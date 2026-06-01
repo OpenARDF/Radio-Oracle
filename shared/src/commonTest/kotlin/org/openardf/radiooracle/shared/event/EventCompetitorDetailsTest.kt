@@ -16,6 +16,8 @@ class EventCompetitorDetailsTest {
         assertEquals("Alice", rows[0].firstName)
         assertEquals("Runner", rows[0].lastName)
         assertEquals("RUNNER Alice", rows[0].fullName)
+        assertEquals("OK Test", rows[0].club)
+        assertEquals("A101", rows[0].index)
         assertEquals("category", rows[0].categoryId)
         assertEquals("W21", rows[0].categoryName)
         assertEquals("101", rows[0].startNumberText)
@@ -80,8 +82,8 @@ class EventCompetitorDetailsTest {
                     categoryId = categoryId,
                     firstName = firstName,
                     lastName = "Runner",
-                    club = "",
-                    index = "",
+                    club = if (firstName == "Alice") "OK Test" else "",
+                    index = if (firstName == "Alice") "A101" else "",
                     isMan = true,
                     birthYear = null,
                     siNumber = siNumber,

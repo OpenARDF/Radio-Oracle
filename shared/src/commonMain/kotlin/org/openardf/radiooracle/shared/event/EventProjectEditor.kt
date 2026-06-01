@@ -367,6 +367,40 @@ object EventProjectEditor {
         )
     }
 
+    /** Returns a copy of the project file with one competitor's club and index changed. */
+    fun updateCompetitorClubIndex(
+        projectFile: EventProjectFile,
+        competitorId: String,
+        club: String,
+        index: String
+    ): EventProjectFile {
+        var foundCompetitor = false
+        val competitorData = projectFile.raceData.competitorData.map { data ->
+            val competitorCategory = data.competitorCategory
+            val competitor = competitorCategory.competitor
+            if (competitor.id == competitorId) {
+                foundCompetitor = true
+                data.copy(
+                    competitorCategory = competitorCategory.copy(
+                        competitor = competitor.copy(
+                            club = club.trim(),
+                            index = index.trim()
+                        )
+                    )
+                )
+            } else {
+                data
+            }
+        }
+        require(foundCompetitor) {
+            "Competitor was not found: $competitorId"
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(competitorData = competitorData)
+        )
+    }
+
     /** Returns a copy of the project file with one competitor's validated numbers changed. */
     fun updateCompetitorNumbers(
         projectFile: EventProjectFile,

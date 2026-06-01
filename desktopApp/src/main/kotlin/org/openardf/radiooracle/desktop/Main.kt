@@ -377,6 +377,17 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
+            onUpdateCompetitorClubIndex = { competitorId, club, index ->
+                runCatching {
+                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.updateCompetitorClubIndex(currentProject, competitorId, club, index)
+                    }
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText = "Unsaved changes."
+                }.onFailure { error ->
+                    projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+                }
+            },
             onAddCompetitor = { firstName, lastName, startNumber, siNumber ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -550,6 +561,7 @@ fun RadioOManagerDesktopApp(
     onRemoveCategory: (String, Boolean) -> Unit = { _, _ -> },
     onRenameCompetitor: (String, String, String) -> Unit = { _, _, _ -> },
     onUpdateCompetitorNumbers: (String, String, String) -> Unit = { _, _, _ -> },
+    onUpdateCompetitorClubIndex: (String, String, String) -> Unit = { _, _, _ -> },
     onAddCompetitor: (String, String, String, String) -> Unit = { _, _, _, _ -> },
     onAssignCompetitorCategory: (String, String?) -> Unit = { _, _ -> },
     onRemoveCompetitor: (String, Boolean) -> Unit = { _, _ -> },
@@ -595,6 +607,7 @@ fun RadioOManagerDesktopApp(
                         onRemoveCategory = onRemoveCategory,
                         onRenameCompetitor = onRenameCompetitor,
                         onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
+                        onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
                         onAddCompetitor = onAddCompetitor,
                         onAssignCompetitorCategory = onAssignCompetitorCategory,
                         onRemoveCompetitor = onRemoveCompetitor,
@@ -683,6 +696,7 @@ private fun SectionWorkspace(
     onRemoveCategory: (String, Boolean) -> Unit,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
+    onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
     onAddCompetitor: (String, String, String, String) -> Unit,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit,
@@ -735,6 +749,7 @@ private fun SectionWorkspace(
                 categories = EventCategoryDetails.from(projectFile.raceData),
                 onRenameCompetitor = onRenameCompetitor,
                 onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
+                onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
                 onAddCompetitor = onAddCompetitor,
                 onAssignCompetitorCategory = onAssignCompetitorCategory,
                 onRemoveCompetitor = onRemoveCompetitor
@@ -1118,19 +1133,21 @@ private fun CompetitorDetailsPanel(
     categories: List<EventCategoryDetails>,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
+    onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
     onAddCompetitor: (String, String, String, String) -> Unit,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CompetitorAddRow(onAddCompetitor)
-        DetailHeaderRow(listOf("First", "Last", "Category", "Start no.", "SI no.", "", "", "", ""))
+        DetailHeaderRow(listOf("First", "Last", "Club", "Index", "Category", "Start no.", "SI no.", "", "", "", "", ""))
         competitors.forEach { competitor ->
             CompetitorDetailRow(
                 competitor = competitor,
                 categories = categories,
                 onRenameCompetitor = onRenameCompetitor,
                 onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
+                onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
                 onAssignCompetitorCategory = onAssignCompetitorCategory,
                 onRemoveCompetitor = onRemoveCompetitor
             )
@@ -1195,11 +1212,14 @@ private fun CompetitorDetailRow(
     categories: List<EventCategoryDetails>,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
+    onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit
 ) {
     var firstNameDraft by remember(competitor.id, competitor.firstName) { mutableStateOf(competitor.firstName) }
     var lastNameDraft by remember(competitor.id, competitor.lastName) { mutableStateOf(competitor.lastName) }
+    var clubDraft by remember(competitor.id, competitor.club) { mutableStateOf(competitor.club) }
+    var indexDraft by remember(competitor.id, competitor.index) { mutableStateOf(competitor.index) }
     var startNumberDraft by remember(competitor.id, competitor.startNumberText) {
         mutableStateOf(competitor.startNumberText)
     }
@@ -1223,6 +1243,18 @@ private fun CompetitorDetailRow(
             onValueChange = { lastNameDraft = it },
             modifier = Modifier.weight(1f),
             label = { Text("Last") }
+        )
+        TextField(
+            value = clubDraft,
+            onValueChange = { clubDraft = it },
+            modifier = Modifier.weight(1f),
+            label = { Text("Club") }
+        )
+        TextField(
+            value = indexDraft,
+            onValueChange = { indexDraft = it },
+            modifier = Modifier.weight(1f),
+            label = { Text("Index") }
         )
         CategoryPicker(
             selectedCategoryId = selectedCategoryId,
@@ -1255,6 +1287,13 @@ private fun CompetitorDetailRow(
             enabled = startNumberDraft != competitor.startNumberText || siNumberDraft != competitor.siNumberText
         ) {
             Text("Nos.")
+        }
+        Button(
+            onClick = { onUpdateCompetitorClubIndex(competitor.id, clubDraft, indexDraft) },
+            modifier = Modifier.weight(1f),
+            enabled = clubDraft != competitor.club || indexDraft != competitor.index
+        ) {
+            Text("Info")
         }
         Button(
             onClick = { onAssignCompetitorCategory(competitor.id, selectedCategoryId) },

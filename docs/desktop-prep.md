@@ -240,7 +240,7 @@ repeatable package validation.
    The Competitors section now shows competitor rows with shared category lookup
    and display formatting, can add uncategorized competitors with conservative
    defaults, and can edit competitor first and last names, category assignment,
-   start numbers, SI numbers, and competitor deletion through shared
+   club, index, start numbers, SI numbers, and competitor deletion through shared
    project-editing rules. Deleted competitor readouts can be kept as unmatched
    readouts or deleted with the competitor, matching the Android deletion policy.
    The Aliases section can

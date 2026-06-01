@@ -353,6 +353,26 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun updatesCompetitorClubAndIndex() {
+        val original = projectFile(
+            competitors = listOf(competitorData("comp-1", "Alice", "Runner"))
+        )
+
+        val updated = EventProjectEditor.updateCompetitorClubIndex(original, "comp-1", " OK Test ", " A101 ")
+
+        val competitor = updated.raceData.competitorData.single().competitorCategory.competitor
+        assertEquals("OK Test", competitor.club)
+        assertEquals("A101", competitor.index)
+    }
+
+    @Test
+    fun rejectsUnknownCompetitorClubAndIndexUpdate() {
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCompetitorClubIndex(projectFile(), "missing", "OK Test", "A101")
+        }
+    }
+
+    @Test
     fun updatesCompetitorNumbersUsingSharedValidationRules() {
         val original = projectFile(
             competitors = listOf(
