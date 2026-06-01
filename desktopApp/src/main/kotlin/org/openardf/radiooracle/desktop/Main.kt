@@ -397,15 +397,17 @@ fun main(args: Array<String>) = application {
                 }
             },
             onAddCategory = { name ->
-                runCatching {
+                val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.addCategory(currentProject, UUID.randomUUID().toString(), name)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
-                }.onFailure { error ->
+                }
+                result.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
+                result.isSuccess
             },
             onRemoveCategory = { categoryId, deleteCompetitors ->
                 runCatching {
@@ -544,7 +546,7 @@ fun main(args: Array<String>) = application {
                 }
             },
             onAddManualReadout = { competitorId, siNumber, startSeconds, finishSeconds, controlCodes, resultStatus ->
-                runCatching {
+                val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.addManualReadout(
                             projectFile = currentProject,
@@ -562,9 +564,11 @@ fun main(args: Array<String>) = application {
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
-                }.onFailure { error ->
+                }
+                result.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
+                result.isSuccess
             },
             onUpdateAlias = { aliasId, siCode, name ->
                 runCatching {
@@ -578,15 +582,17 @@ fun main(args: Array<String>) = application {
                 }
             },
             onAddAlias = { siCode, name ->
-                runCatching {
+                val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.addAlias(currentProject, UUID.randomUUID().toString(), siCode, name)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
-                }.onFailure { error ->
+                }
+                result.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
+                result.isSuccess
             },
             onRemoveAlias = { aliasId ->
                 runCatching {
@@ -650,7 +656,7 @@ fun RadioOManagerDesktopApp(
     onRenameCategory: (String, String) -> Unit = { _, _ -> },
     onUpdateCategoryControlPoints: (String, String) -> Unit = { _, _ -> },
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit = { _, _, _ -> },
-    onAddCategory: (String) -> Unit = {},
+    onAddCategory: (String) -> Boolean = { false },
     onRemoveCategory: (String, Boolean) -> Unit = { _, _ -> },
     onRenameCompetitor: (String, String, String) -> Unit = { _, _, _ -> },
     onUpdateCompetitorNumbers: (String, String, String) -> Unit = { _, _, _ -> },
@@ -661,9 +667,9 @@ fun RadioOManagerDesktopApp(
     onRemoveCompetitor: (String, Boolean) -> Unit = { _, _ -> },
     onRemoveReadout: (String) -> Unit = {},
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit = { _, _ -> },
-    onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Unit = { _, _, _, _, _, _ -> },
+    onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean = { _, _, _, _, _, _ -> false },
     onUpdateAlias: (String, String, String) -> Unit = { _, _, _ -> },
-    onAddAlias: (String, String) -> Unit = { _, _ -> },
+    onAddAlias: (String, String) -> Boolean = { _, _ -> false },
     onRemoveAlias: (String) -> Unit = {}
 ) {
     MaterialTheme(
@@ -787,7 +793,7 @@ private fun SectionWorkspace(
     onRenameCategory: (String, String) -> Unit,
     onUpdateCategoryControlPoints: (String, String) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
-    onAddCategory: (String) -> Unit,
+    onAddCategory: (String) -> Boolean,
     onRemoveCategory: (String, Boolean) -> Unit,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
@@ -798,9 +804,9 @@ private fun SectionWorkspace(
     onRemoveCompetitor: (String, Boolean) -> Unit,
     onRemoveReadout: (String) -> Unit,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
-    onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Unit,
+    onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean,
     onUpdateAlias: (String, String, String) -> Unit,
-    onAddAlias: (String, String) -> Unit,
+    onAddAlias: (String, String) -> Boolean,
     onRemoveAlias: (String) -> Unit
 ) {
     Column(
@@ -1005,7 +1011,7 @@ private fun ReadoutDetailsPanel(
     competitors: List<EventCompetitorDetails>,
     onRemoveReadout: (String) -> Unit,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
-    onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Unit
+    onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean
 ) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(ReadoutTableColumns)
@@ -1030,6 +1036,14 @@ private fun ReadoutDetailsPanel(
                 controlCodesDraft = controlCodesDraft,
                 selectedStatus = selectedStatus,
                 onAddManualReadout = onAddManualReadout,
+                onManualReadoutAdded = {
+                    selectedCompetitorId = null
+                    siNumberDraft = ""
+                    startSecondsDraft = ""
+                    finishSecondsDraft = ""
+                    controlCodesDraft = ""
+                    selectedStatus = ResultStatus.OK
+                },
                 modifier = Modifier.width(104.dp)
             )
             Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
@@ -1093,12 +1107,13 @@ private fun ManualReadoutAddButton(
     finishSecondsDraft: String,
     controlCodesDraft: String,
     selectedStatus: ResultStatus,
-    onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Unit,
+    onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean,
+    onManualReadoutAdded: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Button(
         onClick = {
-            onAddManualReadout(
+            val didAdd = onAddManualReadout(
                 selectedCompetitorId,
                 siNumberDraft,
                 startSecondsDraft,
@@ -1106,6 +1121,9 @@ private fun ManualReadoutAddButton(
                 controlCodesDraft,
                 selectedStatus
             )
+            if (didAdd) {
+                onManualReadoutAdded()
+            }
         },
         modifier = modifier,
         enabled = selectedCompetitorId != null ||
@@ -1764,7 +1782,7 @@ private fun CategoryPicker(
 private fun AliasDetailsPanel(
     aliases: List<EventAliasDetails>,
     onUpdateAlias: (String, String, String) -> Unit,
-    onAddAlias: (String, String) -> Unit,
+    onAddAlias: (String, String) -> Boolean,
     onRemoveAlias: (String) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
@@ -1780,9 +1798,11 @@ private fun AliasDetailsPanel(
         ) {
             Button(
                 onClick = {
-                    onAddAlias(siCodeDraft, nameDraft)
-                    siCodeDraft = ""
-                    nameDraft = ""
+                    val didAdd = onAddAlias(siCodeDraft, nameDraft)
+                    if (didAdd) {
+                        siCodeDraft = ""
+                        nameDraft = ""
+                    }
                 },
                 modifier = Modifier.width(104.dp),
                 enabled = siCodeDraft.isNotBlank() || nameDraft.isNotBlank()
@@ -1946,7 +1966,7 @@ private fun CategoryDetailsPanel(
     onRenameCategory: (String, String) -> Unit,
     onUpdateCategoryControlPoints: (String, String) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
-    onAddCategory: (String) -> Unit,
+    onAddCategory: (String) -> Boolean,
     onRemoveCategory: (String, Boolean) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
@@ -1961,8 +1981,10 @@ private fun CategoryDetailsPanel(
         ) {
             Button(
                 onClick = {
-                    onAddCategory(categoryNameDraft)
-                    categoryNameDraft = ""
+                    val didAdd = onAddCategory(categoryNameDraft)
+                    if (didAdd) {
+                        categoryNameDraft = ""
+                    }
                 },
                 modifier = Modifier.width(104.dp),
                 enabled = categoryNameDraft.isNotBlank()

@@ -241,7 +241,8 @@ repeatable package validation.
    competitor, alias, readout, and result rows use one-line row action buttons;
    add actions stay reachable beside scrollable entry fields where the entry
    row can run wider than the window. Delete actions sit in the same fixed left
-   action column and require confirmation before removal.
+   action column and require confirmation before removal. Add-row drafts remain
+   in place when shared validation rejects the edit.
    The Competitors section now shows competitor rows with shared category lookup
    and display formatting, can add uncategorized competitors with conservative
    defaults, and can edit competitor first and last names, category assignment,
