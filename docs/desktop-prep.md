@@ -231,6 +231,19 @@ block `0` and block `1`, extracted the 128-byte card blocks from the station's
 prefixed `0xef` responses, parsed SI8 series `2`, and reported
 `check=10:13:40 start=10:13:43 finish=12:07:10 punches=15`.
 
+Attached download-station comparison is available through:
+
+```shell
+npm run desktop:usb-station-diagnostic
+```
+
+The diagnostic deduplicates macOS `/dev/cu.*` and `/dev/tty.*` SPORTident
+serial nodes by USB serial number, measures probe and long system-info response
+timing, prints station serial number, code number, mode code, mode label, and
+compares raw system-info offsets against the first detected station. Use
+`RADIO_ORACLE_SI_PORTS=/dev/cu.SLAB_USBtoUART,/dev/cu.SLAB_USBtoUART5` to force
+an explicit comparison order.
+
 For local macOS smoke tests, prefer copying the generated `.app` and sample
 project file to `/tmp` before launching with `open ... --args <sample.rom.json>`.
 Launching the checkout-built app bundle directly from `Documents/GitHub` can
@@ -304,7 +317,9 @@ repeatable package validation.
    and can require the known SPORTident VID/PID when the download box is
    attached. The second command is `npm run desktop:usb-probe`; it opens the
    serial device, sends the setup probe, reads the station response, and closes
-   the port. The desktop Readouts screen now has a single-shot "Download SI"
+   the port. `npm run desktop:usb-station-diagnostic` compares attached
+   download stations for response timing and system-info differences. The
+   desktop Readouts screen now has a single-shot "Download SI"
    action that adds one SI8/SI9/SIAC card readout to the open project when the
    attached station is present and in READOUT/SI MASTER mode.
 7. Long-term: add Station Maintenance after the desktop event-admin beta is

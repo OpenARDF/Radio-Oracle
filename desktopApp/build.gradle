@@ -191,3 +191,12 @@ tasks.register("desktopUsbCardBlockProbe", JavaExec) {
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardBlockProbeKt")
 }
+
+tasks.register("desktopUsbStationDiagnostic", JavaExec) {
+    group = "verification"
+    description = "Measures and compares attached SPORTident station response timing and system-info settings."
+
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationDiagnosticKt")
+}

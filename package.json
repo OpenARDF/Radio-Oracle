@@ -30,6 +30,7 @@
     "jdeploy:release-preflight": "node ./scripts/check-jdeploy-release-ready.mjs",
     "desktop:usb-diagnostic": "./scripts/desktop-usb-diagnostic.sh",
     "desktop:usb-probe": "./gradlew :desktopApp:desktopUsbProbe",
+    "desktop:usb-station-diagnostic": "./gradlew :desktopApp:desktopUsbStationDiagnostic",
     "desktop:usb-card-event": "./gradlew :desktopApp:desktopUsbCardEventProbe",
     "desktop:usb-card-block": "./gradlew :desktopApp:desktopUsbCardBlockProbe",
     "prepublishOnly": "node ./scripts/check-jdeploy-publish.mjs"
