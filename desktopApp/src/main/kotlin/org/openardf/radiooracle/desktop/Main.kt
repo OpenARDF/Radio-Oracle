@@ -50,7 +50,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardBlockDownload
-import org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardBlockReader
+import org.openardf.radiooracle.desktop.usb.DesktopSportIdentReadoutService
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
 import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
@@ -2746,24 +2746,7 @@ private fun detectDesktopSiReaderState(): DesktopSiReaderUiState {
 }
 
 private fun downloadDesktopSportIdentCardReadout(): DesktopSportIdentCardBlockDownload {
-    val provider = JSerialCommDesktopSerialPortProvider
-    val port = provider.listPorts().firstOrNull { it.info.matchesSportIdent() }
-        ?: error("No SPORTident USB station found.")
-
-    try {
-        val station = DesktopSportIdentStationProbe().connectKeepingPortOpen(port)
-        if (station.stationInfo.isDownloadCapableMode == false) {
-            error(
-                "SI station ${station.stationInfo.serialNumber} is in " +
-                    "${station.stationInfo.stationModeLabel} mode instead of READOUT/SI MASTER."
-            )
-        }
-        return DesktopSportIdentCardBlockReader().readFirstSupportedCardAfterInsertOnOpenPort(port)
-    } finally {
-        if (port.isOpen) {
-            port.close()
-        }
-    }
+    return DesktopSportIdentReadoutService().downloadOne()
 }
 
 @Composable

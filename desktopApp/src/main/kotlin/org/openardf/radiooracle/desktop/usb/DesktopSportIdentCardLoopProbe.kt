@@ -15,45 +15,43 @@ fun main(args: Array<String>) {
     println("Using serial port: ${port.info.describe()}")
     println("Reading up to $maxCards cards; stop by waiting for the card-event timeout or pressing Ctrl+C.")
 
-    var cardsRead = 0
-    try {
-        val station = DesktopSportIdentStationProbe().connectKeepingPortOpen(port)
-        println(
-            "Station ready at ${station.baudRate} baud: serial=${station.stationInfo.serialNumber} " +
-                "extended=${station.stationInfo.extendedMode} " +
-                "codeNumber=${station.stationInfo.stationCodeNumber ?: "unknown"} " +
-                "modeCode=${station.stationInfo.stationModeCode ?: "unknown"} " +
-                "mode=${station.stationInfo.stationModeLabel ?: "unknown"}"
-        )
-        warnIfStationLooksNonDownload(station)
-
-        val reader = DesktopSportIdentCardBlockReader(onProgress = ::println)
-        while (cardsRead < maxCards) {
-            val result = runCatching {
-                reader.readFirstSupportedCardAfterInsertOnOpenPort(port)
+    var displayedCardsRead = 0
+    val service = DesktopSportIdentReadoutService(
+        portProvider = object : DesktopSerialPortProvider {
+            override fun listPorts(): List<DesktopSerialPort> = listOf(port)
+            override fun getPort(systemPortPath: String): DesktopSerialPort = port
+        },
+        connectStation = {
+            DesktopSportIdentStationProbe().connectKeepingPortOpen(it).also { connection ->
+                println(
+                    "Station ready at ${connection.baudRate} baud: serial=${connection.stationInfo.serialNumber} " +
+                        "extended=${connection.stationInfo.extendedMode} " +
+                        "codeNumber=${connection.stationInfo.stationCodeNumber ?: "unknown"} " +
+                        "modeCode=${connection.stationInfo.stationModeCode ?: "unknown"} " +
+                        "mode=${connection.stationInfo.stationModeLabel ?: "unknown"}"
+                )
+                warnIfStationLooksNonDownload(connection)
             }
-            val download = result.getOrNull()
-            if (download == null) {
-                val error = result.exceptionOrNull()
-                if ((error?.message ?: "").contains("No SPORTident card insert event")) {
-                    println("No additional card insert event received before timeout.")
-                    break
-                }
-                throw error ?: IllegalStateException("SPORTident card download failed.")
-            }
-            cardsRead += 1
+        },
+        readCard = {
+            DesktopSportIdentCardBlockReader(onProgress = ::println).readFirstSupportedCardAfterInsertOnOpenPort(it)
+        }
+    )
+    val cardsRead = service.downloadUntilTimeout(
+        maxCards = maxCards,
+        onDownload = { download ->
+            displayedCardsRead += 1
             println(
-                "Read $cardsRead/$maxCards: si=${download.readout.siNumber} " +
+                "Read $displayedCardsRead/$maxCards: si=${download.readout.siNumber} " +
                     "type=${download.inserted.cardType.toHexString()} " +
                     "series=${download.readout.series} punches=${download.readout.punches.size} " +
                     "finish=${download.readout.finishTime?.getTimeString() ?: "none"}"
             )
+        },
+        onTimeout = {
+            println("No additional card insert event received before timeout.")
         }
-    } finally {
-        if (port.isOpen) {
-            port.close()
-        }
-    }
+    )
 
     println("Card-loop probe finished; cards read=$cardsRead.")
 }
