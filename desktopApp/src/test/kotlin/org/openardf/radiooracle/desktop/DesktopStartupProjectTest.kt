@@ -35,6 +35,18 @@ class DesktopStartupProjectTest {
         assertEquals(path, session.currentPath)
     }
 
+    @Test
+    fun reportsStartupOpenFailureWithoutChangingSession() {
+        val path = Path.of("missing.rom.json")
+        val session = DesktopProjectSession(StartupProjectFileStore(readError = IllegalArgumentException("Missing project")))
+
+        val status = openStartupProject(session, path)
+
+        assertEquals("Open failed: Missing project", status)
+        assertNull(session.currentProject)
+        assertNull(session.currentPath)
+    }
+
     private fun projectFile(name: String): EventProjectFile =
         EventProjectFile(
             raceData = EventRaceData(
@@ -57,9 +69,11 @@ class DesktopStartupProjectTest {
 }
 
 private class StartupProjectFileStore(
-    private val projects: Map<Path, EventProjectFile> = emptyMap()
+    private val projects: Map<Path, EventProjectFile> = emptyMap(),
+    private val readError: RuntimeException? = null
 ) : ProjectFileStore {
     override fun read(path: Path): EventProjectFile =
+        readError?.let { throw it } ?:
         projects.getValue(path)
 
     override fun write(path: Path, projectFile: EventProjectFile) = Unit

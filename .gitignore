@@ -20,3 +20,6 @@ keystore.properties
 *.ap_
 *.jks
 *.keystore
+node_modules/
+jdeploy/
+jdeploy-bundle/

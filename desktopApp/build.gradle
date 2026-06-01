@@ -5,6 +5,7 @@ plugins {
 }
 
 import java.util.jar.JarFile
+import java.util.Locale
 
 kotlin {
     jvmToolchain(17)
@@ -35,11 +36,40 @@ compose.desktop {
 
 def desktopMainClass = "org.openardf.radiooracle.desktop.MainKt"
 def desktopAppName = "Radio-Oracle"
+def desktopDistributableDir = layout.buildDirectory.dir("compose/binaries/main/app")
 def desktopJdeployBundleDir = layout.buildDirectory.dir("jdeploy")
 def desktopJdeployLibsDir = desktopJdeployBundleDir.map { it.dir("libs") }
 def desktopJdeployJarName = "Radio-Oracle-jdeploy.jar"
 def runtimeClasspath = configurations.runtimeClasspath
 def desktopImplementationVersion = version.toString()
+
+tasks.register("verifyDesktopDistributable") {
+    group = "distribution"
+    description = "Verifies that the local Compose Desktop app image exists."
+
+    dependsOn(tasks.named("createDistributable"))
+
+    doLast {
+        def distributionDir = desktopDistributableDir.get().asFile
+        if (!distributionDir.isDirectory()) {
+            throw new GradleException("Expected desktop distribution directory at ${distributionDir.absolutePath}")
+        }
+        if (distributionDir.listFiles() == null || distributionDir.listFiles().length == 0) {
+            throw new GradleException("Desktop distribution directory is empty: ${distributionDir.absolutePath}")
+        }
+
+        if (System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("mac")) {
+            def appBundle = new File(distributionDir, "${desktopAppName}.app")
+            if (!appBundle.isDirectory()) {
+                throw new GradleException("Expected macOS app bundle at ${appBundle.absolutePath}")
+            }
+            def launcher = new File(appBundle, "Contents/MacOS/${desktopAppName}")
+            if (!launcher.isFile() || !launcher.canExecute()) {
+                throw new GradleException("Expected executable macOS launcher at ${launcher.absolutePath}")
+            }
+        }
+    }
+}
 
 tasks.register("stageDesktopJdeployLibs", Sync) {
     group = "distribution"

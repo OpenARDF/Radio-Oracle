@@ -151,13 +151,18 @@ Goal: produce installable desktop beta artifacts.
 - Use jDeploy as the default packaging path unless a focused packaging spike
   finds a concrete blocker; keep Conveyor as a comparison option and `jpackage`
   as a low-level fallback.
+- Before treating USB SportIdent download as safely post-beta, run a focused
+  desktop USB feasibility spike with the actual SPORTident USB download box.
+  The spike only needs to prove that a packaged desktop app can discover the
+  device, open the serial port, exchange a small SI protocol probe, and close
+  cleanly on macOS at minimum.
 - Add packaging environment checks and package tasks for macOS, Windows, and
   Linux.
 - Document beta limitations clearly.
 - Verify packaged apps launch and complete the event-admin smoke scenario.
 
 Milestone: beta desktop packages are produced and validated on target desktop
-operating systems.
+operating systems, with no known desktop USB showstopper left uninvestigated.
 
 ### 6. Post-beta platform features
 

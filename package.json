@@ -1,0 +1,41 @@
+{
+  "name": "@openardf/radio-oracle",
+  "version": "0.2.0",
+  "description": "Desktop event administration shell for Radio-Oracle.",
+  "author": "OpenARDF",
+  "homepage": "https://github.com/OpenARDF/Radio-Oracle",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OpenARDF/Radio-Oracle.git"
+  },
+  "files": [
+    "README.md",
+    "jdeploy-bundle/**"
+  ],
+  "bin": {
+    "radio-oracle": "jdeploy-bundle/jdeploy.js"
+  },
+  "scripts": {
+    "jdeploy:prepare": "./scripts/jdeploy-prepare.sh",
+    "prejdeploy:package": "npm run jdeploy:prepare",
+    "prejdeploy:install-local": "npm run jdeploy:prepare",
+    "prejdeploy:local": "npm run jdeploy:prepare",
+    "jdeploy:package": "npx --no-install jdeploy package",
+    "jdeploy:install-local": "npx --no-install jdeploy install -y",
+    "jdeploy:verify-install": "npx --no-install jdeploy verify-installation --package-json=package.json --verbose",
+    "jdeploy:local": "npx --no-install jdeploy run --install",
+    "jdeploy:pack-preview": "npm run jdeploy:package && npm pack --dry-run --ignore-scripts",
+    "prepublishOnly": "node ./scripts/check-jdeploy-publish.mjs"
+  },
+  "dependencies": {
+    "shelljs": "^0.8.4"
+  },
+  "devDependencies": {
+    "jdeploy": "6.1.3"
+  },
+  "jdeploy": {
+    "jar": "desktopApp/build/jdeploy/Radio-Oracle-jdeploy.jar",
+    "title": "Radio-Oracle",
+    "javaVersion": "17"
+  }
+}

@@ -15,6 +15,7 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 
 class DesktopSmokeSampleTest {
     @Test
@@ -118,6 +119,33 @@ class DesktopSmokeSampleTest {
         assertEquals(501, readBack.raceData.competitorData.first().competitorCategory.competitor.startNumber)
         assertEquals(7_654_321, readBack.raceData.competitorData.first().competitorCategory.competitor.siNumber)
         assertEquals("F4", readBack.raceData.aliases.first { it.id == aliasId }.name)
+    }
+
+    @Test
+    fun repositorySmokeSampleCompletesDesktopSessionSaveReopenAndExportCopy() {
+        val directory = Files.createTempDirectory("rom-desktop-session-smoke")
+        val source = Path.of("..", "samples", "desktop-smoke.rom.json")
+        val workingCopy = directory.resolve("working.rom.json")
+        val exportCopy = directory.resolve("exported.rom.json")
+        Files.copy(source, workingCopy, StandardCopyOption.REPLACE_EXISTING)
+        val session = DesktopProjectSession(DesktopProjectFiles)
+
+        session.open(workingCopy)
+        val edited = session.updateCurrentProject { currentProject ->
+            EventProjectEditor.renameRace(currentProject, "Session Smoke Race")
+        }
+        session.save()
+        session.closeProject()
+
+        val reopened = session.open(workingCopy)
+        session.exportCopy(exportCopy)
+        val exported = DesktopProjectFiles.read(exportCopy)
+
+        assertEquals("Session Smoke Race", edited.raceData.race.name)
+        assertEquals("Session Smoke Race", reopened.raceData.race.name)
+        assertEquals(reopened, exported)
+        assertEquals(workingCopy, session.currentPath)
+        assertEquals(false, session.hasUnsavedChanges)
     }
 
     @Test

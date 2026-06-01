@@ -106,11 +106,14 @@ The current desktop packaging smoke checks are:
 ```shell
 ./gradlew :desktopApp:checkRuntime
 ./gradlew :desktopApp:createDistributable
+./gradlew :desktopApp:verifyDesktopDistributable
 ./gradlew :desktopApp:prepareDesktopJdeployBundle :desktopApp:verifyDesktopJdeployBundle
 ```
 
-On macOS, `scripts/jdeploy-prepare.sh` selects the registered JDK 17 runtime
-when available and runs the two Gradle-side jDeploy bundle tasks.
+On macOS, `scripts/desktop-distributable-prepare.sh` selects the registered JDK
+17 runtime when available and runs the local app-image packaging smoke.
+`scripts/jdeploy-prepare.sh` does the same for the two Gradle-side jDeploy
+bundle tasks.
 
 `checkRuntime` verifies that Compose Desktop can find a usable JDK runtime.
 `createDistributable` currently writes the macOS app image to
@@ -128,6 +131,19 @@ signal until installer packaging metadata is finalized.
 libraries under `desktopApp/build/jdeploy`. `verifyDesktopJdeployBundle` checks
 the jar manifest and staged classpath layout that the future jDeploy package
 metadata will consume.
+
+The selected public jDeploy/npm package identity is `@openardf/radio-oracle`.
+Local metadata checks are available through:
+
+```shell
+npm install
+npm run jdeploy:pack-preview
+```
+
+`npm run jdeploy:pack-preview` prepares the Gradle-side jDeploy bundle, runs
+`jdeploy package`, and shows the npm tarball payload without publishing. A real
+publish is guarded by `scripts/check-jdeploy-publish.mjs` and requires
+`RADIO_ORACLE_ALLOW_JDEPLOY_PUBLISH=1`.
 
 For local macOS smoke tests, prefer copying the generated `.app` and sample
 project file to `/tmp` before launching with `open ... --args <sample.rom.json>`.
@@ -170,9 +186,11 @@ repeatable package validation.
    competitor matching, SI number, start/finish seconds, and control punch
    codes. The Results section now shows competitor result rows and can set the
    same explicit manual result status for matched readouts. A sample smoke-test project is available at
-   `samples/desktop-smoke.rom.json`.
+   `samples/desktop-smoke.rom.json`, with automated desktop coverage for the
+   session-level open, edit, save, close, reopen, and export-copy flow.
 5. In progress: add jDeploy metadata after the desktop app can complete a real
    smoke scenario. The Gradle-side jDeploy bundle tasks now build and verify
    `desktopApp/build/jdeploy/Radio-Oracle-jdeploy.jar`. The npm/jDeploy
-   package metadata, local install smoke, release workflow, and public package
-   name remain pending.
+   package metadata now uses `@openardf/radio-oracle`, and local package preview
+   is covered by `npm run jdeploy:pack-preview`. Local install smoke, release
+   workflow, and first public publish remain pending.
