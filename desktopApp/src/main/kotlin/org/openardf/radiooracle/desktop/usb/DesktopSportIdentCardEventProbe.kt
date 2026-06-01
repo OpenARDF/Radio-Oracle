@@ -20,7 +20,10 @@ fun main(args: Array<String>) {
     val station = DesktopSportIdentStationProbe().connect(port)
     println(
         "Station ready at ${station.baudRate} baud: serial=${station.stationInfo.serialNumber} " +
-            "extended=${station.stationInfo.extendedMode} mode=${station.stationInfo.stationModeLabel ?: "unknown"}"
+            "extended=${station.stationInfo.extendedMode} " +
+            "codeNumber=${station.stationInfo.stationCodeNumber ?: "unknown"} " +
+            "modeCode=${station.stationInfo.stationModeCode ?: "unknown"} " +
+            "mode=${station.stationInfo.stationModeLabel ?: "unknown"}"
     )
     warnIfNotReadoutMode(station)
     println("Waiting up to ${DesktopSportIdentCardEventMonitor.defaultMaxWaitMs / 1000} seconds for one card insert/remove event...")

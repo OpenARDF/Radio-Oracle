@@ -178,6 +178,12 @@ Goal: add platform-specific capabilities after the event-admin beta is stable.
   It should show station serial number, reported function/mode, code number,
   firmware/config metadata when available, protocol flags, and explicit
   warnings when a download box is not in READOUT/SI MASTER mode.
+- Add Station Maintenance diagnostics for attached download stations, including
+  a response-timing test and a settings comparison test across known-good and
+  suspect units. If a station is in the correct READOUT/SI MASTER mode but is
+  still sluggish or has unexplained configuration/status differences, recommend
+  resetting it to factory defaults and then reapplying the desired event
+  settings before using it for race-day downloads.
 - Extend Station Maintenance to read coupled non-reader stations through the
   USB master/download station when the remote/coupled-station protocol is
   verified. This should be read-only first and should report basic station

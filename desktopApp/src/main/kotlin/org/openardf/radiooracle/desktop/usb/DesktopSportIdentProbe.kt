@@ -27,6 +27,8 @@ fun main(args: Array<String>) {
     println(
         "SPORTident station info: serial=${connection.stationInfo.serialNumber} " +
             "extended=${connection.stationInfo.extendedMode} " +
+            "codeNumber=${connection.stationInfo.stationCodeNumber ?: "unknown"} " +
+            "modeCode=${connection.stationInfo.stationModeCode ?: "unknown"} " +
             "mode=${connection.stationInfo.stationModeLabel ?: "unknown"}"
     )
     if (connection.stationInfo.isReadoutMode == false) {

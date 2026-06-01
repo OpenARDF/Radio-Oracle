@@ -43,7 +43,8 @@ class SIPort(
     private var extendedMode =
         false                            //  Marks if station uses SI extended mode
     private var serialNo: Int = 0                           //  Serial number of the SI station
-    private var stationCode: Int? = null
+    private var stationCodeNumber: Int? = null
+    private var stationModeCode: Int? = null
     private var lastReadCardId: Int? = null
 
     /**
@@ -350,11 +351,14 @@ class SIPort(
                 serialNo =
                     ((byteToUnsignedInt(reply[6]) shl 24) + (byteToUnsignedInt(reply[7]) shl 16)
                             + (byteToUnsignedInt(reply[8]) shl 8) + byteToUnsignedInt(reply[9]))
-                stationCode = byteToUnsignedInt(reply[23])
+                stationCodeNumber = byteToUnsignedInt(reply[4])
+                stationModeCode = byteToUnsignedInt(reply[23])
                 DebugLog.info(
                     "SI",
                     "Station connected serial=$serialNo extended=$extendedMode " +
-                        "stationCode=$stationCode mode=${stationCode?.let(SportIdentStationMode::labelForCode)}"
+                        "stationCodeNumber=$stationCodeNumber " +
+                        "stationModeCode=$stationModeCode " +
+                        "mode=${stationModeCode?.let(SportIdentStationMode::labelForModeCode)}"
                 )
                 ret = true
             }
@@ -375,8 +379,13 @@ class SIPort(
                         ((byteToUnsignedInt(reply[6]) shl 24) + (byteToUnsignedInt(reply[7]) shl 16) + (byteToUnsignedInt(
                             reply[8]
                         ) shl 8) + byteToUnsignedInt(reply[9]))
-                    stationCode = null
-                    DebugLog.info("SI", "Station connected serial=$serialNo extended=$extendedMode")
+                    stationCodeNumber = byteToUnsignedInt(reply[4])
+                    stationModeCode = null
+                    DebugLog.info(
+                        "SI",
+                        "Station connected serial=$serialNo extended=$extendedMode " +
+                            "stationCodeNumber=$stationCodeNumber"
+                    )
                     ret = true
                 }
             }
@@ -804,7 +813,8 @@ class SIPort(
                 SIReaderStatus.CONNECTED,
                 serialNo,
                 null, lastReadCardId,
-                stationCode
+                stationCodeNumber,
+                stationModeCode
             )
         )
     }
@@ -815,7 +825,8 @@ class SIPort(
                 SIReaderStatus.READING,
                 serialNo,
                 cardNo, lastReadCardId,
-                stationCode
+                stationCodeNumber,
+                stationModeCode
             )
         )
     }
@@ -826,7 +837,8 @@ class SIPort(
                 SIReaderStatus.ERROR,
                 serialNo,
                 cardNo, lastReadCardId,
-                stationCode
+                stationCodeNumber,
+                stationModeCode
             )
         )
     }
@@ -837,7 +849,8 @@ class SIPort(
                 SIReaderStatus.CARD_READ,
                 serialNo,
                 cardNo, lastReadCardId,
-                stationCode
+                stationCodeNumber,
+                stationModeCode
             )
         )
     }

@@ -3,33 +3,50 @@ package org.openardf.radiooracle.shared.sportident
 data class SportIdentStationInfo(
     val serialNumber: Int,
     val extendedMode: Boolean,
-    val stationCode: Int? = null
+    val stationCodeNumber: Int? = null,
+    val stationModeCode: Int? = null
 ) {
     val stationModeLabel: String?
-        get() = stationCode?.let(SportIdentStationMode::labelForCode)
+        get() = stationModeCode?.let(SportIdentStationMode::labelForModeCode)
 
     val isReadoutMode: Boolean?
-        get() = stationCode?.let(SportIdentStationMode::isReadoutCode)
+        get() = stationModeCode?.let(SportIdentStationMode::isReadoutModeCode)
 }
 
 object SportIdentStationMode {
-    const val READOUT_CODE = 5
-    const val SI_MASTER_CODE = 8
+    const val READOUT_MODE_CODE = 5
+    const val SI_MASTER_MODE_CODE = 8
 
-    fun isReadoutCode(code: Int): Boolean =
-        code == READOUT_CODE || code == SI_MASTER_CODE
+    fun isReadoutModeCode(code: Int): Boolean =
+        code == READOUT_MODE_CODE || code == SI_MASTER_MODE_CODE
 
-    fun labelForCode(code: Int): String =
+    fun labelForModeCode(code: Int): String =
         when (code) {
             1 -> "CLEAR"
             2 -> "CHECK"
             3 -> "START"
             4 -> "FINISH"
-            READOUT_CODE -> "READOUT"
-            SI_MASTER_CODE -> "SI MASTER"
-            in 31..511 -> "CONTROL $code"
-            else -> "CODE $code"
+            READOUT_MODE_CODE -> "READOUT"
+            SI_MASTER_MODE_CODE -> "SI MASTER"
+            else -> flaggedModeLabel(code) ?: "MODE 0x${code.toHexByte()}"
         }
+
+    private fun flaggedModeLabel(code: Int): String? {
+        val baseCode = code and MODE_CODE_MASK
+        val flagBits = code and MODE_FLAG_MASK
+        if (flagBits == 0) {
+            return null
+        }
+        val baseLabel = when (baseCode) {
+            READOUT_MODE_CODE -> "READOUT"
+            SI_MASTER_MODE_CODE -> "SI MASTER"
+            else -> return null
+        }
+        return "$baseLabel + 0x${flagBits.toHexByte()} flag"
+    }
+
+    private const val MODE_CODE_MASK = 0x1f
+    private const val MODE_FLAG_MASK = 0xe0
 }
 
 object SportIdentStationInfoParser {
@@ -48,22 +65,29 @@ object SportIdentStationInfoParser {
             .getOrNull(EXTENDED_MODE_DATA_OFFSET)
             ?.let { (it.toUnsignedInt() and EXTENDED_MODE_FLAG) == EXTENDED_MODE_FLAG }
             ?: false
-        val stationCode = frame.data
-            .getOrNull(STATION_CODE_DATA_OFFSET)
+        val stationCodeNumber = frame.data
+            .getOrNull(STATION_CODE_NUMBER_DATA_OFFSET)
+            ?.toUnsignedInt()
+        val stationModeCode = frame.data
+            .getOrNull(STATION_MODE_CODE_DATA_OFFSET)
             ?.toUnsignedInt()
 
         return SportIdentStationInfo(
             serialNumber = serialNumber,
             extendedMode = extendedMode,
-            stationCode = stationCode
+            stationCodeNumber = stationCodeNumber,
+            stationModeCode = stationModeCode
         )
     }
 
     private const val SERIAL_DATA_OFFSET = 3
     private const val SERIAL_BYTE_COUNT = 4
-    private const val STATION_CODE_DATA_OFFSET = 20
+    private const val STATION_CODE_NUMBER_DATA_OFFSET = 1
+    private const val STATION_MODE_CODE_DATA_OFFSET = 20
     private const val EXTENDED_MODE_DATA_OFFSET = 119
     private const val EXTENDED_MODE_FLAG = 0x01
 }
 
 private fun Byte.toUnsignedInt(): Int = toInt() and 0xff
+
+private fun Int.toHexByte(): String = toString(16).uppercase().padStart(2, '0')

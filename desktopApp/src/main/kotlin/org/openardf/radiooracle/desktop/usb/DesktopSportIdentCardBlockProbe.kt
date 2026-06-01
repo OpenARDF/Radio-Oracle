@@ -26,7 +26,10 @@ fun main(args: Array<String>) {
         val station = DesktopSportIdentStationProbe().connectKeepingPortOpen(port)
         println(
             "Station ready at ${station.baudRate} baud: serial=${station.stationInfo.serialNumber} " +
-                "extended=${station.stationInfo.extendedMode} mode=${station.stationInfo.stationModeLabel ?: "unknown"}"
+                "extended=${station.stationInfo.extendedMode} " +
+                "codeNumber=${station.stationInfo.stationCodeNumber ?: "unknown"} " +
+                "modeCode=${station.stationInfo.stationModeCode ?: "unknown"} " +
+                "mode=${station.stationInfo.stationModeLabel ?: "unknown"}"
         )
         warnIfNotReadoutMode(station)
         println("Insert an SI8/SI9/SIAC card when prompted.")

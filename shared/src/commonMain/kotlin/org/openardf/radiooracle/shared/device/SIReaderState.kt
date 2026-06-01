@@ -10,6 +10,8 @@ data class SIReaderState(
     var cardId: Int? = null,
     /** Most recently completed card number. */
     var lastCard: Int? = null,
-    /** SPORTident station function/code, when reported by station system info. */
-    var stationCode: Int? = null
+    /** SPORTident station code number, when reported by station system info. */
+    var stationCodeNumber: Int? = null,
+    /** SPORTident station function/mode byte, when reported by station system info. */
+    var stationModeCode: Int? = null
 )

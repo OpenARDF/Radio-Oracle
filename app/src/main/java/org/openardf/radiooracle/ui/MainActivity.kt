@@ -246,10 +246,10 @@ class MainActivity : AppCompatActivity() {
             showSiStationModeWarningIfNeeded(newState)
             when (newState.siReaderState.status) {
                 SIReaderStatus.CONNECTED -> {
-                    val stationCode = newState.siReaderState.stationCode
-                    val stationModeLabel = stationCode?.let(SportIdentStationMode::labelForCode)
+                    val stationModeCode = newState.siReaderState.stationModeCode
+                    val stationModeLabel = stationModeCode?.let(SportIdentStationMode::labelForModeCode)
                     val hasReadoutModeWarning =
-                        stationCode != null && !SportIdentStationMode.isReadoutCode(stationCode)
+                        stationModeCode != null && !SportIdentStationMode.isReadoutModeCode(stationModeCode)
 
                     //Check if race is set
                     if (newState.currentRace != null) {
@@ -351,13 +351,13 @@ class MainActivity : AppCompatActivity() {
         if (newState.siReaderState.status == SIReaderStatus.DISCONNECTED) {
             return
         }
-        val stationCode = newState.siReaderState.stationCode ?: return
-        if (SportIdentStationMode.isReadoutCode(stationCode)) {
+        val stationModeCode = newState.siReaderState.stationModeCode ?: return
+        if (SportIdentStationMode.isReadoutModeCode(stationModeCode)) {
             return
         }
         val stationId = newState.siReaderState.stationId ?: return
-        val stationModeLabel = SportIdentStationMode.labelForCode(stationCode)
-        val warningKey = "$stationId:$stationCode"
+        val stationModeLabel = SportIdentStationMode.labelForModeCode(stationModeCode)
+        val warningKey = "$stationId:$stationModeCode"
         if (warningKey == lastSiStationModeWarningKey) {
             return
         }

@@ -2725,7 +2725,7 @@ private fun detectDesktopSiReaderState(): DesktopSiReaderUiState {
                     statusText = statusText,
                     warningTitle = "SI station mode warning",
                     warningMessage = "$statusText instead of READOUT/SI MASTER. Reprogram the station in a download-capable mode before using it for SI-card downloads.",
-                    warningKey = "${stationInfo.serialNumber}:${stationInfo.stationCode}"
+                    warningKey = "${stationInfo.serialNumber}:${stationInfo.stationModeCode}"
                 )
             }
             true -> DesktopSiReaderUiState(
