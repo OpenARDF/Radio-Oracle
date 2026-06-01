@@ -1236,6 +1236,7 @@ private fun SettingsDetailsPanel(diagnostics: DesktopProjectDiagnostics) {
             )
         )
         DetailRow("Validation", diagnostics.validationState)
+        DetailRow("Live results", diagnostics.liveResultPlanText)
         diagnostics.validationIssues.forEach { issue ->
             Text(
                 text = issue,

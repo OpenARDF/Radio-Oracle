@@ -38,7 +38,8 @@ The desktop beta supports:
   READOUT/SI MASTER station;
 - running an experimental continuous SI5/SI6/SI8/SI9/SIAC card readout loop
   from an attached READOUT/SI MASTER station;
-- previewing finish-ticket text for readouts using the shared ticket renderer.
+- previewing finish-ticket text for readouts using the shared ticket renderer;
+- summarizing live-result send readiness without performing network sends.
 
 The desktop beta does not yet replace the Android race-day workflow. Live
 printer transport, live result sending, shared SQL persistence, and station

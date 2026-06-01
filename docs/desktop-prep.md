@@ -19,6 +19,8 @@ finish table:
   configured in READOUT/SI MASTER mode;
 - preview shared finish-ticket text for readouts before desktop printer
   transport is available;
+- summarize live-result send readiness, including unsent matched results and
+  skipped readouts, before desktop network sending is available;
 - recalculate results using shared services;
 - import/export supported event and result formats as they move into shared
   code.
@@ -26,7 +28,7 @@ finish table:
 The desktop beta should not include:
 
 - Bluetooth or printer transport;
-- live result sending;
+- live result network sending;
 - Android Room database migration or shared SQL persistence;
 - any promise that desktop can replace the Android race-day download workflow.
 

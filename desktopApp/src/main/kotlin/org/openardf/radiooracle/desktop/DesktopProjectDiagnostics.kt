@@ -4,6 +4,7 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectSummary
 import org.openardf.radiooracle.shared.event.EventValidationIssue
 import org.openardf.radiooracle.shared.event.EventValidationRules
+import org.openardf.radiooracle.shared.results.EventResultSending
 
 /** Read-only project and desktop-beta diagnostics shown in the Settings section. */
 data class DesktopProjectDiagnostics(
@@ -18,6 +19,7 @@ data class DesktopProjectDiagnostics(
     val resultCount: Int,
     val validationState: String,
     val validationIssues: List<String>,
+    val liveResultPlanText: String,
     val betaLimitations: List<String>
 ) {
     companion object {
@@ -27,6 +29,7 @@ data class DesktopProjectDiagnostics(
                 ?.let { EventValidationRules.validateRaceData(it.raceData) }
                 ?.map(::validationIssueText)
                 ?: emptyList()
+            val sendPlan = projectFile?.let { EventResultSending.plan(it.raceData) }
             return DesktopProjectDiagnostics(
                 projectState = if (projectFile == null) "No project open" else "Project open",
                 schemaText = projectFile?.let { "${it.appName} schema ${it.schemaVersion}" } ?: "",
@@ -43,10 +46,16 @@ data class DesktopProjectDiagnostics(
                     else -> "${validationIssues.size} validation issue${if (validationIssues.size == 1) "" else "s"}"
                 },
                 validationIssues = validationIssues,
+                liveResultPlanText = sendPlan?.let {
+                    "${it.candidateCount} unsent matched result${if (it.candidateCount == 1) "" else "s"}; " +
+                        "${it.alreadySentCount} already sent; " +
+                        "${it.missingReadoutCount} competitor${if (it.missingReadoutCount == 1) "" else "s"} without readouts; " +
+                        "${it.unmatchedReadoutCount} unmatched readout${if (it.unmatchedReadoutCount == 1) "" else "s"}."
+                } ?: "No project open",
                 betaLimitations = listOf(
-                    "Live SPORTident download remains post-beta.",
-                    "Printing remains post-beta.",
-                    "Live result sending remains post-beta.",
+                    "Hardened race-day SPORTident replacement remains post-beta.",
+                    "Printer transport remains post-beta.",
+                    "Live result network sending remains post-beta.",
                     "Project storage is file-backed .rom.json, not shared SQL."
                 )
             )

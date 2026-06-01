@@ -6,11 +6,14 @@ import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventReadoutData
+import org.openardf.radiooracle.shared.event.EventResult
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -24,6 +27,7 @@ class DesktopProjectDiagnosticsTest {
         assertEquals("", diagnostics.schemaText)
         assertEquals(0, diagnostics.categoryCount)
         assertEquals("No project open", diagnostics.validationState)
+        assertEquals("No project open", diagnostics.liveResultPlanText)
         assertTrue(diagnostics.validationIssues.isEmpty())
         assertTrue(diagnostics.betaLimitations.any { it.contains("SPORTident") })
     }
@@ -39,7 +43,21 @@ class DesktopProjectDiagnosticsTest {
         assertEquals("2026-06-01T10:00", diagnostics.startDateTimeIso)
         assertEquals(1, diagnostics.competitorCount)
         assertEquals("No validation issues", diagnostics.validationState)
+        assertEquals(
+            "0 unsent matched results; 0 already sent; 1 competitor without readouts; 0 unmatched readouts.",
+            diagnostics.liveResultPlanText
+        )
         assertTrue(diagnostics.validationIssues.isEmpty())
+    }
+
+    @Test
+    fun reportsLiveResultSendPlan() {
+        val diagnostics = DesktopProjectDiagnostics.from(projectFile(readout = result(sent = false)))
+
+        assertEquals(
+            "1 unsent matched result; 0 already sent; 0 competitors without readouts; 1 unmatched readout.",
+            diagnostics.liveResultPlanText
+        )
     }
 
     @Test
@@ -69,7 +87,8 @@ class DesktopProjectDiagnosticsTest {
 
     private fun projectFile(
         raceName: String = "Diagnostics Race",
-        categories: List<EventCategoryData> = emptyList()
+        categories: List<EventCategoryData> = emptyList(),
+        readout: EventResult? = null
     ): EventProjectFile {
         val race = EventRace(
             id = "race",
@@ -105,13 +124,36 @@ class DesktopProjectDiagnosticsTest {
                 competitorData = listOf(
                     EventCompetitorData(
                         competitorCategory = EventCompetitorCategory(competitor, null),
-                        readoutData = null
+                        readoutData = readout?.let { EventReadoutData(it, emptyList()) }
                     )
                 ),
-                unmatchedReadoutData = emptyList()
+                unmatchedReadoutData = if (readout == null) {
+                    emptyList()
+                } else {
+                    listOf(EventReadoutData(result(id = "unmatched", sent = false), emptyList()))
+                }
             )
         )
     }
+
+    private fun result(id: String = "result", sent: Boolean): EventResult =
+        EventResult(
+            id = id,
+            raceId = "race",
+            competitorId = "competitor",
+            siNumber = 123456,
+            cardType = 5,
+            checkTimeSeconds = null,
+            startTimeSeconds = null,
+            finishTimeSeconds = null,
+            readoutDateTimeIso = "2026-06-01T11:00",
+            automaticStatus = true,
+            resultStatus = ResultStatus.OK,
+            points = 1,
+            runTimeSeconds = 600,
+            modified = false,
+            sent = sent
+        )
 
     private fun categoryData(name: String, controlPointsString: String): EventCategoryData =
         EventCategoryData(
