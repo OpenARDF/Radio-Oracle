@@ -175,6 +175,8 @@ Goal: add platform-specific capabilities after the event-admin beta is stable.
 
 - Harden the first desktop continuous SportIdent readout loop into a race-day
   reader workflow behind a platform device interface.
+- Reuse the shared finish-ticket renderer when adding desktop printer transport
+  so Android and desktop ticket text stay aligned.
 - Add a read-only Station Maintenance surface for attached SportIdent stations.
   It should show station serial number, reported function/mode, code number,
   firmware/config metadata when available, protocol flags, and explicit
