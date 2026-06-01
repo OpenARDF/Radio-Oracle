@@ -1,11 +1,12 @@
 package org.openardf.radiooracle.backend.sportident
 
 import org.openardf.radiooracle.shared.sportident.SportIdentCodes
+import org.openardf.radiooracle.shared.sportident.SportIdentUsbDevice
 
 /** SportIdent protocol constants and validation helpers used by the Android reader. */
 object SIConstants {
-    const val SI_VENDOR_ID = 4292
-    const val SI_PRODUCT_ID = 32778
+    const val SI_VENDOR_ID = SportIdentUsbDevice.VENDOR_ID
+    const val SI_PRODUCT_ID = SportIdentUsbDevice.PRODUCT_ID
     const val SI_MIN_NUMBER = SportIdentCodes.SI_MIN_NUMBER
     const val SI_MAX_NUMBER = SportIdentCodes.SI_MAX_NUMBER
 

@@ -160,6 +160,36 @@ After a public publish, `npm run jdeploy:registry-smoke -- <version>` installs
 that exact registry version in a temporary directory, launches it with the smoke
 project, confirms startup, and quits the app.
 
+### Desktop USB Feasibility
+
+Live SPORTident reader download remains outside the desktop beta boundary, but
+the desktop plan now includes a pre-beta USB feasibility check so that SI
+download support does not become a late packaging or platform blocker.
+
+The Android reader currently identifies the SPORTident USB bridge by VID/PID
+`4292:32778` (`0x10c4:0x800a`) and then talks to it as a serial port. On macOS,
+run:
+
+```shell
+npm run desktop:usb-diagnostic
+```
+
+The diagnostic reports whether that exact SPORTident USB bridge is visible in
+macOS IORegistry and lists `/dev/cu.*` USB serial nodes that a future desktop
+serial layer could open. Use the stricter form when the SI download box is
+expected to be attached:
+
+```shell
+npm run desktop:usb-diagnostic -- --require-si
+```
+
+Current local evidence on this Mac: `npm run desktop:usb-diagnostic --
+--require-si` detects the SPORTident USB bridge as `4292:32778`, product
+`SPORTident USB to UART Bridge Controller`, serial `554896`, with
+`/dev/cu.SLAB_USBtoUART` available as the macOS serial device node. That removes
+the platform-detection showstopper for desktop SI work; the remaining spike is
+serial-protocol access and card-readout parity with the Android `SIPort` path.
+
 For local macOS smoke tests, prefer copying the generated `.app` and sample
 project file to `/tmp` before launching with `open ... --args <sample.rom.json>`.
 Launching the checkout-built app bundle directly from `Documents/GitHub` can
@@ -207,6 +237,12 @@ repeatable package validation.
    smoke scenario. The Gradle-side jDeploy bundle tasks now build and verify
    `desktopApp/build/jdeploy/Radio-Oracle-jdeploy.jar`. The npm/jDeploy
    package metadata now uses `@openardf/radio-oracle`, local package preview is
-   covered by `npm run jdeploy:pack-preview`, and local install/launch smoke is
-   covered by `npm run jdeploy:local-smoke`. Release workflow and first public
-   publish remain pending.
+   covered by `npm run jdeploy:pack-preview`, local install/launch smoke is
+   covered by `npm run jdeploy:local-smoke`, public install/launch smoke is
+   covered by `npm run jdeploy:registry-smoke -- <version>`, and the first
+   public npm package is published as `@openardf/radio-oracle@1.0.1`.
+6. In progress: keep live SI download post-beta, but run a desktop USB
+   feasibility spike before relying on that deferral. The first diagnostic
+   command is `npm run desktop:usb-diagnostic`; it confirms macOS USB serial
+   visibility and can require the known SPORTident VID/PID when the download box
+   is attached.
