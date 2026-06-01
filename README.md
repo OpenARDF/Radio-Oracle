@@ -3,6 +3,9 @@
 Radio-Oracle is an Android app for managing radio orienteering events on race
 day.
 
+Radio-Oracle is maintained by OpenARDF and derived from the MIT-licensed
+Radio-O-Manager project by Pavel Kolský and contributors.
+
 ## What It Does
 
 Radio-Oracle is intended to help organizers:
@@ -38,8 +41,8 @@ Radio-Oracle is intended to help organizers:
 - [OkHttp](https://github.com/square/okhttp)
 - [Markwon](https://github.com/noties/Markwon)
 
-## Development Team
+## Credits
 
-- Pavel Kolský (head developer)
-- Vojtěch Kopal
-- Jakub Šrom
+- OpenARDF maintains Radio-Oracle.
+- Radio-Oracle is derived from the MIT-licensed Radio-O-Manager project by
+  Pavel Kolský, Vojtěch Kopal, and Jakub Šrom.

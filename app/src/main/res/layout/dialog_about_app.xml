@@ -47,4 +47,21 @@
         android:layout_height="wrap_content"
         android:autoLink="web"
         android:text="@string/about_app_link" />
+
+    <TextView
+        android:id="@+id/tv_credits_title"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/about_app_credits_title" />
+
+    <TextView
+        android:id="@+id/tv_credits"
+        android:textSize="13sp"
+        android:layout_marginTop="4dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/about_app_credits" />
 </LinearLayout>

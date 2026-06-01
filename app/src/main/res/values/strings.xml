@@ -374,6 +374,8 @@
     <string name="about_app_version">Version %1$s</string>
     <string name="about_app_description">Radio-Oracle is an open-source tool for organizing radio orienteering competitions.</string>
     <string name="about_app_link" translatable="false">GitHub: https://github.com/OpenARDF/Radio-Oracle </string>
+    <string name="about_app_credits_title">Credits and licenses</string>
+    <string name="about_app_credits">Maintained by OpenARDF. Derived from the MIT-licensed Radio-O-Manager project by Pavel Kolský, Vojtěch Kopal, and Jakub Šrom. Uses open-source libraries including SortableTableView, kotlin-csv, UsbSerial, ESCPOS-ThermalPrinter-Android, Moshi, OkHttp, Markwon, Firebase, and AndroidX. Logo artwork is original Radio-Oracle artwork generated for this project using Codex.</string>
 
     <!-- =============================================== DATA ARRAYS ===============================================-->
     <string name="race_type_classic">Classic</string>

@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ARDFManager"
+rootProject.name = "RadioOracle"
 include(":app")
 include(":desktopApp")
 include(":shared")
