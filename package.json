@@ -6,7 +6,7 @@
   "homepage": "https://github.com/OpenARDF/Radio-Oracle",
   "repository": {
     "type": "git",
-    "url": "https://github.com/OpenARDF/Radio-Oracle.git"
+    "url": "git+https://github.com/OpenARDF/Radio-Oracle.git"
   },
   "files": [
     "README.md",
