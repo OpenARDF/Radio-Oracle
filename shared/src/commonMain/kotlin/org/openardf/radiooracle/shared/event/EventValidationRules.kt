@@ -1,5 +1,8 @@
 package org.openardf.radiooracle.shared.event
 
+import org.openardf.radiooracle.shared.course.ControlPointRules
+import org.openardf.radiooracle.shared.course.ControlPointValidationError
+import org.openardf.radiooracle.shared.course.ControlPointValidationException
 import org.openardf.radiooracle.shared.importing.ImportValidationRules
 import org.openardf.radiooracle.shared.importing.ReadoutPunchValidationError
 
@@ -18,6 +21,7 @@ object EventValidationRules {
         ).takeIf { it.isNotEmpty() }?.let { duplicateNames ->
             issues.add(EventValidationIssue.DuplicateCategoryNames(duplicateNames))
         }
+        validateCategories(raceData).takeIf { it.isNotEmpty() }?.let(issues::addAll)
 
         ImportValidationRules.duplicateAliasNames(
             raceData.aliases.map { it.name }
@@ -37,6 +41,27 @@ object EventValidationRules {
 
         return issues
     }
+
+    private fun validateCategories(raceData: EventRaceData): List<EventValidationIssue> =
+        buildList {
+            raceData.categories.forEach { data ->
+                try {
+                    ControlPointRules.parseControlPoints(
+                        data.category.controlPointsString.trim(),
+                        data.category.effectiveRaceType(raceData.race)
+                    )
+                } catch (exception: ControlPointValidationException) {
+                    add(
+                        EventValidationIssue.InvalidCategoryControlPoints(
+                            categoryName = data.category.name,
+                            error = exception.error,
+                            token = exception.token,
+                            siCode = exception.siCode
+                        )
+                    )
+                }
+            }
+        }
 
     private fun validateCompetitors(competitors: List<EventCompetitorData>): List<EventValidationIssue> {
         val eventCompetitors = competitors.map { it.competitorCategory.competitor }
@@ -79,4 +104,10 @@ sealed interface EventValidationIssue {
     data class DuplicateSINumbers(val siNumbers: Set<Int>) : EventValidationIssue
     data class MultipleStartPunches(val siNumber: Int?) : EventValidationIssue
     data class MultipleFinishPunches(val siNumber: Int?) : EventValidationIssue
+    data class InvalidCategoryControlPoints(
+        val categoryName: String,
+        val error: ControlPointValidationError,
+        val token: String?,
+        val siCode: Int?
+    ) : EventValidationIssue
 }

@@ -1,0 +1,1502 @@
+{
+    "schemaVersion": 1,
+    "appName": "Radio-Oracle",
+    "raceData": {
+        "race": {
+            "id": "usa-density-race",
+            "name": "USA Radio Orienteering Category Density",
+            "apiKey": "",
+            "startDateTimeIso": "2026-06-14T09:30",
+            "raceType": "CLASSIC",
+            "raceLevel": "REGIONAL",
+            "raceBand": "M80",
+            "timeLimitSeconds": 7200
+        },
+        "categories": [
+            {
+                "category": {
+                    "id": "category-w12",
+                    "raceId": "usa-density-race",
+                    "name": "W12",
+                    "isMan": false,
+                    "maxAge": 12,
+                    "lengthMeters": 2500,
+                    "climbMeters": 60,
+                    "order": 1,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "31 32 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-w12-31",
+                        "categoryId": "category-w12",
+                        "siCode": 31,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-w12-32",
+                        "categoryId": "category-w12",
+                        "siCode": 32,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-w12-90",
+                        "categoryId": "category-w12",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 3
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-w14",
+                    "raceId": "usa-density-race",
+                    "name": "W14",
+                    "isMan": false,
+                    "maxAge": 14,
+                    "lengthMeters": 3000,
+                    "climbMeters": 75,
+                    "order": 2,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "31 32 33 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-w14-31",
+                        "categoryId": "category-w14",
+                        "siCode": 31,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-w14-32",
+                        "categoryId": "category-w14",
+                        "siCode": 32,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-w14-33",
+                        "categoryId": "category-w14",
+                        "siCode": 33,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-w14-90",
+                        "categoryId": "category-w14",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 4
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-w16",
+                    "raceId": "usa-density-race",
+                    "name": "W16",
+                    "isMan": false,
+                    "maxAge": 16,
+                    "lengthMeters": 3800,
+                    "climbMeters": 95,
+                    "order": 3,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "31 32 33 34 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-w16-31",
+                        "categoryId": "category-w16",
+                        "siCode": 31,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-w16-32",
+                        "categoryId": "category-w16",
+                        "siCode": 32,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-w16-33",
+                        "categoryId": "category-w16",
+                        "siCode": 33,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-w16-34",
+                        "categoryId": "category-w16",
+                        "siCode": 34,
+                        "type": "CONTROL",
+                        "order": 4
+                    },
+                    {
+                        "id": "control-w16-90",
+                        "categoryId": "category-w16",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 5
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-w19",
+                    "raceId": "usa-density-race",
+                    "name": "W19",
+                    "isMan": false,
+                    "maxAge": 19,
+                    "lengthMeters": 7000,
+                    "climbMeters": 210,
+                    "order": 4,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "31 32 33 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-w19-31",
+                        "categoryId": "category-w19",
+                        "siCode": 31,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-w19-32",
+                        "categoryId": "category-w19",
+                        "siCode": 32,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-w19-33",
+                        "categoryId": "category-w19",
+                        "siCode": 33,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-w19-90",
+                        "categoryId": "category-w19",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 4
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-w21",
+                    "raceId": "usa-density-race",
+                    "name": "W21",
+                    "isMan": false,
+                    "maxAge": 34,
+                    "lengthMeters": 8000,
+                    "climbMeters": 240,
+                    "order": 5,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "31 32 33 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-w21-31",
+                        "categoryId": "category-w21",
+                        "siCode": 31,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-w21-32",
+                        "categoryId": "category-w21",
+                        "siCode": 32,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-w21-33",
+                        "categoryId": "category-w21",
+                        "siCode": 33,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-w21-90",
+                        "categoryId": "category-w21",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 4
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-w35",
+                    "raceId": "usa-density-race",
+                    "name": "W35",
+                    "isMan": false,
+                    "maxAge": 44,
+                    "lengthMeters": 7000,
+                    "climbMeters": 210,
+                    "order": 6,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "31 32 33 34 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-w35-31",
+                        "categoryId": "category-w35",
+                        "siCode": 31,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-w35-32",
+                        "categoryId": "category-w35",
+                        "siCode": 32,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-w35-33",
+                        "categoryId": "category-w35",
+                        "siCode": 33,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-w35-34",
+                        "categoryId": "category-w35",
+                        "siCode": 34,
+                        "type": "CONTROL",
+                        "order": 4
+                    },
+                    {
+                        "id": "control-w35-90",
+                        "categoryId": "category-w35",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 5
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-w45",
+                    "raceId": "usa-density-race",
+                    "name": "W45",
+                    "isMan": false,
+                    "maxAge": 54,
+                    "lengthMeters": 6000,
+                    "climbMeters": 180,
+                    "order": 7,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "31 32 33 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-w45-31",
+                        "categoryId": "category-w45",
+                        "siCode": 31,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-w45-32",
+                        "categoryId": "category-w45",
+                        "siCode": 32,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-w45-33",
+                        "categoryId": "category-w45",
+                        "siCode": 33,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-w45-90",
+                        "categoryId": "category-w45",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 4
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-w55",
+                    "raceId": "usa-density-race",
+                    "name": "W55",
+                    "isMan": false,
+                    "maxAge": 64,
+                    "lengthMeters": 5000,
+                    "climbMeters": 150,
+                    "order": 8,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "31 32 33 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-w55-31",
+                        "categoryId": "category-w55",
+                        "siCode": 31,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-w55-32",
+                        "categoryId": "category-w55",
+                        "siCode": 32,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-w55-33",
+                        "categoryId": "category-w55",
+                        "siCode": 33,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-w55-90",
+                        "categoryId": "category-w55",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 4
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-w65",
+                    "raceId": "usa-density-race",
+                    "name": "W65",
+                    "isMan": false,
+                    "maxAge": 74,
+                    "lengthMeters": 5000,
+                    "climbMeters": 150,
+                    "order": 9,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "31 32 33 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-w65-31",
+                        "categoryId": "category-w65",
+                        "siCode": 31,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-w65-32",
+                        "categoryId": "category-w65",
+                        "siCode": 32,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-w65-33",
+                        "categoryId": "category-w65",
+                        "siCode": 33,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-w65-90",
+                        "categoryId": "category-w65",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 4
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-w75",
+                    "raceId": "usa-density-race",
+                    "name": "W75",
+                    "isMan": false,
+                    "maxAge": 200,
+                    "lengthMeters": 4000,
+                    "climbMeters": 120,
+                    "order": 10,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "31 32 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-w75-31",
+                        "categoryId": "category-w75",
+                        "siCode": 31,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-w75-32",
+                        "categoryId": "category-w75",
+                        "siCode": 32,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-w75-90",
+                        "categoryId": "category-w75",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 3
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-m12",
+                    "raceId": "usa-density-race",
+                    "name": "M12",
+                    "isMan": true,
+                    "maxAge": 12,
+                    "lengthMeters": 2500,
+                    "climbMeters": 60,
+                    "order": 11,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "41 42 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-m12-41",
+                        "categoryId": "category-m12",
+                        "siCode": 41,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-m12-42",
+                        "categoryId": "category-m12",
+                        "siCode": 42,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-m12-90",
+                        "categoryId": "category-m12",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 3
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-m14",
+                    "raceId": "usa-density-race",
+                    "name": "M14",
+                    "isMan": true,
+                    "maxAge": 14,
+                    "lengthMeters": 3000,
+                    "climbMeters": 75,
+                    "order": 12,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "41 42 43 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-m14-41",
+                        "categoryId": "category-m14",
+                        "siCode": 41,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-m14-42",
+                        "categoryId": "category-m14",
+                        "siCode": 42,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-m14-43",
+                        "categoryId": "category-m14",
+                        "siCode": 43,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-m14-90",
+                        "categoryId": "category-m14",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 4
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-m16",
+                    "raceId": "usa-density-race",
+                    "name": "M16",
+                    "isMan": true,
+                    "maxAge": 16,
+                    "lengthMeters": 3800,
+                    "climbMeters": 95,
+                    "order": 13,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "41 42 43 44 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-m16-41",
+                        "categoryId": "category-m16",
+                        "siCode": 41,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-m16-42",
+                        "categoryId": "category-m16",
+                        "siCode": 42,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-m16-43",
+                        "categoryId": "category-m16",
+                        "siCode": 43,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-m16-44",
+                        "categoryId": "category-m16",
+                        "siCode": 44,
+                        "type": "CONTROL",
+                        "order": 4
+                    },
+                    {
+                        "id": "control-m16-90",
+                        "categoryId": "category-m16",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 5
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-m19",
+                    "raceId": "usa-density-race",
+                    "name": "M19",
+                    "isMan": true,
+                    "maxAge": 19,
+                    "lengthMeters": 9000,
+                    "climbMeters": 270,
+                    "order": 14,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "41 42 43 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-m19-41",
+                        "categoryId": "category-m19",
+                        "siCode": 41,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-m19-42",
+                        "categoryId": "category-m19",
+                        "siCode": 42,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-m19-43",
+                        "categoryId": "category-m19",
+                        "siCode": 43,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-m19-90",
+                        "categoryId": "category-m19",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 4
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-m21",
+                    "raceId": "usa-density-race",
+                    "name": "M21",
+                    "isMan": true,
+                    "maxAge": 39,
+                    "lengthMeters": 10500,
+                    "climbMeters": 320,
+                    "order": 15,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "41 42 43 44 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-m21-41",
+                        "categoryId": "category-m21",
+                        "siCode": 41,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-m21-42",
+                        "categoryId": "category-m21",
+                        "siCode": 42,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-m21-43",
+                        "categoryId": "category-m21",
+                        "siCode": 43,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-m21-44",
+                        "categoryId": "category-m21",
+                        "siCode": 44,
+                        "type": "CONTROL",
+                        "order": 4
+                    },
+                    {
+                        "id": "control-m21-90",
+                        "categoryId": "category-m21",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 5
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-m40",
+                    "raceId": "usa-density-race",
+                    "name": "M40",
+                    "isMan": true,
+                    "maxAge": 49,
+                    "lengthMeters": 9000,
+                    "climbMeters": 270,
+                    "order": 16,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "41 42 43 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-m40-41",
+                        "categoryId": "category-m40",
+                        "siCode": 41,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-m40-42",
+                        "categoryId": "category-m40",
+                        "siCode": 42,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-m40-43",
+                        "categoryId": "category-m40",
+                        "siCode": 43,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-m40-90",
+                        "categoryId": "category-m40",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 4
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-m50",
+                    "raceId": "usa-density-race",
+                    "name": "M50",
+                    "isMan": true,
+                    "maxAge": 59,
+                    "lengthMeters": 7000,
+                    "climbMeters": 210,
+                    "order": 17,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "41 42 43 44 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-m50-41",
+                        "categoryId": "category-m50",
+                        "siCode": 41,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-m50-42",
+                        "categoryId": "category-m50",
+                        "siCode": 42,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-m50-43",
+                        "categoryId": "category-m50",
+                        "siCode": 43,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-m50-44",
+                        "categoryId": "category-m50",
+                        "siCode": 44,
+                        "type": "CONTROL",
+                        "order": 4
+                    },
+                    {
+                        "id": "control-m50-90",
+                        "categoryId": "category-m50",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 5
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-m60",
+                    "raceId": "usa-density-race",
+                    "name": "M60",
+                    "isMan": true,
+                    "maxAge": 69,
+                    "lengthMeters": 6000,
+                    "climbMeters": 180,
+                    "order": 18,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "41 42 43 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-m60-41",
+                        "categoryId": "category-m60",
+                        "siCode": 41,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-m60-42",
+                        "categoryId": "category-m60",
+                        "siCode": 42,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-m60-43",
+                        "categoryId": "category-m60",
+                        "siCode": 43,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-m60-90",
+                        "categoryId": "category-m60",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 4
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-m70",
+                    "raceId": "usa-density-race",
+                    "name": "M70",
+                    "isMan": true,
+                    "maxAge": 79,
+                    "lengthMeters": 5000,
+                    "climbMeters": 150,
+                    "order": 19,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "41 42 43 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-m70-41",
+                        "categoryId": "category-m70",
+                        "siCode": 41,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-m70-42",
+                        "categoryId": "category-m70",
+                        "siCode": 42,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-m70-43",
+                        "categoryId": "category-m70",
+                        "siCode": 43,
+                        "type": "CONTROL",
+                        "order": 3
+                    },
+                    {
+                        "id": "control-m70-90",
+                        "categoryId": "category-m70",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 4
+                    }
+                ],
+                "competitors": []
+            },
+            {
+                "category": {
+                    "id": "category-m80",
+                    "raceId": "usa-density-race",
+                    "name": "M80",
+                    "isMan": true,
+                    "maxAge": 200,
+                    "lengthMeters": 4000,
+                    "climbMeters": 120,
+                    "order": 20,
+                    "differentProperties": false,
+                    "raceType": null,
+                    "raceBand": null,
+                    "timeLimitSeconds": null,
+                    "controlPointsString": "41 42 90"
+                },
+                "controlPoints": [
+                    {
+                        "id": "control-m80-41",
+                        "categoryId": "category-m80",
+                        "siCode": 41,
+                        "type": "CONTROL",
+                        "order": 1
+                    },
+                    {
+                        "id": "control-m80-42",
+                        "categoryId": "category-m80",
+                        "siCode": 42,
+                        "type": "CONTROL",
+                        "order": 2
+                    },
+                    {
+                        "id": "control-m80-90",
+                        "categoryId": "category-m80",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 3
+                    }
+                ],
+                "competitors": []
+            }
+        ],
+        "aliases": [
+            {
+                "id": "alias-31",
+                "raceId": "usa-density-race",
+                "siCode": 31,
+                "name": "Fox 1"
+            },
+            {
+                "id": "alias-90",
+                "raceId": "usa-density-race",
+                "siCode": 90,
+                "name": "Finish Beacon"
+            },
+            {
+                "id": "alias-53",
+                "raceId": "usa-density-race",
+                "siCode": 53,
+                "name": "Youth Beacon"
+            }
+        ],
+        "competitorData": [
+            {
+                "competitorCategory": {
+                    "competitor": {
+                        "id": "competitor-001",
+                        "raceId": "usa-density-race",
+                        "categoryId": "category-m21",
+                        "firstName": "Erik",
+                        "lastName": "Johansson",
+                        "club": "Vasteras Radio Orienteering",
+                        "index": "SWE-M21-001",
+                        "isMan": true,
+                        "birthYear": 1987,
+                        "siNumber": 812345,
+                        "siRent": false,
+                        "startNumber": 101,
+                        "drawnStartTimeSeconds": 600
+                    },
+                    "category": null
+                },
+                "readoutData": {
+                    "result": {
+                        "id": "result-001",
+                        "raceId": "usa-density-race",
+                        "competitorId": "competitor-001",
+                        "siNumber": 812345,
+                        "cardType": 10,
+                        "checkTimeSeconds": null,
+                        "startTimeSeconds": 600,
+                        "finishTimeSeconds": 3150,
+                        "readoutDateTimeIso": "2026-06-14T10:22",
+                        "automaticStatus": true,
+                        "resultStatus": "OK",
+                        "points": 5,
+                        "runTimeSeconds": 2550,
+                        "modified": false,
+                        "sent": false,
+                        "place": 1
+                    },
+                    "punches": []
+                }
+            },
+            {
+                "competitorCategory": {
+                    "competitor": {
+                        "id": "competitor-002",
+                        "raceId": "usa-density-race",
+                        "categoryId": "category-w21",
+                        "firstName": "Maja",
+                        "lastName": "Nordgaard",
+                        "club": "Copenhagen Orienteering Club",
+                        "index": "DEN-W21-014",
+                        "isMan": false,
+                        "birthYear": 1992,
+                        "siNumber": 823456,
+                        "siRent": false,
+                        "startNumber": 102,
+                        "drawnStartTimeSeconds": 660
+                    },
+                    "category": null
+                },
+                "readoutData": {
+                    "result": {
+                        "id": "result-002",
+                        "raceId": "usa-density-race",
+                        "competitorId": "competitor-002",
+                        "siNumber": 823456,
+                        "cardType": 10,
+                        "checkTimeSeconds": null,
+                        "startTimeSeconds": 660,
+                        "finishTimeSeconds": 2820,
+                        "readoutDateTimeIso": "2026-06-14T10:22",
+                        "automaticStatus": true,
+                        "resultStatus": "OK",
+                        "points": 4,
+                        "runTimeSeconds": 2160,
+                        "modified": false,
+                        "sent": false,
+                        "place": 1
+                    },
+                    "punches": []
+                }
+            },
+            {
+                "competitorCategory": {
+                    "competitor": {
+                        "id": "competitor-003",
+                        "raceId": "usa-density-race",
+                        "categoryId": "category-m40",
+                        "firstName": "Soren",
+                        "lastName": "Larsen",
+                        "club": "Aarhus Radio Direction Finding",
+                        "index": "DEN-M40-203",
+                        "isMan": true,
+                        "birthYear": 1979,
+                        "siNumber": 834567,
+                        "siRent": false,
+                        "startNumber": 103,
+                        "drawnStartTimeSeconds": 720
+                    },
+                    "category": null
+                },
+                "readoutData": {
+                    "result": {
+                        "id": "result-003",
+                        "raceId": "usa-density-race",
+                        "competitorId": "competitor-003",
+                        "siNumber": 834567,
+                        "cardType": 10,
+                        "checkTimeSeconds": null,
+                        "startTimeSeconds": 720,
+                        "finishTimeSeconds": 3780,
+                        "readoutDateTimeIso": "2026-06-14T10:22",
+                        "automaticStatus": true,
+                        "resultStatus": "OK",
+                        "points": 4,
+                        "runTimeSeconds": 3060,
+                        "modified": false,
+                        "sent": false,
+                        "place": 1
+                    },
+                    "punches": []
+                }
+            },
+            {
+                "competitorCategory": {
+                    "competitor": {
+                        "id": "competitor-004",
+                        "raceId": "usa-density-race",
+                        "categoryId": "category-w35",
+                        "firstName": "Ingrid",
+                        "lastName": "Hakansson",
+                        "club": "Gothenburg Radio Orienteers",
+                        "index": "SWE-W35-047",
+                        "isMan": false,
+                        "birthYear": 1984,
+                        "siNumber": 845678,
+                        "siRent": false,
+                        "startNumber": 104,
+                        "drawnStartTimeSeconds": 780
+                    },
+                    "category": null
+                },
+                "readoutData": {
+                    "result": {
+                        "id": "result-004",
+                        "raceId": "usa-density-race",
+                        "competitorId": "competitor-004",
+                        "siNumber": 845678,
+                        "cardType": 10,
+                        "checkTimeSeconds": null,
+                        "startTimeSeconds": 780,
+                        "finishTimeSeconds": 3400,
+                        "readoutDateTimeIso": "2026-06-14T10:22",
+                        "automaticStatus": true,
+                        "resultStatus": "OK",
+                        "points": 5,
+                        "runTimeSeconds": 2620,
+                        "modified": false,
+                        "sent": false,
+                        "place": 1
+                    },
+                    "punches": []
+                }
+            },
+            {
+                "competitorCategory": {
+                    "competitor": {
+                        "id": "competitor-005",
+                        "raceId": "usa-density-race",
+                        "categoryId": "category-m16",
+                        "firstName": "Lukas",
+                        "lastName": "Bergstrom",
+                        "club": "Stockholm Forest Runners",
+                        "index": "SWE-M16-118",
+                        "isMan": true,
+                        "birthYear": 2010,
+                        "siNumber": 856789,
+                        "siRent": false,
+                        "startNumber": 105,
+                        "drawnStartTimeSeconds": 840
+                    },
+                    "category": null
+                },
+                "readoutData": {
+                    "result": {
+                        "id": "result-005",
+                        "raceId": "usa-density-race",
+                        "competitorId": "competitor-005",
+                        "siNumber": 856789,
+                        "cardType": 10,
+                        "checkTimeSeconds": null,
+                        "startTimeSeconds": 840,
+                        "finishTimeSeconds": 2460,
+                        "readoutDateTimeIso": "2026-06-14T10:22",
+                        "automaticStatus": true,
+                        "resultStatus": "OK",
+                        "points": 5,
+                        "runTimeSeconds": 1620,
+                        "modified": false,
+                        "sent": false,
+                        "place": 1
+                    },
+                    "punches": []
+                }
+            },
+            {
+                "competitorCategory": {
+                    "competitor": {
+                        "id": "competitor-006",
+                        "raceId": "usa-density-race",
+                        "categoryId": "category-w55",
+                        "firstName": "Kari",
+                        "lastName": "Ostgaard",
+                        "club": "Oslo Radio Orienteering",
+                        "index": "NOR-W55-022",
+                        "isMan": false,
+                        "birthYear": 1967,
+                        "siNumber": 867890,
+                        "siRent": false,
+                        "startNumber": 106,
+                        "drawnStartTimeSeconds": 900
+                    },
+                    "category": null
+                },
+                "readoutData": {
+                    "result": {
+                        "id": "result-006",
+                        "raceId": "usa-density-race",
+                        "competitorId": "competitor-006",
+                        "siNumber": 867890,
+                        "cardType": 10,
+                        "checkTimeSeconds": null,
+                        "startTimeSeconds": 900,
+                        "finishTimeSeconds": 3510,
+                        "readoutDateTimeIso": "2026-06-14T10:22",
+                        "automaticStatus": true,
+                        "resultStatus": "OK",
+                        "points": 4,
+                        "runTimeSeconds": 2610,
+                        "modified": false,
+                        "sent": false,
+                        "place": 1
+                    },
+                    "punches": []
+                }
+            },
+            {
+                "competitorCategory": {
+                    "competitor": {
+                        "id": "competitor-007",
+                        "raceId": "usa-density-race",
+                        "categoryId": "category-m70",
+                        "firstName": "Jukka",
+                        "lastName": "Korhonen",
+                        "club": "Tampere Radio Orienteers",
+                        "index": "FIN-M70-031",
+                        "isMan": true,
+                        "birthYear": 1955,
+                        "siNumber": null,
+                        "siRent": true,
+                        "startNumber": 107,
+                        "drawnStartTimeSeconds": 960
+                    },
+                    "category": null
+                },
+                "readoutData": null
+            },
+            {
+                "competitorCategory": {
+                    "competitor": {
+                        "id": "competitor-008",
+                        "raceId": "usa-density-race",
+                        "categoryId": "category-w19",
+                        "firstName": "Asa",
+                        "lastName": "Nystrom",
+                        "club": "Umea Orienteering",
+                        "index": "SWE-W19-009",
+                        "isMan": false,
+                        "birthYear": 2008,
+                        "siNumber": 878901,
+                        "siRent": false,
+                        "startNumber": 108,
+                        "drawnStartTimeSeconds": 1020
+                    },
+                    "category": null
+                },
+                "readoutData": {
+                    "result": {
+                        "id": "result-008",
+                        "raceId": "usa-density-race",
+                        "competitorId": "competitor-008",
+                        "siNumber": 878901,
+                        "cardType": 10,
+                        "checkTimeSeconds": null,
+                        "startTimeSeconds": 1020,
+                        "finishTimeSeconds": 3300,
+                        "readoutDateTimeIso": "2026-06-14T10:22",
+                        "automaticStatus": true,
+                        "resultStatus": "MISPUNCHED",
+                        "points": 3,
+                        "runTimeSeconds": 2280,
+                        "modified": false,
+                        "sent": false,
+                        "place": 0
+                    },
+                    "punches": []
+                }
+            },
+            {
+                "competitorCategory": {
+                    "competitor": {
+                        "id": "competitor-009",
+                        "raceId": "usa-density-race",
+                        "categoryId": "category-m50",
+                        "firstName": "Matthias",
+                        "lastName": "Schneider",
+                        "club": "DARC Peilsport Berlin",
+                        "index": "GER-M50-077",
+                        "isMan": true,
+                        "birthYear": 1972,
+                        "siNumber": 889123,
+                        "siRent": false,
+                        "startNumber": 109,
+                        "drawnStartTimeSeconds": 1080
+                    },
+                    "category": null
+                },
+                "readoutData": {
+                    "result": {
+                        "id": "result-009",
+                        "raceId": "usa-density-race",
+                        "competitorId": "competitor-009",
+                        "siNumber": 889123,
+                        "cardType": 10,
+                        "checkTimeSeconds": null,
+                        "startTimeSeconds": 1080,
+                        "finishTimeSeconds": 3900,
+                        "readoutDateTimeIso": "2026-06-14T10:35",
+                        "automaticStatus": true,
+                        "resultStatus": "OK",
+                        "points": 5,
+                        "runTimeSeconds": 2820,
+                        "modified": false,
+                        "sent": false,
+                        "place": 2
+                    },
+                    "punches": []
+                }
+            },
+            {
+                "competitorCategory": {
+                    "competitor": {
+                        "id": "competitor-010",
+                        "raceId": "usa-density-race",
+                        "categoryId": "category-w45",
+                        "firstName": "Katrin",
+                        "lastName": "Hoffmann",
+                        "club": "Foxoring Team Sachsen",
+                        "index": "GER-W45-042",
+                        "isMan": false,
+                        "birthYear": 1978,
+                        "siNumber": 889234,
+                        "siRent": false,
+                        "startNumber": 110,
+                        "drawnStartTimeSeconds": 1140
+                    },
+                    "category": null
+                },
+                "readoutData": {
+                    "result": {
+                        "id": "result-010",
+                        "raceId": "usa-density-race",
+                        "competitorId": "competitor-010",
+                        "siNumber": 889234,
+                        "cardType": 10,
+                        "checkTimeSeconds": null,
+                        "startTimeSeconds": 1140,
+                        "finishTimeSeconds": 3570,
+                        "readoutDateTimeIso": "2026-06-14T10:31",
+                        "automaticStatus": true,
+                        "resultStatus": "OK",
+                        "points": 4,
+                        "runTimeSeconds": 2430,
+                        "modified": false,
+                        "sent": false,
+                        "place": 1
+                    },
+                    "punches": []
+                }
+            },
+            {
+                "competitorCategory": {
+                    "competitor": {
+                        "id": "competitor-011",
+                        "raceId": "usa-density-race",
+                        "categoryId": "category-m19",
+                        "firstName": "Tomas",
+                        "lastName": "Kazlauskas",
+                        "club": "Vilnius Radio Orienteering",
+                        "index": "LTU-M19-015",
+                        "isMan": true,
+                        "birthYear": 2008,
+                        "siNumber": 889345,
+                        "siRent": false,
+                        "startNumber": 111,
+                        "drawnStartTimeSeconds": 1200
+                    },
+                    "category": null
+                },
+                "readoutData": {
+                    "result": {
+                        "id": "result-011",
+                        "raceId": "usa-density-race",
+                        "competitorId": "competitor-011",
+                        "siNumber": 889345,
+                        "cardType": 10,
+                        "checkTimeSeconds": null,
+                        "startTimeSeconds": 1200,
+                        "finishTimeSeconds": 4380,
+                        "readoutDateTimeIso": "2026-06-14T10:43",
+                        "automaticStatus": true,
+                        "resultStatus": "OK",
+                        "points": 4,
+                        "runTimeSeconds": 3180,
+                        "modified": false,
+                        "sent": false,
+                        "place": 2
+                    },
+                    "punches": []
+                }
+            },
+            {
+                "competitorCategory": {
+                    "competitor": {
+                        "id": "competitor-012",
+                        "raceId": "usa-density-race",
+                        "categoryId": "category-w65",
+                        "firstName": "Ruta",
+                        "lastName": "Petrauskiene",
+                        "club": "Kaunas Radijo Orientavimasis",
+                        "index": "LTU-W65-006",
+                        "isMan": false,
+                        "birthYear": 1959,
+                        "siNumber": 889456,
+                        "siRent": false,
+                        "startNumber": 112,
+                        "drawnStartTimeSeconds": 1260
+                    },
+                    "category": null
+                },
+                "readoutData": {
+                    "result": {
+                        "id": "result-012",
+                        "raceId": "usa-density-race",
+                        "competitorId": "competitor-012",
+                        "siNumber": 889456,
+                        "cardType": 10,
+                        "checkTimeSeconds": null,
+                        "startTimeSeconds": 1260,
+                        "finishTimeSeconds": 3840,
+                        "readoutDateTimeIso": "2026-06-14T10:34",
+                        "automaticStatus": true,
+                        "resultStatus": "OK",
+                        "points": 4,
+                        "runTimeSeconds": 2580,
+                        "modified": false,
+                        "sent": false,
+                        "place": 2
+                    },
+                    "punches": []
+                }
+            }
+        ],
+        "unmatchedReadoutData": [
+            {
+                "result": {
+                    "id": "result-unmatched-001",
+                    "raceId": "usa-density-race",
+                    "competitorId": null,
+                    "siNumber": 889012,
+                    "cardType": 10,
+                    "checkTimeSeconds": null,
+                    "startTimeSeconds": 1080,
+                    "finishTimeSeconds": 3720,
+                    "readoutDateTimeIso": "2026-06-14T10:32",
+                    "automaticStatus": true,
+                    "resultStatus": "NO_RANKING",
+                    "points": 4,
+                    "runTimeSeconds": 2640,
+                    "modified": false,
+                    "sent": false,
+                    "place": 0
+                },
+                "punches": []
+            }
+        ]
+    }
+}

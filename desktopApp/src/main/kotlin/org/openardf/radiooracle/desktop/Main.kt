@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -42,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import org.openardf.radiooracle.shared.course.ControlPointValidationException
 import org.openardf.radiooracle.shared.event.EventAliasDetails
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCompetitorDetails
@@ -66,6 +68,7 @@ private data class FixedTableColumn(val title: String, val width: Dp)
 private val TableColumnGap = 12.dp
 private val ActionRailWidth = 104.dp
 private val FixedGridRowHeight = 56.dp
+private val ReadoutAddRailYOffset = 10.dp
 
 private val CategoryTableColumns = listOf(
     FixedTableColumn("Name", 150.dp),
@@ -351,7 +354,7 @@ fun main(args: Array<String>) = application {
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
                 }.onFailure { error ->
-                    projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+                    projectStatusText = "Edit failed: ${genericEditErrorText(error)}"
                 }
             },
             onRenameCategory = { categoryId, name ->
@@ -362,7 +365,7 @@ fun main(args: Array<String>) = application {
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
                 }.onFailure { error ->
-                    projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+                    projectStatusText = "Edit failed: ${genericEditErrorText(error)}"
                 }
             },
             onUpdateCategoryControlPoints = { categoryId, controlPointsText ->
@@ -379,7 +382,7 @@ fun main(args: Array<String>) = application {
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
                 }.onFailure { error ->
-                    projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+                    projectStatusText = "Edit failed: ${categoryControlPointErrorText(error)}"
                 }
             },
             onUpdateCategoryPhysicalStats = { categoryId, lengthMeters, climbMeters ->
@@ -1028,7 +1031,7 @@ private fun ReadoutDetailsPanel(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
             ManualReadoutAddButton(
                 selectedCompetitorId = selectedCompetitorId,
@@ -1046,7 +1049,7 @@ private fun ReadoutDetailsPanel(
                     controlCodesDraft = ""
                     selectedStatus = ResultStatus.OK
                 },
-                modifier = fixedActionRailModifier()
+                modifier = fixedActionRailModifier().offset(y = ReadoutAddRailYOffset)
             )
             Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
                 Column(
@@ -1384,7 +1387,7 @@ private fun CompetitorDetailsPanel(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
             Button(
                 onClick = {
@@ -1796,7 +1799,7 @@ private fun AliasDetailsPanel(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
             Button(
                 onClick = {
@@ -1979,7 +1982,7 @@ private fun CategoryDetailsPanel(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
             Button(
                 onClick = {
@@ -2452,6 +2455,16 @@ private fun fixedActionRailModifier(): Modifier =
     Modifier
         .width(ActionRailWidth)
         .height(FixedGridRowHeight)
+
+private fun categoryControlPointErrorText(error: Throwable): String =
+    if (error is ControlPointValidationException) {
+        DesktopControlPointValidationText.messageFor(error)
+    } else {
+        genericEditErrorText(error)
+    }
+
+private fun genericEditErrorText(error: Throwable): String =
+    error.message ?: error::class.simpleName ?: "Unknown error"
 
 private fun fixedTableWidth(columns: List<FixedTableColumn>): Dp =
     columns.fold(0.dp) { total, column -> total + column.width } +

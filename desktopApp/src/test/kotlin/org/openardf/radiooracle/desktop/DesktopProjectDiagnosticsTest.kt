@@ -6,6 +6,8 @@ import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.EventCategory
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
@@ -48,7 +50,27 @@ class DesktopProjectDiagnosticsTest {
         assertTrue(diagnostics.validationIssues.any { it.contains("Race name is blank") })
     }
 
-    private fun projectFile(raceName: String = "Diagnostics Race"): EventProjectFile {
+    @Test
+    fun reportsInvalidCategoryControlPoints() {
+        val diagnostics = DesktopProjectDiagnostics.from(
+            projectFile(
+                categories = listOf(categoryData(name = "M21", controlPointsString = "31 32 31"))
+            )
+        )
+
+        assertEquals("1 validation issue", diagnostics.validationState)
+        assertTrue(
+            diagnostics.validationIssues.any {
+                it.contains("Invalid control points for M21") &&
+                        it.contains("Duplicate control points")
+            }
+        )
+    }
+
+    private fun projectFile(
+        raceName: String = "Diagnostics Race",
+        categories: List<EventCategoryData> = emptyList()
+    ): EventProjectFile {
         val race = EventRace(
             id = "race",
             name = raceName,
@@ -78,7 +100,7 @@ class DesktopProjectDiagnosticsTest {
         return EventProjectFile(
             raceData = EventRaceData(
                 race = race,
-                categories = emptyList(),
+                categories = categories,
                 aliases = emptyList(),
                 competitorData = listOf(
                     EventCompetitorData(
@@ -90,4 +112,25 @@ class DesktopProjectDiagnosticsTest {
             )
         )
     }
+
+    private fun categoryData(name: String, controlPointsString: String): EventCategoryData =
+        EventCategoryData(
+            category = EventCategory(
+                id = name,
+                raceId = "race",
+                name = name,
+                isMan = true,
+                maxAge = null,
+                lengthMeters = 0,
+                climbMeters = 0,
+                order = 0,
+                differentProperties = false,
+                raceType = null,
+                raceBand = null,
+                timeLimitSeconds = null,
+                controlPointsString = controlPointsString
+            ),
+            controlPoints = emptyList(),
+            competitors = emptyList()
+        )
 }

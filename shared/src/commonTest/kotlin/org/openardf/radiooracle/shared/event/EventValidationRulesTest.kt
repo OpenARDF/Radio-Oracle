@@ -67,6 +67,27 @@ class EventValidationRulesTest {
         )
     }
 
+    @Test
+    fun reportsInvalidCategoryControlPoints() {
+        val issues = EventValidationRules.validateRaceData(
+            raceData(
+                categories = listOf(categoryData("M21", controlPointsString = "31 32 31"))
+            )
+        )
+
+        assertEquals(
+            listOf(
+                EventValidationIssue.InvalidCategoryControlPoints(
+                    categoryName = "M21",
+                    error = org.openardf.radiooracle.shared.course.ControlPointValidationError.CLASSIC_DUPLICATE,
+                    token = null,
+                    siCode = null
+                )
+            ),
+            issues
+        )
+    }
+
     private fun raceData(
         race: EventRace = race(),
         categories: List<EventCategoryData> = listOf(categoryData("M21")),
@@ -94,7 +115,7 @@ class EventValidationRulesTest {
             timeLimitSeconds = 7_200
         )
 
-    private fun categoryData(name: String): EventCategoryData =
+    private fun categoryData(name: String, controlPointsString: String = ""): EventCategoryData =
         EventCategoryData(
             category = EventCategory(
                 id = name,
@@ -109,7 +130,7 @@ class EventValidationRulesTest {
                 raceType = null,
                 raceBand = null,
                 timeLimitSeconds = null,
-                controlPointsString = ""
+                controlPointsString = controlPointsString
             ),
             controlPoints = emptyList(),
             competitors = emptyList()

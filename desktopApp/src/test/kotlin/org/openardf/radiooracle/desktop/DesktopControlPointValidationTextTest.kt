@@ -1,0 +1,39 @@
+package org.openardf.radiooracle.desktop
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+import org.openardf.radiooracle.shared.course.ControlPointValidationError
+import org.openardf.radiooracle.shared.course.ControlPointValidationException
+
+class DesktopControlPointValidationTextTest {
+    @Test
+    fun mapsControlPointValidationFailuresToUserText() {
+        assertEquals(
+            "Unknown special control specifier: X",
+            DesktopControlPointValidationText.messageFor(
+                ControlPointValidationException(ControlPointValidationError.UNKNOWN_SPECIFIER, token = "X")
+            )
+        )
+        assertEquals(
+            "Invalid SI range: 256. The code must be between 1 and 255.",
+            DesktopControlPointValidationText.messageFor(
+                ControlPointValidationException(ControlPointValidationError.INVALID_RANGE, token = "256")
+            )
+        )
+        assertEquals(
+            "Beacon must be the last control point.",
+            DesktopControlPointValidationText.messageFor(
+                ControlPointValidationException(ControlPointValidationError.NON_LAST_BEACON)
+            )
+        )
+        assertEquals(
+            "Control point with SI code [40] used as a separator / beacon and as a control.",
+            DesktopControlPointValidationText.messageFor(
+                ControlPointValidationException(
+                    ControlPointValidationError.SPRINT_SPECIAL_REUSES_CONTROL,
+                    siCode = 40
+                )
+            )
+        )
+    }
+}

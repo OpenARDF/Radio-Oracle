@@ -69,6 +69,10 @@ data class DesktopProjectDiagnostics(
                     "Readout has multiple start punches: ${issue.siNumber ?: "unknown SI"}."
                 is EventValidationIssue.MultipleFinishPunches ->
                     "Readout has multiple finish punches: ${issue.siNumber ?: "unknown SI"}."
+                is EventValidationIssue.InvalidCategoryControlPoints ->
+                    "Invalid control points for ${issue.categoryName}: ${
+                        DesktopControlPointValidationText.messageFor(issue.error, issue.token, issue.siCode)
+                    }"
             }
     }
 }

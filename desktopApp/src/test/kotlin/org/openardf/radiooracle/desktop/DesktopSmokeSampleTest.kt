@@ -13,11 +13,41 @@ import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
 class DesktopSmokeSampleTest {
+    @Test
+    fun repositoryUsaDensitySampleIncludesUsaRuleCategories() {
+        val projectFile = DesktopProjectFiles.read(Path.of("..", "samples", "usa-radio-orienteering-density.rom.json"))
+        val raceData = projectFile.raceData
+        val categoryDetails = EventCategoryDetails.from(raceData)
+
+        assertTrue(projectFile.isSupportedSchema())
+        assertEquals("USA Radio Orienteering Category Density", EventProjectSummary.from(projectFile).raceName)
+        assertEquals(
+            listOf(
+                "W12", "W14", "W16", "W19", "W21", "W35", "W45", "W55", "W65", "W75",
+                "M12", "M14", "M16", "M19", "M21", "M40", "M50", "M60", "M70", "M80"
+            ),
+            categoryDetails.map { it.name }
+        )
+        assertEquals(12, EventCompetitorDetails.from(raceData).size)
+        assertEquals(12, EventReadoutDetails.from(raceData).size)
+        assertEquals(11, EventResultDetails.from(raceData).size)
+        assertTrue(raceData.categories.all { category ->
+            category.category.controlPointsString
+                .split(" ")
+                .all { token -> token.all(Char::isDigit) }
+        })
+        assertTrue(raceData.categories.all { category ->
+            category.controlPoints.last().siCode == 90 &&
+                    category.controlPoints.last().type == ControlPointType.BEACON
+        })
+    }
+
     @Test
     fun repositorySmokeSampleExercisesImplementedDesktopSections() {
         val projectFile = DesktopProjectFiles.read(Path.of("..", "samples", "desktop-smoke.rom.json"))
