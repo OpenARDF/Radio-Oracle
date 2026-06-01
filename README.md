@@ -29,7 +29,7 @@ Radio-Oracle is intended to help organizers:
 
 ## Third Party Libraries and Resources
 
-- **Logo** - using SportIdent by Gonzo from <a href="https://thenounproject.com/browse/icons/term/sportident/" target="_blank" title="SportIdent Icons">Noun Project</a> (CC BY 3.0)
+- **Logo** - original Radio-Oracle artwork generated for this project using Codex
 - [SortableTableView](https://github.com/ISchwarz23/SortableTableView)
 - [kotlin-csv](https://github.com/doyaaaaaken/kotlin-csv)
 - [UsbSerial](https://github.com/felHR85/UsbSerial)

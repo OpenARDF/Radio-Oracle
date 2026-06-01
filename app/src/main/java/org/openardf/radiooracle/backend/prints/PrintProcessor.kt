@@ -100,7 +100,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
                     context.getString(R.string.key_prints_remove_diacritics),
                     false
                 )
-            val version = "ARDF Manager v${dataProcessor.getAppVersion()}"
+            val version = "Radio-Oracle v${dataProcessor.getAppVersion()}"
 
             // Remove diacritics if the preference is set
             val textToPrint = if (preference) {
