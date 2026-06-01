@@ -2,6 +2,8 @@ package org.openardf.radiooracle.desktop
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.HorizontalScrollbar
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
@@ -32,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.MenuBar
@@ -55,6 +59,41 @@ import org.openardf.radiooracle.shared.domain.ResultStatus
 import java.nio.file.Path
 import java.time.LocalDateTime
 import java.util.UUID
+
+private data class FixedTableColumn(val title: String, val width: Dp)
+
+private val TableColumnGap = 12.dp
+
+private val CategoryTableColumns = listOf(
+    FixedTableColumn("Name", 150.dp),
+    FixedTableColumn("Length", 84.dp),
+    FixedTableColumn("Climb", 84.dp),
+    FixedTableColumn("Type", 96.dp),
+    FixedTableColumn("Band", 104.dp),
+    FixedTableColumn("Limit", 80.dp),
+    FixedTableColumn("Controls", 180.dp),
+    FixedTableColumn("", 76.dp),
+    FixedTableColumn("", 76.dp),
+    FixedTableColumn("", 76.dp),
+    FixedTableColumn("", 82.dp)
+)
+
+private val CompetitorTableColumns = listOf(
+    FixedTableColumn("First", 120.dp),
+    FixedTableColumn("Last", 136.dp),
+    FixedTableColumn("Club", 210.dp),
+    FixedTableColumn("Index", 116.dp),
+    FixedTableColumn("Birth", 72.dp),
+    FixedTableColumn("Category", 136.dp),
+    FixedTableColumn("Start no.", 86.dp),
+    FixedTableColumn("SI no.", 110.dp),
+    FixedTableColumn("", 74.dp),
+    FixedTableColumn("", 74.dp),
+    FixedTableColumn("", 74.dp),
+    FixedTableColumn("", 74.dp),
+    FixedTableColumn("", 74.dp),
+    FixedTableColumn("", 82.dp)
+)
 
 /** Starts the first Compose Desktop shell for Radio-Oracle. */
 fun main(args: Array<String>) = application {
@@ -1154,20 +1193,41 @@ private fun CompetitorDetailsPanel(
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        CompetitorAddRow(onAddCompetitor)
-        DetailHeaderRow(listOf("First", "Last", "Club", "Index", "Birth", "Category", "Start no.", "SI no.", "", "", "", "", "", ""))
-        competitors.forEach { competitor ->
-            CompetitorDetailRow(
-                competitor = competitor,
-                categories = categories,
-                onRenameCompetitor = onRenameCompetitor,
-                onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
-                onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
-                onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
-                onAssignCompetitorCategory = onAssignCompetitorCategory,
-                onRemoveCompetitor = onRemoveCompetitor
-            )
+    val horizontalScrollState = rememberScrollState()
+    val tableWidth = fixedTableWidth(CompetitorTableColumns)
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(modifier = Modifier.fillMaxWidth().horizontalScroll(horizontalScrollState)) {
+            Column(
+                modifier = Modifier.width(tableWidth),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CompetitorAddRow(onAddCompetitor)
+                FixedDetailHeaderRow(CompetitorTableColumns)
+            }
+        }
+        HorizontalScrollbar(
+            adapter = rememberScrollbarAdapter(horizontalScrollState),
+            modifier = Modifier.fillMaxWidth()
+        )
+        Box(modifier = Modifier.fillMaxWidth().horizontalScroll(horizontalScrollState)) {
+            Column(
+                modifier = Modifier.width(tableWidth),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                competitors.forEach { competitor ->
+                    CompetitorDetailRow(
+                        competitor = competitor,
+                        categories = categories,
+                        onRenameCompetitor = onRenameCompetitor,
+                        onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
+                        onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
+                        onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
+                        onAssignCompetitorCategory = onAssignCompetitorCategory,
+                        onRemoveCompetitor = onRemoveCompetitor
+                    )
+                }
+            }
         }
     }
 }
@@ -1181,37 +1241,45 @@ private fun CompetitorAddRow(onAddCompetitor: (String, String, String, String) -
     var siNumberDraft by remember { mutableStateOf("") }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.width(fixedTableWidth(CompetitorTableColumns)),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
             value = firstNameDraft,
             onValueChange = { firstNameDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[0].width),
+            singleLine = true,
             label = { Text("First") }
         )
         TextField(
             value = lastNameDraft,
             onValueChange = { lastNameDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[1].width),
+            singleLine = true,
             label = { Text("Last") }
         )
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[2].width))
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[3].width))
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[4].width))
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[5].width))
         TextField(
             value = startNumberDraft,
             onValueChange = { startNumberDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[6].width),
+            singleLine = true,
             label = { Text("Start") }
         )
         TextField(
             value = siNumberDraft,
             onValueChange = { siNumberDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[7].width),
+            singleLine = true,
             label = { Text("SI") }
         )
         Button(
             onClick = { onAddCompetitor(firstNameDraft, lastNameDraft, startNumberDraft, siNumberDraft) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[8].width),
             enabled = firstNameDraft.isNotBlank() ||
                     lastNameDraft.isNotBlank() ||
                     startNumberDraft.isNotBlank() ||
@@ -1219,6 +1287,11 @@ private fun CompetitorAddRow(onAddCompetitor: (String, String, String, String) -
         ) {
             Text("Add")
         }
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[9].width))
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[10].width))
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[11].width))
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[12].width))
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[13].width))
     }
 }
 
@@ -1249,96 +1322,103 @@ private fun CompetitorDetailRow(
     var showDeleteDialog by remember(competitor.id) { mutableStateOf(false) }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.width(fixedTableWidth(CompetitorTableColumns)),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
             value = firstNameDraft,
             onValueChange = { firstNameDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[0].width),
+            singleLine = true,
             label = { Text("First") }
         )
         TextField(
             value = lastNameDraft,
             onValueChange = { lastNameDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[1].width),
+            singleLine = true,
             label = { Text("Last") }
         )
         TextField(
             value = clubDraft,
             onValueChange = { clubDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[2].width),
+            singleLine = true,
             label = { Text("Club") }
         )
         TextField(
             value = indexDraft,
             onValueChange = { indexDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[3].width),
+            singleLine = true,
             label = { Text("Index") }
         )
         TextField(
             value = birthYearDraft,
             onValueChange = { birthYearDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[4].width),
+            singleLine = true,
             label = { Text("Birth") }
         )
         CategoryPicker(
             selectedCategoryId = selectedCategoryId,
             categories = categories,
             onCategorySelected = { selectedCategoryId = it },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.width(CompetitorTableColumns[5].width)
         )
         TextField(
             value = startNumberDraft,
             onValueChange = { startNumberDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[6].width),
+            singleLine = true,
             label = { Text("Start") }
         )
         TextField(
             value = siNumberDraft,
             onValueChange = { siNumberDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[7].width),
+            singleLine = true,
             label = { Text("SI") }
         )
         Button(
             onClick = { onRenameCompetitor(competitor.id, firstNameDraft, lastNameDraft) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[8].width),
             enabled = firstNameDraft != competitor.firstName || lastNameDraft != competitor.lastName
         ) {
             Text("Name")
         }
         Button(
             onClick = { onUpdateCompetitorNumbers(competitor.id, startNumberDraft, siNumberDraft) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[9].width),
             enabled = startNumberDraft != competitor.startNumberText || siNumberDraft != competitor.siNumberText
         ) {
             Text("Nos.")
         }
         Button(
             onClick = { onUpdateCompetitorClubIndex(competitor.id, clubDraft, indexDraft) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[10].width),
             enabled = clubDraft != competitor.club || indexDraft != competitor.index
         ) {
             Text("Info")
         }
         Button(
             onClick = { onUpdateCompetitorBirthYear(competitor.id, birthYearDraft) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[11].width),
             enabled = birthYearDraft != competitor.birthYearText
         ) {
             Text("Birth")
         }
         Button(
             onClick = { onAssignCompetitorCategory(competitor.id, selectedCategoryId) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CompetitorTableColumns[12].width),
             enabled = selectedCategoryId != competitor.categoryId
         ) {
             Text("Cat.")
         }
         Button(
             onClick = { showDeleteDialog = true },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.width(CompetitorTableColumns[13].width)
         ) {
             Text("Delete")
         }
@@ -1525,17 +1605,38 @@ private fun CategoryDetailsPanel(
     onAddCategory: (String) -> Unit,
     onRemoveCategory: (String, Boolean) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        CategoryAddRow(onAddCategory)
-        DetailHeaderRow(listOf("Name", "Length", "Climb", "Type", "Band", "Limit", "Controls", "", "", "", ""))
-        categories.forEach { category ->
-            CategoryDetailRow(
-                category,
-                onRenameCategory,
-                onUpdateCategoryControlPoints,
-                onUpdateCategoryPhysicalStats,
-                onRemoveCategory
-            )
+    val horizontalScrollState = rememberScrollState()
+    val tableWidth = fixedTableWidth(CategoryTableColumns)
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(modifier = Modifier.fillMaxWidth().horizontalScroll(horizontalScrollState)) {
+            Column(
+                modifier = Modifier.width(tableWidth),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CategoryAddRow(onAddCategory)
+                FixedDetailHeaderRow(CategoryTableColumns)
+            }
+        }
+        HorizontalScrollbar(
+            adapter = rememberScrollbarAdapter(horizontalScrollState),
+            modifier = Modifier.fillMaxWidth()
+        )
+        Box(modifier = Modifier.fillMaxWidth().horizontalScroll(horizontalScrollState)) {
+            Column(
+                modifier = Modifier.width(tableWidth),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                categories.forEach { category ->
+                    CategoryDetailRow(
+                        category,
+                        onRenameCategory,
+                        onUpdateCategoryControlPoints,
+                        onUpdateCategoryPhysicalStats,
+                        onRemoveCategory
+                    )
+                }
+            }
         }
     }
 }
@@ -1546,23 +1647,33 @@ private fun CategoryAddRow(onAddCategory: (String) -> Unit) {
     var categoryNameDraft by remember { mutableStateOf("") }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.width(fixedTableWidth(CategoryTableColumns)),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
             value = categoryNameDraft,
             onValueChange = { categoryNameDraft = it },
-            modifier = Modifier.weight(5f),
+            modifier = Modifier.width(CategoryTableColumns[0].width),
+            singleLine = true,
             label = { Text("New category") }
         )
+        Spacer(modifier = Modifier.width(CategoryTableColumns[1].width))
+        Spacer(modifier = Modifier.width(CategoryTableColumns[2].width))
+        Spacer(modifier = Modifier.width(CategoryTableColumns[3].width))
+        Spacer(modifier = Modifier.width(CategoryTableColumns[4].width))
+        Spacer(modifier = Modifier.width(CategoryTableColumns[5].width))
+        Spacer(modifier = Modifier.width(CategoryTableColumns[6].width))
         Button(
             onClick = { onAddCategory(categoryNameDraft) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CategoryTableColumns[7].width),
             enabled = categoryNameDraft.isNotBlank()
         ) {
             Text("Add")
         }
+        Spacer(modifier = Modifier.width(CategoryTableColumns[8].width))
+        Spacer(modifier = Modifier.width(CategoryTableColumns[9].width))
+        Spacer(modifier = Modifier.width(CategoryTableColumns[10].width))
     }
 }
 
@@ -1588,40 +1699,59 @@ private fun CategoryDetailRow(
     var showDeleteDialog by remember(category.id) { mutableStateOf(false) }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.width(fixedTableWidth(CategoryTableColumns)),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
             value = categoryNameDraft,
             onValueChange = { categoryNameDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CategoryTableColumns[0].width),
+            singleLine = true,
             label = { Text("Category") }
         )
         TextField(
             value = lengthMetersDraft,
             onValueChange = { lengthMetersDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CategoryTableColumns[1].width),
+            singleLine = true,
             label = { Text("Length") }
         )
         TextField(
             value = climbMetersDraft,
             onValueChange = { climbMetersDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CategoryTableColumns[2].width),
+            singleLine = true,
             label = { Text("Climb") }
         )
-        Text(category.raceTypeLabel, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
-        Text(category.raceBandLabel, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
-        Text(category.timeLimitText, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
+        Text(
+            category.raceTypeLabel,
+            modifier = Modifier.width(CategoryTableColumns[3].width),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        Text(
+            category.raceBandLabel,
+            modifier = Modifier.width(CategoryTableColumns[4].width),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        Text(
+            category.timeLimitText,
+            modifier = Modifier.width(CategoryTableColumns[5].width),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
         TextField(
             value = controlPointsDraft,
             onValueChange = { controlPointsDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CategoryTableColumns[6].width),
+            singleLine = true,
             label = { Text("Controls") }
         )
         Button(
             onClick = { onRenameCategory(category.id, categoryNameDraft) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CategoryTableColumns[7].width),
             enabled = categoryNameDraft != category.name
         ) {
             Text("Apply")
@@ -1630,7 +1760,7 @@ private fun CategoryDetailRow(
             onClick = {
                 onUpdateCategoryPhysicalStats(category.id, lengthMetersDraft, climbMetersDraft)
             },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CategoryTableColumns[8].width),
             enabled = lengthMetersDraft != category.lengthMetersText ||
                     climbMetersDraft != category.climbMetersText
         ) {
@@ -1638,14 +1768,14 @@ private fun CategoryDetailRow(
         }
         Button(
             onClick = { onUpdateCategoryControlPoints(category.id, controlPointsDraft) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(CategoryTableColumns[9].width),
             enabled = controlPointsDraft != category.controlPointsText
         ) {
             Text("Ctrls")
         }
         Button(
             onClick = { showDeleteDialog = true },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.width(CategoryTableColumns[10].width)
         ) {
             Text("Delete")
         }
@@ -1878,6 +2008,29 @@ private fun DetailHeaderRow(values: List<String>) {
         }
     }
 }
+
+/** Displays a fixed-width header row for horizontally scrollable desktop detail grids. */
+@Composable
+private fun FixedDetailHeaderRow(columns: List<FixedTableColumn>) {
+    Row(
+        modifier = Modifier.width(fixedTableWidth(columns)),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap)
+    ) {
+        columns.forEach { column ->
+            Text(
+                text = column.title,
+                modifier = Modifier.width(column.width),
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+private fun fixedTableWidth(columns: List<FixedTableColumn>): Dp =
+    columns.fold(0.dp) { total, column -> total + column.width } +
+            TableColumnGap * (columns.size - 1)
 
 /** Displays a compact value row for read-only desktop detail grids. */
 @Composable
