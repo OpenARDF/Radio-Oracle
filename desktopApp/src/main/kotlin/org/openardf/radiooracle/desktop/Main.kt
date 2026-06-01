@@ -725,6 +725,9 @@ private fun SectionWorkspace(
                 onUpdateReadoutStatus = onUpdateReadoutStatus
             )
         }
+        if (section == DesktopSection.Settings) {
+            SettingsDetailsPanel(DesktopProjectDiagnostics.from(projectFile))
+        }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -740,6 +743,40 @@ private fun SectionWorkspace(
             color = DesktopPalette.Disconnected,
             fontSize = 13.sp
         )
+    }
+}
+
+/** Shows read-only project diagnostics and the desktop-beta scope boundary. */
+@Composable
+private fun SettingsDetailsPanel(diagnostics: DesktopProjectDiagnostics) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        DetailRow("Project", diagnostics.projectState)
+        DetailRow("Schema", diagnostics.schemaText.ifBlank { "None" })
+        DetailRow("Race ID", diagnostics.raceId.ifBlank { "None" })
+        DetailRow("Race name", diagnostics.raceName.ifBlank { "None" })
+        DetailRow("Start", diagnostics.startDateTimeIso.ifBlank { "None" })
+        DetailHeaderRow(listOf("Categories", "Competitors", "Readouts", "Results"))
+        DetailGridRow(
+            listOf(
+                diagnostics.categoryCount.toString(),
+                diagnostics.competitorCount.toString(),
+                diagnostics.readoutCount.toString(),
+                diagnostics.resultCount.toString()
+            )
+        )
+        Text(
+            text = "Desktop beta scope",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+        diagnostics.betaLimitations.forEach { limitation ->
+            Text(
+                text = limitation,
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        }
     }
 }
 
@@ -1713,7 +1750,7 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
         DesktopSection.Aliases -> "${projectFile?.raceData?.aliases?.size ?: 0} aliases loaded."
         DesktopSection.Readouts -> "${summary?.readoutCount ?: 0} SI-card readouts loaded."
         DesktopSection.Results -> "${summary?.resultCount ?: 0} results loaded."
-        DesktopSection.Settings -> "Desktop settings."
+        DesktopSection.Settings -> "Project diagnostics and desktop beta scope."
     }
 }
 
