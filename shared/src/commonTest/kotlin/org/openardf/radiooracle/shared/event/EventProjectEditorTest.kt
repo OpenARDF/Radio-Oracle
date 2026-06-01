@@ -761,6 +761,50 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun marksMatchedReadoutsSent() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", readoutData = readout("result-1", "comp-1", 1111)),
+                competitorData("comp-2", "Bob", "Runner", readoutData = readout("result-2", "comp-2", 2222))
+            )
+        )
+
+        val updated = EventProjectEditor.markReadoutsSent(original, setOf("result-1"))
+
+        assertEquals(true, updated.raceData.competitorData[0].readoutData!!.result.sent)
+        assertEquals(false, updated.raceData.competitorData[1].readoutData!!.result.sent)
+    }
+
+    @Test
+    fun ignoresEmptyMarkReadoutsSentRequest() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", readoutData = readout("result-1", "comp-1", 1111))
+            )
+        )
+
+        assertEquals(original, EventProjectEditor.markReadoutsSent(original, emptySet()))
+    }
+
+    @Test
+    fun rejectsUnmatchedReadoutMarkSent() {
+        val original = projectFile(
+            unmatchedReadouts = listOf(readout("result-1", null, 1111))
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.markReadoutsSent(original, setOf("result-1"))
+        }
+    }
+
+    @Test
+    fun rejectsUnknownReadoutMarkSent() {
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.markReadoutsSent(projectFile(), setOf("missing"))
+        }
+    }
+
+    @Test
     fun addsManualReadoutForMatchedCompetitorAndEvaluatesCourse() {
         val category = category("cat-1", "M21")
         val original = projectFile(

@@ -869,6 +869,39 @@ object EventProjectEditor {
         )
     }
 
+    /** Returns a copy of the project file with successfully exported matched readouts marked sent. */
+    fun markReadoutsSent(
+        projectFile: EventProjectFile,
+        resultIds: Set<String>
+    ): EventProjectFile {
+        if (resultIds.isEmpty()) {
+            return projectFile
+        }
+
+        val remainingResultIds = resultIds.toMutableSet()
+        val competitorData = projectFile.raceData.competitorData.map { data ->
+            val readoutData = data.readoutData
+            if (readoutData != null && remainingResultIds.remove(readoutData.result.id)) {
+                data.copy(
+                    readoutData = readoutData.copy(
+                        result = readoutData.result.copy(sent = true)
+                    )
+                )
+            } else {
+                data
+            }
+        }
+        require(remainingResultIds.isEmpty()) {
+            "Readout was not found: ${remainingResultIds.first()}"
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                competitorData = competitorData
+            )
+        )
+    }
+
     /**
      * Adds a manually entered readout with competitor matching, timing, controls, and status in one operation.
      *
