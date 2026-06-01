@@ -767,6 +767,14 @@ private fun SettingsDetailsPanel(diagnostics: DesktopProjectDiagnostics) {
                 diagnostics.resultCount.toString()
             )
         )
+        DetailRow("Validation", diagnostics.validationState)
+        diagnostics.validationIssues.forEach { issue ->
+            Text(
+                text = issue,
+                color = DesktopPalette.Error,
+                fontSize = 13.sp
+            )
+        }
         Text(
             text = "Desktop beta scope",
             color = DesktopPalette.Disconnected,

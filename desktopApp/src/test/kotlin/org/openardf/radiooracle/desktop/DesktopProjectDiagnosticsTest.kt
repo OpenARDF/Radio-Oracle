@@ -21,6 +21,8 @@ class DesktopProjectDiagnosticsTest {
         assertEquals("No project open", diagnostics.projectState)
         assertEquals("", diagnostics.schemaText)
         assertEquals(0, diagnostics.categoryCount)
+        assertEquals("No project open", diagnostics.validationState)
+        assertTrue(diagnostics.validationIssues.isEmpty())
         assertTrue(diagnostics.betaLimitations.any { it.contains("SPORTident") })
     }
 
@@ -34,12 +36,22 @@ class DesktopProjectDiagnosticsTest {
         assertEquals("Diagnostics Race", diagnostics.raceName)
         assertEquals("2026-06-01T10:00", diagnostics.startDateTimeIso)
         assertEquals(1, diagnostics.competitorCount)
+        assertEquals("No validation issues", diagnostics.validationState)
+        assertTrue(diagnostics.validationIssues.isEmpty())
     }
 
-    private fun projectFile(): EventProjectFile {
+    @Test
+    fun reportsProjectValidationIssues() {
+        val diagnostics = DesktopProjectDiagnostics.from(projectFile(raceName = ""))
+
+        assertEquals("1 validation issue", diagnostics.validationState)
+        assertTrue(diagnostics.validationIssues.any { it.contains("Race name is blank") })
+    }
+
+    private fun projectFile(raceName: String = "Diagnostics Race"): EventProjectFile {
         val race = EventRace(
             id = "race",
-            name = "Diagnostics Race",
+            name = raceName,
             apiKey = "",
             startDateTimeIso = "2026-06-01T10:00",
             raceType = RaceType.CLASSIC,
