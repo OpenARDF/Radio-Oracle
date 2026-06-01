@@ -14,13 +14,15 @@ finish table:
 - manage races, categories, control points, aliases, competitors, readouts, and
   results;
 - manually enter or edit readout-equivalent punch data;
+- download one SI8/SI9/SIAC card at a time from an attached SPORTident station
+  that is already configured in READOUT/SI MASTER mode;
 - recalculate results using shared services;
 - import/export supported event and result formats as they move into shared
   code.
 
 The desktop beta should not include:
 
-- live SPORTident reader download;
+- continuous Android-style SPORTident reader download;
 - Bluetooth or ticket printing;
 - live result sending;
 - Android Room database migration or shared SQL persistence;
@@ -160,6 +162,11 @@ After a public publish, `npm run jdeploy:registry-smoke -- <version>` installs
 that exact registry version in a temporary directory, launches it with the smoke
 project, confirms startup, and quits the app.
 
+Current local packaging evidence: the Gradle app-image checks,
+`npm run jdeploy:pack-preview`, `npm run jdeploy:release-preflight`,
+`npm run jdeploy:local-smoke`, and
+`npm run jdeploy:registry-smoke -- 1.0.1` pass on macOS with JDK 17 selected.
+
 ### Desktop USB Feasibility
 
 Live SPORTident reader download remains outside the desktop beta boundary, but
@@ -290,18 +297,21 @@ repeatable package validation.
    covered by `npm run jdeploy:local-smoke`, public install/launch smoke is
    covered by `npm run jdeploy:registry-smoke -- <version>`, and the first
    public npm package is published as `@openardf/radio-oracle@1.0.1`.
-6. In progress: keep live SI download post-beta, but run a desktop USB
-   feasibility spike before relying on that deferral. The first diagnostic
-   command is `npm run desktop:usb-diagnostic`; it confirms macOS USB serial
-   visibility and can require the known SPORTident VID/PID when the download
-   box is attached. The second command is `npm run desktop:usb-probe`; it opens
-   the serial device, sends the setup probe, reads the station response, and
-   closes the port.
+6. In progress: keep continuous Android-style live SI download post-beta, but
+   run desktop USB feasibility and single-card download slices before relying
+   on that deferral. The first diagnostic command is
+   `npm run desktop:usb-diagnostic`; it confirms macOS USB serial visibility
+   and can require the known SPORTident VID/PID when the download box is
+   attached. The second command is `npm run desktop:usb-probe`; it opens the
+   serial device, sends the setup probe, reads the station response, and closes
+   the port. The desktop Readouts screen now has a single-shot "Download SI"
+   action that adds one SI8/SI9/SIAC card readout to the open project when the
+   attached station is present and in READOUT/SI MASTER mode.
 7. Long-term: add Station Maintenance after the desktop event-admin beta is
    stable. The first version should be read-only for the attached USB
    master/download station and should report serial number, station mode/code,
    protocol flags, firmware/config metadata when available, and clear warnings
-   when a download box is not in READOUT mode. A later read-only phase can read
+   when a download box is not in READOUT/SI MASTER mode. A later read-only phase can read
    station information for non-reader SI stations coupled magnetically to the
    USB master, including battery/status fields and operating-time/status fields
    if the remote/coupled-station protocol exposes them. Station write actions,

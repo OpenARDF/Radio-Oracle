@@ -42,8 +42,8 @@ private fun warnIfNotReadoutMode(station: DesktopSportIdentStationConnection) {
     if (station.stationInfo.isReadoutMode == false) {
         println(
             "WARNING: SPORTident station ${station.stationInfo.serialNumber} is in " +
-                "${station.stationInfo.stationModeLabel} mode instead of READOUT. " +
-                "Reprogram it in Readout mode before using it for SI-card downloads."
+                "${station.stationInfo.stationModeLabel} mode instead of READOUT/SI MASTER. " +
+                "Reprogram it in a download-capable mode before using it for SI-card downloads."
         )
     }
 }

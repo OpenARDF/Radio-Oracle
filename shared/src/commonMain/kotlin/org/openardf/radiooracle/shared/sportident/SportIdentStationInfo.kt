@@ -14,8 +14,10 @@ data class SportIdentStationInfo(
 
 object SportIdentStationMode {
     const val READOUT_CODE = 5
+    const val SI_MASTER_CODE = 8
 
-    fun isReadoutCode(code: Int): Boolean = code == READOUT_CODE
+    fun isReadoutCode(code: Int): Boolean =
+        code == READOUT_CODE || code == SI_MASTER_CODE
 
     fun labelForCode(code: Int): String =
         when (code) {
@@ -24,6 +26,7 @@ object SportIdentStationMode {
             3 -> "START"
             4 -> "FINISH"
             READOUT_CODE -> "READOUT"
+            SI_MASTER_CODE -> "SI MASTER"
             in 31..511 -> "CONTROL $code"
             else -> "CODE $code"
         }

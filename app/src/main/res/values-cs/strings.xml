@@ -124,7 +124,7 @@
     <string name="si_connected_but_no_race">SI čtečka %1$d připojena, ale není vybrán závod!</string>
     <string name="si_station_wrong_mode_status">SI čtečka %1$d je v režimu %2$s</string>
     <string name="si_station_wrong_mode_title">Varování režimu SI čtečky</string>
-    <string name="si_station_wrong_mode_message">SI čtečka %1$d je připojena, ale zdá se, že je v režimu %2$s místo READOUT. Před stahováním SI čipů ji přeprogramujte do režimu Readout.</string>
+    <string name="si_station_wrong_mode_message">SI čtečka %1$d je připojena, ale zdá se, že je v režimu %2$s místo READOUT/SI MASTER. Před stahováním SI čipů ji přeprogramujte do režimu umožňujícího stahování.</string>
     <string name="si_disconnected">SI čtečka nepřipojena</string>
     <string name="si_reading">"SI čtečka %1$d čtení čipu %2$d "</string>
     <string name="si_card_error">"SI čtečka %1$d, chyba při čtení čipu %2$d "</string>

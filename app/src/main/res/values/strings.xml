@@ -176,7 +176,7 @@
     <string name="si_connected_but_no_race">SI station %1$d connected, but no race set!</string>
     <string name="si_station_wrong_mode_status">SI station %1$d is in %2$s mode</string>
     <string name="si_station_wrong_mode_title">SI station mode warning</string>
-    <string name="si_station_wrong_mode_message">SI station %1$d is connected, but it appears to be in %2$s mode instead of READOUT. Reprogram the station in Readout mode before using it for SI-card downloads.</string>
+    <string name="si_station_wrong_mode_message">SI station %1$d is connected, but it appears to be in %2$s mode instead of READOUT/SI MASTER. Reprogram the station in a download-capable mode before using it for SI-card downloads.</string>
     <string name="si_disconnected">SI station disconnected</string>
     <string name="si_reading">SI station %1$d reading card %2$d </string>
     <string name="si_card_error">SI station %1$d, error reading card %2$d </string>

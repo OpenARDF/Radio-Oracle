@@ -66,6 +66,25 @@ class SportIdentStationInfoParserTest {
         assertEquals(false, info.isReadoutMode)
     }
 
+    @Test
+    fun labelsSiMasterStationCodeAsReadoutMode() {
+        val frame = assertNotNull(
+            SportIdentFrameParser.firstFrame(
+                SportIdentProtocol.buildExtendedMessage(
+                    command = SportIdentProtocol.GET_SYSTEM_INFO,
+                    data = systemInfoData(serialNumber = 554900, extendedMode = true, stationCode = 8, size = 120)
+                ),
+                commandFilter = SportIdentProtocol.GET_SYSTEM_INFO
+            )
+        )
+
+        val info = assertNotNull(SportIdentStationInfoParser.fromSystemInfoFrame(frame))
+
+        assertEquals(8, info.stationCode)
+        assertEquals("SI MASTER", info.stationModeLabel)
+        assertEquals(true, info.isReadoutMode)
+    }
+
     private fun systemInfoData(
         serialNumber: Int,
         extendedMode: Boolean,

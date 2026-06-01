@@ -32,8 +32,8 @@ fun main(args: Array<String>) {
     if (connection.stationInfo.isReadoutMode == false) {
         println(
             "WARNING: SPORTident station ${connection.stationInfo.serialNumber} is in " +
-                "${connection.stationInfo.stationModeLabel} mode instead of READOUT. " +
-                "Reprogram it in Readout mode before using it for SI-card downloads."
+                "${connection.stationInfo.stationModeLabel} mode instead of READOUT/SI MASTER. " +
+                "Reprogram it in a download-capable mode before using it for SI-card downloads."
         )
     }
 }

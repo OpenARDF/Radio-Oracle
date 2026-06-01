@@ -32,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,7 +47,10 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardBlockDownload
+import org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardBlockReader
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
 import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
@@ -162,6 +166,7 @@ fun main(args: Array<String>) = application {
     Window(onCloseRequest = { requestWindowClose() }, title = "Radio-Oracle Desktop") {
         val startupPath = remember(args.toList()) { args.firstOrNull()?.let(Path::of) }
         val projectSession = remember { DesktopProjectSession(DesktopProjectFiles) }
+        val appCoroutineScope = rememberCoroutineScope()
         val startupStatus = remember(startupPath) { openStartupProject(projectSession, startupPath) }
         var projectFile by remember { mutableStateOf(projectSession.currentProject) }
         var projectStatusText by remember { mutableStateOf(startupStatus) }
@@ -170,6 +175,8 @@ fun main(args: Array<String>) = application {
         var siReaderState by remember { mutableStateOf(DesktopSiReaderUiState.disconnected()) }
         var pendingSiModeWarning by remember { mutableStateOf<DesktopSiReaderUiState?>(null) }
         var lastShownSiModeWarningKey by remember { mutableStateOf<String?>(null) }
+        var isDownloadingSiReadout by remember { mutableStateOf(false) }
+        var siDownloadStatusText by remember { mutableStateOf<String?>(null) }
 
         LaunchedEffect(Unit) {
             while (true) {
@@ -222,6 +229,51 @@ fun main(args: Array<String>) = application {
             projectSession.newProject(project)
             syncProjectState()
             projectStatusText = "New unsaved project."
+        }
+
+        fun downloadSportIdentReadout() {
+            if (isDownloadingSiReadout) {
+                return
+            }
+            if (projectSession.currentProject == null) {
+                projectStatusText = "Open or create a project before downloading SI cards."
+                return
+            }
+            isDownloadingSiReadout = true
+            siDownloadStatusText = "Waiting for SI card; keep it seated until the read finishes."
+            projectStatusText = "Waiting for SI card..."
+            appCoroutineScope.launch {
+                val downloadResult = runCatching {
+                    withContext(Dispatchers.IO) {
+                        downloadDesktopSportIdentCardReadout()
+                    }
+                }
+                downloadResult.onSuccess { download ->
+                    runCatching {
+                        projectFile = projectSession.updateCurrentProject { currentProject ->
+                            EventProjectEditor.addDownloadedSportIdentReadout(
+                                projectFile = currentProject,
+                                resultId = UUID.randomUUID().toString(),
+                                cardType = download.inserted.cardType,
+                                readout = download.readout,
+                                readoutDateTimeIso = LocalDateTime.now().withNano(0).toString()
+                            ) { index, type ->
+                                "${UUID.randomUUID()}-$index-${type.name}"
+                            }
+                        }
+                        hasUnsavedChanges = projectSession.hasUnsavedChanges
+                        projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
+                        siDownloadStatusText = null
+                    }.onFailure { error ->
+                        projectStatusText = "SI download failed: ${error.message ?: error::class.simpleName}"
+                        siDownloadStatusText = projectStatusText
+                    }
+                }.onFailure { error ->
+                    projectStatusText = "SI download failed: ${error.message ?: error::class.simpleName}"
+                    siDownloadStatusText = projectStatusText
+                }
+                isDownloadingSiReadout = false
+            }
         }
 
         fun saveCurrentProject(): Boolean {
@@ -458,6 +510,8 @@ fun main(args: Array<String>) = application {
             projectStatusText = projectStatusText,
             hasUnsavedChanges = hasUnsavedChanges,
             siReaderState = siReaderState,
+            isDownloadingSiReadout = isDownloadingSiReadout,
+            siDownloadStatusText = siDownloadStatusText,
             onRenameRace = { name ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -690,6 +744,7 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
+            onDownloadSportIdentReadout = ::downloadSportIdentReadout,
             onAddManualReadout = { competitorId, siNumber, startSeconds, finishSeconds, controlCodes, resultStatus ->
                 val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -796,6 +851,8 @@ private fun RadioOManagerDesktopApp(
     projectStatusText: String = "No project open.",
     hasUnsavedChanges: Boolean = false,
     siReaderState: DesktopSiReaderUiState = DesktopSiReaderUiState.disconnected(),
+    isDownloadingSiReadout: Boolean = false,
+    siDownloadStatusText: String? = null,
     onRenameRace: (String) -> Unit = {},
     onUpdateRaceStartDateTime: (String) -> Unit = {},
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit = { _, _, _, _ -> },
@@ -813,6 +870,7 @@ private fun RadioOManagerDesktopApp(
     onRemoveCompetitor: (String, Boolean) -> Unit = { _, _ -> },
     onRemoveReadout: (String) -> Unit = {},
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit = { _, _ -> },
+    onDownloadSportIdentReadout: () -> Unit = {},
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean = { _, _, _, _, _, _ -> false },
     onUpdateAlias: (String, String, String) -> Unit = { _, _, _ -> },
     onAddAlias: (String, String) -> Boolean = { _, _ -> false },
@@ -860,6 +918,9 @@ private fun RadioOManagerDesktopApp(
                         onRemoveCompetitor = onRemoveCompetitor,
                         onRemoveReadout = onRemoveReadout,
                         onUpdateReadoutStatus = onUpdateReadoutStatus,
+                        onDownloadSportIdentReadout = onDownloadSportIdentReadout,
+                        isDownloadingSiReadout = isDownloadingSiReadout,
+                        siDownloadStatusText = siDownloadStatusText,
                         onAddManualReadout = onAddManualReadout,
                         onUpdateAlias = onUpdateAlias,
                         onAddAlias = onAddAlias,
@@ -950,6 +1011,9 @@ private fun SectionWorkspace(
     onRemoveCompetitor: (String, Boolean) -> Unit,
     onRemoveReadout: (String) -> Unit,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
+    onDownloadSportIdentReadout: () -> Unit,
+    isDownloadingSiReadout: Boolean,
+    siDownloadStatusText: String?,
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean,
     onUpdateAlias: (String, String, String) -> Unit,
     onAddAlias: (String, String) -> Boolean,
@@ -1018,6 +1082,9 @@ private fun SectionWorkspace(
                 competitors = EventCompetitorDetails.from(projectFile.raceData),
                 onRemoveReadout = onRemoveReadout,
                 onUpdateReadoutStatus = onUpdateReadoutStatus,
+                onDownloadSportIdentReadout = onDownloadSportIdentReadout,
+                isDownloadingSiReadout = isDownloadingSiReadout,
+                siDownloadStatusText = siDownloadStatusText,
                 onAddManualReadout = onAddManualReadout
             )
         }
@@ -1157,6 +1224,9 @@ private fun ReadoutDetailsPanel(
     competitors: List<EventCompetitorDetails>,
     onRemoveReadout: (String) -> Unit,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
+    onDownloadSportIdentReadout: () -> Unit,
+    isDownloadingSiReadout: Boolean,
+    siDownloadStatusText: String?,
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean
 ) {
     val horizontalScrollState = rememberScrollState()
@@ -1169,6 +1239,23 @@ private fun ReadoutDetailsPanel(
     var selectedStatus by remember { mutableStateOf(ResultStatus.OK) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = onDownloadSportIdentReadout,
+                enabled = !isDownloadingSiReadout
+            ) {
+                ButtonLabel(if (isDownloadingSiReadout) "Waiting" else "Download SI")
+            }
+            Text(
+                text = siDownloadStatusText ?: "Download one SI8/SI9/SIAC card from an attached READOUT/SI MASTER station.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
@@ -2637,13 +2724,13 @@ private fun detectDesktopSiReaderState(): DesktopSiReaderUiState {
                     severity = DesktopSiReaderSeverity.WARNING,
                     statusText = statusText,
                     warningTitle = "SI station mode warning",
-                    warningMessage = "$statusText instead of READOUT. Reprogram the station in Readout mode before using it for SI-card downloads.",
+                    warningMessage = "$statusText instead of READOUT/SI MASTER. Reprogram the station in a download-capable mode before using it for SI-card downloads.",
                     warningKey = "${stationInfo.serialNumber}:${stationInfo.stationCode}"
                 )
             }
             true -> DesktopSiReaderUiState(
                 severity = DesktopSiReaderSeverity.CONNECTED,
-                statusText = "SI station ${stationInfo.serialNumber} connected in READOUT mode"
+                statusText = "SI station ${stationInfo.serialNumber} connected in $modeLabel mode"
             )
             null -> DesktopSiReaderUiState(
                 severity = DesktopSiReaderSeverity.CONNECTED,
@@ -2655,6 +2742,27 @@ private fun detectDesktopSiReaderState(): DesktopSiReaderUiState {
             severity = DesktopSiReaderSeverity.ERROR,
             statusText = "SI station error: ${error.message ?: error::class.simpleName}"
         )
+    }
+}
+
+private fun downloadDesktopSportIdentCardReadout(): DesktopSportIdentCardBlockDownload {
+    val provider = JSerialCommDesktopSerialPortProvider
+    val port = provider.listPorts().firstOrNull { it.info.matchesSportIdent() }
+        ?: error("No SPORTident USB station found.")
+
+    try {
+        val station = DesktopSportIdentStationProbe().connectKeepingPortOpen(port)
+        if (station.stationInfo.isReadoutMode == false) {
+            error(
+                "SI station ${station.stationInfo.serialNumber} is in " +
+                    "${station.stationInfo.stationModeLabel} mode instead of READOUT/SI MASTER."
+            )
+        }
+        return DesktopSportIdentCardBlockReader().readFirstSi8Or9OrSiacBlockAfterInsertOnOpenPort(port)
+    } finally {
+        if (port.isOpen) {
+            port.close()
+        }
     }
 }
 
