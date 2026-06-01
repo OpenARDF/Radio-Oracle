@@ -190,6 +190,25 @@ Current local evidence on this Mac: `npm run desktop:usb-diagnostic --
 the platform-detection showstopper for desktop SI work; the remaining spike is
 serial-protocol access and card-readout parity with the Android `SIPort` path.
 
+The desktop serial probe uses jSerialComm in the desktop module only. It
+discovers the SPORTident USB VID/PID, opens the selected serial device, sends
+the same small SI probe command that Android uses during station setup, reads a
+reply, and closes the port:
+
+```shell
+npm run desktop:usb-probe
+```
+
+To force a specific device node:
+
+```shell
+RADIO_ORACLE_SI_PORT=/dev/cu.SLAB_USBtoUART npm run desktop:usb-probe
+```
+
+Current local probe evidence: the desktop JVM task opened
+`/dev/cu.SLAB_USBtoUART`, selected the SPORTident station serial `554896`, sent
+the setup probe at `38400` baud, and received `02 f0 03 00 11 4d 8d 72 03`.
+
 For local macOS smoke tests, prefer copying the generated `.app` and sample
 project file to `/tmp` before launching with `open ... --args <sample.rom.json>`.
 Launching the checkout-built app bundle directly from `Documents/GitHub` can
@@ -244,5 +263,7 @@ repeatable package validation.
 6. In progress: keep live SI download post-beta, but run a desktop USB
    feasibility spike before relying on that deferral. The first diagnostic
    command is `npm run desktop:usb-diagnostic`; it confirms macOS USB serial
-   visibility and can require the known SPORTident VID/PID when the download box
-   is attached.
+   visibility and can require the known SPORTident VID/PID when the download
+   box is attached. The second command is `npm run desktop:usb-probe`; it opens
+   the serial device, sends the setup probe, reads the station response, and
+   closes the port.

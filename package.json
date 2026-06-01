@@ -29,6 +29,7 @@
     "jdeploy:registry-smoke": "./scripts/jdeploy-registry-smoke.sh",
     "jdeploy:release-preflight": "node ./scripts/check-jdeploy-release-ready.mjs",
     "desktop:usb-diagnostic": "./scripts/desktop-usb-diagnostic.sh",
+    "desktop:usb-probe": "./gradlew :desktopApp:desktopUsbProbe",
     "prepublishOnly": "node ./scripts/check-jdeploy-publish.mjs"
   },
   "dependencies": {

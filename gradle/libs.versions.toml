@@ -19,6 +19,7 @@ expandable-fab = "1.2.1"
 firebase-bom = "34.13.0"
 google-services = "4.4.3"
 junit = "4.13.2"
+jserialcomm = "2.11.4"
 kotlin = "2.2.0"
 kotlin-csv = "1.10.0"
 kotlinx-coroutines = "1.11.0"
@@ -59,6 +60,7 @@ firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
 firebase-crashlytics-ndk = { module = "com.google.firebase:firebase-crashlytics-ndk" }
 junit = { module = "junit:junit", version.ref = "junit" }
+jserialcomm = { module = "com.fazecast:jSerialComm", version.ref = "jserialcomm" }
 kotlin-csv-jvm = { module = "com.github.doyaaaaaken:kotlin-csv-jvm", version.ref = "kotlin-csv" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }

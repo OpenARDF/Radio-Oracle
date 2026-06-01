@@ -16,6 +16,7 @@ version = rootProject.ext.radioOracleVersion
 dependencies {
     implementation(project(":shared"))
     implementation(compose.desktop.currentOs)
+    implementation(libs.jserialcomm)
 
     testImplementation(libs.junit)
 }
@@ -162,4 +163,13 @@ tasks.register("verifyDesktopJdeployBundle") {
             }
         }
     }
+}
+
+tasks.register("desktopUsbProbe", JavaExec) {
+    group = "verification"
+    description = "Opens the SPORTident USB serial device and exchanges a small SI protocol probe."
+
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentProbeKt")
 }
