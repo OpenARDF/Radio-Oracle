@@ -157,19 +157,23 @@ class DesktopSmokeSampleTest {
         val competitors = directory.resolve("competitors.csv")
         val starts = directory.resolve("starts.csv")
         val readouts = directory.resolve("readouts.csv")
+        val results = directory.resolve("results.csv")
 
         DesktopProjectFiles.exportCategoriesCsv(categories, projectFile)
         DesktopProjectFiles.exportCompetitorsCsv(competitors, projectFile)
         DesktopProjectFiles.exportCompetitorStartsCsv(starts, projectFile)
         DesktopProjectFiles.exportReadoutsCsv(readouts, projectFile)
+        DesktopProjectFiles.exportResultsCsv(results, projectFile)
 
         assertEquals(2, Files.readAllLines(categories).size)
         assertEquals(2, Files.readAllLines(competitors).size)
         assertEquals(2, Files.readAllLines(starts).size)
         assertEquals(2, Files.readAllLines(readouts).size)
+        assertEquals(1, Files.readAllLines(results).size)
         assertTrue(Files.readString(competitors).contains("123456;Alice;Runner;M21"))
         assertTrue(Files.readString(starts).contains("101;Runner;Alice;M21;;10:00"))
         assertTrue(Files.readString(readouts).contains("123456;;00:10:00;00:30:00;0"))
+        assertTrue(Files.readString(results).contains("RUNNER Alice;OK;3;00:20:00"))
     }
 
     @Test

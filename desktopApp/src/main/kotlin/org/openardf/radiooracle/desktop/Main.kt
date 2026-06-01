@@ -223,6 +223,9 @@ fun main(args: Array<String>) = application {
                 Item("Export Readouts CSV...", enabled = projectFile != null, onClick = {
                     exportCsv("Export Readouts CSV", DesktopProjectFiles::exportReadoutsCsv)
                 })
+                Item("Export Results CSV...", enabled = projectFile != null, onClick = {
+                    exportCsv("Export Results CSV", DesktopProjectFiles::exportResultsCsv)
+                })
                 Item("Close Project", enabled = projectFile != null, onClick = {
                     pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
                         hasUnsavedChanges,

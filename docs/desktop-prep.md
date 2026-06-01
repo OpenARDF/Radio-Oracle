@@ -251,11 +251,11 @@ repeatable package validation.
    codes. The Results section now shows competitor result rows and can set the
    same explicit manual result status for matched readouts. The Settings
    section now shows project diagnostics and the desktop beta scope boundary.
-   The File menu can export categories, competitors, starts, and readouts as
-   semicolon-delimited CSV files using shared formatters. A sample smoke-test
-   project is available at `samples/desktop-smoke.rom.json`, with automated
-   desktop coverage for the session-level open, edit, save, close, reopen,
-   export-copy, and CSV export flows.
+   The File menu can export categories, competitors, starts, readouts, and
+   results as semicolon-delimited CSV files using shared formatters. A sample
+   smoke-test project is available at `samples/desktop-smoke.rom.json`, with
+   automated desktop coverage for the session-level open, edit, save, close,
+   reopen, export-copy, and CSV export flows.
 5. In progress: add jDeploy metadata after the desktop app can complete a real
    smoke scenario. The Gradle-side jDeploy bundle tasks now build and verify
    `desktopApp/build/jdeploy/Radio-Oracle-jdeploy.jar`. The npm/jDeploy

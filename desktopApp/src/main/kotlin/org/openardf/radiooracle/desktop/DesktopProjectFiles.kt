@@ -35,6 +35,10 @@ object DesktopProjectFiles : ProjectFileStore {
         writeText(path, EventCsvExports.readouts(projectFile.raceData))
     }
 
+    fun exportResultsCsv(path: Path, projectFile: EventProjectFile) {
+        writeText(path, EventCsvExports.results(projectFile.raceData))
+    }
+
     private fun writeText(path: Path, text: String) {
         path.parent?.let { Files.createDirectories(it) }
         Files.writeString(path, text, StandardCharsets.UTF_8)

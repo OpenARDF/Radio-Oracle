@@ -22,6 +22,16 @@ class DesktopProjectFilesTest {
         assertEquals(projectFile, DesktopProjectFiles.read(path))
     }
 
+    @Test
+    fun exportsResultsCsvFile() {
+        val directory = Files.createTempDirectory("rom-desktop-results")
+        val path = directory.resolve("results.csv")
+
+        DesktopProjectFiles.exportResultsCsv(path, EventProjectFile(raceData = raceData()))
+
+        assertEquals("", Files.readString(path))
+    }
+
     private fun raceData(): EventRaceData =
         EventRaceData(
             race = EventRace(

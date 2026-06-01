@@ -55,6 +55,14 @@ class EventCsvExportsTest {
         )
     }
 
+    @Test
+    fun exportsPortableResultRows() {
+        assertEquals(
+            "1;RUNNER Test;OK;2;00:10:00\n",
+            EventCsvExports.results(raceData())
+        )
+    }
+
     private fun raceData(): EventRaceData {
         val race = EventRace(
             id = "race",
@@ -112,7 +120,8 @@ class EventCsvExportsTest {
                 points = 2,
                 runTimeSeconds = 600,
                 modified = false,
-                sent = false
+                sent = false,
+                place = 1
             ),
             punches = listOf(
                 punch("punch-1", race.id, "result", 31, 720, 1),

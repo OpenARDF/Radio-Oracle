@@ -4,6 +4,7 @@ import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** Shared semicolon-delimited CSV export builders for portable event projects. */
@@ -67,6 +68,18 @@ object EventCsvExports {
                                 timeText = it.siTimeSeconds.asSiTimeText()
                             )
                         }
+                )
+            }
+
+    fun results(raceData: EventRaceData): String =
+        EventResultDetails.from(raceData)
+            .joinRows { result ->
+                EventCsvRows.resultRow(
+                    placeText = result.placeText,
+                    competitorName = result.competitorName,
+                    statusLabel = result.statusLabel,
+                    pointsText = result.pointsText,
+                    runTimeText = result.runTimeText
                 )
             }
 

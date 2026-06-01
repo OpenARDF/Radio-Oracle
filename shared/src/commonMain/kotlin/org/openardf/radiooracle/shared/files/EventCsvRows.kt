@@ -73,4 +73,14 @@ object EventCsvRows {
 
         return header + if (punchFields.isNotEmpty()) ";$punchFields" else ""
     }
+
+    /** Formats one ranked result row in the same order as the desktop Results section. */
+    fun resultRow(
+        placeText: String,
+        competitorName: String,
+        statusLabel: String,
+        pointsText: String,
+        runTimeText: String
+    ): String =
+        "$placeText;$competitorName;$statusLabel;$pointsText;$runTimeText"
 }
