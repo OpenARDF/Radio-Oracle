@@ -75,8 +75,7 @@ private val CategoryTableColumns = listOf(
     FixedTableColumn("Controls", 180.dp),
     FixedTableColumn("", 92.dp),
     FixedTableColumn("", 92.dp),
-    FixedTableColumn("", 92.dp),
-    FixedTableColumn("", 104.dp)
+    FixedTableColumn("", 92.dp)
 )
 
 private val CompetitorTableColumns = listOf(
@@ -92,7 +91,31 @@ private val CompetitorTableColumns = listOf(
     FixedTableColumn("", 92.dp),
     FixedTableColumn("", 92.dp),
     FixedTableColumn("", 92.dp),
-    FixedTableColumn("", 92.dp),
+    FixedTableColumn("", 92.dp)
+)
+
+private val ResultTableColumns = listOf(
+    FixedTableColumn("Place", 64.dp),
+    FixedTableColumn("Competitor", 240.dp),
+    FixedTableColumn("Status", 136.dp),
+    FixedTableColumn("Points", 80.dp),
+    FixedTableColumn("Runtime", 104.dp),
+    FixedTableColumn("", 104.dp)
+)
+
+private val ReadoutTableColumns = listOf(
+    FixedTableColumn("SI no.", 112.dp),
+    FixedTableColumn("Competitor", 240.dp),
+    FixedTableColumn("Status", 136.dp),
+    FixedTableColumn("Points", 80.dp),
+    FixedTableColumn("Runtime", 104.dp),
+    FixedTableColumn("Punches", 260.dp),
+    FixedTableColumn("", 104.dp)
+)
+
+private val AliasTableColumns = listOf(
+    FixedTableColumn("SI code", 112.dp),
+    FixedTableColumn("Alias", 320.dp),
     FixedTableColumn("", 104.dp)
 )
 
@@ -921,11 +944,25 @@ private fun ResultDetailsPanel(
     results: List<EventResultDetails>,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit
 ) {
+    val horizontalScrollState = rememberScrollState()
+    val tableWidth = fixedTableWidth(ResultTableColumns)
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        DetailHeaderRow(listOf("Place", "Competitor", "Status", "Points", "Runtime", ""))
-        results.forEach { result ->
-            ResultDetailRow(result, onUpdateReadoutStatus)
+        Box(modifier = Modifier.fillMaxWidth().horizontalScroll(horizontalScrollState)) {
+            Column(
+                modifier = Modifier.width(tableWidth),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FixedDetailHeaderRow(ResultTableColumns)
+                results.forEach { result ->
+                    ResultDetailRow(result, onUpdateReadoutStatus)
+                }
+            }
         }
+        HorizontalScrollbar(
+            adapter = rememberScrollbarAdapter(horizontalScrollState),
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -938,25 +975,25 @@ private fun ResultDetailRow(
     var selectedStatus by remember(result.id, result.resultStatus) { mutableStateOf(result.resultStatus) }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.width(fixedTableWidth(ResultTableColumns)),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(result.placeText, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
-        Text(result.competitorName, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
+        FixedTableText(result.placeText, ResultTableColumns[0].width)
+        FixedTableText(result.competitorName, ResultTableColumns[1].width)
         ResultStatusPicker(
             selectedStatus = selectedStatus,
             onStatusSelected = { selectedStatus = it },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.width(ResultTableColumns[2].width)
         )
-        Text(result.pointsText, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
-        Text(result.runTimeText, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
+        FixedTableText(result.pointsText, ResultTableColumns[3].width)
+        FixedTableText(result.runTimeText, ResultTableColumns[4].width)
         Button(
             onClick = { onUpdateReadoutStatus(result.id, selectedStatus) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(ResultTableColumns[5].width),
             enabled = selectedStatus != result.resultStatus || result.automaticStatus
         ) {
-            Text("Status")
+            ButtonLabel("Status")
         }
     }
 }
@@ -970,24 +1007,8 @@ private fun ReadoutDetailsPanel(
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ManualReadoutAddRow(
-            competitors = competitors,
-            onAddManualReadout = onAddManualReadout
-        )
-        DetailHeaderRow(listOf("SI no.", "Competitor", "Status", "Points", "Runtime", "Punches", "", ""))
-        readouts.forEach { readout ->
-            ReadoutDetailRow(readout, onRemoveReadout, onUpdateReadoutStatus)
-        }
-    }
-}
-
-/** Shows a compact manual readout entry row for desktop beta testing. */
-@Composable
-private fun ManualReadoutAddRow(
-    competitors: List<EventCompetitorDetails>,
-    onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Unit
-) {
+    val horizontalScrollState = rememberScrollState()
+    val tableWidth = fixedTableWidth(ReadoutTableColumns)
     var selectedCompetitorId by remember { mutableStateOf<String?>(null) }
     var siNumberDraft by remember { mutableStateOf("") }
     var startSecondsDraft by remember { mutableStateOf("") }
@@ -995,66 +1016,170 @@ private fun ManualReadoutAddRow(
     var controlCodesDraft by remember { mutableStateOf("") }
     var selectedStatus by remember { mutableStateOf(ResultStatus.OK) }
 
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ManualReadoutAddButton(
+                selectedCompetitorId = selectedCompetitorId,
+                siNumberDraft = siNumberDraft,
+                startSecondsDraft = startSecondsDraft,
+                finishSecondsDraft = finishSecondsDraft,
+                controlCodesDraft = controlCodesDraft,
+                selectedStatus = selectedStatus,
+                onAddManualReadout = onAddManualReadout,
+                modifier = Modifier.width(104.dp)
+            )
+            Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
+                Column(
+                    modifier = Modifier.width(tableWidth),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ManualReadoutAddRow(
+                        competitors = competitors,
+                        selectedCompetitorId = selectedCompetitorId,
+                        onCompetitorSelected = { selectedCompetitorId = it },
+                        siNumberDraft = siNumberDraft,
+                        onSiNumberChange = { siNumberDraft = it },
+                        startSecondsDraft = startSecondsDraft,
+                        onStartSecondsChange = { startSecondsDraft = it },
+                        finishSecondsDraft = finishSecondsDraft,
+                        onFinishSecondsChange = { finishSecondsDraft = it },
+                        controlCodesDraft = controlCodesDraft,
+                        onControlCodesChange = { controlCodesDraft = it },
+                        selectedStatus = selectedStatus,
+                        onStatusSelected = { selectedStatus = it }
+                    )
+                    FixedDetailHeaderRow(ReadoutTableColumns)
+                }
+            }
+        }
+        HorizontalScrollbar(
+            adapter = rememberScrollbarAdapter(horizontalScrollState),
+            modifier = Modifier.fillMaxWidth()
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                readouts.forEach { readout ->
+                    ReadoutDeleteButton(readout, onRemoveReadout)
+                }
+            }
+            Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
+                Column(
+                    modifier = Modifier.width(tableWidth),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    readouts.forEach { readout ->
+                        ReadoutDetailRow(readout, onUpdateReadoutStatus)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Shows a compact manual readout entry row for desktop beta testing. */
+@Composable
+private fun ManualReadoutAddButton(
+    selectedCompetitorId: String?,
+    siNumberDraft: String,
+    startSecondsDraft: String,
+    finishSecondsDraft: String,
+    controlCodesDraft: String,
+    selectedStatus: ResultStatus,
+    onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = {
+            onAddManualReadout(
+                selectedCompetitorId,
+                siNumberDraft,
+                startSecondsDraft,
+                finishSecondsDraft,
+                controlCodesDraft,
+                selectedStatus
+            )
+        },
+        modifier = modifier,
+        enabled = selectedCompetitorId != null ||
+                siNumberDraft.isNotBlank() ||
+                startSecondsDraft.isNotBlank() ||
+                finishSecondsDraft.isNotBlank() ||
+                controlCodesDraft.isNotBlank()
+    ) {
+        ButtonLabel("Add")
+    }
+}
+
+/** Shows a compact manual readout entry row for desktop beta testing. */
+@Composable
+private fun ManualReadoutAddRow(
+    competitors: List<EventCompetitorDetails>,
+    selectedCompetitorId: String?,
+    onCompetitorSelected: (String?) -> Unit,
+    siNumberDraft: String,
+    onSiNumberChange: (String) -> Unit,
+    startSecondsDraft: String,
+    onStartSecondsChange: (String) -> Unit,
+    finishSecondsDraft: String,
+    onFinishSecondsChange: (String) -> Unit,
+    controlCodesDraft: String,
+    onControlCodesChange: (String) -> Unit,
+    selectedStatus: ResultStatus,
+    onStatusSelected: (ResultStatus) -> Unit
+) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.width(fixedTableWidth(ReadoutTableColumns)),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        TextField(
+            value = siNumberDraft,
+            onValueChange = onSiNumberChange,
+            modifier = Modifier.width(ReadoutTableColumns[0].width),
+            singleLine = true,
+            label = { Text("SI") }
+        )
         CompetitorPicker(
             selectedCompetitorId = selectedCompetitorId,
             competitors = competitors,
-            onCompetitorSelected = { selectedCompetitorId = it },
-            modifier = Modifier.weight(1f)
+            onCompetitorSelected = onCompetitorSelected,
+            modifier = Modifier.width(ReadoutTableColumns[1].width)
         )
-        TextField(
-            value = siNumberDraft,
-            onValueChange = { siNumberDraft = it },
-            modifier = Modifier.weight(1f),
-            label = { Text("SI") }
+        ResultStatusPicker(
+            selectedStatus = selectedStatus,
+            onStatusSelected = onStatusSelected,
+            modifier = Modifier.width(ReadoutTableColumns[2].width)
         )
         TextField(
             value = startSecondsDraft,
-            onValueChange = { startSecondsDraft = it },
-            modifier = Modifier.weight(1f),
+            onValueChange = onStartSecondsChange,
+            modifier = Modifier.width(ReadoutTableColumns[3].width),
+            singleLine = true,
             label = { Text("Start s") }
         )
         TextField(
             value = finishSecondsDraft,
-            onValueChange = { finishSecondsDraft = it },
-            modifier = Modifier.weight(1f),
+            onValueChange = onFinishSecondsChange,
+            modifier = Modifier.width(ReadoutTableColumns[4].width),
+            singleLine = true,
             label = { Text("Finish s") }
         )
         TextField(
             value = controlCodesDraft,
-            onValueChange = { controlCodesDraft = it },
-            modifier = Modifier.weight(1f),
+            onValueChange = onControlCodesChange,
+            modifier = Modifier.width(ReadoutTableColumns[5].width),
+            singleLine = true,
             label = { Text("Controls") }
         )
-        ResultStatusPicker(
-            selectedStatus = selectedStatus,
-            onStatusSelected = { selectedStatus = it },
-            modifier = Modifier.weight(1f)
-        )
-        Button(
-            onClick = {
-                onAddManualReadout(
-                    selectedCompetitorId,
-                    siNumberDraft,
-                    startSecondsDraft,
-                    finishSecondsDraft,
-                    controlCodesDraft,
-                    selectedStatus
-                )
-            },
-            modifier = Modifier.weight(1f),
-            enabled = selectedCompetitorId != null ||
-                    siNumberDraft.isNotBlank() ||
-                    startSecondsDraft.isNotBlank() ||
-                    finishSecondsDraft.isNotBlank() ||
-                    controlCodesDraft.isNotBlank()
-        ) {
-            Text("Add")
-        }
+        Spacer(modifier = Modifier.width(ReadoutTableColumns[6].width))
     }
 }
 
@@ -1062,40 +1187,47 @@ private fun ManualReadoutAddRow(
 @Composable
 private fun ReadoutDetailRow(
     readout: EventReadoutDetails,
-    onRemoveReadout: (String) -> Unit,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit
 ) {
-    var showDeleteDialog by remember(readout.id) { mutableStateOf(false) }
     var selectedStatus by remember(readout.id, readout.resultStatus) { mutableStateOf(readout.resultStatus) }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.width(fixedTableWidth(ReadoutTableColumns)),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(readout.siNumberText, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
-        Text(readout.competitorName, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
+        FixedTableText(readout.siNumberText, ReadoutTableColumns[0].width)
+        FixedTableText(readout.competitorName, ReadoutTableColumns[1].width)
         ResultStatusPicker(
             selectedStatus = selectedStatus,
             onStatusSelected = { selectedStatus = it },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.width(ReadoutTableColumns[2].width)
         )
-        Text(readout.pointsText, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
-        Text(readout.runTimeText, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
-        Text(readout.punchCodesText, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
+        FixedTableText(readout.pointsText, ReadoutTableColumns[3].width)
+        FixedTableText(readout.runTimeText, ReadoutTableColumns[4].width)
+        FixedTableText(readout.punchCodesText, ReadoutTableColumns[5].width)
         Button(
             onClick = { onUpdateReadoutStatus(readout.id, selectedStatus) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(ReadoutTableColumns[6].width),
             enabled = selectedStatus != readout.resultStatus || readout.automaticStatus
         ) {
-            Text("Status")
+            ButtonLabel("Status")
         }
-        Button(
-            onClick = { showDeleteDialog = true },
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("Delete")
-        }
+    }
+}
+
+@Composable
+private fun ReadoutDeleteButton(
+    readout: EventReadoutDetails,
+    onRemoveReadout: (String) -> Unit
+) {
+    var showDeleteDialog by remember(readout.id) { mutableStateOf(false) }
+
+    Button(
+        onClick = { showDeleteDialog = true },
+        modifier = Modifier.width(104.dp)
+    ) {
+        ButtonLabel("Delete")
     }
 
     if (showDeleteDialog) {
@@ -1294,22 +1426,32 @@ private fun CompetitorDetailsPanel(
             adapter = rememberScrollbarAdapter(horizontalScrollState),
             modifier = Modifier.fillMaxWidth()
         )
-        Box(modifier = Modifier.fillMaxWidth().horizontalScroll(horizontalScrollState)) {
-            Column(
-                modifier = Modifier.width(tableWidth),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 competitors.forEach { competitor ->
-                    CompetitorDetailRow(
-                        competitor = competitor,
-                        categories = categories,
-                        onRenameCompetitor = onRenameCompetitor,
-                        onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
-                        onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
-                        onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
-                        onAssignCompetitorCategory = onAssignCompetitorCategory,
-                        onRemoveCompetitor = onRemoveCompetitor
-                    )
+                    CompetitorDeleteButton(competitor, onRemoveCompetitor)
+                }
+            }
+            Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
+                Column(
+                    modifier = Modifier.width(tableWidth),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    competitors.forEach { competitor ->
+                        CompetitorDetailRow(
+                            competitor = competitor,
+                            categories = categories,
+                            onRenameCompetitor = onRenameCompetitor,
+                            onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
+                            onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
+                            onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
+                            onAssignCompetitorCategory = onAssignCompetitorCategory
+                        )
+                    }
                 }
             }
         }
@@ -1402,7 +1544,6 @@ private fun CompetitorAddRow(
         Spacer(modifier = Modifier.width(CompetitorTableColumns[10].width))
         Spacer(modifier = Modifier.width(CompetitorTableColumns[11].width))
         Spacer(modifier = Modifier.width(CompetitorTableColumns[12].width))
-        Spacer(modifier = Modifier.width(CompetitorTableColumns[13].width))
     }
 }
 
@@ -1415,8 +1556,7 @@ private fun CompetitorDetailRow(
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
     onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
-    onAssignCompetitorCategory: (String, String?) -> Unit,
-    onRemoveCompetitor: (String, Boolean) -> Unit
+    onAssignCompetitorCategory: (String, String?) -> Unit
 ) {
     var firstNameDraft by remember(competitor.id, competitor.firstName) { mutableStateOf(competitor.firstName) }
     var lastNameDraft by remember(competitor.id, competitor.lastName) { mutableStateOf(competitor.lastName) }
@@ -1430,8 +1570,6 @@ private fun CompetitorDetailRow(
     }
     var siNumberDraft by remember(competitor.id, competitor.siNumberText) { mutableStateOf(competitor.siNumberText) }
     var selectedCategoryId by remember(competitor.id, competitor.categoryId) { mutableStateOf(competitor.categoryId) }
-    var showDeleteDialog by remember(competitor.id) { mutableStateOf(false) }
-
     Row(
         modifier = Modifier.width(fixedTableWidth(CompetitorTableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
@@ -1527,14 +1665,22 @@ private fun CompetitorDetailRow(
         ) {
             ButtonLabel("Cat.")
         }
-        Button(
-            onClick = { showDeleteDialog = true },
-            modifier = Modifier.width(CompetitorTableColumns[13].width)
-        ) {
-            ButtonLabel("Delete")
-        }
     }
+}
 
+@Composable
+private fun CompetitorDeleteButton(
+    competitor: EventCompetitorDetails,
+    onRemoveCompetitor: (String, Boolean) -> Unit
+) {
+    var showDeleteDialog by remember(competitor.id) { mutableStateOf(false) }
+
+    Button(
+        onClick = { showDeleteDialog = true },
+        modifier = Modifier.width(104.dp)
+    ) {
+        ButtonLabel("Delete")
+    }
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -1621,45 +1767,99 @@ private fun AliasDetailsPanel(
     onAddAlias: (String, String) -> Unit,
     onRemoveAlias: (String) -> Unit
 ) {
+    val horizontalScrollState = rememberScrollState()
+    val tableWidth = fixedTableWidth(AliasTableColumns)
+    var siCodeDraft by remember { mutableStateOf("") }
+    var nameDraft by remember { mutableStateOf("") }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        AliasAddRow(onAddAlias)
-        DetailHeaderRow(listOf("SI code", "Alias", "", ""))
-        aliases.forEach { alias ->
-            AliasDetailRow(alias, onUpdateAlias, onRemoveAlias)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = {
+                    onAddAlias(siCodeDraft, nameDraft)
+                    siCodeDraft = ""
+                    nameDraft = ""
+                },
+                modifier = Modifier.width(104.dp),
+                enabled = siCodeDraft.isNotBlank() || nameDraft.isNotBlank()
+            ) {
+                ButtonLabel("Add")
+            }
+            Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
+                Column(
+                    modifier = Modifier.width(tableWidth),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AliasAddRow(
+                        siCodeDraft = siCodeDraft,
+                        onSiCodeChange = { siCodeDraft = it },
+                        nameDraft = nameDraft,
+                        onNameChange = { nameDraft = it }
+                    )
+                    FixedDetailHeaderRow(AliasTableColumns)
+                }
+            }
+        }
+        HorizontalScrollbar(
+            adapter = rememberScrollbarAdapter(horizontalScrollState),
+            modifier = Modifier.fillMaxWidth()
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                aliases.forEach { alias ->
+                    AliasDeleteButton(alias, onRemoveAlias)
+                }
+            }
+            Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
+                Column(
+                    modifier = Modifier.width(tableWidth),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    aliases.forEach { alias ->
+                        AliasDetailRow(alias, onUpdateAlias)
+                    }
+                }
+            }
         }
     }
 }
 
 /** Shows the new-alias entry row above the existing alias mappings. */
 @Composable
-private fun AliasAddRow(onAddAlias: (String, String) -> Unit) {
-    var siCodeDraft by remember { mutableStateOf("") }
-    var nameDraft by remember { mutableStateOf("") }
-
+private fun AliasAddRow(
+    siCodeDraft: String,
+    onSiCodeChange: (String) -> Unit,
+    nameDraft: String,
+    onNameChange: (String) -> Unit
+) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.width(fixedTableWidth(AliasTableColumns)),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
             value = siCodeDraft,
-            onValueChange = { siCodeDraft = it },
-            modifier = Modifier.weight(1f),
+            onValueChange = onSiCodeChange,
+            modifier = Modifier.width(AliasTableColumns[0].width),
+            singleLine = true,
             label = { Text("New SI code") }
         )
         TextField(
             value = nameDraft,
-            onValueChange = { nameDraft = it },
-            modifier = Modifier.weight(1f),
+            onValueChange = onNameChange,
+            modifier = Modifier.width(AliasTableColumns[1].width),
+            singleLine = true,
             label = { Text("New alias") }
         )
-        Button(
-            onClick = { onAddAlias(siCodeDraft, nameDraft) },
-            modifier = Modifier.weight(1f),
-            enabled = siCodeDraft.isNotBlank() || nameDraft.isNotBlank()
-        ) {
-            Text("Add")
-        }
+        Spacer(modifier = Modifier.width(AliasTableColumns[2].width))
     }
 }
 
@@ -1667,42 +1867,75 @@ private fun AliasAddRow(onAddAlias: (String, String) -> Unit) {
 @Composable
 private fun AliasDetailRow(
     alias: EventAliasDetails,
-    onUpdateAlias: (String, String, String) -> Unit,
-    onRemoveAlias: (String) -> Unit
+    onUpdateAlias: (String, String, String) -> Unit
 ) {
     var siCodeDraft by remember(alias.id, alias.siCodeText) { mutableStateOf(alias.siCodeText) }
     var nameDraft by remember(alias.id, alias.name) { mutableStateOf(alias.name) }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.width(fixedTableWidth(AliasTableColumns)),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
             value = siCodeDraft,
             onValueChange = { siCodeDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(AliasTableColumns[0].width),
+            singleLine = true,
             label = { Text("SI code") }
         )
         TextField(
             value = nameDraft,
             onValueChange = { nameDraft = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(AliasTableColumns[1].width),
+            singleLine = true,
             label = { Text("Alias") }
         )
         Button(
             onClick = { onUpdateAlias(alias.id, siCodeDraft, nameDraft) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.width(AliasTableColumns[2].width),
             enabled = siCodeDraft != alias.siCodeText || nameDraft != alias.name
         ) {
-            Text("Apply")
+            ButtonLabel("Apply")
         }
-        Button(
-            onClick = { onRemoveAlias(alias.id) },
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("Delete")
-        }
+    }
+}
+
+@Composable
+private fun AliasDeleteButton(
+    alias: EventAliasDetails,
+    onRemoveAlias: (String) -> Unit
+) {
+    var showDeleteDialog by remember(alias.id) { mutableStateOf(false) }
+
+    Button(
+        onClick = { showDeleteDialog = true },
+        modifier = Modifier.width(104.dp)
+    ) {
+        ButtonLabel("Delete")
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete alias") },
+            text = { Text("Delete alias ${alias.siCodeText} -> ${alias.name}?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteDialog = false
+                        onRemoveAlias(alias.id)
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -1718,34 +1951,64 @@ private fun CategoryDetailsPanel(
 ) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(CategoryTableColumns)
+    var categoryNameDraft by remember { mutableStateOf("") }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Box(modifier = Modifier.fillMaxWidth().horizontalScroll(horizontalScrollState)) {
-            Column(
-                modifier = Modifier.width(tableWidth),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = {
+                    onAddCategory(categoryNameDraft)
+                    categoryNameDraft = ""
+                },
+                modifier = Modifier.width(104.dp),
+                enabled = categoryNameDraft.isNotBlank()
             ) {
-                CategoryAddRow(onAddCategory)
-                FixedDetailHeaderRow(CategoryTableColumns)
+                ButtonLabel("Add")
+            }
+            Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
+                Column(
+                    modifier = Modifier.width(tableWidth),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CategoryAddRow(
+                        categoryNameDraft = categoryNameDraft,
+                        onCategoryNameChange = { categoryNameDraft = it }
+                    )
+                    FixedDetailHeaderRow(CategoryTableColumns)
+                }
             }
         }
         HorizontalScrollbar(
             adapter = rememberScrollbarAdapter(horizontalScrollState),
             modifier = Modifier.fillMaxWidth()
         )
-        Box(modifier = Modifier.fillMaxWidth().horizontalScroll(horizontalScrollState)) {
-            Column(
-                modifier = Modifier.width(tableWidth),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 categories.forEach { category ->
-                    CategoryDetailRow(
-                        category,
-                        onRenameCategory,
-                        onUpdateCategoryControlPoints,
-                        onUpdateCategoryPhysicalStats,
-                        onRemoveCategory
-                    )
+                    CategoryDeleteButton(category, onRemoveCategory)
+                }
+            }
+            Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
+                Column(
+                    modifier = Modifier.width(tableWidth),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    categories.forEach { category ->
+                        CategoryDetailRow(
+                            category,
+                            onRenameCategory,
+                            onUpdateCategoryControlPoints,
+                            onUpdateCategoryPhysicalStats
+                        )
+                    }
                 }
             }
         }
@@ -1754,9 +2017,10 @@ private fun CategoryDetailsPanel(
 
 /** Shows the new-category entry row above existing category definitions. */
 @Composable
-private fun CategoryAddRow(onAddCategory: (String) -> Unit) {
-    var categoryNameDraft by remember { mutableStateOf("") }
-
+private fun CategoryAddRow(
+    categoryNameDraft: String,
+    onCategoryNameChange: (String) -> Unit
+) {
     Row(
         modifier = Modifier.width(fixedTableWidth(CategoryTableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
@@ -1764,7 +2028,7 @@ private fun CategoryAddRow(onAddCategory: (String) -> Unit) {
     ) {
         TextField(
             value = categoryNameDraft,
-            onValueChange = { categoryNameDraft = it },
+            onValueChange = onCategoryNameChange,
             modifier = Modifier.width(CategoryTableColumns[0].width),
             singleLine = true,
             label = { Text("New category") }
@@ -1775,16 +2039,9 @@ private fun CategoryAddRow(onAddCategory: (String) -> Unit) {
         Spacer(modifier = Modifier.width(CategoryTableColumns[4].width))
         Spacer(modifier = Modifier.width(CategoryTableColumns[5].width))
         Spacer(modifier = Modifier.width(CategoryTableColumns[6].width))
-        Button(
-            onClick = { onAddCategory(categoryNameDraft) },
-            modifier = Modifier.width(CategoryTableColumns[7].width),
-            enabled = categoryNameDraft.isNotBlank()
-        ) {
-            ButtonLabel("Add")
-        }
+        Spacer(modifier = Modifier.width(CategoryTableColumns[7].width))
         Spacer(modifier = Modifier.width(CategoryTableColumns[8].width))
         Spacer(modifier = Modifier.width(CategoryTableColumns[9].width))
-        Spacer(modifier = Modifier.width(CategoryTableColumns[10].width))
     }
 }
 
@@ -1794,8 +2051,7 @@ private fun CategoryDetailRow(
     category: EventCategoryDetails,
     onRenameCategory: (String, String) -> Unit,
     onUpdateCategoryControlPoints: (String, String) -> Unit,
-    onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
-    onRemoveCategory: (String, Boolean) -> Unit
+    onUpdateCategoryPhysicalStats: (String, String, String) -> Unit
 ) {
     var categoryNameDraft by remember(category.id, category.name) { mutableStateOf(category.name) }
     var lengthMetersDraft by remember(category.id, category.lengthMetersText) {
@@ -1807,8 +2063,6 @@ private fun CategoryDetailRow(
     var controlPointsDraft by remember(category.id, category.controlPointsText) {
         mutableStateOf(category.controlPointsText)
     }
-    var showDeleteDialog by remember(category.id) { mutableStateOf(false) }
-
     Row(
         modifier = Modifier.width(fixedTableWidth(CategoryTableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
@@ -1884,14 +2138,22 @@ private fun CategoryDetailRow(
         ) {
             ButtonLabel("Ctrls")
         }
-        Button(
-            onClick = { showDeleteDialog = true },
-            modifier = Modifier.width(CategoryTableColumns[10].width)
-        ) {
-            ButtonLabel("Delete")
-        }
     }
+}
 
+@Composable
+private fun CategoryDeleteButton(
+    category: EventCategoryDetails,
+    onRemoveCategory: (String, Boolean) -> Unit
+) {
+    var showDeleteDialog by remember(category.id) { mutableStateOf(false) }
+
+    Button(
+        onClick = { showDeleteDialog = true },
+        modifier = Modifier.width(104.dp)
+    ) {
+        ButtonLabel("Delete")
+    }
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -2146,6 +2408,19 @@ private fun ButtonLabel(text: String) {
         maxLines = 1,
         softWrap = false,
         overflow = TextOverflow.Visible
+    )
+}
+
+@Composable
+private fun FixedTableText(text: String, width: Dp) {
+    Text(
+        text = text,
+        modifier = Modifier.width(width),
+        color = DesktopPalette.Black,
+        fontSize = 13.sp,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis
     )
 }
 
