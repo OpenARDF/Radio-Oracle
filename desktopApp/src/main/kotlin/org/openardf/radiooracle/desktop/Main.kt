@@ -64,6 +64,8 @@ import java.util.UUID
 private data class FixedTableColumn(val title: String, val width: Dp)
 
 private val TableColumnGap = 12.dp
+private val ActionRailWidth = 104.dp
+private val FixedGridRowHeight = 56.dp
 
 private val CategoryTableColumns = listOf(
     FixedTableColumn("Name", 150.dp),
@@ -1044,7 +1046,7 @@ private fun ReadoutDetailsPanel(
                     controlCodesDraft = ""
                     selectedStatus = ResultStatus.OK
                 },
-                modifier = Modifier.width(104.dp)
+                modifier = fixedActionRailModifier()
             )
             Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
                 Column(
@@ -1243,7 +1245,7 @@ private fun ReadoutDeleteButton(
 
     Button(
         onClick = { showDeleteDialog = true },
-        modifier = Modifier.width(104.dp)
+        modifier = fixedActionRailModifier()
     ) {
         ButtonLabel("Delete")
     }
@@ -1407,7 +1409,7 @@ private fun CompetitorDetailsPanel(
                         siNumberDraft = ""
                     }
                 },
-                modifier = Modifier.width(104.dp),
+                modifier = fixedActionRailModifier(),
                 enabled = canAddCompetitor
             ) {
                 ButtonLabel("Add")
@@ -1695,7 +1697,7 @@ private fun CompetitorDeleteButton(
 
     Button(
         onClick = { showDeleteDialog = true },
-        modifier = Modifier.width(104.dp)
+        modifier = fixedActionRailModifier()
     ) {
         ButtonLabel("Delete")
     }
@@ -1804,7 +1806,7 @@ private fun AliasDetailsPanel(
                         nameDraft = ""
                     }
                 },
-                modifier = Modifier.width(104.dp),
+                modifier = fixedActionRailModifier(),
                 enabled = siCodeDraft.isNotBlank() || nameDraft.isNotBlank()
             ) {
                 ButtonLabel("Add")
@@ -1930,7 +1932,7 @@ private fun AliasDeleteButton(
 
     Button(
         onClick = { showDeleteDialog = true },
-        modifier = Modifier.width(104.dp)
+        modifier = fixedActionRailModifier()
     ) {
         ButtonLabel("Delete")
     }
@@ -1986,7 +1988,7 @@ private fun CategoryDetailsPanel(
                         categoryNameDraft = ""
                     }
                 },
-                modifier = Modifier.width(104.dp),
+                modifier = fixedActionRailModifier(),
                 enabled = categoryNameDraft.isNotBlank()
             ) {
                 ButtonLabel("Add")
@@ -2172,7 +2174,7 @@ private fun CategoryDeleteButton(
 
     Button(
         onClick = { showDeleteDialog = true },
-        modifier = Modifier.width(104.dp)
+        modifier = fixedActionRailModifier()
     ) {
         ButtonLabel("Delete")
     }
@@ -2445,6 +2447,11 @@ private fun FixedTableText(text: String, width: Dp) {
         overflow = TextOverflow.Ellipsis
     )
 }
+
+private fun fixedActionRailModifier(): Modifier =
+    Modifier
+        .width(ActionRailWidth)
+        .height(FixedGridRowHeight)
 
 private fun fixedTableWidth(columns: List<FixedTableColumn>): Dp =
     columns.fold(0.dp) { total, column -> total + column.width } +
