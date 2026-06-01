@@ -140,6 +140,7 @@ npm install
 npm run jdeploy:pack-preview
 npm run jdeploy:local-smoke
 npm run jdeploy:release-preflight
+npm run jdeploy:registry-smoke -- 1.0.1
 ```
 
 `npm run jdeploy:pack-preview` prepares the Gradle-side jDeploy bundle, runs
@@ -154,6 +155,10 @@ app.
 
 `npm run jdeploy:release-preflight` checks package identity and version
 alignment before any intentional publish.
+
+After a public publish, `npm run jdeploy:registry-smoke -- <version>` installs
+that exact registry version in a temporary directory, launches it with the smoke
+project, confirms startup, and quits the app.
 
 For local macOS smoke tests, prefer copying the generated `.app` and sample
 project file to `/tmp` before launching with `open ... --args <sample.rom.json>`.
