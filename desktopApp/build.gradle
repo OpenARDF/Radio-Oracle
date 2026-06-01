@@ -11,6 +11,8 @@ kotlin {
     jvmToolchain(17)
 }
 
+version = rootProject.ext.radioOracleVersion
+
 dependencies {
     implementation(project(":shared"))
     implementation(compose.desktop.currentOs)
@@ -24,6 +26,7 @@ compose.desktop {
 
         nativeDistributions {
             packageName = "Radio-Oracle"
+            packageVersion = rootProject.ext.radioOracleVersion
             description = "Desktop event administration shell for Radio-Oracle."
             vendor = "OpenARDF"
 

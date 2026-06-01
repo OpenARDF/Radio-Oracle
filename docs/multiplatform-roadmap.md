@@ -148,6 +148,8 @@ results.
 Goal: produce installable desktop beta artifacts.
 
 - Add version/build metadata for desktop artifacts.
+- Keep Android, npm/jDeploy, and native desktop package versions aligned from
+  `1.0.0` onward. Future releases increment only the third, rightmost field.
 - Use jDeploy as the default packaging path unless a focused packaging spike
   finds a concrete blocker; keep Conveyor as a comparison option and `jpackage`
   as a low-level fallback.
