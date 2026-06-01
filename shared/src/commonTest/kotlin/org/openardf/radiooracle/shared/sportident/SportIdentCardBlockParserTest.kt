@@ -8,6 +8,25 @@ import kotlin.test.assertNull
 
 class SportIdentCardBlockParserTest {
     @Test
+    fun parsesSi6CardBlockWithStationPrefix() {
+        val data = ByteArray(SportIdentProtocol.SI_CARD_BLOCK_SIZE) { it.toByte() }
+        val frame = assertNotNull(
+            SportIdentFrameParser.firstFrame(
+                SportIdentProtocol.buildExtendedMessage(
+                    command = SportIdentProtocol.GET_SI_CARD6,
+                    data = byteArrayOf(0x00, 0x11, 0x00) + data
+                ),
+                commandFilter = SportIdentProtocol.GET_SI_CARD6
+            )
+        )
+
+        val block = assertNotNull(SportIdentCardBlockParser.si6Block(6, frame))
+
+        assertEquals(6, block.blockNumber)
+        assertContentEquals(data, block.data)
+    }
+
+    @Test
     fun parsesSi8Or9OrSiacCardBlock() {
         val data = ByteArray(SportIdentProtocol.SI_CARD_BLOCK_SIZE) { it.toByte() }
         val frame = assertNotNull(

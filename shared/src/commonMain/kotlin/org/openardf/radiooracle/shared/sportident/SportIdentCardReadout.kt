@@ -15,6 +15,38 @@ data class SportIdentCardPunch(
 )
 
 object SportIdentCardReadoutParser {
+    fun parseSi6(data: ByteArray): SportIdentCardReadout? {
+        if (data.size < SI6_MIN_BYTES) {
+            return null
+        }
+
+        val punchCount = minOf(data[18].toUnsignedInt(), SI_CARD6_MAX_PUNCHES)
+        val punchStartOffset = SportIdentProtocol.SI_CARD_BLOCK_SIZE
+        if (data.size < punchStartOffset + punchCount * PUNCH_BYTES) {
+            return null
+        }
+
+        val punches = buildList {
+            repeat(punchCount) { index ->
+                val offset = punchStartOffset + index * PUNCH_BYTES
+                val punch = parsePunch(data.copyOfRange(offset, offset + PUNCH_BYTES)) ?: return null
+                add(punch)
+            }
+        }
+
+        return SportIdentCardReadout(
+            siNumber = (data[10].toUnsignedInt() shl 24) +
+                (data[11].toUnsignedInt() shl 16) +
+                (data[12].toUnsignedInt() shl 8) +
+                data[13].toUnsignedInt(),
+            series = SI_CARD6_SERIES,
+            checkTime = parsePunch(data.copyOfRange(28, 32))?.siTime,
+            startTime = parsePunch(data.copyOfRange(24, 28))?.siTime,
+            finishTime = parsePunch(data.copyOfRange(20, 24))?.siTime,
+            punches = punches
+        )
+    }
+
     fun parseSi8Or9OrSiac(data: ByteArray): SportIdentCardReadout? {
         if (data.size < SportIdentProtocol.SI_CARD_BLOCK_SIZE) {
             return null
@@ -88,14 +120,17 @@ object SportIdentCardReadoutParser {
 
     private const val PUNCH_BYTES = 4
     private const val NULL: Byte = 0xEE.toByte()
+    private const val SI_CARD6_SERIES = 6
     private const val SI_CARD8_SERIES = 2
     private const val SI_CARD9_SERIES = 1
     private const val SI_CARD_PCARD_SERIES = 4
     private const val SI_CARD10_11_SIAC_SERIES = 15
+    private const val SI_CARD6_MAX_PUNCHES = 192
     private const val SI_CARD8_MAX_PUNCHES = 30
     private const val SI_CARD9_MAX_PUNCHES = 50
     private const val SI_CARD_PCARD_MAX_PUNCHES = 20
     private const val SI_CARD10_11_SIAC_MAX_PUNCHES = 128
+    private const val SI6_MIN_BYTES = SportIdentProtocol.SI_CARD_BLOCK_SIZE * 2
 }
 
 private fun Byte.toUnsignedInt(): Int = toInt() and 0xff

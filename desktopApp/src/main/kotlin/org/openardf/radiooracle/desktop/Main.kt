@@ -1251,7 +1251,7 @@ private fun ReadoutDetailsPanel(
                 ButtonLabel(if (isDownloadingSiReadout) "Waiting" else "Download SI")
             }
             Text(
-                text = siDownloadStatusText ?: "Download one SI8/SI9/SIAC card from an attached READOUT/SI MASTER station.",
+                text = siDownloadStatusText ?: "Download one SI6/SI8/SI9/SIAC card from an attached READOUT/SI MASTER station.",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
@@ -2758,7 +2758,7 @@ private fun downloadDesktopSportIdentCardReadout(): DesktopSportIdentCardBlockDo
                     "${station.stationInfo.stationModeLabel} mode instead of READOUT/SI MASTER."
             )
         }
-        return DesktopSportIdentCardBlockReader().readFirstSi8Or9OrSiacBlockAfterInsertOnOpenPort(port)
+        return DesktopSportIdentCardBlockReader().readFirstSupportedCardAfterInsertOnOpenPort(port)
     } finally {
         if (port.isOpen) {
             port.close()
