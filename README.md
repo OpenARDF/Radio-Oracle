@@ -34,7 +34,7 @@ The desktop beta supports:
   files;
 - detecting an attached SPORTident USB download box and warning when it is not
   in READOUT/SI MASTER mode;
-- downloading one SI6/SI8/SI9/SIAC card at a time from an attached
+- downloading one SI5/SI6/SI8/SI9/SIAC card at a time from an attached
   READOUT/SI MASTER station.
 
 The desktop beta does not yet replace the Android race-day workflow. Live

@@ -6,6 +6,32 @@ import kotlin.test.assertNotNull
 
 class SportIdentCardReadoutParserTest {
     @Test
+    fun parsesSi5CardReadout() {
+        val data = ByteArray(130) { 0xEE.toByte() }
+        val cardDataOffset = 2
+        val cardNumber = 234_567
+        val lowNumber = cardNumber % 100_000
+        data[cardDataOffset + 4] = ((lowNumber ushr 8) and 0xff).toByte()
+        data[cardDataOffset + 5] = (lowNumber and 0xff).toByte()
+        data[cardDataOffset + 6] = (cardNumber / 100_000).toByte()
+        data[cardDataOffset + 23] = 3
+        writeSi5Time(data, cardDataOffset + 25, 10 * 3600)
+        writeSi5Time(data, cardDataOffset + 19, 10 * 60 + 30)
+        writeSi5Time(data, cardDataOffset + 21, 11 * 3600)
+        writeSi5Punch(data, cardDataOffset + 33, 41, 12 * 60)
+        writeSi5Punch(data, cardDataOffset + 36, 42, 20 * 60)
+
+        val readout = assertNotNull(SportIdentCardReadoutParser.parseSi5(data))
+
+        assertEquals(cardNumber, readout.siNumber)
+        assertEquals(5, readout.series)
+        assertEquals("10:00:00", readout.checkTime?.getTimeString())
+        assertEquals("00:10:30", readout.startTime?.getTimeString())
+        assertEquals("11:00:00", readout.finishTime?.getTimeString())
+        assertEquals(listOf(41, 42), readout.punches.map { it.siCode })
+    }
+
+    @Test
     fun parsesSi6CardReadout() {
         val data = ByteArray(2 * SportIdentProtocol.SI_CARD_BLOCK_SIZE) { 0xEE.toByte() }
         val cardNumber = 2_005_010
@@ -60,5 +86,15 @@ class SportIdentCardReadoutParserTest {
         data[offset + 1] = (code and 0xff).toByte()
         data[offset + 2] = ((seconds ushr 8) and 0xff).toByte()
         data[offset + 3] = (seconds and 0xff).toByte()
+    }
+
+    private fun writeSi5Punch(data: ByteArray, offset: Int, code: Int, seconds: Int) {
+        data[offset] = (code and 0xff).toByte()
+        writeSi5Time(data, offset + 1, seconds)
+    }
+
+    private fun writeSi5Time(data: ByteArray, offset: Int, seconds: Int) {
+        data[offset] = ((seconds ushr 8) and 0xff).toByte()
+        data[offset + 1] = (seconds and 0xff).toByte()
     }
 }

@@ -14,7 +14,7 @@ finish table:
 - manage races, categories, control points, aliases, competitors, readouts, and
   results;
 - manually enter or edit readout-equivalent punch data;
-- download one SI6/SI8/SI9/SIAC card at a time from an attached SPORTident station
+- download one SI5/SI6/SI8/SI9/SIAC card at a time from an attached SPORTident station
   that is already configured in READOUT/SI MASTER mode;
 - recalculate results using shared services;
 - import/export supported event and result formats as they move into shared
@@ -320,7 +320,7 @@ repeatable package validation.
    the port. `npm run desktop:usb-station-diagnostic` compares attached
    download stations for response timing and system-info differences. The
    desktop Readouts screen now has a single-shot "Download SI" action that adds
-   one SI6/SI8/SI9/SIAC card readout to the open project when the attached station
+   one SI5/SI6/SI8/SI9/SIAC card readout to the open project when the attached station
    is present and in READOUT/SI MASTER mode.
 7. Long-term: add Station Maintenance after the desktop event-admin beta is
    stable. The first version should be read-only for the attached USB

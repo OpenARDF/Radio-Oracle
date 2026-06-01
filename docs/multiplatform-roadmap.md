@@ -66,7 +66,7 @@ The first desktop release should be a beta event-admin app. It should support:
 - creating, opening, editing, saving, and exporting event data;
 - managing races, categories, control points, aliases, competitors, readouts,
   and results;
-- downloading one SI6/SI8/SI9/SIAC card at a time from an attached SPORTident
+- downloading one SI5/SI6/SI8/SI9/SIAC card at a time from an attached SPORTident
   station that is already configured in READOUT/SI MASTER mode;
 - importing and exporting the supported event/result formats once the shared
   import/export layer is ready.

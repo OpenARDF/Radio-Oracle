@@ -1251,7 +1251,7 @@ private fun ReadoutDetailsPanel(
                 ButtonLabel(if (isDownloadingSiReadout) "Waiting" else "Download SI")
             }
             Text(
-                text = siDownloadStatusText ?: "Download one SI6/SI8/SI9/SIAC card from an attached READOUT/SI MASTER station.",
+                text = siDownloadStatusText ?: "Download one SI5/SI6/SI8/SI9/SIAC card from an attached READOUT/SI MASTER station.",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )

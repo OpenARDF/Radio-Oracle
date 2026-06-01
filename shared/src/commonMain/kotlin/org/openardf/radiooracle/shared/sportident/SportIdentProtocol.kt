@@ -10,6 +10,7 @@ object SportIdentProtocol {
     const val WAKEUP: Byte = 0xFF.toByte()
     const val ZERO: Byte = 0x00
     const val GET_SYSTEM_INFO: Byte = 0x83.toByte()
+    const val GET_SI_CARD5: Byte = 0xB1.toByte()
     const val GET_SI_CARD6: Byte = 0xE1.toByte()
     const val GET_SI_CARD8_9_SIAC: Byte = 0xEF.toByte()
     const val PROBE_COMMAND: Byte = 0xF0.toByte()
