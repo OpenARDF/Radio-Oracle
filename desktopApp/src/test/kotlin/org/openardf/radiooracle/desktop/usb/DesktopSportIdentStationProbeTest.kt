@@ -59,7 +59,11 @@ class DesktopSportIdentStationProbeTest {
         val port = FakeDesktopSerialPort(
             repliesByCommand = mapOf(
                 SportIdentProtocol.PROBE_COMMAND to probeReply(),
-                SportIdentProtocol.GET_SYSTEM_INFO to systemInfoReply(serialNumber = 554896, extendedMode = true)
+                SportIdentProtocol.GET_SYSTEM_INFO to systemInfoReply(
+                    serialNumber = 554896,
+                    extendedMode = true,
+                    stationModeCode = 0x28
+                )
             )
         )
 
@@ -69,6 +73,9 @@ class DesktopSportIdentStationProbeTest {
         assertArrayEquals(probeReply().dropWakeup(), connection.probeReply)
         assertEquals(554896, connection.stationInfo.serialNumber)
         assertTrue(connection.stationInfo.extendedMode)
+        assertEquals("SI MASTER + 0x20 flag", connection.stationInfo.stationModeLabel)
+        assertFalse(connection.stationInfo.isReadoutMode!!)
+        assertTrue(connection.stationInfo.isDownloadCapableMode!!)
         assertFalse(port.isOpen)
     }
 
@@ -144,7 +151,11 @@ class DesktopSportIdentStationProbeTest {
             data = byteArrayOf(marker, 0x11, 0x4d)
         )
 
-    private fun systemInfoReply(serialNumber: Int, extendedMode: Boolean): ByteArray =
+    private fun systemInfoReply(
+        serialNumber: Int,
+        extendedMode: Boolean,
+        stationModeCode: Int = 5
+    ): ByteArray =
         SportIdentProtocol.buildExtendedMessage(
             command = SportIdentProtocol.GET_SYSTEM_INFO,
             data = ByteArray(120).also { data ->
@@ -152,6 +163,7 @@ class DesktopSportIdentStationProbeTest {
                 data[4] = ((serialNumber ushr 16) and 0xff).toByte()
                 data[5] = ((serialNumber ushr 8) and 0xff).toByte()
                 data[6] = (serialNumber and 0xff).toByte()
+                data[20] = (stationModeCode and 0xff).toByte()
                 if (extendedMode) {
                     data[119] = 0x01
                 }

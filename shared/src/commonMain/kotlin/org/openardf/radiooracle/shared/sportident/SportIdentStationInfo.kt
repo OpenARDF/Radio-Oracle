@@ -11,6 +11,9 @@ data class SportIdentStationInfo(
 
     val isReadoutMode: Boolean?
         get() = stationModeCode?.let(SportIdentStationMode::isReadoutModeCode)
+
+    val isDownloadCapableMode: Boolean?
+        get() = stationModeCode?.let(SportIdentStationMode::isDownloadCapableModeCode)
 }
 
 object SportIdentStationMode {
@@ -19,6 +22,9 @@ object SportIdentStationMode {
 
     fun isReadoutModeCode(code: Int): Boolean =
         code == READOUT_MODE_CODE || code == SI_MASTER_MODE_CODE
+
+    fun isDownloadCapableModeCode(code: Int): Boolean =
+        baseModeCode(code) == READOUT_MODE_CODE || baseModeCode(code) == SI_MASTER_MODE_CODE
 
     fun labelForModeCode(code: Int): String =
         when (code) {
@@ -32,7 +38,7 @@ object SportIdentStationMode {
         }
 
     private fun flaggedModeLabel(code: Int): String? {
-        val baseCode = code and MODE_CODE_MASK
+        val baseCode = baseModeCode(code)
         val flagBits = code and MODE_FLAG_MASK
         if (flagBits == 0) {
             return null
@@ -44,6 +50,9 @@ object SportIdentStationMode {
         }
         return "$baseLabel + 0x${flagBits.toHexByte()} flag"
     }
+
+    private fun baseModeCode(code: Int): Int =
+        code and MODE_CODE_MASK
 
     private const val MODE_CODE_MASK = 0x1f
     private const val MODE_FLAG_MASK = 0xe0

@@ -73,6 +73,7 @@ class SportIdentStationInfoParserTest {
         assertEquals(0x28, info.stationModeCode)
         assertEquals("SI MASTER + 0x20 flag", info.stationModeLabel)
         assertEquals(false, info.isReadoutMode)
+        assertEquals(true, info.isDownloadCapableMode)
     }
 
     @Test
@@ -99,6 +100,7 @@ class SportIdentStationInfoParserTest {
         assertEquals(8, info.stationModeCode)
         assertEquals("SI MASTER", info.stationModeLabel)
         assertEquals(true, info.isReadoutMode)
+        assertEquals(true, info.isDownloadCapableMode)
     }
 
     private fun systemInfoData(

@@ -2752,7 +2752,7 @@ private fun downloadDesktopSportIdentCardReadout(): DesktopSportIdentCardBlockDo
 
     try {
         val station = DesktopSportIdentStationProbe().connectKeepingPortOpen(port)
-        if (station.stationInfo.isReadoutMode == false) {
+        if (station.stationInfo.isDownloadCapableMode == false) {
             error(
                 "SI station ${station.stationInfo.serialNumber} is in " +
                     "${station.stationInfo.stationModeLabel} mode instead of READOUT/SI MASTER."
