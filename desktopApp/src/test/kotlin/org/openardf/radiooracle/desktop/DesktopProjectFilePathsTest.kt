@@ -34,4 +34,19 @@ class DesktopProjectFilePathsTest {
             DesktopProjectFilePaths.withCsvExtension(Path.of("event"))
         )
     }
+
+    @Test
+    fun keepsExistingArdfJsonExtension() {
+        val path = Path.of("event.ardf.json")
+
+        assertEquals(path, DesktopProjectFilePaths.withArdfJsonExtension(path))
+    }
+
+    @Test
+    fun appendsArdfJsonExtensionWhenMissing() {
+        assertEquals(
+            Path.of("event.ardf.json"),
+            DesktopProjectFilePaths.withArdfJsonExtension(Path.of("event"))
+        )
+    }
 }

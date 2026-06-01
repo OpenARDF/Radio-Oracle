@@ -6,6 +6,13 @@ import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
+import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
+import org.openardf.radiooracle.shared.files.CompetitorStartCsvImportRow
+import org.openardf.radiooracle.shared.sportident.SportIdentCardPunch
+import org.openardf.radiooracle.shared.sportident.SportIdentCardReadout
+import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
+import org.openardf.radiooracle.shared.sportident.SportIdentTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -486,6 +493,139 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun importsCategoryRowsWithControlPoints() {
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21", order = 3))
+        )
+
+        val updated = EventProjectEditor.importCategoryRows(
+            projectFile = original,
+            rows = listOf(categoryImportRow(name = "W21", controlPointsText = "31 32 90B")),
+            categoryIdFactory = { "cat-2" },
+            controlPointIdFactory = { categoryId, index -> "$categoryId-control-$index" }
+        )
+
+        val imported = updated.raceData.categories.last()
+        assertEquals("cat-2", imported.category.id)
+        assertEquals("W21", imported.category.name)
+        assertEquals(4, imported.category.order)
+        assertEquals("31 32 90B", imported.category.controlPointsString)
+        assertEquals(listOf(31, 32, 90), imported.controlPoints.map { it.siCode })
+        assertEquals(ControlPointType.BEACON, imported.controlPoints.last().type)
+    }
+
+    @Test
+    fun rejectsDuplicateCategoryImports() {
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21"))
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.importCategoryRows(
+                projectFile = original,
+                rows = listOf(categoryImportRow(name = "M21")),
+                categoryIdFactory = { "cat-2" },
+                controlPointIdFactory = { categoryId, index -> "$categoryId-control-$index" }
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.importCategoryRows(
+                projectFile = original,
+                rows = listOf(categoryImportRow(name = "W21"), categoryImportRow(name = "W21")),
+                categoryIdFactory = { "cat-2" },
+                controlPointIdFactory = { categoryId, index -> "$categoryId-control-$index" }
+            )
+        }
+    }
+
+    @Test
+    fun importsCompetitorRowsAndCreatesMissingCategories() {
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21")),
+            competitors = listOf(competitorData("comp-1", "Alice", "Runner", startNumber = 1, siNumber = 1111))
+        )
+        var nextCompetitorId = 2
+        var nextCategoryId = 2
+
+        val updated = EventProjectEditor.importCompetitorRows(
+            projectFile = original,
+            rows = listOf(
+                competitorImportRow(firstName = "Pavel", lastName = "Kolsky", categoryName = "M21", startNumber = 2),
+                competitorImportRow(
+                    siNumber = 3333,
+                    firstName = "Anna",
+                    lastName = "Berg",
+                    categoryName = "W21",
+                    startNumber = null
+                )
+            ),
+            competitorIdFactory = { "comp-${nextCompetitorId++}" },
+            categoryIdFactory = { "cat-${nextCategoryId++}" }
+        )
+
+        assertEquals(listOf("M21", "W21"), updated.raceData.categories.map { it.category.name })
+        assertEquals(listOf(1, 2, 3), updated.raceData.competitorData.map { it.competitorCategory.competitor.startNumber })
+
+        val imported = updated.raceData.competitorData[1].competitorCategory
+        assertEquals("comp-2", imported.competitor.id)
+        assertEquals("cat-1", imported.competitor.categoryId)
+        assertEquals("Pavel", imported.competitor.firstName)
+        assertEquals("Kolsky", imported.competitor.lastName)
+
+        val newCategoryCompetitor = updated.raceData.competitorData[2].competitorCategory
+        assertEquals("cat-2", newCategoryCompetitor.competitor.categoryId)
+        assertEquals("W21", newCategoryCompetitor.category?.name)
+    }
+
+    @Test
+    fun rejectsDuplicateCompetitorImportNumbers() {
+        val original = projectFile(
+            competitors = listOf(competitorData("comp-1", "Alice", "Runner", startNumber = 1, siNumber = 1111))
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.importCompetitorRows(
+                projectFile = original,
+                rows = listOf(competitorImportRow(startNumber = 1, siNumber = 2222)),
+                competitorIdFactory = { "comp-2" },
+                categoryIdFactory = { "cat-1" }
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.importCompetitorRows(
+                projectFile = original,
+                rows = listOf(competitorImportRow(startNumber = 2, siNumber = 1111)),
+                competitorIdFactory = { "comp-2" },
+                categoryIdFactory = { "cat-1" }
+            )
+        }
+    }
+
+    @Test
+    fun importsCompetitorStartRowsByStartNumber() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", startNumber = 1, siNumber = 1111),
+                competitorData("comp-2", "Bob", "Racer", startNumber = 2, siNumber = null)
+            )
+        )
+
+        val updated = EventProjectEditor.importCompetitorStartRows(
+            original,
+            listOf(
+                CompetitorStartCsvImportRow(startNumber = 2, startTimeText = "10:15", siNumber = 2222),
+                CompetitorStartCsvImportRow(startNumber = 99, startTimeText = "10:30", siNumber = 3333)
+            )
+        )
+
+        val kept = updated.raceData.competitorData[0].competitorCategory.competitor
+        val changed = updated.raceData.competitorData[1].competitorCategory.competitor
+        assertEquals(null, kept.drawnStartTimeSeconds)
+        assertEquals(2222, changed.siNumber)
+        assertEquals(10 * 60L + 15, changed.drawnStartTimeSeconds)
+    }
+
+    @Test
     fun removesCompetitorAndKeepsReadoutAsUnmatched() {
         val readoutData = readout("result-1", "comp-1", siNumber = 1111)
         val original = projectFile(
@@ -683,6 +823,90 @@ class EventProjectEditorTest {
         assertEquals(null, readout.result.finishTimeSeconds)
         assertEquals(ResultStatus.NO_RANKING, readout.result.resultStatus)
         assertEquals(2, readout.punches.size)
+    }
+
+    @Test
+    fun addsDownloadedSportIdentReadoutForMatchedCompetitorAndEvaluatesCourse() {
+        val category = category("cat-1", "M21")
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21", controlSiCodes = listOf(31, 32, 33))),
+            aliases = listOf(alias("alias-31", 31, "F1")),
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", siNumber = 2005010, category = category)
+            )
+        )
+
+        val updated = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = original,
+            resultId = "result-1",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = sportIdentReadout(
+                siNumber = 2005010,
+                checkSeconds = 36_800,
+                startSeconds = 36_900,
+                finishSeconds = 38_100,
+                controlCodes = listOf(31, 32, 33),
+                firstControlSeconds = 37_100
+            ),
+            readoutDateTimeIso = "2026-05-31T12:00",
+            punchIdFactory = { index, type -> "punch-$index-${type.name}" }
+        )
+
+        val readout = updated.raceData.competitorData.single().readoutData!!
+        assertEquals("comp-1", readout.result.competitorId)
+        assertEquals(2005010, readout.result.siNumber)
+        assertEquals(SportIdentProtocol.SI_CARD8_9_SIAC, readout.result.cardType)
+        assertEquals(36_800, readout.result.checkTimeSeconds)
+        assertEquals(36_900, readout.result.startTimeSeconds)
+        assertEquals(38_100, readout.result.finishTimeSeconds)
+        assertEquals(1_200, readout.result.runTimeSeconds)
+        assertEquals(3, readout.result.points)
+        assertEquals(ResultStatus.OK, readout.result.resultStatus)
+        assertEquals(true, readout.result.automaticStatus)
+        assertEquals(false, readout.result.modified)
+        assertEquals(listOf(SIRecordType.START, SIRecordType.CONTROL, SIRecordType.CONTROL, SIRecordType.CONTROL, SIRecordType.FINISH), readout.punches.map { it.punch.punchType })
+        assertEquals(listOf(0, 31, 32, 33, 0), readout.punches.map { it.punch.siCode })
+        assertEquals(listOf(0L, 200L, 60L, 60L, 880L), readout.punches.map { it.punch.splitSeconds })
+        assertEquals("F1", readout.punches[1].alias?.name)
+        assertEquals(emptyList(), updated.raceData.unmatchedReadoutData)
+    }
+
+    @Test
+    fun addsDownloadedSportIdentReadoutAsUnmatchedWhenNoCompetitorMatches() {
+        val original = projectFile()
+
+        val updated = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = original,
+            resultId = "result-1",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = sportIdentReadout(siNumber = 2005010),
+            readoutDateTimeIso = "2026-05-31T12:00",
+            punchIdFactory = { index, type -> "punch-$index-${type.name}" }
+        )
+
+        val readout = updated.raceData.unmatchedReadoutData.single()
+        assertEquals(null, readout.result.competitorId)
+        assertEquals(2005010, readout.result.siNumber)
+        assertEquals(ResultStatus.NO_RANKING, readout.result.resultStatus)
+        assertEquals(emptyList(), updated.raceData.competitorData.mapNotNull { it.readoutData })
+    }
+
+    @Test
+    fun rejectsDuplicateDownloadedSportIdentReadout() {
+        val original = projectFile(
+            unmatchedReadouts = listOf(readout("existing", null, 2005010))
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.addDownloadedSportIdentReadout(
+                projectFile = original,
+                resultId = "result-1",
+                cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+                readout = sportIdentReadout(siNumber = 2005010),
+                readoutDateTimeIso = "2026-05-31T12:00",
+                punchIdFactory = { index, type -> "punch-$index-${type.name}" }
+            )
+        }
     }
 
     @Test
@@ -891,6 +1115,58 @@ class EventProjectEditorTest {
             readoutData = readoutData
         )
 
+    private fun categoryImportRow(
+        name: String = "W21",
+        isMan: Boolean = false,
+        maxAge: Int = 99,
+        lengthMeters: Int = 5_000,
+        climbMeters: Int = 100,
+        followsRacePresets: Boolean = true,
+        raceType: RaceType? = null,
+        timeLimitMinutes: Long? = null,
+        raceBand: RaceBand? = null,
+        controlPointsText: String = "31 32"
+    ): CategoryCsvImportRow =
+        CategoryCsvImportRow(
+            name = name,
+            isMan = isMan,
+            maxAge = maxAge,
+            lengthMeters = lengthMeters,
+            climbMeters = climbMeters,
+            followsRacePresets = followsRacePresets,
+            raceType = raceType,
+            timeLimitMinutes = timeLimitMinutes,
+            raceBand = raceBand,
+            controlPointsText = controlPointsText
+        )
+
+    private fun competitorImportRow(
+        siNumber: Int? = 2222,
+        startNumber: Int? = 2,
+        firstName: String = "Bob",
+        lastName: String = "Racer",
+        categoryName: String = "",
+        isMan: Boolean = true,
+        birthYear: Int? = 1980,
+        club: String = "OK Test",
+        index: String = "T001",
+        startTimeText: String? = null,
+        siRent: Boolean = false
+    ): CompetitorCsvImportRow =
+        CompetitorCsvImportRow(
+            siNumber = siNumber,
+            startNumber = startNumber,
+            firstName = firstName,
+            lastName = lastName,
+            categoryName = categoryName,
+            isMan = isMan,
+            birthYear = birthYear,
+            club = club,
+            index = index,
+            startTimeText = startTimeText,
+            siRent = siRent
+        )
+
     private fun readout(id: String, competitorId: String?, siNumber: Int): EventReadoutData =
         EventReadoutData(
             result = EventResult(
@@ -911,6 +1187,28 @@ class EventProjectEditorTest {
                 sent = false
             ),
             punches = emptyList()
+        )
+
+    private fun sportIdentReadout(
+        siNumber: Int = 123456,
+        checkSeconds: Long? = null,
+        startSeconds: Long? = 600,
+        finishSeconds: Long? = 1_800,
+        controlCodes: List<Int> = listOf(31, 32),
+        firstControlSeconds: Long = 900
+    ): SportIdentCardReadout =
+        SportIdentCardReadout(
+            siNumber = siNumber,
+            series = 2,
+            checkTime = checkSeconds?.let(::SportIdentTime),
+            startTime = startSeconds?.let(::SportIdentTime),
+            finishTime = finishSeconds?.let(::SportIdentTime),
+            punches = controlCodes.mapIndexed { index, code ->
+                SportIdentCardPunch(
+                    siCode = code,
+                    siTime = SportIdentTime(firstControlSeconds + index * 60)
+                )
+            }
         )
 
     private fun alias(id: String, siCode: Int, name: String): EventAlias =

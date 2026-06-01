@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
@@ -30,6 +31,19 @@ class DesktopProjectFilesTest {
         DesktopProjectFiles.exportResultsCsv(path, EventProjectFile(raceData = raceData()))
 
         assertEquals("", Files.readString(path))
+    }
+
+    @Test
+    fun exportsArdfJsonFile() {
+        val directory = Files.createTempDirectory("rom-desktop-ardf-json")
+        val path = directory.resolve("event.ardf.json")
+
+        DesktopProjectFiles.exportArdfJson(path, EventProjectFile(raceData = raceData()))
+        val exported = Files.readString(path)
+
+        assertTrue(exported.contains("\"format_version\": 1"))
+        assertTrue(exported.contains("\"event_name\": \"Desktop File Race\""))
+        assertTrue(exported.contains("\"race_name\": \"Desktop File Race\""))
     }
 
     private fun raceData(): EventRaceData =

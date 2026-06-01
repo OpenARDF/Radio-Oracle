@@ -2,6 +2,7 @@ package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectFileJson
+import org.openardf.radiooracle.shared.files.ArdfJsonExports
 import org.openardf.radiooracle.shared.files.EventCsvExports
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -37,6 +38,10 @@ object DesktopProjectFiles : ProjectFileStore {
 
     fun exportResultsCsv(path: Path, projectFile: EventProjectFile) {
         writeText(path, EventCsvExports.results(projectFile.raceData))
+    }
+
+    fun exportArdfJson(path: Path, projectFile: EventProjectFile) {
+        writeText(path, ArdfJsonExports.event(projectFile.raceData.race.name, projectFile.raceData))
     }
 
     private fun writeText(path: Path, text: String) {

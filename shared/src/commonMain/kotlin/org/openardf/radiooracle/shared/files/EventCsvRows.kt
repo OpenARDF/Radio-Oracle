@@ -18,14 +18,14 @@ object EventCsvRows {
         return listOf(
             category.name,
             category.isMan.compareTo(false),
-            category.maxAge ?: 0,
+            category.maxAge ?: EventCsvFormat.Category.OPEN_MAX_AGE,
             category.lengthMeters,
             category.climbMeters,
             followsRacePresets,
             category.raceType?.name ?: "",
             category.timeLimitSeconds?.div(60) ?: "",
             category.raceBand?.toDisplayLabel() ?: ""
-        ).joinToString(";")
+        ).joinToString(EventCsvFormat.DELIMITER.toString())
     }
 
     /** Formats a competitor row in the existing simple competitor CSV export shape. */

@@ -153,7 +153,7 @@ class EventModelMappersTest {
         assertEquals(raceId, room.race.id)
         assertEquals(Duration.ofHours(2), room.race.timeLimit)
         assertEquals(Duration.ofMinutes(45), room.categories.single().category.timeLimit)
-        assertEquals("M21;1;0;5000;100;0;SPRINT;45;2m", room.categories.single().category.toCSVString())
+        assertEquals("M21;1;99;5000;100;0;SPRINT;45;2m", room.categories.single().category.toCSVString())
         assertEquals("31", room.categories.single().controlPoints.single().toCsvString())
         assertEquals("123456;31;10:15:00,0,0", room.competitorData.single().readoutData!!.punches.single().punch.toCsvString())
         assertEquals(

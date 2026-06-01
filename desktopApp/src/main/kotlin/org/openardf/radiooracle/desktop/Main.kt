@@ -55,10 +55,12 @@ import org.openardf.radiooracle.shared.event.EventProjectSummary
 import org.openardf.radiooracle.shared.event.EventReadoutDetails
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.toDisplayLabel
+import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDateTime
 import java.util.UUID
@@ -205,6 +207,74 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun exportArdfJson() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportArdfJson()?.let { path ->
+                runCatching {
+                    DesktopProjectFiles.exportArdfJson(path, currentProject)
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
+        fun importCompetitorsCsv() {
+            DesktopFileDialogs.chooseImportCsv("Import Competitors CSV")?.let { path ->
+                runCatching {
+                    val result = EventCsvImports.parseAndroidCompetitorRows(Files.readString(path))
+                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.importCompetitorRows(
+                            projectFile = currentProject,
+                            rows = result.rows,
+                            competitorIdFactory = { UUID.randomUUID().toString() },
+                            categoryIdFactory = { UUID.randomUUID().toString() }
+                        )
+                    }
+                    syncProjectState()
+                    projectStatusText = importStatusText("Imported", result.rows.size, result.invalidLines.size, path.fileName.toString())
+                }.onFailure { error ->
+                    projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
+        fun importCategoriesCsv() {
+            DesktopFileDialogs.chooseImportCsv("Import Categories CSV")?.let { path ->
+                runCatching {
+                    val result = EventCsvImports.parseAndroidCategoryRows(Files.readString(path))
+                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.importCategoryRows(
+                            projectFile = currentProject,
+                            rows = result.rows,
+                            categoryIdFactory = { UUID.randomUUID().toString() },
+                            controlPointIdFactory = { _, _ -> UUID.randomUUID().toString() }
+                        )
+                    }
+                    syncProjectState()
+                    projectStatusText = importStatusText("Imported", result.rows.size, result.invalidLines.size, path.fileName.toString())
+                }.onFailure { error ->
+                    projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
+        fun importCompetitorStartsCsv() {
+            DesktopFileDialogs.chooseImportCsv("Import Starts CSV")?.let { path ->
+                runCatching {
+                    val result = EventCsvImports.parseAndroidCompetitorStartRows(Files.readString(path))
+                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.importCompetitorStartRows(currentProject, result.rows)
+                    }
+                    syncProjectState()
+                    projectStatusText = importStatusText("Imported", result.rows.size, result.invalidLines.size, path.fileName.toString())
+                }.onFailure { error ->
+                    projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun continuePendingDirtyAction(saveFirst: Boolean) {
             val action = pendingDirtyProjectAction ?: return
             if (saveFirst && !saveCurrentProject()) {
@@ -278,6 +348,18 @@ fun main(args: Array<String>) = application {
                             projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
                         }
                     }
+                })
+                Item("Export ARDF JSON...", enabled = projectFile != null, onClick = {
+                    exportArdfJson()
+                })
+                Item("Import Categories CSV...", enabled = projectFile != null, onClick = {
+                    importCategoriesCsv()
+                })
+                Item("Import Competitors CSV...", enabled = projectFile != null, onClick = {
+                    importCompetitorsCsv()
+                })
+                Item("Import Starts CSV...", enabled = projectFile != null, onClick = {
+                    importCompetitorStartsCsv()
                 })
                 Item("Export Categories CSV...", enabled = projectFile != null, onClick = {
                     exportCsv("Export Categories CSV", DesktopProjectFiles::exportCategoriesCsv)
@@ -2472,6 +2554,13 @@ private fun fixedTableWidth(columns: List<FixedTableColumn>): Dp =
 
 private fun nextCompetitorStartNumber(competitors: List<EventCompetitorDetails>): String =
     ((competitors.maxOfOrNull { it.startNumber } ?: 0) + 1).toString()
+
+private fun importStatusText(action: String, importedRows: Int, invalidRows: Int, fileName: String): String =
+    if (invalidRows == 0) {
+        "$action $importedRows rows from $fileName."
+    } else {
+        "$action $importedRows rows from $fileName; skipped $invalidRows invalid rows."
+    }
 
 /** Displays a compact value row for read-only desktop detail grids. */
 @Composable

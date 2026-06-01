@@ -23,6 +23,7 @@ import org.openardf.radiooracle.backend.sportident.SIConstants.SI_CARD_PCARD_MAX
 import org.openardf.radiooracle.backend.sportident.SIConstants.SI_CARD_PCARD_SERIES
 import org.openardf.radiooracle.backend.sportident.SIConstants.SI_CARD_REMOVED
 import org.openardf.radiooracle.backend.sportident.SIConstants.ZERO
+import org.openardf.radiooracle.shared.sportident.SportIdentStationMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -42,6 +43,7 @@ class SIPort(
     private var extendedMode =
         false                            //  Marks if station uses SI extended mode
     private var serialNo: Int = 0                           //  Serial number of the SI station
+    private var stationCode: Int? = null
     private var lastReadCardId: Int? = null
 
     /**
@@ -348,7 +350,12 @@ class SIPort(
                 serialNo =
                     ((byteToUnsignedInt(reply[6]) shl 24) + (byteToUnsignedInt(reply[7]) shl 16)
                             + (byteToUnsignedInt(reply[8]) shl 8) + byteToUnsignedInt(reply[9]))
-                DebugLog.info("SI", "Station connected serial=$serialNo extended=$extendedMode")
+                stationCode = byteToUnsignedInt(reply[23])
+                DebugLog.info(
+                    "SI",
+                    "Station connected serial=$serialNo extended=$extendedMode " +
+                        "stationCode=$stationCode mode=${stationCode?.let(SportIdentStationMode::labelForCode)}"
+                )
                 ret = true
             }
 
@@ -368,6 +375,7 @@ class SIPort(
                         ((byteToUnsignedInt(reply[6]) shl 24) + (byteToUnsignedInt(reply[7]) shl 16) + (byteToUnsignedInt(
                             reply[8]
                         ) shl 8) + byteToUnsignedInt(reply[9]))
+                    stationCode = null
                     DebugLog.info("SI", "Station connected serial=$serialNo extended=$extendedMode")
                     ret = true
                 }
@@ -795,7 +803,8 @@ class SIPort(
             SIReaderState(
                 SIReaderStatus.CONNECTED,
                 serialNo,
-                null, lastReadCardId
+                null, lastReadCardId,
+                stationCode
             )
         )
     }
@@ -805,7 +814,8 @@ class SIPort(
             SIReaderState(
                 SIReaderStatus.READING,
                 serialNo,
-                cardNo, lastReadCardId
+                cardNo, lastReadCardId,
+                stationCode
             )
         )
     }
@@ -815,7 +825,8 @@ class SIPort(
             SIReaderState(
                 SIReaderStatus.ERROR,
                 serialNo,
-                cardNo, lastReadCardId
+                cardNo, lastReadCardId,
+                stationCode
             )
         )
     }
@@ -825,7 +836,8 @@ class SIPort(
             SIReaderState(
                 SIReaderStatus.CARD_READ,
                 serialNo,
-                cardNo, lastReadCardId
+                cardNo, lastReadCardId,
+                stationCode
             )
         )
     }

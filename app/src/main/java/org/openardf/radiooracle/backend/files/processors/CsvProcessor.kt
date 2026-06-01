@@ -21,13 +21,14 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
-import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.backend.room.enums.StandardCategoryType
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import org.openardf.radiooracle.shared.files.EventCsvFormat
+import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import java.io.IOException
 import java.io.InputStream
@@ -122,7 +123,7 @@ object CsvProcessor : FormatProcessor {
     /** Creates a CSV reader configured for the app's semicolon-delimited files. */
     private fun getReader(): CsvReader {
         val context = CsvReaderContext()
-        context.delimiter = ';'
+        context.delimiter = EventCsvFormat.DELIMITER
         return CsvReader(context)
     }
 
@@ -133,88 +134,50 @@ object CsvProcessor : FormatProcessor {
         dataProcessor: DataProcessor,
         context: Context
     ): DataImportWrapper {
-        val readData = getReader().readAll(inStream)
         val categories = ArrayList<CategoryData>()
-        val invalidLines = ArrayList<Pair<Int, String>>()
+        val parsedRows = EventCsvImports.parseAndroidCategoryRows(inStream.bufferedReader().readText())
+        val invalidLines = parsedRows.invalidLines
+            .mapTo(ArrayList()) { it.lineIndex to it.message }
 
-        if (readData.isNotEmpty()) {
+        for ((index, row) in parsedRows.rows.withIndex()) {
+            try {
+                val category = Category(
+                    UUID.randomUUID(),
+                    race.id,
+                    row.name,
+                    row.isMan,
+                    row.maxAge,
+                    row.lengthMeters,
+                    row.climbMeters,
+                    0,
+                    !row.followsRacePresets,
+                    if (row.followsRacePresets) race.raceType else row.raceType,
+                    if (row.followsRacePresets) race.raceBand else row.raceBand,
+                    if (row.followsRacePresets) race.timeLimit else row.timeLimitMinutes?.let(Duration::ofMinutes),
+                    ""
+                )
 
-            for (csvRow in readData.withIndex()) {
-                val row = csvRow.value
-                if (row.size == FileConstants.CATEGORY_CSV_COLUMNS) {
+                val controlPoints = ControlPointsHelper.getControlPointsFromString(
+                    row.controlPointsText,
+                    category.id,
+                    category.raceType ?: race.raceType,
+                    context
+                )
+                category.controlPointsString = row.controlPointsText
 
-                    try {
-
-                        val categoryName = row[0].trim()
-                        val isMan = row[1].trim() == "1"
-                        val maxAge = row[2].trim().toInt()
-                        val length = if (row[3].isNotBlank()) {
-                            row[3].trim().toInt()
-                        } else 0
-                        val climb = if (row[4].isNotBlank()) {
-                            row[4].trim().toInt()
-                        } else 0
-                        val followRacePresets = row[5].trim() == "1"
-
-                        // Reject rows that cannot describe a usable category/course.
-                        if (categoryName.isEmpty() || maxAge <= 0 || length <= 0 || climb < 0) {
-                            throw IllegalArgumentException("Invalid category data: $row")
-                        }
-
-                        val category = Category(
-                            UUID.randomUUID(),
-                            race.id,
-                            categoryName,
-                            isMan,
-                            maxAge,
-                            length,
-                            climb,
-                            0,
-                            false,
-                            race.raceType,
-                            race.raceBand,
-                            race.timeLimit,
-                            ""
-                        )
-
-                        // Rows can either inherit race defaults or override race type, time limit, and band.
-                        if (!followRacePresets) {
-                            val raceType = RaceType.valueOf(row[6].trim())
-                            val timeLimit = row[7].trim().toLong()
-                            val band = row[8].trim()
-
-                            category.differentProperties = true
-                            category.raceType = raceType
-                            category.timeLimit = Duration.ofMinutes(timeLimit)
-                            category.categoryBand = dataProcessor.raceBandStringToEnum(band)
-                        }
-
-                        val controlPointString = row[9].trim()
-                        val controlPoints = dataProcessor.getContext()?.let {
-                            ControlPointsHelper.getControlPointsFromString(
-                                controlPointString,
-                                category.id,
-                                category.raceType ?: race.raceType,
-                                it
-                            )
-                        } ?: emptyList()
-                        category.controlPointsString = controlPointString
-
-                        categories.add(
-                            CategoryData(
-                                category,
-                                controlPoints,
-                                emptyList()
-                            )
-                        )
-                    } catch (e: Exception) {
-                        Log.w(
-                            "CSV import",
-                            "Failed to import category: ${row.joinToString(", ")}\n" + e.stackTraceToString()
-                        )
-                        invalidLines.add(Pair(csvRow.index, e.message ?: ""))
-                    }
-                }
+                categories.add(
+                    CategoryData(
+                        category,
+                        controlPoints,
+                        emptyList()
+                    )
+                )
+            } catch (e: Exception) {
+                Log.w(
+                    "CSV import",
+                    "Failed to import category: ${row.name}\n" + e.stackTraceToString()
+                )
+                invalidLines.add(index to (e.message ?: ""))
             }
         }
         return DataImportWrapper(emptyList(), categories.toList(), invalidLines)

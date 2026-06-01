@@ -207,6 +207,22 @@ class DesktopSmokeSampleTest {
     }
 
     @Test
+    fun repositorySmokeSampleExportsArdfJsonFile() {
+        val directory = Files.createTempDirectory("rom-desktop-ardf-json-smoke")
+        val source = Path.of("..", "samples", "desktop-smoke.rom.json")
+        val target = directory.resolve("desktop-smoke.ardf.json")
+        val projectFile = DesktopProjectFiles.read(source)
+
+        DesktopProjectFiles.exportArdfJson(target, projectFile)
+        val exported = Files.readString(target)
+
+        assertTrue(exported.contains("\"format_version\": 1"))
+        assertTrue(exported.contains("\"race_type\": \"CLASSIC\""))
+        assertTrue(exported.contains("\"category_length\": 5.0"))
+        assertTrue(exported.contains("\"unmatched_results\""))
+    }
+
+    @Test
     fun repositorySmokeSampleReadoutsCanBeDeletedAndSaved() {
         val source = Path.of("..", "samples", "desktop-smoke.rom.json")
         val target = Files.createTempDirectory("rom-desktop-readout-smoke").resolve("edited.rom.json")

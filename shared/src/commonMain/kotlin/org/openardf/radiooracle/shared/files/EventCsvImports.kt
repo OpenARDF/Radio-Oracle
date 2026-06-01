@@ -1,0 +1,229 @@
+package org.openardf.radiooracle.shared.files
+
+import org.openardf.radiooracle.shared.sportident.SportIdentCodes
+import org.openardf.radiooracle.shared.domain.RaceBand
+import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.toDisplayLabel
+
+data class CsvImportError(
+    val lineIndex: Int,
+    val message: String
+)
+
+data class CsvImportResult<T>(
+    val rows: List<T>,
+    val invalidLines: List<CsvImportError>
+)
+
+data class CompetitorCsvImportRow(
+    val siNumber: Int?,
+    val startNumber: Int?,
+    val firstName: String,
+    val lastName: String,
+    val categoryName: String,
+    val isMan: Boolean,
+    val birthYear: Int?,
+    val club: String,
+    val index: String,
+    val startTimeText: String?,
+    val siRent: Boolean
+)
+
+data class CompetitorStartCsvImportRow(
+    val startNumber: Int,
+    val startTimeText: String,
+    val siNumber: Int?
+)
+
+data class CategoryCsvImportRow(
+    val name: String,
+    val isMan: Boolean,
+    val maxAge: Int,
+    val lengthMeters: Int,
+    val climbMeters: Int,
+    val followsRacePresets: Boolean,
+    val raceType: RaceType?,
+    val timeLimitMinutes: Long?,
+    val raceBand: RaceBand?,
+    val controlPointsText: String
+)
+
+/** Shared parsers for CSV import formats currently accepted by the Android app. */
+object EventCsvImports {
+    fun parseAndroidCategoryRows(csvText: String): CsvImportResult<CategoryCsvImportRow> {
+        val rows = mutableListOf<CategoryCsvImportRow>()
+        val invalidLines = mutableListOf<CsvImportError>()
+
+        csvText.lineSequence().forEachIndexed { lineIndex, line ->
+            if (line.isBlank()) return@forEachIndexed
+
+            try {
+                rows += parseAndroidCategoryRow(parseSemicolonRow(line), lineIndex)
+            } catch (error: IllegalArgumentException) {
+                invalidLines += CsvImportError(lineIndex, error.message ?: "Invalid category row")
+            }
+        }
+
+        return CsvImportResult(rows, invalidLines)
+    }
+
+    fun parseAndroidCompetitorRows(csvText: String): CsvImportResult<CompetitorCsvImportRow> {
+        val rows = mutableListOf<CompetitorCsvImportRow>()
+        val invalidLines = mutableListOf<CsvImportError>()
+
+        csvText.lineSequence().forEachIndexed { lineIndex, line ->
+            if (line.isBlank()) return@forEachIndexed
+
+            try {
+                rows += parseAndroidCompetitorRow(parseSemicolonRow(line), lineIndex)
+            } catch (error: IllegalArgumentException) {
+                invalidLines += CsvImportError(lineIndex, error.message ?: "Invalid competitor row")
+            }
+        }
+
+        return CsvImportResult(rows, invalidLines)
+    }
+
+    fun parseAndroidCompetitorStartRows(csvText: String): CsvImportResult<CompetitorStartCsvImportRow> {
+        val rows = mutableListOf<CompetitorStartCsvImportRow>()
+        val invalidLines = mutableListOf<CsvImportError>()
+
+        csvText.lineSequence().forEachIndexed { lineIndex, line ->
+            if (line.isBlank()) return@forEachIndexed
+
+            try {
+                rows += parseAndroidCompetitorStartRow(parseSemicolonRow(line), lineIndex)
+            } catch (error: IllegalArgumentException) {
+                invalidLines += CsvImportError(lineIndex, error.message ?: "Invalid competitor-start row")
+            }
+        }
+
+        return CsvImportResult(rows, invalidLines)
+    }
+
+    private fun parseAndroidCategoryRow(fields: List<String>, lineIndex: Int): CategoryCsvImportRow {
+        require(fields.size == EventCsvFormat.Category.COLUMN_COUNT) {
+            "Expected ${EventCsvFormat.Category.COLUMN_COUNT} columns at line: $lineIndex"
+        }
+
+        val name = fields[EventCsvFormat.Category.NAME].trim()
+        val maxAge = fields[EventCsvFormat.Category.MAX_AGE].trim().toInt()
+        val lengthMeters = fields[EventCsvFormat.Category.LENGTH_METERS].trim().takeIf { it.isNotEmpty() }?.toInt() ?: 0
+        val climbMeters = fields[EventCsvFormat.Category.CLIMB_METERS].trim().takeIf { it.isNotEmpty() }?.toInt() ?: 0
+        require(name.isNotEmpty() && maxAge > 0 && lengthMeters > 0 && climbMeters >= 0) {
+            "Invalid category data at line: $lineIndex"
+        }
+
+        val followsRacePresets = fields[EventCsvFormat.Category.FOLLOWS_RACE_PRESETS].trim() == "1"
+        val raceType = if (followsRacePresets) null else parseRaceType(fields[EventCsvFormat.Category.RACE_TYPE].trim())
+        val timeLimitMinutes = if (followsRacePresets) null else fields[EventCsvFormat.Category.TIME_LIMIT_MINUTES].trim().toLong()
+        val raceBand = if (followsRacePresets) null else parseRaceBand(fields[EventCsvFormat.Category.RACE_BAND].trim())
+
+        return CategoryCsvImportRow(
+            name = name,
+            isMan = fields[EventCsvFormat.Category.IS_MAN].trim() == "1",
+            maxAge = maxAge,
+            lengthMeters = lengthMeters,
+            climbMeters = climbMeters,
+            followsRacePresets = followsRacePresets,
+            raceType = raceType,
+            timeLimitMinutes = timeLimitMinutes,
+            raceBand = raceBand,
+            controlPointsText = EventCsvFormat.Category.controlPointsFrom(fields)
+        )
+    }
+
+    private fun parseAndroidCompetitorRow(fields: List<String>, lineIndex: Int): CompetitorCsvImportRow {
+        require(fields.size >= EventCsvFormat.Competitor.REQUIRED_IMPORT_COLUMNS) {
+            "Expected at least ${EventCsvFormat.Competitor.REQUIRED_IMPORT_COLUMNS} columns at line: $lineIndex"
+        }
+
+        val firstName = fields[EventCsvFormat.Competitor.FIRST_NAME].trim()
+        val lastName = fields[EventCsvFormat.Competitor.LAST_NAME].trim()
+        require(firstName.isNotEmpty() && lastName.isNotEmpty()) {
+            "Missing first/last name at line: $lineIndex"
+        }
+
+        val siNumber = fields[EventCsvFormat.Competitor.SI_NUMBER].trim().takeIf { it.isNotEmpty() }?.toInt()
+        require(siNumber == null || SportIdentCodes.isSINumberValid(siNumber)) {
+            "Invalid SI number at line: $lineIndex"
+        }
+
+        return CompetitorCsvImportRow(
+            siNumber = siNumber,
+            startNumber = fields[EventCsvFormat.Competitor.START_NUMBER].trim().takeIf { it.isNotEmpty() }?.toInt(),
+            firstName = firstName,
+            lastName = lastName,
+            categoryName = fields[EventCsvFormat.Competitor.CATEGORY_NAME].trim(),
+            isMan = fields[EventCsvFormat.Competitor.IS_MAN].trim().toIntOrNull() == 0,
+            birthYear = fields.optionalTrimmedInt(EventCsvFormat.Competitor.BIRTH_YEAR),
+            club = fields.optionalTrimmed(EventCsvFormat.Competitor.CLUB),
+            index = fields.optionalTrimmed(EventCsvFormat.Competitor.INDEX),
+            startTimeText = fields.optionalTrimmed(EventCsvFormat.Competitor.START_TIME).takeIf { it.isNotEmpty() },
+            siRent = fields.optionalTrimmedInt(EventCsvFormat.Competitor.SI_RENT) == 1
+        )
+    }
+
+    private fun parseAndroidCompetitorStartRow(fields: List<String>, lineIndex: Int): CompetitorStartCsvImportRow {
+        require(fields.size == EventCsvFormat.CompetitorStart.COLUMN_COUNT) {
+            "Expected ${EventCsvFormat.CompetitorStart.COLUMN_COUNT} columns at line: $lineIndex"
+        }
+
+        val startNumber = fields[EventCsvFormat.CompetitorStart.START_NUMBER].trim().toInt()
+        val siNumber = fields[EventCsvFormat.CompetitorStart.SI_NUMBER].trim().takeIf { it.isNotEmpty() }?.toInt()
+        require(siNumber == null || SportIdentCodes.isSINumberValid(siNumber)) {
+            "Invalid SI number at line: $lineIndex"
+        }
+
+        return CompetitorStartCsvImportRow(
+            startNumber = startNumber,
+            startTimeText = fields[EventCsvFormat.CompetitorStart.START_TIME].trim(),
+            siNumber = siNumber
+        )
+    }
+
+    private fun parseRaceType(value: String): RaceType =
+        RaceType.entries.firstOrNull { it.name == value || it.toDisplayLabel() == value }
+            ?: throw IllegalArgumentException("Unknown race type: $value")
+
+    private fun parseRaceBand(value: String): RaceBand =
+        RaceBand.entries.firstOrNull { it.name == value || it.toDisplayLabel() == value }
+            ?: throw IllegalArgumentException("Unknown race band: $value")
+
+    private fun parseSemicolonRow(line: String): List<String> {
+        val fields = mutableListOf<String>()
+        val current = StringBuilder()
+        var inQuotes = false
+        var index = 0
+
+        while (index < line.length) {
+            val char = line[index]
+            when {
+                char == '"' && inQuotes && line.getOrNull(index + 1) == '"' -> {
+                    current.append('"')
+                    index++
+                }
+                char == '"' -> inQuotes = !inQuotes
+                char == ';' && !inQuotes -> {
+                    fields += current.toString()
+                    current.clear()
+                }
+                else -> current.append(char)
+            }
+            index++
+        }
+
+        require(!inQuotes) {
+            "Unclosed quoted field"
+        }
+
+        fields += current.toString()
+        return fields
+    }
+
+    private fun List<String>.optionalTrimmed(index: Int): String =
+        getOrNull(index)?.trim() ?: ""
+
+    private fun List<String>.optionalTrimmedInt(index: Int): Int? =
+        optionalTrimmed(index).takeIf { it.isNotEmpty() }?.toInt()
+}

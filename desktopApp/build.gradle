@@ -173,3 +173,21 @@ tasks.register("desktopUsbProbe", JavaExec) {
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentProbeKt")
 }
+
+tasks.register("desktopUsbCardEventProbe", JavaExec) {
+    group = "verification"
+    description = "Waits for one SPORTident card insert/remove event on the USB serial device."
+
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardEventProbeKt")
+}
+
+tasks.register("desktopUsbCardBlockProbe", JavaExec) {
+    group = "verification"
+    description = "Downloads and validates the first SI8/SI9/SIAC card block from the SPORTident USB serial device."
+
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardBlockProbeKt")
+}

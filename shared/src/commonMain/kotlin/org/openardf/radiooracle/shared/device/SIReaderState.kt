@@ -9,5 +9,7 @@ data class SIReaderState(
     /** Card currently being read, when a readout is in progress. */
     var cardId: Int? = null,
     /** Most recently completed card number. */
-    var lastCard: Int? = null
+    var lastCard: Int? = null,
+    /** SPORTident station function/code, when reported by station system info. */
+    var stationCode: Int? = null
 )

@@ -20,8 +20,9 @@ object EventCsvExports {
                             listOf(ControlPointDefinition(it.siCode, it.type, it.order))
                         )
                     }
-                    .joinToString(",")
-                "${EventCsvRows.categoryRow(categoryData.category)};${categoryData.controlPoints.size};$controlPoints"
+                    .joinToString(EventCsvFormat.CONTROL_POINT_DELIMITER.toString())
+                "${EventCsvRows.categoryRow(categoryData.category)}${EventCsvFormat.DELIMITER}" +
+                        "${categoryData.controlPoints.size}${EventCsvFormat.DELIMITER}$controlPoints"
             }
 
     fun competitors(raceData: EventRaceData): String =

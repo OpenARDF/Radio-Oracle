@@ -8,6 +8,7 @@ import java.nio.file.Path
 /** Project-file path helpers shared by desktop file dialogs and tests. */
 object DesktopProjectFilePaths {
     const val PROJECT_EXTENSION = ".rom.json"
+    const val ARDF_JSON_EXTENSION = ".ardf.json"
     const val CSV_EXTENSION = ".csv"
 
     /** Returns a path with the standard Radio-Oracle desktop project extension. */
@@ -23,6 +24,13 @@ object DesktopProjectFilePaths {
             path
         } else {
             path.resolveSibling("${path.fileName}$CSV_EXTENSION")
+        }
+
+    fun withArdfJsonExtension(path: Path): Path =
+        if (path.fileName.toString().endsWith(ARDF_JSON_EXTENSION)) {
+            path
+        } else {
+            path.resolveSibling("${path.fileName}$ARDF_JSON_EXTENSION")
         }
 }
 
@@ -45,6 +53,13 @@ object DesktopFileDialogs {
     fun chooseExportCsv(title: String): Path? =
         chooseFile(title, FileDialog.SAVE, DesktopProjectFilePaths.CSV_EXTENSION)
             ?.let(DesktopProjectFilePaths::withCsvExtension)
+
+    fun chooseExportArdfJson(): Path? =
+        chooseFile("Export ARDF JSON", FileDialog.SAVE, DesktopProjectFilePaths.ARDF_JSON_EXTENSION)
+            ?.let(DesktopProjectFilePaths::withArdfJsonExtension)
+
+    fun chooseImportCsv(title: String): Path? =
+        chooseFile(title, FileDialog.LOAD, DesktopProjectFilePaths.CSV_EXTENSION)
 
     private fun chooseFile(title: String, mode: Int, extension: String): Path? {
         val dialog = FileDialog(null as Frame?, title, mode)

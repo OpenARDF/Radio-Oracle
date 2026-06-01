@@ -26,9 +26,19 @@ class EventCsvExportsTest {
     @Test
     fun exportsPortableCategoryRows() {
         assertEquals(
-            "M21;1;0;5000;100;1;;;;2;31,32\n",
+            "M21;1;99;5000;100;1;;;;2;31,32\n",
             EventCsvExports.categories(raceData())
         )
+    }
+
+    @Test
+    fun exportedCategoryRowsParseWithSharedImportContract() {
+        val result = EventCsvImports.parseAndroidCategoryRows(EventCsvExports.categories(raceData()))
+
+        assertEquals(emptyList(), result.invalidLines)
+        val row = result.rows.single()
+        assertEquals("M21", row.name)
+        assertEquals("31 32", row.controlPointsText)
     }
 
     @Test

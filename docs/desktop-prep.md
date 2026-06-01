@@ -207,7 +207,22 @@ RADIO_ORACLE_SI_PORT=/dev/cu.SLAB_USBtoUART npm run desktop:usb-probe
 
 Current local probe evidence: the desktop JVM task opened
 `/dev/cu.SLAB_USBtoUART`, selected the SPORTident station serial `554896`, sent
-the setup probe at `38400` baud, and received `02 f0 03 00 11 4d 8d 72 03`.
+the setup probe at `38400` baud, received the CRC-valid frame
+`02 f0 03 00 11 4d 8d 72 03`, then read station system info reporting
+`serial=554896 extended=true`.
+
+Current card-event evidence: `npm run desktop:usb-card-event` connected to the
+same station at `38400` baud, waited for an SI card action, and detected a card
+insert event with command `0xe8` and SI number `2005010`. That confirms the
+desktop serial path can reach the first live readout event before card block
+download.
+
+Current card-download evidence: `npm run desktop:usb-card-block` kept one
+serial session open through station setup, card insertion, block download, and
+parse. With SI card `2005010` inserted and held in the station, it downloaded
+block `0` and block `1`, extracted the 128-byte card blocks from the station's
+prefixed `0xef` responses, parsed SI8 series `2`, and reported
+`check=10:13:40 start=10:13:43 finish=12:07:10 punches=15`.
 
 For local macOS smoke tests, prefer copying the generated `.app` and sample
 project file to `/tmp` before launching with `open ... --args <sample.rom.json>`.
@@ -259,12 +274,14 @@ repeatable package validation.
    codes. The Results section now shows competitor result rows and can set the
    same explicit manual result status for matched readouts. The Settings
    section now shows project diagnostics, shared event validation issues, and
-   the desktop beta scope boundary. The File menu can export categories,
+   the desktop beta scope boundary. The File menu can import Android-compatible
+   category, competitor, and start-list CSV files; export categories,
    competitors, starts, readouts, and results as semicolon-delimited CSV files
-   using shared formatters. A sample smoke-test project is available at
+   using shared formatters; and export standards-facing ARDF JSON as
+   `.ardf.json`. A sample smoke-test project is available at
    `samples/desktop-smoke.rom.json`, with automated desktop coverage for the
-   session-level open, edit, save, close, reopen, export-copy, and CSV export
-   flows.
+   session-level open, edit, save, close, reopen, export-copy, CSV export, and
+   ARDF JSON export flows.
 5. In progress: add jDeploy metadata after the desktop app can complete a real
    smoke scenario. The Gradle-side jDeploy bundle tasks now build and verify
    `desktopApp/build/jdeploy/Radio-Oracle-jdeploy.jar`. The npm/jDeploy

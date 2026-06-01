@@ -4,11 +4,21 @@ package org.openardf.radiooracle.shared.sportident
 object SportIdentProtocol {
     const val STX: Byte = 0x02
     const val ETX: Byte = 0x03
+    const val ACK: Byte = 0x06
+    const val DLE: Byte = 0x10
+    const val NAK: Byte = 0x15
     const val WAKEUP: Byte = 0xFF.toByte()
+    const val ZERO: Byte = 0x00
     const val GET_SYSTEM_INFO: Byte = 0x83.toByte()
+    const val GET_SI_CARD8_9_SIAC: Byte = 0xEF.toByte()
     const val PROBE_COMMAND: Byte = 0xF0.toByte()
     const val BAUDRATE_LOW = 4800
     const val BAUDRATE_HIGH = 38400
+    const val SI_CARD5: Byte = 0xE5.toByte()
+    const val SI_CARD6: Byte = 0xE6.toByte()
+    const val SI_CARD8_9_SIAC: Byte = 0xE8.toByte()
+    const val SI_CARD_REMOVED: Byte = 0xE7.toByte()
+    const val SI_CARD_BLOCK_SIZE = 128
 
     private const val POLYNOM = 0x8005
 
@@ -26,6 +36,9 @@ object SportIdentProtocol {
         buffer[data.size + 6] = ETX
         return buffer
     }
+
+    fun buildAckMessage(): ByteArray =
+        byteArrayOf(WAKEUP, STX, ACK, ETX)
 
     fun calculateCrc(count: Int, data: ByteArray): Int {
         if (count < 2) return 0

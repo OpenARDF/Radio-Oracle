@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer
 import androidx.navigation.findNavController
@@ -29,6 +30,7 @@ import org.openardf.radiooracle.backend.room.ARDFRepository
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.sportident.SIReaderStatus
 import org.openardf.radiooracle.databinding.ActivityMainBinding
+import org.openardf.radiooracle.shared.sportident.SportIdentStationMode
 import java.lang.ref.WeakReference
 import java.util.Locale
 
@@ -38,6 +40,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var siStatusTextView: TextView
     private lateinit var dataProcessor: DataProcessor
+    private var lastSiStationModeWarningKey: String? = null
 
     private var usbDetachReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -240,22 +243,44 @@ class MainActivity : AppCompatActivity() {
 
     private fun setStationObserver() {
         val siObserver = Observer<AppState> { newState ->
+            showSiStationModeWarningIfNeeded(newState)
             when (newState.siReaderState.status) {
                 SIReaderStatus.CONNECTED -> {
+                    val stationCode = newState.siReaderState.stationCode
+                    val stationModeLabel = stationCode?.let(SportIdentStationMode::labelForCode)
+                    val hasReadoutModeWarning =
+                        stationCode != null && !SportIdentStationMode.isReadoutCode(stationCode)
+
                     //Check if race is set
                     if (newState.currentRace != null) {
 
-                        if (newState.siReaderState.stationId != null) {
+                        if (hasReadoutModeWarning && newState.siReaderState.stationId != null && stationModeLabel != null) {
+                            siStatusTextView.text =
+                                getString(
+                                    R.string.si_station_wrong_mode_status,
+                                    newState.siReaderState.stationId,
+                                    stationModeLabel
+                                )
+                            siStatusTextView.setBackgroundResource(R.color.yellow_warning)
+                        } else if (newState.siReaderState.stationId != null) {
                             siStatusTextView.text =
                                 getString(R.string.si_connected, newState.siReaderState.stationId)
+                            siStatusTextView.setBackgroundResource(R.color.green_ok)
                         } else {
                             siStatusTextView.text = getString(R.string.si_connected)
+                            siStatusTextView.setBackgroundResource(R.color.green_ok)
                         }
-                        siStatusTextView.setBackgroundResource(R.color.green_ok)
                     }
                     //Race not selected - warn user
                     else {
-                        if (newState.siReaderState.stationId != null) {
+                        if (hasReadoutModeWarning && newState.siReaderState.stationId != null && stationModeLabel != null) {
+                            siStatusTextView.text =
+                                getString(
+                                    R.string.si_station_wrong_mode_status,
+                                    newState.siReaderState.stationId,
+                                    stationModeLabel
+                                )
+                        } else if (newState.siReaderState.stationId != null) {
                             siStatusTextView.text =
                                 getString(
                                     R.string.si_connected_but_no_race,
@@ -269,6 +294,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 SIReaderStatus.DISCONNECTED -> {
+                    lastSiStationModeWarningKey = null
                     siStatusTextView.setText(R.string.si_disconnected)
                     siStatusTextView.setBackgroundResource(R.color.grey)
                 }
@@ -319,5 +345,28 @@ class MainActivity : AppCompatActivity() {
             }
         }
         DataProcessor.get().currentState.observe(this, siObserver)
+    }
+
+    private fun showSiStationModeWarningIfNeeded(newState: AppState) {
+        if (newState.siReaderState.status == SIReaderStatus.DISCONNECTED) {
+            return
+        }
+        val stationCode = newState.siReaderState.stationCode ?: return
+        if (SportIdentStationMode.isReadoutCode(stationCode)) {
+            return
+        }
+        val stationId = newState.siReaderState.stationId ?: return
+        val stationModeLabel = SportIdentStationMode.labelForCode(stationCode)
+        val warningKey = "$stationId:$stationCode"
+        if (warningKey == lastSiStationModeWarningKey) {
+            return
+        }
+        lastSiStationModeWarningKey = warningKey
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.si_station_wrong_mode_title)
+            .setMessage(getString(R.string.si_station_wrong_mode_message, stationId, stationModeLabel))
+            .setPositiveButton(R.string.general_ok, null)
+            .show()
     }
 }

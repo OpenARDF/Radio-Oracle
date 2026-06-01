@@ -34,4 +34,17 @@ class SportIdentProtocolTest {
             SportIdentProtocol.calculateCrc(3, byteArrayOf(0xf0.toByte(), 0x01, 0x4d))
         )
     }
+
+    @Test
+    fun buildsAckMessage() {
+        assertContentEquals(
+            byteArrayOf(
+                SportIdentProtocol.WAKEUP,
+                SportIdentProtocol.STX,
+                SportIdentProtocol.ACK,
+                SportIdentProtocol.ETX
+            ),
+            SportIdentProtocol.buildAckMessage()
+        )
+    }
 }
