@@ -19,4 +19,19 @@ class DesktopProjectFilePathsTest {
             DesktopProjectFilePaths.withProjectExtension(Path.of("event"))
         )
     }
+
+    @Test
+    fun keepsExistingCsvExtension() {
+        val path = Path.of("event.csv")
+
+        assertEquals(path, DesktopProjectFilePaths.withCsvExtension(path))
+    }
+
+    @Test
+    fun appendsCsvExtensionWhenMissing() {
+        assertEquals(
+            Path.of("event.csv"),
+            DesktopProjectFilePaths.withCsvExtension(Path.of("event"))
+        )
+    }
 }

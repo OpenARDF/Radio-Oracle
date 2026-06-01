@@ -149,6 +149,30 @@ class DesktopSmokeSampleTest {
     }
 
     @Test
+    fun repositorySmokeSampleExportsDesktopCsvFiles() {
+        val directory = Files.createTempDirectory("rom-desktop-csv-smoke")
+        val source = Path.of("..", "samples", "desktop-smoke.rom.json")
+        val projectFile = DesktopProjectFiles.read(source)
+        val categories = directory.resolve("categories.csv")
+        val competitors = directory.resolve("competitors.csv")
+        val starts = directory.resolve("starts.csv")
+        val readouts = directory.resolve("readouts.csv")
+
+        DesktopProjectFiles.exportCategoriesCsv(categories, projectFile)
+        DesktopProjectFiles.exportCompetitorsCsv(competitors, projectFile)
+        DesktopProjectFiles.exportCompetitorStartsCsv(starts, projectFile)
+        DesktopProjectFiles.exportReadoutsCsv(readouts, projectFile)
+
+        assertEquals(2, Files.readAllLines(categories).size)
+        assertEquals(2, Files.readAllLines(competitors).size)
+        assertEquals(2, Files.readAllLines(starts).size)
+        assertEquals(2, Files.readAllLines(readouts).size)
+        assertTrue(Files.readString(competitors).contains("123456;Alice;Runner;M21"))
+        assertTrue(Files.readString(starts).contains("101;Runner;Alice;M21;;10:00"))
+        assertTrue(Files.readString(readouts).contains("123456;;00:10:00;00:30:00;0"))
+    }
+
+    @Test
     fun repositorySmokeSampleReadoutsCanBeDeletedAndSaved() {
         val source = Path.of("..", "samples", "desktop-smoke.rom.json")
         val target = Files.createTempDirectory("rom-desktop-readout-smoke").resolve("edited.rom.json")

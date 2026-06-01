@@ -124,6 +124,19 @@ fun main(args: Array<String>) = application {
             }.isSuccess
         }
 
+        fun exportCsv(title: String, export: (Path, EventProjectFile) -> Unit) {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportCsv(title)?.let { path ->
+                runCatching {
+                    export(path, currentProject)
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun continuePendingDirtyAction(saveFirst: Boolean) {
             val action = pendingDirtyProjectAction ?: return
             if (saveFirst && !saveCurrentProject()) {
@@ -191,13 +204,24 @@ fun main(args: Array<String>) = application {
                     DesktopFileDialogs.chooseExportProject()?.let { path ->
                         runCatching {
                             projectSession.exportCopy(path)
-                            projectFile = projectSession.currentProject
-                            hasUnsavedChanges = projectSession.hasUnsavedChanges
+                            syncProjectState()
                             projectStatusText = "Exported ${path.fileName}"
                         }.onFailure { error ->
                             projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
                         }
                     }
+                })
+                Item("Export Categories CSV...", enabled = projectFile != null, onClick = {
+                    exportCsv("Export Categories CSV", DesktopProjectFiles::exportCategoriesCsv)
+                })
+                Item("Export Competitors CSV...", enabled = projectFile != null, onClick = {
+                    exportCsv("Export Competitors CSV", DesktopProjectFiles::exportCompetitorsCsv)
+                })
+                Item("Export Starts CSV...", enabled = projectFile != null, onClick = {
+                    exportCsv("Export Starts CSV", DesktopProjectFiles::exportCompetitorStartsCsv)
+                })
+                Item("Export Readouts CSV...", enabled = projectFile != null, onClick = {
+                    exportCsv("Export Readouts CSV", DesktopProjectFiles::exportReadoutsCsv)
                 })
                 Item("Close Project", enabled = projectFile != null, onClick = {
                     pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
