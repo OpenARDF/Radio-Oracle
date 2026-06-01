@@ -8,6 +8,7 @@ data class EventCompetitorDetails(
     val fullName: String,
     val club: String,
     val index: String,
+    val birthYearText: String,
     val categoryId: String?,
     val categoryName: String,
     val startNumber: Int,
@@ -29,6 +30,7 @@ data class EventCompetitorDetails(
                         fullName = competitor.fullName(),
                         club = competitor.club,
                         index = competitor.index,
+                        birthYearText = competitor.birthYear?.toString() ?: "",
                         categoryId = competitor.categoryId,
                         categoryName = competitorCategory.category?.name
                             ?: competitor.categoryId?.let { categoryNamesById[it] }

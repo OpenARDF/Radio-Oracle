@@ -373,6 +373,36 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun updatesCompetitorBirthYear() {
+        val original = projectFile(
+            competitors = listOf(competitorData("comp-1", "Alice", "Runner"))
+        )
+
+        val updated = EventProjectEditor.updateCompetitorBirthYear(original, "comp-1", " 1985 ")
+        val cleared = EventProjectEditor.updateCompetitorBirthYear(updated, "comp-1", " ")
+
+        assertEquals(1985, updated.raceData.competitorData.single().competitorCategory.competitor.birthYear)
+        assertEquals(null, cleared.raceData.competitorData.single().competitorCategory.competitor.birthYear)
+    }
+
+    @Test
+    fun rejectsInvalidCompetitorBirthYear() {
+        val original = projectFile(
+            competitors = listOf(competitorData("comp-1", "Alice", "Runner"))
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCompetitorBirthYear(original, "missing", "1985")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCompetitorBirthYear(original, "comp-1", "abc")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCompetitorBirthYear(original, "comp-1", "0")
+        }
+    }
+
+    @Test
     fun updatesCompetitorNumbersUsingSharedValidationRules() {
         val original = projectFile(
             competitors = listOf(

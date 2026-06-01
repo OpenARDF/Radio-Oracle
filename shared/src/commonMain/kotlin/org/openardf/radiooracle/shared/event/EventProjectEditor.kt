@@ -401,6 +401,47 @@ object EventProjectEditor {
         )
     }
 
+    /** Returns a copy of the project file with one competitor's optional birth year changed. */
+    fun updateCompetitorBirthYear(
+        projectFile: EventProjectFile,
+        competitorId: String,
+        birthYear: String
+    ): EventProjectFile {
+        val trimmedBirthYear = birthYear.trim()
+        val birthYearValue = if (trimmedBirthYear.isEmpty()) {
+            null
+        } else {
+            trimmedBirthYear.toIntOrNull()
+                ?: throw IllegalArgumentException("Birth year is invalid.")
+        }
+        require(birthYearValue == null || birthYearValue > 0) {
+            "Birth year must be positive."
+        }
+
+        var foundCompetitor = false
+        val competitorData = projectFile.raceData.competitorData.map { data ->
+            val competitorCategory = data.competitorCategory
+            val competitor = competitorCategory.competitor
+            if (competitor.id == competitorId) {
+                foundCompetitor = true
+                data.copy(
+                    competitorCategory = competitorCategory.copy(
+                        competitor = competitor.copy(birthYear = birthYearValue)
+                    )
+                )
+            } else {
+                data
+            }
+        }
+        require(foundCompetitor) {
+            "Competitor was not found: $competitorId"
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(competitorData = competitorData)
+        )
+    }
+
     /** Returns a copy of the project file with one competitor's validated numbers changed. */
     fun updateCompetitorNumbers(
         projectFile: EventProjectFile,
