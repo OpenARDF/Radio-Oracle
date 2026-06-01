@@ -28,6 +28,7 @@ import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +44,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
+import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
 import org.openardf.radiooracle.shared.event.EventAliasDetails
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
@@ -71,6 +77,30 @@ private val TableColumnGap = 12.dp
 private val ActionRailWidth = 104.dp
 private val FixedGridRowHeight = 56.dp
 private val ReadoutAddRailYOffset = 10.dp
+private const val DesktopSiPollIntervalMs = 5_000L
+
+private enum class DesktopSiReaderSeverity {
+    DISCONNECTED,
+    CONNECTED,
+    WARNING,
+    ERROR
+}
+
+private data class DesktopSiReaderUiState(
+    val severity: DesktopSiReaderSeverity,
+    val statusText: String,
+    val warningTitle: String? = null,
+    val warningMessage: String? = null,
+    val warningKey: String? = null
+) {
+    companion object {
+        fun disconnected(): DesktopSiReaderUiState =
+            DesktopSiReaderUiState(
+                severity = DesktopSiReaderSeverity.DISCONNECTED,
+                statusText = "SI station disconnected"
+            )
+    }
+}
 
 private val CategoryTableColumns = listOf(
     FixedTableColumn("Name", 150.dp),
@@ -137,6 +167,26 @@ fun main(args: Array<String>) = application {
         var projectStatusText by remember { mutableStateOf(startupStatus) }
         var hasUnsavedChanges by remember { mutableStateOf(projectSession.hasUnsavedChanges) }
         var pendingDirtyProjectAction by remember { mutableStateOf<PendingDirtyProjectAction?>(null) }
+        var siReaderState by remember { mutableStateOf(DesktopSiReaderUiState.disconnected()) }
+        var pendingSiModeWarning by remember { mutableStateOf<DesktopSiReaderUiState?>(null) }
+        var lastShownSiModeWarningKey by remember { mutableStateOf<String?>(null) }
+
+        LaunchedEffect(Unit) {
+            while (true) {
+                val nextSiReaderState = withContext(Dispatchers.IO) {
+                    detectDesktopSiReaderState()
+                }
+                siReaderState = nextSiReaderState
+                if (
+                    nextSiReaderState.warningKey != null &&
+                    nextSiReaderState.warningKey != lastShownSiModeWarningKey
+                ) {
+                    pendingSiModeWarning = nextSiReaderState
+                    lastShownSiModeWarningKey = nextSiReaderState.warningKey
+                }
+                delay(DesktopSiPollIntervalMs)
+            }
+        }
 
         fun syncProjectState() {
             projectFile = projectSession.currentProject
@@ -395,11 +445,19 @@ fun main(args: Array<String>) = application {
                 onCancel = { pendingDirtyProjectAction = null }
             )
         }
+        pendingSiModeWarning?.let { warning ->
+            SiStationModeWarningDialog(
+                title = warning.warningTitle ?: "SI station mode warning",
+                message = warning.warningMessage ?: warning.statusText,
+                onDismiss = { pendingSiModeWarning = null }
+            )
+        }
 
         RadioOManagerDesktopApp(
             projectFile = projectFile,
             projectStatusText = projectStatusText,
             hasUnsavedChanges = hasUnsavedChanges,
+            siReaderState = siReaderState,
             onRenameRace = { name ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -733,10 +791,11 @@ private fun UnsavedChangesDialog(
  * slices instead of being embedded directly in the desktop UI.
  */
 @Composable
-fun RadioOManagerDesktopApp(
+private fun RadioOManagerDesktopApp(
     projectFile: EventProjectFile? = null,
     projectStatusText: String = "No project open.",
     hasUnsavedChanges: Boolean = false,
+    siReaderState: DesktopSiReaderUiState = DesktopSiReaderUiState.disconnected(),
     onRenameRace: (String) -> Unit = {},
     onUpdateRaceStartDateTime: (String) -> Unit = {},
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit = { _, _, _, _ -> },
@@ -807,7 +866,7 @@ fun RadioOManagerDesktopApp(
                         onRemoveAlias = onRemoveAlias
                     )
                 }
-                StatusStrip(projectStatusText, hasUnsavedChanges)
+                StatusStrip(projectStatusText, hasUnsavedChanges, siReaderState)
             }
         }
     }
@@ -2562,6 +2621,61 @@ private fun importStatusText(action: String, importedRows: Int, invalidRows: Int
         "$action $importedRows rows from $fileName; skipped $invalidRows invalid rows."
     }
 
+private fun detectDesktopSiReaderState(): DesktopSiReaderUiState {
+    val provider = JSerialCommDesktopSerialPortProvider
+    val port = provider.listPorts().firstOrNull { it.info.matchesSportIdent() }
+        ?: return DesktopSiReaderUiState.disconnected()
+
+    return runCatching {
+        val connection = DesktopSportIdentStationProbe().connect(port)
+        val stationInfo = connection.stationInfo
+        val modeLabel = stationInfo.stationModeLabel ?: "unknown"
+        when (stationInfo.isReadoutMode) {
+            false -> {
+                val statusText = "SI station ${stationInfo.serialNumber} is in $modeLabel mode"
+                DesktopSiReaderUiState(
+                    severity = DesktopSiReaderSeverity.WARNING,
+                    statusText = statusText,
+                    warningTitle = "SI station mode warning",
+                    warningMessage = "$statusText instead of READOUT. Reprogram the station in Readout mode before using it for SI-card downloads.",
+                    warningKey = "${stationInfo.serialNumber}:${stationInfo.stationCode}"
+                )
+            }
+            true -> DesktopSiReaderUiState(
+                severity = DesktopSiReaderSeverity.CONNECTED,
+                statusText = "SI station ${stationInfo.serialNumber} connected in READOUT mode"
+            )
+            null -> DesktopSiReaderUiState(
+                severity = DesktopSiReaderSeverity.CONNECTED,
+                statusText = "SI station ${stationInfo.serialNumber} connected; mode unknown"
+            )
+        }
+    }.getOrElse { error ->
+        DesktopSiReaderUiState(
+            severity = DesktopSiReaderSeverity.ERROR,
+            statusText = "SI station error: ${error.message ?: error::class.simpleName}"
+        )
+    }
+}
+
+@Composable
+private fun SiStationModeWarningDialog(
+    title: String,
+    message: String,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("OK")
+            }
+        }
+    )
+}
+
 /** Displays a compact value row for read-only desktop detail grids. */
 @Composable
 private fun DetailGridRow(values: List<String>) {
@@ -2617,19 +2731,32 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
 @Composable
 private fun StatusStrip(
     projectStatusText: String,
-    hasUnsavedChanges: Boolean
+    hasUnsavedChanges: Boolean,
+    siReaderState: DesktopSiReaderUiState
 ) {
+    val backgroundColor = when (siReaderState.severity) {
+        DesktopSiReaderSeverity.DISCONNECTED -> DesktopPalette.Disconnected
+        DesktopSiReaderSeverity.CONNECTED -> DesktopPalette.Connected
+        DesktopSiReaderSeverity.WARNING -> DesktopPalette.Warning
+        DesktopSiReaderSeverity.ERROR -> DesktopPalette.Error
+    }
+    val textColor = when (siReaderState.severity) {
+        DesktopSiReaderSeverity.WARNING,
+        DesktopSiReaderSeverity.CONNECTED -> DesktopPalette.Black
+        DesktopSiReaderSeverity.DISCONNECTED,
+        DesktopSiReaderSeverity.ERROR -> DesktopPalette.White
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(32.dp)
-            .background(DesktopPalette.Disconnected)
+            .background(backgroundColor)
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "SI station disconnected - $projectStatusText${if (hasUnsavedChanges) " *" else ""}",
-            color = DesktopPalette.White,
+            text = "${siReaderState.statusText} - $projectStatusText${if (hasUnsavedChanges) " *" else ""}",
+            color = textColor,
             fontSize = 13.sp
         )
     }
