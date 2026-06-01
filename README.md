@@ -35,11 +35,13 @@ The desktop beta supports:
 - detecting an attached SPORTident USB download box and warning when it is not
   in READOUT/SI MASTER mode;
 - downloading one SI5/SI6/SI8/SI9/SIAC card at a time from an attached
-  READOUT/SI MASTER station.
+  READOUT/SI MASTER station;
+- running an experimental continuous SI5/SI6/SI8/SI9/SIAC card readout loop
+  from an attached READOUT/SI MASTER station.
 
 The desktop beta does not yet replace the Android race-day workflow. Live
-continuous SPORTident card download, ticket printing, live result sending,
-shared SQL persistence, and station maintenance writes remain post-beta work.
+ticket printing, live result sending, shared SQL persistence, and station
+maintenance writes remain post-beta work.
 
 Local desktop packaging and smoke commands are documented in
 [`docs/desktop-prep.md`](docs/desktop-prep.md).

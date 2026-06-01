@@ -66,14 +66,15 @@ The first desktop release should be a beta event-admin app. It should support:
 - creating, opening, editing, saving, and exporting event data;
 - managing races, categories, control points, aliases, competitors, readouts,
   and results;
-- downloading one SI5/SI6/SI8/SI9/SIAC card at a time from an attached SPORTident
-  station that is already configured in READOUT/SI MASTER mode;
+- downloading SI5/SI6/SI8/SI9/SIAC cards from an attached SPORTident station
+  that is already configured in READOUT/SI MASTER mode, first as a one-card
+  action and then through the experimental continuous-readout loop;
 - importing and exporting the supported event/result formats once the shared
   import/export layer is ready.
 
 The desktop beta should explicitly exclude:
 
-- continuous Android-style SportIdent reader integration;
+- hardened Android-style SportIdent race-day reader replacement;
 - ticket printing;
 - live result sending;
 - replacing Android for normal race-day readout operations.
@@ -172,8 +173,8 @@ operating systems, with no known desktop USB showstopper left uninvestigated.
 
 Goal: add platform-specific capabilities after the event-admin beta is stable.
 
-- Promote the first desktop single-card SportIdent readout path into a
-  continuous race-day reader workflow behind a platform device interface.
+- Harden the first desktop continuous SportIdent readout loop into a race-day
+  reader workflow behind a platform device interface.
 - Add a read-only Station Maintenance surface for attached SportIdent stations.
   It should show station serial number, reported function/mode, code number,
   firmware/config metadata when available, protocol flags, and explicit

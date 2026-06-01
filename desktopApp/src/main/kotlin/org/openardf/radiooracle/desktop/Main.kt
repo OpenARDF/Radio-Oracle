@@ -74,6 +74,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDateTime
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 private data class FixedTableColumn(val title: String, val width: Dp)
 
@@ -176,6 +177,8 @@ fun main(args: Array<String>) = application {
         var pendingSiModeWarning by remember { mutableStateOf<DesktopSiReaderUiState?>(null) }
         var lastShownSiModeWarningKey by remember { mutableStateOf<String?>(null) }
         var isDownloadingSiReadout by remember { mutableStateOf(false) }
+        var isContinuousSiReadoutActive by remember { mutableStateOf(false) }
+        var continuousSiReadoutStopRequested by remember { mutableStateOf<AtomicBoolean?>(null) }
         var siDownloadStatusText by remember { mutableStateOf<String?>(null) }
 
         LaunchedEffect(Unit) {
@@ -231,8 +234,23 @@ fun main(args: Array<String>) = application {
             projectStatusText = "New unsaved project."
         }
 
+        fun appendSportIdentDownload(download: DesktopSportIdentCardBlockDownload) {
+            projectFile = projectSession.updateCurrentProject { currentProject ->
+                EventProjectEditor.addDownloadedSportIdentReadout(
+                    projectFile = currentProject,
+                    resultId = UUID.randomUUID().toString(),
+                    cardType = download.inserted.cardType,
+                    readout = download.readout,
+                    readoutDateTimeIso = LocalDateTime.now().withNano(0).toString()
+                ) { index, type ->
+                    "${UUID.randomUUID()}-$index-${type.name}"
+                }
+            }
+            hasUnsavedChanges = projectSession.hasUnsavedChanges
+        }
+
         fun downloadSportIdentReadout() {
-            if (isDownloadingSiReadout) {
+            if (isDownloadingSiReadout || isContinuousSiReadoutActive) {
                 return
             }
             if (projectSession.currentProject == null) {
@@ -250,18 +268,7 @@ fun main(args: Array<String>) = application {
                 }
                 downloadResult.onSuccess { download ->
                     runCatching {
-                        projectFile = projectSession.updateCurrentProject { currentProject ->
-                            EventProjectEditor.addDownloadedSportIdentReadout(
-                                projectFile = currentProject,
-                                resultId = UUID.randomUUID().toString(),
-                                cardType = download.inserted.cardType,
-                                readout = download.readout,
-                                readoutDateTimeIso = LocalDateTime.now().withNano(0).toString()
-                            ) { index, type ->
-                                "${UUID.randomUUID()}-$index-${type.name}"
-                            }
-                        }
-                        hasUnsavedChanges = projectSession.hasUnsavedChanges
+                        appendSportIdentDownload(download)
                         projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
                         siDownloadStatusText = null
                     }.onFailure { error ->
@@ -273,6 +280,70 @@ fun main(args: Array<String>) = application {
                     siDownloadStatusText = projectStatusText
                 }
                 isDownloadingSiReadout = false
+            }
+        }
+
+        fun stopContinuousSportIdentReadout() {
+            continuousSiReadoutStopRequested?.set(true)
+            if (isContinuousSiReadoutActive) {
+                siDownloadStatusText = "Stopping continuous SI readout after the current card wait finishes."
+                projectStatusText = "Stopping continuous SI readout..."
+            }
+        }
+
+        fun startContinuousSportIdentReadout() {
+            if (isDownloadingSiReadout || isContinuousSiReadoutActive) {
+                return
+            }
+            if (projectSession.currentProject == null) {
+                projectStatusText = "Open or create a project before downloading SI cards."
+                return
+            }
+            val stopRequested = AtomicBoolean(false)
+            continuousSiReadoutStopRequested = stopRequested
+            isContinuousSiReadoutActive = true
+            siDownloadStatusText = "Continuous SI readout is running; insert SI cards and keep each seated until it reads."
+            projectStatusText = "Continuous SI readout running..."
+            appCoroutineScope.launch {
+                val result = runCatching {
+                    withContext(Dispatchers.IO) {
+                        DesktopSportIdentReadoutService().downloadUntilTimeout(
+                            maxCards = Int.MAX_VALUE,
+                            onDownload = { download ->
+                                appCoroutineScope.launch {
+                                    runCatching {
+                                        appendSportIdentDownload(download)
+                                        projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
+                                        siDownloadStatusText = "Continuous SI readout running; waiting for the next card."
+                                    }.onFailure { error ->
+                                        projectStatusText = "SI download failed: ${error.message ?: error::class.simpleName}"
+                                        siDownloadStatusText = projectStatusText
+                                        stopRequested.set(true)
+                                    }
+                                }
+                            },
+                            onTimeout = {
+                                appCoroutineScope.launch {
+                                    if (!stopRequested.get()) {
+                                        siDownloadStatusText = "Continuous SI readout timed out waiting for a card."
+                                        projectStatusText = siDownloadStatusText ?: projectStatusText
+                                    }
+                                }
+                            },
+                            shouldContinue = { !stopRequested.get() }
+                        )
+                    }
+                }
+                result.onFailure { error ->
+                    projectStatusText = "SI continuous download failed: ${error.message ?: error::class.simpleName}"
+                    siDownloadStatusText = projectStatusText
+                }
+                if (stopRequested.get() && result.isSuccess) {
+                    projectStatusText = "Continuous SI readout stopped."
+                    siDownloadStatusText = null
+                }
+                isContinuousSiReadoutActive = false
+                continuousSiReadoutStopRequested = null
             }
         }
 
@@ -511,6 +582,7 @@ fun main(args: Array<String>) = application {
             hasUnsavedChanges = hasUnsavedChanges,
             siReaderState = siReaderState,
             isDownloadingSiReadout = isDownloadingSiReadout,
+            isContinuousSiReadoutActive = isContinuousSiReadoutActive,
             siDownloadStatusText = siDownloadStatusText,
             onRenameRace = { name ->
                 runCatching {
@@ -745,6 +817,8 @@ fun main(args: Array<String>) = application {
                 }
             },
             onDownloadSportIdentReadout = ::downloadSportIdentReadout,
+            onStartContinuousSportIdentReadout = ::startContinuousSportIdentReadout,
+            onStopContinuousSportIdentReadout = ::stopContinuousSportIdentReadout,
             onAddManualReadout = { competitorId, siNumber, startSeconds, finishSeconds, controlCodes, resultStatus ->
                 val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -852,6 +926,7 @@ private fun RadioOManagerDesktopApp(
     hasUnsavedChanges: Boolean = false,
     siReaderState: DesktopSiReaderUiState = DesktopSiReaderUiState.disconnected(),
     isDownloadingSiReadout: Boolean = false,
+    isContinuousSiReadoutActive: Boolean = false,
     siDownloadStatusText: String? = null,
     onRenameRace: (String) -> Unit = {},
     onUpdateRaceStartDateTime: (String) -> Unit = {},
@@ -871,6 +946,8 @@ private fun RadioOManagerDesktopApp(
     onRemoveReadout: (String) -> Unit = {},
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit = { _, _ -> },
     onDownloadSportIdentReadout: () -> Unit = {},
+    onStartContinuousSportIdentReadout: () -> Unit = {},
+    onStopContinuousSportIdentReadout: () -> Unit = {},
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean = { _, _, _, _, _, _ -> false },
     onUpdateAlias: (String, String, String) -> Unit = { _, _, _ -> },
     onAddAlias: (String, String) -> Boolean = { _, _ -> false },
@@ -919,7 +996,10 @@ private fun RadioOManagerDesktopApp(
                         onRemoveReadout = onRemoveReadout,
                         onUpdateReadoutStatus = onUpdateReadoutStatus,
                         onDownloadSportIdentReadout = onDownloadSportIdentReadout,
+                        onStartContinuousSportIdentReadout = onStartContinuousSportIdentReadout,
+                        onStopContinuousSportIdentReadout = onStopContinuousSportIdentReadout,
                         isDownloadingSiReadout = isDownloadingSiReadout,
+                        isContinuousSiReadoutActive = isContinuousSiReadoutActive,
                         siDownloadStatusText = siDownloadStatusText,
                         onAddManualReadout = onAddManualReadout,
                         onUpdateAlias = onUpdateAlias,
@@ -1012,7 +1092,10 @@ private fun SectionWorkspace(
     onRemoveReadout: (String) -> Unit,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
     onDownloadSportIdentReadout: () -> Unit,
+    onStartContinuousSportIdentReadout: () -> Unit,
+    onStopContinuousSportIdentReadout: () -> Unit,
     isDownloadingSiReadout: Boolean,
+    isContinuousSiReadoutActive: Boolean,
     siDownloadStatusText: String?,
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean,
     onUpdateAlias: (String, String, String) -> Unit,
@@ -1083,7 +1166,10 @@ private fun SectionWorkspace(
                 onRemoveReadout = onRemoveReadout,
                 onUpdateReadoutStatus = onUpdateReadoutStatus,
                 onDownloadSportIdentReadout = onDownloadSportIdentReadout,
+                onStartContinuousSportIdentReadout = onStartContinuousSportIdentReadout,
+                onStopContinuousSportIdentReadout = onStopContinuousSportIdentReadout,
                 isDownloadingSiReadout = isDownloadingSiReadout,
+                isContinuousSiReadoutActive = isContinuousSiReadoutActive,
                 siDownloadStatusText = siDownloadStatusText,
                 onAddManualReadout = onAddManualReadout
             )
@@ -1225,7 +1311,10 @@ private fun ReadoutDetailsPanel(
     onRemoveReadout: (String) -> Unit,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
     onDownloadSportIdentReadout: () -> Unit,
+    onStartContinuousSportIdentReadout: () -> Unit,
+    onStopContinuousSportIdentReadout: () -> Unit,
     isDownloadingSiReadout: Boolean,
+    isContinuousSiReadoutActive: Boolean,
     siDownloadStatusText: String?,
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean
 ) {
@@ -1246,12 +1335,24 @@ private fun ReadoutDetailsPanel(
         ) {
             Button(
                 onClick = onDownloadSportIdentReadout,
-                enabled = !isDownloadingSiReadout
+                enabled = !isDownloadingSiReadout && !isContinuousSiReadoutActive
             ) {
                 ButtonLabel(if (isDownloadingSiReadout) "Waiting" else "Download SI")
             }
+            Button(
+                onClick = onStartContinuousSportIdentReadout,
+                enabled = !isDownloadingSiReadout && !isContinuousSiReadoutActive
+            ) {
+                ButtonLabel("Start SI")
+            }
+            Button(
+                onClick = onStopContinuousSportIdentReadout,
+                enabled = isContinuousSiReadoutActive
+            ) {
+                ButtonLabel("Stop SI")
+            }
             Text(
-                text = siDownloadStatusText ?: "Download one SI5/SI6/SI8/SI9/SIAC card from an attached READOUT/SI MASTER station.",
+                text = siDownloadStatusText ?: "Download SI5/SI6/SI8/SI9/SIAC cards from an attached READOUT/SI MASTER station.",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )

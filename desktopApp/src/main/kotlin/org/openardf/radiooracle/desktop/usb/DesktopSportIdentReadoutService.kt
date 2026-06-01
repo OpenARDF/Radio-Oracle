@@ -21,12 +21,13 @@ class DesktopSportIdentReadoutService(
         maxCards: Int,
         onDownload: (DesktopSportIdentCardBlockDownload) -> Unit,
         onTimeout: () -> Unit = {},
+        shouldContinue: () -> Boolean = { true },
         isTimeoutError: (Throwable) -> Boolean = ::isNoCardInsertTimeout
     ): Int {
         val port = firstSportIdentPort()
         var cardsRead = 0
         withOpenDownloadStation(port) {
-            while (cardsRead < maxCards) {
+            while (cardsRead < maxCards && shouldContinue()) {
                 val result = runCatching { readCard(port) }
                 val download = result.getOrNull()
                 if (download == null) {

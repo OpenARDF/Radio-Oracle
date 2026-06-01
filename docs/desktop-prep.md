@@ -14,15 +14,15 @@ finish table:
 - manage races, categories, control points, aliases, competitors, readouts, and
   results;
 - manually enter or edit readout-equivalent punch data;
-- download one SI5/SI6/SI8/SI9/SIAC card at a time from an attached SPORTident station
-  that is already configured in READOUT/SI MASTER mode;
+- download one SI5/SI6/SI8/SI9/SIAC card at a time, or run an experimental
+  continuous readout loop, from an attached SPORTident station that is already
+  configured in READOUT/SI MASTER mode;
 - recalculate results using shared services;
 - import/export supported event and result formats as they move into shared
   code.
 
 The desktop beta should not include:
 
-- continuous Android-style SPORTident reader download;
 - Bluetooth or ticket printing;
 - live result sending;
 - Android Room database migration or shared SQL persistence;
@@ -329,18 +329,20 @@ repeatable package validation.
    covered by `npm run jdeploy:local-smoke`, public install/launch smoke is
    covered by `npm run jdeploy:registry-smoke -- <version>`, and the first
    public npm package is published as `@openardf/radio-oracle@1.0.1`.
-6. In progress: keep continuous Android-style live SI download post-beta, but
-   run desktop USB feasibility and single-card download slices before relying
-   on that deferral. The first diagnostic command is
+6. In progress: keep hardened Android-style race-day SI download post-beta, but
+   continue desktop USB feasibility, single-card download, and experimental
+   continuous-readout slices before relying on that deferral. The first
+   diagnostic command is
    `npm run desktop:usb-diagnostic`; it confirms macOS USB serial visibility
    and can require the known SPORTident VID/PID when the download box is
    attached. The second command is `npm run desktop:usb-probe`; it opens the
    serial device, sends the setup probe, reads the station response, and closes
    the port. `npm run desktop:usb-station-diagnostic` compares attached
    download stations for response timing and system-info differences. The
-   desktop Readouts screen now has a single-shot "Download SI" action that adds
-   one SI5/SI6/SI8/SI9/SIAC card readout to the open project when the attached station
-   is present and in READOUT/SI MASTER mode.
+   desktop Readouts screen now has a single-shot "Download SI" action and
+   experimental continuous "Start SI" / "Stop SI" controls that add
+   SI5/SI6/SI8/SI9/SIAC card readouts to the open project when the attached
+   station is present and in READOUT/SI MASTER mode.
 7. Long-term: add Station Maintenance after the desktop event-admin beta is
    stable. The first version should be read-only for the attached USB
    master/download station and should report serial number, station mode/code,

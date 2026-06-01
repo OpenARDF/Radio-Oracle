@@ -103,6 +103,36 @@ class DesktopSportIdentReadoutServiceTest {
         assertTrue(port.closed)
     }
 
+    @Test
+    fun downloadUntilTimeoutChecksStopHookBetweenCards() {
+        val port = FakePort()
+        var readAttempts = 0
+        val readSis = mutableListOf<Int>()
+        val service = DesktopSportIdentReadoutService(
+            portProvider = FakePortProvider(listOf(port)),
+            connectStation = {
+                it.open(0)
+                connection(modeCode = 8)
+            },
+            readCard = {
+                readAttempts += 1
+                download(siNumber = 200 + readAttempts)
+            }
+        )
+
+        val count = service.downloadUntilTimeout(
+            maxCards = 10,
+            onDownload = { readSis.add(it.readout.siNumber) },
+            shouldContinue = { readAttempts == 0 }
+        )
+
+        assertEquals(1, count)
+        assertEquals(listOf(201), readSis)
+        assertEquals(1, readAttempts)
+        assertFalse(port.isOpen)
+        assertTrue(port.closed)
+    }
+
     private class FakePortProvider(private val ports: List<DesktopSerialPort>) : DesktopSerialPortProvider {
         override fun listPorts(): List<DesktopSerialPort> = ports
         override fun getPort(systemPortPath: String): DesktopSerialPort =
