@@ -171,6 +171,22 @@ operating systems, with no known desktop USB showstopper left uninvestigated.
 Goal: add platform-specific capabilities after the event-admin beta is stable.
 
 - Add desktop SportIdent readout behind a platform device interface.
+- Add a read-only Station Maintenance surface for attached SportIdent stations.
+  It should show station serial number, reported function/mode, code number,
+  firmware/config metadata when available, protocol flags, and explicit
+  warnings when a download box is not in READOUT mode.
+- Extend Station Maintenance to read coupled non-reader stations through the
+  USB master/download station when the remote/coupled-station protocol is
+  verified. This should be read-only first and should report basic station
+  information such as serial number, mode/code, clock/status fields, operating
+  time, battery-level or battery-status fields, and backup-memory/status flags
+  where the protocol exposes them.
+- Treat station writes as a later, guarded maintenance phase. A "set attached
+  download box to READOUT" action may be added only after the SPORTident
+  configuration write transaction is verified against real hardware and has
+  immediate read-back validation. The UI must warn that applying station
+  settings can overwrite station configuration and may clear backup data, and
+  it must refuse to report success unless the station re-reads as READOUT.
 - Add desktop printing behind a platform print interface.
 - Add live result sending after the network/result-service logic is isolated
   from Android WorkManager.

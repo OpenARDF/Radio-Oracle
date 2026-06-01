@@ -297,3 +297,14 @@ repeatable package validation.
    box is attached. The second command is `npm run desktop:usb-probe`; it opens
    the serial device, sends the setup probe, reads the station response, and
    closes the port.
+7. Long-term: add Station Maintenance after the desktop event-admin beta is
+   stable. The first version should be read-only for the attached USB
+   master/download station and should report serial number, station mode/code,
+   protocol flags, firmware/config metadata when available, and clear warnings
+   when a download box is not in READOUT mode. A later read-only phase can read
+   station information for non-reader SI stations coupled magnetically to the
+   USB master, including battery/status fields and operating-time/status fields
+   if the remote/coupled-station protocol exposes them. Station write actions,
+   including "set this download box to READOUT", should remain disabled until
+   the SPORTident configuration-write transaction is verified on real hardware
+   and protected by confirmation plus immediate read-back validation.
