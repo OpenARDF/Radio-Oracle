@@ -70,6 +70,7 @@ import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.printing.FinishTicketRenderer
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDateTime
@@ -152,6 +153,7 @@ private val ReadoutTableColumns = listOf(
     FixedTableColumn("Points", 80.dp),
     FixedTableColumn("Runtime", 104.dp),
     FixedTableColumn("Punches", 260.dp),
+    FixedTableColumn("", 104.dp),
     FixedTableColumn("", 104.dp)
 )
 
@@ -819,6 +821,16 @@ fun main(args: Array<String>) = application {
             onDownloadSportIdentReadout = ::downloadSportIdentReadout,
             onStartContinuousSportIdentReadout = ::startContinuousSportIdentReadout,
             onStopContinuousSportIdentReadout = ::stopContinuousSportIdentReadout,
+            onPreviewFinishTicket = { resultId ->
+                runCatching {
+                    val currentProject = requireNotNull(projectSession.currentProject) {
+                        "Open or create a project before previewing finish tickets."
+                    }
+                    FinishTicketRenderer.render(currentProject.raceData, resultId)
+                }.getOrElse { error ->
+                    "Ticket preview failed: ${error.message ?: error::class.simpleName}"
+                }
+            },
             onAddManualReadout = { competitorId, siNumber, startSeconds, finishSeconds, controlCodes, resultStatus ->
                 val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -948,6 +960,7 @@ private fun RadioOManagerDesktopApp(
     onDownloadSportIdentReadout: () -> Unit = {},
     onStartContinuousSportIdentReadout: () -> Unit = {},
     onStopContinuousSportIdentReadout: () -> Unit = {},
+    onPreviewFinishTicket: (String) -> String = { "" },
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean = { _, _, _, _, _, _ -> false },
     onUpdateAlias: (String, String, String) -> Unit = { _, _, _ -> },
     onAddAlias: (String, String) -> Boolean = { _, _ -> false },
@@ -998,6 +1011,7 @@ private fun RadioOManagerDesktopApp(
                         onDownloadSportIdentReadout = onDownloadSportIdentReadout,
                         onStartContinuousSportIdentReadout = onStartContinuousSportIdentReadout,
                         onStopContinuousSportIdentReadout = onStopContinuousSportIdentReadout,
+                        onPreviewFinishTicket = onPreviewFinishTicket,
                         isDownloadingSiReadout = isDownloadingSiReadout,
                         isContinuousSiReadoutActive = isContinuousSiReadoutActive,
                         siDownloadStatusText = siDownloadStatusText,
@@ -1094,6 +1108,7 @@ private fun SectionWorkspace(
     onDownloadSportIdentReadout: () -> Unit,
     onStartContinuousSportIdentReadout: () -> Unit,
     onStopContinuousSportIdentReadout: () -> Unit,
+    onPreviewFinishTicket: (String) -> String,
     isDownloadingSiReadout: Boolean,
     isContinuousSiReadoutActive: Boolean,
     siDownloadStatusText: String?,
@@ -1168,6 +1183,7 @@ private fun SectionWorkspace(
                 onDownloadSportIdentReadout = onDownloadSportIdentReadout,
                 onStartContinuousSportIdentReadout = onStartContinuousSportIdentReadout,
                 onStopContinuousSportIdentReadout = onStopContinuousSportIdentReadout,
+                onPreviewFinishTicket = onPreviewFinishTicket,
                 isDownloadingSiReadout = isDownloadingSiReadout,
                 isContinuousSiReadoutActive = isContinuousSiReadoutActive,
                 siDownloadStatusText = siDownloadStatusText,
@@ -1313,6 +1329,7 @@ private fun ReadoutDetailsPanel(
     onDownloadSportIdentReadout: () -> Unit,
     onStartContinuousSportIdentReadout: () -> Unit,
     onStopContinuousSportIdentReadout: () -> Unit,
+    onPreviewFinishTicket: (String) -> String,
     isDownloadingSiReadout: Boolean,
     isContinuousSiReadoutActive: Boolean,
     siDownloadStatusText: String?,
@@ -1326,6 +1343,7 @@ private fun ReadoutDetailsPanel(
     var finishSecondsDraft by remember { mutableStateOf("") }
     var controlCodesDraft by remember { mutableStateOf("") }
     var selectedStatus by remember { mutableStateOf(ResultStatus.OK) }
+    var ticketPreviewText by remember { mutableStateOf<String?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -1424,10 +1442,20 @@ private fun ReadoutDetailsPanel(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     readouts.forEach { readout ->
-                        ReadoutDetailRow(readout, onUpdateReadoutStatus)
+                        ReadoutDetailRow(
+                            readout = readout,
+                            onUpdateReadoutStatus = onUpdateReadoutStatus,
+                            onPreviewFinishTicket = { ticketPreviewText = onPreviewFinishTicket(readout.id) }
+                        )
                     }
                 }
             }
+        }
+        ticketPreviewText?.let { previewText ->
+            FinishTicketPreviewDialog(
+                text = previewText,
+                onDismiss = { ticketPreviewText = null }
+            )
         }
     }
 }
@@ -1532,6 +1560,7 @@ private fun ManualReadoutAddRow(
             label = { Text("Controls") }
         )
         Spacer(modifier = Modifier.width(ReadoutTableColumns[6].width))
+        Spacer(modifier = Modifier.width(ReadoutTableColumns[7].width))
     }
 }
 
@@ -1539,7 +1568,8 @@ private fun ManualReadoutAddRow(
 @Composable
 private fun ReadoutDetailRow(
     readout: EventReadoutDetails,
-    onUpdateReadoutStatus: (String, ResultStatus) -> Unit
+    onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
+    onPreviewFinishTicket: () -> Unit
 ) {
     var selectedStatus by remember(readout.id, readout.resultStatus) { mutableStateOf(readout.resultStatus) }
 
@@ -1565,7 +1595,36 @@ private fun ReadoutDetailRow(
         ) {
             ButtonLabel("Status")
         }
+        Button(
+            onClick = onPreviewFinishTicket,
+            modifier = Modifier.width(ReadoutTableColumns[7].width)
+        ) {
+            ButtonLabel("Ticket")
+        }
     }
+}
+
+@Composable
+private fun FinishTicketPreviewDialog(
+    text: String,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Finish ticket preview") },
+        text = {
+            Text(
+                text = text,
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("OK")
+            }
+        }
+    )
 }
 
 @Composable

@@ -17,13 +17,15 @@ finish table:
 - download one SI5/SI6/SI8/SI9/SIAC card at a time, or run an experimental
   continuous readout loop, from an attached SPORTident station that is already
   configured in READOUT/SI MASTER mode;
+- preview shared finish-ticket text for readouts before desktop printer
+  transport is available;
 - recalculate results using shared services;
 - import/export supported event and result formats as they move into shared
   code.
 
 The desktop beta should not include:
 
-- Bluetooth or ticket printing;
+- Bluetooth or printer transport;
 - live result sending;
 - Android Room database migration or shared SQL persistence;
 - any promise that desktop can replace the Android race-day download workflow.
