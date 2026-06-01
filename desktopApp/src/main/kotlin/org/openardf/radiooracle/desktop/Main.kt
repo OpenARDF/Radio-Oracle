@@ -317,6 +317,22 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
+            onUpdateCategoryPhysicalStats = { categoryId, lengthMeters, climbMeters ->
+                runCatching {
+                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.updateCategoryPhysicalStats(
+                            currentProject,
+                            categoryId,
+                            lengthMeters,
+                            climbMeters
+                        )
+                    }
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText = "Unsaved changes."
+                }.onFailure { error ->
+                    projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+                }
+            },
             onAddCategory = { name ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -529,6 +545,7 @@ fun RadioOManagerDesktopApp(
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit = { _, _, _, _ -> },
     onRenameCategory: (String, String) -> Unit = { _, _ -> },
     onUpdateCategoryControlPoints: (String, String) -> Unit = { _, _ -> },
+    onUpdateCategoryPhysicalStats: (String, String, String) -> Unit = { _, _, _ -> },
     onAddCategory: (String) -> Unit = {},
     onRemoveCategory: (String, Boolean) -> Unit = { _, _ -> },
     onRenameCompetitor: (String, String, String) -> Unit = { _, _, _ -> },
@@ -573,6 +590,7 @@ fun RadioOManagerDesktopApp(
                         onUpdateRaceSettings = onUpdateRaceSettings,
                         onRenameCategory = onRenameCategory,
                         onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
+                        onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
                         onAddCategory = onAddCategory,
                         onRemoveCategory = onRemoveCategory,
                         onRenameCompetitor = onRenameCompetitor,
@@ -660,6 +678,7 @@ private fun SectionWorkspace(
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
     onRenameCategory: (String, String) -> Unit,
     onUpdateCategoryControlPoints: (String, String) -> Unit,
+    onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
     onAddCategory: (String) -> Unit,
     onRemoveCategory: (String, Boolean) -> Unit,
     onRenameCompetitor: (String, String, String) -> Unit,
@@ -705,6 +724,7 @@ private fun SectionWorkspace(
                 categories = EventCategoryDetails.from(projectFile.raceData),
                 onRenameCategory = onRenameCategory,
                 onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
+                onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
                 onAddCategory = onAddCategory,
                 onRemoveCategory = onRemoveCategory
             )
@@ -1428,14 +1448,21 @@ private fun CategoryDetailsPanel(
     categories: List<EventCategoryDetails>,
     onRenameCategory: (String, String) -> Unit,
     onUpdateCategoryControlPoints: (String, String) -> Unit,
+    onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
     onAddCategory: (String) -> Unit,
     onRemoveCategory: (String, Boolean) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CategoryAddRow(onAddCategory)
-        DetailHeaderRow(listOf("Name", "Type", "Band", "Limit", "Controls", "", "", ""))
+        DetailHeaderRow(listOf("Name", "Length", "Climb", "Type", "Band", "Limit", "Controls", "", "", "", ""))
         categories.forEach { category ->
-            CategoryDetailRow(category, onRenameCategory, onUpdateCategoryControlPoints, onRemoveCategory)
+            CategoryDetailRow(
+                category,
+                onRenameCategory,
+                onUpdateCategoryControlPoints,
+                onUpdateCategoryPhysicalStats,
+                onRemoveCategory
+            )
         }
     }
 }
@@ -1472,9 +1499,16 @@ private fun CategoryDetailRow(
     category: EventCategoryDetails,
     onRenameCategory: (String, String) -> Unit,
     onUpdateCategoryControlPoints: (String, String) -> Unit,
+    onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
     onRemoveCategory: (String, Boolean) -> Unit
 ) {
     var categoryNameDraft by remember(category.id, category.name) { mutableStateOf(category.name) }
+    var lengthMetersDraft by remember(category.id, category.lengthMetersText) {
+        mutableStateOf(category.lengthMetersText)
+    }
+    var climbMetersDraft by remember(category.id, category.climbMetersText) {
+        mutableStateOf(category.climbMetersText)
+    }
     var controlPointsDraft by remember(category.id, category.controlPointsText) {
         mutableStateOf(category.controlPointsText)
     }
@@ -1491,6 +1525,18 @@ private fun CategoryDetailRow(
             modifier = Modifier.weight(1f),
             label = { Text("Category") }
         )
+        TextField(
+            value = lengthMetersDraft,
+            onValueChange = { lengthMetersDraft = it },
+            modifier = Modifier.weight(1f),
+            label = { Text("Length") }
+        )
+        TextField(
+            value = climbMetersDraft,
+            onValueChange = { climbMetersDraft = it },
+            modifier = Modifier.weight(1f),
+            label = { Text("Climb") }
+        )
         Text(category.raceTypeLabel, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
         Text(category.raceBandLabel, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
         Text(category.timeLimitText, modifier = Modifier.weight(1f), color = DesktopPalette.Black, fontSize = 13.sp)
@@ -1506,6 +1552,16 @@ private fun CategoryDetailRow(
             enabled = categoryNameDraft != category.name
         ) {
             Text("Apply")
+        }
+        Button(
+            onClick = {
+                onUpdateCategoryPhysicalStats(category.id, lengthMetersDraft, climbMetersDraft)
+            },
+            modifier = Modifier.weight(1f),
+            enabled = lengthMetersDraft != category.lengthMetersText ||
+                    climbMetersDraft != category.climbMetersText
+        ) {
+            Text("Stats")
         }
         Button(
             onClick = { onUpdateCategoryControlPoints(category.id, controlPointsDraft) },

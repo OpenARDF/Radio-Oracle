@@ -14,6 +14,8 @@ class EventCategoryDetailsTest {
         assertEquals(2, rows.size)
         assertEquals("W21", rows[0].id)
         assertEquals("W21", rows[0].name)
+        assertEquals("5000", rows[0].lengthMetersText)
+        assertEquals("100", rows[0].climbMetersText)
         assertEquals("Sprint", rows[0].raceTypeLabel)
         assertEquals("2m", rows[0].raceBandLabel)
         assertEquals("60:00", rows[0].timeLimitText)

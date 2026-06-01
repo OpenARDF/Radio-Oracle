@@ -235,8 +235,8 @@ repeatable package validation.
    project-session state now tracks unsaved edits and can save back to the
    current project path. The
    Categories section now shows category rows using shared effective race settings, can add categories with conservative
-   defaults, and can edit category names and control-point strings through
-   shared project-editing rules.
+   defaults, and can edit category names, length, climb, and control-point
+   strings through shared project-editing rules.
    The Competitors section now shows competitor rows with shared category lookup
    and display formatting, can add uncategorized competitors with conservative
    defaults, and can edit competitor first and last names, category assignment,

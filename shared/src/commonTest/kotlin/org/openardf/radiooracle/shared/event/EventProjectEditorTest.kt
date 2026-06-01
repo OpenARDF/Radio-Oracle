@@ -243,6 +243,35 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun updatesCategoryPhysicalStats() {
+        val original = projectFile(categories = listOf(categoryData("cat-1", "M21")))
+
+        val updated = EventProjectEditor.updateCategoryPhysicalStats(original, "cat-1", " 6500 ", " 220 ")
+
+        val category = updated.raceData.categories.single().category
+        assertEquals(6_500, category.lengthMeters)
+        assertEquals(220, category.climbMeters)
+    }
+
+    @Test
+    fun rejectsInvalidCategoryPhysicalStats() {
+        val original = projectFile(categories = listOf(categoryData("cat-1", "M21")))
+
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCategoryPhysicalStats(original, "missing", "6500", "220")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCategoryPhysicalStats(original, "cat-1", "", "220")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCategoryPhysicalStats(original, "cat-1", "6500", "abc")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCategoryPhysicalStats(original, "cat-1", "-1", "220")
+        }
+    }
+
+    @Test
     fun renamesCompetitorWithoutChangingOtherCompetitors() {
         val original = projectFile(
             competitors = listOf(competitorData("comp-1", "Alice", "Runner"), competitorData("comp-2", "Bob", "Racer"))

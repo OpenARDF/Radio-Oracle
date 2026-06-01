@@ -252,6 +252,39 @@ object EventProjectEditor {
         )
     }
 
+    /** Returns a copy of the project file with validated category length and climb. */
+    fun updateCategoryPhysicalStats(
+        projectFile: EventProjectFile,
+        categoryId: String,
+        lengthMeters: String,
+        climbMeters: String
+    ): EventProjectFile {
+        val length = parseNonNegativeInt(lengthMeters, "Category length")
+        val climb = parseNonNegativeInt(climbMeters, "Category climb")
+
+        var foundCategory = false
+        val categories = projectFile.raceData.categories.map { categoryData ->
+            if (categoryData.category.id == categoryId) {
+                foundCategory = true
+                categoryData.copy(
+                    category = categoryData.category.copy(
+                        lengthMeters = length,
+                        climbMeters = climb
+                    )
+                )
+            } else {
+                categoryData
+            }
+        }
+        require(foundCategory) {
+            "Category was not found: $categoryId"
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(categories = categories)
+        )
+    }
+
     /** Returns a copy of the project file with one competitor's validated name changed. */
     fun renameCompetitor(
         projectFile: EventProjectFile,
@@ -910,6 +943,19 @@ object EventProjectEditor {
             ),
             alias = null
         )
+
+    private fun parseNonNegativeInt(value: String, label: String): Int {
+        val trimmed = value.trim()
+        require(trimmed.isNotEmpty()) {
+            "$label is required."
+        }
+        val parsed = trimmed.toIntOrNull()
+            ?: throw IllegalArgumentException("$label is invalid.")
+        require(parsed >= 0) {
+            "$label cannot be negative."
+        }
+        return parsed
+    }
 
     private fun validatedCompetitorBasics(
         raceId: String,
