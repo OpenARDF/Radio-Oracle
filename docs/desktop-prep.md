@@ -237,7 +237,9 @@ repeatable package validation.
    Categories section now shows category rows using shared effective race settings, can add categories with conservative
    defaults, and can edit category names, length, climb, and control-point
    strings through shared project-editing rules. Dense category and competitor
-   grids use fixed-width columns with horizontal scrolling.
+   grids use fixed-width columns with horizontal scrolling, one-line row action
+   buttons, and a fixed new-competitor Add action beside the scrollable entry
+   fields.
    The Competitors section now shows competitor rows with shared category lookup
    and display formatting, can add uncategorized competitors with conservative
    defaults, and can edit competitor first and last names, category assignment,
