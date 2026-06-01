@@ -89,6 +89,20 @@ class DesktopSportIdentCardEventMonitor(
         return null
     }
 
+    fun waitForInsertEventOnOpenPort(
+        port: DesktopSerialPort,
+        deadlineMillis: Long
+    ): SportIdentCardEvent.Inserted? {
+        while (System.currentTimeMillis() < deadlineMillis) {
+            when (val event = waitForOneEventOnOpenPort(port, deadlineMillis)) {
+                is SportIdentCardEvent.Inserted -> return event
+                is SportIdentCardEvent.Removed -> continue
+                null -> return null
+            }
+        }
+        return null
+    }
+
     companion object {
         val defaultMaxWaitMs: Long =
             System.getenv("RADIO_ORACLE_SI_CARD_EVENT_TIMEOUT_MS")?.toLongOrNull() ?: 60_000

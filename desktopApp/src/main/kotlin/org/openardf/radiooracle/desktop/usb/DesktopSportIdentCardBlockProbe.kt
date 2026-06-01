@@ -102,15 +102,13 @@ class DesktopSportIdentCardBlockReader(
             val event = DesktopSportIdentCardEventMonitor(
                 readTimeoutMs = readTimeoutMs,
                 writeTimeoutMs = writeTimeoutMs
-            ).waitForOneEventOnOpenPort(
+            ).waitForInsertEventOnOpenPort(
                 port,
                 System.currentTimeMillis() + DesktopSportIdentCardEventMonitor.defaultMaxWaitMs
             ) ?: error("No SPORTident card insert event received before timeout.")
-            val inserted = event as? SportIdentCardEvent.Inserted
-                ?: error("Expected a card insert event but received $event.")
-            onProgress("Card inserted: type=${inserted.cardType.toHexString()} si=${inserted.siNumber}; keep it seated.")
+            onProgress("Card inserted: type=${event.cardType.toHexString()} si=${event.siNumber}; keep it seated.")
 
-            return readInsertedCardOnOpenPort(port, inserted)
+            return readInsertedCardOnOpenPort(port, event)
         } finally {
             if (port.isOpen) {
                 port.close()
@@ -129,15 +127,13 @@ class DesktopSportIdentCardBlockReader(
         val event = DesktopSportIdentCardEventMonitor(
             readTimeoutMs = readTimeoutMs,
             writeTimeoutMs = writeTimeoutMs
-        ).waitForOneEventOnOpenPort(
+        ).waitForInsertEventOnOpenPort(
             port,
             System.currentTimeMillis() + DesktopSportIdentCardEventMonitor.defaultMaxWaitMs
         ) ?: error("No SPORTident card insert event received before timeout.")
-        val inserted = event as? SportIdentCardEvent.Inserted
-            ?: error("Expected a card insert event but received $event.")
-        onProgress("Card inserted: type=${inserted.cardType.toHexString()} si=${inserted.siNumber}; keep it seated.")
+        onProgress("Card inserted: type=${event.cardType.toHexString()} si=${event.siNumber}; keep it seated.")
 
-        return readInsertedCardOnOpenPort(port, inserted)
+        return readInsertedCardOnOpenPort(port, event)
     }
 
     private fun readInsertedCardOnOpenPort(

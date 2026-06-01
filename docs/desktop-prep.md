@@ -218,6 +218,25 @@ the setup probe at `38400` baud, received the CRC-valid frame
 `02 f0 03 00 11 4d 8d 72 03`, then read station system info reporting
 `serial=554896 extended=true`.
 
+Single-card desktop readout can be checked with:
+
+```shell
+npm run desktop:usb-card-block
+```
+
+The continuous-readout feasibility path keeps one station session open and
+downloads supported cards as they are inserted:
+
+```shell
+npm run desktop:usb-card-loop
+```
+
+For unattended smoke tests, cap the loop and shorten the insert timeout:
+
+```shell
+RADIO_ORACLE_SI_LOOP_MAX_CARDS=1 RADIO_ORACLE_SI_CARD_EVENT_TIMEOUT_MS=1000 npm run desktop:usb-card-loop
+```
+
 Current card-event evidence: `npm run desktop:usb-card-event` connected to the
 same station at `38400` baud, waited for an SI card action, and detected a card
 insert event with command `0xe8` and SI number `2005010`. That confirms the

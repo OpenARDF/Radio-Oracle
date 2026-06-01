@@ -33,6 +33,7 @@
     "desktop:usb-station-diagnostic": "./gradlew :desktopApp:desktopUsbStationDiagnostic",
     "desktop:usb-card-event": "./gradlew :desktopApp:desktopUsbCardEventProbe",
     "desktop:usb-card-block": "./gradlew :desktopApp:desktopUsbCardBlockProbe",
+    "desktop:usb-card-loop": "./gradlew :desktopApp:desktopUsbCardLoopProbe",
     "prepublishOnly": "node ./scripts/check-jdeploy-publish.mjs"
   },
   "dependencies": {
