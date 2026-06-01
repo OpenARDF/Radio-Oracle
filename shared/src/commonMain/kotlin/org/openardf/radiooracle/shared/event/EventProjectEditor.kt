@@ -60,6 +60,20 @@ object EventProjectEditor {
         )
     }
 
+    /** Returns a copy of the project file with a validated race start date/time string. */
+    fun updateRaceStartDateTime(projectFile: EventProjectFile, startDateTimeIso: String): EventProjectFile {
+        val trimmedStart = startDateTimeIso.trim()
+        require(trimmedStart.isNotEmpty()) {
+            "Race start date/time cannot be blank."
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                race = projectFile.raceData.race.copy(startDateTimeIso = trimmedStart)
+            )
+        )
+    }
+
     /** Returns a copy of the project file with one validated category name changed. */
     fun renameCategory(
         projectFile: EventProjectFile,

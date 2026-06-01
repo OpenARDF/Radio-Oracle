@@ -63,6 +63,20 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun updatesRaceStartDateTime() {
+        val updated = EventProjectEditor.updateRaceStartDateTime(projectFile(), " 2026-06-01T09:30 ")
+
+        assertEquals("2026-06-01T09:30", updated.raceData.race.startDateTimeIso)
+    }
+
+    @Test
+    fun rejectsBlankRaceStartDateTime() {
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateRaceStartDateTime(projectFile(), " ")
+        }
+    }
+
+    @Test
     fun renamesCategoryWithoutChangingOtherCategories() {
         val original = projectFile(
             name = "Original Race",

@@ -230,9 +230,10 @@ repeatable package validation.
    accept a startup `.rom.json` path for repeatable smoke runs.
 4. In progress: add the first event-admin screen backed by shared models and
    services. The Races section now shows race details from shared display models
-   and can edit the race name, race type, race level, race band, and time limit
-   through shared project-editing rules. Desktop project-session state now
-   tracks unsaved edits and can save back to the current project path. The
+   and can edit the race name, start date/time, race type, race level, race
+   band, and time limit through shared project-editing rules. Desktop
+   project-session state now tracks unsaved edits and can save back to the
+   current project path. The
    Categories section now shows category rows using shared effective race settings, can add categories with conservative
    defaults, and can edit category names and control-point strings through
    shared project-editing rules.

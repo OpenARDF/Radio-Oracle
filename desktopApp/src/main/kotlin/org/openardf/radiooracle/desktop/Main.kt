@@ -261,6 +261,17 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
+            onUpdateRaceStartDateTime = { startDateTimeIso ->
+                runCatching {
+                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.updateRaceStartDateTime(currentProject, startDateTimeIso)
+                    }
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText = "Unsaved changes."
+                }.onFailure { error ->
+                    projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+                }
+            },
             onUpdateRaceSettings = { raceType, raceLevel, raceBand, timeLimitMinutes ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -514,6 +525,7 @@ fun RadioOManagerDesktopApp(
     projectStatusText: String = "No project open.",
     hasUnsavedChanges: Boolean = false,
     onRenameRace: (String) -> Unit = {},
+    onUpdateRaceStartDateTime: (String) -> Unit = {},
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit = { _, _, _, _ -> },
     onRenameCategory: (String, String) -> Unit = { _, _ -> },
     onUpdateCategoryControlPoints: (String, String) -> Unit = { _, _ -> },
@@ -557,6 +569,7 @@ fun RadioOManagerDesktopApp(
                         projectFile = projectFile,
                         projectStatusText = projectStatusText,
                         onRenameRace = onRenameRace,
+                        onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
                         onUpdateRaceSettings = onUpdateRaceSettings,
                         onRenameCategory = onRenameCategory,
                         onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
@@ -643,6 +656,7 @@ private fun SectionWorkspace(
     projectFile: EventProjectFile?,
     projectStatusText: String,
     onRenameRace: (String) -> Unit,
+    onUpdateRaceStartDateTime: (String) -> Unit,
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
     onRenameCategory: (String, String) -> Unit,
     onUpdateCategoryControlPoints: (String, String) -> Unit,
@@ -682,6 +696,7 @@ private fun SectionWorkspace(
             RaceDetailsPanel(
                 details = EventRaceDetails.from(projectFile.raceData.race),
                 onRenameRace = onRenameRace,
+                onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
                 onUpdateRaceSettings = onUpdateRaceSettings
             )
         }
@@ -1546,9 +1561,13 @@ private fun CategoryDetailRow(
 private fun RaceDetailsPanel(
     details: EventRaceDetails,
     onRenameRace: (String) -> Unit,
+    onUpdateRaceStartDateTime: (String) -> Unit,
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit
 ) {
     var raceNameDraft by remember(details.name) { mutableStateOf(details.name) }
+    var startDateTimeDraft by remember(details.startDateTimeIso) {
+        mutableStateOf(details.startDateTimeIso)
+    }
     var selectedRaceType by remember(details.raceType) { mutableStateOf(details.raceType) }
     var selectedRaceLevel by remember(details.raceLevel) { mutableStateOf(details.raceLevel) }
     var selectedRaceBand by remember(details.raceBand) { mutableStateOf(details.raceBand) }
@@ -1575,7 +1594,24 @@ private fun RaceDetailsPanel(
                 Text("Apply")
             }
         }
-        DetailRow("Start", details.startDateTimeIso)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = startDateTimeDraft,
+                onValueChange = { startDateTimeDraft = it },
+                modifier = Modifier.weight(1f),
+                label = { Text("Start date/time") }
+            )
+            Button(
+                onClick = { onUpdateRaceStartDateTime(startDateTimeDraft) },
+                enabled = startDateTimeDraft != details.startDateTimeIso
+            ) {
+                Text("Apply")
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
