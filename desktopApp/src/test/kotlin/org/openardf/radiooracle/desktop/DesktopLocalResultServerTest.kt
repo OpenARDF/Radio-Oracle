@@ -70,6 +70,22 @@ class DesktopLocalResultServerTest {
     }
 
     @Test
+    fun servesAutoRefreshingResultHtmlOnLoopback() {
+        val server = DesktopLocalResultServer { projectFile() }
+        try {
+            val url = server.start()
+            val connection = URL(url).openConnection() as HttpURLConnection
+            val html = connection.inputStream.bufferedReader().readText()
+
+            assertTrue(connection.contentType == "text/html; charset=utf-8")
+            assertTrue(html.contains("<meta http-equiv=\"refresh\" content=\"5\">"))
+            assertTrue(html.contains("<title>Radio-Oracle Results</title>"))
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
     fun servesCategoryJsonOnLoopback() {
         val server = DesktopLocalResultServer { projectFile() }
         try {
@@ -94,6 +110,7 @@ class DesktopLocalResultServerTest {
 
             assertTrue(connection.contentType == "text/html; charset=utf-8")
             assertTrue(connection.getHeaderField("Cache-Control") == "no-store")
+            assertTrue(html.contains("<meta http-equiv=\"refresh\" content=\"5\">"))
             assertTrue(html.contains("<title>Radio-Oracle Categories</title>"))
             assertTrue(html.contains("<td>M21</td>"))
             assertTrue(html.contains("<td>1</td>"))

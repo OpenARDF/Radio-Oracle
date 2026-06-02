@@ -18,6 +18,8 @@ class DesktopLocalResultServer(
     var url: String? = null
         private set
 
+    private val autoRefreshMeta = "<meta http-equiv=\"refresh\" content=\"5\">"
+
     @Synchronized
     fun start(): String {
         url?.let { return it }
@@ -132,6 +134,7 @@ class DesktopLocalResultServer(
 
         return buildString {
             append("<!doctype html><html><head><meta charset=\"utf-8\">")
+            append(autoRefreshMeta)
             append("<title>Radio-Oracle Results</title>")
             append("<style>body{font-family:sans-serif;margin:24px}table{border-collapse:collapse}")
             append("td,th{border-bottom:1px solid #ddd;padding:6px 10px;text-align:left}</style>")
@@ -162,6 +165,7 @@ class DesktopLocalResultServer(
 
         return buildString {
             append("<!doctype html><html><head><meta charset=\"utf-8\">")
+            append(autoRefreshMeta)
             append("<title>Radio-Oracle Categories</title>")
             append("<style>body{font-family:sans-serif;margin:24px}table{border-collapse:collapse}")
             append("td,th{border-bottom:1px solid #ddd;padding:6px 10px;text-align:left}</style>")
