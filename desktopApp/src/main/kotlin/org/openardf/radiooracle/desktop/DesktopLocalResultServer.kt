@@ -376,6 +376,10 @@ class DesktopLocalResultServer(
     private fun StringBuilder.appendLocalNavigation() {
         append("<nav><a href=\"/\">Results</a> | <a href=\"/categories\">Categories</a> | ")
         append("<a href=\"/starts\">Starts</a> | <a href=\"/in-forest\">In Forest</a></nav>")
+        append("<p>JSON: <a href=\"/results.json\">results</a> | ")
+        append("<a href=\"/categories.json\">categories</a> | ")
+        append("<a href=\"/starts.json\">starts</a> | ")
+        append("<a href=\"/in-forest.json\">in forest</a></p>")
     }
 }
 

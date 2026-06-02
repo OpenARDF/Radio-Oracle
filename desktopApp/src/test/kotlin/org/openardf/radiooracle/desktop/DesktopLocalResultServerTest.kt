@@ -108,6 +108,7 @@ class DesktopLocalResultServerTest {
             assertTrue(connection.contentType == "text/html; charset=utf-8")
             assertTrue(html.contains("<meta http-equiv=\"refresh\" content=\"5\">"))
             assertTrue(html.contains("<a href=\"/categories\">Categories</a>"))
+            assertTrue(html.contains("<a href=\"/results.json\">results</a>"))
             assertTrue(html.contains("<title>Radio-Oracle Results</title>"))
         } finally {
             server.stop()
@@ -142,6 +143,7 @@ class DesktopLocalResultServerTest {
             assertTrue(html.contains("<meta http-equiv=\"refresh\" content=\"5\">"))
             assertTrue(html.contains("<title>Radio-Oracle Categories</title>"))
             assertTrue(html.contains("<a href=\"/starts\">Starts</a>"))
+            assertTrue(html.contains("<a href=\"/categories.json\">categories</a>"))
             assertTrue(html.contains("<td>M21</td>"))
             assertTrue(html.contains("<td>1</td>"))
         } finally {
@@ -178,6 +180,7 @@ class DesktopLocalResultServerTest {
             assertTrue(html.contains("<meta http-equiv=\"refresh\" content=\"5\">"))
             assertTrue(html.contains("<title>Radio-Oracle Starts</title>"))
             assertTrue(html.contains("<a href=\"/in-forest\">In Forest</a>"))
+            assertTrue(html.contains("<a href=\"/starts.json\">starts</a>"))
             assertTrue(html.contains("<td>RUNNER Alice</td>"))
         } finally {
             server.stop()
@@ -213,6 +216,7 @@ class DesktopLocalResultServerTest {
             assertTrue(html.contains("<meta http-equiv=\"refresh\" content=\"5\">"))
             assertTrue(html.contains("<title>Radio-Oracle In Forest</title>"))
             assertTrue(html.contains("<a href=\"/\">Results</a>"))
+            assertTrue(html.contains("<a href=\"/in-forest.json\">in forest</a>"))
             assertTrue(html.contains("<td>RUNNER Alice (1)</td>"))
             assertTrue(html.contains("class=\"over\">Over limit</td>"))
         } finally {
