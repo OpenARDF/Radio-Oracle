@@ -42,8 +42,8 @@ The desktop beta supports:
 - summarizing live-result send readiness and exporting Android-shaped
   live-result JSON payloads;
 - manually sending unsent matched live results to ROBIS using the race API key;
-- sending unsent matched ROBIS live results in the background while a project is
-  open.
+- sending unsent matched ROBIS live results in the background when enabled in
+  Settings.
 
 The desktop beta does not yet replace the Android race-day workflow. Live
 printer transport, shared SQL persistence, and station maintenance writes remain

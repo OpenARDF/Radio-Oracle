@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
+import androidx.compose.material.Checkbox
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.MaterialTheme
@@ -185,6 +186,7 @@ fun main(args: Array<String>) = application {
         var continuousSiReadoutStopRequested by remember { mutableStateOf<AtomicBoolean?>(null) }
         var siDownloadStatusText by remember { mutableStateOf<String?>(null) }
         var isSendingLiveResults by remember { mutableStateOf(false) }
+        var isBackgroundLiveResultSendingEnabled by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) {
             while (true) {
@@ -403,7 +405,9 @@ fun main(args: Array<String>) = application {
         LaunchedEffect(Unit) {
             while (true) {
                 delay(DesktopLiveResultSendIntervalMs)
-                sendRobisLiveResults(automatic = true)
+                if (isBackgroundLiveResultSendingEnabled) {
+                    sendRobisLiveResults(automatic = true)
+                }
             }
         }
 
@@ -661,6 +665,7 @@ fun main(args: Array<String>) = application {
             isContinuousSiReadoutActive = isContinuousSiReadoutActive,
             siDownloadStatusText = siDownloadStatusText,
             isSendingLiveResults = isSendingLiveResults,
+            isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
             onRenameRace = { name ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -966,7 +971,15 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
-            onSendRobisLiveResults = { sendRobisLiveResults() }
+            onSendRobisLiveResults = { sendRobisLiveResults() },
+            onSetBackgroundLiveResultSendingEnabled = { enabled ->
+                isBackgroundLiveResultSendingEnabled = enabled
+                projectStatusText = if (enabled) {
+                    "Background ROBIS sending enabled."
+                } else {
+                    "Background ROBIS sending disabled."
+                }
+            }
         )
     }
 }
@@ -1017,6 +1030,7 @@ private fun RadioOManagerDesktopApp(
     isContinuousSiReadoutActive: Boolean = false,
     siDownloadStatusText: String? = null,
     isSendingLiveResults: Boolean = false,
+    isBackgroundLiveResultSendingEnabled: Boolean = false,
     onRenameRace: (String) -> Unit = {},
     onUpdateRaceStartDateTime: (String) -> Unit = {},
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit = { _, _, _, _ -> },
@@ -1042,7 +1056,8 @@ private fun RadioOManagerDesktopApp(
     onUpdateAlias: (String, String, String) -> Unit = { _, _, _ -> },
     onAddAlias: (String, String) -> Boolean = { _, _ -> false },
     onRemoveAlias: (String) -> Unit = {},
-    onSendRobisLiveResults: () -> Unit = {}
+    onSendRobisLiveResults: () -> Unit = {},
+    onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit = {}
 ) {
     MaterialTheme(
         colors = MaterialTheme.colors.copy(
@@ -1098,7 +1113,9 @@ private fun RadioOManagerDesktopApp(
                         onAddAlias = onAddAlias,
                         onRemoveAlias = onRemoveAlias,
                         isSendingLiveResults = isSendingLiveResults,
-                        onSendRobisLiveResults = onSendRobisLiveResults
+                        isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
+                        onSendRobisLiveResults = onSendRobisLiveResults,
+                        onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled
                     )
                 }
                 StatusStrip(projectStatusText, hasUnsavedChanges, siReaderState)
@@ -1197,7 +1214,9 @@ private fun SectionWorkspace(
     onAddAlias: (String, String) -> Boolean,
     onRemoveAlias: (String) -> Unit,
     isSendingLiveResults: Boolean,
-    onSendRobisLiveResults: () -> Unit
+    isBackgroundLiveResultSendingEnabled: Boolean,
+    onSendRobisLiveResults: () -> Unit,
+    onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -1282,7 +1301,9 @@ private fun SectionWorkspace(
             SettingsDetailsPanel(
                 diagnostics = DesktopProjectDiagnostics.from(projectFile),
                 isSendingLiveResults = isSendingLiveResults,
-                onSendRobisLiveResults = onSendRobisLiveResults
+                isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
+                onSendRobisLiveResults = onSendRobisLiveResults,
+                onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled
             )
         }
         Box(
@@ -1308,7 +1329,9 @@ private fun SectionWorkspace(
 private fun SettingsDetailsPanel(
     diagnostics: DesktopProjectDiagnostics,
     isSendingLiveResults: Boolean,
-    onSendRobisLiveResults: () -> Unit
+    isBackgroundLiveResultSendingEnabled: Boolean,
+    onSendRobisLiveResults: () -> Unit,
+    onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DetailRow("Project", diagnostics.projectState)
@@ -1327,6 +1350,18 @@ private fun SettingsDetailsPanel(
         )
         DetailRow("Validation", diagnostics.validationState)
         DetailRow("Live results", diagnostics.liveResultPlanText)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = isBackgroundLiveResultSendingEnabled,
+                onCheckedChange = onSetBackgroundLiveResultSendingEnabled,
+                enabled = diagnostics.projectState == "Project open"
+            )
+            Text(
+                text = "Background ROBIS sending",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        }
         Button(
             onClick = onSendRobisLiveResults,
             enabled = diagnostics.projectState == "Project open" && !isSendingLiveResults

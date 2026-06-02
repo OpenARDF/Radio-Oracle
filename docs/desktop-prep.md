@@ -23,8 +23,8 @@ finish table:
   skipped readouts, and export Android-shaped live-result JSON payloads for
   provider inspection;
 - manually send unsent matched live results to ROBIS using the race API key;
-- send unsent matched ROBIS live results in the background while a project is
-  open;
+- send unsent matched ROBIS live results in the background when enabled in
+  Settings;
 - recalculate results using shared services;
 - import/export supported event and result formats as they move into shared
   code.
