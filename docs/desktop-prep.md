@@ -47,6 +47,31 @@ Prefer a small desktop app module that depends on `:shared`. Compose
 Multiplatform Desktop is the default UI candidate because it keeps the app in
 Kotlin and aligns naturally with the existing Kotlin Multiplatform foundation.
 
+ARDFEvent is the closest verified desktop reference for mature race-day ARDF
+workflows. Use it as a functional benchmark for desktop ergonomics: dense
+task-specific pages, operator-visible status, fast table editing, direct
+print/send/readout actions, and a separate readout status surface that can stay
+visible during finish work. Do not copy ARDFEvent's Python/PyQt architecture or
+plugin system into Radio-Oracle unless a future integration creates a concrete
+need; keep Radio-Oracle centered on shared Kotlin services and the existing
+Android-compatible event model.
+
+ARDFEvent-derived desktop parity gaps to track after the current live-result
+slices:
+
+- start-list draw/edit workflows with club/category separation and start-list
+  export variants;
+- in-forest tracking from start times, readouts, and event time limits;
+- duplicate-card overwrite handling and unmatched-card assignment during
+  continuous SI readout;
+- full ESC/POS ticket printer transport using the shared finish-ticket
+  renderer as the text source;
+- richer readout operator status, including audible/visible error state and
+  last-read runner details;
+- OCheckList-style DNS/new-card import or equivalent race-day status import;
+- local finish-line web display/API for results when mobile data is not
+  available.
+
 The desktop app should intentionally feel like the Android app, not like a new
 product. Reuse the Android visual language where practical:
 

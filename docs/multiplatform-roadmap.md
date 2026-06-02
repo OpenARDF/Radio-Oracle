@@ -69,6 +69,8 @@ The first desktop release should be a beta event-admin app. It should support:
 - downloading SI5/SI6/SI8/SI9/SIAC cards from an attached SPORTident station
   that is already configured in READOUT/SI MASTER mode, first as a one-card
   action and then through the experimental continuous-readout loop;
+- previewing finish-ticket text and sending unsent matched ROBIS live results
+  through the shared result payload path;
 - importing and exporting the supported event/result formats once the shared
   import/export layer is ready.
 
@@ -76,8 +78,48 @@ The desktop beta should explicitly exclude:
 
 - hardened Android-style SportIdent race-day reader replacement;
 - ticket printing;
-- live result sending;
+- additional live-result providers beyond the first ROBIS path;
 - replacing Android for normal race-day readout operations.
+
+## ARDFEvent reference benchmark
+
+ARDFEvent is a useful desktop reference because it is a verified race-day
+desktop application for the same problem space. It should inform the long-term
+desktop feature set, but it should not pull Radio-Oracle away from the current
+shared Kotlin architecture or Android-compatible data model.
+
+Relevant ARDFEvent feature areas to keep in view:
+
+- persistent race selection backed by one local SQLite database per event;
+- dense desktop navigation with task-specific pages for event info, controls,
+  categories, import, competitors, SI readout, start lists, results, runners in
+  forest, and advanced repair tools;
+- control presets, mandatory/spectator control flags, coordinates, and
+  category course assignment;
+- competitor autocomplete/import from registration data, club lookup, start
+  numbers, start times, and manual DNS/DSQ flags;
+- start-list drawing that separates categories and clubs, plus start-list
+  exports by category, by minute, ROBIS CSV/JSON, and IOF XML;
+- continuous SI readout with duplicate-card overwrite handling, unmatched-card
+  assignment, readout status window, error sound, and immediate result refresh;
+- ESC/POS ticket printing for competitor tickets and string tickets, including
+  printer setup, test printing, optional QR/link, and double-print support;
+- result calculation from stored punches with DNS, DSQ, DNF, MP, OVT, and
+  running/unknown states, with places sorted by transmitter count and time;
+- in-forest tracking from start times and readout state, including last-limit
+  visibility for operators;
+- result exports to HTML, HTML with splits, CSV, IOF XML, and ARDF JSON;
+- a local finish-line web server exposing live category/result JSON plus public
+  and organizer static views;
+- OCheckList import and a signed plugin system with startup, readout, and menu
+  hooks.
+
+For Radio-Oracle, this suggests the next desktop parity work should prioritize
+operator workflow gaps before optional extensibility: start-list management,
+in-forest tracking, full ticket printer transport, duplicate/unmatched readout
+handling polish, richer status/error surfaces, and export coverage. A plugin
+system should remain long-term unless a concrete integration cannot be handled
+through shared services or ordinary platform UI.
 
 The concrete desktop boundary, storage approach, UI direction, and packaging
 default are tracked in [`desktop-prep.md`](desktop-prep.md).
@@ -204,8 +246,8 @@ Goal: add platform-specific capabilities after the event-admin beta is stable.
   settings can overwrite station configuration and may clear backup data, and
   it must refuse to report success unless the station re-reads as READOUT.
 - Add desktop printing behind a platform print interface.
-- Add live result sending after the network/result-service logic is isolated
-  from Android WorkManager.
+- Add non-ROBis live result providers after their network/result-service logic
+  is isolated from Android WorkManager.
 
 Milestone: each platform feature lands behind shared tests plus platform smoke
 tests without regressing Android.
