@@ -54,6 +54,20 @@ class DesktopLocalResultServerTest {
     }
 
     @Test
+    fun rendersStartJsonForOpenProject() {
+        val server = DesktopLocalResultServer { projectFile() }
+
+        val json = server.startsJson()
+
+        assertTrue(json.contains(""""project_open":true"""))
+        assertTrue(json.contains(""""race_name":"Local \"Race\"""""))
+        assertTrue(json.contains(""""scheduled_count":1"""))
+        assertTrue(json.contains(""""unscheduled_count":0"""))
+        assertTrue(json.contains(""""competitor":"RUNNER Alice""""))
+        assertTrue(json.contains(""""start_time":"10:00""""))
+    }
+
+    @Test
     fun servesResultJsonOnLoopback() {
         val server = DesktopLocalResultServer { projectFile() }
         try {
@@ -114,6 +128,40 @@ class DesktopLocalResultServerTest {
             assertTrue(html.contains("<title>Radio-Oracle Categories</title>"))
             assertTrue(html.contains("<td>M21</td>"))
             assertTrue(html.contains("<td>1</td>"))
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun servesStartJsonOnLoopback() {
+        val server = DesktopLocalResultServer { projectFile() }
+        try {
+            val url = server.start()
+            val connection = URL("${url}starts.json").openConnection() as HttpURLConnection
+            val json = connection.inputStream.bufferedReader().readText()
+
+            assertTrue(connection.contentType == "application/json; charset=utf-8")
+            assertTrue(connection.getHeaderField("Cache-Control") == "no-store")
+            assertTrue(json.contains(""""scheduled_count":1"""))
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun servesStartHtmlOnLoopback() {
+        val server = DesktopLocalResultServer { projectFile() }
+        try {
+            val url = server.start()
+            val connection = URL("${url}starts").openConnection() as HttpURLConnection
+            val html = connection.inputStream.bufferedReader().readText()
+
+            assertTrue(connection.contentType == "text/html; charset=utf-8")
+            assertTrue(connection.getHeaderField("Cache-Control") == "no-store")
+            assertTrue(html.contains("<meta http-equiv=\"refresh\" content=\"5\">"))
+            assertTrue(html.contains("<title>Radio-Oracle Starts</title>"))
+            assertTrue(html.contains("<td>RUNNER Alice</td>"))
         } finally {
             server.stop()
         }
@@ -199,7 +247,7 @@ class DesktopLocalResultServerTest {
             siNumber = 123456,
             siRent = false,
             startNumber = 1,
-            drawnStartTimeSeconds = null
+            drawnStartTimeSeconds = 10 * 60
         )
 
         return EventProjectFile(

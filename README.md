@@ -55,9 +55,9 @@ The desktop beta supports:
 - manually sending unsent matched live results to ROBIS using the race API key;
 - sending unsent matched ROBIS live results in the background when enabled in
   Settings;
-- serving auto-refreshing loopback-only local result/category displays plus
-  `/results.json` and `/categories.json` endpoints from the open desktop
-  project;
+- serving auto-refreshing loopback-only local result/category/start-list
+  displays plus `/results.json`, `/categories.json`, and `/starts.json`
+  endpoints from the open desktop project;
 - tracking started competitors without readouts in an In Forest desktop view.
 
 The desktop beta does not yet replace the Android race-day workflow. Live

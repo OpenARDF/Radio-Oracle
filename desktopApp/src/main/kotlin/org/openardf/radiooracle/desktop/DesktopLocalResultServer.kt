@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventResultDetails
+import org.openardf.radiooracle.shared.event.EventStartListDetails
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
@@ -47,6 +48,16 @@ class DesktopLocalResultServer(
         nextServer.createContext("/categories.json") { exchange ->
             exchange.handleExactGet("/categories.json") {
                 exchange.sendText(categoriesJson(), "application/json; charset=utf-8")
+            }
+        }
+        nextServer.createContext("/starts") { exchange ->
+            exchange.handleExactGet("/starts") {
+                exchange.sendText(startsHtml(), "text/html; charset=utf-8")
+            }
+        }
+        nextServer.createContext("/starts.json") { exchange ->
+            exchange.handleExactGet("/starts.json") {
+                exchange.sendText(startsJson(), "application/json; charset=utf-8")
             }
         }
         nextServer.start()
@@ -127,6 +138,38 @@ class DesktopLocalResultServer(
         }
     }
 
+    fun startsJson(): String {
+        val projectFile = projectSupplier()
+            ?: return """{"project_open":false,"race_name":"","starts":[]}"""
+        val raceData = projectFile.raceData
+        val details = EventStartListDetails.from(raceData)
+
+        return buildString {
+            append("""{"project_open":true""")
+            append(""","race_name":""")
+            appendJsonString(raceData.race.name)
+            append(""","scheduled_count":${details.scheduledCount}""")
+            append(""","unscheduled_count":${details.unscheduledCount}""")
+            append(""","starts":[""")
+            details.rows.forEachIndexed { index, row ->
+                if (index > 0) append(',')
+                append('{')
+                append(""""start_time":""")
+                appendJsonString(row.startTimeText)
+                append(""","start_number":""")
+                appendJsonString(row.startNumberText)
+                append(""","competitor":""")
+                appendJsonString(row.competitorName)
+                append(""","category":""")
+                appendJsonString(row.categoryName)
+                append(""","si_number":""")
+                appendJsonString(row.siNumberText)
+                append('}')
+            }
+            append("]}")
+        }
+    }
+
     private fun indexHtml(): String {
         val projectFile = projectSupplier()
         val raceName = projectFile?.raceData?.race?.name ?: "No project open"
@@ -188,6 +231,42 @@ class DesktopLocalResultServer(
                     appendHtml(competitors.count { it.readoutData != null }.toString())
                     append("</td></tr>")
                 }
+            append("</tbody></table></body></html>")
+        }
+    }
+
+    private fun startsHtml(): String {
+        val projectFile = projectSupplier()
+        val raceData = projectFile?.raceData
+        val raceName = raceData?.race?.name ?: "No project open"
+        val details = raceData?.let { EventStartListDetails.from(it) }
+
+        return buildString {
+            append("<!doctype html><html><head><meta charset=\"utf-8\">")
+            append(autoRefreshMeta)
+            append("<title>Radio-Oracle Starts</title>")
+            append("<style>body{font-family:sans-serif;margin:24px}table{border-collapse:collapse}")
+            append("td,th{border-bottom:1px solid #ddd;padding:6px 10px;text-align:left}</style>")
+            append("</head><body><h1>")
+            appendHtml(raceName)
+            append("</h1><p>Scheduled: ")
+            appendHtml((details?.scheduledCount ?: 0).toString())
+            append(" | Unscheduled: ")
+            appendHtml((details?.unscheduledCount ?: 0).toString())
+            append("</p><table><thead><tr><th>Start</th><th>No.</th><th>Competitor</th><th>Category</th><th>SI</th></tr></thead><tbody>")
+            details?.rows?.forEach { row ->
+                append("<tr><td>")
+                appendHtml(row.startTimeText)
+                append("</td><td>")
+                appendHtml(row.startNumberText)
+                append("</td><td>")
+                appendHtml(row.competitorName)
+                append("</td><td>")
+                appendHtml(row.categoryName)
+                append("</td><td>")
+                appendHtml(row.siNumberText)
+                append("</td></tr>")
+            }
             append("</tbody></table></body></html>")
         }
     }
