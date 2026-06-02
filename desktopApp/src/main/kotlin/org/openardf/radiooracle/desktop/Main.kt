@@ -80,6 +80,7 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.printing.FinishTicketRenderer
 import org.openardf.radiooracle.shared.results.EventResultSending
+import java.awt.Toolkit
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -229,6 +230,7 @@ fun main(args: Array<String>) = application {
         var isSendingLiveResults by remember { mutableStateOf(false) }
         var isBackgroundLiveResultSendingEnabled by remember { mutableStateOf(false) }
         var readoutDuplicatePolicy by remember { mutableStateOf(EventReadoutDuplicatePolicy.Reject) }
+        var isReadoutAlertSoundEnabled by remember { mutableStateOf(true) }
         var localResultServerUrl by remember { mutableStateOf<String?>(null) }
         var raceClockTick by remember { mutableStateOf(0L) }
 
@@ -304,6 +306,12 @@ fun main(args: Array<String>) = application {
                 }
             }
             hasUnsavedChanges = projectSession.hasUnsavedChanges
+            val lastReadoutSeverity = projectSession.currentProject
+                ?.let { EventLastReadoutDetails.from(it.raceData).severity }
+                ?: EventLastReadoutSeverity.None
+            if (isReadoutAlertSoundEnabled && lastReadoutSeverity == EventLastReadoutSeverity.Error) {
+                beepDesktopReadoutAlert()
+            }
             return when {
                 !isDuplicate -> DesktopSportIdentAppendOutcome.Added
                 readoutDuplicatePolicy == EventReadoutDuplicatePolicy.Replace ->
@@ -334,8 +342,12 @@ fun main(args: Array<String>) = application {
                         when (appendSportIdentDownload(download)) {
                             DesktopSportIdentAppendOutcome.Added ->
                                 projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
-                            DesktopSportIdentAppendOutcome.DuplicateIgnored ->
+                            DesktopSportIdentAppendOutcome.DuplicateIgnored -> {
                                 projectStatusText = "SI card ${download.readout.siNumber} was already downloaded."
+                                if (isReadoutAlertSoundEnabled) {
+                                    beepDesktopReadoutAlert()
+                                }
+                            }
                             DesktopSportIdentAppendOutcome.DuplicateReplaced ->
                                 projectStatusText = "Replaced existing readout for SI card ${download.readout.siNumber}."
                             DesktopSportIdentAppendOutcome.DuplicateCreatedNew ->
@@ -392,6 +404,9 @@ fun main(args: Array<String>) = application {
                                             DesktopSportIdentAppendOutcome.DuplicateIgnored -> {
                                                 projectStatusText =
                                                     "SI card ${download.readout.siNumber} was already downloaded."
+                                                if (isReadoutAlertSoundEnabled) {
+                                                    beepDesktopReadoutAlert()
+                                                }
                                                 siDownloadStatusText =
                                                     "Duplicate SI card ignored; continuous SI readout is still running."
                                             }
@@ -764,6 +779,7 @@ fun main(args: Array<String>) = application {
             isSendingLiveResults = isSendingLiveResults,
             isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
             readoutDuplicatePolicy = readoutDuplicatePolicy,
+            isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
             localResultServerUrl = localResultServerUrl,
             raceClockTick = raceClockTick,
             onRenameRace = { name ->
@@ -1106,6 +1122,14 @@ fun main(args: Array<String>) = application {
                 readoutDuplicatePolicy = policy
                 projectStatusText = "Duplicate SI card action set to ${policy.toDisplayLabel()}."
             },
+            onSetReadoutAlertSoundEnabled = { enabled ->
+                isReadoutAlertSoundEnabled = enabled
+                projectStatusText = if (enabled) {
+                    "Readout alert sounds enabled."
+                } else {
+                    "Readout alert sounds disabled."
+                }
+            },
             onStartLocalResultServer = {
                 runCatching {
                     localResultServer.start()
@@ -1173,6 +1197,7 @@ private fun RadioOManagerDesktopApp(
     isSendingLiveResults: Boolean = false,
     isBackgroundLiveResultSendingEnabled: Boolean = false,
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy = EventReadoutDuplicatePolicy.Reject,
+    isReadoutAlertSoundEnabled: Boolean = true,
     localResultServerUrl: String? = null,
     raceClockTick: Long = 0L,
     onRenameRace: (String) -> Unit = {},
@@ -1205,6 +1230,7 @@ private fun RadioOManagerDesktopApp(
     onSendRobisLiveResults: () -> Unit = {},
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit = {},
     onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit = {},
+    onSetReadoutAlertSoundEnabled: (Boolean) -> Unit = {},
     onStartLocalResultServer: () -> Unit = {},
     onStopLocalResultServer: () -> Unit = {}
 ) {
@@ -1266,11 +1292,13 @@ private fun RadioOManagerDesktopApp(
                         isSendingLiveResults = isSendingLiveResults,
                         isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
                         readoutDuplicatePolicy = readoutDuplicatePolicy,
+                        isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
                         localResultServerUrl = localResultServerUrl,
                         raceClockTick = raceClockTick,
                         onSendRobisLiveResults = onSendRobisLiveResults,
                         onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
                         onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
+                        onSetReadoutAlertSoundEnabled = onSetReadoutAlertSoundEnabled,
                         onStartLocalResultServer = onStartLocalResultServer,
                         onStopLocalResultServer = onStopLocalResultServer
                     )
@@ -1375,11 +1403,13 @@ private fun SectionWorkspace(
     isSendingLiveResults: Boolean,
     isBackgroundLiveResultSendingEnabled: Boolean,
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
+    isReadoutAlertSoundEnabled: Boolean,
     localResultServerUrl: String?,
     raceClockTick: Long,
     onSendRobisLiveResults: () -> Unit,
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
     onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit,
+    onSetReadoutAlertSoundEnabled: (Boolean) -> Unit,
     onStartLocalResultServer: () -> Unit,
     onStopLocalResultServer: () -> Unit
 ) {
@@ -1485,10 +1515,12 @@ private fun SectionWorkspace(
                 isSendingLiveResults = isSendingLiveResults,
                 isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
                 readoutDuplicatePolicy = readoutDuplicatePolicy,
+                isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
                 localResultServerUrl = localResultServerUrl,
                 onSendRobisLiveResults = onSendRobisLiveResults,
                 onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
                 onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
+                onSetReadoutAlertSoundEnabled = onSetReadoutAlertSoundEnabled,
                 onStartLocalResultServer = onStartLocalResultServer,
                 onStopLocalResultServer = onStopLocalResultServer
             )
@@ -1518,10 +1550,12 @@ private fun SettingsDetailsPanel(
     isSendingLiveResults: Boolean,
     isBackgroundLiveResultSendingEnabled: Boolean,
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
+    isReadoutAlertSoundEnabled: Boolean,
     localResultServerUrl: String?,
     onSendRobisLiveResults: () -> Unit,
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
     onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit,
+    onSetReadoutAlertSoundEnabled: (Boolean) -> Unit,
     onStartLocalResultServer: () -> Unit,
     onStopLocalResultServer: () -> Unit
 ) {
@@ -1546,6 +1580,17 @@ private fun SettingsDetailsPanel(
             selectedPolicy = readoutDuplicatePolicy,
             onPolicySelected = onSetReadoutDuplicatePolicy
         )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = isReadoutAlertSoundEnabled,
+                onCheckedChange = onSetReadoutAlertSoundEnabled
+            )
+            Text(
+                text = "Readout alert sounds",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        }
         DetailRow("Local result display", localResultServerUrl ?: "Stopped")
         Row(horizontalArrangement = Arrangement.spacedBy(TableColumnGap)) {
             Button(
@@ -3457,6 +3502,12 @@ private fun detectDesktopSiReaderState(): DesktopSiReaderUiState {
 
 private fun downloadDesktopSportIdentCardReadout(): DesktopSportIdentCardBlockDownload {
     return DesktopSportIdentReadoutService().downloadOne()
+}
+
+private fun beepDesktopReadoutAlert() {
+    runCatching {
+        Toolkit.getDefaultToolkit().beep()
+    }
 }
 
 @Composable

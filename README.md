@@ -42,6 +42,8 @@ The desktop beta supports:
   new readouts;
 - showing the most recent readout SI card, competitor, status, timestamp, and
   warning/error state;
+- playing optional desktop alert sounds for duplicate or error/unknown SI
+  readouts;
 - inspecting competitors in drawn start-time order in a Start List desktop view;
 - assigning unmatched readouts to competitors;
 - previewing finish-ticket text for readouts using the shared ticket renderer;

@@ -21,6 +21,7 @@ finish table:
   new readouts;
 - show the most recent readout SI card, competitor, status, timestamp, and
   warning/error state;
+- play optional desktop alert sounds for duplicate or error/unknown SI readouts;
 - inspect competitors in drawn start-time order in a Start List desktop view;
 - assign unmatched readouts to competitors;
 - preview shared finish-ticket text for readouts before desktop printer
@@ -72,7 +73,6 @@ slices:
   variants;
 - full ESC/POS ticket printer transport using the shared finish-ticket
   renderer as the text source;
-- richer readout operator status, including audible error alerts;
 - OCheckList-style DNS/new-card import or equivalent race-day status import;
 - LAN-facing finish-line web display/API hardening for results when mobile data
   is not available.
