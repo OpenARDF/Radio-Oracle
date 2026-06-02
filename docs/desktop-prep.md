@@ -17,6 +17,7 @@ finish table:
 - download one SI5/SI6/SI8/SI9/SIAC card at a time, or run an experimental
   continuous readout loop, from an attached SPORTident station that is already
   configured in READOUT/SI MASTER mode;
+- assign unmatched readouts to competitors;
 - preview shared finish-ticket text for readouts before desktop printer
   transport is available;
 - summarize live-result send readiness, including unsent matched results and
@@ -62,8 +63,7 @@ slices:
 
 - start-list draw/edit workflows with club/category separation and start-list
   export variants;
-- duplicate-card overwrite handling and unmatched-card assignment during
-  continuous SI readout;
+- duplicate-card overwrite handling during continuous SI readout;
 - full ESC/POS ticket printer transport using the shared finish-ticket
   renderer as the text source;
 - richer readout operator status, including audible/visible error state and

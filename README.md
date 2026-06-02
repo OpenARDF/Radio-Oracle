@@ -38,12 +38,13 @@ The desktop beta supports:
   READOUT/SI MASTER station;
 - running an experimental continuous SI5/SI6/SI8/SI9/SIAC card readout loop
   from an attached READOUT/SI MASTER station;
+- assigning unmatched readouts to competitors;
 - previewing finish-ticket text for readouts using the shared ticket renderer;
 - summarizing live-result send readiness and exporting Android-shaped
   live-result JSON payloads;
 - manually sending unsent matched live results to ROBIS using the race API key;
 - sending unsent matched ROBIS live results in the background when enabled in
-  Settings.
+  Settings;
 - tracking started competitors without readouts in an In Forest desktop view.
 
 The desktop beta does not yet replace the Android race-day workflow. Live

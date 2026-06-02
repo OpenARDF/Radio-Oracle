@@ -165,6 +165,8 @@ private val ReadoutTableColumns = listOf(
     FixedTableColumn("Points", 80.dp),
     FixedTableColumn("Runtime", 104.dp),
     FixedTableColumn("Punches", 260.dp),
+    FixedTableColumn("Assign to", 240.dp),
+    FixedTableColumn("", 104.dp),
     FixedTableColumn("", 104.dp),
     FixedTableColumn("", 104.dp)
 )
@@ -949,6 +951,17 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
+            onAssignUnmatchedReadout = { resultId, competitorId ->
+                runCatching {
+                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.assignUnmatchedReadout(currentProject, resultId, competitorId)
+                    }
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText = "Unsaved changes."
+                }.onFailure { error ->
+                    projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+                }
+            },
             onDownloadSportIdentReadout = ::downloadSportIdentReadout,
             onStartContinuousSportIdentReadout = ::startContinuousSportIdentReadout,
             onStopContinuousSportIdentReadout = ::stopContinuousSportIdentReadout,
@@ -1101,6 +1114,7 @@ private fun RadioOManagerDesktopApp(
     onRemoveCompetitor: (String, Boolean) -> Unit = { _, _ -> },
     onRemoveReadout: (String) -> Unit = {},
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit = { _, _ -> },
+    onAssignUnmatchedReadout: (String, String) -> Unit = { _, _ -> },
     onDownloadSportIdentReadout: () -> Unit = {},
     onStartContinuousSportIdentReadout: () -> Unit = {},
     onStopContinuousSportIdentReadout: () -> Unit = {},
@@ -1155,6 +1169,7 @@ private fun RadioOManagerDesktopApp(
                         onRemoveCompetitor = onRemoveCompetitor,
                         onRemoveReadout = onRemoveReadout,
                         onUpdateReadoutStatus = onUpdateReadoutStatus,
+                        onAssignUnmatchedReadout = onAssignUnmatchedReadout,
                         onDownloadSportIdentReadout = onDownloadSportIdentReadout,
                         onStartContinuousSportIdentReadout = onStartContinuousSportIdentReadout,
                         onStopContinuousSportIdentReadout = onStopContinuousSportIdentReadout,
@@ -1258,6 +1273,7 @@ private fun SectionWorkspace(
     onRemoveCompetitor: (String, Boolean) -> Unit,
     onRemoveReadout: (String) -> Unit,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
+    onAssignUnmatchedReadout: (String, String) -> Unit,
     onDownloadSportIdentReadout: () -> Unit,
     onStartContinuousSportIdentReadout: () -> Unit,
     onStopContinuousSportIdentReadout: () -> Unit,
@@ -1339,6 +1355,7 @@ private fun SectionWorkspace(
                 competitors = EventCompetitorDetails.from(projectFile.raceData),
                 onRemoveReadout = onRemoveReadout,
                 onUpdateReadoutStatus = onUpdateReadoutStatus,
+                onAssignUnmatchedReadout = onAssignUnmatchedReadout,
                 onDownloadSportIdentReadout = onDownloadSportIdentReadout,
                 onStartContinuousSportIdentReadout = onStartContinuousSportIdentReadout,
                 onStopContinuousSportIdentReadout = onStopContinuousSportIdentReadout,
@@ -1590,6 +1607,7 @@ private fun ReadoutDetailsPanel(
     competitors: List<EventCompetitorDetails>,
     onRemoveReadout: (String) -> Unit,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
+    onAssignUnmatchedReadout: (String, String) -> Unit,
     onDownloadSportIdentReadout: () -> Unit,
     onStartContinuousSportIdentReadout: () -> Unit,
     onStopContinuousSportIdentReadout: () -> Unit,
@@ -1708,7 +1726,9 @@ private fun ReadoutDetailsPanel(
                     readouts.forEach { readout ->
                         ReadoutDetailRow(
                             readout = readout,
+                            competitors = competitors,
                             onUpdateReadoutStatus = onUpdateReadoutStatus,
+                            onAssignUnmatchedReadout = onAssignUnmatchedReadout,
                             onPreviewFinishTicket = { ticketPreviewText = onPreviewFinishTicket(readout.id) }
                         )
                     }
@@ -1825,6 +1845,8 @@ private fun ManualReadoutAddRow(
         )
         Spacer(modifier = Modifier.width(ReadoutTableColumns[6].width))
         Spacer(modifier = Modifier.width(ReadoutTableColumns[7].width))
+        Spacer(modifier = Modifier.width(ReadoutTableColumns[8].width))
+        Spacer(modifier = Modifier.width(ReadoutTableColumns[9].width))
     }
 }
 
@@ -1832,10 +1854,13 @@ private fun ManualReadoutAddRow(
 @Composable
 private fun ReadoutDetailRow(
     readout: EventReadoutDetails,
+    competitors: List<EventCompetitorDetails>,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
+    onAssignUnmatchedReadout: (String, String) -> Unit,
     onPreviewFinishTicket: () -> Unit
 ) {
     var selectedStatus by remember(readout.id, readout.resultStatus) { mutableStateOf(readout.resultStatus) }
+    var selectedCompetitorId by remember(readout.id) { mutableStateOf<String?>(null) }
 
     Row(
         modifier = Modifier.width(fixedTableWidth(ReadoutTableColumns)),
@@ -1852,16 +1877,38 @@ private fun ReadoutDetailRow(
         FixedTableText(readout.pointsText, ReadoutTableColumns[3].width)
         FixedTableText(readout.runTimeText, ReadoutTableColumns[4].width)
         FixedTableText(readout.punchCodesText, ReadoutTableColumns[5].width)
+        if (readout.matched) {
+            FixedTableText("", ReadoutTableColumns[6].width)
+            Spacer(modifier = Modifier.width(ReadoutTableColumns[7].width))
+        } else {
+            CompetitorPicker(
+                selectedCompetitorId = selectedCompetitorId,
+                competitors = competitors,
+                onCompetitorSelected = { selectedCompetitorId = it },
+                modifier = Modifier.width(ReadoutTableColumns[6].width)
+            )
+            Button(
+                onClick = {
+                    selectedCompetitorId?.let { competitorId ->
+                        onAssignUnmatchedReadout(readout.id, competitorId)
+                    }
+                },
+                modifier = Modifier.width(ReadoutTableColumns[7].width),
+                enabled = selectedCompetitorId != null
+            ) {
+                ButtonLabel("Assign")
+            }
+        }
         Button(
             onClick = { onUpdateReadoutStatus(readout.id, selectedStatus) },
-            modifier = Modifier.width(ReadoutTableColumns[6].width),
+            modifier = Modifier.width(ReadoutTableColumns[8].width),
             enabled = selectedStatus != readout.resultStatus || readout.automaticStatus
         ) {
             ButtonLabel("Status")
         }
         Button(
             onClick = onPreviewFinishTicket,
-            modifier = Modifier.width(ReadoutTableColumns[7].width)
+            modifier = Modifier.width(ReadoutTableColumns[9].width)
         ) {
             ButtonLabel("Ticket")
         }

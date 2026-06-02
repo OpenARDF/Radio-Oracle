@@ -744,6 +744,39 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun assignsUnmatchedReadoutToCompetitor() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner")
+            ),
+            unmatchedReadouts = listOf(readout("result-1", null, 1111, sent = true))
+        )
+
+        val updated = EventProjectEditor.assignUnmatchedReadout(original, "result-1", "comp-1")
+        val readout = updated.raceData.competitorData.single().readoutData!!
+
+        assertEquals(emptyList(), updated.raceData.unmatchedReadoutData)
+        assertEquals("result-1", readout.result.id)
+        assertEquals("comp-1", readout.result.competitorId)
+        assertEquals(true, readout.result.modified)
+        assertEquals(false, readout.result.sent)
+    }
+
+    @Test
+    fun rejectsUnmatchedReadoutAssignmentToCompetitorWithReadout() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", readoutData = readout("existing", "comp-1", 1111))
+            ),
+            unmatchedReadouts = listOf(readout("result-1", null, 2222))
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.assignUnmatchedReadout(original, "result-1", "comp-1")
+        }
+    }
+
+    @Test
     fun updatesMatchedReadoutManualStatus() {
         val original = projectFile(
             competitors = listOf(
@@ -1241,7 +1274,12 @@ class EventProjectEditorTest {
             siRent = siRent
         )
 
-    private fun readout(id: String, competitorId: String?, siNumber: Int): EventReadoutData =
+    private fun readout(
+        id: String,
+        competitorId: String?,
+        siNumber: Int,
+        sent: Boolean = false
+    ): EventReadoutData =
         EventReadoutData(
             result = EventResult(
                 id = id,
@@ -1258,7 +1296,7 @@ class EventProjectEditorTest {
                 points = 0,
                 runTimeSeconds = 0,
                 modified = false,
-                sent = false
+                sent = sent
             ),
             punches = emptyList()
         )

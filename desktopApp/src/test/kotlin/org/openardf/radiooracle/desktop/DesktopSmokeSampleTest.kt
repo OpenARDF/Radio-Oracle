@@ -243,6 +243,34 @@ class DesktopSmokeSampleTest {
     }
 
     @Test
+    fun repositorySmokeSampleUnmatchedReadoutCanBeAssignedAndSaved() {
+        val source = Path.of("..", "samples", "desktop-smoke.rom.json")
+        val target = Files.createTempDirectory("rom-desktop-assign-readout-smoke").resolve("edited.rom.json")
+
+        val original = DesktopProjectFiles.read(source)
+        val unmatchedReadoutId = original.raceData.unmatchedReadoutData.single().result.id
+        val competitorWithoutReadout = original.raceData.competitorData.first { it.readoutData == null }
+            .competitorCategory.competitor
+        val edited = EventProjectEditor.assignUnmatchedReadout(
+            original,
+            unmatchedReadoutId,
+            competitorWithoutReadout.id
+        )
+
+        DesktopProjectFiles.write(target, edited)
+        val readBack = DesktopProjectFiles.read(target)
+        val assigned = readBack.raceData.competitorData
+            .first { it.competitorCategory.competitor.id == competitorWithoutReadout.id }
+            .readoutData!!
+
+        assertTrue(readBack.raceData.unmatchedReadoutData.isEmpty())
+        assertEquals(unmatchedReadoutId, assigned.result.id)
+        assertEquals(competitorWithoutReadout.id, assigned.result.competitorId)
+        assertEquals(true, assigned.result.modified)
+        assertEquals(false, assigned.result.sent)
+    }
+
+    @Test
     fun repositorySmokeSampleReadoutStatusCanBeEditedAndSaved() {
         val source = Path.of("..", "samples", "desktop-smoke.rom.json")
         val target = Files.createTempDirectory("rom-desktop-status-smoke").resolve("edited.rom.json")

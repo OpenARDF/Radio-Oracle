@@ -858,6 +858,48 @@ object EventProjectEditor {
         )
     }
 
+    /** Assigns an unmatched readout to a competitor who does not already have a readout. */
+    fun assignUnmatchedReadout(
+        projectFile: EventProjectFile,
+        resultId: String,
+        competitorId: String
+    ): EventProjectFile {
+        val trimmedCompetitorId = competitorId.trim()
+        require(trimmedCompetitorId.isNotEmpty()) {
+            "Competitor was not selected."
+        }
+        val readoutData = projectFile.raceData.unmatchedReadoutData.firstOrNull { it.result.id == resultId }
+            ?: throw IllegalArgumentException("Unmatched readout was not found: $resultId")
+        val competitorIndex = projectFile.raceData.competitorData.indexOfFirst {
+            it.competitorCategory.competitor.id == trimmedCompetitorId
+        }
+        require(competitorIndex >= 0) {
+            "Competitor was not found: $trimmedCompetitorId"
+        }
+        require(projectFile.raceData.competitorData[competitorIndex].readoutData == null) {
+            "Competitor already has a readout."
+        }
+
+        val assignedReadoutData = readoutData.copy(
+            result = readoutData.result.copy(
+                competitorId = trimmedCompetitorId,
+                modified = true,
+                sent = false
+            )
+        )
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                competitorData = projectFile.raceData.competitorData.mapIndexed { index, data ->
+                    if (index == competitorIndex) data.copy(readoutData = assignedReadoutData) else data
+                },
+                unmatchedReadoutData = projectFile.raceData.unmatchedReadoutData.filterNot {
+                    it.result.id == resultId
+                }
+            )
+        )
+    }
+
     /**
      * Returns a copy of the project file with one readout set to a manual status.
      *

@@ -9,6 +9,7 @@ data class EventReadoutDetails(
     val id: String,
     val siNumberText: String,
     val competitorName: String,
+    val matched: Boolean,
     val resultStatus: ResultStatus,
     val automaticStatus: Boolean,
     val statusLabel: String,
@@ -23,21 +24,27 @@ data class EventReadoutDetails(
                 val readoutData = competitorData.readoutData ?: return@mapNotNull null
                 fromReadout(
                     readoutData = readoutData,
-                    competitorName = competitorData.competitorCategory.competitor.fullName()
+                    competitorName = competitorData.competitorCategory.competitor.fullName(),
+                    matched = true
                 )
             }
             val unmatched = raceData.unmatchedReadoutData.map { readoutData ->
-                fromReadout(readoutData = readoutData, competitorName = "")
+                fromReadout(readoutData = readoutData, competitorName = "", matched = false)
             }
             return matched + unmatched
         }
 
-        private fun fromReadout(readoutData: EventReadoutData, competitorName: String): EventReadoutDetails {
+        private fun fromReadout(
+            readoutData: EventReadoutData,
+            competitorName: String,
+            matched: Boolean
+        ): EventReadoutDetails {
             val result = readoutData.result
             return EventReadoutDetails(
                 id = result.id,
                 siNumberText = result.siNumber?.toString() ?: "",
                 competitorName = competitorName,
+                matched = matched,
                 resultStatus = result.resultStatus,
                 automaticStatus = result.automaticStatus,
                 statusLabel = result.resultStatus.toDisplayLabel(),
