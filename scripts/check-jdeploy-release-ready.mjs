@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { platform, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -27,6 +27,30 @@ function gradleCommand() {
   return platform() === "win32" ? resolve("gradlew.bat") : resolve("gradlew");
 }
 
+function javaEnv() {
+  let javaHome = process.env.JAVA_HOME;
+  if (!javaHome && platform() === "darwin" && existsSync("/usr/libexec/java_home")) {
+    javaHome = execFileSync("/usr/libexec/java_home", ["-v", "17"], { encoding: "utf8" }).trim();
+  }
+  if (!javaHome) {
+    fail("Set JAVA_HOME to a full JDK 17 installation.");
+  }
+  return {
+    ...process.env,
+    PATH: `${resolve(javaHome, "bin")}${platform() === "win32" ? ";" : ":"}${process.env.PATH || ""}`
+  };
+}
+
+function runGradle(args) {
+  const gradle = gradleCommand();
+  const env = javaEnv();
+  if (platform() === "win32") {
+    execFileSync("cmd.exe", ["/d", "/c", "call", gradle, ...args], { stdio: "inherit", env });
+    return;
+  }
+  execFileSync(gradle, args, { stdio: "inherit", env });
+}
+
 requireEqual("package name", packageJson.name, expectedPackageName);
 requireEqual("package-lock name", packageLock.name, expectedPackageName);
 requireEqual("package-lock version", packageLock.version, packageJson.version);
@@ -43,12 +67,13 @@ if (!desktopBuildGradle.includes("packageVersion = rootProject.ext.radioOracleVe
   fail("desktop native packageVersion must use rootProject.ext.radioOracleVersion");
 }
 
-execFileSync(gradleCommand(), [":desktopApp:verifyDesktopJdeployBundle"], { stdio: "inherit" });
+runGradle([":desktopApp:verifyDesktopJdeployBundle"]);
 
 const tempDir = mkdtempSync(join(tmpdir(), "radio-oracle-manifest-"));
 try {
   execFileSync("jar", ["xf", `${process.cwd()}/desktopApp/build/jdeploy/Radio-Oracle-jdeploy.jar`, "META-INF/MANIFEST.MF"], {
     cwd: tempDir,
+    env: javaEnv(),
     stdio: "ignore"
   });
   const manifest = readFileSync(join(tempDir, "META-INF/MANIFEST.MF"), "utf8");

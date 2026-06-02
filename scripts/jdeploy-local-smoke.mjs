@@ -15,6 +15,10 @@ function fail(message) {
 }
 
 function run(command, args, options = {}) {
+  if (platform() === "win32" && command.endsWith(".cmd")) {
+    execFileSync("cmd.exe", ["/d", "/c", "call", command, ...args], { stdio: "inherit", ...options });
+    return;
+  }
   execFileSync(command, args, { stdio: "inherit", ...options });
 }
 
