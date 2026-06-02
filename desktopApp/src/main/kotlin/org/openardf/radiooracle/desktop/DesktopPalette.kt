@@ -46,6 +46,7 @@ enum class DesktopSection(val label: String) {
     Races("Races"),
     Categories("Categories"),
     Competitors("Competitors"),
+    StartList("Start List"),
     Aliases("Aliases"),
     Readouts("Readouts"),
     InForest("In Forest"),

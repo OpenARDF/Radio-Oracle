@@ -67,6 +67,8 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectSummary
 import org.openardf.radiooracle.shared.event.EventReadoutDetails
 import org.openardf.radiooracle.shared.event.EventResultDetails
+import org.openardf.radiooracle.shared.event.EventStartListDetails
+import org.openardf.radiooracle.shared.event.EventStartListRow
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.domain.RaceBand
@@ -169,6 +171,14 @@ private val ReadoutTableColumns = listOf(
     FixedTableColumn("", 104.dp),
     FixedTableColumn("", 104.dp),
     FixedTableColumn("", 104.dp)
+)
+
+private val StartListTableColumns = listOf(
+    FixedTableColumn("Start", 96.dp),
+    FixedTableColumn("No.", 72.dp),
+    FixedTableColumn("Competitor", 260.dp),
+    FixedTableColumn("Category", 120.dp),
+    FixedTableColumn("SI no.", 112.dp)
 )
 
 private val InForestTableColumns = listOf(
@@ -1349,6 +1359,9 @@ private fun SectionWorkspace(
                 onRemoveAlias = onRemoveAlias
             )
         }
+        if (section == DesktopSection.StartList && projectFile != null) {
+            StartListDetailsPanel(EventStartListDetails.from(projectFile.raceData))
+        }
         if (section == DesktopSection.Readouts && projectFile != null) {
             ReadoutDetailsPanel(
                 readouts = EventReadoutDetails.from(projectFile.raceData),
@@ -1534,6 +1547,56 @@ private fun ResultDetailRow(
         ) {
             ButtonLabel("Status")
         }
+    }
+}
+
+/** Shows competitors sorted by drawn start time for race-day start-list inspection. */
+@Composable
+private fun StartListDetailsPanel(details: EventStartListDetails) {
+    val horizontalScrollState = rememberScrollState()
+    val tableWidth = fixedTableWidth(StartListTableColumns)
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        DetailHeaderRow(listOf("Scheduled", "No start time"))
+        DetailGridRow(listOf(details.scheduledCount.toString(), details.unscheduledCount.toString()))
+        if (details.rows.isEmpty()) {
+            Text(
+                text = "No competitors are loaded.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        } else {
+            Box(modifier = Modifier.fillMaxWidth().horizontalScroll(horizontalScrollState)) {
+                Column(
+                    modifier = Modifier.width(tableWidth),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FixedDetailHeaderRow(StartListTableColumns)
+                    details.rows.forEach { row ->
+                        StartListDetailRow(row)
+                    }
+                }
+            }
+            HorizontalScrollbar(
+                adapter = rememberScrollbarAdapter(horizontalScrollState),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun StartListDetailRow(row: EventStartListRow) {
+    Row(
+        modifier = Modifier.width(fixedTableWidth(StartListTableColumns)),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FixedTableText(row.startTimeText, StartListTableColumns[0].width)
+        FixedTableText(row.startNumberText, StartListTableColumns[1].width)
+        FixedTableText(row.competitorName, StartListTableColumns[2].width)
+        FixedTableText(row.categoryName, StartListTableColumns[3].width)
+        FixedTableText(row.siNumberText, StartListTableColumns[4].width)
     }
 }
 
@@ -3304,6 +3367,7 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
         DesktopSection.Races -> summary?.raceName ?: "No races loaded."
         DesktopSection.Categories -> "${summary?.categoryCount ?: 0} categories loaded."
         DesktopSection.Competitors -> "${summary?.competitorCount ?: 0} competitors loaded."
+        DesktopSection.StartList -> "Competitors sorted by drawn start time."
         DesktopSection.Aliases -> "${projectFile?.raceData?.aliases?.size ?: 0} aliases loaded."
         DesktopSection.Readouts -> "${summary?.readoutCount ?: 0} SI-card readouts loaded."
         DesktopSection.InForest -> "Started competitors without readouts."

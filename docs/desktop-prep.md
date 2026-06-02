@@ -17,6 +17,7 @@ finish table:
 - download one SI5/SI6/SI8/SI9/SIAC card at a time, or run an experimental
   continuous readout loop, from an attached SPORTident station that is already
   configured in READOUT/SI MASTER mode;
+- inspect competitors in drawn start-time order in a Start List desktop view;
 - assign unmatched readouts to competitors;
 - preview shared finish-ticket text for readouts before desktop printer
   transport is available;
@@ -61,8 +62,8 @@ Android-compatible event model.
 ARDFEvent-derived desktop parity gaps to track after the current live-result
 slices:
 
-- start-list draw/edit workflows with club/category separation and start-list
-  export variants;
+- start-list draw workflows with club/category separation and start-list export
+  variants;
 - duplicate-card overwrite handling during continuous SI readout;
 - full ESC/POS ticket printer transport using the shared finish-ticket
   renderer as the text source;
