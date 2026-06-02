@@ -1209,7 +1209,7 @@ class EventProjectEditorTest {
     }
 
     @Test
-    fun createsNewDuplicateDownloadedSportIdentReadoutAsUnmatchedWithoutSiNumber() {
+    fun createsNewDuplicateDownloadedSportIdentReadoutAsUnmatchedWithSiNumber() {
         val original = projectFile(
             competitors = listOf(
                 competitorData(
@@ -1236,7 +1236,7 @@ class EventProjectEditorTest {
         val duplicate = updated.raceData.unmatchedReadoutData.single()
         assertEquals("new-duplicate", duplicate.result.id)
         assertEquals(null, duplicate.result.competitorId)
-        assertEquals(null, duplicate.result.siNumber)
+        assertEquals(2005010, duplicate.result.siNumber)
     }
 
     @Test

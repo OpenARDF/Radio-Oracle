@@ -1393,7 +1393,7 @@ object EventProjectEditor {
                 id = resultId,
                 raceId = workingProjectFile.raceData.race.id,
                 competitorId = matchedCompetitor?.id,
-                siNumber = if (createNewReadout) null else readout.siNumber,
+                siNumber = readout.siNumber,
                 cardType = cardType,
                 checkTimeSeconds = readout.checkTime?.getSeconds(),
                 startTimeSeconds = startSeconds,
