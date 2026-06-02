@@ -51,6 +51,36 @@ class DesktopProjectFilePathsTest {
     }
 
     @Test
+    fun keepsExistingAndroidRaceBackupJsonExtension() {
+        val path = Path.of("race.ardfjs")
+
+        assertEquals(path, DesktopProjectFilePaths.withAndroidRaceBackupJsonExtension(path))
+    }
+
+    @Test
+    fun appendsAndroidRaceBackupJsonExtensionWhenMissing() {
+        assertEquals(
+            Path.of("race.ardfjs"),
+            DesktopProjectFilePaths.withAndroidRaceBackupJsonExtension(Path.of("race"))
+        )
+    }
+
+    @Test
+    fun keepsExistingFinalResultsJsonExtension() {
+        val path = Path.of("event.final-results.json")
+
+        assertEquals(path, DesktopProjectFilePaths.withFinalResultsJsonExtension(path))
+    }
+
+    @Test
+    fun appendsFinalResultsJsonExtensionWhenMissing() {
+        assertEquals(
+            Path.of("event.final-results.json"),
+            DesktopProjectFilePaths.withFinalResultsJsonExtension(Path.of("event"))
+        )
+    }
+
+    @Test
     fun keepsExistingLiveResultsJsonExtension() {
         val path = Path.of("event.live-results.json")
 
@@ -77,6 +107,36 @@ class DesktopProjectFilePathsTest {
         assertEquals(
             Path.of("event.iof.xml"),
             DesktopProjectFilePaths.withIofXmlExtension(Path.of("event"))
+        )
+    }
+
+    @Test
+    fun keepsExistingHtmlExtension() {
+        val path = Path.of("results.html")
+
+        assertEquals(path, DesktopProjectFilePaths.withHtmlExtension(path))
+    }
+
+    @Test
+    fun appendsHtmlExtensionWhenMissing() {
+        assertEquals(
+            Path.of("results.html"),
+            DesktopProjectFilePaths.withHtmlExtension(Path.of("results"))
+        )
+    }
+
+    @Test
+    fun keepsExistingTxtExtension() {
+        val path = Path.of("results.txt")
+
+        assertEquals(path, DesktopProjectFilePaths.withTxtExtension(path))
+    }
+
+    @Test
+    fun appendsTxtExtensionWhenMissing() {
+        assertEquals(
+            Path.of("results.txt"),
+            DesktopProjectFilePaths.withTxtExtension(Path.of("results"))
         )
     }
 }
