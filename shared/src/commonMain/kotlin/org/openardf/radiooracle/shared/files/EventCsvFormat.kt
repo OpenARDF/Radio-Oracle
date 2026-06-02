@@ -70,4 +70,21 @@ object EventCsvFormat {
         const val START_TIME = 1
         const val SI_NUMBER = 2
     }
+
+    object ArdfEventRegistration {
+        const val COLUMN_COUNT = 5
+        const val FIRST_NAME = 0
+        const val LAST_NAME = 1
+        const val INDEX = 2
+        const val SI_NUMBER = 3
+        const val CATEGORY_NAME = 4
+
+        private val CZECH_HEADER = listOf("jméno", "příjmení", "registrace", "si", "kategorie")
+        private val ASCII_HEADER = listOf("jmeno", "prijmeni", "registrace", "si", "kategorie")
+
+        fun isHeader(fields: List<String>): Boolean {
+            val normalized = fields.map { it.trim().lowercase() }
+            return normalized == CZECH_HEADER || normalized == ASCII_HEADER
+        }
+    }
 }

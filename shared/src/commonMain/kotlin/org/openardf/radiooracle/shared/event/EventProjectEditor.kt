@@ -19,6 +19,18 @@ import org.openardf.radiooracle.shared.sportident.SportIdentCardReadout
 import org.openardf.radiooracle.shared.sportident.SportIdentCodes
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
+enum class CompetitorCsvImportDuplicatePolicy {
+    REJECT_DUPLICATES,
+    UPDATE_EXISTING_BY_INDEX
+}
+
+data class CompetitorCsvImportOutcome(
+    val projectFile: EventProjectFile,
+    val importedCount: Int,
+    val updatedCount: Int,
+    val warnings: List<String>
+)
+
 /** Shared event-project editing helpers used by desktop and future non-Android flows. */
 object EventProjectEditor {
     /** Returns a copy of the project file with a validated race name. */
@@ -702,13 +714,33 @@ object EventProjectEditor {
         rows: List<CompetitorCsvImportRow>,
         competitorIdFactory: () -> String,
         categoryIdFactory: () -> String
-    ): EventProjectFile {
+    ): EventProjectFile =
+        importCompetitorRowsWithOutcome(
+            projectFile = projectFile,
+            rows = rows,
+            competitorIdFactory = competitorIdFactory,
+            categoryIdFactory = categoryIdFactory
+        ).projectFile
+
+    fun importCompetitorRowsWithOutcome(
+        projectFile: EventProjectFile,
+        rows: List<CompetitorCsvImportRow>,
+        competitorIdFactory: () -> String,
+        categoryIdFactory: () -> String,
+        duplicatePolicy: CompetitorCsvImportDuplicatePolicy = CompetitorCsvImportDuplicatePolicy.REJECT_DUPLICATES
+    ): CompetitorCsvImportOutcome {
         var categories = projectFile.raceData.categories
         val competitors = projectFile.raceData.competitorData.toMutableList()
+        val warnings = mutableListOf<String>()
         var nextCategoryOrder = (categories.maxOfOrNull { it.category.order } ?: -1) + 1
         var nextStartNumber = (competitors.maxOfOrNull { it.competitorCategory.competitor.startNumber } ?: 0) + 1
+        var importedCount = 0
+        var updatedCount = 0
 
-        rows.forEach { row ->
+        rows.forEachIndexed { rowIndex, row ->
+            if (row.categoryName.isBlank()) {
+                warnings += "Line ${rowIndex + 1}: competitor ${row.lastName} ${row.firstName} has no category."
+            }
             val category = row.categoryName.takeIf { it.isNotEmpty() }?.let { categoryName ->
                 categories.firstOrNull { it.category.name == categoryName }?.category
                     ?: EventCategory(
@@ -726,6 +758,7 @@ object EventProjectEditor {
                         timeLimitSeconds = null,
                         controlPointsString = ""
                     ).also { newCategory ->
+                        warnings += "Line ${rowIndex + 1}: created placeholder category '${newCategory.name}'."
                         categories += EventCategoryData(
                             category = newCategory,
                             controlPoints = emptyList(),
@@ -734,17 +767,66 @@ object EventProjectEditor {
                     }
             }
 
-            val startNumber = row.startNumber ?: nextStartNumber++
+            val existingPosition = if (duplicatePolicy == CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_INDEX &&
+                row.index.isNotBlank()
+            ) {
+                competitors.indexOfFirst { it.competitorCategory.competitor.index == row.index }
+            } else {
+                -1
+            }
+            val startNumber = row.startNumber ?: if (existingPosition >= 0) {
+                competitors[existingPosition].competitorCategory.competitor.startNumber
+            } else {
+                nextStartNumber++
+            }
             if (startNumber >= nextStartNumber) {
                 nextStartNumber = startNumber + 1
             }
-            require(competitors.none { it.competitorCategory.competitor.startNumber == startNumber }) {
+            require(competitors.noneIndexed { index, data ->
+                index != existingPosition && data.competitorCategory.competitor.startNumber == startNumber
+            }) {
                 "Start number must be unique."
             }
             require(
-                row.siNumber == null || competitors.none { it.competitorCategory.competitor.siNumber == row.siNumber }
+                row.siNumber == null || competitors.noneIndexed { index, data ->
+                    index != existingPosition && data.competitorCategory.competitor.siNumber == row.siNumber
+                }
             ) {
                 "SI number must be unique."
+            }
+            require(
+                row.index.isBlank() || competitors.noneIndexed { index, data ->
+                    index != existingPosition && data.competitorCategory.competitor.index == row.index
+                }
+            ) {
+                "Registration index must be unique."
+            }
+
+            if (existingPosition >= 0) {
+                val existingData = competitors[existingPosition]
+                val existingCompetitor = existingData.competitorCategory.competitor
+                val updatedCompetitor = existingCompetitor.copy(
+                    categoryId = category?.id,
+                    firstName = row.firstName,
+                    lastName = row.lastName,
+                    club = row.club,
+                    index = row.index,
+                    isMan = row.isMan,
+                    birthYear = row.birthYear,
+                    siNumber = row.siNumber ?: existingCompetitor.siNumber,
+                    siRent = row.siRent,
+                    startNumber = startNumber,
+                    drawnStartTimeSeconds = row.startTimeText?.let(DurationFormatter::minuteStringToSeconds)
+                        ?: existingCompetitor.drawnStartTimeSeconds
+                )
+                competitors[existingPosition] = existingData.copy(
+                    competitorCategory = existingData.competitorCategory.copy(
+                        competitor = updatedCompetitor,
+                        category = category
+                    )
+                )
+                updatedCount++
+                return@forEachIndexed
             }
 
             val competitor = EventCompetitor(
@@ -769,13 +851,28 @@ object EventProjectEditor {
                 ),
                 readoutData = null
             )
+            importedCount++
         }
 
-        return projectFile.copy(
-            raceData = projectFile.raceData.copy(
-                categories = categories,
-                competitorData = competitors
-            )
+        val raceData = projectFile.raceData.copy(
+            categories = categories,
+            competitorData = competitors
+        )
+        return CompetitorCsvImportOutcome(
+            projectFile = projectFile.copy(
+                raceData = raceData.copy(
+                    categories = raceData.categories.map { categoryData ->
+                        categoryData.copy(
+                            competitors = competitors
+                                .map { it.competitorCategory.competitor }
+                                .filter { it.categoryId == categoryData.category.id }
+                        )
+                    }
+                )
+            ),
+            importedCount = importedCount,
+            updatedCount = updatedCount,
+            warnings = warnings
         )
     }
 

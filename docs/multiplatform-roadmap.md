@@ -69,16 +69,20 @@ The first desktop release should be a beta event-admin app. It should support:
 - downloading SI5/SI6/SI8/SI9/SIAC cards from an attached SPORTident station
   that is already configured in READOUT/SI MASTER mode, first as a one-card
   action and then through the experimental continuous-readout loop;
-- previewing finish-ticket text and sending unsent matched ROBIS live results
-  through the shared result payload path;
+- previewing finish-ticket text, printing the previewed ticket through desktop
+  system printing, and sending unsent matched ROBIS live results through the
+  shared result payload path;
 - importing and exporting the supported event/result formats once the shared
   import/export layer is ready.
 
 The desktop beta should explicitly exclude:
 
 - hardened Android-style SportIdent race-day reader replacement;
-- ticket printing;
+- desktop Bluetooth printer transport;
 - additional live-result providers beyond the first ROBIS path;
+- SPORTident station write/reprogramming actions;
+- unverified OCheckList/new-card imports;
+- LAN-exposed local web displays;
 - replacing Android for normal race-day readout operations.
 
 ## ARDFEvent reference benchmark
@@ -305,6 +309,8 @@ Reasons:
 The desktop beta should continue to advance conservative event-admin and
 loopback-display slices while these boundaries remain in force:
 
+- macOS hardware validation and Windows packaged-app smoke validation are beta
+  release blockers; Linux packaging is best-effort for this beta.
 - Local web display stays bound to loopback until LAN exposure is hardened and
   explicitly selected.
 - Android Bluetooth printer transport is pre-beta hardware validation work for

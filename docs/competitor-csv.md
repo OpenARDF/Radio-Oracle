@@ -35,10 +35,11 @@ Fields containing semicolons, quotes, or line breaks are quoted with double quot
 ## Compatibility Profiles
 
 Radio-Oracle's canonical competitor CSV is the round-trip format for preserving
-Radio-Oracle competitor fields.
+Radio-Oracle competitor fields. Duplicate start numbers, SI numbers, and
+registration indexes are rejected by default.
 
-Future import work should also support an ARDFEvent-compatible registration CSV
-profile for preregistration files with this semicolon-delimited header:
+Radio-Oracle also accepts an ARDFEvent-compatible registration CSV profile for
+preregistration files with this semicolon-delimited header:
 
 ```text
 Jmeno;Prijmeni;Registrace;SI;Kategorie
@@ -60,3 +61,10 @@ That profile should map:
 
 ARDFEvent-compatible import is intentionally an alternate import profile, not a
 replacement for the canonical Radio-Oracle CSV export format.
+
+On desktop, ARDFEvent-compatible imports use preregistration update behavior:
+when a nonblank `Registrace` value already matches an existing competitor index,
+the existing competitor is updated instead of creating a duplicate. If the
+incoming SI number belongs to a different competitor, the import is rejected.
+Missing categories create placeholder categories and are reported as warnings;
+empty categories leave competitors category-less and are also reported.

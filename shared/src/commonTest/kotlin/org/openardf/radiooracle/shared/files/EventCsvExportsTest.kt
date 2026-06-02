@@ -103,6 +103,19 @@ class EventCsvExportsTest {
     }
 
     @Test
+    fun exportsRobisStartListRows() {
+        assertEquals(
+            """
+            "";Gamma;Carol;M21;"";00:12:00;OK003;"";"CZE";333333
+            "";NoTime;Dave;M21;"";;OK004;"";"CZE";444444
+            "";Beta;Bob;W21;"";00:11:00;OK002;"";"CZE";222222
+            "";Alpha;Alice;W21;"";00:13:00;OK001;"";"CZE";111111
+            """.trimIndent() + "\n",
+            EventCsvExports.robisStartList(startVariantRaceData())
+        )
+    }
+
+    @Test
     fun exportsPortableReadoutRows() {
         assertEquals(
             "123456;00:01:40;00:10:00;00:20:00;2;31;00:12:00;32;00:15:00\n",
@@ -115,6 +128,17 @@ class EventCsvExportsTest {
         assertEquals(
             "1;RUNNER Test;OK;2;00:10:00\n",
             EventCsvExports.results(raceData())
+        )
+    }
+
+    @Test
+    fun exportsArdfEventStyleResultRows() {
+        assertEquals(
+            """
+            Kategorie;Pořadí;Jméno;Index;Čas;TX;Status;Kontroly
+            M21;1;RUNNER Test;OK001;00:10:00;2;OK;31 32
+            """.trimIndent() + "\n",
+            EventCsvExports.ardfEventResults(raceData())
         )
     }
 

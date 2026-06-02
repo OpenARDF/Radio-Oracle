@@ -64,6 +64,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitorDetails
 import org.openardf.radiooracle.shared.event.EventInForestDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutSeverity
+import org.openardf.radiooracle.shared.event.CompetitorCsvImportDuplicatePolicy
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventRaceDetails
@@ -77,6 +78,7 @@ import org.openardf.radiooracle.shared.event.EventStartListDetails
 import org.openardf.radiooracle.shared.event.EventStartListRow
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.files.EventCsvImports
+import org.openardf.radiooracle.shared.files.CompetitorCsvImportProfile
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -686,17 +688,40 @@ fun main(args: Array<String>) = application {
         fun importCompetitorsCsv() {
             DesktopFileDialogs.chooseImportCsv("Import Competitors CSV")?.let { path ->
                 runCatching {
-                    val result = EventCsvImports.parseAndroidCompetitorRows(Files.readString(path))
+                    val csvText = Files.readString(path)
+                    val profile = EventCsvImports.detectCompetitorProfile(csvText)
+                    val result = EventCsvImports.parseAndroidCompetitorRows(csvText)
+                    var importWarnings = emptyList<String>()
+                    var importedRows = 0
+                    var updatedRows = 0
                     projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.importCompetitorRows(
+                        val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
                             projectFile = currentProject,
                             rows = result.rows,
                             competitorIdFactory = { UUID.randomUUID().toString() },
-                            categoryIdFactory = { UUID.randomUUID().toString() }
+                            categoryIdFactory = { UUID.randomUUID().toString() },
+                            duplicatePolicy = if (profile == CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION) {
+                                CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_INDEX
+                            } else {
+                                CompetitorCsvImportDuplicatePolicy.REJECT_DUPLICATES
+                            }
                         )
+                        importWarnings = outcome.warnings
+                        importedRows = outcome.importedCount
+                        updatedRows = outcome.updatedCount
+                        outcome.projectFile
                     }
                     syncProjectState()
-                    projectStatusText = importStatusText("Imported", result.rows.size, result.invalidLines.size, path.fileName.toString())
+                    projectStatusText = if (profile == CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION) {
+                        competitorImportStatusText(
+                            importedRows = importedRows,
+                            updatedRows = updatedRows,
+                            invalidRows = result.invalidLines.size,
+                            fileName = path.fileName.toString()
+                        )
+                    } else {
+                        importStatusText("Imported", importedRows, result.invalidLines.size, path.fileName.toString())
+                    } + warningStatusSuffix(importWarnings)
                 }.onFailure { error ->
                     projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
                 }
@@ -870,11 +895,17 @@ fun main(args: Array<String>) = application {
                 Item("Export Starts by Minute CSV...", enabled = projectFile != null, onClick = {
                     exportCsv("Export Starts by Minute CSV", DesktopProjectFiles::exportCompetitorStartsByMinuteCsv)
                 })
+                Item("Export ROBIS Start List CSV...", enabled = projectFile != null, onClick = {
+                    exportCsv("Export ROBIS Start List CSV", DesktopProjectFiles::exportRobisStartListCsv)
+                })
                 Item("Export Readouts CSV...", enabled = projectFile != null, onClick = {
                     exportCsv("Export Readouts CSV", DesktopProjectFiles::exportReadoutsCsv)
                 })
                 Item("Export Results CSV...", enabled = projectFile != null, onClick = {
                     exportCsv("Export Results CSV", DesktopProjectFiles::exportResultsCsv)
+                })
+                Item("Export ARDFEvent Results CSV...", enabled = projectFile != null, onClick = {
+                    exportCsv("Export ARDFEvent Results CSV", DesktopProjectFiles::exportArdfEventResultsCsv)
                 })
                 Item("Export Results TXT...", enabled = projectFile != null, onClick = {
                     exportResultsText()
@@ -3749,6 +3780,23 @@ private fun importStatusText(action: String, importedRows: Int, invalidRows: Int
         "$action $importedRows rows from $fileName."
     } else {
         "$action $importedRows rows from $fileName; skipped $invalidRows invalid rows."
+    }
+
+private fun competitorImportStatusText(importedRows: Int, updatedRows: Int, invalidRows: Int, fileName: String): String {
+    val summary = "Imported $importedRows and updated $updatedRows ARDFEvent competitor rows from $fileName."
+    return if (invalidRows == 0) {
+        summary
+    } else {
+        "$summary Skipped $invalidRows invalid rows."
+    }
+}
+
+private fun warningStatusSuffix(warnings: List<String>): String =
+    if (warnings.isEmpty()) {
+        ""
+    } else {
+        " Warnings: " + warnings.take(3).joinToString(" ") +
+                if (warnings.size > 3) " +${warnings.size - 3} more." else ""
     }
 
 private fun detectDesktopSiReaderState(): DesktopSiReaderUiState {

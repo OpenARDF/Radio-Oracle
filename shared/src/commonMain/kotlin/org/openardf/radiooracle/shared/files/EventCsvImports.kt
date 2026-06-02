@@ -29,6 +29,11 @@ data class CompetitorCsvImportRow(
     val siRent: Boolean
 )
 
+enum class CompetitorCsvImportProfile {
+    CANONICAL,
+    ARDF_EVENT_REGISTRATION
+}
+
 data class CompetitorStartCsvImportRow(
     val startNumber: Int,
     val startTimeText: String,
@@ -48,7 +53,7 @@ data class CategoryCsvImportRow(
     val controlPointsText: String
 )
 
-/** Shared parsers for CSV import formats currently accepted by the Android app. */
+/** Shared parsers for CSV import formats currently accepted by Android and desktop. */
 object EventCsvImports {
     fun parseAndroidCategoryRows(csvText: String): CsvImportResult<CategoryCsvImportRow> {
         val rows = mutableListOf<CategoryCsvImportRow>()
@@ -68,6 +73,10 @@ object EventCsvImports {
     }
 
     fun parseAndroidCompetitorRows(csvText: String): CsvImportResult<CompetitorCsvImportRow> {
+        if (detectCompetitorProfile(csvText) == CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION) {
+            return parseArdfEventRegistrationCompetitorRows(csvText)
+        }
+
         val rows = mutableListOf<CompetitorCsvImportRow>()
         val invalidLines = mutableListOf<CsvImportError>()
 
@@ -80,6 +89,40 @@ object EventCsvImports {
                 // Optional exported header row.
             } catch (error: IllegalArgumentException) {
                 invalidLines += CsvImportError(lineIndex, error.message ?: "Invalid competitor row")
+            }
+        }
+
+        return CsvImportResult(rows, invalidLines)
+    }
+
+    fun detectCompetitorProfile(csvText: String): CompetitorCsvImportProfile {
+        val firstFields = csvText.lineSequence()
+            .firstOrNull { it.isNotBlank() }
+            ?.let(::parseSemicolonRow)
+            ?: return CompetitorCsvImportProfile.CANONICAL
+
+        return if (EventCsvFormat.ArdfEventRegistration.isHeader(firstFields)) {
+            CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION
+        } else {
+            CompetitorCsvImportProfile.CANONICAL
+        }
+    }
+
+    fun parseArdfEventRegistrationCompetitorRows(csvText: String): CsvImportResult<CompetitorCsvImportRow> {
+        val rows = mutableListOf<CompetitorCsvImportRow>()
+        val invalidLines = mutableListOf<CsvImportError>()
+
+        csvText.lineSequence().forEachIndexed { lineIndex, line ->
+            if (line.isBlank()) return@forEachIndexed
+
+            try {
+                val fields = parseSemicolonRow(line)
+                if (EventCsvFormat.ArdfEventRegistration.isHeader(fields)) {
+                    return@forEachIndexed
+                }
+                rows += parseArdfEventRegistrationCompetitorRow(fields, lineIndex)
+            } catch (error: IllegalArgumentException) {
+                invalidLines += CsvImportError(lineIndex, error.message ?: "Invalid ARDFEvent competitor row")
             }
         }
 
@@ -167,6 +210,37 @@ object EventCsvImports {
             index = fields.optionalTrimmed(EventCsvFormat.Competitor.INDEX),
             startTimeText = fields.optionalTrimmed(EventCsvFormat.Competitor.START_TIME).takeIf { it.isNotEmpty() },
             siRent = fields.optionalTrimmedInt(EventCsvFormat.Competitor.SI_RENT) == 1
+        )
+    }
+
+    private fun parseArdfEventRegistrationCompetitorRow(fields: List<String>, lineIndex: Int): CompetitorCsvImportRow {
+        require(fields.size == EventCsvFormat.ArdfEventRegistration.COLUMN_COUNT) {
+            "Expected ${EventCsvFormat.ArdfEventRegistration.COLUMN_COUNT} columns at line: $lineIndex"
+        }
+
+        val firstName = fields[EventCsvFormat.ArdfEventRegistration.FIRST_NAME].trim()
+        val lastName = fields[EventCsvFormat.ArdfEventRegistration.LAST_NAME].trim()
+        require(firstName.isNotEmpty() && lastName.isNotEmpty()) {
+            "Missing first/last name at line: $lineIndex"
+        }
+
+        val siNumber = fields[EventCsvFormat.ArdfEventRegistration.SI_NUMBER].trim().takeIf { it.isNotEmpty() }?.toInt()
+        require(siNumber == null || SportIdentCodes.isSINumberValid(siNumber)) {
+            "Invalid SI number at line: $lineIndex"
+        }
+
+        return CompetitorCsvImportRow(
+            siNumber = siNumber,
+            startNumber = null,
+            firstName = firstName,
+            lastName = lastName,
+            categoryName = fields[EventCsvFormat.ArdfEventRegistration.CATEGORY_NAME].trim(),
+            isMan = false,
+            birthYear = null,
+            club = "",
+            index = fields[EventCsvFormat.ArdfEventRegistration.INDEX].trim(),
+            startTimeText = null,
+            siRent = false
         )
     }
 

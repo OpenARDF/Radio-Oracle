@@ -42,6 +42,28 @@ class DesktopProjectFilesTest {
     }
 
     @Test
+    fun exportsRobisStartListCsvFile() {
+        val directory = Files.createTempDirectory("rom-desktop-robis-start-list")
+        val path = directory.resolve("robis-start-list.csv")
+
+        DesktopProjectFiles.exportRobisStartListCsv(path, EventProjectFile(raceData = raceDataWithReadout()))
+
+        assertTrue(Files.readString(path).contains("\"\";Runner;Alice;M21;\"\";;IDX;\"\";\"CZE\";123456"))
+    }
+
+    @Test
+    fun exportsArdfEventResultsCsvFile() {
+        val directory = Files.createTempDirectory("rom-desktop-ardfevent-results")
+        val path = directory.resolve("ardfevent-results.csv")
+
+        DesktopProjectFiles.exportArdfEventResultsCsv(path, EventProjectFile(raceData = raceDataWithReadout()))
+        val exported = Files.readString(path)
+
+        assertTrue(exported.contains("Kategorie;Pořadí;Jméno;Index;Čas;TX;Status;Kontroly"))
+        assertTrue(exported.contains("M21;;RUNNER Alice;IDX;00:20:00;0;OK;"))
+    }
+
+    @Test
     fun exportsArdfJsonFile() {
         val directory = Files.createTempDirectory("rom-desktop-ardf-json")
         val path = directory.resolve("event.ardf.json")

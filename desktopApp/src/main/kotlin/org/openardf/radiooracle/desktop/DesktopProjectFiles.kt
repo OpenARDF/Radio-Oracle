@@ -50,12 +50,20 @@ object DesktopProjectFiles : ProjectFileStore {
         writeText(path, EventCsvExports.competitorStartsByMinute(projectFile.raceData))
     }
 
+    fun exportRobisStartListCsv(path: Path, projectFile: EventProjectFile) {
+        writeText(path, EventCsvExports.robisStartList(projectFile.raceData))
+    }
+
     fun exportReadoutsCsv(path: Path, projectFile: EventProjectFile) {
         writeText(path, EventCsvExports.readouts(projectFile.raceData))
     }
 
     fun exportResultsCsv(path: Path, projectFile: EventProjectFile) {
         writeText(path, EventCsvExports.results(projectFile.raceData))
+    }
+
+    fun exportArdfEventResultsCsv(path: Path, projectFile: EventProjectFile) {
+        writeText(path, EventCsvExports.ardfEventResults(projectFile.raceData))
     }
 
     fun exportArdfJson(path: Path, projectFile: EventProjectFile) {

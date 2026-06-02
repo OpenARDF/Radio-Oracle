@@ -86,6 +86,48 @@ class EventCsvImportsTest {
     }
 
     @Test
+    fun parsesArdfEventRegistrationCompetitorRows() {
+        val result = EventCsvImports.parseAndroidCompetitorRows(
+            """
+
+            Jméno;Příjmení;Registrace;SI;Kategorie
+            Alice;Runner;OK001;123456;W21
+            Bob;NoCard;OK002;;M21
+            """.trimIndent()
+        )
+
+        assertEquals(CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION, EventCsvImports.detectCompetitorProfile(
+            "Jméno;Příjmení;Registrace;SI;Kategorie"
+        ))
+        assertEquals(emptyList(), result.invalidLines)
+        assertEquals(2, result.rows.size)
+        assertEquals("Alice", result.rows[0].firstName)
+        assertEquals("Runner", result.rows[0].lastName)
+        assertEquals("OK001", result.rows[0].index)
+        assertEquals(123456, result.rows[0].siNumber)
+        assertEquals("W21", result.rows[0].categoryName)
+        assertEquals(null, result.rows[0].startNumber)
+        assertEquals("", result.rows[0].club)
+        assertEquals(null, result.rows[1].siNumber)
+    }
+
+    @Test
+    fun reportsInvalidArdfEventRegistrationRows() {
+        val result = EventCsvImports.parseArdfEventRegistrationCompetitorRows(
+            """
+            Jmeno;Prijmeni;Registrace;SI;Kategorie
+            Alice;Runner;OK001;999;W21
+            ;NoFirst;OK002;123456;M21
+            """.trimIndent()
+        )
+
+        assertEquals(emptyList(), result.rows)
+        assertEquals(2, result.invalidLines.size)
+        assertEquals("Invalid SI number at line: 1", result.invalidLines[0].message)
+        assertEquals("Missing first/last name at line: 2", result.invalidLines[1].message)
+    }
+
+    @Test
     fun skipsOptionalCompetitorHeaderRow() {
         val result = EventCsvImports.parseAndroidCompetitorRows(
             """

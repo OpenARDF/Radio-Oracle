@@ -7,6 +7,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventResultDetails
+import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** Shared semicolon-delimited CSV export builders for portable event projects. */
@@ -67,6 +68,27 @@ object EventCsvExports {
             )
             .joinCompetitorStartRows(raceData)
 
+    fun robisStartList(raceData: EventRaceData): String =
+        raceData.competitorData
+            .sortedWith(
+                compareBy<EventCompetitorData>(
+                    { raceData.categoryNameFor(it.competitorCategory.competitor.categoryId) },
+                    { it.competitorCategory.competitor.startTimeSortKey() },
+                    { it.competitorCategory.competitor.startNumber },
+                    { it.competitorCategory.competitor.fullName() }
+                )
+            )
+            .joinRows { competitorData ->
+                val competitor = competitorData.competitorCategory.competitor
+                EventCsvRows.robisStartListRow(
+                    competitor = competitor,
+                    categoryName = raceData.categoryNameFor(competitor.categoryId),
+                    startTimeText = competitor.drawnStartTimeSeconds?.let {
+                        DurationFormatter.secondsToFormattedString(it, useMinutes = false)
+                    }
+                )
+            }
+
     fun readouts(raceData: EventRaceData): String =
         (raceData.competitorData.mapNotNull { it.readoutData } + raceData.unmatchedReadoutData)
             .sortedWith(compareBy({ it.result.siNumber ?: Int.MAX_VALUE }, { it.result.id }))
@@ -100,6 +122,39 @@ object EventCsvExports {
                     runTimeText = result.runTimeText
                 )
             }
+
+    fun ardfEventResults(raceData: EventRaceData): String =
+        "Kategorie;Pořadí;Jméno;Index;Čas;TX;Status;Kontroly\n" +
+            raceData.competitorData
+                .sortedWith(
+                    compareBy<EventCompetitorData>(
+                        { raceData.categoryNameFor(it.competitorCategory.competitor.categoryId) },
+                        { it.readoutData?.result?.place?.takeIf { place -> place > 0 } ?: Int.MAX_VALUE },
+                        { it.competitorCategory.competitor.fullName() }
+                    )
+                )
+                .mapNotNull { competitorData ->
+                    val readoutData = competitorData.readoutData ?: return@mapNotNull null
+                    val result = readoutData.result
+                    val competitor = competitorData.competitorCategory.competitor
+                    val categoryName = raceData.categoryNameFor(competitor.categoryId)
+                    val controlOrder = readoutData.punches
+                        .map { it.punch }
+                        .filter { it.punchType == SIRecordType.CONTROL }
+                        .sortedBy { it.order }
+                        .joinToString(" ") { it.siCode.toString() }
+                    EventCsvRows.ardfEventResultRow(
+                        categoryName = categoryName,
+                        placeText = if (result.place > 0) result.place.toString() else "",
+                        competitorName = competitor.fullName(),
+                        index = competitor.index,
+                        runTimeText = DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinutes = false),
+                        pointsText = result.points.toString(),
+                        statusLabel = result.resultStatus.toDisplayLabel(),
+                        controlOrderText = controlOrder
+                    )
+                }
+                .joinToString(separator = "\n", postfix = "\n")
 
     private fun <T> List<T>.joinRows(row: (T) -> String): String =
         joinToString(separator = "\n", postfix = if (isEmpty()) "" else "\n", transform = row)

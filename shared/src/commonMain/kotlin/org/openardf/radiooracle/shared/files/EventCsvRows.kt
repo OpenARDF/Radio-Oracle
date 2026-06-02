@@ -57,6 +57,15 @@ object EventCsvRows {
                 "${competitor.club};${competitor.siNumber ?: ""}"
     }
 
+    fun robisStartListRow(
+        competitor: EventCompetitor,
+        categoryName: String,
+        startTimeText: String?
+    ): String =
+        "\"\";${competitor.lastName.csvField()};${competitor.firstName.csvField()};" +
+                "${categoryName.csvField()};\"\";${(startTimeText ?: "").csvField()};" +
+                "${competitor.index.csvField()};\"\";\"CZE\";${(competitor.siNumber ?: "").toString().csvField()}"
+
     /** Formats one raw punch row for readout debugging/export. */
     fun punchRow(cardNumber: Int?, siCode: Int, timeText: String): String {
         return "${cardNumber ?: ""};$siCode;$timeText"
@@ -94,6 +103,21 @@ object EventCsvRows {
         runTimeText: String
     ): String =
         "$placeText;$competitorName;$statusLabel;$pointsText;$runTimeText"
+
+    fun ardfEventResultRow(
+        categoryName: String,
+        placeText: String,
+        competitorName: String,
+        index: String,
+        runTimeText: String,
+        pointsText: String,
+        statusLabel: String,
+        controlOrderText: String
+    ): String =
+        csvRow(categoryName, placeText, competitorName, index, runTimeText, pointsText, statusLabel, controlOrderText)
+
+    private fun csvRow(vararg fields: Any?): String =
+        fields.joinToString(EventCsvFormat.DELIMITER.toString()) { (it ?: "").toString().csvField() }
 
     private fun String.csvField(): String =
         if (any { it == EventCsvFormat.DELIMITER || it == '"' || it == '\n' || it == '\r' }) {

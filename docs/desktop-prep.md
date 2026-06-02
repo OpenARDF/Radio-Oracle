@@ -44,10 +44,17 @@ finish table:
 - import/export supported event and result formats as they move into shared
   code.
 
+macOS hardware validation and Windows packaged-app smoke validation are beta
+release blockers. Linux packaging is best-effort for this beta. The release
+checklist lives in [`desktop-beta-checklist.md`](desktop-beta-checklist.md).
+
 The desktop beta should not include:
 
 - Bluetooth printer transport;
 - Android Room database migration or shared SQL persistence;
+- SPORTident station write/reprogramming actions;
+- unverified OCheckList/new-card imports;
+- LAN-exposed local web displays;
 - any promise that desktop can replace the Android race-day download workflow.
 
 ## Current Decision Boundary
@@ -383,11 +390,13 @@ repeatable package validation.
    matched readouts. The Settings
    section now shows project diagnostics, shared event validation issues, and
    the desktop beta scope boundary. The File menu can import Android-compatible
-   category, competitor, start-list CSV, and race-backup JSON files; export
+   category, competitor, ARDFEvent registration, start-list CSV, and
+   race-backup JSON files; export
    categories, competitors, starts, starts-by-category, starts-by-minute, readouts, and
    results as semicolon-delimited CSV files using shared formatters; export
-   result TXT/HTML, IOF start/result-list XML, Android-shaped race-backup,
-   live-result, and final-result JSON, and standards-facing ARDF JSON. A sample
+   ROBIS start-list CSV, ARDFEvent-style results CSV, result TXT/HTML, IOF
+   start/result-list XML, Android-shaped race-backup, live-result, and
+   final-result JSON, and standards-facing ARDF JSON. A sample
    smoke-test project is available at `samples/desktop-smoke.rom.json`, with
    automated desktop coverage for the session-level open, edit, save, close,
    reopen, export-copy, CSV export, and ARDF JSON export flows.
