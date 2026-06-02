@@ -28,10 +28,14 @@ class DesktopLocalResultServer(
         }
         nextServer.executor = nextExecutor
         nextServer.createContext("/") { exchange ->
-            exchange.sendText(indexHtml(), "text/html; charset=utf-8")
+            exchange.handleExactGet("/") {
+                exchange.sendText(indexHtml(), "text/html; charset=utf-8")
+            }
         }
         nextServer.createContext("/results.json") { exchange ->
-            exchange.sendText(resultsJson(), "application/json; charset=utf-8")
+            exchange.handleExactGet("/results.json") {
+                exchange.sendText(resultsJson(), "application/json; charset=utf-8")
+            }
         }
         nextServer.start()
 
@@ -111,12 +115,31 @@ class DesktopLocalResultServer(
     }
 }
 
+private fun HttpExchange.handleExactGet(path: String, block: () -> Unit) {
+    when {
+        requestMethod != "GET" && requestMethod != "HEAD" -> {
+            responseHeaders.set("Allow", "GET, HEAD")
+            sendText("Method not allowed", "text/plain; charset=utf-8", statusCode = 405)
+        }
+        requestURI.path != path -> sendText("Not found", "text/plain; charset=utf-8", statusCode = 404)
+        else -> block()
+    }
+}
+
 private fun HttpExchange.sendText(text: String, contentType: String) {
+    sendText(text, contentType, statusCode = 200)
+}
+
+private fun HttpExchange.sendText(text: String, contentType: String, statusCode: Int) {
     val bytes = text.toByteArray(StandardCharsets.UTF_8)
     responseHeaders.set("Content-Type", contentType)
-    sendResponseHeaders(200, bytes.size.toLong())
+    responseHeaders.set("Cache-Control", "no-store")
+    val responseLength = if (requestMethod == "HEAD") -1L else bytes.size.toLong()
+    sendResponseHeaders(statusCode, responseLength)
     responseBody.use { output ->
-        output.write(bytes)
+        if (requestMethod != "HEAD") {
+            output.write(bytes)
+        }
     }
 }
 

@@ -14,6 +14,7 @@ import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
+import java.net.HttpURLConnection
 import java.net.URL
 
 class DesktopLocalResultServerTest {
@@ -41,10 +42,53 @@ class DesktopLocalResultServerTest {
         val server = DesktopLocalResultServer { projectFile() }
         try {
             val url = server.start()
-            val json = URL("${url}results.json").readText()
+            val connection = URL("${url}results.json").openConnection() as HttpURLConnection
+            val json = connection.inputStream.bufferedReader().readText()
 
             assertTrue(url.startsWith("http://127.0.0.1:"))
+            assertTrue(connection.getHeaderField("Cache-Control") == "no-store")
             assertTrue(json.contains(""""result_count":1"""))
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun rejectsUnknownLocalResultPaths() {
+        val server = DesktopLocalResultServer { projectFile() }
+        try {
+            val connection = URL("${server.start()}missing").openConnection() as HttpURLConnection
+
+            assertTrue(connection.responseCode == 404)
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun rejectsNonGetLocalResultRequests() {
+        val server = DesktopLocalResultServer { projectFile() }
+        try {
+            val connection = URL("${server.start()}results.json").openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+
+            assertTrue(connection.responseCode == 405)
+            assertTrue(connection.getHeaderField("Allow") == "GET, HEAD")
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun supportsHeadLocalResultRequests() {
+        val server = DesktopLocalResultServer { projectFile() }
+        try {
+            val connection = URL("${server.start()}results.json").openConnection() as HttpURLConnection
+            connection.requestMethod = "HEAD"
+
+            assertTrue(connection.responseCode == 200)
+            assertTrue(connection.contentType == "application/json; charset=utf-8")
+            assertTrue(connection.getHeaderField("Cache-Control") == "no-store")
         } finally {
             server.stop()
         }
