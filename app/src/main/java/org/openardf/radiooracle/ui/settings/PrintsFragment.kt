@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.widget.Toolbar
@@ -20,6 +21,7 @@ import androidx.preference.SeekBarPreference
 import androidx.preference.SwitchPreference
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
+import org.openardf.radiooracle.backend.logging.DebugLog
 
 
 class PrintsFragment : PreferenceFragmentCompat() {
@@ -56,6 +58,7 @@ class PrintsFragment : PreferenceFragmentCompat() {
 
             // If printing is disabled -> let the PrintProcessor know
             if (enablePrints as Boolean) {
+                logInfo("Print settings enabled")
                 // Request bluetooth permissions if needed
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     ActivityCompat.requestPermissions(
@@ -68,6 +71,7 @@ class PrintsFragment : PreferenceFragmentCompat() {
                     )
                 }
             } else {
+                logInfo("Print settings disabled")
                 dataProcessor.disablePrinter()
             }
 
@@ -120,15 +124,19 @@ class PrintsFragment : PreferenceFragmentCompat() {
                     if (bluetoothAdapter != null && bluetoothAdapter.bondedDevices != null) {
                         pairedDevices.addAll(bluetoothAdapter.bondedDevices!!)
                     }
+                } else {
+                    logWarn("Bluetooth printer list unavailable because BLUETOOTH_CONNECT permission is not granted")
                 }
                 val deviceNames = pairedDevices.map { it.name }.toTypedArray()
                 val deviceAddresses = pairedDevices.map { it.address }.toTypedArray()
+                logInfo("Loaded ${pairedDevices.size} paired Bluetooth printer candidate(s)")
 
                 printerSelectPreference.entries = deviceNames
                 printerSelectPreference.entryValues = deviceAddresses
             }
             //Warning about missing bluetooth
             else {
+                logWarn("Bluetooth is not supported on this device")
                 val toast = Toast.makeText(
                     requireContext(),
                     requireContext().getString(R.string.print_bluetooth_not_supported),
@@ -166,6 +174,7 @@ class PrintsFragment : PreferenceFragmentCompat() {
                 address
             )
             editor.apply()
+            logInfo("Selected Bluetooth printer name=$name address=${address.maskBluetoothAddress()}")
             true
         }
 
@@ -178,6 +187,7 @@ class PrintsFragment : PreferenceFragmentCompat() {
                 action.toString()
             )
             editor.apply()
+            logInfo("Automatic print mode set to $action")
 
             automaticPrintPreference.summary = requireContext().getString(
                 R.string.preferences_prints_automatic_hint,
@@ -199,6 +209,7 @@ class PrintsFragment : PreferenceFragmentCompat() {
             doublePrintDelayPreference?.isEnabled = doublePrint
 
             editor.apply()
+            logInfo("Double print set to $doublePrint")
             true
         }
 
@@ -211,6 +222,7 @@ class PrintsFragment : PreferenceFragmentCompat() {
                 doublePrint as Int
             )
             editor.apply()
+            logInfo("Double print delay set to $doublePrint seconds")
             true
         }
 
@@ -223,6 +235,7 @@ class PrintsFragment : PreferenceFragmentCompat() {
                 removeDiacritics as Boolean
             )
             editor.apply()
+            logInfo("Remove diacritics set to $removeDiacritics")
             true
         }
     }
@@ -236,5 +249,28 @@ class PrintsFragment : PreferenceFragmentCompat() {
 
         printerSelectPreference?.isEnabled = enable
         automaticPrintPreference?.isEnabled = enable
+    }
+
+    private fun logInfo(message: String) {
+        Log.i(LOG_TAG, message)
+        DebugLog.info(LOG_TAG, message)
+    }
+
+    private fun logWarn(message: String) {
+        Log.w(LOG_TAG, message)
+        DebugLog.warn(LOG_TAG, message)
+    }
+
+    private fun String.maskBluetoothAddress(): String =
+        split(":").let { parts ->
+            if (parts.size == 6) {
+                "xx:xx:xx:${parts.takeLast(3).joinToString(":")}"
+            } else {
+                "<selected>"
+            }
+        }
+
+    private companion object {
+        const val LOG_TAG = "Printer"
     }
 }

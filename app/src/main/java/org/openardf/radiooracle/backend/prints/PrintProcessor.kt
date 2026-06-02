@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.backend.prints
 
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import androidx.preference.PreferenceManager
 import com.dantsu.escposprinter.EscPosCharsetEncoding
@@ -9,6 +10,7 @@ import com.dantsu.escposprinter.connection.bluetooth.BluetoothConnection
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
+import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.AliasPunch
@@ -38,12 +40,17 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
                 appContext.get()!!.getString(R.string.key_prints_enabled), false
             )
             if (!enabled) {
+                logInfo("Printing disabled in preferences")
                 return
             }
             val address = sharedPref.getString(
                 appContext.get()!!.getString(R.string.key_prints_selected_printer_address), ""
             )
             if (!address.isNullOrEmpty()) {
+                val name = sharedPref.getString(
+                    appContext.get()!!.getString(R.string.key_prints_selected_printer_name), ""
+                )
+                logInfo("Initializing Bluetooth printer name=${name.orEmpty()} address=${address.maskBluetoothAddress()}")
                 val bluetoothAdapter = (appContext.get()
                     ?.getSystemService(android.bluetooth.BluetoothManager::class.java))?.adapter
                 if (bluetoothAdapter != null) {
@@ -60,7 +67,9 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
                                     EscPosCharsetEncoding("windows-1250", 72)
                                 )   // TODO: fix charset encoding
                             printerReady = true
+                            logInfo("Bluetooth printer initialized")
                         } catch (e: Exception) {
+                            logError("Bluetooth printer init failed: ${e.message ?: e::class.simpleName}")
                             CoroutineScope(Dispatchers.Main).launch {
                                 makeToast(
                                     appContext.get()!!
@@ -72,18 +81,24 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
                     }
                     //Inform about disabled bluetooth
                     else {
+                        logWarn("Bluetooth adapter is disabled")
                         makeToast(
                             appContext.get()?.getString(R.string.prints_bluetooth_disabled)
                                 ?: "Bluetooth disabled"
                         )
                     }
+                } else {
+                    logWarn("Bluetooth adapter is unavailable")
                 }
+            } else {
+                logWarn("Printing enabled but no Bluetooth printer address is selected")
             }
         }
     }
 
     fun disablePrinter() {
         printerReady = false
+        logInfo("Bluetooth printer disabled")
     }
 
     private suspend fun print(formatted: String) {
@@ -110,8 +125,11 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
             }
 
             try {
+                logInfo("Submitting ESC/POS print job lines=${textToPrint.lines().size}")
                 printer!!.printFormattedText(textToPrint + "\n\n[C]${version}", 100)
+                logInfo("ESC/POS print job submitted")
             } catch (e: Exception) {
+                logError("ESC/POS print failed: ${e.message ?: e::class.simpleName}")
                 CoroutineScope(Dispatchers.Main).launch {
                     makeToast(
                         appContext.get()?.getString(R.string.prints_error, e.message)
@@ -183,6 +201,10 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
                 2
             )
 
+        logInfo(
+            "Printing finish ticket result=${resultData.result.id} si=${resultData.result.siNumber} " +
+                "doublePrint=$doublePrint delaySeconds=$doublePrintDelay"
+        )
         print(formatted)
         if (doublePrint) {
             delay(doublePrintDelay * 1000L)
@@ -330,5 +352,33 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
         } else {
             name
         }
+    }
+
+    private fun logInfo(message: String) {
+        Log.i(LOG_TAG, message)
+        DebugLog.info(LOG_TAG, message)
+    }
+
+    private fun logWarn(message: String) {
+        Log.w(LOG_TAG, message)
+        DebugLog.warn(LOG_TAG, message)
+    }
+
+    private fun logError(message: String) {
+        Log.e(LOG_TAG, message)
+        DebugLog.error(LOG_TAG, message)
+    }
+
+    private fun String.maskBluetoothAddress(): String =
+        split(":").let { parts ->
+            if (parts.size == 6) {
+                "xx:xx:xx:${parts.takeLast(3).joinToString(":")}"
+            } else {
+                "<selected>"
+            }
+        }
+
+    private companion object {
+        const val LOG_TAG = "Printer"
     }
 }
