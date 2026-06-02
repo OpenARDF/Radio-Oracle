@@ -65,6 +65,7 @@ import org.openardf.radiooracle.shared.event.EventRaceDetails
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectSummary
+import org.openardf.radiooracle.shared.event.EventReadoutDuplicatePolicy
 import org.openardf.radiooracle.shared.event.EventReadoutDetails
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.EventStartListDetails
@@ -119,6 +120,13 @@ private data class DesktopSiReaderUiState(
 private fun EventRaceData.containsReadoutForSiNumber(siNumber: Int): Boolean =
     competitorData.any { it.readoutData?.result?.siNumber == siNumber } ||
         unmatchedReadoutData.any { it.result.siNumber == siNumber }
+
+private enum class DesktopSportIdentAppendOutcome {
+    Added,
+    DuplicateIgnored,
+    DuplicateReplaced,
+    DuplicateCreatedNew
+}
 
 private val CategoryTableColumns = listOf(
     FixedTableColumn("Name", 150.dp),
@@ -217,6 +225,7 @@ fun main(args: Array<String>) = application {
         var siDownloadStatusText by remember { mutableStateOf<String?>(null) }
         var isSendingLiveResults by remember { mutableStateOf(false) }
         var isBackgroundLiveResultSendingEnabled by remember { mutableStateOf(false) }
+        var readoutDuplicatePolicy by remember { mutableStateOf(EventReadoutDuplicatePolicy.Reject) }
         var raceClockTick by remember { mutableStateOf(0L) }
 
         LaunchedEffect(Unit) {
@@ -272,10 +281,11 @@ fun main(args: Array<String>) = application {
             projectStatusText = "New unsaved project."
         }
 
-        fun appendSportIdentDownload(download: DesktopSportIdentCardBlockDownload): Boolean {
-            val currentProject = projectSession.currentProject ?: return false
-            if (currentProject.raceData.containsReadoutForSiNumber(download.readout.siNumber)) {
-                return false
+        fun appendSportIdentDownload(download: DesktopSportIdentCardBlockDownload): DesktopSportIdentAppendOutcome {
+            val currentProject = projectSession.currentProject ?: return DesktopSportIdentAppendOutcome.DuplicateIgnored
+            val isDuplicate = currentProject.raceData.containsReadoutForSiNumber(download.readout.siNumber)
+            if (isDuplicate && readoutDuplicatePolicy == EventReadoutDuplicatePolicy.Reject) {
+                return DesktopSportIdentAppendOutcome.DuplicateIgnored
             }
             projectFile = projectSession.updateCurrentProject { currentProject ->
                 EventProjectEditor.addDownloadedSportIdentReadout(
@@ -283,13 +293,19 @@ fun main(args: Array<String>) = application {
                     resultId = UUID.randomUUID().toString(),
                     cardType = download.inserted.cardType,
                     readout = download.readout,
-                    readoutDateTimeIso = LocalDateTime.now().withNano(0).toString()
+                    readoutDateTimeIso = LocalDateTime.now().withNano(0).toString(),
+                    duplicatePolicy = readoutDuplicatePolicy
                 ) { index, type ->
                     "${UUID.randomUUID()}-$index-${type.name}"
                 }
             }
             hasUnsavedChanges = projectSession.hasUnsavedChanges
-            return true
+            return when {
+                !isDuplicate -> DesktopSportIdentAppendOutcome.Added
+                readoutDuplicatePolicy == EventReadoutDuplicatePolicy.Replace ->
+                    DesktopSportIdentAppendOutcome.DuplicateReplaced
+                else -> DesktopSportIdentAppendOutcome.DuplicateCreatedNew
+            }
         }
 
         fun downloadSportIdentReadout() {
@@ -311,10 +327,15 @@ fun main(args: Array<String>) = application {
                 }
                 downloadResult.onSuccess { download ->
                     runCatching {
-                        if (appendSportIdentDownload(download)) {
-                            projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
-                        } else {
-                            projectStatusText = "SI card ${download.readout.siNumber} was already downloaded."
+                        when (appendSportIdentDownload(download)) {
+                            DesktopSportIdentAppendOutcome.Added ->
+                                projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
+                            DesktopSportIdentAppendOutcome.DuplicateIgnored ->
+                                projectStatusText = "SI card ${download.readout.siNumber} was already downloaded."
+                            DesktopSportIdentAppendOutcome.DuplicateReplaced ->
+                                projectStatusText = "Replaced existing readout for SI card ${download.readout.siNumber}."
+                            DesktopSportIdentAppendOutcome.DuplicateCreatedNew ->
+                                projectStatusText = "Created new duplicate readout for SI card ${download.readout.siNumber}."
                         }
                         siDownloadStatusText = null
                     }.onFailure { error ->
@@ -358,13 +379,30 @@ fun main(args: Array<String>) = application {
                             onDownload = { download ->
                                 appCoroutineScope.launch {
                                     runCatching {
-                                        if (appendSportIdentDownload(download)) {
-                                            projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
-                                            siDownloadStatusText = "Continuous SI readout running; waiting for the next card."
-                                        } else {
-                                            projectStatusText = "SI card ${download.readout.siNumber} was already downloaded."
-                                            siDownloadStatusText =
-                                                "Duplicate SI card ignored; continuous SI readout is still running."
+                                        when (appendSportIdentDownload(download)) {
+                                            DesktopSportIdentAppendOutcome.Added -> {
+                                                projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
+                                                siDownloadStatusText =
+                                                    "Continuous SI readout running; waiting for the next card."
+                                            }
+                                            DesktopSportIdentAppendOutcome.DuplicateIgnored -> {
+                                                projectStatusText =
+                                                    "SI card ${download.readout.siNumber} was already downloaded."
+                                                siDownloadStatusText =
+                                                    "Duplicate SI card ignored; continuous SI readout is still running."
+                                            }
+                                            DesktopSportIdentAppendOutcome.DuplicateReplaced -> {
+                                                projectStatusText =
+                                                    "Replaced existing readout for SI card ${download.readout.siNumber}."
+                                                siDownloadStatusText =
+                                                    "Duplicate SI card replaced; waiting for the next card."
+                                            }
+                                            DesktopSportIdentAppendOutcome.DuplicateCreatedNew -> {
+                                                projectStatusText =
+                                                    "Created new duplicate readout for SI card ${download.readout.siNumber}."
+                                                siDownloadStatusText =
+                                                    "Duplicate SI card stored as a new readout; waiting for the next card."
+                                            }
                                         }
                                     }.onFailure { error ->
                                         projectStatusText = "SI download failed: ${error.message ?: error::class.simpleName}"
@@ -717,6 +755,7 @@ fun main(args: Array<String>) = application {
             siDownloadStatusText = siDownloadStatusText,
             isSendingLiveResults = isSendingLiveResults,
             isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
+            readoutDuplicatePolicy = readoutDuplicatePolicy,
             raceClockTick = raceClockTick,
             onRenameRace = { name ->
                 runCatching {
@@ -1053,6 +1092,10 @@ fun main(args: Array<String>) = application {
                 } else {
                     "Background ROBIS sending disabled."
                 }
+            },
+            onSetReadoutDuplicatePolicy = { policy ->
+                readoutDuplicatePolicy = policy
+                projectStatusText = "Duplicate SI card action set to ${policy.toDisplayLabel()}."
             }
         )
     }
@@ -1105,6 +1148,7 @@ private fun RadioOManagerDesktopApp(
     siDownloadStatusText: String? = null,
     isSendingLiveResults: Boolean = false,
     isBackgroundLiveResultSendingEnabled: Boolean = false,
+    readoutDuplicatePolicy: EventReadoutDuplicatePolicy = EventReadoutDuplicatePolicy.Reject,
     raceClockTick: Long = 0L,
     onRenameRace: (String) -> Unit = {},
     onUpdateRaceStartDateTime: (String) -> Unit = {},
@@ -1134,7 +1178,8 @@ private fun RadioOManagerDesktopApp(
     onAddAlias: (String, String) -> Boolean = { _, _ -> false },
     onRemoveAlias: (String) -> Unit = {},
     onSendRobisLiveResults: () -> Unit = {},
-    onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit = {}
+    onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit = {},
+    onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit = {}
 ) {
     MaterialTheme(
         colors = MaterialTheme.colors.copy(
@@ -1193,9 +1238,11 @@ private fun RadioOManagerDesktopApp(
                         onRemoveAlias = onRemoveAlias,
                         isSendingLiveResults = isSendingLiveResults,
                         isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
+                        readoutDuplicatePolicy = readoutDuplicatePolicy,
                         raceClockTick = raceClockTick,
                         onSendRobisLiveResults = onSendRobisLiveResults,
-                        onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled
+                        onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
+                        onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy
                     )
                 }
                 StatusStrip(projectStatusText, hasUnsavedChanges, siReaderState)
@@ -1297,9 +1344,11 @@ private fun SectionWorkspace(
     onRemoveAlias: (String) -> Unit,
     isSendingLiveResults: Boolean,
     isBackgroundLiveResultSendingEnabled: Boolean,
+    readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
     raceClockTick: Long,
     onSendRobisLiveResults: () -> Unit,
-    onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit
+    onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
+    onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -1401,8 +1450,10 @@ private fun SectionWorkspace(
                 diagnostics = DesktopProjectDiagnostics.from(projectFile),
                 isSendingLiveResults = isSendingLiveResults,
                 isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
+                readoutDuplicatePolicy = readoutDuplicatePolicy,
                 onSendRobisLiveResults = onSendRobisLiveResults,
-                onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled
+                onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
+                onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy
             )
         }
         Box(
@@ -1429,8 +1480,10 @@ private fun SettingsDetailsPanel(
     diagnostics: DesktopProjectDiagnostics,
     isSendingLiveResults: Boolean,
     isBackgroundLiveResultSendingEnabled: Boolean,
+    readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
     onSendRobisLiveResults: () -> Unit,
-    onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit
+    onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
+    onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DetailRow("Project", diagnostics.projectState)
@@ -1448,6 +1501,11 @@ private fun SettingsDetailsPanel(
             )
         )
         DetailRow("Validation", diagnostics.validationState)
+        DetailRow("Duplicate SI cards", readoutDuplicatePolicy.toDisplayLabel())
+        ReadoutDuplicatePolicyPicker(
+            selectedPolicy = readoutDuplicatePolicy,
+            onPolicySelected = onSetReadoutDuplicatePolicy
+        )
         DetailRow("Live results", diagnostics.liveResultPlanText)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(
@@ -1488,6 +1546,20 @@ private fun SettingsDetailsPanel(
             )
         }
     }
+}
+
+@Composable
+private fun ReadoutDuplicatePolicyPicker(
+    selectedPolicy: EventReadoutDuplicatePolicy,
+    onPolicySelected: (EventReadoutDuplicatePolicy) -> Unit
+) {
+    EnumPicker(
+        selectedValue = selectedPolicy,
+        values = EventReadoutDuplicatePolicy.entries,
+        label = EventReadoutDuplicatePolicy::toDisplayLabel,
+        onValueSelected = onPolicySelected,
+        modifier = Modifier.width(240.dp)
+    )
 }
 
 /** Shows read-only competitor result rows. */
@@ -3381,6 +3453,13 @@ private fun desktopRaceElapsedSeconds(startDateTimeIso: String, tick: Long): Lon
         Duration.between(LocalDateTime.parse(startDateTimeIso), LocalDateTime.now()).seconds
     }.getOrDefault(0L)
 }
+
+private fun EventReadoutDuplicatePolicy.toDisplayLabel(): String =
+    when (this) {
+        EventReadoutDuplicatePolicy.Reject -> "Ignore"
+        EventReadoutDuplicatePolicy.Replace -> "Replace"
+        EventReadoutDuplicatePolicy.CreateNew -> "Create new readout"
+    }
 
 /** Shows the current SI-reader connection state and project-save status. */
 @Composable

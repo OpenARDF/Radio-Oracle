@@ -1108,6 +1108,7 @@ object EventProjectEditor {
         cardType: Byte,
         readout: SportIdentCardReadout,
         readoutDateTimeIso: String,
+        duplicatePolicy: EventReadoutDuplicatePolicy = EventReadoutDuplicatePolicy.Reject,
         punchIdFactory: (Int, SIRecordType) -> String
     ): EventProjectFile {
         require(resultId.isNotBlank()) {
@@ -1119,22 +1120,31 @@ object EventProjectEditor {
         require(readoutDateTimeIso.isNotBlank()) {
             "Readout date/time cannot be blank."
         }
-        require(!projectFile.raceData.containsReadoutForSiNumber(readout.siNumber)) {
-            "Readout already exists for SI number: ${readout.siNumber}"
+        val hasDuplicateSiNumber = projectFile.raceData.containsReadoutForSiNumber(readout.siNumber)
+        val workingProjectFile = when {
+            !hasDuplicateSiNumber -> projectFile
+            duplicatePolicy == EventReadoutDuplicatePolicy.Replace -> removeReadoutForSiNumber(projectFile, readout.siNumber)
+            duplicatePolicy == EventReadoutDuplicatePolicy.CreateNew -> projectFile
+            else -> throw IllegalArgumentException("Readout already exists for SI number: ${readout.siNumber}")
         }
 
-        val matchedCompetitorIndex = projectFile.raceData.competitorData.indexOfFirst { competitorData ->
-            competitorData.competitorCategory.competitor.siNumber == readout.siNumber
-        }.takeIf { it >= 0 }
+        val createNewReadout = hasDuplicateSiNumber && duplicatePolicy == EventReadoutDuplicatePolicy.CreateNew
+        val matchedCompetitorIndex = if (createNewReadout) {
+            null
+        } else {
+            workingProjectFile.raceData.competitorData.indexOfFirst { competitorData ->
+                competitorData.competitorCategory.competitor.siNumber == readout.siNumber
+            }.takeIf { it >= 0 }
+        }
         matchedCompetitorIndex?.let { index ->
-            require(projectFile.raceData.competitorData[index].readoutData == null) {
+            require(workingProjectFile.raceData.competitorData[index].readoutData == null) {
                 "Competitor already has a readout."
             }
         }
-        val matchedCompetitorData = matchedCompetitorIndex?.let { projectFile.raceData.competitorData[it] }
+        val matchedCompetitorData = matchedCompetitorIndex?.let { workingProjectFile.raceData.competitorData[it] }
         val matchedCompetitor = matchedCompetitorData?.competitorCategory?.competitor
         val categoryData = matchedCompetitor?.categoryId?.let { categoryId ->
-            projectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
+            workingProjectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
         }
 
         val controlPunches = readout.punches
@@ -1147,7 +1157,7 @@ object EventProjectEditor {
         }
         val startSeconds = readout.startTime?.getSeconds()
             ?: matchedCompetitor?.drawnStartTimeSeconds?.let { drawnStart ->
-                raceStartSecondsOfDay(projectFile.raceData.race.startDateTimeIso)?.let { raceStart ->
+                raceStartSecondsOfDay(workingProjectFile.raceData.race.startDateTimeIso)?.let { raceStart ->
                     (raceStart + drawnStart) % SportIdentCodes.SECONDS_DAY
                 }
             }
@@ -1179,9 +1189,9 @@ object EventProjectEditor {
         val readoutData = EventReadoutData(
             result = EventResult(
                 id = resultId,
-                raceId = projectFile.raceData.race.id,
+                raceId = workingProjectFile.raceData.race.id,
                 competitorId = matchedCompetitor?.id,
-                siNumber = readout.siNumber,
+                siNumber = if (createNewReadout) null else readout.siNumber,
                 cardType = cardType,
                 checkTimeSeconds = readout.checkTime?.getSeconds(),
                 startTimeSeconds = startSeconds,
@@ -1198,17 +1208,17 @@ object EventProjectEditor {
         )
 
         return if (matchedCompetitorIndex != null) {
-            projectFile.copy(
-                raceData = projectFile.raceData.copy(
-                    competitorData = projectFile.raceData.competitorData.mapIndexed { index, data ->
+            workingProjectFile.copy(
+                raceData = workingProjectFile.raceData.copy(
+                    competitorData = workingProjectFile.raceData.competitorData.mapIndexed { index, data ->
                         if (index == matchedCompetitorIndex) data.copy(readoutData = readoutData) else data
                     }
                 )
             )
         } else {
-            projectFile.copy(
-                raceData = projectFile.raceData.copy(
-                    unmatchedReadoutData = projectFile.raceData.unmatchedReadoutData + readoutData
+            workingProjectFile.copy(
+                raceData = workingProjectFile.raceData.copy(
+                    unmatchedReadoutData = workingProjectFile.raceData.unmatchedReadoutData + readoutData
                 )
             )
         }
@@ -1315,6 +1325,22 @@ object EventProjectEditor {
     private fun EventRaceData.containsReadoutForSiNumber(siNumber: Int): Boolean =
         competitorData.any { it.readoutData?.result?.siNumber == siNumber } ||
             unmatchedReadoutData.any { it.result.siNumber == siNumber }
+
+    private fun removeReadoutForSiNumber(projectFile: EventProjectFile, siNumber: Int): EventProjectFile =
+        projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                competitorData = projectFile.raceData.competitorData.map { data ->
+                    if (data.readoutData?.result?.siNumber == siNumber) {
+                        data.copy(readoutData = null)
+                    } else {
+                        data
+                    }
+                },
+                unmatchedReadoutData = projectFile.raceData.unmatchedReadoutData.filterNot {
+                    it.result.siNumber == siNumber
+                }
+            )
+        )
 
     private fun parseOptionalSiNumber(siNumber: String, fallbackSiNumber: Int?): Int? {
         val trimmedSiNumber = siNumber.trim()

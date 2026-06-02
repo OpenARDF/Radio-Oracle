@@ -1017,6 +1017,89 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun replacesDuplicateDownloadedSportIdentReadout() {
+        val original = projectFile(
+            unmatchedReadouts = listOf(readout("existing", null, 2005010))
+        )
+
+        val updated = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = original,
+            resultId = "replacement",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = sportIdentReadout(siNumber = 2005010),
+            readoutDateTimeIso = "2026-05-31T12:00",
+            duplicatePolicy = EventReadoutDuplicatePolicy.Replace,
+            punchIdFactory = { index, type -> "replacement-punch-$index-${type.name}" }
+        )
+
+        val readout = updated.raceData.unmatchedReadoutData.single()
+        assertEquals("replacement", readout.result.id)
+        assertEquals(2005010, readout.result.siNumber)
+    }
+
+    @Test
+    fun replacesDuplicateMatchedDownloadedSportIdentReadout() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    siNumber = 2005010,
+                    readoutData = readout("existing", "comp-1", 2005010)
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = original,
+            resultId = "replacement",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = sportIdentReadout(siNumber = 2005010),
+            readoutDateTimeIso = "2026-05-31T12:00",
+            duplicatePolicy = EventReadoutDuplicatePolicy.Replace,
+            punchIdFactory = { index, type -> "replacement-punch-$index-${type.name}" }
+        )
+
+        val readout = updated.raceData.competitorData.single().readoutData!!
+        assertEquals("replacement", readout.result.id)
+        assertEquals("comp-1", readout.result.competitorId)
+        assertEquals(2005010, readout.result.siNumber)
+        assertEquals(emptyList(), updated.raceData.unmatchedReadoutData)
+    }
+
+    @Test
+    fun createsNewDuplicateDownloadedSportIdentReadoutAsUnmatchedWithoutSiNumber() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    siNumber = 2005010,
+                    readoutData = readout("existing", "comp-1", 2005010)
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = original,
+            resultId = "new-duplicate",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = sportIdentReadout(siNumber = 2005010),
+            readoutDateTimeIso = "2026-05-31T12:00",
+            duplicatePolicy = EventReadoutDuplicatePolicy.CreateNew,
+            punchIdFactory = { index, type -> "new-punch-$index-${type.name}" }
+        )
+
+        assertEquals("existing", updated.raceData.competitorData.single().readoutData!!.result.id)
+        val duplicate = updated.raceData.unmatchedReadoutData.single()
+        assertEquals("new-duplicate", duplicate.result.id)
+        assertEquals(null, duplicate.result.competitorId)
+        assertEquals(null, duplicate.result.siNumber)
+    }
+
+    @Test
     fun rejectsInvalidManualReadoutInputs() {
         val original = projectFile(
             competitors = listOf(

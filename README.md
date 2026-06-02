@@ -38,6 +38,8 @@ The desktop beta supports:
   READOUT/SI MASTER station;
 - running an experimental continuous SI5/SI6/SI8/SI9/SIAC card readout loop
   from an attached READOUT/SI MASTER station;
+- choosing whether duplicate SI-card reads are ignored, replaced, or stored as
+  new readouts;
 - inspecting competitors in drawn start-time order in a Start List desktop view;
 - assigning unmatched readouts to competitors;
 - previewing finish-ticket text for readouts using the shared ticket renderer;
