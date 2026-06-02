@@ -2155,6 +2155,7 @@ private fun ReadoutDetailsPanel(
     var selectedStatus by remember { mutableStateOf(ResultStatus.OK) }
     var ticketPreviewText by remember { mutableStateOf<String?>(null) }
     var ticketPreviewResultId by remember { mutableStateOf<String?>(null) }
+    val competitorsWithoutReadouts = competitors.filterNot { it.hasReadout }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         LastReadoutStatusPanel(lastReadout)
@@ -2216,7 +2217,7 @@ private fun ReadoutDetailsPanel(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     ManualReadoutAddRow(
-                        competitors = competitors,
+                        competitors = competitorsWithoutReadouts,
                         selectedCompetitorId = selectedCompetitorId,
                         onCompetitorSelected = { selectedCompetitorId = it },
                         siNumberDraft = siNumberDraft,
@@ -2256,7 +2257,7 @@ private fun ReadoutDetailsPanel(
                     readouts.forEach { readout ->
                         ReadoutDetailRow(
                             readout = readout,
-                            competitors = competitors,
+                            competitors = competitorsWithoutReadouts,
                             onUpdateReadoutStatus = onUpdateReadoutStatus,
                             onAssignUnmatchedReadout = onAssignUnmatchedReadout,
                             onPreviewFinishTicket = {
