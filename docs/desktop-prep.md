@@ -20,8 +20,9 @@ finish table:
 - preview shared finish-ticket text for readouts before desktop printer
   transport is available;
 - summarize live-result send readiness, including unsent matched results and
-  skipped readouts, and export Android-shaped live-result JSON payloads before
-  desktop network sending is available;
+  skipped readouts, and export Android-shaped live-result JSON payloads for
+  provider inspection;
+- manually send unsent matched live results to ROBIS using the race API key;
 - recalculate results using shared services;
 - import/export supported event and result formats as they move into shared
   code.
@@ -29,7 +30,7 @@ finish table:
 The desktop beta should not include:
 
 - Bluetooth or printer transport;
-- live result network sending;
+- background live result network sending;
 - Android Room database migration or shared SQL persistence;
 - any promise that desktop can replace the Android race-day download workflow.
 

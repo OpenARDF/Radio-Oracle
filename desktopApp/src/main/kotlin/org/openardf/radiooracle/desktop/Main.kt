@@ -182,6 +182,7 @@ fun main(args: Array<String>) = application {
         var isContinuousSiReadoutActive by remember { mutableStateOf(false) }
         var continuousSiReadoutStopRequested by remember { mutableStateOf<AtomicBoolean?>(null) }
         var siDownloadStatusText by remember { mutableStateOf<String?>(null) }
+        var isSendingLiveResults by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) {
             while (true) {
@@ -346,6 +347,37 @@ fun main(args: Array<String>) = application {
                 }
                 isContinuousSiReadoutActive = false
                 continuousSiReadoutStopRequested = null
+            }
+        }
+
+        fun sendRobisLiveResults() {
+            if (isSendingLiveResults) {
+                return
+            }
+            if (projectSession.currentProject == null) {
+                projectStatusText = "Open or create a project before sending live results."
+                return
+            }
+            isSendingLiveResults = true
+            projectStatusText = "Sending live results to ROBIS..."
+            appCoroutineScope.launch {
+                val sendResult = runCatching {
+                    withContext(Dispatchers.IO) {
+                        val currentProject = requireNotNull(projectSession.currentProject)
+                        DesktopRobisLiveResultSender().sendUnsent(
+                            projectFile = currentProject,
+                            apiKey = currentProject.raceData.race.apiKey
+                        )
+                    }
+                }
+                sendResult.onSuccess { result ->
+                    projectFile = projectSession.updateCurrentProject { result.projectFile }
+                    syncProjectState()
+                    projectStatusText = "Sent ${result.sentCount} live result${if (result.sentCount == 1) "" else "s"} to ROBIS."
+                }.onFailure { error ->
+                    projectStatusText = "ROBIS send failed: ${error.message ?: error::class.simpleName}"
+                }
+                isSendingLiveResults = false
             }
         }
 
@@ -602,6 +634,7 @@ fun main(args: Array<String>) = application {
             isDownloadingSiReadout = isDownloadingSiReadout,
             isContinuousSiReadoutActive = isContinuousSiReadoutActive,
             siDownloadStatusText = siDownloadStatusText,
+            isSendingLiveResults = isSendingLiveResults,
             onRenameRace = { name ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -906,7 +939,8 @@ fun main(args: Array<String>) = application {
                 }.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
-            }
+            },
+            onSendRobisLiveResults = ::sendRobisLiveResults
         )
     }
 }
@@ -956,6 +990,7 @@ private fun RadioOManagerDesktopApp(
     isDownloadingSiReadout: Boolean = false,
     isContinuousSiReadoutActive: Boolean = false,
     siDownloadStatusText: String? = null,
+    isSendingLiveResults: Boolean = false,
     onRenameRace: (String) -> Unit = {},
     onUpdateRaceStartDateTime: (String) -> Unit = {},
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit = { _, _, _, _ -> },
@@ -980,7 +1015,8 @@ private fun RadioOManagerDesktopApp(
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean = { _, _, _, _, _, _ -> false },
     onUpdateAlias: (String, String, String) -> Unit = { _, _, _ -> },
     onAddAlias: (String, String) -> Boolean = { _, _ -> false },
-    onRemoveAlias: (String) -> Unit = {}
+    onRemoveAlias: (String) -> Unit = {},
+    onSendRobisLiveResults: () -> Unit = {}
 ) {
     MaterialTheme(
         colors = MaterialTheme.colors.copy(
@@ -1034,7 +1070,9 @@ private fun RadioOManagerDesktopApp(
                         onAddManualReadout = onAddManualReadout,
                         onUpdateAlias = onUpdateAlias,
                         onAddAlias = onAddAlias,
-                        onRemoveAlias = onRemoveAlias
+                        onRemoveAlias = onRemoveAlias,
+                        isSendingLiveResults = isSendingLiveResults,
+                        onSendRobisLiveResults = onSendRobisLiveResults
                     )
                 }
                 StatusStrip(projectStatusText, hasUnsavedChanges, siReaderState)
@@ -1131,7 +1169,9 @@ private fun SectionWorkspace(
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean,
     onUpdateAlias: (String, String, String) -> Unit,
     onAddAlias: (String, String) -> Boolean,
-    onRemoveAlias: (String) -> Unit
+    onRemoveAlias: (String) -> Unit,
+    isSendingLiveResults: Boolean,
+    onSendRobisLiveResults: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -1213,7 +1253,11 @@ private fun SectionWorkspace(
             )
         }
         if (section == DesktopSection.Settings) {
-            SettingsDetailsPanel(DesktopProjectDiagnostics.from(projectFile))
+            SettingsDetailsPanel(
+                diagnostics = DesktopProjectDiagnostics.from(projectFile),
+                isSendingLiveResults = isSendingLiveResults,
+                onSendRobisLiveResults = onSendRobisLiveResults
+            )
         }
         Box(
             modifier = Modifier
@@ -1235,7 +1279,11 @@ private fun SectionWorkspace(
 
 /** Shows read-only project diagnostics and the desktop-beta scope boundary. */
 @Composable
-private fun SettingsDetailsPanel(diagnostics: DesktopProjectDiagnostics) {
+private fun SettingsDetailsPanel(
+    diagnostics: DesktopProjectDiagnostics,
+    isSendingLiveResults: Boolean,
+    onSendRobisLiveResults: () -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DetailRow("Project", diagnostics.projectState)
         DetailRow("Schema", diagnostics.schemaText.ifBlank { "None" })
@@ -1253,6 +1301,12 @@ private fun SettingsDetailsPanel(diagnostics: DesktopProjectDiagnostics) {
         )
         DetailRow("Validation", diagnostics.validationState)
         DetailRow("Live results", diagnostics.liveResultPlanText)
+        Button(
+            onClick = onSendRobisLiveResults,
+            enabled = diagnostics.projectState == "Project open" && !isSendingLiveResults
+        ) {
+            ButtonLabel(if (isSendingLiveResults) "Sending" else "Send ROBIS")
+        }
         diagnostics.validationIssues.forEach { issue ->
             Text(
                 text = issue,

@@ -40,10 +40,11 @@ The desktop beta supports:
   from an attached READOUT/SI MASTER station;
 - previewing finish-ticket text for readouts using the shared ticket renderer;
 - summarizing live-result send readiness and exporting Android-shaped
-  live-result JSON payloads without performing network sends.
+  live-result JSON payloads;
+- manually sending unsent matched live results to ROBIS using the race API key.
 
 The desktop beta does not yet replace the Android race-day workflow. Live
-printer transport, live result sending, shared SQL persistence, and station
+printer transport, background live result sending, shared SQL persistence, and station
 maintenance writes remain post-beta work.
 
 Local desktop packaging and smoke commands are documented in
