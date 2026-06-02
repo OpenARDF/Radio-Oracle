@@ -3,6 +3,8 @@ package org.openardf.radiooracle.shared.files
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.event.EventCompetitor
+import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.time.DurationFormatter
@@ -39,16 +41,31 @@ object EventCsvExports {
     fun competitorStarts(raceData: EventRaceData): String =
         raceData.competitorData
             .sortedWith(compareBy({ it.competitorCategory.competitor.startNumber }, { it.competitorCategory.competitor.fullName() }))
-            .joinRows { competitorData ->
-                val competitorCategory = competitorData.competitorCategory
-                EventCsvRows.competitorStartRow(
-                    competitor = competitorCategory.competitor,
-                    categoryName = raceData.categoryNameFor(competitorCategory.competitor.categoryId),
-                    startTimeText = competitorCategory.competitor.drawnStartTimeSeconds?.let {
-                        DurationFormatter.secondsToFormattedString(it, useMinutes = true)
-                    }
+            .joinCompetitorStartRows(raceData)
+
+    fun competitorStartsByCategory(raceData: EventRaceData): String =
+        raceData.competitorData
+            .sortedWith(
+                compareBy<EventCompetitorData>(
+                    { raceData.categoryNameFor(it.competitorCategory.competitor.categoryId) },
+                    { it.competitorCategory.competitor.startTimeSortKey() },
+                    { it.competitorCategory.competitor.startNumber },
+                    { it.competitorCategory.competitor.fullName() }
                 )
-            }
+            )
+            .joinCompetitorStartRows(raceData)
+
+    fun competitorStartsByMinute(raceData: EventRaceData): String =
+        raceData.competitorData
+            .sortedWith(
+                compareBy<EventCompetitorData>(
+                    { it.competitorCategory.competitor.startTimeSortKey() },
+                    { raceData.categoryNameFor(it.competitorCategory.competitor.categoryId) },
+                    { it.competitorCategory.competitor.startNumber },
+                    { it.competitorCategory.competitor.fullName() }
+                )
+            )
+            .joinCompetitorStartRows(raceData)
 
     fun readouts(raceData: EventRaceData): String =
         (raceData.competitorData.mapNotNull { it.readoutData } + raceData.unmatchedReadoutData)
@@ -87,8 +104,23 @@ object EventCsvExports {
     private fun <T> List<T>.joinRows(row: (T) -> String): String =
         joinToString(separator = "\n", postfix = if (isEmpty()) "" else "\n", transform = row)
 
+    private fun List<EventCompetitorData>.joinCompetitorStartRows(raceData: EventRaceData): String =
+        joinRows { competitorData ->
+            val competitorCategory = competitorData.competitorCategory
+            EventCsvRows.competitorStartRow(
+                competitor = competitorCategory.competitor,
+                categoryName = raceData.categoryNameFor(competitorCategory.competitor.categoryId),
+                startTimeText = competitorCategory.competitor.drawnStartTimeSeconds?.let {
+                    DurationFormatter.secondsToFormattedString(it, useMinutes = true)
+                }
+            )
+        }
+
     private fun EventRaceData.categoryNameFor(categoryId: String?): String =
         categoryId?.let { id -> categories.firstOrNull { it.category.id == id }?.category?.name } ?: ""
+
+    private fun EventCompetitor.startTimeSortKey(): Long =
+        drawnStartTimeSeconds ?: Long.MAX_VALUE
 
     private fun Long.asSiTimeText(): String =
         DurationFormatter.secondsToFormattedString(this, useMinutes = false)

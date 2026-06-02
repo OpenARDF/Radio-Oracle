@@ -69,8 +69,7 @@ Android-compatible event model.
 ARDFEvent-derived desktop parity gaps to track after the current live-result
 slices:
 
-- start-list draw workflows with club/category separation and start-list export
-  variants;
+- start-list draw workflows with club/category separation;
 - full ESC/POS ticket printer transport using the shared finish-ticket
   renderer as the text source;
 - OCheckList-style DNS/new-card import or equivalent race-day status import;

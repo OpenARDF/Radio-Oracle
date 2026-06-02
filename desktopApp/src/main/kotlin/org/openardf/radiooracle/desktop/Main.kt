@@ -735,6 +735,12 @@ fun main(args: Array<String>) = application {
                 Item("Export Starts CSV...", enabled = projectFile != null, onClick = {
                     exportCsv("Export Starts CSV", DesktopProjectFiles::exportCompetitorStartsCsv)
                 })
+                Item("Export Starts by Category CSV...", enabled = projectFile != null, onClick = {
+                    exportCsv("Export Starts by Category CSV", DesktopProjectFiles::exportCompetitorStartsByCategoryCsv)
+                })
+                Item("Export Starts by Minute CSV...", enabled = projectFile != null, onClick = {
+                    exportCsv("Export Starts by Minute CSV", DesktopProjectFiles::exportCompetitorStartsByMinuteCsv)
+                })
                 Item("Export Readouts CSV...", enabled = projectFile != null, onClick = {
                     exportCsv("Export Readouts CSV", DesktopProjectFiles::exportReadoutsCsv)
                 })

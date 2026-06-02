@@ -33,6 +33,14 @@ object DesktopProjectFiles : ProjectFileStore {
         writeText(path, EventCsvExports.competitorStarts(projectFile.raceData))
     }
 
+    fun exportCompetitorStartsByCategoryCsv(path: Path, projectFile: EventProjectFile) {
+        writeText(path, EventCsvExports.competitorStartsByCategory(projectFile.raceData))
+    }
+
+    fun exportCompetitorStartsByMinuteCsv(path: Path, projectFile: EventProjectFile) {
+        writeText(path, EventCsvExports.competitorStartsByMinute(projectFile.raceData))
+    }
+
     fun exportReadoutsCsv(path: Path, projectFile: EventProjectFile) {
         writeText(path, EventCsvExports.readouts(projectFile.raceData))
     }

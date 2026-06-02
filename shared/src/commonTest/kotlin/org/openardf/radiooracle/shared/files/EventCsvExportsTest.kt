@@ -58,6 +58,32 @@ class EventCsvExportsTest {
     }
 
     @Test
+    fun exportsCompetitorStartRowsByCategory() {
+        assertEquals(
+            """
+            3;Gamma;Carol;M21;;12:00;OK003;;OK Test;333333
+            4;NoTime;Dave;M21;;;OK004;;OK Test;444444
+            2;Beta;Bob;W21;;11:00;OK002;;OK Test;222222
+            1;Alpha;Alice;W21;;13:00;OK001;;OK Test;111111
+            """.trimIndent() + "\n",
+            EventCsvExports.competitorStartsByCategory(startVariantRaceData())
+        )
+    }
+
+    @Test
+    fun exportsCompetitorStartRowsByMinute() {
+        assertEquals(
+            """
+            2;Beta;Bob;W21;;11:00;OK002;;OK Test;222222
+            3;Gamma;Carol;M21;;12:00;OK003;;OK Test;333333
+            1;Alpha;Alice;W21;;13:00;OK001;;OK Test;111111
+            4;NoTime;Dave;M21;;;OK004;;OK Test;444444
+            """.trimIndent() + "\n",
+            EventCsvExports.competitorStartsByMinute(startVariantRaceData())
+        )
+    }
+
+    @Test
     fun exportsPortableReadoutRows() {
         assertEquals(
             "123456;00:01:40;00:10:00;00:20:00;2;31;00:12:00;32;00:15:00\n",
@@ -161,6 +187,85 @@ class EventCsvExportsTest {
             unmatchedReadoutData = emptyList()
         )
     }
+
+    private fun startVariantRaceData(): EventRaceData {
+        val race = EventRace(
+            id = "race",
+            name = "CSV Race",
+            apiKey = "",
+            startDateTimeIso = "2026-06-01T10:00",
+            raceType = RaceType.CLASSIC,
+            raceLevel = RaceLevel.PRACTICE,
+            raceBand = RaceBand.M80,
+            timeLimitSeconds = 7_200
+        )
+        val m21 = EventCategory(
+            id = "m21",
+            raceId = race.id,
+            name = "M21",
+            isMan = true,
+            maxAge = null,
+            lengthMeters = 5_000,
+            climbMeters = 100,
+            order = 1,
+            differentProperties = false,
+            raceType = null,
+            raceBand = null,
+            timeLimitSeconds = null,
+            controlPointsString = ""
+        )
+        val w21 = m21.copy(id = "w21", name = "W21", isMan = false)
+        val competitors = listOf(
+            variantCompetitor(race.id, w21.id, "Alice", "Alpha", "OK001", 111111, 1, 780),
+            variantCompetitor(race.id, w21.id, "Bob", "Beta", "OK002", 222222, 2, 660),
+            variantCompetitor(race.id, m21.id, "Carol", "Gamma", "OK003", 333333, 3, 720),
+            variantCompetitor(race.id, m21.id, "Dave", "NoTime", "OK004", 444444, 4, null)
+        )
+        return EventRaceData(
+            race = race,
+            categories = listOf(
+                EventCategoryData(m21, controlPoints = emptyList(), competitors = competitors.filter { it.categoryId == m21.id }),
+                EventCategoryData(w21, controlPoints = emptyList(), competitors = competitors.filter { it.categoryId == w21.id })
+            ),
+            aliases = emptyList(),
+            competitorData = competitors.map { competitor ->
+                EventCompetitorData(
+                    competitorCategory = EventCompetitorCategory(
+                        competitor = competitor,
+                        category = if (competitor.categoryId == m21.id) m21 else w21
+                    ),
+                    readoutData = null
+                )
+            },
+            unmatchedReadoutData = emptyList()
+        )
+    }
+
+    private fun variantCompetitor(
+        raceId: String,
+        categoryId: String,
+        firstName: String,
+        lastName: String,
+        index: String,
+        siNumber: Int,
+        startNumber: Int,
+        drawnStartTimeSeconds: Long?
+    ): EventCompetitor =
+        EventCompetitor(
+            id = index,
+            raceId = raceId,
+            categoryId = categoryId,
+            firstName = firstName,
+            lastName = lastName,
+            club = "OK Test",
+            index = index,
+            isMan = categoryId == "m21",
+            birthYear = 1985,
+            siNumber = siNumber,
+            siRent = false,
+            startNumber = startNumber,
+            drawnStartTimeSeconds = drawnStartTimeSeconds
+        )
 
     private fun punch(
         id: String,
