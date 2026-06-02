@@ -82,6 +82,23 @@ class LiveResultJsonExportsTest {
     }
 
     @Test
+    fun canLimitExportToSpecificResultIds() {
+        val category = category()
+        val rows = LiveResultJsonExports.resultRows(
+            raceData(
+                competitors = listOf(
+                    competitorData("one", category = category, readout = readout("result-one")),
+                    competitorData("two", category = category, readout = readout("result-two"))
+                )
+            ),
+            resultIds = setOf("result-two")
+        )
+
+        assertEquals(1, rows.size)
+        assertEquals("2026-06-01T10:21:00", rows.single().result.readoutTime)
+    }
+
+    @Test
     fun exportsResultAndPunchStatusShortCodes() {
         val result = LiveResultJsonExports.resultRows(
             raceData(

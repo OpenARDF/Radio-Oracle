@@ -24,12 +24,15 @@ object LiveResultJsonExports {
     }
 
     /** Exports matched, categorized competitor readouts using the Android live-result JSON field names. */
-    fun results(raceData: EventRaceData): String =
-        json.encodeToString(resultRows(raceData))
+    fun results(raceData: EventRaceData, resultIds: Set<String>? = null): String =
+        json.encodeToString(resultRows(raceData, resultIds))
 
-    fun resultRows(raceData: EventRaceData): List<LiveResultCompetitorJson> =
+    fun resultRows(raceData: EventRaceData, resultIds: Set<String>? = null): List<LiveResultCompetitorJson> =
         raceData.competitorData.mapNotNull { competitorData ->
             val readoutData = competitorData.readoutData ?: return@mapNotNull null
+            if (resultIds != null && readoutData.result.id !in resultIds) {
+                return@mapNotNull null
+            }
             val competitorCategory = competitorData.competitorCategory
             val category = competitorCategory.category ?: return@mapNotNull null
             val competitor = competitorCategory.competitor
