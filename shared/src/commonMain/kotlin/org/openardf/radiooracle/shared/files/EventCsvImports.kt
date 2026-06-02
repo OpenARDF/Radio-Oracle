@@ -76,6 +76,8 @@ object EventCsvImports {
 
             try {
                 rows += parseAndroidCompetitorRow(parseSemicolonRow(line), lineIndex)
+            } catch (_: HeaderRow) {
+                // Optional exported header row.
             } catch (error: IllegalArgumentException) {
                 invalidLines += CsvImportError(lineIndex, error.message ?: "Invalid competitor row")
             }
@@ -134,6 +136,10 @@ object EventCsvImports {
     }
 
     private fun parseAndroidCompetitorRow(fields: List<String>, lineIndex: Int): CompetitorCsvImportRow {
+        if (lineIndex == 0 && EventCsvFormat.Competitor.isHeader(fields)) {
+            throw HeaderRow
+        }
+
         require(fields.size >= EventCsvFormat.Competitor.REQUIRED_IMPORT_COLUMNS) {
             "Expected at least ${EventCsvFormat.Competitor.REQUIRED_IMPORT_COLUMNS} columns at line: $lineIndex"
         }
@@ -226,4 +232,6 @@ object EventCsvImports {
 
     private fun List<String>.optionalTrimmedInt(index: Int): Int? =
         optionalTrimmed(index).takeIf { it.isNotEmpty() }?.toInt()
+
+    private object HeaderRow : IllegalArgumentException()
 }

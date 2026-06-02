@@ -27,6 +27,7 @@ import org.openardf.radiooracle.backend.wrappers.ResultWrapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvFormat
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
@@ -231,120 +232,86 @@ object CsvProcessor : FormatProcessor {
         context: Context
     ): DataImportWrapper {
 
-        val csvReader = getReader().readAll(inStream)
         val competitors = ArrayList<CompetitorCategory>()
         var currOrder =
             dataProcessor.getHighestCategoryOrder(race.id) + 1 // Preserve category order when new categories are created.
         var currStartNum = dataProcessor.getHighestStartNumberByRace(race.id) + 1
-        val invalidLines = ArrayList<Pair<Int, String>>()
+        val parsedRows = EventCsvImports.parseAndroidCompetitorRows(inStream.bufferedReader().readText())
+        val invalidLines = parsedRows.invalidLines
+            .mapTo(ArrayList()) { it.lineIndex to it.message }
 
-        for (csvRow in csvReader.withIndex()) {
+        for ((index, row) in parsedRows.rows.withIndex()) {
             try {
-                val row = csvRow.value
-                var category: CategoryData? = null
-
-                // Reuse existing categories by name, or create lightweight placeholders for new names.
-                if (row[4].isNotEmpty()) {
-                    val catName = row[4].trim()
-                    val origCat = categories.find { it.category.name == catName }
-                    if (origCat != null) {
-                        category = origCat
-                    } else {
-                        category = CategoryData(
-                            Category(
-                                UUID.randomUUID(),
-                                race.id,
-                                row[4].trim(),
-                                false,
-                                null,
-                                0,
-                                0,
-                                currOrder,
-                                false,
-                                null,
-                                null,
-                                null,
-                                ""
-                            ), emptyList(), emptyList()
-                        )
-                        currOrder++
-                        categories.add(category)
-                    }
+                val category = findOrCreateCategory(row, race, categories, currOrder)
+                if (category != null && categories.none { it.category.id == category.category.id }) {
+                    currOrder++
+                    categories.add(category)
                 }
 
                 val categoryId = category?.category?.id
-                var startNumber = currStartNum
-
-                if (row[1].isNotEmpty()) {
-                    startNumber = row[1].trim().toInt()
-                } else {
-                    currStartNum++
-                }
-                val firstName = row[2].trim()
-                val lastName = row[3].trim()
-                val isMan = row[5].trim().toIntOrNull() == 0
-                val birthYear = if (row.size > 6) row[6].trim().toIntOrNull() else null
-                val club = if (row.size > 7) row[7].trim() else ""
-                val index = if (row.size > 8) row[8].trim() else ""
-                val siNumber = row[0].trim().toIntOrNull()
-
-                // Validate SI numbers here because invalid numbers cannot be fixed during persistence.
-                if (siNumber != null && !SIConstants.isSINumberValid(siNumber)) {
-                    throw IllegalArgumentException(
-                        context.getString(
-                            R.string.data_import_competitor_invalid_si,
-                            csvRow.index
-                        )
-                    )
+                val startNumber = row.startNumber ?: currStartNum++
+                if (startNumber >= currStartNum) {
+                    currStartNum = startNumber + 1
                 }
 
                 val drawnRelativeStartTime: Duration? =
-                    if (row.size > 9 && row[9].isNotEmpty()) {
-                        TimeProcessor.minuteStringToDuration(row[9].trim())
-                    } else null
-
-                // Competitor names are required by the UI and export paths.
-                if (firstName.isEmpty() || lastName.isEmpty()) {
-                    throw IllegalArgumentException(
-                        context.getString(
-                            R.string.data_import_competitor_blank_name,
-                            csvRow.index
-                        )
-                    )
-                }
-
-                val siRent = if (row.size > 10) {
-                    row[10].trim().toInt() == 1
-                } else false
+                    row.startTimeText?.let { TimeProcessor.minuteStringToDuration(it) }
 
                 val competitor = Competitor(
                     UUID.randomUUID(),
                     race.id,
                     categoryId,
-                    firstName,
-                    lastName,
-                    club,
-                    index,
-                    isMan,
-                    birthYear,
-                    siNumber,
-                    siRent,
+                    row.firstName,
+                    row.lastName,
+                    row.club,
+                    row.index,
+                    row.isMan,
+                    row.birthYear,
+                    row.siNumber,
+                    row.siRent,
                     startNumber,
                     drawnRelativeStartTime
                 )
-                if (category != null) {
-                    competitors.add(CompetitorCategory(competitor, category.category))
-                }
+                competitors.add(CompetitorCategory(competitor, category?.category))
             } catch (e: Exception) {
                 Log.w(
                     "CSV import",
                     "Failed to import competitor \n\" " + e.stackTraceToString()
                 )
 
-                invalidLines.add(Pair(csvRow.index, e.message ?: ""))
+                invalidLines.add(Pair(index, e.message ?: ""))
             }
         }
         return DataImportWrapper(competitors, categories.toList(), invalidLines)
+    }
+
+    private fun findOrCreateCategory(
+        row: CompetitorCsvImportRow,
+        race: Race,
+        categories: HashSet<CategoryData>,
+        order: Int
+    ): CategoryData? {
+        if (row.categoryName.isEmpty()) {
+            return null
+        }
+        categories.find { it.category.name == row.categoryName }?.let { return it }
+        return CategoryData(
+            Category(
+                UUID.randomUUID(),
+                race.id,
+                row.categoryName,
+                false,
+                null,
+                0,
+                0,
+                order,
+                false,
+                null,
+                null,
+                null,
+                ""
+            ), emptyList(), emptyList()
+        )
     }
 
     /** Imports start-list rows and updates matched competitors by start number. */
@@ -447,6 +414,8 @@ object CsvProcessor : FormatProcessor {
     ) {
         val writer = outStream.bufferedWriter()
         withContext(Dispatchers.IO) {
+            writer.write(EventCsvFormat.Competitor.HEADER_ROW)
+            writer.newLine()
 
             for (com in competitorData) {
                 writer.write(

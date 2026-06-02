@@ -3,6 +3,7 @@ package org.openardf.radiooracle.shared.files
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.toDisplayLabel
+import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** A control punch rendered as a pair of SI code and already formatted time text. */
 data class TimedPunchCsvField(
@@ -30,9 +31,19 @@ object EventCsvRows {
 
     /** Formats a competitor row in the existing simple competitor CSV export shape. */
     fun competitorRow(competitor: EventCompetitor, categoryName: String): String {
-        return "${competitor.siNumber ?: ""};${competitor.firstName};${competitor.lastName};" +
-                "$categoryName;${competitor.isMan.compareTo(false)};${competitor.birthYear};;" +
-                "${competitor.club};;${competitor.startNumber};${competitor.index}"
+        return listOf(
+            competitor.siNumber ?: "",
+            competitor.startNumber,
+            competitor.firstName,
+            competitor.lastName,
+            categoryName,
+            if (competitor.isMan) 0 else 1,
+            competitor.birthYear ?: "",
+            competitor.club,
+            competitor.index,
+            competitor.drawnStartTimeSeconds?.let { DurationFormatter.secondsToFormattedString(it, useMinutes = true) } ?: "",
+            if (competitor.siRent) 1 else 0
+        ).joinToString(EventCsvFormat.DELIMITER.toString()) { it.toString().csvField() }
     }
 
     /** Formats a start-list row, using caller-provided absolute start time text when available. */
@@ -83,4 +94,11 @@ object EventCsvRows {
         runTimeText: String
     ): String =
         "$placeText;$competitorName;$statusLabel;$pointsText;$runTimeText"
+
+    private fun String.csvField(): String =
+        if (any { it == EventCsvFormat.DELIMITER || it == '"' || it == '\n' || it == '\r' }) {
+            "\"" + replace("\"", "\"\"") + "\""
+        } else {
+            this
+        }
 }

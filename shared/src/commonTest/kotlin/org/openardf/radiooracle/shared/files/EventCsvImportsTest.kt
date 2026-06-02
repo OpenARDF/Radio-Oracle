@@ -86,9 +86,23 @@ class EventCsvImportsTest {
     }
 
     @Test
+    fun skipsOptionalCompetitorHeaderRow() {
+        val result = EventCsvImports.parseAndroidCompetitorRows(
+            """
+            ${EventCsvFormat.Competitor.HEADER_ROW}
+            123456;42;Pavel;Kolsky;M21;0;1980;OK Lokomotiva;OK001;10:00;1
+            """.trimIndent()
+        )
+
+        assertEquals(emptyList(), result.invalidLines)
+        assertEquals(1, result.rows.size)
+        assertEquals("Pavel", result.rows.single().firstName)
+    }
+
+    @Test
     fun allowsOptionalCompetitorImportFields() {
         val result = EventCsvImports.parseAndroidCompetitorRows(
-            "; ;Anna;Berg;W21;1;;;;;"
+            "; ;Anna;Berg;;1;;;;;"
         )
 
         assertEquals(emptyList(), result.invalidLines)
@@ -96,6 +110,7 @@ class EventCsvImportsTest {
         val row = result.rows.single()
         assertEquals(null, row.siNumber)
         assertEquals(null, row.startNumber)
+        assertEquals("", row.categoryName)
         assertFalse(row.isMan)
         assertEquals(null, row.birthYear)
         assertEquals("", row.club)
@@ -126,10 +141,11 @@ class EventCsvImportsTest {
     @Test
     fun parsesQuotedSemicolonFields() {
         val result = EventCsvImports.parseAndroidCompetitorRows(
-            "123456;42;Pavel;Kolsky;M21;0;1980;\"OK; Lokomotiva\";OK001;10:00;0"
+            "123456;42;\"Pa\"\"vel\";Kolsky;M21;0;1980;\"OK; Lokomotiva\";OK001;10:00;0"
         )
 
         assertEquals(emptyList(), result.invalidLines)
+        assertEquals("Pa\"vel", result.rows.single().firstName)
         assertEquals("OK; Lokomotiva", result.rows.single().club)
         assertFalse(result.rows.single().siRent)
     }

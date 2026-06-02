@@ -44,9 +44,28 @@ class EventCsvExportsTest {
     @Test
     fun exportsPortableCompetitorRows() {
         assertEquals(
-            "123456;Test;Runner;M21;1;1985;;OK Test;;7;OK001\n",
+            """
+            si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent
+            123456;7;Test;Runner;M21;0;1985;OK Test;OK001;10:00;0
+            """.trimIndent() + "\n",
             EventCsvExports.competitors(raceData())
         )
+    }
+
+    @Test
+    fun exportedCompetitorRowsParseWithSharedImportContract() {
+        val result = EventCsvImports.parseAndroidCompetitorRows(EventCsvExports.competitors(raceData()))
+
+        assertEquals(emptyList(), result.invalidLines)
+        val row = result.rows.single()
+        assertEquals(123456, row.siNumber)
+        assertEquals(7, row.startNumber)
+        assertEquals("Test", row.firstName)
+        assertEquals("Runner", row.lastName)
+        assertEquals("M21", row.categoryName)
+        assertEquals("OK Test", row.club)
+        assertEquals("OK001", row.index)
+        assertEquals("10:00", row.startTimeText)
     }
 
     @Test

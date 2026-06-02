@@ -608,6 +608,21 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun importsCompetitorRowsWithoutCategory() {
+        val updated = EventProjectEditor.importCompetitorRows(
+            projectFile = projectFile(categories = listOf(categoryData("cat-1", "M21"))),
+            rows = listOf(competitorImportRow(firstName = "Practice", lastName = "Attendee", categoryName = "")),
+            competitorIdFactory = { "comp-1" },
+            categoryIdFactory = { "cat-2" }
+        )
+
+        val competitorCategory = updated.raceData.competitorData.single().competitorCategory
+        assertEquals(null, competitorCategory.competitor.categoryId)
+        assertEquals(null, competitorCategory.category)
+        assertEquals(listOf("M21"), updated.raceData.categories.map { it.category.name })
+    }
+
+    @Test
     fun rejectsDuplicateCompetitorImportNumbers() {
         val original = projectFile(
             competitors = listOf(competitorData("comp-1", "Alice", "Runner", startNumber = 1, siNumber = 1111))

@@ -28,7 +28,7 @@ object EventCsvExports {
             }
 
     fun competitors(raceData: EventRaceData): String =
-        raceData.competitorData
+        EventCsvFormat.Competitor.HEADER_ROW + "\n" + raceData.competitorData
             .sortedWith(compareBy({ it.competitorCategory.competitor.startNumber }, { it.competitorCategory.competitor.fullName() }))
             .joinRows { competitorData ->
                 val competitorCategory = competitorData.competitorCategory

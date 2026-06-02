@@ -46,7 +46,36 @@ class EventCsvRowsTest {
             drawnStartTimeSeconds = null
         )
 
-        assertEquals("123456;Pavel;Kolsky;M21;1;1980;;OK;;42;OK001", EventCsvRows.competitorRow(competitor, "M21"))
+        assertEquals("123456;42;Pavel;Kolsky;M21;0;1980;OK;OK001;;0", EventCsvRows.competitorRow(competitor, "M21"))
+    }
+
+    @Test
+    fun formatsCompetitorRowsWithQuotedFields() {
+        val competitor = EventCompetitor(
+            id = "competitor",
+            raceId = "race",
+            categoryId = null,
+            firstName = "Pa\"vel",
+            lastName = "Kolsky",
+            club = "OK; East",
+            index = "OK001",
+            isMan = true,
+            birthYear = null,
+            siNumber = null,
+            siRent = true,
+            startNumber = 42,
+            drawnStartTimeSeconds = 600
+        )
+
+        val row = EventCsvRows.competitorRow(competitor, "")
+
+        assertEquals(";42;\"Pa\"\"vel\";Kolsky;;0;;\"OK; East\";OK001;10:00;1", row)
+        val parsed = EventCsvImports.parseAndroidCompetitorRows(row)
+        assertEquals(emptyList(), parsed.invalidLines)
+        assertEquals("Pa\"vel", parsed.rows.single().firstName)
+        assertEquals("OK; East", parsed.rows.single().club)
+        assertEquals("", parsed.rows.single().categoryName)
+        assertEquals("10:00", parsed.rows.single().startTimeText)
     }
 
     @Test

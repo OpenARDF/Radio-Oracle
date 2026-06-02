@@ -31,6 +31,7 @@ object EventCsvFormat {
     }
 
     object Competitor {
+        const val COLUMN_COUNT = 11
         const val REQUIRED_IMPORT_COLUMNS = 6
         const val SI_NUMBER = 0
         const val START_NUMBER = 1
@@ -43,6 +44,24 @@ object EventCsvFormat {
         const val INDEX = 8
         const val START_TIME = 9
         const val SI_RENT = 10
+
+        val HEADER = listOf(
+            "si_number",
+            "start_number",
+            "first_name",
+            "last_name",
+            "category",
+            "gender",
+            "birth_year",
+            "club",
+            "index",
+            "start_time",
+            "si_rent"
+        )
+        val HEADER_ROW = HEADER.joinToString(DELIMITER.toString())
+
+        fun isHeader(fields: List<String>): Boolean =
+            fields.map { it.trim().lowercase() } == HEADER
     }
 
     object CompetitorStart {
