@@ -605,6 +605,19 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun exportResultsHtml() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportHtml("Export Results HTML")?.let { path ->
+                runCatching {
+                    DesktopProjectFiles.exportResultsHtml(path, currentProject)
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun importCompetitorsCsv() {
             DesktopFileDialogs.chooseImportCsv("Import Competitors CSV")?.let { path ->
                 runCatching {
@@ -779,6 +792,9 @@ fun main(args: Array<String>) = application {
                 })
                 Item("Export Results CSV...", enabled = projectFile != null, onClick = {
                     exportCsv("Export Results CSV", DesktopProjectFiles::exportResultsCsv)
+                })
+                Item("Export Results HTML...", enabled = projectFile != null, onClick = {
+                    exportResultsHtml()
                 })
                 Item("Close Project", enabled = projectFile != null, onClick = {
                     pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(

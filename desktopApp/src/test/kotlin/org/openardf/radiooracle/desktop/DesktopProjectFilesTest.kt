@@ -97,6 +97,21 @@ class DesktopProjectFilesTest {
         assertTrue(exported.contains("<Status>OK</Status>"))
     }
 
+    @Test
+    fun exportsResultsHtmlFile() {
+        val directory = Files.createTempDirectory("rom-desktop-results-html")
+        val path = directory.resolve("results.html")
+
+        DesktopProjectFiles.exportResultsHtml(path, EventProjectFile(raceData = raceDataWithReadout()))
+        val exported = Files.readString(path)
+
+        assertTrue(exported.contains("<!doctype html>"))
+        assertTrue(exported.contains("<h1>Desktop File Race</h1>"))
+        assertTrue(exported.contains("<h2>M21</h2>"))
+        assertTrue(exported.contains("<td>RUNNER Alice</td>"))
+        assertTrue(exported.contains("<td>00:20:00</td>"))
+    }
+
 
     private fun raceData(): EventRaceData =
         EventRaceData(
