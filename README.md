@@ -41,11 +41,13 @@ The desktop beta supports:
 - previewing finish-ticket text for readouts using the shared ticket renderer;
 - summarizing live-result send readiness and exporting Android-shaped
   live-result JSON payloads;
-- manually sending unsent matched live results to ROBIS using the race API key.
+- manually sending unsent matched live results to ROBIS using the race API key;
+- sending unsent matched ROBIS live results in the background while a project is
+  open.
 
 The desktop beta does not yet replace the Android race-day workflow. Live
-printer transport, background live result sending, shared SQL persistence, and station
-maintenance writes remain post-beta work.
+printer transport, shared SQL persistence, and station maintenance writes remain
+post-beta work.
 
 Local desktop packaging and smoke commands are documented in
 [`docs/desktop-prep.md`](docs/desktop-prep.md).

@@ -71,6 +71,7 @@ import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.printing.FinishTicketRenderer
+import org.openardf.radiooracle.shared.results.EventResultSending
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDateTime
@@ -84,6 +85,7 @@ private val ActionRailWidth = 104.dp
 private val FixedGridRowHeight = 56.dp
 private val ReadoutAddRailYOffset = 10.dp
 private const val DesktopSiPollIntervalMs = 5_000L
+private const val DesktopLiveResultSendIntervalMs = 15_000L
 
 private enum class DesktopSiReaderSeverity {
     DISCONNECTED,
@@ -350,16 +352,33 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun sendRobisLiveResults() {
+        fun sendRobisLiveResults(automatic: Boolean = false) {
             if (isSendingLiveResults) {
                 return
             }
-            if (projectSession.currentProject == null) {
-                projectStatusText = "Open or create a project before sending live results."
+            val currentProjectForPlan = projectSession.currentProject
+            if (currentProjectForPlan == null) {
+                if (!automatic) {
+                    projectStatusText = "Open or create a project before sending live results."
+                }
+                return
+            }
+            if (currentProjectForPlan.raceData.race.apiKey.isBlank()) {
+                if (!automatic) {
+                    projectStatusText = "Set the race API key before sending ROBIS live results."
+                }
+                return
+            }
+            if (!EventResultSending.plan(currentProjectForPlan.raceData).hasCandidates) {
+                if (!automatic) {
+                    projectStatusText = "There are no unsent matched results to send."
+                }
                 return
             }
             isSendingLiveResults = true
-            projectStatusText = "Sending live results to ROBIS..."
+            if (!automatic) {
+                projectStatusText = "Sending live results to ROBIS..."
+            }
             appCoroutineScope.launch {
                 val sendResult = runCatching {
                     withContext(Dispatchers.IO) {
@@ -378,6 +397,13 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "ROBIS send failed: ${error.message ?: error::class.simpleName}"
                 }
                 isSendingLiveResults = false
+            }
+        }
+
+        LaunchedEffect(Unit) {
+            while (true) {
+                delay(DesktopLiveResultSendIntervalMs)
+                sendRobisLiveResults(automatic = true)
             }
         }
 
@@ -940,7 +966,7 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
-            onSendRobisLiveResults = ::sendRobisLiveResults
+            onSendRobisLiveResults = { sendRobisLiveResults() }
         )
     }
 }
