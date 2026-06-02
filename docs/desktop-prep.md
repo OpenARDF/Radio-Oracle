@@ -352,8 +352,9 @@ repeatable package validation.
    section now shows project diagnostics, shared event validation issues, and
    the desktop beta scope boundary. The File menu can import Android-compatible
    category, competitor, and start-list CSV files; export categories,
-   competitors, starts, readouts, and results as semicolon-delimited CSV files
-   using shared formatters; and export standards-facing ARDF JSON as
+   competitors, starts, starts-by-category, starts-by-minute, readouts, and
+   results as semicolon-delimited CSV files using shared formatters; export
+   Android-shaped live-result JSON; and export standards-facing ARDF JSON as
    `.ardf.json`. A sample smoke-test project is available at
    `samples/desktop-smoke.rom.json`, with automated desktop coverage for the
    session-level open, edit, save, close, reopen, export-copy, CSV export, and

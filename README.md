@@ -28,8 +28,7 @@ The desktop beta supports:
 - opening, editing, saving, and exporting `.rom.json` project files;
 - managing races, categories, control points, aliases, competitors, manual
   readouts, and results;
-- importing Android-compatible category, competitor, start-list, readout, and
-  result CSV files;
+- importing Android-compatible category, competitor, and start-list CSV files;
 - exporting category, competitor, start-list, start-list-by-category,
   start-list-by-minute, readout, result, and ARDF JSON files;
 - detecting an attached SPORTident USB download box and warning when it is not
