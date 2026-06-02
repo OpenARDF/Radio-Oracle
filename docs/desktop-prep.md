@@ -34,7 +34,7 @@ finish table:
 - manually send unsent matched live results to ROBIS using the race API key;
 - send unsent matched ROBIS live results in the background when enabled in
   Settings;
-- serve a loopback-only local result display plus `/results.json` and
+- serve loopback-only local result/category displays plus `/results.json` and
   `/categories.json` endpoints from the open desktop project;
 - track started competitors without readouts in an In Forest desktop view;
 - recalculate results using shared services;

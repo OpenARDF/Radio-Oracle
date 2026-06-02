@@ -37,6 +37,11 @@ class DesktopLocalResultServer(
                 exchange.sendText(resultsJson(), "application/json; charset=utf-8")
             }
         }
+        nextServer.createContext("/categories") { exchange ->
+            exchange.handleExactGet("/categories") {
+                exchange.sendText(categoriesHtml(), "text/html; charset=utf-8")
+            }
+        }
         nextServer.createContext("/categories.json") { exchange ->
             exchange.handleExactGet("/categories.json") {
                 exchange.sendText(categoriesJson(), "application/json; charset=utf-8")
@@ -146,6 +151,39 @@ class DesktopLocalResultServer(
                 appendHtml(result.runTimeText)
                 append("</td></tr>")
             }
+            append("</tbody></table></body></html>")
+        }
+    }
+
+    private fun categoriesHtml(): String {
+        val projectFile = projectSupplier()
+        val raceData = projectFile?.raceData
+        val raceName = raceData?.race?.name ?: "No project open"
+
+        return buildString {
+            append("<!doctype html><html><head><meta charset=\"utf-8\">")
+            append("<title>Radio-Oracle Categories</title>")
+            append("<style>body{font-family:sans-serif;margin:24px}table{border-collapse:collapse}")
+            append("td,th{border-bottom:1px solid #ddd;padding:6px 10px;text-align:left}</style>")
+            append("</head><body><h1>")
+            appendHtml(raceName)
+            append("</h1><table><thead><tr><th>Category</th><th>Competitors</th><th>Results</th></tr></thead><tbody>")
+            raceData?.categories
+                ?.sortedWith(compareBy({ it.category.order }, { it.category.name }))
+                ?.forEach { categoryData ->
+                    val categoryId = categoryData.category.id
+                    val competitors = raceData.competitorData.filter { data ->
+                        data.competitorCategory.category?.id == categoryId ||
+                            data.competitorCategory.competitor.categoryId == categoryId
+                    }
+                    append("<tr><td>")
+                    appendHtml(categoryData.category.name)
+                    append("</td><td>")
+                    appendHtml(competitors.size.toString())
+                    append("</td><td>")
+                    appendHtml(competitors.count { it.readoutData != null }.toString())
+                    append("</td></tr>")
+                }
             append("</tbody></table></body></html>")
         }
     }

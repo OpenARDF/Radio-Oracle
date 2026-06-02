@@ -85,6 +85,24 @@ class DesktopLocalResultServerTest {
     }
 
     @Test
+    fun servesCategoryHtmlOnLoopback() {
+        val server = DesktopLocalResultServer { projectFile() }
+        try {
+            val url = server.start()
+            val connection = URL("${url}categories").openConnection() as HttpURLConnection
+            val html = connection.inputStream.bufferedReader().readText()
+
+            assertTrue(connection.contentType == "text/html; charset=utf-8")
+            assertTrue(connection.getHeaderField("Cache-Control") == "no-store")
+            assertTrue(html.contains("<title>Radio-Oracle Categories</title>"))
+            assertTrue(html.contains("<td>M21</td>"))
+            assertTrue(html.contains("<td>1</td>"))
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
     fun rejectsUnknownLocalResultPaths() {
         val server = DesktopLocalResultServer { projectFile() }
         try {
