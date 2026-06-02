@@ -53,7 +53,7 @@ data class DesktopProjectDiagnostics(
                         "${it.unmatchedReadoutCount} unmatched readout${if (it.unmatchedReadoutCount == 1) "" else "s"}."
                 } ?: "No project open",
                 betaLimitations = listOf(
-                    "Hardened race-day SPORTident replacement remains post-beta.",
+                    "SPORTident station maintenance and reprogramming remain post-beta.",
                     "Desktop Bluetooth printer transport remains post-beta.",
                     "Full Android result-service configuration remains post-beta.",
                     "Project storage is file-backed .rom.json, not shared SQL."
