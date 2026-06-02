@@ -31,7 +31,7 @@ The desktop beta supports:
 - importing Android-compatible category, competitor, and start-list CSV files;
 - exporting category, competitor, start-list, start-list-by-category,
   start-list-by-minute, readout, result, result TXT/HTML, IOF start/result-list
-  XML, Android-shaped final-result JSON, and ARDF JSON files;
+  XML, Android-shaped race-backup/final-result JSON, and ARDF JSON files;
 - detecting an attached SPORTident USB download box and warning when it is not
   in READOUT/SI MASTER mode;
 - downloading one SI5/SI6/SI8/SI9/SIAC card at a time from an attached

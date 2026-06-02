@@ -8,6 +8,7 @@ import org.openardf.radiooracle.shared.files.FinalResultJsonExports
 import org.openardf.radiooracle.shared.files.HtmlResultExports
 import org.openardf.radiooracle.shared.files.IofXmlExports
 import org.openardf.radiooracle.shared.files.LiveResultJsonExports
+import org.openardf.radiooracle.shared.files.RaceBackupJsonExports
 import org.openardf.radiooracle.shared.files.TextResultExports
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -55,6 +56,10 @@ object DesktopProjectFiles : ProjectFileStore {
 
     fun exportArdfJson(path: Path, projectFile: EventProjectFile) {
         writeText(path, ArdfJsonExports.event(projectFile.raceData.race.name, projectFile.raceData))
+    }
+
+    fun exportAndroidRaceBackupJson(path: Path, projectFile: EventProjectFile) {
+        writeText(path, RaceBackupJsonExports.race(projectFile.raceData))
     }
 
     fun exportLiveResultsJson(path: Path, projectFile: EventProjectFile) {

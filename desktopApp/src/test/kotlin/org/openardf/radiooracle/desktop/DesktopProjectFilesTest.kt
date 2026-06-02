@@ -55,6 +55,20 @@ class DesktopProjectFilesTest {
     }
 
     @Test
+    fun exportsAndroidRaceBackupJsonFile() {
+        val directory = Files.createTempDirectory("rom-desktop-android-race-backup-json")
+        val path = directory.resolve("race.ardfjs")
+
+        DesktopProjectFiles.exportAndroidRaceBackupJson(path, EventProjectFile(raceData = raceDataWithReadout()))
+        val exported = Files.readString(path)
+
+        assertTrue(exported.contains("\"race_name\": \"Desktop File Race\""))
+        assertTrue(exported.contains("\"race_time_limit\": \"120\""))
+        assertTrue(exported.contains("\"unmatched_results\""))
+        assertTrue(exported.contains("\"competitor_category\": \"M21\""))
+    }
+
+    @Test
     fun exportsLiveResultsJsonFile() {
         val directory = Files.createTempDirectory("rom-desktop-live-results-json")
         val path = directory.resolve("event.live-results.json")

@@ -566,6 +566,19 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun exportAndroidRaceBackupJson() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportAndroidRaceBackupJson()?.let { path ->
+                runCatching {
+                    DesktopProjectFiles.exportAndroidRaceBackupJson(path, currentProject)
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun exportLiveResultsJson() {
             val currentProject = projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportLiveResultsJson()?.let { path ->
@@ -779,6 +792,9 @@ fun main(args: Array<String>) = application {
                 })
                 Item("Export ARDF JSON...", enabled = projectFile != null, onClick = {
                     exportArdfJson()
+                })
+                Item("Export Android Race Backup JSON...", enabled = projectFile != null, onClick = {
+                    exportAndroidRaceBackupJson()
                 })
                 Item("Export Live Results JSON...", enabled = projectFile != null, onClick = {
                     exportLiveResultsJson()

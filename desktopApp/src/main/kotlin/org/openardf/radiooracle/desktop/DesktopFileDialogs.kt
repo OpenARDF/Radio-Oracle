@@ -8,6 +8,7 @@ import java.nio.file.Path
 /** Project-file path helpers shared by desktop file dialogs and tests. */
 object DesktopProjectFilePaths {
     const val PROJECT_EXTENSION = ".rom.json"
+    const val ANDROID_RACE_BACKUP_JSON_EXTENSION = ".ardfjs"
     const val ARDF_JSON_EXTENSION = ".ardf.json"
     const val FINAL_RESULTS_JSON_EXTENSION = ".final-results.json"
     const val LIVE_RESULTS_JSON_EXTENSION = ".live-results.json"
@@ -29,6 +30,13 @@ object DesktopProjectFilePaths {
             path
         } else {
             path.resolveSibling("${path.fileName}$CSV_EXTENSION")
+        }
+
+    fun withAndroidRaceBackupJsonExtension(path: Path): Path =
+        if (path.fileName.toString().endsWith(ANDROID_RACE_BACKUP_JSON_EXTENSION)) {
+            path
+        } else {
+            path.resolveSibling("${path.fileName}$ANDROID_RACE_BACKUP_JSON_EXTENSION")
         }
 
     fun withArdfJsonExtension(path: Path): Path =
@@ -97,6 +105,13 @@ object DesktopFileDialogs {
     fun chooseExportArdfJson(): Path? =
         chooseFile("Export ARDF JSON", FileDialog.SAVE, DesktopProjectFilePaths.ARDF_JSON_EXTENSION)
             ?.let(DesktopProjectFilePaths::withArdfJsonExtension)
+
+    fun chooseExportAndroidRaceBackupJson(): Path? =
+        chooseFile(
+            "Export Android Race Backup JSON",
+            FileDialog.SAVE,
+            DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION
+        )?.let(DesktopProjectFilePaths::withAndroidRaceBackupJsonExtension)
 
     fun chooseExportFinalResultsJson(): Path? =
         chooseFile("Export Final Results JSON", FileDialog.SAVE, DesktopProjectFilePaths.FINAL_RESULTS_JSON_EXTENSION)

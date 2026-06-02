@@ -243,6 +243,22 @@ class DesktopSmokeSampleTest {
     }
 
     @Test
+    fun repositorySmokeSampleExportsAndroidRaceBackupJsonFile() {
+        val directory = Files.createTempDirectory("rom-desktop-android-race-backup-json-smoke")
+        val source = Path.of("..", "samples", "desktop-smoke.rom.json")
+        val target = directory.resolve("desktop-smoke.ardfjs")
+        val projectFile = DesktopProjectFiles.read(source)
+
+        DesktopProjectFiles.exportAndroidRaceBackupJson(target, projectFile)
+        val exported = Files.readString(target)
+
+        assertTrue(exported.contains("\"race_name\": \"Desktop Smoke Race\""))
+        assertTrue(exported.contains("\"race_time_limit\": \"120\""))
+        assertTrue(exported.contains("\"unmatched_results\""))
+        assertTrue(exported.contains("\"si_number\": 654321"))
+    }
+
+    @Test
     fun repositorySmokeSampleExportsFinalResultsJsonFile() {
         val directory = Files.createTempDirectory("rom-desktop-final-results-json-smoke")
         val source = Path.of("..", "samples", "desktop-smoke.rom.json")
