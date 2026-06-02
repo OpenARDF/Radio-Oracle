@@ -211,6 +211,7 @@ fun main(args: Array<String>) = application {
     Window(onCloseRequest = { requestWindowClose() }, title = "Radio-Oracle Desktop") {
         val startupPath = remember(args.toList()) { args.firstOrNull()?.let(Path::of) }
         val projectSession = remember { DesktopProjectSession(DesktopProjectFiles) }
+        val localResultServer = remember { DesktopLocalResultServer { projectSession.currentProject } }
         val appCoroutineScope = rememberCoroutineScope()
         val startupStatus = remember(startupPath) { openStartupProject(projectSession, startupPath) }
         var projectFile by remember { mutableStateOf(projectSession.currentProject) }
@@ -227,6 +228,7 @@ fun main(args: Array<String>) = application {
         var isSendingLiveResults by remember { mutableStateOf(false) }
         var isBackgroundLiveResultSendingEnabled by remember { mutableStateOf(false) }
         var readoutDuplicatePolicy by remember { mutableStateOf(EventReadoutDuplicatePolicy.Reject) }
+        var localResultServerUrl by remember { mutableStateOf<String?>(null) }
         var raceClockTick by remember { mutableStateOf(0L) }
 
         LaunchedEffect(Unit) {
@@ -622,7 +624,10 @@ fun main(args: Array<String>) = application {
             }
             pendingDirtyProjectAction = null
             when (action) {
-                PendingDirtyProjectAction.ExitApplication -> exitApplication()
+                PendingDirtyProjectAction.ExitApplication -> {
+                    localResultServer.stop()
+                    exitApplication()
+                }
                 PendingDirtyProjectAction.NewProject -> createNewProject()
                 is PendingDirtyProjectAction.OpenProject -> openProject(action.path)
                 PendingDirtyProjectAction.CloseProject -> closeProject(
@@ -637,6 +642,7 @@ fun main(args: Array<String>) = application {
                 PendingDirtyProjectAction.ExitApplication
             )
             if (pendingDirtyProjectAction == null) {
+                localResultServer.stop()
                 exitApplication()
             }
         }
@@ -757,6 +763,7 @@ fun main(args: Array<String>) = application {
             isSendingLiveResults = isSendingLiveResults,
             isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
             readoutDuplicatePolicy = readoutDuplicatePolicy,
+            localResultServerUrl = localResultServerUrl,
             raceClockTick = raceClockTick,
             onRenameRace = { name ->
                 runCatching {
@@ -1097,6 +1104,21 @@ fun main(args: Array<String>) = application {
             onSetReadoutDuplicatePolicy = { policy ->
                 readoutDuplicatePolicy = policy
                 projectStatusText = "Duplicate SI card action set to ${policy.toDisplayLabel()}."
+            },
+            onStartLocalResultServer = {
+                runCatching {
+                    localResultServer.start()
+                }.onSuccess { url ->
+                    localResultServerUrl = url
+                    projectStatusText = "Local result display running at $url"
+                }.onFailure { error ->
+                    projectStatusText = "Local result display failed: ${error.message ?: error::class.simpleName}"
+                }
+            },
+            onStopLocalResultServer = {
+                localResultServer.stop()
+                localResultServerUrl = null
+                projectStatusText = "Local result display stopped."
             }
         )
     }
@@ -1150,6 +1172,7 @@ private fun RadioOManagerDesktopApp(
     isSendingLiveResults: Boolean = false,
     isBackgroundLiveResultSendingEnabled: Boolean = false,
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy = EventReadoutDuplicatePolicy.Reject,
+    localResultServerUrl: String? = null,
     raceClockTick: Long = 0L,
     onRenameRace: (String) -> Unit = {},
     onUpdateRaceStartDateTime: (String) -> Unit = {},
@@ -1180,7 +1203,9 @@ private fun RadioOManagerDesktopApp(
     onRemoveAlias: (String) -> Unit = {},
     onSendRobisLiveResults: () -> Unit = {},
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit = {},
-    onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit = {}
+    onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit = {},
+    onStartLocalResultServer: () -> Unit = {},
+    onStopLocalResultServer: () -> Unit = {}
 ) {
     MaterialTheme(
         colors = MaterialTheme.colors.copy(
@@ -1240,10 +1265,13 @@ private fun RadioOManagerDesktopApp(
                         isSendingLiveResults = isSendingLiveResults,
                         isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
                         readoutDuplicatePolicy = readoutDuplicatePolicy,
+                        localResultServerUrl = localResultServerUrl,
                         raceClockTick = raceClockTick,
                         onSendRobisLiveResults = onSendRobisLiveResults,
                         onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
-                        onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy
+                        onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
+                        onStartLocalResultServer = onStartLocalResultServer,
+                        onStopLocalResultServer = onStopLocalResultServer
                     )
                 }
                 StatusStrip(projectStatusText, hasUnsavedChanges, siReaderState)
@@ -1346,10 +1374,13 @@ private fun SectionWorkspace(
     isSendingLiveResults: Boolean,
     isBackgroundLiveResultSendingEnabled: Boolean,
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
+    localResultServerUrl: String?,
     raceClockTick: Long,
     onSendRobisLiveResults: () -> Unit,
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
-    onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit
+    onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit,
+    onStartLocalResultServer: () -> Unit,
+    onStopLocalResultServer: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -1453,9 +1484,12 @@ private fun SectionWorkspace(
                 isSendingLiveResults = isSendingLiveResults,
                 isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
                 readoutDuplicatePolicy = readoutDuplicatePolicy,
+                localResultServerUrl = localResultServerUrl,
                 onSendRobisLiveResults = onSendRobisLiveResults,
                 onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
-                onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy
+                onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
+                onStartLocalResultServer = onStartLocalResultServer,
+                onStopLocalResultServer = onStopLocalResultServer
             )
         }
         Box(
@@ -1483,9 +1517,12 @@ private fun SettingsDetailsPanel(
     isSendingLiveResults: Boolean,
     isBackgroundLiveResultSendingEnabled: Boolean,
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
+    localResultServerUrl: String?,
     onSendRobisLiveResults: () -> Unit,
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
-    onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit
+    onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit,
+    onStartLocalResultServer: () -> Unit,
+    onStopLocalResultServer: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DetailRow("Project", diagnostics.projectState)
@@ -1508,6 +1545,21 @@ private fun SettingsDetailsPanel(
             selectedPolicy = readoutDuplicatePolicy,
             onPolicySelected = onSetReadoutDuplicatePolicy
         )
+        DetailRow("Local result display", localResultServerUrl ?: "Stopped")
+        Row(horizontalArrangement = Arrangement.spacedBy(TableColumnGap)) {
+            Button(
+                onClick = onStartLocalResultServer,
+                enabled = diagnostics.projectState == "Project open" && localResultServerUrl == null
+            ) {
+                ButtonLabel("Start Display")
+            }
+            Button(
+                onClick = onStopLocalResultServer,
+                enabled = localResultServerUrl != null
+            ) {
+                ButtonLabel("Stop Display")
+            }
+        }
         DetailRow("Live results", diagnostics.liveResultPlanText)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(

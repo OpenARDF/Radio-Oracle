@@ -30,6 +30,8 @@ finish table:
 - manually send unsent matched live results to ROBIS using the race API key;
 - send unsent matched ROBIS live results in the background when enabled in
   Settings;
+- serve a loopback-only local result display and `/results.json` endpoint from
+  the open desktop project;
 - track started competitors without readouts in an In Forest desktop view;
 - recalculate results using shared services;
 - import/export supported event and result formats as they move into shared
@@ -71,8 +73,8 @@ slices:
   renderer as the text source;
 - richer readout operator status, including audible/visible error state;
 - OCheckList-style DNS/new-card import or equivalent race-day status import;
-- local finish-line web display/API for results when mobile data is not
-  available.
+- LAN-facing finish-line web display/API hardening for results when mobile data
+  is not available.
 
 The desktop app should intentionally feel like the Android app, not like a new
 product. Reuse the Android visual language where practical:

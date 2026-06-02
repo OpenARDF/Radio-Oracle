@@ -30,6 +30,7 @@ compose.desktop {
             packageVersion = rootProject.ext.radioOracleVersion
             description = "Desktop event administration shell for Radio-Oracle."
             vendor = "OpenARDF"
+            modules("jdk.httpserver")
 
             macOS {
                 bundleID = "org.openardf.radiooracle.desktop"
