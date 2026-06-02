@@ -48,6 +48,24 @@ The desktop beta should not include:
 - Android Room database migration or shared SQL persistence;
 - any promise that desktop can replace the Android race-day download workflow.
 
+## Current Decision Boundary
+
+The current desktop beta decisions are:
+
+- Keep the local result/start/in-forest server loopback-only. LAN exposure needs
+  a separate hardening decision covering bind address, operator warnings, and
+  event-network security.
+- Keep printer transport out of the beta until a target transport and printer
+  profile are selected. The shared finish-ticket renderer remains the source
+  for future ticket output.
+- Keep OCheckList/new-card import out of the beta until a verified sample file
+  or schema is available.
+- Keep shared SQL persistence post-beta. The beta uses `.rom.json` files while
+  shared domain services and import/export APIs stabilize.
+- Keep SPORTident station write actions disabled until configuration-write
+  transactions are verified on real hardware and protected by confirmation plus
+  immediate read-back validation.
+
 ## Storage
 
 Use file-backed project storage for the beta, most likely a `.rom.json` project

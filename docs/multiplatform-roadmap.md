@@ -272,6 +272,19 @@ Reasons:
 - Deferring shared SQL reduces risk and gets a useful desktop package in users'
   hands sooner.
 
+## Desktop beta decisions
+
+The desktop beta should continue to advance conservative event-admin and
+loopback-display slices while these boundaries remain in force:
+
+- Local web display stays bound to loopback until LAN exposure is hardened and
+  explicitly selected.
+- Printer transport waits for a chosen transport/printer profile.
+- OCheckList/new-card import waits for a verified sample file or schema.
+- Shared SQL waits until after the file-backed desktop beta.
+- SPORTident station writes wait for verified write/read-back transactions on
+  real hardware.
+
 ## Acceptance criteria for Stage 1
 
 - `docs/multiplatform-roadmap.md` exists and describes the staged roadmap.
