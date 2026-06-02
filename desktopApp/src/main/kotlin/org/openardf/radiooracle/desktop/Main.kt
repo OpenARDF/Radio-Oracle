@@ -553,6 +553,17 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun importAndroidRaceBackupJson(path: Path) {
+            runCatching {
+                val imported = DesktopProjectFiles.importAndroidRaceBackupJson(path) { UUID.randomUUID().toString() }
+                projectFile = projectSession.newProject(imported)
+                syncProjectState()
+                projectStatusText = "Imported ${path.fileName}"
+            }.onFailure { error ->
+                projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
         fun exportArdfJson() {
             val currentProject = projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportArdfJson()?.let { path ->
@@ -725,6 +736,7 @@ fun main(args: Array<String>) = application {
                 }
                 PendingDirtyProjectAction.NewProject -> createNewProject()
                 is PendingDirtyProjectAction.OpenProject -> openProject(action.path)
+                is PendingDirtyProjectAction.ImportAndroidRaceBackup -> importAndroidRaceBackupJson(action.path)
                 PendingDirtyProjectAction.CloseProject -> closeProject(
                     discardUnsavedChanges = DesktopDirtyProjectActions.shouldDiscardForClose(saveFirst)
                 )
@@ -761,6 +773,17 @@ fun main(args: Array<String>) = application {
                         )
                         if (pendingDirtyProjectAction == null) {
                             openProject(path)
+                        }
+                    }
+                })
+                Item("Import Android Race Backup JSON...", onClick = {
+                    DesktopFileDialogs.chooseImportAndroidRaceBackupJson()?.let { path ->
+                        pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
+                            hasUnsavedChanges,
+                            PendingDirtyProjectAction.ImportAndroidRaceBackup(path)
+                        )
+                        if (pendingDirtyProjectAction == null) {
+                            importAndroidRaceBackupJson(path)
                         }
                     }
                 })

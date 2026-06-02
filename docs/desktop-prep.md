@@ -354,8 +354,8 @@ repeatable package validation.
    matched readouts. The Settings
    section now shows project diagnostics, shared event validation issues, and
    the desktop beta scope boundary. The File menu can import Android-compatible
-   category, competitor, and start-list CSV files; export categories,
-   competitors, starts, starts-by-category, starts-by-minute, readouts, and
+   category, competitor, start-list CSV, and race-backup JSON files; export
+   categories, competitors, starts, starts-by-category, starts-by-minute, readouts, and
    results as semicolon-delimited CSV files using shared formatters; export
    result TXT/HTML, IOF start/result-list XML, Android-shaped race-backup,
    live-result, and final-result JSON, and standards-facing ARDF JSON. A sample

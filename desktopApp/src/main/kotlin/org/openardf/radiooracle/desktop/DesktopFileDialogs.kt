@@ -136,6 +136,13 @@ object DesktopFileDialogs {
     fun chooseImportCsv(title: String): Path? =
         chooseFile(title, FileDialog.LOAD, DesktopProjectFilePaths.CSV_EXTENSION)
 
+    fun chooseImportAndroidRaceBackupJson(): Path? =
+        chooseFile(
+            "Import Android Race Backup JSON",
+            FileDialog.LOAD,
+            DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION
+        )
+
     private fun chooseFile(title: String, mode: Int, extension: String): Path? {
         val dialog = FileDialog(null as Frame?, title, mode)
         dialog.filenameFilter = FilenameFilter { _, name -> name.endsWith(extension) }

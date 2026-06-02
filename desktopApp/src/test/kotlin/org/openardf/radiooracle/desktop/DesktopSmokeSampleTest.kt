@@ -259,6 +259,29 @@ class DesktopSmokeSampleTest {
     }
 
     @Test
+    fun repositorySmokeSampleImportsAndroidRaceBackupJsonFileAsUnsavedProject() {
+        val directory = Files.createTempDirectory("rom-desktop-import-android-race-backup-json-smoke")
+        val source = Path.of("..", "samples", "desktop-smoke.rom.json")
+        val backup = directory.resolve("desktop-smoke.ardfjs")
+        val projectFile = DesktopProjectFiles.read(source)
+        val session = DesktopProjectSession(DesktopProjectFiles)
+        var nextId = 0
+
+        DesktopProjectFiles.exportAndroidRaceBackupJson(backup, projectFile)
+        val imported = DesktopProjectFiles.importAndroidRaceBackupJson(backup) {
+            "smoke-import-${nextId++}"
+        }
+        session.newProject(imported)
+
+        assertEquals("Desktop Smoke Race", imported.raceData.race.name)
+        assertEquals(2, imported.raceData.categories.size)
+        assertEquals(2, imported.raceData.competitorData.size)
+        assertEquals(1, imported.raceData.unmatchedReadoutData.size)
+        assertEquals(null, session.currentPath)
+        assertEquals(true, session.hasUnsavedChanges)
+    }
+
+    @Test
     fun repositorySmokeSampleExportsFinalResultsJsonFile() {
         val directory = Files.createTempDirectory("rom-desktop-final-results-json-smoke")
         val source = Path.of("..", "samples", "desktop-smoke.rom.json")

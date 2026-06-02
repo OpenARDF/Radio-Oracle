@@ -10,6 +10,9 @@ sealed interface PendingDirtyProjectAction {
     /** Open the selected project after the user decides what to do with unsaved edits. */
     data class OpenProject(val path: Path) : PendingDirtyProjectAction
 
+    /** Import an Android race backup after the user decides what to do with unsaved edits. */
+    data class ImportAndroidRaceBackup(val path: Path) : PendingDirtyProjectAction
+
     /** Close the current project after the user decides what to do with unsaved edits. */
     data object CloseProject : PendingDirtyProjectAction
 

@@ -28,7 +28,8 @@ The desktop beta supports:
 - opening, editing, saving, and exporting `.rom.json` project files;
 - managing races, categories, control points, aliases, competitors, manual
   readouts, and results;
-- importing Android-compatible category, competitor, and start-list CSV files;
+- importing Android-compatible category, competitor, and start-list CSV files
+  plus Android race-backup JSON files;
 - exporting category, competitor, start-list, start-list-by-category,
   start-list-by-minute, readout, result, result TXT/HTML, IOF start/result-list
   XML, Android-shaped race-backup/final-result JSON, and ARDF JSON files;
