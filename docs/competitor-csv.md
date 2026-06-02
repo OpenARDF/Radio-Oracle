@@ -31,3 +31,32 @@ si_number;start_number;first_name;last_name;category;gender;birth_year;club;inde
 ```
 
 Fields containing semicolons, quotes, or line breaks are quoted with double quotes. Quotes inside a quoted field are doubled.
+
+## Compatibility Profiles
+
+Radio-Oracle's canonical competitor CSV is the round-trip format for preserving
+Radio-Oracle competitor fields.
+
+Future import work should also support an ARDFEvent-compatible registration CSV
+profile for preregistration files with this semicolon-delimited header:
+
+```text
+Jmeno;Prijmeni;Registrace;SI;Kategorie
+```
+
+The Czech header used by ARDFEvent is:
+
+```text
+Jméno;Příjmení;Registrace;SI;Kategorie
+```
+
+That profile should map:
+
+- `Jmeno` / `Jméno` to `first_name`.
+- `Prijmeni` / `Příjmení` to `last_name`.
+- `Registrace` to `index`.
+- `SI` to `si_number`.
+- `Kategorie` to `category`.
+
+ARDFEvent-compatible import is intentionally an alternate import profile, not a
+replacement for the canonical Radio-Oracle CSV export format.

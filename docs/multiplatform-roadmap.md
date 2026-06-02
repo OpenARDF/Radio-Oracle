@@ -114,6 +114,25 @@ Relevant ARDFEvent feature areas to keep in view:
 - OCheckList import and a signed plugin system with startup, readout, and menu
   hooks.
 
+Accepted ARDFEvent CSV alignment work:
+
+- Keep Radio-Oracle's canonical competitor CSV as the primary round-trip import
+  and export format.
+- Add an ARDFEvent-compatible registration CSV import profile that accepts the
+  semicolon-delimited `Jméno;Příjmení;Registrace;SI;Kategorie` shape used by
+  ARDFEvent, mapping registration to Radio-Oracle's competitor index field.
+- Add an explicit import duplicate/update policy for preregistration workflows,
+  including an option to update existing competitors by registration/index
+  rather than only rejecting duplicate SI or start numbers.
+- Preserve the current missing-category behavior, but make import preview and
+  warnings clear when placeholder categories are created or when competitors are
+  imported without a category.
+- Add a desktop-only ROBIS CSV start-list export option based on ARDFEvent's
+  ROBIS start-list CSV shape; do not change the canonical Radio-Oracle start
+  CSV for this.
+- Add a desktop-only ARDFEvent-style results CSV export with category, place,
+  name, index, time, transmitter count, status, and control-order columns.
+
 For Radio-Oracle, this suggests the next desktop parity work should prioritize
 operator workflow gaps before optional extensibility: start-list management,
 in-forest tracking, full ticket printer transport, duplicate/unmatched readout
