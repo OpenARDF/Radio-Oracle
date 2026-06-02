@@ -187,9 +187,10 @@ The current desktop packaging smoke checks are:
 ```
 
 On macOS, `scripts/desktop-distributable-prepare.sh` selects the registered JDK
-17 runtime when available and runs the local app-image packaging smoke.
-`scripts/jdeploy-prepare.sh` does the same for the two Gradle-side jDeploy
-bundle tasks.
+17 runtime when available and runs the local app-image packaging smoke. The
+npm-facing `scripts/jdeploy-prepare.mjs` selects `gradlew` or `gradlew.bat`,
+adds `JAVA_HOME/bin` to `PATH`, and runs the two Gradle-side jDeploy bundle
+tasks.
 
 `checkRuntime` verifies that Compose Desktop can find a usable JDK runtime.
 `createDistributable` currently writes the macOS app image to
@@ -225,7 +226,7 @@ publish is guarded by `scripts/check-jdeploy-publish.mjs` and requires
 `RADIO_ORACLE_ALLOW_JDEPLOY_PUBLISH=1`.
 
 `npm run jdeploy:local-smoke` installs the package locally, verifies the
-generated app bundle, launches it with a `/tmp` copy of
+generated app bundle or Windows executable, launches it with a temporary copy of
 `samples/desktop-smoke.rom.json`, confirms the process starts, and quits the
 app.
 
@@ -240,6 +241,9 @@ Current local packaging evidence: the Gradle app-image checks,
 `npm run jdeploy:pack-preview`, `npm run jdeploy:release-preflight`,
 `npm run jdeploy:local-smoke`, and
 `npm run jdeploy:registry-smoke -- 1.0.1` pass on macOS with JDK 17 selected.
+Windows packaged-app smoke reached the installed executable and loaded the
+sample project; the npm helper scripts are cross-platform, but final Windows
+confirmation is still tracked through `CODEX_MAILBOX.md`.
 
 ### Desktop USB Feasibility
 

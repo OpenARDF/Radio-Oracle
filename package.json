@@ -16,7 +16,7 @@
     "radio-oracle": "jdeploy-bundle/jdeploy.js"
   },
   "scripts": {
-    "jdeploy:prepare": "./scripts/jdeploy-prepare.sh",
+    "jdeploy:prepare": "node ./scripts/jdeploy-prepare.mjs",
     "prejdeploy:package": "npm run jdeploy:prepare",
     "prejdeploy:install-local": "npm run jdeploy:prepare",
     "prejdeploy:local": "npm run jdeploy:prepare",
@@ -24,7 +24,7 @@
     "jdeploy:install-local": "npx --no-install jdeploy install -y",
     "jdeploy:verify-install": "npx --no-install jdeploy verify-installation --package-json=package.json --verbose",
     "jdeploy:local": "npx --no-install jdeploy run --install",
-    "jdeploy:local-smoke": "./scripts/jdeploy-local-smoke.sh",
+    "jdeploy:local-smoke": "node ./scripts/jdeploy-local-smoke.mjs",
     "jdeploy:pack-preview": "npm run jdeploy:package && npm pack --dry-run --ignore-scripts",
     "jdeploy:registry-smoke": "./scripts/jdeploy-registry-smoke.sh",
     "jdeploy:release-preflight": "node ./scripts/check-jdeploy-release-ready.mjs",

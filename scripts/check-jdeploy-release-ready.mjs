@@ -2,8 +2,8 @@
 
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { platform, tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 const expectedPackageName = "@openardf/radio-oracle";
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
@@ -23,6 +23,10 @@ function requireEqual(label, actual, expected) {
   }
 }
 
+function gradleCommand() {
+  return platform() === "win32" ? resolve("gradlew.bat") : resolve("gradlew");
+}
+
 requireEqual("package name", packageJson.name, expectedPackageName);
 requireEqual("package-lock name", packageLock.name, expectedPackageName);
 requireEqual("package-lock version", packageLock.version, packageJson.version);
@@ -39,7 +43,7 @@ if (!desktopBuildGradle.includes("packageVersion = rootProject.ext.radioOracleVe
   fail("desktop native packageVersion must use rootProject.ext.radioOracleVersion");
 }
 
-execFileSync("./gradlew", [":desktopApp:verifyDesktopJdeployBundle"], { stdio: "inherit" });
+execFileSync(gradleCommand(), [":desktopApp:verifyDesktopJdeployBundle"], { stdio: "inherit" });
 
 const tempDir = mkdtempSync(join(tmpdir(), "radio-oracle-manifest-"));
 try {
