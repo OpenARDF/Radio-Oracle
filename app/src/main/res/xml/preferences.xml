@@ -56,7 +56,7 @@
         <ListPreference
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:defaultValue="@string/preferences_readout_duplicate_ignore"
+            android:defaultValue="@string/preferences_readout_duplicate_ignore_value"
             android:entries="@array/preferences_readout_duplicate_options"
             android:entryValues="@array/preferences_readout_duplicate_values"
             android:key="@string/key_readout_duplicate"

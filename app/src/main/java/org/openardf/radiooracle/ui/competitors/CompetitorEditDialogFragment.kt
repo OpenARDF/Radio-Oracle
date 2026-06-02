@@ -44,7 +44,7 @@ class CompetitorEditDialogFragment : DialogFragment() {
     private lateinit var clubTextView: TextInputEditText
     private lateinit var indexTextView: TextInputEditText
     private lateinit var birthYearTextView: TextInputEditText
-    private lateinit var womanCheckBox: CheckBox
+    private lateinit var manualGenderCheckBox: CheckBox
     private lateinit var categoryPicker: MaterialAutoCompleteTextView
     private lateinit var categoryLayout: TextInputLayout
     private lateinit var siNumberLayout: TextInputLayout
@@ -87,7 +87,7 @@ class CompetitorEditDialogFragment : DialogFragment() {
         clubTextView = view.findViewById(R.id.competitor_dialog_club)
         indexTextView = view.findViewById(R.id.competitor_dialog_index_callsign)
         birthYearTextView = view.findViewById(R.id.competitor_dialog_year_of_birth)
-        womanCheckBox = view.findViewById(R.id.competitor_dialog_woman_checkbox)
+        manualGenderCheckBox = view.findViewById(R.id.competitor_dialog_woman_checkbox)
         categoryLayout = view.findViewById(R.id.competitor_dialog_category_layout)
         categoryPicker = view.findViewById(R.id.competitor_dialog_category)
         siNumberLayout = view.findViewById(R.id.competitor_dialog_si_layout)
@@ -146,7 +146,7 @@ class CompetitorEditDialogFragment : DialogFragment() {
 
             //Preset gender
             if (competitor.isMan) {
-                womanCheckBox.isChecked = true
+                manualGenderCheckBox.isChecked = true
             }
 
             //Preset category
@@ -180,9 +180,13 @@ class CompetitorEditDialogFragment : DialogFragment() {
         categoryPicker.setAdapter(categoriesAdapter)
         startNumberTextView.setText(competitor.startNumber.toString())
 
-        womanCheckBox.setOnCheckedChangeListener { _, checked ->
+        manualGenderCheckBox.setOnCheckedChangeListener { _, checked ->
             competitor.isMan = checked
         }
+        categoryPicker.setOnItemClickListener { _, _, _, _ ->
+            updateManualGenderVisibility()
+        }
+        updateManualGenderVisibility()
 
         //Auto insertion of the last card read
         siNumberLayout.setEndIconOnClickListener {
@@ -240,9 +244,12 @@ class CompetitorEditDialogFragment : DialogFragment() {
                 //0 is reserved for no category
                 val catPos = categoryArr.indexOf(categoryPicker.text.toString()).or(0)
                 if (catPos > 0 && catPos <= categories.size) {
-                    competitor.categoryId = categories[catPos - 1].id
+                    val category = categories[catPos - 1]
+                    competitor.categoryId = category.id
+                    competitor.isMan = category.isMan
                 } else {
                     competitor.categoryId = null
+                    competitor.isMan = manualGenderCheckBox.isChecked
                 }
 
                 competitor.siRent = siRentCheckBox.isChecked
@@ -350,6 +357,15 @@ class CompetitorEditDialogFragment : DialogFragment() {
         }
 
         return valid
+    }
+
+    private fun updateManualGenderVisibility() {
+        val catPos = categoryArr.indexOf(categoryPicker.text.toString()).or(0)
+        manualGenderCheckBox.visibility = if (catPos > 0 && catPos <= categories.size) {
+            View.GONE
+        } else {
+            View.VISIBLE
+        }
     }
 
     companion object {

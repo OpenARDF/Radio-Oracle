@@ -238,6 +238,7 @@ fun main(args: Array<String>) = application {
         var isBackgroundLiveResultSendingEnabled by remember { mutableStateOf(false) }
         var readoutDuplicatePolicy by remember { mutableStateOf(EventReadoutDuplicatePolicy.Reject) }
         var isReadoutAlertSoundEnabled by remember { mutableStateOf(true) }
+        var areAliasesEnabled by remember { mutableStateOf(true) }
         var localResultServerUrl by remember { mutableStateOf<String?>(null) }
         var raceClockTick by remember { mutableStateOf(0L) }
         var printerDiagnostics by remember { mutableStateOf(DesktopPrinterDiagnostics.from(emptyList())) }
@@ -1212,7 +1213,7 @@ fun main(args: Array<String>) = application {
                     val currentProject = requireNotNull(projectSession.currentProject) {
                         "Open or create a project before previewing finish tickets."
                     }
-                    FinishTicketRenderer.render(currentProject.raceData, resultId)
+                    FinishTicketRenderer.render(currentProject.raceData, resultId, useAliases = areAliasesEnabled)
                 }.getOrElse { error ->
                     "Ticket preview failed: ${error.message ?: error::class.simpleName}"
                 }
@@ -1226,7 +1227,11 @@ fun main(args: Array<String>) = application {
                     appCoroutineScope.launch {
                         val result = runCatching {
                             withContext(Dispatchers.IO) {
-                                val markedUpTicketText = FinishTicketRenderer.render(currentProject.raceData, resultId)
+                                val markedUpTicketText = FinishTicketRenderer.render(
+                                    currentProject.raceData,
+                                    resultId,
+                                    useAliases = areAliasesEnabled
+                                )
                                 val printerName = DesktopTicketPrinterSelector.selectPrinterName(ticketPrinter.listPrinters())
                                 ticketPrinter.printFinishTicket(markedUpTicketText, printerName)
                             }
@@ -1389,6 +1394,7 @@ private fun RadioOManagerDesktopApp(
     isBackgroundLiveResultSendingEnabled: Boolean = false,
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy = EventReadoutDuplicatePolicy.Reject,
     isReadoutAlertSoundEnabled: Boolean = true,
+    areAliasesEnabled: Boolean = true,
     localResultServerUrl: String? = null,
     printerDiagnostics: DesktopPrinterDiagnostics = DesktopPrinterDiagnostics.from(emptyList()),
     raceClockTick: Long = 0L,
@@ -1426,6 +1432,7 @@ private fun RadioOManagerDesktopApp(
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit = {},
     onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit = {},
     onSetReadoutAlertSoundEnabled: (Boolean) -> Unit = {},
+    onSetAliasesEnabled: (Boolean) -> Unit = {},
     onStartLocalResultServer: () -> Unit = {},
     onStopLocalResultServer: () -> Unit = {}
 ) {
@@ -1491,6 +1498,7 @@ private fun RadioOManagerDesktopApp(
                         isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
                         readoutDuplicatePolicy = readoutDuplicatePolicy,
                         isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
+                        areAliasesEnabled = areAliasesEnabled,
                         localResultServerUrl = localResultServerUrl,
                         printerDiagnostics = printerDiagnostics,
                         raceClockTick = raceClockTick,
@@ -1498,6 +1506,7 @@ private fun RadioOManagerDesktopApp(
                         onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
                         onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
                         onSetReadoutAlertSoundEnabled = onSetReadoutAlertSoundEnabled,
+                        onSetAliasesEnabled = onSetAliasesEnabled,
                         onStartLocalResultServer = onStartLocalResultServer,
                         onStopLocalResultServer = onStopLocalResultServer
                     )
@@ -1606,6 +1615,7 @@ private fun SectionWorkspace(
     isBackgroundLiveResultSendingEnabled: Boolean,
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
     isReadoutAlertSoundEnabled: Boolean,
+    areAliasesEnabled: Boolean,
     localResultServerUrl: String?,
     printerDiagnostics: DesktopPrinterDiagnostics,
     raceClockTick: Long,
@@ -1613,6 +1623,7 @@ private fun SectionWorkspace(
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
     onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit,
     onSetReadoutAlertSoundEnabled: (Boolean) -> Unit,
+    onSetAliasesEnabled: (Boolean) -> Unit,
     onStartLocalResultServer: () -> Unit,
     onStopLocalResultServer: () -> Unit
 ) {
@@ -1644,7 +1655,7 @@ private fun SectionWorkspace(
         }
         if (section == DesktopSection.Categories && projectFile != null) {
             CategoryDetailsPanel(
-                categories = EventCategoryDetails.from(projectFile.raceData),
+                categories = EventCategoryDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
                 onRenameCategory = onRenameCategory,
                 onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
                 onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
@@ -1655,7 +1666,7 @@ private fun SectionWorkspace(
         if (section == DesktopSection.Competitors && projectFile != null) {
             CompetitorDetailsPanel(
                 competitors = EventCompetitorDetails.from(projectFile.raceData),
-                categories = EventCategoryDetails.from(projectFile.raceData),
+                categories = EventCategoryDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
                 onRenameCompetitor = onRenameCompetitor,
                 onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
                 onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
@@ -1683,7 +1694,7 @@ private fun SectionWorkspace(
         }
         if (section == DesktopSection.Readouts && projectFile != null) {
             ReadoutDetailsPanel(
-                readouts = EventReadoutDetails.from(projectFile.raceData),
+                readouts = EventReadoutDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
                 lastReadout = EventLastReadoutDetails.from(projectFile.raceData),
                 competitors = EventCompetitorDetails.from(projectFile.raceData),
                 onRemoveReadout = onRemoveReadout,
@@ -1724,12 +1735,14 @@ private fun SectionWorkspace(
                 isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
                 readoutDuplicatePolicy = readoutDuplicatePolicy,
                 isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
+                areAliasesEnabled = areAliasesEnabled,
                 localResultServerUrl = localResultServerUrl,
                 printerDiagnostics = printerDiagnostics,
                 onSendRobisLiveResults = onSendRobisLiveResults,
                 onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
                 onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
                 onSetReadoutAlertSoundEnabled = onSetReadoutAlertSoundEnabled,
+                onSetAliasesEnabled = onSetAliasesEnabled,
                 onStartLocalResultServer = onStartLocalResultServer,
                 onStopLocalResultServer = onStopLocalResultServer
             )
@@ -1760,12 +1773,14 @@ private fun SettingsDetailsPanel(
     isBackgroundLiveResultSendingEnabled: Boolean,
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
     isReadoutAlertSoundEnabled: Boolean,
+    areAliasesEnabled: Boolean,
     localResultServerUrl: String?,
     printerDiagnostics: DesktopPrinterDiagnostics,
     onSendRobisLiveResults: () -> Unit,
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
     onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit,
     onSetReadoutAlertSoundEnabled: (Boolean) -> Unit,
+    onSetAliasesEnabled: (Boolean) -> Unit,
     onStartLocalResultServer: () -> Unit,
     onStopLocalResultServer: () -> Unit
 ) {
@@ -1797,6 +1812,18 @@ private fun SettingsDetailsPanel(
             )
             Text(
                 text = "Readout alert sounds",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = areAliasesEnabled,
+                onCheckedChange = onSetAliasesEnabled,
+                enabled = diagnostics.projectState == "Project open"
+            )
+            Text(
+                text = "Use aliases",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )

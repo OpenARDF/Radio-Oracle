@@ -3,7 +3,7 @@ package org.openardf.radiooracle.sportident
 import junit.framework.TestCase.assertEquals
 import org.openardf.radiooracle.backend.results.ResultsProcessor
 import org.openardf.radiooracle.backend.room.entity.Result
-import org.openardf.radiooracle.backend.room.enums.ResultStatus
+import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.sportident.SIPort
 import org.openardf.radiooracle.backend.sportident.SIPort.CardData
@@ -39,8 +39,14 @@ class SI5Tests {
         val finishTime = SITime(LocalTime.of(9, 43, 0))
 
         var zeroTimeBase = LocalTime.of(10, 0)
-        val cardData =
-            CardData(SIConstants.SI_CARD5, 12345, checkTime, startTime, finishTime, punchData)
+        val cardData = CardData(
+            cardType = SIConstants.SI_CARD5,
+            siNumber = 12345,
+            checkTime = checkTime,
+            startTime = startTime,
+            finishTime = finishTime,
+            punchData = punchData
+        )
 
         var result =
             Result(

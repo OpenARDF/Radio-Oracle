@@ -104,8 +104,7 @@ class AliasEditDialogFragment : DialogFragment() {
             val adapter = (aliasRecyclerView.adapter as AliasRecyclerViewAdapter)
 
             if (adapter.checkFields()) {
-                val values =
-                    AliasEditItemWrapper.getAliases((aliasRecyclerView.adapter as AliasRecyclerViewAdapter).values)
+                val values = adapter.getSortedAliases()
                 selectedRaceViewModel.createOrUpdateAliases(values, args.raceId)
                 dialog?.dismiss()
             }

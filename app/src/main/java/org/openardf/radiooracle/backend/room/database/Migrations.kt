@@ -102,3 +102,10 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         db.execSQL("ALTER TABLE result_service ADD COLUMN `init` INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+// Migration from version 3 -> 4: preserve optional SI-card personal name captured during readout.
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `result` ADD COLUMN `card_name` TEXT")
+    }
+}

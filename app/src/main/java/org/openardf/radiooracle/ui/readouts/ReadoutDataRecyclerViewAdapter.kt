@@ -37,7 +37,7 @@ class ReadoutDataRecyclerViewAdapter(
         if (item.competitorCategory?.competitor != null) {
             holder.competitorView.text = item.competitorCategory!!.competitor.getFullName().take(30)
         } else {
-            holder.competitorView.setText(R.string.unknown)
+            holder.competitorView.text = item.result.cardName ?: context.getString(R.string.unknown)
         }
 
         if (item.competitorCategory?.category != null) {
@@ -84,6 +84,10 @@ class ReadoutDataRecyclerViewAdapter(
         holder.itemView.setOnClickListener {
             onReadoutClicked(item)
         }
+        holder.itemView.setOnLongClickListener {
+            showContextMenu(holder.moreBtn, position, item)
+            true
+        }
 
         //Set color based on status
         if (item.result.resultStatus == ResultStatus.ERROR) {
@@ -92,33 +96,37 @@ class ReadoutDataRecyclerViewAdapter(
             holder.itemView.setBackgroundResource(R.color.orange_reading)
         } else if (item.competitorCategory?.competitor?.siRent == true) {
             holder.itemView.setBackgroundResource(R.color.yellow_warning)
+        } else {
+            holder.itemView.setBackgroundResource(R.color.white)
         }
 
-        //Set context menu
         holder.moreBtn.setOnClickListener {
+            showContextMenu(holder.moreBtn, position, item)
+        }
+    }
 
-            val popupMenu = PopupMenu(context, holder.moreBtn)
-            popupMenu.inflate(R.menu.context_menu_readout)
+    private fun showContextMenu(anchor: View, position: Int, item: ResultData) {
+        val popupMenu = PopupMenu(context, anchor)
+        popupMenu.inflate(R.menu.context_menu_readout)
 
-            popupMenu.setOnMenuItemClickListener {
-                when (it.itemId) {
-                    R.id.menu_item_edit_readout -> {
-                        onMoreClicked(0, position, item)
-                        true
-                    }
+        popupMenu.setOnMenuItemClickListener {
+            when (it.itemId) {
+                R.id.menu_item_edit_readout -> {
+                    onMoreClicked(0, position, item)
+                    true
+                }
 
-                    R.id.menu_item_delete_readout -> {
-                        onMoreClicked(1, position, item)
-                        true
-                    }
+                R.id.menu_item_delete_readout -> {
+                    onMoreClicked(1, position, item)
+                    true
+                }
 
-                    else -> {
-                        false
-                    }
+                else -> {
+                    false
                 }
             }
-            popupMenu.show()
         }
+        popupMenu.show()
     }
 
     inner class ReadoutViewHolder(view: View) : RecyclerView.ViewHolder(view) {

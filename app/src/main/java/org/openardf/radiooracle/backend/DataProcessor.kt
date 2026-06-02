@@ -10,8 +10,6 @@ import androidx.preference.PreferenceManager
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.files.DataImportValidator
 import org.openardf.radiooracle.backend.files.FileProcessor
-import org.openardf.radiooracle.backend.files.constants.DataFormat
-import org.openardf.radiooracle.backend.files.constants.DataType
 import org.openardf.radiooracle.backend.files.wrappers.DataImportWrapper
 import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
@@ -34,20 +32,22 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
-import org.openardf.radiooracle.backend.room.enums.PunchStatus
-import org.openardf.radiooracle.backend.room.enums.RaceBand
-import org.openardf.radiooracle.backend.room.enums.RaceLevel
-import org.openardf.radiooracle.backend.room.enums.RaceType
-import org.openardf.radiooracle.backend.room.enums.ResultServiceStatus
-import org.openardf.radiooracle.backend.room.enums.ProviderType
-import org.openardf.radiooracle.backend.room.enums.ResultStatus
-import org.openardf.radiooracle.backend.room.enums.StandardCategoryType
 import org.openardf.radiooracle.backend.sportident.SIPort.CardData
 import org.openardf.radiooracle.backend.sportident.SIReaderService
-import org.openardf.radiooracle.backend.sportident.SIReaderState
-import org.openardf.radiooracle.backend.sportident.SIReaderStatus
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
 import org.openardf.radiooracle.backend.wrappers.StatisticsWrapper
+import org.openardf.radiooracle.shared.device.SIReaderState
+import org.openardf.radiooracle.shared.device.SIReaderStatus
+import org.openardf.radiooracle.shared.domain.ProviderType
+import org.openardf.radiooracle.shared.domain.PunchStatus
+import org.openardf.radiooracle.shared.domain.RaceBand
+import org.openardf.radiooracle.shared.domain.RaceLevel
+import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.domain.ResultServiceStatus
+import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.StandardCategoryType
+import org.openardf.radiooracle.shared.files.DataFormat
+import org.openardf.radiooracle.shared.files.DataType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -663,9 +663,9 @@ class DataProcessor private constructor(context: Context) {
     fun genderToString(isMan: Boolean?): String {
         val ctx = appContext.get()
         return when (isMan) {
-            false -> ctx?.resources?.getString(R.string.general_gender_woman) ?: "Woman"
-            true -> ctx?.resources?.getString(R.string.general_gender_man) ?: "Man"
-            null -> "Man"
+            false -> ctx?.resources?.getString(R.string.general_gender_woman) ?: "Women"
+            true -> ctx?.resources?.getString(R.string.general_gender_man) ?: "Men"
+            null -> "Men"
         }
     }
 

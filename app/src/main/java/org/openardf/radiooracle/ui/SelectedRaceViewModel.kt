@@ -12,6 +12,7 @@ import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.constants.DataFormat
 import org.openardf.radiooracle.backend.files.constants.DataType
 import org.openardf.radiooracle.backend.files.wrappers.DataImportWrapper
+import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.results.ResultsProcessor
 import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Category
@@ -231,6 +232,38 @@ class SelectedRaceViewModel : ViewModel() {
 
     fun createOrUpdateCompetitor(competitor: Competitor) = CoroutineScope(Dispatchers.IO).launch {
         dataProcessor.createOrUpdateCompetitor(competitor)
+    }
+
+    fun createCompetitorFromCardReadout(resultData: ResultData) = CoroutineScope(Dispatchers.IO).launch {
+        val siNumber = resultData.result.siNumber ?: return@launch
+        val cardName = resultData.result.cardName?.trim()?.takeIf { it.isNotBlank() } ?: return@launch
+        val raceId = resultData.result.raceId
+        if (dataProcessor.getCompetitorBySINumber(siNumber, raceId) != null) {
+            DebugLog.info("Readouts", "Skipped card competitor creation because SI already exists si=$siNumber")
+            return@launch
+        }
+
+        val nameParts = cardName.split(Regex("\\s+"), limit = 2)
+        val competitor = Competitor(
+            id = UUID.randomUUID(),
+            raceId = raceId,
+            categoryId = null,
+            firstName = nameParts.getOrNull(1).orEmpty(),
+            lastName = nameParts.firstOrNull().orEmpty(),
+            club = "",
+            index = "",
+            isMan = false,
+            birthYear = null,
+            siNumber = siNumber,
+            siRent = false,
+            startNumber = dataProcessor.getHighestStartNumberByRace(raceId) + 1,
+            drawnRelativeStartTime = null
+        )
+        dataProcessor.createOrUpdateCompetitor(competitor)
+        DebugLog.info(
+            "Readouts",
+            "Created card competitor id=${competitor.id} si=$siNumber name=${competitor.getFullName()}"
+        )
     }
 
     fun deleteCompetitor(competitorId: UUID, deleteResult: Boolean) =

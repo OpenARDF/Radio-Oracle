@@ -68,6 +68,7 @@ class SportIdentCardReadoutParserTest {
         writePunch(data, 8, 31, 10 * 3600)
         writePunch(data, 12, 32, 10 * 60 + 30)
         writePunch(data, 16, 33, 11 * 3600)
+        writeAscii(data, 0x20, "Alice;Runner;")
         writePunch(data, 34 * 4, 41, 12 * 60)
         writePunch(data, 34 * 4 + 4, 42, 20 * 60)
 
@@ -79,6 +80,22 @@ class SportIdentCardReadoutParserTest {
         assertEquals("00:10:30", readout.startTime?.getTimeString())
         assertEquals("11:00:00", readout.finishTime?.getTimeString())
         assertEquals(listOf(41, 42), readout.punches.map { it.siCode })
+        assertEquals("Alice", readout.cardHolder?.firstName)
+        assertEquals("Runner", readout.cardHolder?.lastName)
+        assertEquals("Runner Alice", readout.cardHolder?.displayName)
+    }
+
+    @Test
+    fun parsesSi6FixedWidthCardHolderNames() {
+        val data = ByteArray(2 * SportIdentProtocol.SI_CARD_BLOCK_SIZE) { 0xEE.toByte() }
+        writeAscii(data, 0x30, "Runner")
+        writeAscii(data, 0x44, "Alice")
+
+        val cardHolder = assertNotNull(SportIdentCardReadoutParser.parseFixedCardHolder(data))
+
+        assertEquals("Alice", cardHolder.firstName)
+        assertEquals("Runner", cardHolder.lastName)
+        assertEquals("Runner Alice", cardHolder.displayName)
     }
 
     private fun writePunch(data: ByteArray, offset: Int, code: Int, seconds: Int) {
@@ -96,5 +113,11 @@ class SportIdentCardReadoutParserTest {
     private fun writeSi5Time(data: ByteArray, offset: Int, seconds: Int) {
         data[offset] = ((seconds ushr 8) and 0xff).toByte()
         data[offset + 1] = (seconds and 0xff).toByte()
+    }
+
+    private fun writeAscii(data: ByteArray, offset: Int, text: String) {
+        text.forEachIndexed { index, char ->
+            data[offset + index] = char.code.toByte()
+        }
     }
 }

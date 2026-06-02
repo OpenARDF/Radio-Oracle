@@ -3,7 +3,7 @@ package org.openardf.radiooracle.files
 import android.content.Context
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.DataImportValidator
-import org.openardf.radiooracle.backend.files.constants.DataType
+import org.openardf.radiooracle.shared.files.DataType
 import org.openardf.radiooracle.backend.files.wrappers.DataImportWrapper
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
@@ -13,7 +13,7 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.AliasPunch
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
-import org.openardf.radiooracle.backend.room.enums.SIRecordType
+import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test

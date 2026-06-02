@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.shared.event
 
 import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
@@ -19,17 +20,25 @@ data class EventReadoutDetails(
 ) {
     companion object {
         /** Builds readout display rows for competitor-linked and unmatched readouts. */
-        fun from(raceData: EventRaceData): List<EventReadoutDetails> {
+        fun from(raceData: EventRaceData, useAliases: Boolean = true): List<EventReadoutDetails> {
             val matched = raceData.competitorData.mapNotNull { competitorData ->
                 val readoutData = competitorData.readoutData ?: return@mapNotNull null
                 fromReadout(
                     readoutData = readoutData,
                     competitorName = competitorData.competitorCategory.competitor.fullName(),
-                    matched = true
+                    matched = true,
+                    raceType = raceData.race.raceType,
+                    useAliases = useAliases
                 )
             }
             val unmatched = raceData.unmatchedReadoutData.map { readoutData ->
-                fromReadout(readoutData = readoutData, competitorName = "", matched = false)
+                fromReadout(
+                    readoutData = readoutData,
+                    competitorName = readoutData.result.cardName ?: "",
+                    matched = false,
+                    raceType = raceData.race.raceType,
+                    useAliases = useAliases
+                )
             }
             return matched + unmatched
         }
@@ -37,7 +46,9 @@ data class EventReadoutDetails(
         private fun fromReadout(
             readoutData: EventReadoutData,
             competitorName: String,
-            matched: Boolean
+            matched: Boolean,
+            raceType: RaceType,
+            useAliases: Boolean
         ): EventReadoutDetails {
             val result = readoutData.result
             return EventReadoutDetails(
@@ -51,9 +62,14 @@ data class EventReadoutDetails(
                 pointsText = result.points.toString(),
                 runTimeText = DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinutes = false),
                 punchCodesText = readoutData.punches
-                    .map { it.punch }
-                    .filter { it.punchType == SIRecordType.CONTROL }
-                    .joinToString(" ") { it.siCode.toString() }
+                    .filter { it.punch.punchType == SIRecordType.CONTROL }
+                    .joinToString(" ") { aliasPunch ->
+                        if (raceType != RaceType.ORIENTEERING && useAliases && aliasPunch.alias?.name != null) {
+                            aliasPunch.alias.name
+                        } else {
+                            aliasPunch.punch.siCode.toString()
+                        }
+                    }
             )
         }
     }

@@ -129,6 +129,7 @@ data class EventResult(
     val runTimeSeconds: Long,
     val modified: Boolean,
     val sent: Boolean,
+    val cardName: String? = null,
     val place: Int = 0
 )
 

@@ -1,5 +1,6 @@
 package org.openardf.radiooracle.shared.event
 
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -19,7 +20,7 @@ class EventCategoryDetailsTest {
         assertEquals("Sprint", rows[0].raceTypeLabel)
         assertEquals("2m", rows[0].raceBandLabel)
         assertEquals("60:00", rows[0].timeLimitText)
-        assertEquals("31 32", rows[0].controlPointsText)
+        assertEquals("Foxhole 32", rows[0].controlPointsText)
 
         assertEquals("M21", rows[1].id)
         assertEquals("M21", rows[1].name)
@@ -28,14 +29,28 @@ class EventCategoryDetailsTest {
         assertEquals("120:00", rows[1].timeLimitText)
     }
 
-    private fun raceData(): EventRaceData =
+    @Test
+    fun buildsDisplayRowsWithRawControlsWhenAliasesAreDisabled() {
+        val rows = EventCategoryDetails.from(raceData(), useAliases = false)
+
+        assertEquals("31 32", rows[0].controlPointsText)
+    }
+
+    @Test
+    fun leavesOrienteeringControlDisplayUnchanged() {
+        val rows = EventCategoryDetails.from(raceData(defaultRaceType = RaceType.ORIENTEERING))
+
+        assertEquals("31 32", rows[1].controlPointsText)
+    }
+
+    private fun raceData(defaultRaceType: RaceType = RaceType.CLASSIC): EventRaceData =
         EventRaceData(
             race = EventRace(
                 id = "race",
                 name = "Category Race",
                 apiKey = "",
                 startDateTimeIso = "2026-05-31T10:00",
-                raceType = RaceType.CLASSIC,
+                raceType = defaultRaceType,
                 raceLevel = RaceLevel.PRACTICE,
                 raceBand = RaceBand.M80,
                 timeLimitSeconds = 7_200
@@ -58,7 +73,7 @@ class EventCategoryDetailsTest {
                     timeLimitSeconds = 3_600
                 )
             ),
-            aliases = emptyList(),
+            aliases = listOf(EventAlias("alias-31", "race", 31, "Foxhole")),
             competitorData = emptyList(),
             unmatchedReadoutData = emptyList()
         )
@@ -87,7 +102,10 @@ class EventCategoryDetailsTest {
                 timeLimitSeconds = timeLimitSeconds,
                 controlPointsString = "31 32"
             ),
-            controlPoints = emptyList(),
+            controlPoints = listOf(
+                EventControlPoint("cp-31-$name", name, 31, ControlPointType.CONTROL, 0),
+                EventControlPoint("cp-32-$name", name, 32, ControlPointType.CONTROL, 1)
+            ),
             competitors = emptyList()
         )
 }

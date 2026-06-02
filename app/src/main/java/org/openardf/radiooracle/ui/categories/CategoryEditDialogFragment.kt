@@ -21,9 +21,11 @@ import com.google.android.material.textfield.TextInputLayout
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
+import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
+import kotlinx.coroutines.runBlocking
 import java.time.Duration
 import java.util.UUID
 
@@ -189,7 +191,7 @@ class CategoryEditDialogFragment : DialogFragment() {
 
         //Set gender
         genderPicker.setText(dataProcessor.genderToString(category.isMan), false)
-        controlPointsEditText.setText(category.controlPointsString)
+        controlPointsEditText.setText(getEditableControlPointsString())
 
         //TODO: Process the saving - this is just to preserve the filtering after screen rotation
         raceTypePicker.isSaveEnabled = false
@@ -235,11 +237,9 @@ class CategoryEditDialogFragment : DialogFragment() {
             val text = controlPointsEditText.text.toString().trim()
 
             try {
-                ControlPointsHelper.getControlPointsFromString(
+                getControlPointsFromEditorString(
                     text,
-                    category.id,
-                    category.raceType ?: args.race.raceType,
-                    requireContext()
+                    category.id
                 )
             } catch (e: Exception) {
                 controlPointsLayout.error = e.message
@@ -327,11 +327,9 @@ class CategoryEditDialogFragment : DialogFragment() {
                 val controlPointsString =
                     controlPointsEditText.text.toString().trim()
                 //Get control points
-                val controlPoints = ControlPointsHelper.getControlPointsFromString(
+                val controlPoints = getControlPointsFromEditorString(
                     controlPointsString,
-                    category.id,
-                    category.raceType ?: race.raceType,
-                    requireContext()
+                    category.id
                 )
                 selectedRaceViewModel.createOrUpdateCategory(category, controlPoints)
 
@@ -354,6 +352,51 @@ class CategoryEditDialogFragment : DialogFragment() {
     fun getGenderFromPicker(): Boolean {
         return dataProcessor.genderFromString(genderPicker.text.toString())
     }
+
+    private fun getEditableControlPointsString(): String {
+        if (!shouldUseAliasEditor() || args.create) {
+            return category.controlPointsString
+        }
+        val controlPointAliases = runBlocking {
+            dataProcessor.getControlPointAliasesByCategory(category.id)
+        }
+        return if (controlPointAliases.isEmpty()) {
+            category.controlPointsString
+        } else {
+            ControlPointsHelper.getEditableStringFromControlPointAliases(
+                controlPointAliases,
+                requireContext()
+            )
+        }
+    }
+
+    private fun getControlPointsFromEditorString(
+        input: String,
+        categoryId: UUID
+    ) =
+        if (shouldUseAliasEditor()) {
+            ControlPointsHelper.getControlPointsFromDisplayString(
+                input,
+                categoryId,
+                category.raceType ?: args.race.raceType,
+                getRaceAliases(),
+                requireContext()
+            )
+        } else {
+            ControlPointsHelper.getControlPointsFromString(
+                input,
+                categoryId,
+                category.raceType ?: args.race.raceType,
+                requireContext()
+            )
+        }
+
+    private fun shouldUseAliasEditor(): Boolean =
+        (category.raceType ?: args.race.raceType) != RaceType.ORIENTEERING &&
+                ControlPointsHelper.shouldUseAliases(requireContext())
+
+    private fun getRaceAliases(): List<Alias> =
+        selectedRaceViewModel.getAliasesByRace(args.race.id)
 
     companion object {
         const val REQUEST_CATEGORY_MODIFICATION = "REQUEST_CATEGORY_MODIFICATION"

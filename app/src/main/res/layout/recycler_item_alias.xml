@@ -23,7 +23,7 @@
         android:layout_marginEnd="20dp"
         android:ems="10"
         android:hint="@string/general_name"
-        android:inputType="text"
+        android:inputType="textCapWords"
         android:maxLength="6"
         android:digits="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ/"
         android:textColor="@color/black"

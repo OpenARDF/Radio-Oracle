@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.ui.aliases
 
 import android.content.Context
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -20,6 +21,9 @@ class AliasRecyclerViewAdapter(
     val raceId: UUID
 ) :
     RecyclerView.Adapter<AliasRecyclerViewAdapter.AliasViewHolder>() {
+    init {
+        sortAliases()
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AliasViewHolder {
         val adapterLayout = LayoutInflater.from(parent.context)
@@ -32,6 +36,8 @@ class AliasRecyclerViewAdapter(
 
     override fun onBindViewHolder(holder: AliasViewHolder, position: Int) {
         val item = values[position]
+        holder.nameTextWatcher?.let { holder.name.removeTextChangedListener(it) }
+        holder.codeTextWatcher?.let { holder.siCode.removeTextChangedListener(it) }
         holder.siCode.setText(item.alias.siCode.toString())
         holder.name.setText(item.alias.name)
 
@@ -44,31 +50,42 @@ class AliasRecyclerViewAdapter(
             holder.siCode.error = holder.itemView.context.getString(R.string.general_required)
         }
 
-        holder.name.doOnTextChanged { cs: CharSequence?, _, _, _ ->
+        holder.nameTextWatcher = holder.name.doOnTextChanged { cs: CharSequence?, _, _, _ ->
+            val currentPosition = holder.currentPositionOrNull() ?: return@doOnTextChanged
             try {
-                nameWatcher(holder.adapterPosition, cs.toString(), holder.name.context)
+                nameWatcher(currentPosition, cs.toString(), holder.name.context)
             } catch (e: IllegalArgumentException) {
                 holder.name.error = e.message
             }
         }
 
-        holder.siCode.doOnTextChanged { cs: CharSequence?, _, _, _ ->
+        holder.codeTextWatcher = holder.siCode.doOnTextChanged { cs: CharSequence?, _, _, _ ->
+            val currentPosition = holder.currentPositionOrNull() ?: return@doOnTextChanged
             try {
-                codeWatcher(holder.adapterPosition, cs.toString(), holder.name.context)
+                codeWatcher(currentPosition, cs.toString(), holder.name.context)
             } catch (e: IllegalArgumentException) {
                 holder.siCode.error = e.message
             }
         }
 
+        holder.siCode.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                sortAliases()
+                notifyDataSetChanged()
+            }
+        }
+
         holder.addBtn.setOnClickListener {
-            addAlias(holder.adapterPosition)
+            val currentPosition = holder.currentPositionOrNull() ?: return@setOnClickListener
+            addAlias(currentPosition)
         }
 
         holder.deleteBtn.setOnClickListener {
             //Remove focus to prevent crash
             holder.name.clearFocus()
             holder.siCode.clearFocus()
-            deleteAlias(holder.adapterPosition)
+            val currentPosition = holder.currentPositionOrNull() ?: return@setOnClickListener
+            deleteAlias(currentPosition)
         }
     }
 
@@ -105,6 +122,11 @@ class AliasRecyclerViewAdapter(
     }
 
     fun checkFields(): Boolean = values.all { a -> a.isNameValid && a.isCodeValid }
+
+    fun getSortedAliases(): List<Alias> {
+        sortAliases()
+        return AliasEditItemWrapper.getAliases(values)
+    }
 
     private fun AliasValidationResult.toMessage(context: Context): String {
         return when (this) {
@@ -203,7 +225,16 @@ class AliasRecyclerViewAdapter(
         )
 
         values = standard
+        sortAliases()
         notifyDataSetChanged()
+    }
+
+    private fun sortAliases() {
+        values.sortWith(
+            compareBy<AliasEditItemWrapper> {
+                if (it.isCodeValid && it.alias.siCode > 0) it.alias.siCode else Int.MAX_VALUE
+            }.thenBy { it.alias.name }
+        )
     }
 
     class AliasViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -212,5 +243,10 @@ class AliasRecyclerViewAdapter(
         var addBtn: ImageButton = view.findViewById(R.id.alias_item_add_btn)
         var deleteBtn: ImageButton =
             view.findViewById(R.id.alias_item_delete_btn)
+        var nameTextWatcher: TextWatcher? = null
+        var codeTextWatcher: TextWatcher? = null
+
+        fun currentPositionOrNull(): Int? =
+            bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }
     }
 }

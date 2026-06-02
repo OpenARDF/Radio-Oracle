@@ -47,37 +47,44 @@ class RaceRecyclerViewAdapter(
         holder.itemView.setOnClickListener {
             onRaceClicked(item.id)
         }
+        holder.itemView.setOnLongClickListener {
+            showContextMenu(holder.moreBtn, position, item)
+            true
+        }
         holder.moreBtn.setOnClickListener {
+            showContextMenu(holder.moreBtn, position, item)
+        }
+    }
 
-            val popupMenu = PopupMenu(context, holder.moreBtn)
-            popupMenu.inflate(R.menu.context_menu_race)
+    private fun showContextMenu(anchor: View, position: Int, item: Race) {
+        val popupMenu = PopupMenu(context, anchor)
+        popupMenu.inflate(R.menu.context_menu_race)
 
-            popupMenu.setOnMenuItemClickListener {
-                when (it.itemId) {
-                    R.id.menu_item_edit_race -> {
-                        onMoreClicked(0, position, item)
-                        true
-                    }
+        popupMenu.setOnMenuItemClickListener {
+            when (it.itemId) {
+                R.id.menu_item_edit_race -> {
+                    onMoreClicked(0, position, item)
+                    true
+                }
 
-                    R.id.menu_item_export_race -> {
-                        onMoreClicked(1, position, item)
-                        true
-                    }
+                R.id.menu_item_export_race -> {
+                    onMoreClicked(1, position, item)
+                    true
+                }
 
 
-                    R.id.menu_item_delete_race -> {
-                        onMoreClicked(2, position, item)
-                        true
-                    }
+                R.id.menu_item_delete_race -> {
+                    onMoreClicked(2, position, item)
+                    true
+                }
 
-                    else -> {
-                        onMoreClicked(3, position, item)
-                        true
-                    }
+                else -> {
+                    onMoreClicked(3, position, item)
+                    true
                 }
             }
-            popupMenu.show()
         }
+        popupMenu.show()
     }
 
     /** Returns the number of races currently displayed. */

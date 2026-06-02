@@ -46,6 +46,7 @@ data class Result(
     @ColumnInfo(name = "run_time") var runTime: Duration,
     @ColumnInfo(name = "modified") var modified: Boolean,
     @ColumnInfo(name = "sent") var sent: Boolean,
+    @ColumnInfo(name = "card_name") var cardName: String? = null,
 
 ) : Serializable, Comparable<Result> {
     @Ignore
@@ -74,6 +75,7 @@ data class Result(
         points = 0,
         runTime = Duration.ZERO,
         modified = false,
-        sent = false
+        sent = false,
+        cardName = null
     )
 }

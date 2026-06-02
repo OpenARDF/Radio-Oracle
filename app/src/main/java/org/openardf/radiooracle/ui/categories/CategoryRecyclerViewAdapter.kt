@@ -10,10 +10,12 @@ import androidx.appcompat.widget.PopupMenu
 import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
+import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
-import org.openardf.radiooracle.backend.room.enums.RaceBand
-import org.openardf.radiooracle.backend.room.enums.RaceType
+import org.openardf.radiooracle.shared.domain.RaceBand
+import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
+import kotlinx.coroutines.runBlocking
 
 class CategoryRecyclerViewAdapter(
     private var values: List<CategoryData>,
@@ -52,40 +54,21 @@ class CategoryRecyclerViewAdapter(
                 ?: RaceBand.M80)
         )
         holder.gender.text = dataProcessor.genderToString(item.category.isMan)
-        holder.siCodes.text = item.category.controlPointsString
+        holder.siCodes.text = getDisplayControlPoints(item, item.category.raceType ?: currentRaceType())
 
-        if (item.category.maxAge != null) {
-            holder.maxAge.text = item.category.maxAge.toString()
+        holder.maxAge.text = item.category.maxAge?.toString().orEmpty()
+
+        holder.itemView.setOnClickListener {
+            onMoreClicked(0, position, item)
+        }
+
+        holder.itemView.setOnLongClickListener {
+            showContextMenu(holder.moreBtn, position, item)
+            true
         }
 
         holder.moreBtn.setOnClickListener {
-
-            val popupMenu = PopupMenu(context, holder.moreBtn)
-            popupMenu.inflate(R.menu.context_menu_category)
-
-            popupMenu.setOnMenuItemClickListener {
-                when (it.itemId) {
-                    R.id.menu_item_edit_category -> {
-                        onMoreClicked(0, position, item)
-                        true
-                    }
-
-                    R.id.menu_item_duplicate_category -> {
-                        onMoreClicked(1, position, item)
-                        true
-                    }
-
-                    R.id.menu_item_delete_category -> {
-                        onMoreClicked(2, position, item)
-                        true
-                    }
-
-                    else -> {
-                        false
-                    }
-                }
-            }
-            popupMenu.show()
+            showContextMenu(holder.moreBtn, position, item)
         }
 
         holder.upBtn.setOnClickListener {
@@ -99,17 +82,65 @@ class CategoryRecyclerViewAdapter(
                 moveCategory(holder.layoutPosition, false)
         }
 
+        holder.upBtn.visibility = View.VISIBLE
+        holder.downBtn.visibility = View.VISIBLE
         //Hide the buttons for last and first item
         if (position == 0) {
             holder.upBtn.visibility = View.GONE
-        } else if (position == values.size - 1) {
+        }
+        if (position == values.size - 1) {
             holder.downBtn.visibility = View.GONE
         }
+    }
+
+    private fun showContextMenu(anchor: View, position: Int, item: CategoryData) {
+        val popupMenu = PopupMenu(context, anchor)
+        popupMenu.inflate(R.menu.context_menu_category)
+
+        popupMenu.setOnMenuItemClickListener {
+            when (it.itemId) {
+                R.id.menu_item_edit_category -> {
+                    onMoreClicked(0, position, item)
+                    true
+                }
+
+                R.id.menu_item_duplicate_category -> {
+                    onMoreClicked(1, position, item)
+                    true
+                }
+
+                R.id.menu_item_delete_category -> {
+                    onMoreClicked(2, position, item)
+                    true
+                }
+
+                else -> {
+                    false
+                }
+            }
+        }
+        popupMenu.show()
     }
 
     /**
      * Changes the category's order and saves it to database
      */
+    private fun getDisplayControlPoints(item: CategoryData, raceType: RaceType): String {
+        if (raceType == RaceType.ORIENTEERING) {
+            return item.category.controlPointsString
+        }
+
+        return runBlocking {
+            ControlPointsHelper.getStringFromControlPointAliases(
+                dataProcessor.getControlPointAliasesByCategory(item.category.id),
+                context
+            )
+        }
+    }
+
+    private fun currentRaceType(): RaceType =
+        selectedRaceViewModel.getCurrentRace()?.raceType ?: RaceType.CLASSIC
+
     private fun moveCategory(position: Int, up: Boolean) {
         if (up) {
             values[position - 1].category.order++

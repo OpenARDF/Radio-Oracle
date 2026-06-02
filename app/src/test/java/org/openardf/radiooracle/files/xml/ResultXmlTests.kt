@@ -14,8 +14,8 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.AliasPunch
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
-import org.openardf.radiooracle.backend.room.enums.ResultStatus
-import org.openardf.radiooracle.backend.room.enums.SIRecordType
+import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.backend.sportident.SITime
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals

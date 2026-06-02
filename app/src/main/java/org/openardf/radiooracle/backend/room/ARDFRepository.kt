@@ -6,6 +6,7 @@ import androidx.room.withTransaction
 import org.openardf.radiooracle.backend.room.database.EventDatabase
 import org.openardf.radiooracle.backend.room.database.MIGRATION_1_2
 import org.openardf.radiooracle.backend.room.database.MIGRATION_2_3
+import org.openardf.radiooracle.backend.room.database.MIGRATION_3_4
 import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
@@ -17,6 +18,7 @@ import org.openardf.radiooracle.backend.room.entity.ResultService
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.util.UUID
 
 class ARDFRepository private constructor(context: Context) {
@@ -27,7 +29,7 @@ class ARDFRepository private constructor(context: Context) {
             EventDatabase::class.java,
             "event-database"
         )
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
         .build()
 
     //-------------------Races-------------------
@@ -89,7 +91,12 @@ class ARDFRepository private constructor(context: Context) {
         eventDatabase.controlPointDao().getControlPointsByCategory(categoryId)
 
     suspend fun getControlPointAliasesByCategory(categoryId: UUID) =
-        eventDatabase.controlPointDao().getControlPointAliasesByCategory(categoryId)
+        RaceScopedAliasResolver.resolveControlPoints(
+            eventDatabase.controlPointDao().getControlPointAliasesByCategory(categoryId),
+            eventDatabase.categoryDao().getCategory(categoryId)?.let { category ->
+                getAliasesByRace(category.raceId)
+            } ?: emptyList()
+        )
 
     suspend fun deleteControlPointsByCategory(categoryId: UUID) =
         eventDatabase.controlPointDao().deleteControlPointsByCategory(categoryId)
@@ -115,7 +122,12 @@ class ARDFRepository private constructor(context: Context) {
         eventDatabase.competitorDao().getHighestStartNumberByRace(raceId)
 
     fun getCompetitorDataFlowByRace(raceId: UUID): Flow<List<CompetitorData>> =
-        eventDatabase.competitorDao().getCompetitorDataFlow(raceId)
+        eventDatabase.competitorDao().getCompetitorDataFlow(raceId).map { competitorData ->
+            RaceScopedAliasResolver.resolveCompetitorData(
+                competitorData,
+                getAliasesByRace(raceId)
+            )
+        }
 
     suspend fun getCompetitorsByCategory(categoryId: UUID) =
         eventDatabase.competitorDao().getCompetitorsByCategory(categoryId)
@@ -149,10 +161,21 @@ class ARDFRepository private constructor(context: Context) {
     //-------------------Results-------------------
     suspend fun getResult(id: UUID) = eventDatabase.resultDao().getResult(id)
 
-    suspend fun getResultData(id: UUID) = eventDatabase.resultDao().getResultData(id)
+    suspend fun getResultData(id: UUID) =
+        eventDatabase.resultDao().getResultData(id).let { resultData ->
+            RaceScopedAliasResolver.resolveResultData(
+                resultData,
+                getAliasesByRace(resultData.result.raceId)
+            )
+        }
 
     fun getResultDataFlowByRace(raceId: UUID) =
-        eventDatabase.resultDao().getResultDataFlowByRace(raceId)
+        eventDatabase.resultDao().getResultDataFlowByRace(raceId).map { resultData ->
+            RaceScopedAliasResolver.resolveResultData(
+                resultData,
+                getAliasesByRace(raceId)
+            )
+        }
 
     suspend fun getResultBySINumber(siNumber: Int, raceId: UUID) =
         eventDatabase.resultDao().getResultForSINumber(siNumber, raceId)

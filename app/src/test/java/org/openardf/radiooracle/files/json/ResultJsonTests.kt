@@ -24,9 +24,9 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
-import org.openardf.radiooracle.backend.room.enums.PunchStatus
-import org.openardf.radiooracle.backend.room.enums.ResultStatus
-import org.openardf.radiooracle.backend.room.enums.SIRecordType
+import org.openardf.radiooracle.shared.domain.PunchStatus
+import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.backend.sportident.SITime
 import org.junit.Before
 import org.junit.Test

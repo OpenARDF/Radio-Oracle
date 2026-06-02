@@ -21,8 +21,8 @@
     <string name="general_finish">Finish</string>
     <string name="general_finish_time">Finish time</string>
     <string name="general_gender">Gender</string>
-    <string name="general_gender_man">Man</string>
-    <string name="general_gender_woman">Woman</string>
+    <string name="general_gender_man">Men</string>
+    <string name="general_gender_woman">Women</string>
     <string name="general_index">Index</string>
     <string name="general_invalid">Invalid</string>
     <string name="general_length">Length</string>
@@ -151,6 +151,7 @@
     <string name="competitor_to_limit">To limit</string>
     <string name="competitor_create">Create competitor</string>
     <string name="competitor_edit">Edit competitor</string>
+    <string name="competitor_manual_gender">Advanced/import: Men</string>
     <string name="competitor_delete">Delete competitor</string>
     <string name="competitor_delete_all">Delete all competitors</string>
     <string name="competitor_delete_confirmation">Do you really want to delete this competitor?\n%1$s</string>
@@ -195,8 +196,12 @@
     <string name="readout_detail_split">Split</string>
     <string name="readout_detail_status">Status</string>
     <string name="readout_si_number" translatable="false">SI: %1$s</string>
-    <string name="readout_si_exists">Readout with this SI number already exists!</string>
+    <string name="readout_si_exists">Duplicate SI %1$d ignored. Readout already exists.</string>
+    <string name="readout_named_unmatched_si_exists">SI %1$d already has a named readout. Open Readouts to add the competitor.</string>
     <string name="readout_competitor_exists">Readout for this competitor already exists!</string>
+    <string name="readout_add_card_competitor_title">Add competitor?</string>
+    <string name="readout_add_card_competitor_message">SI card %2$d was read as %1$s. Add this competitor to the race?</string>
+    <string name="readout_add_card_competitor_positive">Add competitor</string>
     <string name="readout_unknown_category">Unknown category</string>
     <string name="readout_unknown_competitor">Unknown competitor</string>
     <string name="readout_time">Readout time</string>

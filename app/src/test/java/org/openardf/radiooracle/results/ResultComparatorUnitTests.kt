@@ -8,7 +8,7 @@ import org.openardf.radiooracle.backend.room.entity.Result
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
-import org.openardf.radiooracle.backend.room.enums.ResultStatus
+import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.junit.Test
 import java.time.Duration

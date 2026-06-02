@@ -21,7 +21,8 @@ import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.results.ResultsProcessor
 import org.openardf.radiooracle.backend.room.entity.embeddeds.AliasPunch
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
-import org.openardf.radiooracle.backend.room.enums.ResultStatus
+import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.categories.CategoryEditDialogFragment
 import kotlinx.coroutines.CoroutineScope
@@ -100,7 +101,8 @@ class ReadoutDetailFragment : Fragment() {
             competitorNameView.text = resultData.competitorCategory!!.competitor.getFullName()
             pointsView.text = resultData.result.points.toString()
         } else {
-            competitorNameView.text = getText(R.string.readout_unknown_competitor)
+            competitorNameView.text =
+                resultData.result.cardName ?: getString(R.string.readout_unknown_competitor)
             pointsView.text = getText(R.string.unknown)
             clubView.text = getText(R.string.unknown)
             indexView.text = getText(R.string.unknown)
@@ -277,6 +279,7 @@ class ReadoutDetailFragment : Fragment() {
 
     /** Displays the readout's ordered punch list. */
     private fun setRecyclerViewAdapter(punches: List<AliasPunch>) {
-        punchRecyclerView.adapter = PunchRecyclerViewAdapter(punches, requireContext())
+        val raceType = selectedRaceViewModel.getCurrentRace()?.raceType ?: RaceType.CLASSIC
+        punchRecyclerView.adapter = PunchRecyclerViewAdapter(punches, requireContext(), raceType)
     }
 }

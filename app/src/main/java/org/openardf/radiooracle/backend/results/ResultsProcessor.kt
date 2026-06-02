@@ -11,6 +11,7 @@ import com.google.android.material.snackbar.Snackbar
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
+import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.ControlPoint
@@ -206,7 +207,7 @@ object ResultsProcessor {
             sharedPref.getString(
                 context.getString(R.string.key_readout_duplicate),
                 context.getString(R.string.preferences_readout_duplicate_ignore_value)
-            )
+            ).normalizeDuplicatePreference(context)
         val existingResult = dataProcessor.getResultBySINumber(cardData.siNumber, race.id)
         val exist = (existingResult != null)
         var createNewReadout = false
@@ -225,18 +226,37 @@ object ResultsProcessor {
                     dataProcessor.deleteResult(existingResult.id)
                 }
 
-                // Warn about existing readout
-                else -> {
-                    //Run on the main UI thread
-                    CoroutineScope(Dispatchers.Main).launch {
-                        Toast.makeText(
-                            context,
-                            context.getText(R.string.readout_si_exists),
-                            Toast.LENGTH_LONG
-                        )
-                            .show()
+	                // Warn about existing readout
+	                else -> {
+                    val namedUnmatchedReadout =
+                        existingResult.competitorId == null && !existingResult.cardName.isNullOrBlank()
+                    DebugLog.warn(
+                        "SI",
+                        if (namedUnmatchedReadout) {
+                            "Named unmatched duplicate card read ignored id=${cardData.siNumber}"
+                        } else {
+                            "Duplicate card read ignored id=${cardData.siNumber}"
+                        }
+                    )
+	                    //Run on the main UI thread
+	                    CoroutineScope(Dispatchers.Main).launch {
+	                        Toast.makeText(
+	                            context,
+                            if (namedUnmatchedReadout) {
+                                context.getString(
+                                    R.string.readout_named_unmatched_si_exists,
+                                    cardData.siNumber
+                                )
+                            } else {
+                                context.getString(R.string.readout_si_exists, cardData.siNumber)
+                            },
+	                            Toast.LENGTH_LONG
+	                        )
+	                            .show()
                     }
-                    isToMakeSound(context, SoundType.DUPLICATE)
+                    if (!namedUnmatchedReadout) {
+                        isToMakeSound(context, SoundType.DUPLICATE)
+                    }
                     return false
                 }
             }
@@ -265,7 +285,8 @@ object ResultsProcessor {
                 resultStatus = ResultStatus.NO_RANKING,
                 runTime = Duration.ZERO,
                 modified = false,
-                sent = false
+                sent = false,
+                cardName = cardData.cardName?.takeIf { it.isNotBlank() }
             )
 
         if (result.startTime == null) {
@@ -305,7 +326,8 @@ object ResultsProcessor {
         var sound = false
 
         // Warn about error / unknown with a sound
-        if (result.resultStatus == ResultStatus.ERROR || result.competitorId == null
+        if (result.resultStatus == ResultStatus.ERROR ||
+            (result.competitorId == null && result.cardName.isNullOrBlank())
         ) {
             dataProcessor.getContext()?.let { isToMakeSound(it, SoundType.ERROR_UNKNOWN) }
             sound = true
@@ -318,6 +340,15 @@ object ResultsProcessor {
 
         return true
     }
+
+    private fun String?.normalizeDuplicatePreference(context: Context): String =
+        when (this) {
+            context.getString(R.string.preferences_readout_duplicate_new_value) ->
+                context.getString(R.string.preferences_readout_duplicate_new_value)
+            context.getString(R.string.preferences_readout_duplicate_replace_value) ->
+                context.getString(R.string.preferences_readout_duplicate_replace_value)
+            else -> context.getString(R.string.preferences_readout_duplicate_ignore_value)
+        }
 
     // Returns if the ticket should be printed based on the current settings
     private fun isToPrintFinishTicket(

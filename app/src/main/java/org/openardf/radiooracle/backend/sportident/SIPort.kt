@@ -23,6 +23,7 @@ import org.openardf.radiooracle.backend.sportident.SIConstants.SI_CARD_PCARD_MAX
 import org.openardf.radiooracle.backend.sportident.SIConstants.SI_CARD_PCARD_SERIES
 import org.openardf.radiooracle.backend.sportident.SIConstants.SI_CARD_REMOVED
 import org.openardf.radiooracle.backend.sportident.SIConstants.ZERO
+import org.openardf.radiooracle.shared.sportident.SportIdentCardReadoutParser
 import org.openardf.radiooracle.shared.sportident.SportIdentStationMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +57,7 @@ class SIPort(
         var checkTime: SITime? = null,
         var startTime: SITime? = null,
         var finishTime: SITime? = null,
+        var cardName: String? = null,
         var punchData: ArrayList<PunchData>
     )
 
@@ -562,6 +564,7 @@ class SIPort(
     }
 
     private fun card6EntryParse(data: ByteArray, cardData: CardData): Boolean {
+        cardData.cardName = SportIdentCardReadoutParser.parseFixedCardHolder(data)?.displayName
         cardData.siNumber =
             byteToUnsignedInt(data[10]) shl 24 or (byteToUnsignedInt(data[11]) shl 16) or (byteToUnsignedInt(
                 data[12]
@@ -660,6 +663,7 @@ class SIPort(
             )
 
         val series = data[24].toInt() and SI_CARD10_11_SIAC_SERIES
+        cardData.cardName = SportIdentCardReadoutParser.parseSemicolonCardHolder(data, series)?.displayName
 
         //Parse the special punches
         val checkPunch = parseNewPunch(data.copyOfRange(8, 12))

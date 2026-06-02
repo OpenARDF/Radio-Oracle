@@ -6,13 +6,25 @@ data class SportIdentCardReadout(
     val checkTime: SportIdentTime?,
     val startTime: SportIdentTime?,
     val finishTime: SportIdentTime?,
-    val punches: List<SportIdentCardPunch>
+    val punches: List<SportIdentCardPunch>,
+    val cardHolder: SportIdentCardHolder? = null
 )
 
 data class SportIdentCardPunch(
     val siCode: Int,
     val siTime: SportIdentTime
 )
+
+data class SportIdentCardHolder(
+    val firstName: String?,
+    val lastName: String?
+) {
+    val displayName: String?
+        get() = listOfNotNull(lastName, firstName)
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
+            .ifBlank { null }
+}
 
 object SportIdentCardReadoutParser {
     fun parseSi5(data: ByteArray): SportIdentCardReadout? {
@@ -75,7 +87,8 @@ object SportIdentCardReadoutParser {
             checkTime = parsePunch(data.copyOfRange(28, 32))?.siTime,
             startTime = parsePunch(data.copyOfRange(24, 28))?.siTime,
             finishTime = parsePunch(data.copyOfRange(20, 24))?.siTime,
-            punches = punches
+            punches = punches,
+            cardHolder = parseFixedCardHolder(data)
         )
     }
 
@@ -121,8 +134,36 @@ object SportIdentCardReadoutParser {
             checkTime = parsePunch(data.copyOfRange(8, 12))?.siTime,
             startTime = parsePunch(data.copyOfRange(12, 16))?.siTime,
             finishTime = parsePunch(data.copyOfRange(16, 20))?.siTime,
-            punches = punches
+            punches = punches,
+            cardHolder = parseSemicolonCardHolder(data, series)
         )
+    }
+
+    fun parseFixedCardHolder(data: ByteArray): SportIdentCardHolder? {
+        val lastName = parseSpaceTerminatedAscii(data, SI6_LAST_NAME_OFFSET, SI6_NAME_BYTES)
+        val firstName = parseSpaceTerminatedAscii(data, SI6_FIRST_NAME_OFFSET, SI6_NAME_BYTES)
+        return SportIdentCardHolder(firstName, lastName).takeIf { it.displayName != null }
+    }
+
+    fun parseSemicolonCardHolder(data: ByteArray, series: Int): SportIdentCardHolder? {
+        val bytesToRead = when (series) {
+            SI_CARD8_SERIES -> SI8_CARD_HOLDER_BYTES
+            SI_CARD9_SERIES, SI_CARD_PCARD_SERIES -> SI9_PCARD_HOLDER_BYTES
+            SI_CARD10_11_SIAC_SERIES -> MODERN_CARD_HOLDER_BYTES_AVAILABLE
+            else -> return null
+        }
+        if (data.size <= CARD_HOLDER_OFFSET) {
+            return null
+        }
+        val text = parseNullTerminatedAscii(
+            data,
+            CARD_HOLDER_OFFSET,
+            minOf(bytesToRead, data.size - CARD_HOLDER_OFFSET)
+        )
+        val parts = text?.split(";") ?: return null
+        val firstName = parts.getOrNull(0)?.ifBlank { null }
+        val lastName = parts.getOrNull(1)?.ifBlank { null }
+        return SportIdentCardHolder(firstName, lastName).takeIf { it.displayName != null }
     }
 
     private fun si5Number(
@@ -186,10 +227,33 @@ object SportIdentCardReadoutParser {
         )
     }
 
+    private fun parseSpaceTerminatedAscii(data: ByteArray, offset: Int, length: Int): String? {
+        if (data.size < offset + length) {
+            return null
+        }
+        val end = (offset until offset + length).firstOrNull { data[it] == SPACE || data[it] == NULL } ?: offset + length
+        return data.copyOfRange(offset, end).toAsciiString()
+    }
+
+    private fun parseNullTerminatedAscii(data: ByteArray, offset: Int, length: Int): String? {
+        if (data.size < offset + length) {
+            return null
+        }
+        val end = (offset until offset + length).firstOrNull { data[it] == NULL } ?: offset + length
+        return data.copyOfRange(offset, end).toAsciiString()
+    }
+
+    private fun ByteArray.toAsciiString(): String? =
+        map { byte -> byte.toUnsignedInt().toChar() }
+            .joinToString("")
+            .trim()
+            .ifBlank { null }
+
     private const val PUNCH_BYTES = 4
     private const val SI5_PUNCH_BYTES = 3
     private const val SI5_TIME_BYTES = 2
     private const val NULL: Byte = 0xEE.toByte()
+    private const val SPACE: Byte = 0x20
     private const val SI_CARD5_SERIES = 5
     private const val SI_CARD6_SERIES = 6
     private const val SI_CARD8_SERIES = 2
@@ -205,6 +269,13 @@ object SportIdentCardReadoutParser {
     private const val SI5_RESPONSE_DATA_BYTES = 130
     private const val SI5_CARD_DATA_OFFSET = 2
     private const val SI6_MIN_BYTES = SportIdentProtocol.SI_CARD_BLOCK_SIZE * 2
+    private const val CARD_HOLDER_OFFSET = 0x20
+    private const val SI8_CARD_HOLDER_BYTES = 0x60
+    private const val SI9_PCARD_HOLDER_BYTES = 0x18
+    private const val MODERN_CARD_HOLDER_BYTES_AVAILABLE = 0x60
+    private const val SI6_LAST_NAME_OFFSET = 0x30
+    private const val SI6_FIRST_NAME_OFFSET = 0x44
+    private const val SI6_NAME_BYTES = 20
 }
 
 private fun Byte.toUnsignedInt(): Int = toInt() and 0xff

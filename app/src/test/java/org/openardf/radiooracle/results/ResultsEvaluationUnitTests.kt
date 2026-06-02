@@ -4,10 +4,10 @@ import org.openardf.radiooracle.backend.results.ResultsProcessor
 import org.openardf.radiooracle.backend.room.entity.ControlPoint
 import org.openardf.radiooracle.backend.room.entity.Punch
 import org.openardf.radiooracle.backend.room.entity.Result
-import org.openardf.radiooracle.backend.room.enums.ControlPointType
-import org.openardf.radiooracle.backend.room.enums.PunchStatus
-import org.openardf.radiooracle.backend.room.enums.ResultStatus
-import org.openardf.radiooracle.backend.room.enums.SIRecordType
+import org.openardf.radiooracle.shared.domain.ControlPointType
+import org.openardf.radiooracle.shared.domain.PunchStatus
+import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.sportident.SITime
 import org.junit.Assert.assertEquals

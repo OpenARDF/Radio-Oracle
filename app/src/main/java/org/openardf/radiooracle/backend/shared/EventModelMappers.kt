@@ -132,6 +132,7 @@ fun Result.toEventResult(): EventResult =
         runTimeSeconds = runTime.seconds,
         modified = modified,
         sent = sent,
+        cardName = cardName,
         place = place
     )
 
@@ -282,7 +283,8 @@ fun EventResult.toRoomResult(): Result =
         points = points,
         runTime = Duration.ofSeconds(runTimeSeconds),
         modified = modified,
-        sent = sent
+        sent = sent,
+        cardName = cardName
     ).also { it.place = place }
 
 /** Converts the portable shared alias-punch model back into an Android relation object. */

@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.shared.printing
 
 import org.openardf.radiooracle.shared.domain.PunchStatus
+import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAliasPunch
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
@@ -15,13 +16,16 @@ object FinishTicketRenderer {
         raceData: EventRaceData,
         resultId: String,
         charactersPerLine: Int = DEFAULT_CHARACTERS_PER_LINE,
-        useMinuteTimeFormat: Boolean = false
+        useMinuteTimeFormat: Boolean = false,
+        useAliases: Boolean = true
     ): String {
         val readoutContext = raceData.findReadoutContext(resultId)
             ?: error("No readout found for result $resultId.")
         val result = readoutContext.readoutData.result
         val competitor = readoutContext.competitorCategory
-        val competitorName = competitor?.competitor?.fullName()?.truncate(charactersPerLine) ?: "?"
+        val competitorName = (
+            competitor?.competitor?.fullName() ?: result.cardName ?: "?"
+            ).truncate(charactersPerLine)
         val categoryName = competitor?.category?.name ?: "?"
         val siAndIndex = "SI: ${result.siNumber ?: "?"} ${competitor?.competitor?.index?.ifBlank { "?" } ?: "?"}"
         val controls = "${result.points} Controls"
@@ -35,7 +39,7 @@ object FinishTicketRenderer {
             append("[L]$competitorName\n")
             append("[L]$siAndIndex\n")
             append("[L]$categoryName\n\n")
-            append(readoutContext.readoutData.punches.formatPunches(useMinuteTimeFormat))
+            append(readoutContext.readoutData.punches.formatPunches(raceData.race.raceType, useMinuteTimeFormat, useAliases))
             append("\n\n")
             append("[R]<b>$runTime</b>\n")
             append("[R]$controls\n")
@@ -57,22 +61,34 @@ object FinishTicketRenderer {
         return null
     }
 
-    private fun List<EventAliasPunch>.formatPunches(useMinuteTimeFormat: Boolean): String =
-        joinToString("\n") { aliasPunch -> aliasPunch.format(useMinuteTimeFormat) }
+    private fun List<EventAliasPunch>.formatPunches(
+        raceType: RaceType,
+        useMinuteTimeFormat: Boolean,
+        useAliases: Boolean
+    ): String =
+        joinToString("\n") { aliasPunch -> aliasPunch.format(raceType, useMinuteTimeFormat, useAliases) }
 
-    private fun EventAliasPunch.format(useMinuteTimeFormat: Boolean): String =
+    private fun EventAliasPunch.format(
+        raceType: RaceType,
+        useMinuteTimeFormat: Boolean,
+        useAliases: Boolean
+    ): String =
         when (punch.punchType) {
             SIRecordType.START ->
                 "[L]Start[R]${punch.siTimeSeconds.toTimeOfDay()}[R] "
             SIRecordType.FINISH ->
                 "[L]Finish[R]${punch.siTimeSeconds.toTimeOfDay()}[R]${punch.splitSeconds.toDuration(useMinuteTimeFormat)}"
             SIRecordType.CONTROL ->
-                "[L]${formatCode()}[R]${punch.siTimeSeconds.toTimeOfDay()}[R]${punch.splitSeconds.toDuration(useMinuteTimeFormat)}"
+                "[L]${formatCode(raceType, useAliases)}[R]${punch.siTimeSeconds.toTimeOfDay()}[R]${punch.splitSeconds.toDuration(useMinuteTimeFormat)}"
             SIRecordType.CHECK -> ""
         }
 
-    private fun EventAliasPunch.formatCode(): String {
-        val code = "${punch.order} (${alias?.name ?: punch.siCode})"
+    private fun EventAliasPunch.formatCode(raceType: RaceType, useAliases: Boolean): String {
+        val code = if (raceType == RaceType.ORIENTEERING || useAliases) {
+            "${punch.order} (${alias?.name ?: punch.siCode})"
+        } else {
+            punch.siCode.toString()
+        }
         return "$code${punch.punchStatus.toTicketSuffix()}"
     }
 

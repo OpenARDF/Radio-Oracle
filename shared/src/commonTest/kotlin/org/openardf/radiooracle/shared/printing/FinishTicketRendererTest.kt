@@ -68,6 +68,16 @@ class FinishTicketRendererTest {
     }
 
     @Test
+    fun rendersUnmatchedFinishTicketWithCardName() {
+        val text = FinishTicketRenderer.render(
+            raceData(unmatchedCardName = "Runner Alice"),
+            resultId = "unmatched"
+        )
+
+        assertEquals("[L]Runner Alice", text.lines()[2])
+    }
+
+    @Test
     fun truncatesLongCompetitorNamesToPrinterWidth() {
         val text = FinishTicketRenderer.render(raceData(longName = true), resultId = "matched", charactersPerLine = 10)
 
@@ -122,13 +132,45 @@ class FinishTicketRendererTest {
         assertEquals("              0 Controls", lines[9])
     }
 
-    private fun raceData(longName: Boolean = false): EventRaceData {
+    @Test
+    fun rendersRadioOTicketWithRawSiCodesWhenAliasesAreDisabled() {
+        val text = FinishTicketRenderer.render(raceData(), resultId = "matched", useAliases = false)
+
+        assertEquals("31OK", text.lines()[7].substringAfter("[L]").substringBefore("[R]"))
+        assertEquals("32MP", text.lines()[8].substringAfter("[L]").substringBefore("[R]"))
+    }
+
+    @Test
+    fun rendersRadioOTicketWithNumberedAliasesWhenAliasesAreEnabled() {
+        val text = FinishTicketRenderer.render(raceData(), resultId = "matched", useAliases = true)
+
+        assertEquals("1 (Foxhole)OK", text.lines()[7].substringAfter("[L]").substringBefore("[R]"))
+        assertEquals("2 (32)MP", text.lines()[8].substringAfter("[L]").substringBefore("[R]"))
+    }
+
+    @Test
+    fun leavesOrienteeringTicketControlLabelsUnchanged() {
+        val text = FinishTicketRenderer.render(
+            raceData(raceType = RaceType.ORIENTEERING),
+            resultId = "matched",
+            useAliases = true
+        )
+
+        assertEquals("1 (Foxhole)OK", text.lines()[7].substringAfter("[L]").substringBefore("[R]"))
+        assertEquals("2 (32)MP", text.lines()[8].substringAfter("[L]").substringBefore("[R]"))
+    }
+
+    private fun raceData(
+        longName: Boolean = false,
+        raceType: RaceType = RaceType.CLASSIC,
+        unmatchedCardName: String? = null
+    ): EventRaceData {
         val race = EventRace(
             id = "race",
             name = "Ticket Race",
             apiKey = "",
             startDateTimeIso = "2026-05-31T10:00",
-            raceType = RaceType.CLASSIC,
+            raceType = raceType,
             raceLevel = RaceLevel.PRACTICE,
             raceBand = RaceBand.M80,
             timeLimitSeconds = 7_200
@@ -197,11 +239,12 @@ class FinishTicketRendererTest {
                     competitorId = null,
                     siNumber = 654321,
                     resultStatus = ResultStatus.NO_RANKING,
-                    points = 0,
-                    runTimeSeconds = 0,
-                    punches = listOf(
-                        punch("u1", 41, 1, SIRecordType.CONTROL, PunchStatus.UNKNOWN, 39_900, 0, null)
-                    )
+	                    points = 0,
+	                    runTimeSeconds = 0,
+                        cardName = unmatchedCardName,
+	                    punches = listOf(
+	                        punch("u1", 41, 1, SIRecordType.CONTROL, PunchStatus.UNKNOWN, 39_900, 0, null)
+	                    )
                 )
             )
         )
@@ -214,6 +257,7 @@ class FinishTicketRendererTest {
         resultStatus: ResultStatus,
         points: Int,
         runTimeSeconds: Long = 1_200,
+        cardName: String? = null,
         punches: List<EventAliasPunch>
     ): EventReadoutData =
         EventReadoutData(
@@ -232,7 +276,8 @@ class FinishTicketRendererTest {
                 points = points,
                 runTimeSeconds = runTimeSeconds,
                 modified = false,
-                sent = false
+                sent = false,
+                cardName = cardName
             ),
             punches = punches
         )

@@ -98,6 +98,7 @@
     <string name="general_gender_woman">Žena</string>
     <string name="competitor_create">Vytvořit závodníka</string>
     <string name="competitor_edit">Upravit závodníka</string>
+    <string name="competitor_manual_gender">Pokročilé/import: muž</string>
     <string name="competitor_delete_all">Smazat všechny závodníky</string>
     <string name="competitor_delete_confirmation">Opravdu chcete smazat tohoto závodníka?\n%1$s</string>
     <string name="competitor_delete_readout_data">Smazat i vyčítání (pokud existuje)</string>
@@ -137,8 +138,12 @@
     <string name="readout_detail_real_time">Reálný čas</string>
     <string name="readout_detail_split">Mezičas</string>
     <string name="readout_detail_status">Status</string>
-    <string name="readout_si_exists">Čip už byl vyčtený!</string>
+    <string name="readout_si_exists">Duplicitní SI %1$d ignorováno. Vyčítání už existuje.</string>
+    <string name="readout_named_unmatched_si_exists">SI %1$d už má pojmenované vyčítání. Otevřete Vyčítání a přidejte závodníka.</string>
     <string name="readout_competitor_exists">Tento závodník si už vyčetl!</string>
+    <string name="readout_add_card_competitor_title">Přidat závodníka?</string>
+    <string name="readout_add_card_competitor_message">SI čip %2$d byl vyčtený jako %1$s. Přidat tohoto závodníka do závodu?</string>
+    <string name="readout_add_card_competitor_positive">Přidat závodníka</string>
     <string name="readout_unknown_competitor">Neznámý závodník</string>
     <string name="readout_assign_control_points">Přiřadit kontroly kategorii</string>
     <string name="readout_no_category_exists">Závod nemá žádné kategorie!</string>

@@ -25,6 +25,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import org.openardf.radiooracle.BottomNavDirections
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
+import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.databinding.FragmentReadoutsBinding
@@ -44,6 +45,7 @@ class ReadoutFragment : Fragment() {
     private val dataProcessor = DataProcessor.get()
 
     private var statsJob: Job? = null
+    private val promptedNamedReadouts = mutableSetOf<UUID>()
 
     private lateinit var readoutToolbar: Toolbar
     private lateinit var startedTextView: TextView
@@ -280,10 +282,50 @@ class ReadoutFragment : Fragment() {
                                     position,
                                     readoutData
                                 )
-                            })
+	                            })
+                    promptForNamedUnmatchedReadout(readouts)
                 }
             }
         }
+    }
+
+    private fun promptForNamedUnmatchedReadout(readouts: List<ResultData>) {
+        val readout = readouts.firstOrNull { resultData ->
+            resultData.result.competitorId == null &&
+                resultData.result.siNumber != null &&
+                !resultData.result.cardName.isNullOrBlank() &&
+                promptedNamedReadouts.add(resultData.result.id)
+        } ?: return
+
+        DebugLog.info(
+            "Readouts",
+            "Prompting to add card competitor si=${readout.result.siNumber} name=${readout.result.cardName}"
+        )
+        AlertDialog.Builder(context)
+            .setTitle(R.string.readout_add_card_competitor_title)
+            .setMessage(
+                getString(
+                    R.string.readout_add_card_competitor_message,
+                    readout.result.cardName,
+                    readout.result.siNumber
+                )
+            )
+            .setPositiveButton(R.string.readout_add_card_competitor_positive) { dialog, _ ->
+                DebugLog.info(
+                    "Readouts",
+                    "Accepted card competitor prompt si=${readout.result.siNumber} name=${readout.result.cardName}"
+                )
+                selectedRaceViewModel.createCompetitorFromCardReadout(readout)
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.general_cancel) { dialog, _ ->
+                DebugLog.info(
+                    "Readouts",
+                    "Canceled card competitor prompt si=${readout.result.siNumber} name=${readout.result.cardName}"
+                )
+                dialog.cancel()
+            }
+            .show()
     }
 
     private fun openReadoutDetail(resultData: ResultData) {

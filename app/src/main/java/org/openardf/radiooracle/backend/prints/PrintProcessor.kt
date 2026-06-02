@@ -16,10 +16,11 @@ import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.AliasPunch
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
-import org.openardf.radiooracle.backend.room.enums.PunchStatus
-import org.openardf.radiooracle.backend.room.enums.ResultStatus
-import org.openardf.radiooracle.backend.room.enums.SIRecordType
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
+import org.openardf.radiooracle.shared.domain.PunchStatus
+import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.SIRecordType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -158,7 +159,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
         val context = appContext.get()!!
         val competitor = resultData.competitorCategory?.competitor
         val category = resultData.competitorCategory?.category?.name ?: "?"
-        val punches = getPunchesFormatted(resultData.punches)
+        val punches = getPunchesFormatted(resultData.punches, race.raceType)
         val compIndex =
             "SI: ${resultData.result.siNumber ?: "?"} ${competitor?.index ?: context.getString(R.string.unknown)}"
 
@@ -182,7 +183,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
 
         val formatted = "[C]<b>${race.name}</b>\n" +
                 "[L]\n" +
-                "[L]${getMaxCompetitorName(competitor)}\n" +
+                "[L]${getMaxCompetitorName(resultData)}\n" +
                 "[L]$compIndex\n" +
                 "[L]$category\n\n" +
                 punches + "\n\n" +
@@ -212,9 +213,11 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
         }
     }
 
-    private fun getMaxCompetitorName(competitor: Competitor?): String {
+    private fun getMaxCompetitorName(resultData: ResultData): String {
         val maxLength = getCharactersPerLine()
-        val fullName = competitor?.getFullName() ?: "?"
+        val fullName = resultData.competitorCategory?.competitor?.getFullName()
+            ?: resultData.result.cardName
+            ?: "?"
         return if (fullName.length > maxLength) {
             fullName.take(maxLength)
         } else {
@@ -222,11 +225,11 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
         }
     }
 
-    private fun getPunchesFormatted(punches: List<AliasPunch>): String {
-        return punches.joinToString("\n") { p -> getAliasPunchFormatted(p) }
+    private fun getPunchesFormatted(punches: List<AliasPunch>, raceType: RaceType): String {
+        return punches.joinToString("\n") { p -> getAliasPunchFormatted(p, raceType) }
     }
 
-    private fun getAliasPunchFormatted(aliasPunch: AliasPunch): String {
+    private fun getAliasPunchFormatted(aliasPunch: AliasPunch, raceType: RaceType): String {
         when (aliasPunch.punch.punchType) {
             SIRecordType.START -> {
                 return "[L]${appContext.get()?.getString(R.string.general_start)}" +
@@ -244,7 +247,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
             }
 
             SIRecordType.CONTROL -> {
-                return "[L]${formatCodeString(aliasPunch)}" +
+                return "[L]${formatCodeString(aliasPunch, raceType)}" +
                         "[R]${aliasPunch.punch.siTime.getTimeString()}" +
                         "[R]${
                             TimeProcessor.durationToFormattedString(
@@ -259,7 +262,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
         }
     }
 
-    private fun formatCodeString(aliasPunch: AliasPunch): String {
+    private fun formatCodeString(aliasPunch: AliasPunch, raceType: RaceType): String {
         val context = appContext.get()!!
 
         val symbol = when (aliasPunch.punch.punchStatus) {
@@ -268,9 +271,18 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
             PunchStatus.DUPLICATE -> context.getString(R.string.punch_status_duplicate)
             PunchStatus.UNKNOWN -> context.getString(R.string.punch_status_unknown)
         }
-        val code =
+        val code = if (raceType == RaceType.ORIENTEERING || shouldUseAliases()) {
             "${aliasPunch.punch.order} (${aliasPunch.alias?.name ?: aliasPunch.punch.siCode})"
+        } else {
+            aliasPunch.punch.siCode.toString()
+        }
         return "$code$symbol"
+    }
+
+    private fun shouldUseAliases(): Boolean {
+        val context = appContext.get() ?: return true
+        val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
+        return sharedPref.getBoolean(context.getString(R.string.key_results_use_aliases), true)
     }
 
     suspend fun printResults(results: List<ResultWrapper>, race: Race) {

@@ -23,7 +23,7 @@ class EventReadoutDetailsTest {
         assertEquals("OK", rows[0].statusLabel)
         assertEquals("3", rows[0].pointsText)
         assertEquals("00:20:00", rows[0].runTimeText)
-        assertEquals("31 32", rows[0].punchCodesText)
+        assertEquals("Foxhole 32", rows[0].punchCodesText)
 
         assertEquals("unmatched", rows[1].id)
         assertEquals("654321", rows[1].siNumberText)
@@ -34,7 +34,34 @@ class EventReadoutDetailsTest {
         assertEquals("41", rows[1].punchCodesText)
     }
 
-    private fun raceData(): EventRaceData {
+    @Test
+    fun buildsRadioOReadoutRowsWithRawSiCodesWhenAliasesAreDisabled() {
+        val rows = EventReadoutDetails.from(raceData(), useAliases = false)
+
+        assertEquals("31 32", rows[0].punchCodesText)
+    }
+
+    @Test
+    fun usesCardNameForUnmatchedReadouts() {
+        val rows = EventReadoutDetails.from(raceData(unmatchedCardName = "Runner Alice"))
+
+        assertEquals("Runner Alice", rows[1].competitorName)
+    }
+
+    @Test
+    fun leavesOrienteeringReadoutRowsUnchanged() {
+        val rows = EventReadoutDetails.from(raceData(raceType = RaceType.ORIENTEERING), useAliases = true)
+
+        assertEquals("31 32", rows[0].punchCodesText)
+    }
+
+    private fun raceData(raceType: RaceType = RaceType.CLASSIC, unmatchedCardName: String? = null): EventRaceData {
+        val alias = EventAlias(
+            id = "alias",
+            raceId = "race",
+            siCode = 31,
+            name = "Foxhole"
+        )
         val competitor = EventCompetitor(
             id = "competitor",
             raceId = "race",
@@ -56,20 +83,29 @@ class EventReadoutDetailsTest {
                 name = "Readout Race",
                 apiKey = "",
                 startDateTimeIso = "2026-05-31T10:00",
-                raceType = RaceType.CLASSIC,
+                raceType = raceType,
                 raceLevel = RaceLevel.PRACTICE,
                 raceBand = RaceBand.M80,
                 timeLimitSeconds = 7_200
             ),
             categories = emptyList(),
-            aliases = emptyList(),
+            aliases = listOf(alias),
             competitorData = listOf(
                 EventCompetitorData(
                     competitorCategory = EventCompetitorCategory(competitor, category = null),
-                    readoutData = readout("matched", competitor.id, 123456, ResultStatus.OK, listOf(31, 32))
+                    readoutData = readout("matched", competitor.id, 123456, ResultStatus.OK, listOf(31, 32), alias)
                 )
             ),
-            unmatchedReadoutData = listOf(readout("unmatched", competitorId = null, siNumber = 654321, ResultStatus.NO_RANKING, listOf(41)))
+            unmatchedReadoutData = listOf(
+                readout(
+                    "unmatched",
+                    competitorId = null,
+                    siNumber = 654321,
+                    ResultStatus.NO_RANKING,
+                    listOf(41),
+                    cardName = unmatchedCardName
+                )
+            )
         )
     }
 
@@ -78,7 +114,9 @@ class EventReadoutDetailsTest {
         competitorId: String?,
         siNumber: Int,
         resultStatus: ResultStatus,
-        controlCodes: List<Int>
+        controlCodes: List<Int>,
+        alias: EventAlias? = null,
+        cardName: String? = null
     ): EventReadoutData =
         EventReadoutData(
             result = EventResult(
@@ -96,7 +134,8 @@ class EventReadoutDetailsTest {
                 points = 3,
                 runTimeSeconds = 1_200,
                 modified = false,
-                sent = false
+                sent = false,
+                cardName = cardName
             ),
             punches = controlCodes.mapIndexed { index, siCode ->
                 EventAliasPunch(
@@ -113,7 +152,7 @@ class EventReadoutDetailsTest {
                         punchStatus = PunchStatus.UNKNOWN,
                         splitSeconds = 0
                     ),
-                    alias = null
+                    alias = alias?.takeIf { it.siCode == siCode }
                 )
             }
         )

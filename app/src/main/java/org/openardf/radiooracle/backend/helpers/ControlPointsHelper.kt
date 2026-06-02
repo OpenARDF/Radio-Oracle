@@ -3,10 +3,12 @@ package org.openardf.radiooracle.backend.helpers
 import android.content.Context
 import androidx.preference.PreferenceManager
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.ControlPoint
 import org.openardf.radiooracle.backend.room.entity.Punch
 import org.openardf.radiooracle.backend.room.entity.embeddeds.AliasPunch
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ControlPointAlias
+import org.openardf.radiooracle.backend.room.enums.ControlPointType
 import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.backend.room.enums.SIRecordType
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
@@ -40,6 +42,21 @@ object ControlPointsHelper {
             throw IllegalArgumentException(exception.toLocalizedMessage(context))
         }
     }
+
+    /** Parses display text where control aliases may be used instead of raw SI codes. */
+    fun getControlPointsFromDisplayString(
+        input: String,
+        categoryId: UUID,
+        raceType: RaceType,
+        aliases: List<Alias>,
+        context: Context
+    ): List<ControlPoint> =
+        getControlPointsFromString(
+            replaceAliasTokens(input, aliases),
+            categoryId,
+            raceType,
+            context
+        )
 
     /** Formats Room control points back into the compact course-control string. */
     fun getStringFromControlPoints(controlPoints: List<ControlPoint>): String {
@@ -98,10 +115,6 @@ object ControlPointsHelper {
         controlPoints: List<ControlPointAlias>,
         context: Context
     ): String {
-        val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
-        val useAlias =
-            sharedPref.getBoolean(context.getString(R.string.key_results_use_aliases), true)
-
         return ControlPointRules.formatDisplayTokens(
             controlPoints.map { controlPointAlias ->
                 ControlPointDisplayToken(
@@ -109,8 +122,30 @@ object ControlPointsHelper {
                     aliasName = controlPointAlias.alias?.name
                 )
             },
-            useAlias
+            shouldUseAliases(context)
         )
+    }
+
+    /** Formats category control points for editing, preserving special-control markers. */
+    fun getEditableStringFromControlPointAliases(
+        controlPoints: List<ControlPointAlias>,
+        context: Context
+    ): String {
+        val useAlias = shouldUseAliases(context)
+        return controlPoints.joinToString(" ") { controlPointAlias ->
+            val controlPoint = controlPointAlias.controlPoint
+            val base = if (useAlias && controlPointAlias.alias?.name != null) {
+                controlPointAlias.alias!!.name
+            } else {
+                controlPoint.siCode.toString()
+            }
+            val marker = when (controlPoint.type) {
+                ControlPointType.BEACON -> ControlPointRules.BEACON_CONTROL_MARKER.toString()
+                ControlPointType.SEPARATOR -> ControlPointRules.SPECTATOR_CONTROL_MARKER.toString()
+                ControlPointType.CONTROL -> ""
+            }
+            "$base$marker"
+        }
     }
 
     /** Formats raw readout punches without alias substitution. */
@@ -128,10 +163,6 @@ object ControlPointsHelper {
 
     /** Formats readout punches for display, using aliases when the user setting enables them. */
     fun getStringFromAliasPunches(punches: List<AliasPunch>, context: Context): String {
-        val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
-        val useAlias =
-            sharedPref.getBoolean(context.getString(R.string.key_results_use_aliases), true)
-
         return ControlPointRules.formatDisplayTokens(
             punches.map { aliasPunch ->
                 ControlPointDisplayToken(
@@ -140,8 +171,38 @@ object ControlPointsHelper {
                     include = aliasPunch.punch.punchType == SIRecordType.CONTROL
                 )
             },
-            useAlias
+            shouldUseAliases(context)
         )
+    }
+
+    fun shouldUseAliases(context: Context): Boolean {
+        val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
+        return sharedPref.getBoolean(context.getString(R.string.key_results_use_aliases), true)
+    }
+
+    private fun replaceAliasTokens(input: String, aliases: List<Alias>): String {
+        if (input.isBlank()) {
+            return input
+        }
+        val aliasesByName = aliases.associateBy { it.name }
+        return input.trim().split("\\s+".toRegex()).joinToString(" ") { token ->
+            aliasesByName[token]?.siCode?.toString()
+                ?: replaceMarkedAliasToken(token, aliasesByName)
+        }
+    }
+
+    private fun replaceMarkedAliasToken(
+        token: String,
+        aliasesByName: Map<String, Alias>
+    ): String {
+        val marker = token.lastOrNull()
+        if (marker != ControlPointRules.SPECTATOR_CONTROL_MARKER &&
+            marker != ControlPointRules.BEACON_CONTROL_MARKER
+        ) {
+            return token
+        }
+        val base = token.dropLast(1)
+        return aliasesByName[base]?.let { alias -> "${alias.siCode}$marker" } ?: token
     }
 
     const val SPECTATOR_CONTROL_MARKER = ControlPointRules.SPECTATOR_CONTROL_MARKER

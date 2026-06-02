@@ -205,6 +205,10 @@ class CompetitorTableViewAdapter(
             }
         }
 
+        view.setOnClickListener {
+            onMoreClicked(0, rowIndex, item)
+        }
+
         //Set context menu
         view.setOnLongClickListener { w ->
             val popupMenu = PopupMenu(context, w)
