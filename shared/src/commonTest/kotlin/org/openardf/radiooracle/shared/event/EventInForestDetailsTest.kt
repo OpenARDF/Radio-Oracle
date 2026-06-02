@@ -16,7 +16,7 @@ class EventInForestDetailsTest {
 
         assertEquals(2, details.inForestCount)
         assertEquals(1, details.finishedCount)
-        assertEquals(1, details.notStartedCount)
+        assertEquals(2, details.notStartedCount)
         assertEquals(1, details.unscheduledCount)
 
         assertEquals("late", details.inForestRows[0].competitorId)
@@ -64,6 +64,7 @@ class EventInForestDetailsTest {
             competitorData = listOf(
                 competitorData("finished", "Finished", 1, 5 * 60, readout = true),
                 competitorData("future", "Future", 2, 100 * 60),
+                competitorData("dns", "Dns", 6, 20 * 60, status = ResultStatus.DID_NOT_START),
                 competitorData("late", "Late", 3, 10 * 60),
                 competitorData("active", "Active", 4, 40 * 60),
                 competitorData("unscheduled", "Unscheduled", 5, null)
@@ -77,7 +78,8 @@ class EventInForestDetailsTest {
         firstName: String,
         startNumber: Int,
         startTimeSeconds: Long?,
-        readout: Boolean = false
+        readout: Boolean = false,
+        status: ResultStatus = ResultStatus.OK
     ): EventCompetitorData =
         EventCompetitorData(
             competitorCategory = EventCompetitorCategory(
@@ -98,10 +100,10 @@ class EventInForestDetailsTest {
                 ),
                 category = null
             ),
-            readoutData = if (readout) readout(id) else null
+            readoutData = if (readout || status != ResultStatus.OK) readout(id, status) else null
         )
 
-    private fun readout(id: String): EventReadoutData =
+    private fun readout(id: String, status: ResultStatus): EventReadoutData =
         EventReadoutData(
             result = EventResult(
                 id = "result-$id",
@@ -114,7 +116,7 @@ class EventInForestDetailsTest {
                 finishTimeSeconds = 1200,
                 readoutDateTimeIso = "2026-06-01T10:21",
                 automaticStatus = true,
-                resultStatus = ResultStatus.OK,
+                resultStatus = status,
                 points = 1,
                 runTimeSeconds = 600,
                 modified = false,

@@ -1,5 +1,6 @@
 package org.openardf.radiooracle.shared.event
 
+import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 data class EventInForestRow(
@@ -30,7 +31,12 @@ data class EventInForestDetails(
             raceData.competitorData.forEach { competitorData ->
                 val competitor = competitorData.competitorCategory.competitor
                 val startSeconds = competitor.drawnStartTimeSeconds
-                if (competitorData.readoutData != null) {
+                val readoutStatus = competitorData.readoutData?.result?.resultStatus
+                if (readoutStatus == ResultStatus.DID_NOT_START) {
+                    notStartedCount += 1
+                    return@forEach
+                }
+                if (readoutStatus != null) {
                     finishedCount += 1
                     return@forEach
                 }
