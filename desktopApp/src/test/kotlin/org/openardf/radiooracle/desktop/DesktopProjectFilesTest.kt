@@ -81,6 +81,23 @@ class DesktopProjectFilesTest {
         assertTrue(exported.contains("<ControlCard>123456</ControlCard>"))
     }
 
+    @Test
+    fun exportsIofResultListXmlFile() {
+        val directory = Files.createTempDirectory("rom-desktop-iof-result-list")
+        val path = directory.resolve("event.iof.xml")
+
+        DesktopProjectFiles.exportIofResultListXml(path, EventProjectFile(raceData = raceDataWithReadout()))
+        val exported = Files.readString(path)
+
+        assertTrue(exported.contains("<ResultList"))
+        assertTrue(exported.contains("<ClassResult>"))
+        assertTrue(exported.contains("<Family>Runner</Family>"))
+        assertTrue(exported.contains("<StartTime>2026-05-31T10:00:00</StartTime>"))
+        assertTrue(exported.contains("<FinishTime>2026-05-31T10:20:00</FinishTime>"))
+        assertTrue(exported.contains("<Status>OK</Status>"))
+    }
+
+
     private fun raceData(): EventRaceData =
         EventRaceData(
             race = EventRace(

@@ -62,6 +62,10 @@ object DesktopProjectFiles : ProjectFileStore {
         writeText(path, IofXmlExports.startList(projectFile.raceData))
     }
 
+    fun exportIofResultListXml(path: Path, projectFile: EventProjectFile) {
+        writeText(path, IofXmlExports.resultList(projectFile.raceData))
+    }
+
     private fun writeText(path: Path, text: String) {
         path.parent?.let { Files.createDirectories(it) }
         Files.writeString(path, text, StandardCharsets.UTF_8)

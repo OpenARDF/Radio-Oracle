@@ -1,15 +1,22 @@
 package org.openardf.radiooracle.shared.files
 
+import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.event.EventAliasPunch
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.EventReadoutData
+import org.openardf.radiooracle.shared.event.EventResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -53,7 +60,41 @@ class IofXmlExportsTest {
         assertFalse(xml.contains("<ControlCard></ControlCard>"))
     }
 
-    private fun raceData(includeSecondCategory: Boolean = false): EventRaceData {
+    @Test
+    fun exportsIofResultListUsingAndroidStructure() {
+        val xml = IofXmlExports.resultList(raceData(includeSecondCategory = true, includeReadout = true), creator = "Radio-Oracle 1.0")
+
+        assertTrue(xml.startsWith("""<?xml version="1.0" encoding="UTF-8"?>"""))
+        assertTrue(xml.contains("""<ResultList xmlns="http://www.orienteering.org/datastandard/3.0" iofVersion="3.0" creator="Radio-Oracle 1.0" status="Complete">"""))
+        assertTrue(xml.contains("<ClassResult>"))
+        assertTrue(xml.contains("""<Class sex="M">"""))
+        assertTrue(xml.contains("<Family>Runner</Family>"))
+        assertTrue(xml.contains("<StartTime>2026-06-01T10:00:00</StartTime>"))
+        assertTrue(xml.contains("<FinishTime>2026-06-01T10:45:00</FinishTime>"))
+        assertTrue(xml.contains("<Time>2700</Time>"))
+        assertTrue(xml.contains("<Position>1</Position>"))
+        assertTrue(xml.contains("<Status>OK</Status>"))
+        assertTrue(xml.contains("<ControlCode>31</ControlCode>"))
+        assertTrue(xml.contains("<Time>600</Time>"))
+        assertTrue(xml.contains("<ControlCode>32</ControlCode>"))
+        assertTrue(xml.contains("<Time>1500</Time>"))
+        assertTrue(xml.contains("<Family>NoTime</Family>"))
+        assertTrue(xml.contains("<Status>Active</Status>"))
+    }
+
+    @Test
+    fun resultListOnlyWritesPositionForOkResults() {
+        val xml = IofXmlExports.resultList(raceData(includeReadout = true, resultStatus = ResultStatus.MISPUNCHED))
+
+        assertTrue(xml.contains("<Status>MissingPunch</Status>"))
+        assertFalse(xml.contains("<Position>"))
+    }
+
+    private fun raceData(
+        includeSecondCategory: Boolean = false,
+        includeReadout: Boolean = false,
+        resultStatus: ResultStatus = ResultStatus.OK
+    ): EventRaceData {
         val race = EventRace(
             id = "race",
             name = "IOF & Start Race",
@@ -112,7 +153,7 @@ class IofXmlExportsTest {
                         competitor = competitor,
                         category = if (competitor.categoryId == m21.id) m21 else w21
                     ),
-                    readoutData = null
+                    readoutData = if (includeReadout && competitor.id == "alice") readout(resultStatus) else null
                 )
             },
             unmatchedReadoutData = emptyList()
@@ -162,5 +203,51 @@ class IofXmlExportsTest {
             siRent = false,
             startNumber = startNumber,
             drawnStartTimeSeconds = drawnStartTimeSeconds
+        )
+
+    private fun readout(resultStatus: ResultStatus): EventReadoutData =
+        EventReadoutData(
+            result = EventResult(
+                id = "result",
+                raceId = "race",
+                competitorId = "alice",
+                siNumber = 123456,
+                cardType = 5,
+                checkTimeSeconds = null,
+                startTimeSeconds = 36_000,
+                finishTimeSeconds = 38_700,
+                readoutDateTimeIso = "2026-06-01T10:46:00",
+                automaticStatus = true,
+                resultStatus = resultStatus,
+                points = 2,
+                runTimeSeconds = 2_700,
+                modified = false,
+                sent = false,
+                place = 0
+            ),
+            punches = listOf(
+                punch(code = 13, type = SIRecordType.START, splitSeconds = 0),
+                punch(code = 31, type = SIRecordType.CONTROL, splitSeconds = 600),
+                punch(code = 32, type = SIRecordType.CONTROL, splitSeconds = 900),
+                punch(code = 34, type = SIRecordType.FINISH, splitSeconds = 1_200)
+            )
+        )
+
+    private fun punch(code: Int, type: SIRecordType, splitSeconds: Long): EventAliasPunch =
+        EventAliasPunch(
+            punch = EventPunch(
+                id = "punch-$code",
+                raceId = "race",
+                resultId = "result",
+                cardNumber = 123456,
+                siCode = code,
+                siTimeSeconds = 36_000 + splitSeconds,
+                originalSiTimeSeconds = 36_000 + splitSeconds,
+                punchType = type,
+                order = code,
+                punchStatus = PunchStatus.VALID,
+                splitSeconds = splitSeconds
+            ),
+            alias = null
         )
 }

@@ -1,8 +1,13 @@
 package org.openardf.radiooracle.shared.files
 
+import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
+import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.results.EventResultPlacement
+import org.openardf.radiooracle.shared.results.IofResultStatus
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -24,6 +29,26 @@ object IofXmlExports {
                     appendClassStart(categoryData, raceData.competitorsFor(categoryData), raceStart)
                 }
             append("</StartList>\n")
+        }
+    }
+
+    fun resultList(raceData: EventRaceData, creator: String = "Radio-Oracle Desktop"): String {
+        val raceStart = parseRaceStart(raceData.race.startDateTimeIso)
+        val placedByCategory = raceData.competitorData
+            .groupBy { it.competitorCategory.category?.id ?: it.competitorCategory.competitor.categoryId }
+            .mapValues { (_, categoryCompetitors) -> EventResultPlacement.sortByPlace(categoryCompetitors) }
+        return buildString {
+            append("""<?xml version="1.0" encoding="UTF-8"?>""")
+            append('\n')
+            append("""<ResultList xmlns="$IOF_NAMESPACE" iofVersion="3.0" creator="${creator.xmlEscaped()}" status="Complete">""")
+            append('\n')
+            appendEvent(raceData, raceStart)
+            raceData.categories
+                .sortedWith(compareBy({ it.category.order }, { it.category.name }))
+                .forEach { categoryData ->
+                    appendClassResult(categoryData, placedByCategory[categoryData.category.id] ?: emptyList(), raceStart)
+                }
+            append("</ResultList>\n")
         }
     }
 
@@ -60,21 +85,7 @@ object IofXmlExports {
 
     private fun StringBuilder.appendPersonStart(competitor: EventCompetitor, raceStart: LocalDateTime) {
         append("    <PersonStart>\n")
-        append("      <Person>\n")
-        if (competitor.index.isNotBlank()) {
-            append("""        <Id type="CZE">${competitor.index.xmlEscaped()}</Id>""")
-            append('\n')
-        }
-        append("        <Name>\n")
-        appendTextElement("Family", competitor.lastName, indent = "          ")
-        appendTextElement("Given", competitor.firstName, indent = "          ")
-        append("        </Name>\n")
-        append("      </Person>\n")
-        if (competitor.club.isNotBlank()) {
-            append("      <Organisation>\n")
-            appendTextElement("Name", competitor.club, indent = "        ")
-            append("      </Organisation>\n")
-        }
+        appendPersonAndOrganisation(competitor, indent = "      ")
         append("      <Start>\n")
         appendTextElement("BibNumber", competitor.startNumber.toString(), indent = "        ")
         appendTextElement(
@@ -87,6 +98,80 @@ object IofXmlExports {
         }
         append("      </Start>\n")
         append("    </PersonStart>\n")
+    }
+
+    private fun StringBuilder.appendClassResult(
+        categoryData: EventCategoryData,
+        competitorData: List<EventCompetitorData>,
+        raceStart: LocalDateTime
+    ) {
+        append("  <ClassResult>\n")
+        append("""    <Class sex="${if (categoryData.category.isMan) "M" else "F"}">""")
+        append('\n')
+        appendTextElement("Name", categoryData.category.name, indent = "      ")
+        append("    </Class>\n")
+        competitorData.forEach { appendPersonResult(it, raceStart) }
+        append("  </ClassResult>\n")
+    }
+
+    private fun StringBuilder.appendPersonResult(competitorData: EventCompetitorData, raceStart: LocalDateTime) {
+        append("    <PersonResult>\n")
+        appendPersonAndOrganisation(competitorData.competitorCategory.competitor, indent = "      ")
+        append("      <Result>\n")
+        val readoutData = competitorData.readoutData
+        if (readoutData == null) {
+            appendTextElement("Status", "Active", indent = "        ")
+        } else {
+            val result = readoutData.result
+            result.startTimeSeconds?.let { seconds ->
+                appendTextElement("StartTime", seconds.toRaceDateTime(raceStart), indent = "        ")
+            }
+            result.finishTimeSeconds?.let { seconds ->
+                appendTextElement("FinishTime", seconds.toRaceDateTime(raceStart), indent = "        ")
+            }
+            appendTextElement("Time", result.runTimeSeconds.toString(), indent = "        ")
+            if (result.place > 0 && result.resultStatus == ResultStatus.OK) {
+                appendTextElement("Position", result.place.toString(), indent = "        ")
+            }
+            appendTextElement("Status", IofResultStatus.fromResultStatus(result.resultStatus), indent = "        ")
+        }
+        var cumulativeSplitSeconds = 0L
+        readoutData?.punches
+            ?.filter { it.punch.punchType == SIRecordType.CONTROL }
+            ?.forEach { aliasPunch ->
+                cumulativeSplitSeconds += aliasPunch.punch.splitSeconds
+                append("        <SplitTime>\n")
+                appendTextElement("ControlCode", aliasPunch.punch.siCode.toString(), indent = "          ")
+                appendTextElement("Time", cumulativeSplitSeconds.toString(), indent = "          ")
+                append("        </SplitTime>\n")
+            }
+        append("      </Result>\n")
+        append("    </PersonResult>\n")
+    }
+
+    private fun StringBuilder.appendPersonAndOrganisation(competitor: EventCompetitor, indent: String) {
+        append(indent)
+        append("<Person>\n")
+        if (competitor.index.isNotBlank()) {
+            append(indent)
+            append("""  <Id type="CZE">${competitor.index.xmlEscaped()}</Id>""")
+            append('\n')
+        }
+        append(indent)
+        append("  <Name>\n")
+        appendTextElement("Family", competitor.lastName, indent = "$indent    ")
+        appendTextElement("Given", competitor.firstName, indent = "$indent    ")
+        append(indent)
+        append("  </Name>\n")
+        append(indent)
+        append("</Person>\n")
+        if (competitor.club.isNotBlank()) {
+            append(indent)
+            append("<Organisation>\n")
+            appendTextElement("Name", competitor.club, indent = "$indent  ")
+            append(indent)
+            append("</Organisation>\n")
+        }
     }
 
     private fun StringBuilder.appendTextElement(name: String, value: String, indent: String) {
@@ -107,6 +192,15 @@ object IofXmlExports {
 
     private fun parseRaceStart(value: String): LocalDateTime =
         LocalDateTime.parse(value.trim().replace(' ', 'T'))
+
+    private fun Long.toRaceDateTime(raceStart: LocalDateTime): String {
+        val secondsInDay = 24 * 60 * 60
+        val normalized = ((this % secondsInDay) + secondsInDay) % secondsInDay
+        return raceStart.toLocalDate()
+            .atStartOfDay()
+            .plusSeconds(normalized)
+            .format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+    }
 
     private fun String.xmlEscaped(): String =
         buildString {
