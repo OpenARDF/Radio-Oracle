@@ -37,7 +37,6 @@
         android:roundIcon="@mipmap/ic_logo_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.RadioOracle"
-        tools:replace="android:theme"
         tools:targetApi="tiramisu">
 
         <activity
