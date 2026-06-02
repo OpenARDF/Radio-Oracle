@@ -67,6 +67,21 @@ class DesktopProjectFilesTest {
     }
 
     @Test
+    fun exportsFinalResultsJsonFile() {
+        val directory = Files.createTempDirectory("rom-desktop-final-results-json")
+        val path = directory.resolve("event.final-results.json")
+
+        DesktopProjectFiles.exportFinalResultsJson(path, EventProjectFile(raceData = raceDataWithReadout()))
+        val exported = Files.readString(path)
+
+        assertTrue(exported.contains("\"categories\""))
+        assertTrue(exported.contains("\"aliases\""))
+        assertTrue(exported.contains("\"competitors\""))
+        assertTrue(exported.contains("\"competitor_category\": \"M21\""))
+        assertTrue(exported.contains("\"result_status\": \"OK\""))
+    }
+
+    @Test
     fun exportsIofStartListXmlFile() {
         val directory = Files.createTempDirectory("rom-desktop-iof-start-list")
         val path = directory.resolve("event.iof.xml")

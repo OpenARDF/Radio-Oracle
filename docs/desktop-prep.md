@@ -29,8 +29,8 @@ finish table:
 - preview shared finish-ticket text for readouts before desktop printer
   transport is available;
 - summarize live-result send readiness, including unsent matched results and
-  skipped readouts, and export Android-shaped live-result JSON payloads for
-  provider inspection;
+  skipped readouts, and export Android-shaped live-result and final-result JSON
+  payloads for provider inspection;
 - manually send unsent matched live results to ROBIS using the race API key;
 - send unsent matched ROBIS live results in the background when enabled in
   Settings;
@@ -357,11 +357,11 @@ repeatable package validation.
    category, competitor, and start-list CSV files; export categories,
    competitors, starts, starts-by-category, starts-by-minute, readouts, and
    results as semicolon-delimited CSV files using shared formatters; export
-   result TXT/HTML, IOF start/result-list XML, Android-shaped live-result JSON,
-   and standards-facing ARDF JSON. A sample smoke-test project is available at
-   `samples/desktop-smoke.rom.json`, with automated desktop coverage for the
-   session-level open, edit, save, close, reopen, export-copy, CSV export, and
-   ARDF JSON export flows.
+   result TXT/HTML, IOF start/result-list XML, Android-shaped live-result and
+   final-result JSON, and standards-facing ARDF JSON. A sample smoke-test
+   project is available at `samples/desktop-smoke.rom.json`, with automated
+   desktop coverage for the session-level open, edit, save, close, reopen,
+   export-copy, CSV export, and ARDF JSON export flows.
 5. In progress: add jDeploy metadata after the desktop app can complete a real
    smoke scenario. The Gradle-side jDeploy bundle tasks now build and verify
    `desktopApp/build/jdeploy/Radio-Oracle-jdeploy.jar`. The npm/jDeploy

@@ -579,6 +579,19 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun exportFinalResultsJson() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportFinalResultsJson()?.let { path ->
+                runCatching {
+                    DesktopProjectFiles.exportFinalResultsJson(path, currentProject)
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun exportIofStartListXml() {
             val currentProject = projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportIofXml("Export IOF Start List XML")?.let { path ->
@@ -769,6 +782,9 @@ fun main(args: Array<String>) = application {
                 })
                 Item("Export Live Results JSON...", enabled = projectFile != null, onClick = {
                     exportLiveResultsJson()
+                })
+                Item("Export Final Results JSON...", enabled = projectFile != null, onClick = {
+                    exportFinalResultsJson()
                 })
                 Item("Export IOF Start List XML...", enabled = projectFile != null, onClick = {
                     exportIofStartListXml()

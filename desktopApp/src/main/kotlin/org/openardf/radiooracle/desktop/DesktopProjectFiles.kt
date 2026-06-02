@@ -4,6 +4,7 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import org.openardf.radiooracle.shared.files.ArdfJsonExports
 import org.openardf.radiooracle.shared.files.EventCsvExports
+import org.openardf.radiooracle.shared.files.FinalResultJsonExports
 import org.openardf.radiooracle.shared.files.HtmlResultExports
 import org.openardf.radiooracle.shared.files.IofXmlExports
 import org.openardf.radiooracle.shared.files.LiveResultJsonExports
@@ -58,6 +59,10 @@ object DesktopProjectFiles : ProjectFileStore {
 
     fun exportLiveResultsJson(path: Path, projectFile: EventProjectFile) {
         writeText(path, LiveResultJsonExports.results(projectFile.raceData))
+    }
+
+    fun exportFinalResultsJson(path: Path, projectFile: EventProjectFile) {
+        writeText(path, FinalResultJsonExports.results(projectFile.raceData))
     }
 
     fun exportIofStartListXml(path: Path, projectFile: EventProjectFile) {

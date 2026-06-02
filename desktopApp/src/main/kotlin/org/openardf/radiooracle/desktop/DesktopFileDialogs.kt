@@ -9,6 +9,7 @@ import java.nio.file.Path
 object DesktopProjectFilePaths {
     const val PROJECT_EXTENSION = ".rom.json"
     const val ARDF_JSON_EXTENSION = ".ardf.json"
+    const val FINAL_RESULTS_JSON_EXTENSION = ".final-results.json"
     const val LIVE_RESULTS_JSON_EXTENSION = ".live-results.json"
     const val IOF_XML_EXTENSION = ".iof.xml"
     const val CSV_EXTENSION = ".csv"
@@ -35,6 +36,13 @@ object DesktopProjectFilePaths {
             path
         } else {
             path.resolveSibling("${path.fileName}$ARDF_JSON_EXTENSION")
+        }
+
+    fun withFinalResultsJsonExtension(path: Path): Path =
+        if (path.fileName.toString().endsWith(FINAL_RESULTS_JSON_EXTENSION)) {
+            path
+        } else {
+            path.resolveSibling("${path.fileName}$FINAL_RESULTS_JSON_EXTENSION")
         }
 
     fun withLiveResultsJsonExtension(path: Path): Path =
@@ -89,6 +97,10 @@ object DesktopFileDialogs {
     fun chooseExportArdfJson(): Path? =
         chooseFile("Export ARDF JSON", FileDialog.SAVE, DesktopProjectFilePaths.ARDF_JSON_EXTENSION)
             ?.let(DesktopProjectFilePaths::withArdfJsonExtension)
+
+    fun chooseExportFinalResultsJson(): Path? =
+        chooseFile("Export Final Results JSON", FileDialog.SAVE, DesktopProjectFilePaths.FINAL_RESULTS_JSON_EXTENSION)
+            ?.let(DesktopProjectFilePaths::withFinalResultsJsonExtension)
 
     fun chooseExportLiveResultsJson(): Path? =
         chooseFile("Export Live Results JSON", FileDialog.SAVE, DesktopProjectFilePaths.LIVE_RESULTS_JSON_EXTENSION)
