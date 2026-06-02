@@ -6,6 +6,8 @@ import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.event.EventCategory
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
@@ -38,6 +40,20 @@ class DesktopLocalResultServerTest {
     }
 
     @Test
+    fun rendersCategoryJsonForOpenProject() {
+        val server = DesktopLocalResultServer { projectFile() }
+
+        val json = server.categoriesJson()
+
+        assertTrue(json.contains(""""project_open":true"""))
+        assertTrue(json.contains(""""race_name":"Local \"Race\"""""))
+        assertTrue(json.contains(""""category_count":1"""))
+        assertTrue(json.contains(""""name":"M21""""))
+        assertTrue(json.contains(""""competitor_count":1"""))
+        assertTrue(json.contains(""""result_count":1"""))
+    }
+
+    @Test
     fun servesResultJsonOnLoopback() {
         val server = DesktopLocalResultServer { projectFile() }
         try {
@@ -48,6 +64,21 @@ class DesktopLocalResultServerTest {
             assertTrue(url.startsWith("http://127.0.0.1:"))
             assertTrue(connection.getHeaderField("Cache-Control") == "no-store")
             assertTrue(json.contains(""""result_count":1"""))
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun servesCategoryJsonOnLoopback() {
+        val server = DesktopLocalResultServer { projectFile() }
+        try {
+            val url = server.start()
+            val connection = URL("${url}categories.json").openConnection() as HttpURLConnection
+            val json = connection.inputStream.bufferedReader().readText()
+
+            assertTrue(connection.getHeaderField("Cache-Control") == "no-store")
+            assertTrue(json.contains(""""category_count":1"""))
         } finally {
             server.stop()
         }
@@ -105,10 +136,25 @@ class DesktopLocalResultServerTest {
             raceBand = RaceBand.M80,
             timeLimitSeconds = 7_200
         )
+        val category = EventCategory(
+            id = "category",
+            raceId = race.id,
+            name = "M21",
+            isMan = true,
+            maxAge = null,
+            lengthMeters = 5_000,
+            climbMeters = 100,
+            order = 1,
+            differentProperties = false,
+            raceType = null,
+            raceBand = null,
+            timeLimitSeconds = null,
+            controlPointsString = ""
+        )
         val competitor = EventCompetitor(
             id = "competitor",
             raceId = race.id,
-            categoryId = null,
+            categoryId = category.id,
             firstName = "Alice",
             lastName = "Runner",
             club = "",
@@ -124,11 +170,11 @@ class DesktopLocalResultServerTest {
         return EventProjectFile(
             raceData = EventRaceData(
                 race = race,
-                categories = emptyList(),
+                categories = listOf(EventCategoryData(category, controlPoints = emptyList(), competitors = listOf(competitor))),
                 aliases = emptyList(),
                 competitorData = listOf(
                     EventCompetitorData(
-                        competitorCategory = EventCompetitorCategory(competitor, null),
+                        competitorCategory = EventCompetitorCategory(competitor, category),
                         readoutData = EventReadoutData(result(), emptyList())
                     )
                 ),

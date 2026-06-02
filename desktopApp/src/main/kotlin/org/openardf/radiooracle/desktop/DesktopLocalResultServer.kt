@@ -37,6 +37,11 @@ class DesktopLocalResultServer(
                 exchange.sendText(resultsJson(), "application/json; charset=utf-8")
             }
         }
+        nextServer.createContext("/categories.json") { exchange ->
+            exchange.handleExactGet("/categories.json") {
+                exchange.sendText(categoriesJson(), "application/json; charset=utf-8")
+            }
+        }
         nextServer.start()
 
         server = nextServer
@@ -80,6 +85,37 @@ class DesktopLocalResultServer(
                 appendJsonString(result.runTimeText)
                 append('}')
             }
+            append("]}")
+        }
+    }
+
+    fun categoriesJson(): String {
+        val projectFile = projectSupplier()
+            ?: return """{"project_open":false,"race_name":"","categories":[]}"""
+        val raceData = projectFile.raceData
+
+        return buildString {
+            append("""{"project_open":true""")
+            append(""","race_name":""")
+            appendJsonString(raceData.race.name)
+            append(""","category_count":${raceData.categories.size}""")
+            append(""","categories":[""")
+            raceData.categories
+                .sortedWith(compareBy({ it.category.order }, { it.category.name }))
+                .forEachIndexed { index, categoryData ->
+                    if (index > 0) append(',')
+                    val categoryId = categoryData.category.id
+                    val competitors = raceData.competitorData.filter { data ->
+                        data.competitorCategory.category?.id == categoryId ||
+                            data.competitorCategory.competitor.categoryId == categoryId
+                    }
+                    append('{')
+                    append(""""name":""")
+                    appendJsonString(categoryData.category.name)
+                    append(""","competitor_count":${competitors.size}""")
+                    append(""","result_count":${competitors.count { it.readoutData != null }}""")
+                    append('}')
+                }
             append("]}")
         }
     }
