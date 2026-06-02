@@ -22,6 +22,7 @@ class EventCompetitorDetailsTest {
         assertEquals("category", rows[0].categoryId)
         assertEquals("W21", rows[0].categoryName)
         assertEquals("101", rows[0].startNumberText)
+        assertEquals("10:15", rows[0].startTimeText)
         assertEquals("123456", rows[0].siNumberText)
 
         assertEquals("Bob", rows[1].id)
@@ -29,6 +30,7 @@ class EventCompetitorDetailsTest {
         assertEquals(null, rows[1].categoryId)
         assertEquals("", rows[1].categoryName)
         assertEquals("102", rows[1].startNumberText)
+        assertEquals("", rows[1].startTimeText)
         assertEquals("", rows[1].siNumberText)
     }
 
@@ -90,7 +92,7 @@ class EventCompetitorDetailsTest {
                     siNumber = siNumber,
                     siRent = false,
                     startNumber = startNumber,
-                    drawnStartTimeSeconds = null
+                    drawnStartTimeSeconds = if (firstName == "Alice") 10 * 60L + 15 else null
                 ),
                 category = null
             ),

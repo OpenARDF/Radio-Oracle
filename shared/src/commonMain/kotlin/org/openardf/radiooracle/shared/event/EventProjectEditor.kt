@@ -447,6 +447,43 @@ object EventProjectEditor {
         )
     }
 
+    /** Returns a copy of the project file with one competitor's optional drawn start time changed. */
+    fun updateCompetitorStartTime(
+        projectFile: EventProjectFile,
+        competitorId: String,
+        startTime: String
+    ): EventProjectFile {
+        val trimmedStartTime = startTime.trim()
+        val startTimeSeconds = if (trimmedStartTime.isEmpty()) {
+            null
+        } else {
+            DurationFormatter.minuteStringToSeconds(trimmedStartTime)
+        }
+
+        var foundCompetitor = false
+        val competitorData = projectFile.raceData.competitorData.map { data ->
+            val competitorCategory = data.competitorCategory
+            val competitor = competitorCategory.competitor
+            if (competitor.id == competitorId) {
+                foundCompetitor = true
+                data.copy(
+                    competitorCategory = competitorCategory.copy(
+                        competitor = competitor.copy(drawnStartTimeSeconds = startTimeSeconds)
+                    )
+                )
+            } else {
+                data
+            }
+        }
+        require(foundCompetitor) {
+            "Competitor was not found: $competitorId"
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(competitorData = competitorData)
+        )
+    }
+
     /** Returns a copy of the project file with one competitor's validated numbers changed. */
     fun updateCompetitorNumbers(
         projectFile: EventProjectFile,

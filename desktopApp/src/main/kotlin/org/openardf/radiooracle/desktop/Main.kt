@@ -137,7 +137,9 @@ private val CompetitorTableColumns = listOf(
     FixedTableColumn("Birth", 72.dp),
     FixedTableColumn("Category", 136.dp),
     FixedTableColumn("Start no.", 86.dp),
+    FixedTableColumn("Start time", 104.dp),
     FixedTableColumn("SI no.", 110.dp),
+    FixedTableColumn("", 92.dp),
     FixedTableColumn("", 92.dp),
     FixedTableColumn("", 92.dp),
     FixedTableColumn("", 92.dp),
@@ -835,6 +837,17 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
+            onUpdateCompetitorStartTime = { competitorId, startTime ->
+                runCatching {
+                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.updateCompetitorStartTime(currentProject, competitorId, startTime)
+                    }
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText = "Unsaved changes."
+                }.onFailure { error ->
+                    projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+                }
+            },
             onAddCompetitor = { firstName, lastName, club, index, birthYear, categoryId, startNumber, siNumber ->
                 val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -1061,6 +1074,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateCompetitorNumbers: (String, String, String) -> Unit = { _, _, _ -> },
     onUpdateCompetitorClubIndex: (String, String, String) -> Unit = { _, _, _ -> },
     onUpdateCompetitorBirthYear: (String, String) -> Unit = { _, _ -> },
+    onUpdateCompetitorStartTime: (String, String) -> Unit = { _, _ -> },
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean = { _, _, _, _, _, _, _, _ -> false },
     onAssignCompetitorCategory: (String, String?) -> Unit = { _, _ -> },
     onRemoveCompetitor: (String, Boolean) -> Unit = { _, _ -> },
@@ -1114,6 +1128,7 @@ private fun RadioOManagerDesktopApp(
                         onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
                         onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
                         onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
+                        onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
                         onAddCompetitor = onAddCompetitor,
                         onAssignCompetitorCategory = onAssignCompetitorCategory,
                         onRemoveCompetitor = onRemoveCompetitor,
@@ -1215,6 +1230,7 @@ private fun SectionWorkspace(
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
     onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
+    onUpdateCompetitorStartTime: (String, String) -> Unit,
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit,
@@ -1280,6 +1296,7 @@ private fun SectionWorkspace(
                 onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
                 onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
                 onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
+                onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
                 onAddCompetitor = onAddCompetitor,
                 onAssignCompetitorCategory = onAssignCompetitorCategory,
                 onRemoveCompetitor = onRemoveCompetitor
@@ -1902,6 +1919,7 @@ private fun CompetitorDetailsPanel(
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
     onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
+    onUpdateCompetitorStartTime: (String, String) -> Unit,
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit
@@ -2010,6 +2028,7 @@ private fun CompetitorDetailsPanel(
                             onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
                             onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
                             onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
+                            onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
                             onAssignCompetitorCategory = onAssignCompetitorCategory
                         )
                     }
@@ -2093,18 +2112,20 @@ private fun CompetitorAddRow(
             singleLine = true,
             label = { Text("Start") }
         )
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[7].width))
         TextField(
             value = siNumberDraft,
             onValueChange = onSiNumberChange,
-            modifier = Modifier.width(CompetitorTableColumns[7].width),
+            modifier = Modifier.width(CompetitorTableColumns[8].width),
             singleLine = true,
             label = { Text("SI") }
         )
-        Spacer(modifier = Modifier.width(CompetitorTableColumns[8].width))
         Spacer(modifier = Modifier.width(CompetitorTableColumns[9].width))
         Spacer(modifier = Modifier.width(CompetitorTableColumns[10].width))
         Spacer(modifier = Modifier.width(CompetitorTableColumns[11].width))
         Spacer(modifier = Modifier.width(CompetitorTableColumns[12].width))
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[13].width))
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[14].width))
     }
 }
 
@@ -2117,6 +2138,7 @@ private fun CompetitorDetailRow(
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
     onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
+    onUpdateCompetitorStartTime: (String, String) -> Unit,
     onAssignCompetitorCategory: (String, String?) -> Unit
 ) {
     var firstNameDraft by remember(competitor.id, competitor.firstName) { mutableStateOf(competitor.firstName) }
@@ -2128,6 +2150,9 @@ private fun CompetitorDetailRow(
     }
     var startNumberDraft by remember(competitor.id, competitor.startNumberText) {
         mutableStateOf(competitor.startNumberText)
+    }
+    var startTimeDraft by remember(competitor.id, competitor.startTimeText) {
+        mutableStateOf(competitor.startTimeText)
     }
     var siNumberDraft by remember(competitor.id, competitor.siNumberText) { mutableStateOf(competitor.siNumberText) }
     var selectedCategoryId by remember(competitor.id, competitor.categoryId) { mutableStateOf(competitor.categoryId) }
@@ -2185,43 +2210,57 @@ private fun CompetitorDetailRow(
             label = { Text("Start") }
         )
         TextField(
+            value = startTimeDraft,
+            onValueChange = { startTimeDraft = it },
+            modifier = Modifier.width(CompetitorTableColumns[7].width),
+            singleLine = true,
+            label = { Text("mmm:ss") }
+        )
+        TextField(
             value = siNumberDraft,
             onValueChange = { siNumberDraft = it },
-            modifier = Modifier.width(CompetitorTableColumns[7].width),
+            modifier = Modifier.width(CompetitorTableColumns[8].width),
             singleLine = true,
             label = { Text("SI") }
         )
         Button(
             onClick = { onRenameCompetitor(competitor.id, firstNameDraft, lastNameDraft) },
-            modifier = Modifier.width(CompetitorTableColumns[8].width),
+            modifier = Modifier.width(CompetitorTableColumns[9].width),
             enabled = firstNameDraft != competitor.firstName || lastNameDraft != competitor.lastName
         ) {
             ButtonLabel("Name")
         }
         Button(
             onClick = { onUpdateCompetitorNumbers(competitor.id, startNumberDraft, siNumberDraft) },
-            modifier = Modifier.width(CompetitorTableColumns[9].width),
+            modifier = Modifier.width(CompetitorTableColumns[10].width),
             enabled = startNumberDraft != competitor.startNumberText || siNumberDraft != competitor.siNumberText
         ) {
             ButtonLabel("Nos.")
         }
         Button(
             onClick = { onUpdateCompetitorClubIndex(competitor.id, clubDraft, indexDraft) },
-            modifier = Modifier.width(CompetitorTableColumns[10].width),
+            modifier = Modifier.width(CompetitorTableColumns[11].width),
             enabled = clubDraft != competitor.club || indexDraft != competitor.index
         ) {
             ButtonLabel("Info")
         }
         Button(
             onClick = { onUpdateCompetitorBirthYear(competitor.id, birthYearDraft) },
-            modifier = Modifier.width(CompetitorTableColumns[11].width),
+            modifier = Modifier.width(CompetitorTableColumns[12].width),
             enabled = birthYearDraft != competitor.birthYearText
         ) {
             ButtonLabel("Birth")
         }
         Button(
+            onClick = { onUpdateCompetitorStartTime(competitor.id, startTimeDraft) },
+            modifier = Modifier.width(CompetitorTableColumns[13].width),
+            enabled = startTimeDraft != competitor.startTimeText
+        ) {
+            ButtonLabel("Start")
+        }
+        Button(
             onClick = { onAssignCompetitorCategory(competitor.id, selectedCategoryId) },
-            modifier = Modifier.width(CompetitorTableColumns[12].width),
+            modifier = Modifier.width(CompetitorTableColumns[14].width),
             enabled = selectedCategoryId != competitor.categoryId
         ) {
             ButtonLabel("Cat.")

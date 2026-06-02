@@ -410,6 +410,36 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun updatesCompetitorStartTime() {
+        val original = projectFile(
+            competitors = listOf(competitorData("comp-1", "Alice", "Runner"))
+        )
+
+        val updated = EventProjectEditor.updateCompetitorStartTime(original, "comp-1", " 10:15 ")
+        val cleared = EventProjectEditor.updateCompetitorStartTime(updated, "comp-1", " ")
+
+        assertEquals(10 * 60L + 15, updated.raceData.competitorData.single().competitorCategory.competitor.drawnStartTimeSeconds)
+        assertEquals(null, cleared.raceData.competitorData.single().competitorCategory.competitor.drawnStartTimeSeconds)
+    }
+
+    @Test
+    fun rejectsInvalidCompetitorStartTime() {
+        val original = projectFile(
+            competitors = listOf(competitorData("comp-1", "Alice", "Runner"))
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCompetitorStartTime(original, "missing", "10:15")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCompetitorStartTime(original, "comp-1", "10")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCompetitorStartTime(original, "comp-1", "10:60")
+        }
+    }
+
+    @Test
     fun updatesCompetitorNumbersUsingSharedValidationRules() {
         val original = projectFile(
             competitors = listOf(

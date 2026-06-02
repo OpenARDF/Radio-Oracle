@@ -1,5 +1,7 @@
 package org.openardf.radiooracle.shared.event
 
+import org.openardf.radiooracle.shared.time.DurationFormatter
+
 /** Shared read-only competitor row prepared for desktop and other event-admin surfaces. */
 data class EventCompetitorDetails(
     val id: String,
@@ -13,6 +15,7 @@ data class EventCompetitorDetails(
     val categoryName: String,
     val startNumber: Int,
     val startNumberText: String,
+    val startTimeText: String,
     val siNumberText: String
 ) {
     companion object {
@@ -37,6 +40,9 @@ data class EventCompetitorDetails(
                             ?: "",
                         startNumber = competitor.startNumber,
                         startNumberText = competitor.startNumber.toString(),
+                        startTimeText = competitor.drawnStartTimeSeconds?.let {
+                            DurationFormatter.secondsToFormattedString(it, useMinutes = true)
+                        } ?: "",
                         siNumberText = competitor.siNumber?.toString() ?: ""
                     )
                 }
