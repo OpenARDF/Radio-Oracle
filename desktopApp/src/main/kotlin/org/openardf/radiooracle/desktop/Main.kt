@@ -58,6 +58,7 @@ import org.openardf.radiooracle.shared.course.ControlPointValidationException
 import org.openardf.radiooracle.shared.event.EventAliasDetails
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCompetitorDetails
+import org.openardf.radiooracle.shared.event.EventInForestDetails
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventRaceDetails
@@ -76,6 +77,7 @@ import org.openardf.radiooracle.shared.printing.FinishTicketRenderer
 import org.openardf.radiooracle.shared.results.EventResultSending
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
@@ -167,6 +169,15 @@ private val ReadoutTableColumns = listOf(
     FixedTableColumn("", 104.dp)
 )
 
+private val InForestTableColumns = listOf(
+    FixedTableColumn("Competitor", 260.dp),
+    FixedTableColumn("Category", 120.dp),
+    FixedTableColumn("Start", 96.dp),
+    FixedTableColumn("Elapsed", 96.dp),
+    FixedTableColumn("Limit", 96.dp),
+    FixedTableColumn("State", 112.dp)
+)
+
 private val AliasTableColumns = listOf(
     FixedTableColumn("SI code", 112.dp),
     FixedTableColumn("Alias", 320.dp),
@@ -194,6 +205,7 @@ fun main(args: Array<String>) = application {
         var siDownloadStatusText by remember { mutableStateOf<String?>(null) }
         var isSendingLiveResults by remember { mutableStateOf(false) }
         var isBackgroundLiveResultSendingEnabled by remember { mutableStateOf(false) }
+        var raceClockTick by remember { mutableStateOf(0L) }
 
         LaunchedEffect(Unit) {
             while (true) {
@@ -428,6 +440,13 @@ fun main(args: Array<String>) = application {
                 if (isBackgroundLiveResultSendingEnabled) {
                     sendRobisLiveResults(automatic = true)
                 }
+            }
+        }
+
+        LaunchedEffect(Unit) {
+            while (true) {
+                delay(30_000L)
+                raceClockTick += 1
             }
         }
 
@@ -686,6 +705,7 @@ fun main(args: Array<String>) = application {
             siDownloadStatusText = siDownloadStatusText,
             isSendingLiveResults = isSendingLiveResults,
             isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
+            raceClockTick = raceClockTick,
             onRenameRace = { name ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -1062,6 +1082,7 @@ private fun RadioOManagerDesktopApp(
     siDownloadStatusText: String? = null,
     isSendingLiveResults: Boolean = false,
     isBackgroundLiveResultSendingEnabled: Boolean = false,
+    raceClockTick: Long = 0L,
     onRenameRace: (String) -> Unit = {},
     onUpdateRaceStartDateTime: (String) -> Unit = {},
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit = { _, _, _, _ -> },
@@ -1147,6 +1168,7 @@ private fun RadioOManagerDesktopApp(
                         onRemoveAlias = onRemoveAlias,
                         isSendingLiveResults = isSendingLiveResults,
                         isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
+                        raceClockTick = raceClockTick,
                         onSendRobisLiveResults = onSendRobisLiveResults,
                         onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled
                     )
@@ -1249,6 +1271,7 @@ private fun SectionWorkspace(
     onRemoveAlias: (String) -> Unit,
     isSendingLiveResults: Boolean,
     isBackgroundLiveResultSendingEnabled: Boolean,
+    raceClockTick: Long,
     onSendRobisLiveResults: () -> Unit,
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit
 ) {
@@ -1324,6 +1347,17 @@ private fun SectionWorkspace(
                 isContinuousSiReadoutActive = isContinuousSiReadoutActive,
                 siDownloadStatusText = siDownloadStatusText,
                 onAddManualReadout = onAddManualReadout
+            )
+        }
+        if (section == DesktopSection.InForest && projectFile != null) {
+            InForestDetailsPanel(
+                details = EventInForestDetails.from(
+                    raceData = projectFile.raceData,
+                    raceElapsedSeconds = desktopRaceElapsedSeconds(
+                        projectFile.raceData.race.startDateTimeIso,
+                        raceClockTick
+                    )
+                )
             )
         }
         if (section == DesktopSection.Results && projectFile != null) {
@@ -1483,6 +1517,69 @@ private fun ResultDetailRow(
         ) {
             ButtonLabel("Status")
         }
+    }
+}
+
+/** Shows runners who have started but do not yet have a readout. */
+@Composable
+private fun InForestDetailsPanel(details: EventInForestDetails) {
+    val horizontalScrollState = rememberScrollState()
+    val tableWidth = fixedTableWidth(InForestTableColumns)
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        DetailHeaderRow(listOf("In forest", "Finished", "Not started", "No start time"))
+        DetailGridRow(
+            listOf(
+                details.inForestCount.toString(),
+                details.finishedCount.toString(),
+                details.notStartedCount.toString(),
+                details.unscheduledCount.toString()
+            )
+        )
+        if (details.inForestRows.isEmpty()) {
+            Text(
+                text = "No started competitors are waiting for readout.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        } else {
+            Box(modifier = Modifier.fillMaxWidth().horizontalScroll(horizontalScrollState)) {
+                Column(
+                    modifier = Modifier.width(tableWidth),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FixedDetailHeaderRow(InForestTableColumns)
+                    details.inForestRows.forEach { row ->
+                        InForestDetailRow(row)
+                    }
+                }
+            }
+            HorizontalScrollbar(
+                adapter = rememberScrollbarAdapter(horizontalScrollState),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun InForestDetailRow(row: org.openardf.radiooracle.shared.event.EventInForestRow) {
+    Row(
+        modifier = Modifier.width(fixedTableWidth(InForestTableColumns)),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FixedTableText(row.competitorName, InForestTableColumns[0].width)
+        FixedTableText(row.categoryName, InForestTableColumns[1].width)
+        FixedTableText(row.startTimeText, InForestTableColumns[2].width)
+        FixedTableText(row.elapsedText, InForestTableColumns[3].width)
+        FixedTableText(row.limitText, InForestTableColumns[4].width)
+        Text(
+            text = if (row.overLimit) "Over limit" else "Running",
+            modifier = Modifier.width(InForestTableColumns[5].width),
+            color = if (row.overLimit) DesktopPalette.Error else DesktopPalette.Black,
+            fontSize = 13.sp
+        )
     }
 }
 
@@ -3162,9 +3259,16 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
         DesktopSection.Competitors -> "${summary?.competitorCount ?: 0} competitors loaded."
         DesktopSection.Aliases -> "${projectFile?.raceData?.aliases?.size ?: 0} aliases loaded."
         DesktopSection.Readouts -> "${summary?.readoutCount ?: 0} SI-card readouts loaded."
+        DesktopSection.InForest -> "Started competitors without readouts."
         DesktopSection.Results -> "${summary?.resultCount ?: 0} results loaded."
         DesktopSection.Settings -> "Project diagnostics and desktop beta scope."
     }
+}
+
+private fun desktopRaceElapsedSeconds(startDateTimeIso: String, tick: Long): Long {
+    return runCatching {
+        Duration.between(LocalDateTime.parse(startDateTimeIso), LocalDateTime.now()).seconds
+    }.getOrDefault(0L)
 }
 
 /** Shows the current SI-reader connection state and project-save status. */

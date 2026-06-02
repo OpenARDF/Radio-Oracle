@@ -25,6 +25,7 @@ finish table:
 - manually send unsent matched live results to ROBIS using the race API key;
 - send unsent matched ROBIS live results in the background when enabled in
   Settings;
+- track started competitors without readouts in an In Forest desktop view;
 - recalculate results using shared services;
 - import/export supported event and result formats as they move into shared
   code.
@@ -61,7 +62,6 @@ slices:
 
 - start-list draw/edit workflows with club/category separation and start-list
   export variants;
-- in-forest tracking from start times, readouts, and event time limits;
 - duplicate-card overwrite handling and unmatched-card assignment during
   continuous SI readout;
 - full ESC/POS ticket printer transport using the shared finish-ticket

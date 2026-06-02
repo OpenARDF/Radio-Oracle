@@ -7,7 +7,7 @@ class DesktopPaletteTest {
     @Test
     fun exposesAndroidNavigationVocabulary() {
         assertEquals(
-            listOf("Races", "Categories", "Competitors", "Aliases", "Readouts", "Results", "Settings"),
+            listOf("Races", "Categories", "Competitors", "Aliases", "Readouts", "In Forest", "Results", "Settings"),
             DesktopSection.entries.map { it.label }
         )
     }
