@@ -50,6 +50,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.openardf.radiooracle.desktop.printing.DesktopPrinterDiagnostics
 import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinter
 import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinterSelector
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardBlockDownload
@@ -239,6 +240,7 @@ fun main(args: Array<String>) = application {
         var isReadoutAlertSoundEnabled by remember { mutableStateOf(true) }
         var localResultServerUrl by remember { mutableStateOf<String?>(null) }
         var raceClockTick by remember { mutableStateOf(0L) }
+        var printerDiagnostics by remember { mutableStateOf(DesktopPrinterDiagnostics.from(emptyList())) }
 
         LaunchedEffect(Unit) {
             while (true) {
@@ -255,6 +257,13 @@ fun main(args: Array<String>) = application {
                 }
                 delay(DesktopSiPollIntervalMs)
             }
+        }
+
+        LaunchedEffect(Unit) {
+            val printers = withContext(Dispatchers.IO) {
+                ticketPrinter.listPrinters()
+            }
+            printerDiagnostics = DesktopPrinterDiagnostics.from(printers)
         }
 
         fun syncProjectState() {
@@ -912,6 +921,7 @@ fun main(args: Array<String>) = application {
             readoutDuplicatePolicy = readoutDuplicatePolicy,
             isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
             localResultServerUrl = localResultServerUrl,
+            printerDiagnostics = printerDiagnostics,
             raceClockTick = raceClockTick,
             onRenameRace = { name ->
                 runCatching {
@@ -1380,6 +1390,7 @@ private fun RadioOManagerDesktopApp(
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy = EventReadoutDuplicatePolicy.Reject,
     isReadoutAlertSoundEnabled: Boolean = true,
     localResultServerUrl: String? = null,
+    printerDiagnostics: DesktopPrinterDiagnostics = DesktopPrinterDiagnostics.from(emptyList()),
     raceClockTick: Long = 0L,
     onRenameRace: (String) -> Unit = {},
     onUpdateRaceStartDateTime: (String) -> Unit = {},
@@ -1481,6 +1492,7 @@ private fun RadioOManagerDesktopApp(
                         readoutDuplicatePolicy = readoutDuplicatePolicy,
                         isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
                         localResultServerUrl = localResultServerUrl,
+                        printerDiagnostics = printerDiagnostics,
                         raceClockTick = raceClockTick,
                         onSendRobisLiveResults = onSendRobisLiveResults,
                         onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
@@ -1595,6 +1607,7 @@ private fun SectionWorkspace(
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
     isReadoutAlertSoundEnabled: Boolean,
     localResultServerUrl: String?,
+    printerDiagnostics: DesktopPrinterDiagnostics,
     raceClockTick: Long,
     onSendRobisLiveResults: () -> Unit,
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
@@ -1712,6 +1725,7 @@ private fun SectionWorkspace(
                 readoutDuplicatePolicy = readoutDuplicatePolicy,
                 isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
                 localResultServerUrl = localResultServerUrl,
+                printerDiagnostics = printerDiagnostics,
                 onSendRobisLiveResults = onSendRobisLiveResults,
                 onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
                 onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
@@ -1747,6 +1761,7 @@ private fun SettingsDetailsPanel(
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
     isReadoutAlertSoundEnabled: Boolean,
     localResultServerUrl: String?,
+    printerDiagnostics: DesktopPrinterDiagnostics,
     onSendRobisLiveResults: () -> Unit,
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
     onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit,
@@ -1786,6 +1801,11 @@ private fun SettingsDetailsPanel(
                 fontSize = 13.sp
             )
         }
+        DetailRow("Printer", printerDiagnostics.readinessText)
+        DetailRow(
+            "Detected printers",
+            printerDiagnostics.detectedPrinterNames.joinToString().ifBlank { "None" }
+        )
         DetailRow("Local result display", localResultServerUrl ?: "Stopped")
         Row(horizontalArrangement = Arrangement.spacedBy(TableColumnGap)) {
             Button(

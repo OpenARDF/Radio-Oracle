@@ -75,6 +75,36 @@ class DesktopTicketPrinterTest {
         assertEquals("Office Printer", selected)
     }
 
+    @Test
+    fun reportsPrinterDiagnosticsWithSelectedTarget() {
+        val diagnostics = DesktopPrinterDiagnostics.from(
+            printers = listOf(
+                DesktopPrinterTarget("DYMO LabelManager 280", isDefault = true),
+                DesktopPrinterTarget("EPSON ET-2720 Series", isDefault = false)
+            ),
+            requestedPrinterName = null
+        )
+
+        assertEquals("EPSON ET-2720 Series", diagnostics.selectedPrinterName)
+        assertEquals("Ready: EPSON ET-2720 Series", diagnostics.readinessText)
+        assertEquals(
+            listOf("DYMO LabelManager 280 (default)", "EPSON ET-2720 Series"),
+            diagnostics.detectedPrinterNames
+        )
+    }
+
+    @Test
+    fun reportsPrinterDiagnosticsWhenNoTargetIsAvailable() {
+        val diagnostics = DesktopPrinterDiagnostics.from(
+            printers = emptyList(),
+            requestedPrinterName = null
+        )
+
+        assertEquals(null, diagnostics.selectedPrinterName)
+        assertEquals("No system printers detected", diagnostics.readinessText)
+        assertEquals(emptyList<String>(), diagnostics.detectedPrinterNames)
+    }
+
     private class FakePrinterBackend(
         private val printers: List<DesktopPrinterTarget>
     ) : DesktopPrinterBackend {

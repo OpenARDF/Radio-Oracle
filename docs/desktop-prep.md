@@ -34,6 +34,8 @@ finish table:
 - manually send unsent matched live results to ROBIS using the race API key;
 - send unsent matched ROBIS live results in the background when enabled in
   Settings;
+- show desktop system-printer readiness in Settings, including the selected
+  print target and detected system printers;
 - serve auto-refreshing loopback-only local result/category/start-list/in-forest
   displays plus `/results.json`, `/categories.json`, `/starts.json`, and
   `/in-forest.json` endpoints from the open desktop project;
