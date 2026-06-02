@@ -3,6 +3,7 @@ package org.openardf.radiooracle.backend.room.entity
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import org.openardf.radiooracle.backend.room.enums.PunchStatus
 import org.openardf.radiooracle.backend.room.enums.SIRecordType
@@ -14,7 +15,9 @@ import java.util.UUID
 
 /** Room entity for one punch read from a SportIdent card. */
 @Entity(
-    tableName = "punch", foreignKeys = [ForeignKey(
+    tableName = "punch",
+    indices = [Index("result_id")],
+    foreignKeys = [ForeignKey(
         entity = Result::class,
         parentColumns = arrayOf("id"),
         childColumns = arrayOf("result_id"),

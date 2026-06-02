@@ -92,7 +92,8 @@ class ResultJsonTests {
         val out = moshi.adapter(ResultJson::class.java).toJson(json)
 
         val stream =
-            this::class.java.classLoader.getResourceAsStream("json/json_results_filtered_start.ardfjs")
+            requireNotNull(this::class.java.classLoader)
+                .getResourceAsStream("json/json_results_filtered_start.ardfjs")
         val valid = stream.bufferedReader().use { it.readText() }.filterNot { it.isWhitespace() }
 
         assertEquals(valid, out)
@@ -162,7 +163,8 @@ class ResultJsonTests {
         val out = moshi.adapter(FinalResultsJson::class.java).toJson(json)
 
         val stream =
-            this::class.java.classLoader.getResourceAsStream("json/json_final_results.ardfjs")
+            requireNotNull(this::class.java.classLoader)
+                .getResourceAsStream("json/json_final_results.ardfjs")
         val valid = stream.bufferedReader().use { it.readText() }.filterNot { it.isWhitespace() }
 
         assertEquals(valid, out)

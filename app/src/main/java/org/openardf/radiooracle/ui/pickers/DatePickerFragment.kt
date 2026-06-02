@@ -4,7 +4,6 @@ import android.app.DatePickerDialog
 import android.app.Dialog
 import android.os.Bundle
 import android.widget.DatePicker
-import androidx.core.os.bundleOf
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.setFragmentResult
 import androidx.navigation.fragment.navArgs
@@ -22,7 +21,9 @@ class DatePickerFragment : DialogFragment() {
                 val resultDate = LocalDate.of(year, month + 1, day).toString()
                 setFragmentResult(
                     REQUEST_KEY_DATE,
-                    bundleOf(BUNDLE_KEY_DATE to resultDate)
+                    Bundle().apply {
+                        putString(BUNDLE_KEY_DATE, resultDate)
+                    }
                 )
             }
 

@@ -10,7 +10,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
-import androidx.core.os.bundleOf
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResult
@@ -334,11 +333,12 @@ class CategoryEditDialogFragment : DialogFragment() {
                 selectedRaceViewModel.createOrUpdateCategory(category, controlPoints)
 
                 setFragmentResult(
-                    REQUEST_CATEGORY_MODIFICATION, bundleOf(
-                        BUNDLE_KEY_CREATE to args.create,
-                        BUNDLE_KEY_POSITION to args.position,
-                        BUNDLE_KEY_CATEGORY_ID to category.id.toString()
-                    )
+                    REQUEST_CATEGORY_MODIFICATION,
+                    Bundle().apply {
+                        putBoolean(BUNDLE_KEY_CREATE, args.create)
+                        putInt(BUNDLE_KEY_POSITION, args.position)
+                        putString(BUNDLE_KEY_CATEGORY_ID, category.id.toString())
+                    }
                 )
                 dialog?.dismiss()
             }

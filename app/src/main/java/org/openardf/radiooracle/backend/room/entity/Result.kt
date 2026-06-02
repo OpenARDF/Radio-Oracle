@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Ignore
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import org.openardf.radiooracle.backend.room.enums.ResultStatus
 import org.openardf.radiooracle.backend.sportident.SIConstants
@@ -16,7 +17,9 @@ import java.util.UUID
 
 /** Room entity for one SI card readout result, optionally matched to a competitor. */
 @Entity(
-    tableName = "result", foreignKeys = [ForeignKey(
+    tableName = "result",
+    indices = [Index("race_id"), Index("competitor_id")],
+    foreignKeys = [ForeignKey(
         entity = Race::class,
         parentColumns = arrayOf("id"),
         childColumns = arrayOf("race_id"),

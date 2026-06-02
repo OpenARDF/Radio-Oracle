@@ -5,7 +5,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
-import androidx.core.os.bundleOf
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.setFragmentResult
 import androidx.fragment.app.setFragmentResultListener
@@ -175,10 +174,11 @@ class RaceEditDialogFragment : DialogFragment() {
                 race.timeLimit = Duration.ofMinutes(limitEditText.text.toString().trim().toLong())
 
                 setFragmentResult(
-                    REQUEST_RACE_MODIFICATION, bundleOf(
-                        BUNDLE_KEY_ACTIONS to args.action,
-                        BUNDLE_KEY_RACE to race
-                    )
+                    REQUEST_RACE_MODIFICATION,
+                    Bundle().apply {
+                        putSerializable(BUNDLE_KEY_ACTIONS, args.action)
+                        putSerializable(BUNDLE_KEY_RACE, race)
+                    }
                 )
                 //End the dialog
                 dialog?.dismiss()

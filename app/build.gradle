@@ -15,7 +15,7 @@ if (firebaseEnabled) {
 
 android {
     namespace = "org.openardf.radiooracle"
-    compileSdk 36
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "org.openardf.radiooracle"

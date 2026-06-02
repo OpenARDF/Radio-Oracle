@@ -10,7 +10,6 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.TextView
-import androidx.core.os.bundleOf
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResult
@@ -315,9 +314,10 @@ class ReadoutEditDialogFragment : DialogFragment() {
                 }
 
                 setFragmentResult(
-                    REQUEST_READOUT_MODIFICATION, bundleOf(
-                        BUNDLE_RESULT_ID to result.id.toString()
-                    )
+                    REQUEST_READOUT_MODIFICATION,
+                    Bundle().apply {
+                        putString(BUNDLE_RESULT_ID, result.id.toString())
+                    }
                 )
                 dialog?.dismiss()
             }

@@ -3,6 +3,7 @@ package org.openardf.radiooracle.backend.room.dao
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Transaction
 import org.openardf.radiooracle.backend.room.entity.ControlPoint
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ControlPointAlias
 import java.util.UUID
@@ -15,6 +16,7 @@ interface ControlPointDao {
     suspend fun getControlPointsByCategory(categoryId: UUID): List<ControlPoint>
 
     /** Returns ordered control points joined with any matching aliases. */
+    @Transaction
     @Query("SELECT * FROM control_point WHERE category_id=(:categoryId) ORDER BY `order`ASC")
     suspend fun getControlPointAliasesByCategory(categoryId: UUID): List<ControlPointAlias>
 

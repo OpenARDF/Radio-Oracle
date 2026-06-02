@@ -3,6 +3,7 @@ package org.openardf.radiooracle.backend.room.entity
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import org.openardf.radiooracle.backend.room.enums.ResultServiceStatus
 import org.openardf.radiooracle.backend.room.enums.ProviderType
@@ -14,6 +15,7 @@ import java.util.UUID
 /** Room entity for one configured live-result publishing service. */
 @Entity(
     tableName = "result_service",
+    indices = [Index("race_id")],
     foreignKeys = [ForeignKey(
         entity = Race::class,
         parentColumns = arrayOf("id"),

@@ -109,3 +109,19 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         db.execSQL("ALTER TABLE `result` ADD COLUMN `card_name` TEXT")
     }
 }
+
+// Migration from version 4 -> 5: add indices for foreign-key child columns so Room does not
+// need full table scans when parent rows are updated or deleted.
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_category_race_id` ON `category` (`race_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_alias_race_id` ON `alias` (`race_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_competitor_race_id` ON `competitor` (`race_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_competitor_category_id` ON `competitor` (`category_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_control_point_category_id` ON `control_point` (`category_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_result_race_id` ON `result` (`race_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_result_competitor_id` ON `result` (`competitor_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_punch_result_id` ON `punch` (`result_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_result_service_race_id` ON `result_service` (`race_id`)")
+    }
+}

@@ -9,7 +9,6 @@ import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
-import androidx.core.os.bundleOf
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResult
@@ -257,10 +256,11 @@ class CompetitorEditDialogFragment : DialogFragment() {
                 selectedRaceViewModel.createOrUpdateCompetitor(competitor)
                 //Send back the result to update the recycler view
                 setFragmentResult(
-                    REQUEST_COMPETITOR_MODIFICATION, bundleOf(
-                        BUNDLE_KEY_CREATE to args.create,
-                        BUNDLE_KEY_POSITION to args.position
-                    )
+                    REQUEST_COMPETITOR_MODIFICATION,
+                    Bundle().apply {
+                        putBoolean(BUNDLE_KEY_CREATE, args.create)
+                        putInt(BUNDLE_KEY_POSITION, args.position)
+                    }
                 )
                 dialog?.dismiss()
             }

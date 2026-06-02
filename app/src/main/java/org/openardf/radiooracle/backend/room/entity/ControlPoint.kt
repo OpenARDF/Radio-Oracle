@@ -3,6 +3,7 @@ package org.openardf.radiooracle.backend.room.entity
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import org.openardf.radiooracle.backend.room.enums.ControlPointType
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
@@ -13,6 +14,7 @@ import java.util.UUID
 /** Room entity for one ordered control point in a category course. */
 @Entity(
     tableName = "control_point",
+    indices = [Index("category_id")],
     foreignKeys = [ForeignKey(
         entity = Category::class,
         parentColumns = arrayOf("id"),

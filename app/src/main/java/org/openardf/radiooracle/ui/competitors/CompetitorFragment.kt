@@ -1,7 +1,6 @@
 package org.openardf.radiooracle.ui.competitors
 
 import android.app.AlertDialog
-import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.Gravity
@@ -33,6 +32,7 @@ import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.databinding.FragmentCompetitorsBinding
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
+import org.openardf.radiooracle.ui.serializableCompat
 import org.openardf.radiooracle.ui.races.RaceEditDialogFragment
 import kotlinx.coroutines.launch
 import java.text.Collator
@@ -417,15 +417,7 @@ class CompetitorFragment : Fragment() {
 
         //Enable race modification from menu
         setFragmentResultListener(RaceEditDialogFragment.REQUEST_RACE_MODIFICATION) { _, bundle ->
-            val race: Race = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                bundle.getSerializable(
-                    RaceEditDialogFragment.BUNDLE_KEY_RACE,
-                    Race::class.java
-                )!!
-            } else {
-                @Suppress("DEPRECATION")
-                bundle.getSerializable(RaceEditDialogFragment.BUNDLE_KEY_RACE) as Race
-            }
+            val race: Race = bundle.serializableCompat(RaceEditDialogFragment.BUNDLE_KEY_RACE)!!
             selectedRaceViewModel.updateRace(race)
         }
     }

@@ -1,7 +1,6 @@
 package org.openardf.radiooracle.ui.results
 
 import android.app.AlertDialog
-import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MenuItem
@@ -26,6 +25,7 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.databinding.FragmentResultsBinding
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
+import org.openardf.radiooracle.ui.serializableCompat
 import org.openardf.radiooracle.ui.races.RaceEditDialogFragment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -157,14 +157,7 @@ class ResultsFragment : Fragment() {
     private fun setResultListener() {
         //Enable event modification from menu
         setFragmentResultListener(RaceEditDialogFragment.REQUEST_RACE_MODIFICATION) { _, bundle ->
-            val race: Race = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                bundle.getSerializable(
-                    RaceEditDialogFragment.BUNDLE_KEY_RACE,
-                    Race::class.java
-                )!!
-            } else {
-                bundle.getSerializable(RaceEditDialogFragment.BUNDLE_KEY_RACE) as Race
-            }
+            val race: Race = bundle.serializableCompat(RaceEditDialogFragment.BUNDLE_KEY_RACE)!!
             selectedRaceViewModel.updateRace(race)
         }
     }

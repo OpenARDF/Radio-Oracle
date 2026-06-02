@@ -5,7 +5,6 @@ import android.content.res.Resources
 import android.graphics.Rect
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -22,6 +21,7 @@ import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
+import org.openardf.radiooracle.ui.serializableCompat
 import kotlin.getValue
 
 class InternetImportDialogFragment : DialogFragment() {
@@ -74,24 +74,9 @@ class InternetImportDialogFragment : DialogFragment() {
 
     private fun setFragmentListener() {
         setFragmentResultListener(RaceEditDialogFragment.REQUEST_RACE_MODIFICATION) { _, bundle ->
-            val action =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) bundle.getSerializable(
-                    RaceEditDialogFragment.BUNDLE_KEY_ACTIONS,
-                    RaceEditDialogFragment.RaceEditActions::class.java
-                )
-                else {
-                    bundle.getSerializable(RaceEditDialogFragment.BUNDLE_KEY_ACTIONS) as Race
-
-                }
-
-            val race: Race = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                bundle.getSerializable(
-                    RaceEditDialogFragment.BUNDLE_KEY_RACE,
-                    Race::class.java
-                )!!
-            } else {
-                bundle.getSerializable(RaceEditDialogFragment.BUNDLE_KEY_RACE) as Race
-            }
+            val action: RaceEditDialogFragment.RaceEditActions =
+                bundle.serializableCompat(RaceEditDialogFragment.BUNDLE_KEY_ACTIONS)!!
+            val race: Race = bundle.serializableCompat(RaceEditDialogFragment.BUNDLE_KEY_RACE)!!
             if (action == RaceEditDialogFragment.RaceEditActions.IMPORT) {
                 raceData?.let { raceData ->
                     raceData.race = race

@@ -21,7 +21,9 @@ import java.util.UUID
         Index(
             value = ["name", "race_id"],
             unique = true
-        )],
+        ),
+        Index("race_id")
+    ],
     foreignKeys = [ForeignKey(
         entity = Race::class,
         parentColumns = arrayOf("id"),

@@ -27,10 +27,12 @@ interface CategoryDao {
     suspend fun getCategory(id: UUID): Category?
 
     /** Returns one category aggregate by primary key, or null when absent. */
+    @Transaction
     @Query("SELECT * FROM category WHERE id=(:id) LIMIT 1")
     suspend fun getCategoryData(id: UUID): CategoryData?
 
     /** Returns all category aggregates for a race. */
+    @Transaction
     @Query("SELECT * FROM category WHERE  race_id=(:raceId) ")
     suspend fun getCategoryDataForRace(raceId: UUID): List<CategoryData>
 

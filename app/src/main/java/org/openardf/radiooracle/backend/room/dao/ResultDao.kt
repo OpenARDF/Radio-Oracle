@@ -2,6 +2,7 @@ package org.openardf.radiooracle.backend.room.dao
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import org.openardf.radiooracle.backend.room.entity.Result
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
@@ -16,10 +17,12 @@ interface ResultDao {
     suspend fun getResult(id: UUID): Result
 
     /** Returns one result aggregate by primary key. */
+    @Transaction
     @Query("SELECT * FROM result WHERE id=(:id)")
     suspend fun getResultData(id: UUID): ResultData
 
     /** Observes result aggregates for a race ordered by readout time. */
+    @Transaction
     @Query("SELECT * FROM result WHERE race_id=(:raceId) ORDER BY readout_time ASC")
     fun getResultDataFlowByRace(raceId: UUID): Flow<List<ResultData>>
 

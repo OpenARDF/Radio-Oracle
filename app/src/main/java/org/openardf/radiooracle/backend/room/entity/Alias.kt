@@ -13,7 +13,7 @@ import java.util.UUID
     tableName = "alias", indices = [Index(
         value = ["name", "race_id", "si_code"],
         unique = true
-    )], foreignKeys = [ForeignKey(
+    ), Index("race_id")], foreignKeys = [ForeignKey(
         entity = Race::class,
         parentColumns = arrayOf("id"),
         childColumns = arrayOf("race_id"),

@@ -4,7 +4,6 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -26,6 +25,7 @@ import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
+import org.openardf.radiooracle.ui.serializableCompat
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -143,26 +143,12 @@ class RaceSelectionFragment : Fragment() {
 
     private fun setFragmentListener() {
         setFragmentResultListener(RaceEditDialogFragment.REQUEST_RACE_MODIFICATION) { _, bundle ->
-            val action =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) bundle.getSerializable(
-                    RaceEditDialogFragment.BUNDLE_KEY_ACTIONS,
-                    RaceEditDialogFragment.RaceEditActions::class.java
-                )
-                else {
-                    bundle.getSerializable(RaceEditDialogFragment.BUNDLE_KEY_ACTIONS) as RaceEditDialogFragment.RaceEditActions
-
-                }
+            val action: RaceEditDialogFragment.RaceEditActions =
+                bundle.serializableCompat(RaceEditDialogFragment.BUNDLE_KEY_ACTIONS)!!
 
             val position = bundle.getInt(RaceEditDialogFragment.BUNDLE_KEY_POSITION)
 
-            val race: Race = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                bundle.getSerializable(
-                    RaceEditDialogFragment.BUNDLE_KEY_RACE,
-                    Race::class.java
-                )!!
-            } else {
-                bundle.getSerializable(RaceEditDialogFragment.BUNDLE_KEY_RACE) as Race
-            }
+            val race: Race = bundle.serializableCompat(RaceEditDialogFragment.BUNDLE_KEY_RACE)!!
 
             //create new race
             when (action) {

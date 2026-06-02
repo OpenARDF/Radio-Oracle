@@ -11,6 +11,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Parcelable
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
@@ -46,12 +47,7 @@ class MainActivity : AppCompatActivity() {
         override fun onReceive(context: Context, intent: Intent) {
 
             if (UsbManager.ACTION_USB_DEVICE_DETACHED == intent.action) {
-                val device: UsbDevice? =
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-                    } else {
-                        intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
-                    }
+                val device: UsbDevice? = intent.parcelableExtraCompat(UsbManager.EXTRA_DEVICE)
                 device?.apply {
                     dataProcessor.detachDevice(device)
                 }
@@ -68,7 +64,7 @@ class MainActivity : AppCompatActivity() {
             "en"
         }
 
-        val locale = Locale(languageCode)
+        val locale = Locale.forLanguageTag(languageCode)
         Locale.setDefault(locale)
 
         val config = Configuration()
@@ -110,12 +106,7 @@ class MainActivity : AppCompatActivity() {
         detectSIReader()
 
         if (intent != null) {
-            val device: UsbDevice? =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-                } else {
-                    intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
-                }
+            val device: UsbDevice? = intent.parcelableExtraCompat(UsbManager.EXTRA_DEVICE)
             if (device != null) {
                 dataProcessor.connectDevice(device)
             }
@@ -182,12 +173,7 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
 
         if (intent != null) {
-            val device: UsbDevice? =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-                } else {
-                    intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
-                }
+            val device: UsbDevice? = intent.parcelableExtraCompat(UsbManager.EXTRA_DEVICE)
             if (device != null) {
                 DebugLog.info("USB", "USB attach intent for device ${device.vendorId}:${device.productId}")
                 dataProcessor.connectDevice(device)
@@ -370,3 +356,11 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 }
+
+private inline fun <reified T : Parcelable> Intent.parcelableExtraCompat(name: String): T? =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        getParcelableExtra(name, T::class.java)
+    } else {
+        @Suppress("DEPRECATION")
+        getParcelableExtra(name) as? T
+    }

@@ -40,7 +40,7 @@ class PunchEditRecyclerViewAdapter(
         holder.week.setText(item.punch.siTime.getWeek().toString())
 
         holder.addBtn.setOnClickListener {
-            addPunch(holder.adapterPosition)
+            holder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }?.let(::addPunch)
         }
 
         holder.deleteBtn.setOnClickListener {
@@ -48,7 +48,7 @@ class PunchEditRecyclerViewAdapter(
             holder.time.clearFocus()
             holder.week.clearFocus()
             holder.weekday.clearFocus()
-            deletePunch(holder.adapterPosition)
+            holder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }?.let(::deletePunch)
         }
 
         //Set the start punch
@@ -84,26 +84,26 @@ class PunchEditRecyclerViewAdapter(
         holder.code.doOnTextChanged { cs: CharSequence?, i: Int, i1: Int, i2: Int ->
             // Omit the check for start and finish
             if (item.punch.punchType != SIRecordType.START && item.punch.punchType != SIRecordType.FINISH) {
-                if (!codeWatcher(holder.adapterPosition, cs.toString())) {
+                if (!codeWatcher(holder.bindingAdapterPosition, cs.toString())) {
                     holder.code.error = holder.code.context.getString(R.string.general_invalid)
                 }
             }
         }
 
         holder.time.doOnTextChanged { cs: CharSequence?, i: Int, i1: Int, i2: Int ->
-            if (!timeWatcher(holder.adapterPosition, cs.toString())) {
+            if (!timeWatcher(holder.bindingAdapterPosition, cs.toString())) {
                 holder.time.error = holder.code.context.getString(R.string.general_invalid)
             }
         }
 
         holder.weekday.doOnTextChanged { cs: CharSequence?, i: Int, i1: Int, i2: Int ->
-            if (!dayWatcher(holder.adapterPosition, cs.toString())) {
+            if (!dayWatcher(holder.bindingAdapterPosition, cs.toString())) {
                 holder.weekday.error = holder.code.context.getString(R.string.general_invalid)
             }
         }
 
         holder.week.doOnTextChanged { cs: CharSequence?, i: Int, i1: Int, i2: Int ->
-            if (!weekWatcher(holder.adapterPosition, cs.toString())) {
+            if (!weekWatcher(holder.bindingAdapterPosition, cs.toString())) {
                 holder.week.error = holder.code.context.getString(R.string.general_invalid)
             }
         }
@@ -136,6 +136,7 @@ class PunchEditRecyclerViewAdapter(
 
     //Text watchers
     private fun codeWatcher(position: Int, text: String): Boolean {
+        if (position == RecyclerView.NO_POSITION) return true
         try {
             val code = text.toInt()
             if (SIConstants.isSICodeValid(code)) {
@@ -154,6 +155,7 @@ class PunchEditRecyclerViewAdapter(
 
 
     private fun timeWatcher(position: Int, text: String): Boolean {
+        if (position == RecyclerView.NO_POSITION) return true
         //Try parsing the time into SI time
         try {
             val time = LocalTime.parse(text)
@@ -167,6 +169,7 @@ class PunchEditRecyclerViewAdapter(
     }
 
     private fun dayWatcher(position: Int, text: String): Boolean {
+        if (position == RecyclerView.NO_POSITION) return true
         try {
             val day = text.toInt()
             if (day in 0..7) {
@@ -181,6 +184,7 @@ class PunchEditRecyclerViewAdapter(
     }
 
     private fun weekWatcher(position: Int, text: String): Boolean {
+        if (position == RecyclerView.NO_POSITION) return true
         try {
             val week = text.toInt()
             if (week in 0..3) {
