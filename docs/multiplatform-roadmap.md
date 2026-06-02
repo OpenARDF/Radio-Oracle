@@ -282,7 +282,8 @@ loopback-display slices while these boundaries remain in force:
 - Desktop printer transport starts with system printing. The current known
   target is the WiFi Epson printer visible as `EPSON ET-2720 Series`; Bluetooth
   printer support remains a separate adapter after the system-printer path is
-  validated.
+  validated. The desktop readout ticket preview can submit the shared ticket
+  text through the selected system printer.
 - OCheckList/new-card import waits for a verified sample file or schema.
 - Shared SQL waits until after the file-backed desktop beta.
 - SPORTident station writes wait for verified write/read-back transactions on

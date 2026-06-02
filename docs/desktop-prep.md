@@ -26,8 +26,8 @@ finish table:
 - draw start times by category with club rotation and a configurable interval;
 - assign unmatched readouts to competitors;
 - mark competitors DNS without an SI-card readout;
-- preview shared finish-ticket text for readouts before desktop printer
-  transport is available;
+- preview shared finish-ticket text for readouts and print the previewed ticket
+  through desktop system printing;
 - summarize live-result send readiness, including unsent matched results and
   skipped readouts, and export Android-shaped live-result and final-result JSON
   payloads for provider inspection;
@@ -44,7 +44,7 @@ finish table:
 
 The desktop beta should not include:
 
-- Bluetooth or printer transport;
+- Bluetooth printer transport;
 - Android Room database migration or shared SQL persistence;
 - any promise that desktop can replace the Android race-day download workflow.
 
@@ -59,6 +59,8 @@ The current desktop beta decisions are:
   Epson target is visible to Java/CUPS as `EPSON ET-2720 Series`; the DYMO
   system printer is not a Radio-Oracle target. Keep Bluetooth printing as a
   later transport adapter unless a reliable JVM/macOS pairing path is selected.
+  The readout ticket preview includes a `Print` action that submits the shared
+  ticket text through this system-printer path.
 - Keep OCheckList/new-card import out of the beta until a verified sample file
   or schema is available.
 - Keep shared SQL persistence post-beta. The beta uses `.rom.json` files while

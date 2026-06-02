@@ -23,9 +23,13 @@ fun main(args: Array<String>) {
         return
     }
 
+    val printerName = DesktopTicketPrinterSelector.selectPrinterName(
+        printers = printers,
+        requestedName = requestedPrinter
+    )
     val result = printer.printFinishTicket(
         markedUpTicketText = testTicketText,
-        printerName = requestedPrinter
+        printerName = printerName
     )
     println(result.summary())
 }

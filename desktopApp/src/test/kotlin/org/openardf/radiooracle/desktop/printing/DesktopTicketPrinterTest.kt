@@ -39,6 +39,42 @@ class DesktopTicketPrinterTest {
         assertEquals(result.plainText, backend.printedText)
     }
 
+    @Test
+    fun selectsPreferredEpsonPrinterBeforeIgnoredSystemPrinters() {
+        val selected = DesktopTicketPrinterSelector.selectPrinterName(
+            printers = listOf(
+                DesktopPrinterTarget("DYMO LabelManager 280", isDefault = true),
+                DesktopPrinterTarget("EPSON ET-2720 Series", isDefault = false)
+            ),
+            requestedName = null
+        )
+
+        assertEquals("EPSON ET-2720 Series", selected)
+    }
+
+    @Test
+    fun honorsRequestedPrinterName() {
+        val selected = DesktopTicketPrinterSelector.selectPrinterName(
+            printers = listOf(DesktopPrinterTarget("EPSON ET-2720 Series", isDefault = true)),
+            requestedName = "Operator Printer"
+        )
+
+        assertEquals("Operator Printer", selected)
+    }
+
+    @Test
+    fun fallsBackToNonIgnoredDefaultPrinter() {
+        val selected = DesktopTicketPrinterSelector.selectPrinterName(
+            printers = listOf(
+                DesktopPrinterTarget("Office Printer", isDefault = true),
+                DesktopPrinterTarget("EPSON Backup", isDefault = false)
+            ),
+            requestedName = null
+        )
+
+        assertEquals("Office Printer", selected)
+    }
+
     private class FakePrinterBackend(
         private val printers: List<DesktopPrinterTarget>
     ) : DesktopPrinterBackend {

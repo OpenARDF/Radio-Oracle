@@ -50,6 +50,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinter
+import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinterSelector
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardBlockDownload
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentReadoutService
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
@@ -217,6 +219,7 @@ fun main(args: Array<String>) = application {
         val localResultServer = remember {
             DesktopLocalResultServer(projectSupplier = { projectSession.currentProject })
         }
+        val ticketPrinter = remember { DesktopTicketPrinter() }
         val appCoroutineScope = rememberCoroutineScope()
         val startupStatus = remember(startupPath) { openStartupProject(projectSession, startupPath) }
         var projectFile by remember { mutableStateOf(projectSession.currentProject) }
@@ -1204,6 +1207,29 @@ fun main(args: Array<String>) = application {
                     "Ticket preview failed: ${error.message ?: error::class.simpleName}"
                 }
             },
+            onPrintFinishTicket = { resultId ->
+                val currentProject = projectSession.currentProject
+                if (currentProject == null) {
+                    projectStatusText = "Open or create a project before printing finish tickets."
+                } else {
+                    projectStatusText = "Printing finish ticket..."
+                    appCoroutineScope.launch {
+                        val result = runCatching {
+                            withContext(Dispatchers.IO) {
+                                val markedUpTicketText = FinishTicketRenderer.render(currentProject.raceData, resultId)
+                                val printerName = DesktopTicketPrinterSelector.selectPrinterName(ticketPrinter.listPrinters())
+                                ticketPrinter.printFinishTicket(markedUpTicketText, printerName)
+                            }
+                        }
+                        projectStatusText = result.fold(
+                            onSuccess = { it.summary() },
+                            onFailure = { error ->
+                                "Ticket print failed: ${error.message ?: error::class.simpleName}"
+                            }
+                        )
+                    }
+                }
+            },
             onAddManualReadout = { competitorId, siNumber, startSeconds, finishSeconds, controlCodes, resultStatus ->
                 val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -1380,6 +1406,7 @@ private fun RadioOManagerDesktopApp(
     onStartContinuousSportIdentReadout: () -> Unit = {},
     onStopContinuousSportIdentReadout: () -> Unit = {},
     onPreviewFinishTicket: (String) -> String = { "" },
+    onPrintFinishTicket: (String) -> Unit = {},
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean = { _, _, _, _, _, _ -> false },
     onUpdateAlias: (String, String, String) -> Unit = { _, _, _ -> },
     onAddAlias: (String, String) -> Boolean = { _, _ -> false },
@@ -1441,6 +1468,7 @@ private fun RadioOManagerDesktopApp(
                         onStartContinuousSportIdentReadout = onStartContinuousSportIdentReadout,
                         onStopContinuousSportIdentReadout = onStopContinuousSportIdentReadout,
                         onPreviewFinishTicket = onPreviewFinishTicket,
+                        onPrintFinishTicket = onPrintFinishTicket,
                         isDownloadingSiReadout = isDownloadingSiReadout,
                         isContinuousSiReadoutActive = isContinuousSiReadoutActive,
                         siDownloadStatusText = siDownloadStatusText,
@@ -1554,6 +1582,7 @@ private fun SectionWorkspace(
     onStartContinuousSportIdentReadout: () -> Unit,
     onStopContinuousSportIdentReadout: () -> Unit,
     onPreviewFinishTicket: (String) -> String,
+    onPrintFinishTicket: (String) -> Unit,
     isDownloadingSiReadout: Boolean,
     isContinuousSiReadoutActive: Boolean,
     siDownloadStatusText: String?,
@@ -1651,6 +1680,7 @@ private fun SectionWorkspace(
                 onStartContinuousSportIdentReadout = onStartContinuousSportIdentReadout,
                 onStopContinuousSportIdentReadout = onStopContinuousSportIdentReadout,
                 onPreviewFinishTicket = onPreviewFinishTicket,
+                onPrintFinishTicket = onPrintFinishTicket,
                 isDownloadingSiReadout = isDownloadingSiReadout,
                 isContinuousSiReadoutActive = isContinuousSiReadoutActive,
                 siDownloadStatusText = siDownloadStatusText,
@@ -2031,6 +2061,7 @@ private fun ReadoutDetailsPanel(
     onStartContinuousSportIdentReadout: () -> Unit,
     onStopContinuousSportIdentReadout: () -> Unit,
     onPreviewFinishTicket: (String) -> String,
+    onPrintFinishTicket: (String) -> Unit,
     isDownloadingSiReadout: Boolean,
     isContinuousSiReadoutActive: Boolean,
     siDownloadStatusText: String?,
@@ -2045,6 +2076,7 @@ private fun ReadoutDetailsPanel(
     var controlCodesDraft by remember { mutableStateOf("") }
     var selectedStatus by remember { mutableStateOf(ResultStatus.OK) }
     var ticketPreviewText by remember { mutableStateOf<String?>(null) }
+    var ticketPreviewResultId by remember { mutableStateOf<String?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         LastReadoutStatusPanel(lastReadout)
@@ -2149,7 +2181,10 @@ private fun ReadoutDetailsPanel(
                             competitors = competitors,
                             onUpdateReadoutStatus = onUpdateReadoutStatus,
                             onAssignUnmatchedReadout = onAssignUnmatchedReadout,
-                            onPreviewFinishTicket = { ticketPreviewText = onPreviewFinishTicket(readout.id) }
+                            onPreviewFinishTicket = {
+                                ticketPreviewResultId = readout.id
+                                ticketPreviewText = onPreviewFinishTicket(readout.id)
+                            }
                         )
                     }
                 }
@@ -2158,7 +2193,13 @@ private fun ReadoutDetailsPanel(
         ticketPreviewText?.let { previewText ->
             FinishTicketPreviewDialog(
                 text = previewText,
-                onDismiss = { ticketPreviewText = null }
+                onPrint = {
+                    ticketPreviewResultId?.let(onPrintFinishTicket)
+                },
+                onDismiss = {
+                    ticketPreviewText = null
+                    ticketPreviewResultId = null
+                }
             )
         }
     }
@@ -2363,6 +2404,7 @@ private fun ReadoutDetailRow(
 @Composable
 private fun FinishTicketPreviewDialog(
     text: String,
+    onPrint: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -2374,6 +2416,11 @@ private fun FinishTicketPreviewDialog(
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
+        },
+        dismissButton = {
+            Button(onClick = onPrint) {
+                Text("Print")
+            }
         },
         confirmButton = {
             Button(onClick = onDismiss) {
