@@ -61,6 +61,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitorDetails
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventRaceDetails
+import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectSummary
 import org.openardf.radiooracle.shared.event.EventReadoutDetails
@@ -110,6 +111,10 @@ private data class DesktopSiReaderUiState(
             )
     }
 }
+
+private fun EventRaceData.containsReadoutForSiNumber(siNumber: Int): Boolean =
+    competitorData.any { it.readoutData?.result?.siNumber == siNumber } ||
+        unmatchedReadoutData.any { it.result.siNumber == siNumber }
 
 private val CategoryTableColumns = listOf(
     FixedTableColumn("Name", 150.dp),
@@ -241,7 +246,11 @@ fun main(args: Array<String>) = application {
             projectStatusText = "New unsaved project."
         }
 
-        fun appendSportIdentDownload(download: DesktopSportIdentCardBlockDownload) {
+        fun appendSportIdentDownload(download: DesktopSportIdentCardBlockDownload): Boolean {
+            val currentProject = projectSession.currentProject ?: return false
+            if (currentProject.raceData.containsReadoutForSiNumber(download.readout.siNumber)) {
+                return false
+            }
             projectFile = projectSession.updateCurrentProject { currentProject ->
                 EventProjectEditor.addDownloadedSportIdentReadout(
                     projectFile = currentProject,
@@ -254,6 +263,7 @@ fun main(args: Array<String>) = application {
                 }
             }
             hasUnsavedChanges = projectSession.hasUnsavedChanges
+            return true
         }
 
         fun downloadSportIdentReadout() {
@@ -275,8 +285,11 @@ fun main(args: Array<String>) = application {
                 }
                 downloadResult.onSuccess { download ->
                     runCatching {
-                        appendSportIdentDownload(download)
-                        projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
+                        if (appendSportIdentDownload(download)) {
+                            projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
+                        } else {
+                            projectStatusText = "SI card ${download.readout.siNumber} was already downloaded."
+                        }
                         siDownloadStatusText = null
                     }.onFailure { error ->
                         projectStatusText = "SI download failed: ${error.message ?: error::class.simpleName}"
@@ -319,9 +332,14 @@ fun main(args: Array<String>) = application {
                             onDownload = { download ->
                                 appCoroutineScope.launch {
                                     runCatching {
-                                        appendSportIdentDownload(download)
-                                        projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
-                                        siDownloadStatusText = "Continuous SI readout running; waiting for the next card."
+                                        if (appendSportIdentDownload(download)) {
+                                            projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
+                                            siDownloadStatusText = "Continuous SI readout running; waiting for the next card."
+                                        } else {
+                                            projectStatusText = "SI card ${download.readout.siNumber} was already downloaded."
+                                            siDownloadStatusText =
+                                                "Duplicate SI card ignored; continuous SI readout is still running."
+                                        }
                                     }.onFailure { error ->
                                         projectStatusText = "SI download failed: ${error.message ?: error::class.simpleName}"
                                         siDownloadStatusText = projectStatusText
