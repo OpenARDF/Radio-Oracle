@@ -981,6 +981,64 @@ object EventProjectEditor {
         )
     }
 
+    /** Adds a status-only DNS result for a competitor who has no SI-card readout. */
+    fun markCompetitorDidNotStart(
+        projectFile: EventProjectFile,
+        competitorId: String,
+        resultId: String,
+        readoutDateTimeIso: String
+    ): EventProjectFile {
+        require(resultId.isNotBlank()) {
+            "Readout ID cannot be blank."
+        }
+        require(!projectFile.raceData.containsReadout(resultId)) {
+            "Readout ID already exists: $resultId"
+        }
+        require(readoutDateTimeIso.isNotBlank()) {
+            "Readout date/time cannot be blank."
+        }
+
+        val competitorIndex = projectFile.raceData.competitorData.indexOfFirst {
+            it.competitorCategory.competitor.id == competitorId
+        }
+        require(competitorIndex >= 0) {
+            "Competitor was not found: $competitorId"
+        }
+        require(projectFile.raceData.competitorData[competitorIndex].readoutData == null) {
+            "Competitor already has a readout."
+        }
+
+        val competitor = projectFile.raceData.competitorData[competitorIndex].competitorCategory.competitor
+        val readoutData = EventReadoutData(
+            result = EventResult(
+                id = resultId,
+                raceId = projectFile.raceData.race.id,
+                competitorId = competitor.id,
+                siNumber = competitor.siNumber,
+                cardType = 0,
+                checkTimeSeconds = null,
+                startTimeSeconds = null,
+                finishTimeSeconds = null,
+                readoutDateTimeIso = readoutDateTimeIso,
+                automaticStatus = false,
+                resultStatus = ResultStatus.DID_NOT_START,
+                points = 0,
+                runTimeSeconds = 0,
+                modified = true,
+                sent = false
+            ),
+            punches = emptyList()
+        )
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                competitorData = projectFile.raceData.competitorData.mapIndexed { index, data ->
+                    if (index == competitorIndex) data.copy(readoutData = readoutData) else data
+                }
+            )
+        )
+    }
+
     /**
      * Adds a manually entered readout with competitor matching, timing, controls, and status in one operation.
      *

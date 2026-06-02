@@ -46,6 +46,7 @@ The desktop beta supports:
   readouts;
 - inspecting competitors in drawn start-time order in a Start List desktop view;
 - assigning unmatched readouts to competitors;
+- marking competitors DNS without an SI-card readout;
 - previewing finish-ticket text for readouts using the shared ticket renderer;
 - summarizing live-result send readiness and exporting Android-shaped
   live-result JSON payloads;

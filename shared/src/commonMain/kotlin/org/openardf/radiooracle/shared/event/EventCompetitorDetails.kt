@@ -16,7 +16,8 @@ data class EventCompetitorDetails(
     val startNumber: Int,
     val startNumberText: String,
     val startTimeText: String,
-    val siNumberText: String
+    val siNumberText: String,
+    val hasReadout: Boolean
 ) {
     companion object {
         /** Builds competitor display rows with category names resolved from embedded data or project categories. */
@@ -43,7 +44,8 @@ data class EventCompetitorDetails(
                         startTimeText = competitor.drawnStartTimeSeconds?.let {
                             DurationFormatter.secondsToFormattedString(it, useMinutes = true)
                         } ?: "",
-                        siNumberText = competitor.siNumber?.toString() ?: ""
+                        siNumberText = competitor.siNumber?.toString() ?: "",
+                        hasReadout = competitorData.readoutData != null
                     )
                 }
                 .sortedWith(compareBy<EventCompetitorDetails> { it.startNumber }.thenBy { it.fullName })

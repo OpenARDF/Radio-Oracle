@@ -868,6 +868,55 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun marksCompetitorDidNotStartWithStatusOnlyReadout() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", siNumber = 123456)
+            )
+        )
+
+        val updated = EventProjectEditor.markCompetitorDidNotStart(
+            projectFile = original,
+            competitorId = "comp-1",
+            resultId = "dns-result",
+            readoutDateTimeIso = "2026-05-31T12:00"
+        )
+
+        val readout = updated.raceData.competitorData.single().readoutData!!
+        assertEquals("dns-result", readout.result.id)
+        assertEquals("comp-1", readout.result.competitorId)
+        assertEquals(123456, readout.result.siNumber)
+        assertEquals(ResultStatus.DID_NOT_START, readout.result.resultStatus)
+        assertEquals(false, readout.result.automaticStatus)
+        assertEquals(true, readout.result.modified)
+        assertEquals(false, readout.result.sent)
+        assertEquals(null, readout.result.startTimeSeconds)
+        assertEquals(null, readout.result.finishTimeSeconds)
+        assertEquals(0, readout.result.runTimeSeconds)
+        assertEquals(emptyList(), readout.punches)
+    }
+
+    @Test
+    fun rejectsCompetitorDidNotStartWhenCompetitorAlreadyHasReadout() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", readoutData = readout("result-1", "comp-1", 1111))
+            )
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.markCompetitorDidNotStart(original, "comp-1", "dns-result", "2026-05-31T12:00")
+        }
+    }
+
+    @Test
+    fun rejectsUnknownCompetitorDidNotStart() {
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.markCompetitorDidNotStart(projectFile(), "missing", "dns-result", "2026-05-31T12:00")
+        }
+    }
+
+    @Test
     fun addsManualReadoutForMatchedCompetitorAndEvaluatesCourse() {
         val category = category("cat-1", "M21")
         val original = projectFile(

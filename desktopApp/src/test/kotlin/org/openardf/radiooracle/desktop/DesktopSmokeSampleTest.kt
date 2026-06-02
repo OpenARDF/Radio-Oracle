@@ -302,6 +302,35 @@ class DesktopSmokeSampleTest {
     }
 
     @Test
+    fun repositorySmokeSampleCompetitorCanBeMarkedDnsAndSaved() {
+        val source = Path.of("..", "samples", "desktop-smoke.rom.json")
+        val target = Files.createTempDirectory("rom-desktop-dns-smoke").resolve("edited.rom.json")
+
+        val original = DesktopProjectFiles.read(source)
+        val competitorWithoutReadout = original.raceData.competitorData.first { it.readoutData == null }
+            .competitorCategory.competitor
+        val edited = EventProjectEditor.markCompetitorDidNotStart(
+            projectFile = original,
+            competitorId = competitorWithoutReadout.id,
+            resultId = "dns-result",
+            readoutDateTimeIso = "2026-05-31T13:00"
+        )
+
+        DesktopProjectFiles.write(target, edited)
+        val readBack = DesktopProjectFiles.read(target)
+        val readout = readBack.raceData.competitorData
+            .first { it.competitorCategory.competitor.id == competitorWithoutReadout.id }
+            .readoutData!!
+
+        assertEquals(ResultStatus.DID_NOT_START, readout.result.resultStatus)
+        assertEquals(competitorWithoutReadout.id, readout.result.competitorId)
+        assertEquals(false, readout.result.automaticStatus)
+        assertEquals(true, readout.result.modified)
+        assertEquals(false, readout.result.sent)
+        assertEquals(0, readout.punches.size)
+    }
+
+    @Test
     fun repositorySmokeSampleManualReadoutCanBeEnteredAndSaved() {
         val source = Path.of("..", "samples", "desktop-smoke.rom.json")
         val target = Files.createTempDirectory("rom-desktop-manual-readout-smoke").resolve("edited.rom.json")

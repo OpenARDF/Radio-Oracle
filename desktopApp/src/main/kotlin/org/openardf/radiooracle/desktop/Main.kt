@@ -159,6 +159,7 @@ private val CompetitorTableColumns = listOf(
     FixedTableColumn("", 92.dp),
     FixedTableColumn("", 92.dp),
     FixedTableColumn("", 92.dp),
+    FixedTableColumn("", 92.dp),
     FixedTableColumn("", 92.dp)
 )
 
@@ -1009,6 +1010,22 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
+            onMarkCompetitorDidNotStart = { competitorId ->
+                runCatching {
+                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.markCompetitorDidNotStart(
+                            projectFile = currentProject,
+                            competitorId = competitorId,
+                            resultId = UUID.randomUUID().toString(),
+                            readoutDateTimeIso = LocalDateTime.now().withNano(0).toString()
+                        )
+                    }
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText = "Unsaved changes."
+                }.onFailure { error ->
+                    projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+                }
+            },
             onRemoveReadout = { resultId ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -1222,6 +1239,7 @@ private fun RadioOManagerDesktopApp(
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean = { _, _, _, _, _, _, _, _ -> false },
     onAssignCompetitorCategory: (String, String?) -> Unit = { _, _ -> },
     onRemoveCompetitor: (String, Boolean) -> Unit = { _, _ -> },
+    onMarkCompetitorDidNotStart: (String) -> Unit = {},
     onRemoveReadout: (String) -> Unit = {},
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit = { _, _ -> },
     onAssignUnmatchedReadout: (String, String) -> Unit = { _, _ -> },
@@ -1281,6 +1299,7 @@ private fun RadioOManagerDesktopApp(
                         onAddCompetitor = onAddCompetitor,
                         onAssignCompetitorCategory = onAssignCompetitorCategory,
                         onRemoveCompetitor = onRemoveCompetitor,
+                        onMarkCompetitorDidNotStart = onMarkCompetitorDidNotStart,
                         onRemoveReadout = onRemoveReadout,
                         onUpdateReadoutStatus = onUpdateReadoutStatus,
                         onAssignUnmatchedReadout = onAssignUnmatchedReadout,
@@ -1392,6 +1411,7 @@ private fun SectionWorkspace(
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit,
+    onMarkCompetitorDidNotStart: (String) -> Unit,
     onRemoveReadout: (String) -> Unit,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
     onAssignUnmatchedReadout: (String, String) -> Unit,
@@ -1466,7 +1486,8 @@ private fun SectionWorkspace(
                 onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
                 onAddCompetitor = onAddCompetitor,
                 onAssignCompetitorCategory = onAssignCompetitorCategory,
-                onRemoveCompetitor = onRemoveCompetitor
+                onRemoveCompetitor = onRemoveCompetitor,
+                onMarkCompetitorDidNotStart = onMarkCompetitorDidNotStart
             )
         }
         if (section == DesktopSection.Aliases && projectFile != null) {
@@ -2334,7 +2355,8 @@ private fun CompetitorDetailsPanel(
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean,
     onAssignCompetitorCategory: (String, String?) -> Unit,
-    onRemoveCompetitor: (String, Boolean) -> Unit
+    onRemoveCompetitor: (String, Boolean) -> Unit,
+    onMarkCompetitorDidNotStart: (String) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(CompetitorTableColumns)
@@ -2441,7 +2463,8 @@ private fun CompetitorDetailsPanel(
                             onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
                             onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
                             onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
-                            onAssignCompetitorCategory = onAssignCompetitorCategory
+                            onAssignCompetitorCategory = onAssignCompetitorCategory,
+                            onMarkCompetitorDidNotStart = onMarkCompetitorDidNotStart
                         )
                     }
                 }
@@ -2538,6 +2561,7 @@ private fun CompetitorAddRow(
         Spacer(modifier = Modifier.width(CompetitorTableColumns[12].width))
         Spacer(modifier = Modifier.width(CompetitorTableColumns[13].width))
         Spacer(modifier = Modifier.width(CompetitorTableColumns[14].width))
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[15].width))
     }
 }
 
@@ -2551,7 +2575,8 @@ private fun CompetitorDetailRow(
     onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
-    onAssignCompetitorCategory: (String, String?) -> Unit
+    onAssignCompetitorCategory: (String, String?) -> Unit,
+    onMarkCompetitorDidNotStart: (String) -> Unit
 ) {
     var firstNameDraft by remember(competitor.id, competitor.firstName) { mutableStateOf(competitor.firstName) }
     var lastNameDraft by remember(competitor.id, competitor.lastName) { mutableStateOf(competitor.lastName) }
@@ -2676,6 +2701,13 @@ private fun CompetitorDetailRow(
             enabled = selectedCategoryId != competitor.categoryId
         ) {
             ButtonLabel("Cat.")
+        }
+        Button(
+            onClick = { onMarkCompetitorDidNotStart(competitor.id) },
+            modifier = Modifier.width(CompetitorTableColumns[15].width),
+            enabled = !competitor.hasReadout
+        ) {
+            ButtonLabel("DNS")
         }
     }
 }
