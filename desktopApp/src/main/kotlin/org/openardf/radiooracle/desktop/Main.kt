@@ -395,6 +395,19 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun exportLiveResultsJson() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportLiveResultsJson()?.let { path ->
+                runCatching {
+                    DesktopProjectFiles.exportLiveResultsJson(path, currentProject)
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun importCompetitorsCsv() {
             DesktopFileDialogs.chooseImportCsv("Import Competitors CSV")?.let { path ->
                 runCatching {
@@ -526,6 +539,9 @@ fun main(args: Array<String>) = application {
                 })
                 Item("Export ARDF JSON...", enabled = projectFile != null, onClick = {
                     exportArdfJson()
+                })
+                Item("Export Live Results JSON...", enabled = projectFile != null, onClick = {
+                    exportLiveResultsJson()
                 })
                 Item("Import Categories CSV...", enabled = projectFile != null, onClick = {
                     importCategoriesCsv()

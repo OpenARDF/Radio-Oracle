@@ -20,7 +20,8 @@ finish table:
 - preview shared finish-ticket text for readouts before desktop printer
   transport is available;
 - summarize live-result send readiness, including unsent matched results and
-  skipped readouts, before desktop network sending is available;
+  skipped readouts, and export Android-shaped live-result JSON payloads before
+  desktop network sending is available;
 - recalculate results using shared services;
 - import/export supported event and result formats as they move into shared
   code.

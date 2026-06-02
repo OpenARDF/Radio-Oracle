@@ -9,6 +9,7 @@ import java.nio.file.Path
 object DesktopProjectFilePaths {
     const val PROJECT_EXTENSION = ".rom.json"
     const val ARDF_JSON_EXTENSION = ".ardf.json"
+    const val LIVE_RESULTS_JSON_EXTENSION = ".live-results.json"
     const val CSV_EXTENSION = ".csv"
 
     /** Returns a path with the standard Radio-Oracle desktop project extension. */
@@ -31,6 +32,13 @@ object DesktopProjectFilePaths {
             path
         } else {
             path.resolveSibling("${path.fileName}$ARDF_JSON_EXTENSION")
+        }
+
+    fun withLiveResultsJsonExtension(path: Path): Path =
+        if (path.fileName.toString().endsWith(LIVE_RESULTS_JSON_EXTENSION)) {
+            path
+        } else {
+            path.resolveSibling("${path.fileName}$LIVE_RESULTS_JSON_EXTENSION")
         }
 }
 
@@ -57,6 +65,10 @@ object DesktopFileDialogs {
     fun chooseExportArdfJson(): Path? =
         chooseFile("Export ARDF JSON", FileDialog.SAVE, DesktopProjectFilePaths.ARDF_JSON_EXTENSION)
             ?.let(DesktopProjectFilePaths::withArdfJsonExtension)
+
+    fun chooseExportLiveResultsJson(): Path? =
+        chooseFile("Export Live Results JSON", FileDialog.SAVE, DesktopProjectFilePaths.LIVE_RESULTS_JSON_EXTENSION)
+            ?.let(DesktopProjectFilePaths::withLiveResultsJsonExtension)
 
     fun chooseImportCsv(title: String): Path? =
         chooseFile(title, FileDialog.LOAD, DesktopProjectFilePaths.CSV_EXTENSION)

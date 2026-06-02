@@ -49,4 +49,19 @@ class DesktopProjectFilePathsTest {
             DesktopProjectFilePaths.withArdfJsonExtension(Path.of("event"))
         )
     }
+
+    @Test
+    fun keepsExistingLiveResultsJsonExtension() {
+        val path = Path.of("event.live-results.json")
+
+        assertEquals(path, DesktopProjectFilePaths.withLiveResultsJsonExtension(path))
+    }
+
+    @Test
+    fun appendsLiveResultsJsonExtensionWhenMissing() {
+        assertEquals(
+            Path.of("event.live-results.json"),
+            DesktopProjectFilePaths.withLiveResultsJsonExtension(Path.of("event"))
+        )
+    }
 }

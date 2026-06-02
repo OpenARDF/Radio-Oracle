@@ -6,9 +6,16 @@ import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.event.EventCategory
+import org.openardf.radiooracle.shared.event.EventCompetitor
+import org.openardf.radiooracle.shared.event.EventCompetitorCategory
+import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.EventReadoutData
+import org.openardf.radiooracle.shared.event.EventResult
 import java.nio.file.Files
 
 class DesktopProjectFilesTest {
@@ -46,6 +53,18 @@ class DesktopProjectFilesTest {
         assertTrue(exported.contains("\"race_name\": \"Desktop File Race\""))
     }
 
+    @Test
+    fun exportsLiveResultsJsonFile() {
+        val directory = Files.createTempDirectory("rom-desktop-live-results-json")
+        val path = directory.resolve("event.live-results.json")
+
+        DesktopProjectFiles.exportLiveResultsJson(path, EventProjectFile(raceData = raceDataWithReadout()))
+        val exported = Files.readString(path)
+
+        assertTrue(exported.contains("\"competitor_category\": \"M21\""))
+        assertTrue(exported.contains("\"result_status\": \"OK\""))
+    }
+
     private fun raceData(): EventRaceData =
         EventRaceData(
             race = EventRace(
@@ -63,4 +82,66 @@ class DesktopProjectFilesTest {
             competitorData = emptyList(),
             unmatchedReadoutData = emptyList()
         )
+
+    private fun raceDataWithReadout(): EventRaceData {
+        val race = raceData().race
+        val category = EventCategory(
+            id = "category",
+            raceId = race.id,
+            name = "M21",
+            isMan = true,
+            maxAge = null,
+            lengthMeters = 0,
+            climbMeters = 0,
+            order = 1,
+            differentProperties = false,
+            raceType = null,
+            raceBand = null,
+            timeLimitSeconds = null,
+            controlPointsString = ""
+        )
+        val competitor = EventCompetitor(
+            id = "competitor",
+            raceId = race.id,
+            categoryId = category.id,
+            firstName = "Alice",
+            lastName = "Runner",
+            club = "",
+            index = "IDX",
+            isMan = false,
+            birthYear = null,
+            siNumber = 123456,
+            siRent = false,
+            startNumber = 1,
+            drawnStartTimeSeconds = null
+        )
+        return raceData().copy(
+            categories = emptyList(),
+            competitorData = listOf(
+                EventCompetitorData(
+                    competitorCategory = EventCompetitorCategory(competitor, category),
+                    readoutData = EventReadoutData(
+                        result = EventResult(
+                            id = "result",
+                            raceId = race.id,
+                            competitorId = competitor.id,
+                            siNumber = 123456,
+                            cardType = 5,
+                            checkTimeSeconds = null,
+                            startTimeSeconds = 36_000,
+                            finishTimeSeconds = 37_200,
+                            readoutDateTimeIso = "2026-05-31T10:21:00",
+                            automaticStatus = true,
+                            resultStatus = ResultStatus.OK,
+                            points = 0,
+                            runTimeSeconds = 1_200,
+                            modified = false,
+                            sent = false
+                        ),
+                        punches = emptyList()
+                    )
+                )
+            )
+        )
+    }
 }
