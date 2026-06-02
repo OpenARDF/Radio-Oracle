@@ -30,6 +30,8 @@ class DesktopProjectDiagnosticsTest {
         assertEquals("No project open", diagnostics.liveResultPlanText)
         assertTrue(diagnostics.validationIssues.isEmpty())
         assertTrue(diagnostics.betaLimitations.any { it.contains("SPORTident") })
+        assertTrue(diagnostics.betaLimitations.any { it.contains("Android result-service configuration") })
+        assertTrue(diagnostics.betaLimitations.none { it == "Live result network sending remains post-beta." })
     }
 
     @Test

@@ -55,7 +55,7 @@ data class DesktopProjectDiagnostics(
                 betaLimitations = listOf(
                     "Hardened race-day SPORTident replacement remains post-beta.",
                     "Printer transport remains post-beta.",
-                    "Live result network sending remains post-beta.",
+                    "Full Android result-service configuration remains post-beta.",
                     "Project storage is file-backed .rom.json, not shared SQL."
                 )
             )
