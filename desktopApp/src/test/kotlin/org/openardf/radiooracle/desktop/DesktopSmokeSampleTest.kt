@@ -215,6 +215,18 @@ class DesktopSmokeSampleTest {
     }
 
     @Test
+    fun repositorySmokeSampleCanDrawStartList() {
+        val source = Path.of("..", "samples", "desktop-smoke.rom.json")
+        val projectFile = DesktopProjectFiles.read(source)
+
+        val drawn = EventProjectEditor.drawStartList(projectFile, "02:00")
+        val startTimes = drawn.raceData.competitorData
+            .map { it.competitorCategory.competitor.drawnStartTimeSeconds }
+
+        assertEquals(listOf(0L, 120L), startTimes)
+    }
+
+    @Test
     fun repositorySmokeSampleExportsArdfJsonFile() {
         val directory = Files.createTempDirectory("rom-desktop-ardf-json-smoke")
         val source = Path.of("..", "samples", "desktop-smoke.rom.json")

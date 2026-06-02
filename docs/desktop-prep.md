@@ -23,6 +23,7 @@ finish table:
   warning/error state;
 - play optional desktop alert sounds for duplicate or error/unknown SI readouts;
 - inspect competitors in drawn start-time order in a Start List desktop view;
+- draw start times by category with club rotation and a configurable interval;
 - assign unmatched readouts to competitors;
 - mark competitors DNS without an SI-card readout;
 - preview shared finish-ticket text for readouts before desktop printer
@@ -70,7 +71,7 @@ Android-compatible event model.
 ARDFEvent-derived desktop parity gaps to track after the current live-result
 slices:
 
-- start-list draw workflows with club/category separation;
+- richer ARDFEvent-style start-list draw setup with configurable draw rows;
 - full ESC/POS ticket printer transport using the shared finish-ticket
   renderer as the text source;
 - OCheckList-style new-card import or equivalent race-day status import;
@@ -347,8 +348,10 @@ repeatable package validation.
    SI-card readout rows and can delete readouts through shared project-editing
    rules, set an explicit manual result status, or create manual readouts with
    competitor matching, SI number, start/finish seconds, and control punch
-   codes. The Results section now shows competitor result rows and can set the
-   same explicit manual result status for matched readouts. The Settings
+   codes. The Start List section can draw start times by category with a
+   configurable interval and club rotation. The Results section now shows
+   competitor result rows and can set the same explicit manual result status for
+   matched readouts. The Settings
    section now shows project diagnostics, shared event validation issues, and
    the desktop beta scope boundary. The File menu can import Android-compatible
    category, competitor, and start-list CSV files; export categories,

@@ -1259,6 +1259,38 @@ class EventProjectEditorTest {
         }
     }
 
+    @Test
+    fun drawsStartListByCategoryOrderAndRotatesClubs() {
+        val m21 = category("cat-m21", "M21", order = 1)
+        val w21 = category("cat-w21", "W21", order = 0)
+        val original = projectFile(
+            categories = listOf(categoryData(m21.id, m21.name, order = m21.order), categoryData(w21.id, w21.name, order = w21.order)),
+            competitors = listOf(
+                competitorData("m-a1", "Alice", "Alpha", startNumber = 1, category = m21, club = "A"),
+                competitorData("m-a2", "Aaron", "Alpha", startNumber = 2, category = m21, club = "A"),
+                competitorData("m-b1", "Bob", "Bravo", startNumber = 3, category = m21, club = "B"),
+                competitorData("w-c1", "Cara", "Charlie", startNumber = 4, category = w21, club = "C")
+            )
+        )
+
+        val drawn = EventProjectEditor.drawStartList(original, "02:00")
+
+        assertEquals(0L, drawn.startTimeFor("w-c1"))
+        assertEquals(120L, drawn.startTimeFor("m-a1"))
+        assertEquals(240L, drawn.startTimeFor("m-b1"))
+        assertEquals(360L, drawn.startTimeFor("m-a2"))
+    }
+
+    @Test
+    fun rejectsInvalidStartListDrawIntervals() {
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.drawStartList(projectFile(), "2")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.drawStartList(projectFile(), "00:00")
+        }
+    }
+
     private fun projectFile(
         name: String = "Original Race",
         categories: List<EventCategoryData> = emptyList(),
@@ -1330,6 +1362,7 @@ class EventProjectEditorTest {
         startNumber: Int = 1,
         siNumber: Int? = null,
         category: EventCategory? = null,
+        club: String = "",
         readoutData: EventReadoutData? = null
     ): EventCompetitorData =
         EventCompetitorData(
@@ -1340,7 +1373,7 @@ class EventProjectEditorTest {
                     categoryId = category?.id,
                     firstName = firstName,
                     lastName = lastName,
-                    club = "",
+                    club = club,
                     index = "",
                     isMan = true,
                     birthYear = null,
@@ -1353,6 +1386,11 @@ class EventProjectEditorTest {
             ),
             readoutData = readoutData
         )
+
+    private fun EventProjectFile.startTimeFor(competitorId: String): Long? =
+        raceData.competitorData
+            .first { it.competitorCategory.competitor.id == competitorId }
+            .competitorCategory.competitor.drawnStartTimeSeconds
 
     private fun categoryImportRow(
         name: String = "W21",

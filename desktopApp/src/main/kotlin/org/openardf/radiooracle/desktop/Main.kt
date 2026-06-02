@@ -983,6 +983,17 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
+            onDrawStartList = { interval ->
+                runCatching {
+                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.drawStartList(currentProject, interval)
+                    }
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText = "Unsaved changes."
+                }.onFailure { error ->
+                    projectStatusText = "Draw failed: ${error.message ?: error::class.simpleName}"
+                }
+            },
             onAddCompetitor = { firstName, lastName, club, index, birthYear, categoryId, startNumber, siNumber ->
                 val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -1268,6 +1279,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateCompetitorClubIndex: (String, String, String) -> Unit = { _, _, _ -> },
     onUpdateCompetitorBirthYear: (String, String) -> Unit = { _, _ -> },
     onUpdateCompetitorStartTime: (String, String) -> Unit = { _, _ -> },
+    onDrawStartList: (String) -> Unit = {},
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean = { _, _, _, _, _, _, _, _ -> false },
     onAssignCompetitorCategory: (String, String?) -> Unit = { _, _ -> },
     onRemoveCompetitor: (String, Boolean) -> Unit = { _, _ -> },
@@ -1328,6 +1340,7 @@ private fun RadioOManagerDesktopApp(
                         onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
                         onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
                         onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
+                        onDrawStartList = onDrawStartList,
                         onAddCompetitor = onAddCompetitor,
                         onAssignCompetitorCategory = onAssignCompetitorCategory,
                         onRemoveCompetitor = onRemoveCompetitor,
@@ -1440,6 +1453,7 @@ private fun SectionWorkspace(
     onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
+    onDrawStartList: (String) -> Unit,
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit,
@@ -1531,7 +1545,10 @@ private fun SectionWorkspace(
             )
         }
         if (section == DesktopSection.StartList && projectFile != null) {
-            StartListDetailsPanel(EventStartListDetails.from(projectFile.raceData))
+            StartListDetailsPanel(
+                details = EventStartListDetails.from(projectFile.raceData),
+                onDrawStartList = onDrawStartList
+            )
         }
         if (section == DesktopSection.Readouts && projectFile != null) {
             ReadoutDetailsPanel(
@@ -1783,11 +1800,29 @@ private fun ResultDetailRow(
 
 /** Shows competitors sorted by drawn start time for race-day start-list inspection. */
 @Composable
-private fun StartListDetailsPanel(details: EventStartListDetails) {
+private fun StartListDetailsPanel(
+    details: EventStartListDetails,
+    onDrawStartList: (String) -> Unit
+) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(StartListTableColumns)
+    var intervalDraft by remember { mutableStateOf("02:00") }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = intervalDraft,
+                onValueChange = { intervalDraft = it },
+                label = { Text("Interval") },
+                modifier = Modifier.width(132.dp)
+            )
+            Button(onClick = { onDrawStartList(intervalDraft) }) {
+                Text("Draw starts")
+            }
+        }
         DetailHeaderRow(listOf("Scheduled", "No start time"))
         DetailGridRow(listOf(details.scheduledCount.toString(), details.unscheduledCount.toString()))
         if (details.rows.isEmpty()) {

@@ -484,6 +484,53 @@ object EventProjectEditor {
         )
     }
 
+    /** Draws start times by category order, rotating clubs within each category where possible. */
+    fun drawStartList(
+        projectFile: EventProjectFile,
+        intervalText: String
+    ): EventProjectFile {
+        val intervalSeconds = DurationFormatter.minuteStringToSeconds(intervalText.trim())
+        require(intervalSeconds > 0) {
+            "Start interval must be greater than zero."
+        }
+
+        val competitorStartTimes = mutableMapOf<String, Long>()
+        var nextStartSeconds = 0L
+        projectFile.raceData.categories
+            .sortedWith(compareBy({ it.category.order }, { it.category.name }))
+            .forEach { categoryData ->
+                val categoryCompetitors = projectFile.raceData.competitorData
+                    .filter { data ->
+                        data.competitorCategory.category?.id == categoryData.category.id ||
+                            data.competitorCategory.competitor.categoryId == categoryData.category.id
+                    }
+                    .map { it.competitorCategory.competitor }
+                val drawnCategoryCompetitors = drawClubRotatedCategory(categoryCompetitors)
+                drawnCategoryCompetitors.forEach { competitor ->
+                    competitorStartTimes[competitor.id] = nextStartSeconds
+                    nextStartSeconds += intervalSeconds
+                }
+            }
+
+        val competitorData = projectFile.raceData.competitorData.map { data ->
+            val competitor = data.competitorCategory.competitor
+            val startTimeSeconds = competitorStartTimes[competitor.id]
+            if (startTimeSeconds == null) {
+                data
+            } else {
+                data.copy(
+                    competitorCategory = data.competitorCategory.copy(
+                        competitor = competitor.copy(drawnStartTimeSeconds = startTimeSeconds)
+                    )
+                )
+            }
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(competitorData = competitorData)
+        )
+    }
+
     /** Returns a copy of the project file with one competitor's validated numbers changed. */
     fun updateCompetitorNumbers(
         projectFile: EventProjectFile,
@@ -1722,5 +1769,34 @@ object EventProjectEditor {
             startNumber = startNumberValue,
             drawnStartTimeSeconds = null
         )
+    }
+
+    private fun drawClubRotatedCategory(competitors: List<EventCompetitor>): List<EventCompetitor> {
+        val clubQueues = competitors
+            .groupBy { it.club.trim() }
+            .values
+            .map { clubCompetitors ->
+                clubCompetitors
+                    .sortedWith(compareBy({ it.startNumber }, { it.fullName() }))
+                    .toMutableList()
+            }
+            .sortedWith(
+                compareByDescending<MutableList<EventCompetitor>> { it.size }
+                    .thenBy { it.firstOrNull()?.club ?: "" }
+            )
+            .toMutableList()
+
+        val drawn = mutableListOf<EventCompetitor>()
+        while (clubQueues.isNotEmpty()) {
+            clubQueues.toList().forEach { clubQueue ->
+                if (clubQueue.isNotEmpty()) {
+                    drawn += clubQueue.removeAt(0)
+                }
+                if (clubQueue.isEmpty()) {
+                    clubQueues.remove(clubQueue)
+                }
+            }
+        }
+        return drawn
     }
 }

@@ -45,6 +45,7 @@ The desktop beta supports:
 - playing optional desktop alert sounds for duplicate or error/unknown SI
   readouts;
 - inspecting competitors in drawn start-time order in a Start List desktop view;
+- drawing start times by category with club rotation and a configurable interval;
 - assigning unmatched readouts to competitors;
 - marking competitors DNS without an SI-card readout;
 - previewing finish-ticket text for readouts using the shared ticket renderer;
