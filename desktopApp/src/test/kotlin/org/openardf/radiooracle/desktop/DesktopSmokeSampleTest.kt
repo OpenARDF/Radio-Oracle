@@ -291,6 +291,22 @@ class DesktopSmokeSampleTest {
     }
 
     @Test
+    fun repositorySmokeSampleExportsResultsTextFile() {
+        val directory = Files.createTempDirectory("rom-desktop-results-text-smoke")
+        val source = Path.of("..", "samples", "desktop-smoke.rom.json")
+        val target = directory.resolve("desktop-smoke-results.txt")
+        val projectFile = DesktopProjectFiles.read(source)
+
+        DesktopProjectFiles.exportResultsText(target, projectFile)
+        val exported = Files.readString(target)
+
+        assertTrue(exported.contains("Race: Desktop Smoke Race"))
+        assertTrue(exported.contains("Category M21"))
+        assertTrue(exported.contains("1.\tRUNNER Alice"))
+        assertTrue(exported.contains("00:20:00"))
+    }
+
+    @Test
     fun repositorySmokeSampleReadoutsCanBeDeletedAndSaved() {
         val source = Path.of("..", "samples", "desktop-smoke.rom.json")
         val target = Files.createTempDirectory("rom-desktop-readout-smoke").resolve("edited.rom.json")

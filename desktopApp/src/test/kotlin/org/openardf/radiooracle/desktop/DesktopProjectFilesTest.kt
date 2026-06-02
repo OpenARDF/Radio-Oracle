@@ -112,6 +112,22 @@ class DesktopProjectFilesTest {
         assertTrue(exported.contains("<td>00:20:00</td>"))
     }
 
+    @Test
+    fun exportsResultsTextFile() {
+        val directory = Files.createTempDirectory("rom-desktop-results-text")
+        val path = directory.resolve("results.txt")
+
+        DesktopProjectFiles.exportResultsText(path, EventProjectFile(raceData = raceDataWithReadout()))
+        val exported = Files.readString(path)
+
+        assertTrue(exported.contains("Results"))
+        assertTrue(exported.contains("Race: Desktop File Race"))
+        assertTrue(exported.contains("Category M21"))
+        assertTrue(exported.contains("1.\tRUNNER Alice"))
+        assertTrue(exported.contains("00:20:00"))
+    }
+
+
 
     private fun raceData(): EventRaceData =
         EventRaceData(

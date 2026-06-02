@@ -13,6 +13,7 @@ object DesktopProjectFilePaths {
     const val IOF_XML_EXTENSION = ".iof.xml"
     const val CSV_EXTENSION = ".csv"
     const val HTML_EXTENSION = ".html"
+    const val TXT_EXTENSION = ".txt"
 
     /** Returns a path with the standard Radio-Oracle desktop project extension. */
     fun withProjectExtension(path: Path): Path =
@@ -56,6 +57,13 @@ object DesktopProjectFilePaths {
         } else {
             path.resolveSibling("${path.fileName}$HTML_EXTENSION")
         }
+
+    fun withTxtExtension(path: Path): Path =
+        if (path.fileName.toString().endsWith(TXT_EXTENSION)) {
+            path
+        } else {
+            path.resolveSibling("${path.fileName}$TXT_EXTENSION")
+        }
 }
 
 /** AWT-backed file chooser for desktop `.rom.json` project files. */
@@ -93,6 +101,10 @@ object DesktopFileDialogs {
     fun chooseExportHtml(title: String): Path? =
         chooseFile(title, FileDialog.SAVE, DesktopProjectFilePaths.HTML_EXTENSION)
             ?.let(DesktopProjectFilePaths::withHtmlExtension)
+
+    fun chooseExportTxt(title: String): Path? =
+        chooseFile(title, FileDialog.SAVE, DesktopProjectFilePaths.TXT_EXTENSION)
+            ?.let(DesktopProjectFilePaths::withTxtExtension)
 
     fun chooseImportCsv(title: String): Path? =
         chooseFile(title, FileDialog.LOAD, DesktopProjectFilePaths.CSV_EXTENSION)

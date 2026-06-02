@@ -7,6 +7,7 @@ import org.openardf.radiooracle.shared.files.EventCsvExports
 import org.openardf.radiooracle.shared.files.HtmlResultExports
 import org.openardf.radiooracle.shared.files.IofXmlExports
 import org.openardf.radiooracle.shared.files.LiveResultJsonExports
+import org.openardf.radiooracle.shared.files.TextResultExports
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -69,6 +70,10 @@ object DesktopProjectFiles : ProjectFileStore {
 
     fun exportResultsHtml(path: Path, projectFile: EventProjectFile) {
         writeText(path, HtmlResultExports.results(projectFile.raceData))
+    }
+
+    fun exportResultsText(path: Path, projectFile: EventProjectFile) {
+        writeText(path, TextResultExports.results(projectFile.raceData))
     }
 
     private fun writeText(path: Path, text: String) {
