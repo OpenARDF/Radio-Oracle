@@ -40,6 +40,7 @@ The desktop beta supports:
   from an attached READOUT/SI MASTER station;
 - choosing whether duplicate SI-card reads are ignored, replaced, or stored as
   new readouts;
+- showing the most recent readout SI card, competitor, status, and timestamp;
 - inspecting competitors in drawn start-time order in a Start List desktop view;
 - assigning unmatched readouts to competitors;
 - previewing finish-ticket text for readouts using the shared ticket renderer;

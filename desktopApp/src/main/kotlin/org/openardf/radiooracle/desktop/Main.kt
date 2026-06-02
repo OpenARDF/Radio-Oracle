@@ -59,6 +59,7 @@ import org.openardf.radiooracle.shared.event.EventAliasDetails
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCompetitorDetails
 import org.openardf.radiooracle.shared.event.EventInForestDetails
+import org.openardf.radiooracle.shared.event.EventLastReadoutDetails
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventRaceDetails
@@ -1414,6 +1415,7 @@ private fun SectionWorkspace(
         if (section == DesktopSection.Readouts && projectFile != null) {
             ReadoutDetailsPanel(
                 readouts = EventReadoutDetails.from(projectFile.raceData),
+                lastReadout = EventLastReadoutDetails.from(projectFile.raceData),
                 competitors = EventCompetitorDetails.from(projectFile.raceData),
                 onRemoveReadout = onRemoveReadout,
                 onUpdateReadoutStatus = onUpdateReadoutStatus,
@@ -1739,6 +1741,7 @@ private fun InForestDetailRow(row: org.openardf.radiooracle.shared.event.EventIn
 @Composable
 private fun ReadoutDetailsPanel(
     readouts: List<EventReadoutDetails>,
+    lastReadout: EventLastReadoutDetails,
     competitors: List<EventCompetitorDetails>,
     onRemoveReadout: (String) -> Unit,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
@@ -1763,6 +1766,7 @@ private fun ReadoutDetailsPanel(
     var ticketPreviewText by remember { mutableStateOf<String?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LastReadoutStatusPanel(lastReadout)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
@@ -1877,6 +1881,23 @@ private fun ReadoutDetailsPanel(
             )
         }
     }
+}
+
+@Composable
+private fun LastReadoutStatusPanel(lastReadout: EventLastReadoutDetails) {
+    DetailHeaderRow(listOf("Last SI", "Competitor", "Status", "Read at"))
+    DetailGridRow(
+        if (lastReadout.hasReadout) {
+            listOf(
+                lastReadout.siNumberText.ifBlank { "None" },
+                lastReadout.competitorName.ifBlank { "Unmatched" },
+                lastReadout.statusLabel,
+                lastReadout.readoutDateTimeIso
+            )
+        } else {
+            listOf("None", "None", "None", "None")
+        }
+    )
 }
 
 /** Shows a compact manual readout entry row for desktop beta testing. */
