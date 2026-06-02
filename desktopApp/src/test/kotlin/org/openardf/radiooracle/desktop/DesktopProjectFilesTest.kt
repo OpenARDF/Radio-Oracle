@@ -8,6 +8,7 @@ import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.event.EventCategory
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
@@ -65,6 +66,21 @@ class DesktopProjectFilesTest {
         assertTrue(exported.contains("\"result_status\": \"OK\""))
     }
 
+    @Test
+    fun exportsIofStartListXmlFile() {
+        val directory = Files.createTempDirectory("rom-desktop-iof-start-list")
+        val path = directory.resolve("event.iof.xml")
+
+        DesktopProjectFiles.exportIofStartListXml(path, EventProjectFile(raceData = raceDataWithReadout()))
+        val exported = Files.readString(path)
+
+        assertTrue(exported.contains("<StartList"))
+        assertTrue(exported.contains("<ClassStart>"))
+        assertTrue(exported.contains("<Family>Runner</Family>"))
+        assertTrue(exported.contains("<StartTime>2026-05-31T10:00:00</StartTime>"))
+        assertTrue(exported.contains("<ControlCard>123456</ControlCard>"))
+    }
+
     private fun raceData(): EventRaceData =
         EventRaceData(
             race = EventRace(
@@ -116,7 +132,7 @@ class DesktopProjectFilesTest {
             drawnStartTimeSeconds = null
         )
         return raceData().copy(
-            categories = emptyList(),
+            categories = listOf(EventCategoryData(category, controlPoints = emptyList(), competitors = listOf(competitor))),
             competitorData = listOf(
                 EventCompetitorData(
                     competitorCategory = EventCompetitorCategory(competitor, category),

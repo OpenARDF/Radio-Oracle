@@ -579,6 +579,19 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun exportIofStartListXml() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportIofXml("Export IOF Start List XML")?.let { path ->
+                runCatching {
+                    DesktopProjectFiles.exportIofStartListXml(path, currentProject)
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun importCompetitorsCsv() {
             DesktopFileDialogs.chooseImportCsv("Import Competitors CSV")?.let { path ->
                 runCatching {
@@ -717,6 +730,9 @@ fun main(args: Array<String>) = application {
                 })
                 Item("Export Live Results JSON...", enabled = projectFile != null, onClick = {
                     exportLiveResultsJson()
+                })
+                Item("Export IOF Start List XML...", enabled = projectFile != null, onClick = {
+                    exportIofStartListXml()
                 })
                 Item("Import Categories CSV...", enabled = projectFile != null, onClick = {
                     importCategoriesCsv()

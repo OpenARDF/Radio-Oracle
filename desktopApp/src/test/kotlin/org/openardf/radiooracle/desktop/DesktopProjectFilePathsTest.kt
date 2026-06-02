@@ -64,4 +64,19 @@ class DesktopProjectFilePathsTest {
             DesktopProjectFilePaths.withLiveResultsJsonExtension(Path.of("event"))
         )
     }
+
+    @Test
+    fun keepsExistingIofXmlExtension() {
+        val path = Path.of("event.iof.xml")
+
+        assertEquals(path, DesktopProjectFilePaths.withIofXmlExtension(path))
+    }
+
+    @Test
+    fun appendsIofXmlExtensionWhenMissing() {
+        assertEquals(
+            Path.of("event.iof.xml"),
+            DesktopProjectFilePaths.withIofXmlExtension(Path.of("event"))
+        )
+    }
 }

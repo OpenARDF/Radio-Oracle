@@ -231,6 +231,22 @@ class DesktopSmokeSampleTest {
     }
 
     @Test
+    fun repositorySmokeSampleExportsIofStartListXmlFile() {
+        val directory = Files.createTempDirectory("rom-desktop-iof-start-list-smoke")
+        val source = Path.of("..", "samples", "desktop-smoke.rom.json")
+        val target = directory.resolve("desktop-smoke.iof.xml")
+        val projectFile = DesktopProjectFiles.read(source)
+
+        DesktopProjectFiles.exportIofStartListXml(target, projectFile)
+        val exported = Files.readString(target)
+
+        assertTrue(exported.contains("<StartList"))
+        assertTrue(exported.contains("<ClassStart>"))
+        assertTrue(exported.contains("<Family>Runner</Family>"))
+        assertTrue(exported.contains("<StartTime>2026-05-31T10:10:00</StartTime>"))
+    }
+
+    @Test
     fun repositorySmokeSampleReadoutsCanBeDeletedAndSaved() {
         val source = Path.of("..", "samples", "desktop-smoke.rom.json")
         val target = Files.createTempDirectory("rom-desktop-readout-smoke").resolve("edited.rom.json")

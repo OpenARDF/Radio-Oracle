@@ -1,0 +1,166 @@
+package org.openardf.radiooracle.shared.files
+
+import org.openardf.radiooracle.shared.domain.RaceBand
+import org.openardf.radiooracle.shared.domain.RaceLevel
+import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.EventCategory
+import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventCompetitor
+import org.openardf.radiooracle.shared.event.EventCompetitorCategory
+import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventRace
+import org.openardf.radiooracle.shared.event.EventRaceData
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class IofXmlExportsTest {
+    @Test
+    fun exportsIofStartListUsingAndroidStructure() {
+        val xml = IofXmlExports.startList(raceData(), creator = "Radio-Oracle 1.0")
+
+        assertTrue(xml.startsWith("""<?xml version="1.0" encoding="UTF-8"?>"""))
+        assertTrue(xml.contains("""<StartList xmlns="http://www.orienteering.org/datastandard/3.0" iofVersion="3.0" creator="Radio-Oracle 1.0">"""))
+        assertTrue(xml.contains("<Event>"))
+        assertTrue(xml.contains("<Name>IOF &amp; Start Race</Name>"))
+        assertTrue(xml.contains("<Date>2026-06-01</Date>"))
+        assertTrue(xml.contains("<Time>10:00:00</Time>"))
+        assertTrue(xml.contains("<ClassStart>"))
+        assertTrue(xml.contains("<Class>"))
+        assertTrue(xml.contains("<Name>M21</Name>"))
+        assertTrue(xml.contains("<Length>5200</Length>"))
+        assertTrue(xml.contains("<Climb>120</Climb>"))
+        assertTrue(xml.contains("<PersonStart>"))
+        assertTrue(xml.contains("""<Id type="CZE">OK001</Id>"""))
+        assertTrue(xml.contains("<Family>Runner</Family>"))
+        assertTrue(xml.contains("<Given>Alice</Given>"))
+        assertTrue(xml.contains("<Organisation>"))
+        assertTrue(xml.contains("<Name>OK &amp; Test</Name>"))
+        assertTrue(xml.contains("<BibNumber>7</BibNumber>"))
+        assertTrue(xml.contains("<StartTime>2026-06-01T10:10:00</StartTime>"))
+        assertTrue(xml.contains("<ControlCard>123456</ControlCard>"))
+    }
+
+    @Test
+    fun groupsStartsByCategoryAndUsesRaceStartWhenDrawnTimeIsMissing() {
+        val xml = IofXmlExports.startList(raceData(includeSecondCategory = true))
+
+        assertEquals(2, Regex("<ClassStart>").findAll(xml).count())
+        assertTrue(xml.indexOf("<Name>M21</Name>") < xml.indexOf("<Name>W21</Name>"))
+        assertTrue(xml.contains("<Family>NoTime</Family>"))
+        assertTrue(xml.contains("<StartTime>2026-06-01T10:00:00</StartTime>"))
+        assertFalse(xml.contains("<ControlCard></ControlCard>"))
+    }
+
+    private fun raceData(includeSecondCategory: Boolean = false): EventRaceData {
+        val race = EventRace(
+            id = "race",
+            name = "IOF & Start Race",
+            apiKey = "",
+            startDateTimeIso = "2026-06-01T10:00:00",
+            raceType = RaceType.CLASSIC,
+            raceLevel = RaceLevel.PRACTICE,
+            raceBand = RaceBand.M80,
+            timeLimitSeconds = 7_200
+        )
+        val m21 = category(race.id, "m21", "M21", order = 1)
+        val w21 = category(race.id, "w21", "W21", order = 2)
+        val competitors = buildList {
+            add(
+                competitor(
+                    raceId = race.id,
+                    category = m21,
+                    id = "alice",
+                    firstName = "Alice",
+                    lastName = "Runner",
+                    club = "OK & Test",
+                    index = "OK001",
+                    siNumber = 123456,
+                    startNumber = 7,
+                    drawnStartTimeSeconds = 600
+                )
+            )
+            if (includeSecondCategory) {
+                add(
+                    competitor(
+                        raceId = race.id,
+                        category = w21,
+                        id = "notime",
+                        firstName = "Bob",
+                        lastName = "NoTime",
+                        club = "",
+                        index = "",
+                        siNumber = null,
+                        startNumber = 8,
+                        drawnStartTimeSeconds = null
+                    )
+                )
+            }
+        }
+
+        return EventRaceData(
+            race = race,
+            categories = listOf(
+                EventCategoryData(m21, controlPoints = emptyList(), competitors = competitors.filter { it.categoryId == m21.id }),
+                EventCategoryData(w21, controlPoints = emptyList(), competitors = competitors.filter { it.categoryId == w21.id })
+            ),
+            aliases = emptyList(),
+            competitorData = competitors.map { competitor ->
+                EventCompetitorData(
+                    competitorCategory = EventCompetitorCategory(
+                        competitor = competitor,
+                        category = if (competitor.categoryId == m21.id) m21 else w21
+                    ),
+                    readoutData = null
+                )
+            },
+            unmatchedReadoutData = emptyList()
+        )
+    }
+
+    private fun category(raceId: String, id: String, name: String, order: Int): EventCategory =
+        EventCategory(
+            id = id,
+            raceId = raceId,
+            name = name,
+            isMan = name.startsWith("M"),
+            maxAge = null,
+            lengthMeters = 5_200,
+            climbMeters = 120,
+            order = order,
+            differentProperties = false,
+            raceType = null,
+            raceBand = null,
+            timeLimitSeconds = null,
+            controlPointsString = ""
+        )
+
+    private fun competitor(
+        raceId: String,
+        category: EventCategory,
+        id: String,
+        firstName: String,
+        lastName: String,
+        club: String,
+        index: String,
+        siNumber: Int?,
+        startNumber: Int,
+        drawnStartTimeSeconds: Long?
+    ): EventCompetitor =
+        EventCompetitor(
+            id = id,
+            raceId = raceId,
+            categoryId = category.id,
+            firstName = firstName,
+            lastName = lastName,
+            club = club,
+            index = index,
+            isMan = category.isMan,
+            birthYear = null,
+            siNumber = siNumber,
+            siRent = false,
+            startNumber = startNumber,
+            drawnStartTimeSeconds = drawnStartTimeSeconds
+        )
+}

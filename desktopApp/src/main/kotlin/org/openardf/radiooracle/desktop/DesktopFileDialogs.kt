@@ -10,6 +10,7 @@ object DesktopProjectFilePaths {
     const val PROJECT_EXTENSION = ".rom.json"
     const val ARDF_JSON_EXTENSION = ".ardf.json"
     const val LIVE_RESULTS_JSON_EXTENSION = ".live-results.json"
+    const val IOF_XML_EXTENSION = ".iof.xml"
     const val CSV_EXTENSION = ".csv"
 
     /** Returns a path with the standard Radio-Oracle desktop project extension. */
@@ -40,6 +41,13 @@ object DesktopProjectFilePaths {
         } else {
             path.resolveSibling("${path.fileName}$LIVE_RESULTS_JSON_EXTENSION")
         }
+
+    fun withIofXmlExtension(path: Path): Path =
+        if (path.fileName.toString().endsWith(IOF_XML_EXTENSION)) {
+            path
+        } else {
+            path.resolveSibling("${path.fileName}$IOF_XML_EXTENSION")
+        }
 }
 
 /** AWT-backed file chooser for desktop `.rom.json` project files. */
@@ -69,6 +77,10 @@ object DesktopFileDialogs {
     fun chooseExportLiveResultsJson(): Path? =
         chooseFile("Export Live Results JSON", FileDialog.SAVE, DesktopProjectFilePaths.LIVE_RESULTS_JSON_EXTENSION)
             ?.let(DesktopProjectFilePaths::withLiveResultsJsonExtension)
+
+    fun chooseExportIofXml(title: String): Path? =
+        chooseFile(title, FileDialog.SAVE, DesktopProjectFilePaths.IOF_XML_EXTENSION)
+            ?.let(DesktopProjectFilePaths::withIofXmlExtension)
 
     fun chooseImportCsv(title: String): Path? =
         chooseFile(title, FileDialog.LOAD, DesktopProjectFilePaths.CSV_EXTENSION)
