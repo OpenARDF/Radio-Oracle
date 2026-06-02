@@ -83,6 +83,45 @@ class FinishTicketRendererTest {
         assertEquals("No readout found for result missing.", error.message)
     }
 
+    @Test
+    fun formatsTicketMarkupAsPlainTextForSystemPrinters() {
+        val text = FinishTicketRenderer.render(raceData(), resultId = "matched")
+        val plainText = FinishTicketPlainTextFormatter.format(text)
+
+        val lines = plainText.lines()
+        assertEquals("          Ticket Race", lines[0])
+        assertEquals("", lines[1])
+        assertEquals("RUNNER Alice", lines[2])
+        assertEquals("SI: 123456 A-12", lines[3])
+        assertEquals("M21", lines[4])
+        assertEquals("", lines[5])
+        assertEquals("Start                   10:00:00", lines[6])
+        assertEquals("1 (Foxhole)OK  10:05:00 00:05:00", lines[7])
+        assertEquals("2 (32)MP       10:10:00 00:10:00", lines[8])
+        assertEquals("Finish         10:20:00 00:20:00", lines[9])
+        assertEquals("", lines[10])
+        assertEquals("           Run time: 00:20:00 OK", lines[11])
+        assertEquals("                      2 Controls", lines[12])
+    }
+
+    @Test
+    fun formatsUnmatchedTicketMarkupAsPlainTextForSystemPrinters() {
+        val text = FinishTicketRenderer.render(raceData(), resultId = "unmatched")
+        val plainText = FinishTicketPlainTextFormatter.format(text, charactersPerLine = 24)
+
+        val lines = plainText.lines()
+        assertEquals("      Ticket Race", lines[0])
+        assertEquals("", lines[1])
+        assertEquals("?", lines[2])
+        assertEquals("SI: 654321 ?", lines[3])
+        assertEquals("?", lines[4])
+        assertEquals("", lines[5])
+        assertEquals("1 (41) 11:05:00 00:00:00", lines[6])
+        assertEquals("", lines[7])
+        assertEquals(" Run time: 00:00:00 No ra", lines[8])
+        assertEquals("              0 Controls", lines[9])
+    }
+
     private fun raceData(longName: Boolean = false): EventRaceData {
         val race = EventRace(
             id = "race",

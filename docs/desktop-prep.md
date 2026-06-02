@@ -55,9 +55,10 @@ The current desktop beta decisions are:
 - Keep the local result/start/in-forest server loopback-only. LAN exposure needs
   a separate hardening decision covering bind address, operator warnings, and
   event-network security.
-- Keep printer transport out of the beta until a target transport and printer
-  profile are selected. The shared finish-ticket renderer remains the source
-  for future ticket output.
+- Use desktop system printing as the first beta printer transport. The WiFi
+  Epson target is visible to Java/CUPS as `EPSON ET-2720 Series`; the DYMO
+  system printer is not a Radio-Oracle target. Keep Bluetooth printing as a
+  later transport adapter unless a reliable JVM/macOS pairing path is selected.
 - Keep OCheckList/new-card import out of the beta until a verified sample file
   or schema is available.
 - Keep shared SQL persistence post-beta. The beta uses `.rom.json` files while
@@ -91,8 +92,8 @@ ARDFEvent-derived desktop parity gaps to track after the current live-result
 slices:
 
 - richer ARDFEvent-style start-list draw setup with configurable draw rows;
-- full ESC/POS ticket printer transport using the shared finish-ticket
-  renderer as the text source;
+- desktop system-printer ticket output using the shared finish-ticket renderer
+  as the text source, with Bluetooth printer transport as a later adapter;
 - OCheckList-style new-card import or equivalent race-day status import;
 - LAN-facing finish-line web display/API hardening for results when mobile data
   is not available.
