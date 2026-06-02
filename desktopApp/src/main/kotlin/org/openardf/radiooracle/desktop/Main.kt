@@ -214,7 +214,9 @@ fun main(args: Array<String>) = application {
     Window(onCloseRequest = { requestWindowClose() }, title = "Radio-Oracle Desktop") {
         val startupPath = remember(args.toList()) { args.firstOrNull()?.let(Path::of) }
         val projectSession = remember { DesktopProjectSession(DesktopProjectFiles) }
-        val localResultServer = remember { DesktopLocalResultServer { projectSession.currentProject } }
+        val localResultServer = remember {
+            DesktopLocalResultServer(projectSupplier = { projectSession.currentProject })
+        }
         val appCoroutineScope = rememberCoroutineScope()
         val startupStatus = remember(startupPath) { openStartupProject(projectSession, startupPath) }
         var projectFile by remember { mutableStateOf(projectSession.currentProject) }

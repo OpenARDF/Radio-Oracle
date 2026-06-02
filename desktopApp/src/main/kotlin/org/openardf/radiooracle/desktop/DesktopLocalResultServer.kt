@@ -2,17 +2,21 @@ package org.openardf.radiooracle.desktop
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import org.openardf.radiooracle.shared.event.EventInForestDetails
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.EventStartListDetails
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
+import java.time.Duration
+import java.time.LocalDateTime
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class DesktopLocalResultServer(
-    private val projectSupplier: () -> EventProjectFile?
+    private val projectSupplier: () -> EventProjectFile?,
+    private val raceElapsedSeconds: (String) -> Long = ::defaultRaceElapsedSeconds
 ) {
     private var server: HttpServer? = null
     private var executor: ExecutorService? = null
@@ -58,6 +62,16 @@ class DesktopLocalResultServer(
         nextServer.createContext("/starts.json") { exchange ->
             exchange.handleExactGet("/starts.json") {
                 exchange.sendText(startsJson(), "application/json; charset=utf-8")
+            }
+        }
+        nextServer.createContext("/in-forest") { exchange ->
+            exchange.handleExactGet("/in-forest") {
+                exchange.sendText(inForestHtml(), "text/html; charset=utf-8")
+            }
+        }
+        nextServer.createContext("/in-forest.json") { exchange ->
+            exchange.handleExactGet("/in-forest.json") {
+                exchange.sendText(inForestJson(), "application/json; charset=utf-8")
             }
         }
         nextServer.start()
@@ -170,6 +184,41 @@ class DesktopLocalResultServer(
         }
     }
 
+    fun inForestJson(): String {
+        val projectFile = projectSupplier()
+            ?: return """{"project_open":false,"race_name":"","in_forest":[]}"""
+        val raceData = projectFile.raceData
+        val details = EventInForestDetails.from(raceData, raceElapsedSeconds(raceData.race.startDateTimeIso))
+
+        return buildString {
+            append("""{"project_open":true""")
+            append(""","race_name":""")
+            appendJsonString(raceData.race.name)
+            append(""","in_forest_count":${details.inForestCount}""")
+            append(""","finished_count":${details.finishedCount}""")
+            append(""","not_started_count":${details.notStartedCount}""")
+            append(""","unscheduled_count":${details.unscheduledCount}""")
+            append(""","in_forest":[""")
+            details.inForestRows.forEachIndexed { index, row ->
+                if (index > 0) append(',')
+                append('{')
+                append(""""competitor":""")
+                appendJsonString(row.competitorName)
+                append(""","category":""")
+                appendJsonString(row.categoryName)
+                append(""","start_time":""")
+                appendJsonString(row.startTimeText)
+                append(""","elapsed":""")
+                appendJsonString(row.elapsedText)
+                append(""","limit":""")
+                appendJsonString(row.limitText)
+                append(""","over_limit":${row.overLimit}""")
+                append('}')
+            }
+            append("]}")
+        }
+    }
+
     private fun indexHtml(): String {
         val projectFile = projectSupplier()
         val raceName = projectFile?.raceData?.race?.name ?: "No project open"
@@ -270,7 +319,57 @@ class DesktopLocalResultServer(
             append("</tbody></table></body></html>")
         }
     }
+
+    private fun inForestHtml(): String {
+        val projectFile = projectSupplier()
+        val raceData = projectFile?.raceData
+        val raceName = raceData?.race?.name ?: "No project open"
+        val details = raceData?.let { EventInForestDetails.from(it, raceElapsedSeconds(it.race.startDateTimeIso)) }
+
+        return buildString {
+            append("<!doctype html><html><head><meta charset=\"utf-8\">")
+            append(autoRefreshMeta)
+            append("<title>Radio-Oracle In Forest</title>")
+            append("<style>body{font-family:sans-serif;margin:24px}table{border-collapse:collapse}")
+            append("td,th{border-bottom:1px solid #ddd;padding:6px 10px;text-align:left}")
+            append(".over{color:#b00020;font-weight:bold}</style>")
+            append("</head><body><h1>")
+            appendHtml(raceName)
+            append("</h1><p>In forest: ")
+            appendHtml((details?.inForestCount ?: 0).toString())
+            append(" | Finished: ")
+            appendHtml((details?.finishedCount ?: 0).toString())
+            append(" | Not started: ")
+            appendHtml((details?.notStartedCount ?: 0).toString())
+            append(" | Unscheduled: ")
+            appendHtml((details?.unscheduledCount ?: 0).toString())
+            append("</p><table><thead><tr><th>Competitor</th><th>Category</th><th>Start</th><th>Elapsed</th><th>Limit</th><th>Status</th></tr></thead><tbody>")
+            details?.inForestRows?.forEach { row ->
+                append("<tr><td>")
+                appendHtml(row.competitorName)
+                append("</td><td>")
+                appendHtml(row.categoryName)
+                append("</td><td>")
+                appendHtml(row.startTimeText)
+                append("</td><td>")
+                appendHtml(row.elapsedText)
+                append("</td><td>")
+                appendHtml(row.limitText)
+                append("</td><td")
+                if (row.overLimit) append(" class=\"over\"")
+                append(">")
+                appendHtml(if (row.overLimit) "Over limit" else "In forest")
+                append("</td></tr>")
+            }
+            append("</tbody></table></body></html>")
+        }
+    }
 }
+
+private fun defaultRaceElapsedSeconds(startDateTimeIso: String): Long =
+    runCatching {
+        Duration.between(LocalDateTime.parse(startDateTimeIso), LocalDateTime.now()).seconds
+    }.getOrDefault(0L)
 
 private fun HttpExchange.handleExactGet(path: String, block: () -> Unit) {
     when {

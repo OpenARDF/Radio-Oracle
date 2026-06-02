@@ -22,7 +22,7 @@ import java.net.URL
 class DesktopLocalResultServerTest {
     @Test
     fun rendersResultJsonForOpenProject() {
-        val server = DesktopLocalResultServer { projectFile() }
+        val server = DesktopLocalResultServer(projectSupplier = { projectFile() })
 
         val json = server.resultsJson()
 
@@ -34,14 +34,14 @@ class DesktopLocalResultServerTest {
 
     @Test
     fun rendersClosedProjectJson() {
-        val server = DesktopLocalResultServer { null }
+        val server = DesktopLocalResultServer(projectSupplier = { null })
 
         assertTrue(server.resultsJson().contains(""""project_open":false"""))
     }
 
     @Test
     fun rendersCategoryJsonForOpenProject() {
-        val server = DesktopLocalResultServer { projectFile() }
+        val server = DesktopLocalResultServer(projectSupplier = { projectFile() })
 
         val json = server.categoriesJson()
 
@@ -55,7 +55,7 @@ class DesktopLocalResultServerTest {
 
     @Test
     fun rendersStartJsonForOpenProject() {
-        val server = DesktopLocalResultServer { projectFile() }
+        val server = DesktopLocalResultServer(projectSupplier = { projectFile() })
 
         val json = server.startsJson()
 
@@ -68,8 +68,22 @@ class DesktopLocalResultServerTest {
     }
 
     @Test
+    fun rendersInForestJsonForOpenProject() {
+        val server = DesktopLocalResultServer({ inForestProjectFile() }) { 90 * 60 }
+
+        val json = server.inForestJson()
+
+        assertTrue(json.contains(""""project_open":true"""))
+        assertTrue(json.contains(""""race_name":"Local \"Race\"""""))
+        assertTrue(json.contains(""""in_forest_count":1"""))
+        assertTrue(json.contains(""""competitor":"RUNNER Alice (1)""""))
+        assertTrue(json.contains(""""elapsed":"80:00""""))
+        assertTrue(json.contains(""""over_limit":true"""))
+    }
+
+    @Test
     fun servesResultJsonOnLoopback() {
-        val server = DesktopLocalResultServer { projectFile() }
+        val server = DesktopLocalResultServer(projectSupplier = { projectFile() })
         try {
             val url = server.start()
             val connection = URL("${url}results.json").openConnection() as HttpURLConnection
@@ -85,7 +99,7 @@ class DesktopLocalResultServerTest {
 
     @Test
     fun servesAutoRefreshingResultHtmlOnLoopback() {
-        val server = DesktopLocalResultServer { projectFile() }
+        val server = DesktopLocalResultServer(projectSupplier = { projectFile() })
         try {
             val url = server.start()
             val connection = URL(url).openConnection() as HttpURLConnection
@@ -101,7 +115,7 @@ class DesktopLocalResultServerTest {
 
     @Test
     fun servesCategoryJsonOnLoopback() {
-        val server = DesktopLocalResultServer { projectFile() }
+        val server = DesktopLocalResultServer(projectSupplier = { projectFile() })
         try {
             val url = server.start()
             val connection = URL("${url}categories.json").openConnection() as HttpURLConnection
@@ -116,7 +130,7 @@ class DesktopLocalResultServerTest {
 
     @Test
     fun servesCategoryHtmlOnLoopback() {
-        val server = DesktopLocalResultServer { projectFile() }
+        val server = DesktopLocalResultServer(projectSupplier = { projectFile() })
         try {
             val url = server.start()
             val connection = URL("${url}categories").openConnection() as HttpURLConnection
@@ -135,7 +149,7 @@ class DesktopLocalResultServerTest {
 
     @Test
     fun servesStartJsonOnLoopback() {
-        val server = DesktopLocalResultServer { projectFile() }
+        val server = DesktopLocalResultServer(projectSupplier = { projectFile() })
         try {
             val url = server.start()
             val connection = URL("${url}starts.json").openConnection() as HttpURLConnection
@@ -151,7 +165,7 @@ class DesktopLocalResultServerTest {
 
     @Test
     fun servesStartHtmlOnLoopback() {
-        val server = DesktopLocalResultServer { projectFile() }
+        val server = DesktopLocalResultServer(projectSupplier = { projectFile() })
         try {
             val url = server.start()
             val connection = URL("${url}starts").openConnection() as HttpURLConnection
@@ -168,8 +182,43 @@ class DesktopLocalResultServerTest {
     }
 
     @Test
+    fun servesInForestJsonOnLoopback() {
+        val server = DesktopLocalResultServer({ inForestProjectFile() }) { 90 * 60 }
+        try {
+            val url = server.start()
+            val connection = URL("${url}in-forest.json").openConnection() as HttpURLConnection
+            val json = connection.inputStream.bufferedReader().readText()
+
+            assertTrue(connection.contentType == "application/json; charset=utf-8")
+            assertTrue(connection.getHeaderField("Cache-Control") == "no-store")
+            assertTrue(json.contains(""""in_forest_count":1"""))
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun servesInForestHtmlOnLoopback() {
+        val server = DesktopLocalResultServer({ inForestProjectFile() }) { 90 * 60 }
+        try {
+            val url = server.start()
+            val connection = URL("${url}in-forest").openConnection() as HttpURLConnection
+            val html = connection.inputStream.bufferedReader().readText()
+
+            assertTrue(connection.contentType == "text/html; charset=utf-8")
+            assertTrue(connection.getHeaderField("Cache-Control") == "no-store")
+            assertTrue(html.contains("<meta http-equiv=\"refresh\" content=\"5\">"))
+            assertTrue(html.contains("<title>Radio-Oracle In Forest</title>"))
+            assertTrue(html.contains("<td>RUNNER Alice (1)</td>"))
+            assertTrue(html.contains("class=\"over\">Over limit</td>"))
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
     fun rejectsUnknownLocalResultPaths() {
-        val server = DesktopLocalResultServer { projectFile() }
+        val server = DesktopLocalResultServer(projectSupplier = { projectFile() })
         try {
             val connection = URL("${server.start()}missing").openConnection() as HttpURLConnection
 
@@ -181,7 +230,7 @@ class DesktopLocalResultServerTest {
 
     @Test
     fun rejectsNonGetLocalResultRequests() {
-        val server = DesktopLocalResultServer { projectFile() }
+        val server = DesktopLocalResultServer(projectSupplier = { projectFile() })
         try {
             val connection = URL("${server.start()}results.json").openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
@@ -195,7 +244,7 @@ class DesktopLocalResultServerTest {
 
     @Test
     fun supportsHeadLocalResultRequests() {
-        val server = DesktopLocalResultServer { projectFile() }
+        val server = DesktopLocalResultServer(projectSupplier = { projectFile() })
         try {
             val connection = URL("${server.start()}results.json").openConnection() as HttpURLConnection
             connection.requestMethod = "HEAD"
@@ -259,6 +308,64 @@ class DesktopLocalResultServerTest {
                     EventCompetitorData(
                         competitorCategory = EventCompetitorCategory(competitor, category),
                         readoutData = EventReadoutData(result(), emptyList())
+                    )
+                ),
+                unmatchedReadoutData = emptyList()
+            )
+        )
+    }
+
+    private fun inForestProjectFile(): EventProjectFile {
+        val race = EventRace(
+            id = "race",
+            name = "Local \"Race\"",
+            apiKey = "",
+            startDateTimeIso = "2026-06-01T10:00",
+            raceType = RaceType.CLASSIC,
+            raceLevel = RaceLevel.PRACTICE,
+            raceBand = RaceBand.M80,
+            timeLimitSeconds = 60 * 60
+        )
+        val category = EventCategory(
+            id = "category",
+            raceId = race.id,
+            name = "M21",
+            isMan = true,
+            maxAge = null,
+            lengthMeters = 5_000,
+            climbMeters = 100,
+            order = 1,
+            differentProperties = false,
+            raceType = null,
+            raceBand = null,
+            timeLimitSeconds = null,
+            controlPointsString = ""
+        )
+        val competitor = EventCompetitor(
+            id = "competitor",
+            raceId = race.id,
+            categoryId = category.id,
+            firstName = "Alice",
+            lastName = "Runner",
+            club = "",
+            index = "",
+            isMan = true,
+            birthYear = null,
+            siNumber = 123456,
+            siRent = false,
+            startNumber = 1,
+            drawnStartTimeSeconds = 10 * 60
+        )
+
+        return EventProjectFile(
+            raceData = EventRaceData(
+                race = race,
+                categories = listOf(EventCategoryData(category, controlPoints = emptyList(), competitors = listOf(competitor))),
+                aliases = emptyList(),
+                competitorData = listOf(
+                    EventCompetitorData(
+                        competitorCategory = EventCompetitorCategory(competitor, category),
+                        readoutData = null
                     )
                 ),
                 unmatchedReadoutData = emptyList()
