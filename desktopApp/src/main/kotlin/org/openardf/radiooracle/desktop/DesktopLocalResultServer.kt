@@ -232,7 +232,9 @@ class DesktopLocalResultServer(
             append("td,th{border-bottom:1px solid #ddd;padding:6px 10px;text-align:left}</style>")
             append("</head><body><h1>")
             appendHtml(raceName)
-            append("</h1><table><thead><tr><th>Place</th><th>Competitor</th><th>Status</th><th>Points</th><th>Runtime</th></tr></thead><tbody>")
+            append("</h1>")
+            appendLocalNavigation()
+            append("<table><thead><tr><th>Place</th><th>Competitor</th><th>Status</th><th>Points</th><th>Runtime</th></tr></thead><tbody>")
             results.forEach { result ->
                 append("<tr><td>")
                 appendHtml(result.placeText)
@@ -263,7 +265,9 @@ class DesktopLocalResultServer(
             append("td,th{border-bottom:1px solid #ddd;padding:6px 10px;text-align:left}</style>")
             append("</head><body><h1>")
             appendHtml(raceName)
-            append("</h1><table><thead><tr><th>Category</th><th>Competitors</th><th>Results</th></tr></thead><tbody>")
+            append("</h1>")
+            appendLocalNavigation()
+            append("<table><thead><tr><th>Category</th><th>Competitors</th><th>Results</th></tr></thead><tbody>")
             raceData?.categories
                 ?.sortedWith(compareBy({ it.category.order }, { it.category.name }))
                 ?.forEach { categoryData ->
@@ -298,7 +302,9 @@ class DesktopLocalResultServer(
             append("td,th{border-bottom:1px solid #ddd;padding:6px 10px;text-align:left}</style>")
             append("</head><body><h1>")
             appendHtml(raceName)
-            append("</h1><p>Scheduled: ")
+            append("</h1>")
+            appendLocalNavigation()
+            append("<p>Scheduled: ")
             appendHtml((details?.scheduledCount ?: 0).toString())
             append(" | Unscheduled: ")
             appendHtml((details?.unscheduledCount ?: 0).toString())
@@ -335,7 +341,9 @@ class DesktopLocalResultServer(
             append(".over{color:#b00020;font-weight:bold}</style>")
             append("</head><body><h1>")
             appendHtml(raceName)
-            append("</h1><p>In forest: ")
+            append("</h1>")
+            appendLocalNavigation()
+            append("<p>In forest: ")
             appendHtml((details?.inForestCount ?: 0).toString())
             append(" | Finished: ")
             appendHtml((details?.finishedCount ?: 0).toString())
@@ -363,6 +371,11 @@ class DesktopLocalResultServer(
             }
             append("</tbody></table></body></html>")
         }
+    }
+
+    private fun StringBuilder.appendLocalNavigation() {
+        append("<nav><a href=\"/\">Results</a> | <a href=\"/categories\">Categories</a> | ")
+        append("<a href=\"/starts\">Starts</a> | <a href=\"/in-forest\">In Forest</a></nav>")
     }
 }
 
