@@ -59,8 +59,12 @@ The current desktop beta decisions are:
   event-network security.
 - Use desktop system printing as the first beta printer transport. The WiFi
   Epson target is visible to Java/CUPS as `EPSON ET-2720 Series`; the DYMO
-  system printer is not a Radio-Oracle target. Keep Bluetooth printing as a
-  later transport adapter unless a reliable JVM/macOS pairing path is selected.
+  system printer is not a Radio-Oracle target. ARDFEvent supports serial,
+  native USB, and dummy ESC/POS desktop printer transports, but not Bluetooth;
+  keep desktop Bluetooth printing as a post-beta transport adapter unless a
+  reliable JVM/macOS pairing path is selected. Android Bluetooth ESC/POS
+  printing remains pre-beta work for the Android app using the available
+  Bluetooth printer hardware.
   The readout ticket preview includes a `Print` action that submits the shared
   ticket text through this system-printer path.
 - Keep OCheckList/new-card import out of the beta until a verified sample file
@@ -97,7 +101,8 @@ slices:
 
 - richer ARDFEvent-style start-list draw setup with configurable draw rows;
 - desktop system-printer ticket output using the shared finish-ticket renderer
-  as the text source, with Bluetooth printer transport as a later adapter;
+  as the text source, with desktop Bluetooth printer transport as a post-beta
+  adapter;
 - OCheckList-style new-card import or equivalent race-day status import;
 - LAN-facing finish-line web display/API hardening for results when mobile data
   is not available.

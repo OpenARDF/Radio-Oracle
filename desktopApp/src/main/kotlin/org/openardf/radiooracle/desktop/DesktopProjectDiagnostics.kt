@@ -54,7 +54,7 @@ data class DesktopProjectDiagnostics(
                 } ?: "No project open",
                 betaLimitations = listOf(
                     "Hardened race-day SPORTident replacement remains post-beta.",
-                    "Bluetooth printer transport remains post-beta.",
+                    "Desktop Bluetooth printer transport remains post-beta.",
                     "Full Android result-service configuration remains post-beta.",
                     "Project storage is file-backed .rom.json, not shared SQL."
                 )

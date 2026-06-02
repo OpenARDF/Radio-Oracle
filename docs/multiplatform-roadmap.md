@@ -121,6 +121,13 @@ handling polish, richer status/error surfaces, and export coverage. A plugin
 system should remain long-term unless a concrete integration cannot be handled
 through shared services or ordinary platform UI.
 
+ARDFEvent's desktop printer setup supports serial, native USB, and dummy
+ESC/POS transports; it does not provide a Bluetooth printer transport. For
+Radio-Oracle, Android Bluetooth ESC/POS printing should still be validated and
+hardened before beta using the available Bluetooth printer hardware. Desktop
+Bluetooth printer support should remain post-beta unless a reliable desktop
+Bluetooth transport is selected separately.
+
 The concrete desktop boundary, storage approach, UI direction, and packaging
 default are tracked in [`desktop-prep.md`](desktop-prep.md).
 
@@ -246,6 +253,8 @@ Goal: add platform-specific capabilities after the event-admin beta is stable.
   settings can overwrite station configuration and may clear backup data, and
   it must refuse to report success unless the station re-reads as READOUT.
 - Add desktop printing behind a platform print interface.
+- Validate and harden Android Bluetooth ESC/POS printing before beta against the
+  target Bluetooth printer hardware.
 - Add non-ROBis live result providers after their network/result-service logic
   is isolated from Android WorkManager.
 
@@ -279,11 +288,13 @@ loopback-display slices while these boundaries remain in force:
 
 - Local web display stays bound to loopback until LAN exposure is hardened and
   explicitly selected.
+- Android Bluetooth printer transport is pre-beta hardware validation work for
+  the Android app.
 - Desktop printer transport starts with system printing. The current known
   target is the WiFi Epson printer visible as `EPSON ET-2720 Series`; Bluetooth
-  printer support remains a separate adapter after the system-printer path is
-  validated. The desktop readout ticket preview can submit the shared ticket
-  text through the selected system printer.
+  printer support remains a post-beta separate adapter because ARDFEvent does
+  not provide a desktop Bluetooth printer precedent. The desktop readout ticket
+  preview can submit the shared ticket text through the selected system printer.
 - OCheckList/new-card import waits for a verified sample file or schema.
 - Shared SQL waits until after the file-backed desktop beta.
 - SPORTident station writes wait for verified write/read-back transactions on
