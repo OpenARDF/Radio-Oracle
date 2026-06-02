@@ -60,6 +60,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCompetitorDetails
 import org.openardf.radiooracle.shared.event.EventInForestDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutDetails
+import org.openardf.radiooracle.shared.event.EventLastReadoutSeverity
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventRaceDetails
@@ -1937,19 +1938,27 @@ private fun ReadoutDetailsPanel(
 
 @Composable
 private fun LastReadoutStatusPanel(lastReadout: EventLastReadoutDetails) {
+    val statusColor = when (lastReadout.severity) {
+        EventLastReadoutSeverity.None -> DesktopPalette.Black
+        EventLastReadoutSeverity.Normal -> DesktopPalette.Connected
+        EventLastReadoutSeverity.Warning -> DesktopPalette.Warning
+        EventLastReadoutSeverity.Error -> DesktopPalette.Error
+    }
+
     DetailHeaderRow(listOf("Last SI", "Competitor", "Status", "Read at"))
-    DetailGridRow(
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (lastReadout.hasReadout) {
-            listOf(
-                lastReadout.siNumberText.ifBlank { "None" },
-                lastReadout.competitorName.ifBlank { "Unmatched" },
-                lastReadout.statusLabel,
-                lastReadout.readoutDateTimeIso
-            )
+            DetailValue(lastReadout.siNumberText.ifBlank { "None" }, Modifier.weight(1f), color = statusColor)
+            DetailValue(lastReadout.competitorName.ifBlank { "Unmatched" }, Modifier.weight(1f), color = statusColor)
+            DetailValue(lastReadout.statusLabel, Modifier.weight(1f), color = statusColor)
+            DetailValue(lastReadout.readoutDateTimeIso, Modifier.weight(1f), color = statusColor)
         } else {
-            listOf("None", "None", "None", "None")
+            DetailValue("None", Modifier.weight(1f), color = statusColor)
+            DetailValue("None", Modifier.weight(1f), color = statusColor)
+            DetailValue("None", Modifier.weight(1f), color = statusColor)
+            DetailValue("None", Modifier.weight(1f), color = statusColor)
         }
-    )
+    }
 }
 
 /** Shows a compact manual readout entry row for desktop beta testing. */
@@ -3484,6 +3493,23 @@ private fun DetailGridRow(values: List<String>) {
             )
         }
     }
+}
+
+@Composable
+private fun DetailValue(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = DesktopPalette.Black
+) {
+    Text(
+        text = text,
+        modifier = modifier,
+        color = color,
+        fontSize = 13.sp,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis
+    )
 }
 
 /** Displays a compact label/value pair for read-only desktop event details. */

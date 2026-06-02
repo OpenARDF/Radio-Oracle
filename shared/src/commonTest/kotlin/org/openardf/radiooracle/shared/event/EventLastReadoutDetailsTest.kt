@@ -16,6 +16,7 @@ class EventLastReadoutDetailsTest {
 
         assertFalse(details.hasReadout)
         assertEquals("", details.siNumberText)
+        assertEquals(EventLastReadoutSeverity.None, details.severity)
     }
 
     @Test
@@ -39,6 +40,7 @@ class EventLastReadoutDetailsTest {
         assertEquals("2222", details.siNumberText)
         assertEquals("RUNNER Bob", details.competitorName)
         assertEquals("Mispunched", details.statusLabel)
+        assertEquals(EventLastReadoutSeverity.Warning, details.severity)
     }
 
     @Test
@@ -56,6 +58,39 @@ class EventLastReadoutDetailsTest {
         assertEquals("3333", details.siNumberText)
         assertEquals("", details.competitorName)
         assertEquals("OK", details.statusLabel)
+        assertEquals(EventLastReadoutSeverity.Error, details.severity)
+    }
+
+    @Test
+    fun marksOkMatchedReadoutNormal() {
+        val details = EventLastReadoutDetails.from(
+            raceData(
+                competitorReadouts = listOf(
+                    competitorData("comp-1", "Alice", readout("ok", "comp-1", 1111, "2026-06-01T10:00"))
+                ),
+                unmatchedReadouts = emptyList()
+            )
+        )
+
+        assertEquals(EventLastReadoutSeverity.Normal, details.severity)
+    }
+
+    @Test
+    fun marksErrorStatusAsError() {
+        val details = EventLastReadoutDetails.from(
+            raceData(
+                competitorReadouts = listOf(
+                    competitorData(
+                        "comp-1",
+                        "Alice",
+                        readout("error", "comp-1", 1111, "2026-06-01T10:00", ResultStatus.ERROR)
+                    )
+                ),
+                unmatchedReadouts = emptyList()
+            )
+        )
+
+        assertEquals(EventLastReadoutSeverity.Error, details.severity)
     }
 
     private fun raceData(

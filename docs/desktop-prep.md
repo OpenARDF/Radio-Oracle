@@ -19,7 +19,8 @@ finish table:
   configured in READOUT/SI MASTER mode;
 - choose whether duplicate SI-card reads are ignored, replaced, or stored as
   new readouts;
-- show the most recent readout SI card, competitor, status, and timestamp;
+- show the most recent readout SI card, competitor, status, timestamp, and
+  warning/error state;
 - inspect competitors in drawn start-time order in a Start List desktop view;
 - assign unmatched readouts to competitors;
 - preview shared finish-ticket text for readouts before desktop printer
@@ -71,7 +72,7 @@ slices:
   variants;
 - full ESC/POS ticket printer transport using the shared finish-ticket
   renderer as the text source;
-- richer readout operator status, including audible/visible error state;
+- richer readout operator status, including audible error alerts;
 - OCheckList-style DNS/new-card import or equivalent race-day status import;
 - LAN-facing finish-line web display/API hardening for results when mobile data
   is not available.

@@ -1,11 +1,21 @@
 package org.openardf.radiooracle.shared.event
 
+import org.openardf.radiooracle.shared.domain.ResultStatus
+
+enum class EventLastReadoutSeverity {
+    None,
+    Normal,
+    Warning,
+    Error
+}
+
 data class EventLastReadoutDetails(
     val hasReadout: Boolean,
     val readoutDateTimeIso: String,
     val siNumberText: String,
     val competitorName: String,
-    val statusLabel: String
+    val statusLabel: String,
+    val severity: EventLastReadoutSeverity
 ) {
     companion object {
         fun from(raceData: EventRaceData): EventLastReadoutDetails {
@@ -28,7 +38,8 @@ data class EventLastReadoutDetails(
                 readoutDateTimeIso = result.readoutDateTimeIso,
                 siNumberText = result.siNumber?.toString() ?: "",
                 competitorName = lastReadout.competitorName,
-                statusLabel = result.resultStatus.toDisplayLabel()
+                statusLabel = result.resultStatus.toDisplayLabel(),
+                severity = result.resultStatus.toLastReadoutSeverity(lastReadout.competitorName.isBlank())
             )
         }
 
@@ -38,7 +49,8 @@ data class EventLastReadoutDetails(
                 readoutDateTimeIso = "",
                 siNumberText = "",
                 competitorName = "",
-                statusLabel = ""
+                statusLabel = "",
+                severity = EventLastReadoutSeverity.None
             )
     }
 }
@@ -47,3 +59,11 @@ private data class LastReadoutCandidate(
     val readoutData: EventReadoutData,
     val competitorName: String
 )
+
+private fun ResultStatus.toLastReadoutSeverity(unmatched: Boolean): EventLastReadoutSeverity =
+    when {
+        this == ResultStatus.ERROR -> EventLastReadoutSeverity.Error
+        unmatched -> EventLastReadoutSeverity.Error
+        this == ResultStatus.OK -> EventLastReadoutSeverity.Normal
+        else -> EventLastReadoutSeverity.Warning
+    }
