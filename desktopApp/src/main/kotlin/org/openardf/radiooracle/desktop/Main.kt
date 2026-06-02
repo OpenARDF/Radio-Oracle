@@ -1119,11 +1119,12 @@ fun main(args: Array<String>) = application {
             },
             onDrawStartList = { interval ->
                 runCatching {
-                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                    val drawnProject = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.drawStartList(currentProject, interval)
                     }
+                    projectFile = drawnProject
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    projectStatusText = "Unsaved changes."
+                    projectStatusText = startListDrawStatusText(EventStartListDetails.from(drawnProject.raceData))
                 }.onFailure { error ->
                     projectStatusText = "Draw failed: ${error.message ?: error::class.simpleName}"
                 }
@@ -3782,6 +3783,15 @@ private fun importStatusText(action: String, importedRows: Int, invalidRows: Int
     } else {
         "$action $importedRows rows from $fileName; skipped $invalidRows invalid rows."
     }
+
+private fun startListDrawStatusText(details: EventStartListDetails): String {
+    val scheduledText = "${details.scheduledCount} scheduled"
+    return if (details.unscheduledCount == 0) {
+        "Drew start list; $scheduledText."
+    } else {
+        "Drew start list; $scheduledText, ${details.unscheduledCount} without start times."
+    }
+}
 
 private fun competitorImportStatusText(importedRows: Int, updatedRows: Int, invalidRows: Int, fileName: String): String {
     val summary = "Imported $importedRows and updated $updatedRows ARDFEvent competitor rows from $fileName."
