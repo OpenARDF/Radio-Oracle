@@ -27,7 +27,11 @@ data class EventLastReadoutDetails(
                 )
             }
             val unmatched = raceData.unmatchedReadoutData.map { readoutData ->
-                LastReadoutCandidate(readoutData = readoutData, competitorName = "")
+                LastReadoutCandidate(
+                    readoutData = readoutData,
+                    competitorName = readoutData.result.cardName ?: "",
+                    unmatched = true
+                )
             }
             val lastReadout = (matched + unmatched).maxByOrNull { it.readoutData.result.readoutDateTimeIso }
                 ?: return empty()
@@ -38,8 +42,8 @@ data class EventLastReadoutDetails(
                 readoutDateTimeIso = result.readoutDateTimeIso,
                 siNumberText = result.siNumber?.toString() ?: "",
                 competitorName = lastReadout.competitorName,
-                statusLabel = result.resultStatus.toDisplayLabel(),
-                severity = result.resultStatus.toLastReadoutSeverity(lastReadout.competitorName.isBlank())
+                statusLabel = result.resultStatus.toLastReadoutStatusLabel(lastReadout.unmatched),
+                severity = result.resultStatus.toLastReadoutSeverity(lastReadout.unmatched)
             )
         }
 
@@ -57,8 +61,18 @@ data class EventLastReadoutDetails(
 
 private data class LastReadoutCandidate(
     val readoutData: EventReadoutData,
-    val competitorName: String
+    val competitorName: String,
+    val unmatched: Boolean = false
 )
+
+private fun ResultStatus.toLastReadoutStatusLabel(unmatched: Boolean): String {
+    val label = toDisplayLabel()
+    return when {
+        !unmatched -> label
+        this == ResultStatus.OK -> "Unmatched"
+        else -> "Unmatched: $label"
+    }
+}
 
 private fun ResultStatus.toLastReadoutSeverity(unmatched: Boolean): EventLastReadoutSeverity =
     when {

@@ -57,7 +57,51 @@ class EventLastReadoutDetailsTest {
         assertTrue(details.hasReadout)
         assertEquals("3333", details.siNumberText)
         assertEquals("", details.competitorName)
-        assertEquals("OK", details.statusLabel)
+        assertEquals("Unmatched", details.statusLabel)
+        assertEquals(EventLastReadoutSeverity.Error, details.severity)
+    }
+
+    @Test
+    fun returnsCardNameForMostRecentUnmatchedReadoutWhenAvailable() {
+        val details = EventLastReadoutDetails.from(
+            raceData(
+                competitorReadouts = emptyList(),
+                unmatchedReadouts = listOf(
+                    readout(
+                        id = "unmatched",
+                        competitorId = null,
+                        siNumber = 3333,
+                        readoutDateTimeIso = "2026-06-01T10:10",
+                        cardName = "Runner Alice"
+                    )
+                )
+            )
+        )
+
+        assertTrue(details.hasReadout)
+        assertEquals("Runner Alice", details.competitorName)
+        assertEquals("Unmatched", details.statusLabel)
+        assertEquals(EventLastReadoutSeverity.Error, details.severity)
+    }
+
+    @Test
+    fun keepsUnmatchedNonOkStatusVisible() {
+        val details = EventLastReadoutDetails.from(
+            raceData(
+                competitorReadouts = emptyList(),
+                unmatchedReadouts = listOf(
+                    readout(
+                        id = "unmatched",
+                        competitorId = null,
+                        siNumber = 3333,
+                        readoutDateTimeIso = "2026-06-01T10:10",
+                        status = ResultStatus.MISPUNCHED
+                    )
+                )
+            )
+        )
+
+        assertEquals("Unmatched: Mispunched", details.statusLabel)
         assertEquals(EventLastReadoutSeverity.Error, details.severity)
     }
 
@@ -142,7 +186,8 @@ class EventLastReadoutDetailsTest {
         competitorId: String?,
         siNumber: Int?,
         readoutDateTimeIso: String,
-        status: ResultStatus = ResultStatus.OK
+        status: ResultStatus = ResultStatus.OK,
+        cardName: String? = null
     ): EventReadoutData =
         EventReadoutData(
             result = EventResult(
@@ -160,7 +205,8 @@ class EventLastReadoutDetailsTest {
                 points = 0,
                 runTimeSeconds = 600,
                 modified = false,
-                sent = false
+                sent = false,
+                cardName = cardName
             ),
             punches = emptyList()
         )
