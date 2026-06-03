@@ -49,6 +49,8 @@ import androidx.compose.ui.window.application
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.desktop.printing.DesktopPrinterDiagnostics
 import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinter
@@ -244,11 +246,14 @@ fun main(args: Array<String>) = application {
         var localResultServerUrl by remember { mutableStateOf<String?>(null) }
         var raceClockTick by remember { mutableStateOf(0L) }
         var printerDiagnostics by remember { mutableStateOf(DesktopPrinterDiagnostics.from(emptyList())) }
+        val siPortMutex = remember { Mutex() }
 
         LaunchedEffect(Unit) {
             while (true) {
                 val nextSiReaderState = withContext(Dispatchers.IO) {
-                    detectDesktopSiReaderState()
+                    siPortMutex.withLock {
+                        detectDesktopSiReaderState()
+                    }
                 }
                 siReaderState = nextSiReaderState
                 if (
@@ -352,7 +357,9 @@ fun main(args: Array<String>) = application {
             appCoroutineScope.launch {
                 val downloadResult = runCatching {
                     withContext(Dispatchers.IO) {
-                        downloadDesktopSportIdentCardReadout()
+                        siPortMutex.withLock {
+                            downloadDesktopSportIdentCardReadout()
+                        }
                     }
                 }
                 downloadResult.onSuccess { download ->
@@ -408,56 +415,58 @@ fun main(args: Array<String>) = application {
             appCoroutineScope.launch {
                 val result = runCatching {
                     withContext(Dispatchers.IO) {
-                        DesktopSportIdentReadoutService().downloadUntilTimeout(
-                            maxCards = Int.MAX_VALUE,
-                            onDownload = { download ->
-                                appCoroutineScope.launch {
-                                    runCatching {
-                                        when (appendSportIdentDownload(download)) {
-                                            DesktopSportIdentAppendOutcome.Added -> {
-                                                projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
-                                                siDownloadStatusText =
-                                                    "Continuous SI readout running; waiting for the next card."
-                                            }
-                                            DesktopSportIdentAppendOutcome.DuplicateIgnored -> {
-                                                projectStatusText =
-                                                    "SI card ${download.readout.siNumber} was already downloaded."
-                                                if (isReadoutAlertSoundEnabled) {
-                                                    beepDesktopReadoutAlert()
+                        siPortMutex.withLock {
+                            DesktopSportIdentReadoutService().downloadUntilTimeout(
+                                maxCards = Int.MAX_VALUE,
+                                onDownload = { download ->
+                                    appCoroutineScope.launch {
+                                        runCatching {
+                                            when (appendSportIdentDownload(download)) {
+                                                DesktopSportIdentAppendOutcome.Added -> {
+                                                    projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
+                                                    siDownloadStatusText =
+                                                        "Continuous SI readout running; waiting for the next card."
                                                 }
-                                                siDownloadStatusText =
-                                                    "Duplicate SI card ignored; continuous SI readout is still running."
+                                                DesktopSportIdentAppendOutcome.DuplicateIgnored -> {
+                                                    projectStatusText =
+                                                        "SI card ${download.readout.siNumber} was already downloaded."
+                                                    if (isReadoutAlertSoundEnabled) {
+                                                        beepDesktopReadoutAlert()
+                                                    }
+                                                    siDownloadStatusText =
+                                                        "Duplicate SI card ignored; continuous SI readout is still running."
+                                                }
+                                                DesktopSportIdentAppendOutcome.DuplicateReplaced -> {
+                                                    projectStatusText =
+                                                        "Replaced existing readout for SI card ${download.readout.siNumber}."
+                                                    siDownloadStatusText =
+                                                        "Duplicate SI card replaced; waiting for the next card."
+                                                }
+                                                DesktopSportIdentAppendOutcome.DuplicateCreatedNew -> {
+                                                    projectStatusText =
+                                                        "Created new duplicate readout for SI card ${download.readout.siNumber}."
+                                                    siDownloadStatusText =
+                                                        "Duplicate SI card stored as a new readout; waiting for the next card."
+                                                }
                                             }
-                                            DesktopSportIdentAppendOutcome.DuplicateReplaced -> {
-                                                projectStatusText =
-                                                    "Replaced existing readout for SI card ${download.readout.siNumber}."
-                                                siDownloadStatusText =
-                                                    "Duplicate SI card replaced; waiting for the next card."
-                                            }
-                                            DesktopSportIdentAppendOutcome.DuplicateCreatedNew -> {
-                                                projectStatusText =
-                                                    "Created new duplicate readout for SI card ${download.readout.siNumber}."
-                                                siDownloadStatusText =
-                                                    "Duplicate SI card stored as a new readout; waiting for the next card."
-                                            }
+                                        }.onFailure { error ->
+                                            projectStatusText = "SI download failed: ${error.message ?: error::class.simpleName}"
+                                            siDownloadStatusText = projectStatusText
+                                            stopRequested.set(true)
                                         }
-                                    }.onFailure { error ->
-                                        projectStatusText = "SI download failed: ${error.message ?: error::class.simpleName}"
-                                        siDownloadStatusText = projectStatusText
-                                        stopRequested.set(true)
                                     }
-                                }
-                            },
-                            onTimeout = {
-                                appCoroutineScope.launch {
-                                    if (!stopRequested.get()) {
-                                        siDownloadStatusText = "Continuous SI readout timed out waiting for a card."
-                                        projectStatusText = siDownloadStatusText ?: projectStatusText
+                                },
+                                onTimeout = {
+                                    appCoroutineScope.launch {
+                                        if (!stopRequested.get()) {
+                                            siDownloadStatusText = "Continuous SI readout timed out waiting for a card."
+                                            projectStatusText = siDownloadStatusText ?: projectStatusText
+                                        }
                                     }
-                                }
-                            },
-                            shouldContinue = { !stopRequested.get() }
-                        )
+                                },
+                                shouldContinue = { !stopRequested.get() }
+                            )
+                        }
                     }
                 }
                 result.onFailure { error ->
