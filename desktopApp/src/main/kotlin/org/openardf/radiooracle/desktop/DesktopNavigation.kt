@@ -77,6 +77,8 @@ data class DesktopNavState(
                 copy(submenuStack = submenuStack + item.id)
             item.section != null ->
                 copy(selectedSection = item.section, selectedItemId = item.id)
+            item.action != null ->
+                copy(selectedItemId = item.id)
             else -> this
         }
 

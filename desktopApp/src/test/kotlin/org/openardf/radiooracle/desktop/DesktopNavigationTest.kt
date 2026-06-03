@@ -113,4 +113,24 @@ class DesktopNavigationTest {
         assertFalse(helpActions.first { it.label == "Logs" }.requiresEventFile)
         assertFalse(helpActions.first { it.label == "About Radio-Oracle" }.requiresEventFile)
     }
+
+    @Test
+    fun actionSelectionUpdatesBreadcrumbWithoutChangingContentSection() {
+        val state = DesktopNavState()
+            .switchWorkflow(DesktopWorkflow.SettingsHelp)
+            .enter(DesktopNavigation.rootItems(DesktopWorkflow.SettingsHelp).first { it.label == "Help" })
+            .enter(DesktopNavigation.currentItems(
+                DesktopNavState(
+                    workflow = DesktopWorkflow.SettingsHelp,
+                    submenuStack = listOf("settings.help"),
+                    selectedSection = DesktopSection.Settings,
+                    selectedItemId = "settings.app"
+                )
+            ).first { it.label == "About Radio-Oracle" })
+
+        assertEquals(DesktopSection.Settings, state.selectedSection)
+        assertEquals("settings.about", state.selectedItemId)
+        assertEquals("About Radio-Oracle", DesktopNavigation.selectedLabel(state))
+        assertEquals("Help/About/App Settings > Help > About Radio-Oracle", DesktopNavigation.breadcrumb(state))
+    }
 }

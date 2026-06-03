@@ -1564,7 +1564,10 @@ private fun RadioOManagerDesktopApp(
                             when {
                                 item.children.isNotEmpty() -> navState = navState.enter(item)
                                 item.section != null -> navState = navState.enter(item)
-                                item.action != null -> onNavAction(item.action)
+                                item.action != null -> {
+                                    navState = navState.enter(item)
+                                    onNavAction(item.action)
+                                }
                             }
                         }
                     )
