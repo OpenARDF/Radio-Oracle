@@ -42,7 +42,9 @@ enum class DesktopNavAction {
     StopContinuousSiReadout,
     StartLocalResultDisplay,
     StopLocalResultDisplay,
-    SendRobis
+    SendRobis,
+    ShowDebugLogHelp,
+    ShowAbout
 }
 
 data class DesktopNavItem(
@@ -242,8 +244,8 @@ object DesktopNavigation {
                     workflow,
                     listOf(
                         item("settings.beta-scope", "Beta Scope", workflow, DesktopSection.Settings),
-                        item("settings.logs", "Logs", workflow, DesktopSection.Settings),
-                        item("settings.about", "About Radio-Oracle", workflow, DesktopSection.Settings)
+                        action("settings.logs", "Logs", workflow, DesktopNavAction.ShowDebugLogHelp, requiresEventFile = false),
+                        action("settings.about", "About Radio-Oracle", workflow, DesktopNavAction.ShowAbout, requiresEventFile = false)
                     )
                 )
             )

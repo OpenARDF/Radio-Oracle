@@ -100,4 +100,17 @@ class DesktopNavigationTest {
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFile }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.CloseEventFile }.requiresEventFile)
     }
+
+    @Test
+    fun helpMenuExposesConcreteActions() {
+        val helpActions = DesktopNavigation.rootItems(DesktopWorkflow.SettingsHelp)
+            .first { it.label == "Help" }
+            .children
+
+        assertEquals(DesktopSection.Settings, helpActions.first { it.label == "Beta Scope" }.section)
+        assertEquals(DesktopNavAction.ShowDebugLogHelp, helpActions.first { it.label == "Logs" }.action)
+        assertEquals(DesktopNavAction.ShowAbout, helpActions.first { it.label == "About Radio-Oracle" }.action)
+        assertFalse(helpActions.first { it.label == "Logs" }.requiresEventFile)
+        assertFalse(helpActions.first { it.label == "About Radio-Oracle" }.requiresEventFile)
+    }
 }

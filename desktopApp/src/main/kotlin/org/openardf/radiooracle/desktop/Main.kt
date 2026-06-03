@@ -245,6 +245,7 @@ fun main(args: Array<String>) = application {
         var isReadoutAlertSoundEnabled by remember { mutableStateOf(true) }
         var areAliasesEnabled by remember { mutableStateOf(true) }
         var localResultServerUrl by remember { mutableStateOf<String?>(null) }
+        var isAboutDialogVisible by remember { mutableStateOf(false) }
         var raceClockTick by remember { mutableStateOf(0L) }
         var printerDiagnostics by remember { mutableStateOf(DesktopPrinterDiagnostics.from(emptyList())) }
         val siPortMutex = remember { Mutex() }
@@ -878,6 +879,8 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.NewEventFile,
                 DesktopNavAction.OpenEventFile,
                 DesktopNavAction.ImportAndroidRaceBackup -> true
+                DesktopNavAction.ShowDebugLogHelp,
+                DesktopNavAction.ShowAbout -> true
                 DesktopNavAction.SaveEventFile -> projectFile != null && hasUnsavedChanges
                 DesktopNavAction.StopContinuousSiReadout -> isContinuousSiReadoutActive
                 DesktopNavAction.StartLocalResultDisplay -> projectFile != null && localResultServerUrl == null
@@ -941,6 +944,12 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Local result display stopped."
                 }
                 DesktopNavAction.SendRobis -> sendRobisLiveResults()
+                DesktopNavAction.ShowDebugLogHelp -> {
+                    projectStatusText = "Desktop logs are not exposed yet. Android debug-log extraction is documented in docs/debug-logging.md."
+                }
+                DesktopNavAction.ShowAbout -> {
+                    isAboutDialogVisible = true
+                }
             }
         }
 
@@ -971,6 +980,9 @@ fun main(args: Array<String>) = application {
                 message = warning.warningMessage ?: warning.statusText,
                 onDismiss = { pendingSiModeWarning = null }
             )
+        }
+        if (isAboutDialogVisible) {
+            AboutRadioOracleDialog(onDismiss = { isAboutDialogVisible = false })
         }
 
         RadioOManagerDesktopApp(
@@ -1437,6 +1449,27 @@ private fun UnsavedChangesDialog(
                 Button(onClick = onCancel) {
                     Text("Cancel")
                 }
+            }
+        }
+    )
+}
+
+@Composable
+private fun AboutRadioOracleDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("About Radio-Oracle") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Radio-Oracle Desktop")
+                Text("Desktop event administration beta for radio orienteering events.")
+                Text("Maintained by OpenARDF.")
+                Text("GitHub: https://github.com/OpenARDF/Radio-Oracle")
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("OK")
             }
         }
     )
