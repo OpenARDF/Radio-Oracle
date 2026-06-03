@@ -4,10 +4,13 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 object DesktopDateTimeText {
     private val DateFormatter: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
     private val TimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
+    private val DisplayFormatter: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("EEE, MMM d, yyyy h:mm a", Locale.US)
 
     fun defaultStartDateTime(): LocalDateTime =
         LocalDateTime.now().withSecond(0).withNano(0)
@@ -20,6 +23,12 @@ object DesktopDateTimeText {
 
     fun isoText(value: LocalDateTime): String =
         value.withNano(0).toString()
+
+    fun displayText(value: LocalDateTime): String =
+        value.withNano(0).format(DisplayFormatter)
+
+    fun displayIsoOrRaw(value: String): String =
+        parseIsoOrNull(value)?.let(::displayText) ?: value
 
     fun parseIsoOrNull(value: String): LocalDateTime? =
         runCatching { LocalDateTime.parse(value.trim()).withNano(0) }.getOrNull()

@@ -1972,7 +1972,7 @@ private fun SectionWorkspace(
         )
         Text(
             text = if (projectFile != null) {
-                "${projectFile.raceData.race.startDateTimeIso} - $projectStatusText"
+                "${DesktopDateTimeText.displayIsoOrRaw(projectFile.raceData.race.startDateTimeIso)} - $projectStatusText"
             } else {
                 projectStatusText
             },
@@ -2006,7 +2006,12 @@ private fun SettingsDetailsPanel(
         DetailRow("Schema", diagnostics.schemaText.ifBlank { "None" })
         DetailRow("Race ID", diagnostics.raceId.ifBlank { "None" })
         DetailRow("Race name", diagnostics.raceName.ifBlank { "None" })
-        DetailRow("Start", diagnostics.startDateTimeIso.ifBlank { "None" })
+        DetailRow(
+            "Start",
+            diagnostics.startDateTimeIso.takeIf { it.isNotBlank() }
+                ?.let(DesktopDateTimeText::displayIsoOrRaw)
+                ?: "None"
+        )
         DetailHeaderRow(listOf("Categories", "Competitors", "Readouts", "Results"))
         DetailGridRow(
             listOf(
@@ -3713,17 +3718,28 @@ private fun RaceDetailsPanel(
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit
 ) {
     var raceNameDraft by remember(details.name) { mutableStateOf(details.name) }
-    val savedStartDateTime = remember(details.startDateTimeIso) {
-        DesktopDateTimeText.parseIsoOrNull(details.startDateTimeIso) ?: DesktopDateTimeText.defaultStartDateTime()
-    }
     var startDateTimeDraft by remember(details.startDateTimeIso) {
-        mutableStateOf(savedStartDateTime)
+        mutableStateOf(
+            DesktopDateTimeText.parseIsoOrNull(details.startDateTimeIso) ?: DesktopDateTimeText.defaultStartDateTime()
+        )
     }
     var selectedRaceType by remember(details.raceType) { mutableStateOf(details.raceType) }
     var selectedRaceLevel by remember(details.raceLevel) { mutableStateOf(details.raceLevel) }
     var selectedRaceBand by remember(details.raceBand) { mutableStateOf(details.raceBand) }
     var timeLimitMinutesDraft by remember(details.timeLimitMinutesText) {
         mutableStateOf(details.timeLimitMinutesText)
+    }
+
+    fun applyRaceSettings(
+        raceType: RaceType = selectedRaceType,
+        raceLevel: RaceLevel = selectedRaceLevel,
+        raceBand: RaceBand = selectedRaceBand,
+        timeLimitMinutes: String = timeLimitMinutesDraft
+    ) {
+        val timeLimit = timeLimitMinutes.trim().toLongOrNull()
+        if (timeLimit != null && timeLimit >= 0) {
+            onUpdateRaceSettings(raceType, raceLevel, raceBand, timeLimitMinutes)
+        }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3753,46 +3769,51 @@ private fun RaceDetailsPanel(
             DateTimePickerField(
                 label = "Start date/time",
                 value = startDateTimeDraft,
-                onValueChange = { startDateTimeDraft = it },
-                modifier = Modifier.weight(1f),
+                onValueChange = {
+                    startDateTimeDraft = it
+                    onUpdateRaceStartDateTime(DesktopDateTimeText.isoText(it))
+                },
+                modifier = Modifier.fillMaxWidth(),
             )
-            Button(
-                onClick = { onUpdateRaceStartDateTime(DesktopDateTimeText.isoText(startDateTimeDraft)) },
-                enabled = !startDateTimeDraft.isEqual(savedStartDateTime)
-            ) {
-                Text("Apply")
-            }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            RaceTypePicker(selectedRaceType, { selectedRaceType = it }, Modifier.weight(1f))
-            RaceLevelPicker(selectedRaceLevel, { selectedRaceLevel = it }, Modifier.weight(1f))
-            RaceBandPicker(selectedRaceBand, { selectedRaceBand = it }, Modifier.weight(1f))
+            RaceTypePicker(
+                selectedRaceType,
+                {
+                    selectedRaceType = it
+                    applyRaceSettings(raceType = it)
+                },
+                Modifier.weight(1f)
+            )
+            RaceLevelPicker(
+                selectedRaceLevel,
+                {
+                    selectedRaceLevel = it
+                    applyRaceSettings(raceLevel = it)
+                },
+                Modifier.weight(1f)
+            )
+            RaceBandPicker(
+                selectedRaceBand,
+                {
+                    selectedRaceBand = it
+                    applyRaceSettings(raceBand = it)
+                },
+                Modifier.weight(1f)
+            )
             TextField(
                 value = timeLimitMinutesDraft,
-                onValueChange = { timeLimitMinutesDraft = it },
+                onValueChange = {
+                    timeLimitMinutesDraft = it
+                    applyRaceSettings(timeLimitMinutes = it)
+                },
                 modifier = Modifier.weight(1f),
                 label = { Text("Limit min") }
             )
-            Button(
-                onClick = {
-                    onUpdateRaceSettings(
-                        selectedRaceType,
-                        selectedRaceLevel,
-                        selectedRaceBand,
-                        timeLimitMinutesDraft
-                    )
-                },
-                enabled = selectedRaceType != details.raceType ||
-                        selectedRaceLevel != details.raceLevel ||
-                        selectedRaceBand != details.raceBand ||
-                        timeLimitMinutesDraft != details.timeLimitMinutesText
-            ) {
-                Text("Settings")
-            }
         }
         DetailRow("Time limit", details.timeLimitText)
     }
@@ -3854,7 +3875,7 @@ private fun DateTimePickerField(
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
-            value = DesktopDateTimeText.isoText(value),
+            value = DesktopDateTimeText.displayText(value),
             onValueChange = {},
             readOnly = true,
             modifier = Modifier.weight(1f),

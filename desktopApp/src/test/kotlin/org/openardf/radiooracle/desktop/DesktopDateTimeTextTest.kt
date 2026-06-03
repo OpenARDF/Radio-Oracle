@@ -29,6 +29,8 @@ class DesktopDateTimeTextTest {
         assertEquals("2026-06-01", DesktopDateTimeText.dateText(value))
         assertEquals("09:30:00", DesktopDateTimeText.timeText(value))
         assertEquals("2026-06-01T09:30", DesktopDateTimeText.isoText(value))
+        assertEquals("Mon, Jun 1, 2026 9:30 AM", DesktopDateTimeText.displayText(value))
+        assertEquals("Mon, Jun 1, 2026 9:30 AM", DesktopDateTimeText.displayIsoOrRaw("2026-06-01T09:30"))
     }
 
     @Test
