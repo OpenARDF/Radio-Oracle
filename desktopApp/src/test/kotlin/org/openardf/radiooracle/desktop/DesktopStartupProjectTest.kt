@@ -18,7 +18,7 @@ class DesktopStartupProjectTest {
 
         val status = openStartupProject(session, null)
 
-        assertEquals("No project open.", status)
+        assertEquals("No Event File open.", status)
         assertNull(session.currentProject)
     }
 
@@ -38,11 +38,11 @@ class DesktopStartupProjectTest {
     @Test
     fun reportsStartupOpenFailureWithoutChangingSession() {
         val path = Path.of("missing.rom.json")
-        val session = DesktopProjectSession(StartupProjectFileStore(readError = IllegalArgumentException("Missing project")))
+        val session = DesktopProjectSession(StartupProjectFileStore(readError = IllegalArgumentException("Missing Event File")))
 
         val status = openStartupProject(session, path)
 
-        assertEquals("Open failed: Missing project", status)
+        assertEquals("Open failed: Missing Event File", status)
         assertNull(session.currentProject)
         assertNull(session.currentPath)
     }

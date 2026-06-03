@@ -4,7 +4,7 @@ Radio-Oracle is an Android app for managing radio orienteering events on race
 day.
 
 Radio-Oracle is maintained by OpenARDF and derived from the MIT-licensed
-Radio-O-Manager project by Pavel Kolský and contributors.
+Radio-O-Manager app by Pavel Kolský and contributors.
 
 ## What It Does
 
@@ -25,7 +25,7 @@ post-event administration away from the finish table.
 
 The desktop beta supports:
 
-- opening, editing, saving, and exporting `.rom.json` project files;
+- opening, editing, saving, and exporting `.rom.json` Event Files;
 - managing races, categories, control points, aliases, competitors, manual
   readouts, and results;
 - importing Android-compatible category, competitor, and start-list CSV files
@@ -57,7 +57,7 @@ The desktop beta supports:
   Settings;
 - serving auto-refreshing loopback-only local result/category/start-list/in-forest
   displays plus `/results.json`, `/categories.json`, `/starts.json`, and
-  `/in-forest.json` endpoints from the open desktop project;
+  `/in-forest.json` endpoints from the open desktop Event File;
 - tracking started competitors without readouts in an In Forest desktop view.
 
 The desktop beta does not yet replace the Android race-day workflow. Live
@@ -82,7 +82,7 @@ Local desktop packaging and smoke commands are documented in
 
 ## Third Party Libraries and Resources
 
-- **Logo** - original Radio-Oracle artwork generated for this project using Codex
+- **Logo** - original Radio-Oracle artwork generated for this app using Codex
 - [SortableTableView](https://github.com/ISchwarz23/SortableTableView)
 - [kotlin-csv](https://github.com/doyaaaaaken/kotlin-csv)
 - [UsbSerial](https://github.com/felHR85/UsbSerial)
@@ -94,5 +94,5 @@ Local desktop packaging and smoke commands are documented in
 ## Credits
 
 - OpenARDF maintains Radio-Oracle.
-- Radio-Oracle is derived from the MIT-licensed Radio-O-Manager project by
+- Radio-Oracle is derived from the MIT-licensed Radio-O-Manager app by
   Pavel Kolský, Vojtěch Kopal, and Jakub Šrom.

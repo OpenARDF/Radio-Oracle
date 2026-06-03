@@ -15,13 +15,13 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 
-/** Desktop filesystem adapter for shared `.rom.json` project files. */
+/** Desktop filesystem adapter for shared `.rom.json` Event Files. */
 object DesktopProjectFiles : ProjectFileStore {
-    /** Reads and decodes a project file from the supplied desktop filesystem path. */
+    /** Reads and decodes an Event File from the supplied desktop filesystem path. */
     override fun read(path: Path): EventProjectFile =
         EventProjectFileJson.decode(Files.readString(path, StandardCharsets.UTF_8))
 
-    /** Encodes and writes a project file, creating parent directories when needed. */
+    /** Encodes and writes an Event File, creating parent directories when needed. */
     override fun write(path: Path, projectFile: EventProjectFile) {
         path.parent?.let { Files.createDirectories(it) }
         Files.writeString(path, EventProjectFileJson.encode(projectFile), StandardCharsets.UTF_8)

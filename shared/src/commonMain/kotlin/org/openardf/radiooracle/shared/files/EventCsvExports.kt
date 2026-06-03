@@ -10,7 +10,7 @@ import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
-/** Shared semicolon-delimited CSV export builders for portable event projects. */
+/** Shared semicolon-delimited CSV export builders for portable Event Files. */
 object EventCsvExports {
     fun categories(raceData: EventRaceData): String =
         raceData.categories

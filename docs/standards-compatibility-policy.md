@@ -64,7 +64,7 @@ standards PR.
 
 ## Exceptions
 
-Private project files such as `.rom.json` may use Radio-Oracle-specific
+Private Event Files such as `.rom.json` may use Radio-Oracle-specific
 metadata when they are clearly not advertised as ARDF JSON or ARDF XML
-interchange files. Even then, project-file fields that duplicate standard
+interchange files. Even then, Event File fields that duplicate standard
 interchange concepts should stay easy to map back to `radio-o-standards`.

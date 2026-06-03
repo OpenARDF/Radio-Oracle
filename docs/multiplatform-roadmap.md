@@ -11,7 +11,7 @@ Multiplatform module with Android and desktop JVM targets. Shared code currently
 covers portable domain enums, SportIdent code and time helpers, duration
 formatting, file definitions, alias validation, control-point parsing, import
 validation, result ranking, course evaluation, IOF result-status mapping,
-platform-neutral event models, event validation, result placement, project-file
+platform-neutral event models, event validation, result placement, Event File
 envelope metadata, CSV row formatting, control/punch display formatting,
 template rendering, standard-category row parsing and presets, network endpoint
 definitions, and result-send filtering.
@@ -209,7 +209,7 @@ Goal: build the first user-visible desktop app around shared services.
 
 - Add a thin desktop app module or desktop source set, following the shared JVM
   smoke pattern already in place.
-- Use file-backed project storage for beta, such as a `.rom.json` event file.
+- Use file-backed Event File storage for beta, such as a `.rom.json` Event File.
 - Build desktop workflows for race selection, category/control-point/alias
   editing, competitor editing, readout/result entry, result recalculation, and
   import/export.
@@ -288,7 +288,7 @@ tests without regressing Android.
 
 Shared SQL is not on the critical path for the first desktop beta.
 
-Use file-backed project storage for the desktop beta while shared domain models,
+Use file-backed Event File storage for the desktop beta while shared domain models,
 services, and import/export APIs stabilize. After the beta, run a bounded shared
 SQL spike with Room KMP as the baseline candidate. SQLDelight remains the
 fallback/comparison option if Room KMP limitations are unacceptable.

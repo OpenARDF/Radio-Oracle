@@ -31,9 +31,9 @@ data class CompetitorCsvImportOutcome(
     val warnings: List<String>
 )
 
-/** Shared event-project editing helpers used by desktop and future non-Android flows. */
+/** Shared Event File editing helpers used by desktop and future non-Android flows. */
 object EventProjectEditor {
-    /** Returns a copy of the project file with a validated race name. */
+    /** Returns a copy of the Event File with a validated race name. */
     fun renameRace(projectFile: EventProjectFile, name: String): EventProjectFile {
         val trimmedName = name.trim()
         require(trimmedName.isNotEmpty()) {
@@ -47,7 +47,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with race-level settings changed. */
+    /** Returns a copy of the Event File with race-level settings changed. */
     fun updateRaceSettings(
         projectFile: EventProjectFile,
         raceType: RaceType,
@@ -77,7 +77,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with a validated race start date/time string. */
+    /** Returns a copy of the Event File with a validated race start date/time string. */
     fun updateRaceStartDateTime(projectFile: EventProjectFile, startDateTimeIso: String): EventProjectFile {
         val trimmedStart = startDateTimeIso.trim()
         require(trimmedStart.isNotEmpty()) {
@@ -91,7 +91,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with one validated category name changed. */
+    /** Returns a copy of the Event File with one validated category name changed. */
     fun renameCategory(
         projectFile: EventProjectFile,
         categoryId: String,
@@ -127,7 +127,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with a new category using conservative defaults. */
+    /** Returns a copy of the Event File with a new category using conservative defaults. */
     fun addCategory(
         projectFile: EventProjectFile,
         categoryId: String,
@@ -176,9 +176,9 @@ object EventProjectEditor {
     }
 
     /**
-     * Returns a copy of the project file with one category and its course removed.
+     * Returns a copy of the Event File with one category and its course removed.
      *
-     * Desktop project files do not have Room foreign keys, so this helper makes
+     * Desktop Event Files do not have Room foreign keys, so this helper makes
      * the deletion policy explicit: category-owned control points disappear with
      * the category, remaining categories are renumbered, and kept competitors are
      * made uncategorized instead of retaining an invisible dangling category ID.
@@ -228,7 +228,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with a category course parsed from a control-point string. */
+    /** Returns a copy of the Event File with a category course parsed from a control-point string. */
     fun updateCategoryControlPoints(
         projectFile: EventProjectFile,
         categoryId: String,
@@ -269,7 +269,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with validated category length and climb. */
+    /** Returns a copy of the Event File with validated category length and climb. */
     fun updateCategoryPhysicalStats(
         projectFile: EventProjectFile,
         categoryId: String,
@@ -302,7 +302,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with one competitor's validated name changed. */
+    /** Returns a copy of the Event File with one competitor's validated name changed. */
     fun renameCompetitor(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -345,7 +345,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with one competitor assigned to a category, or to no category. */
+    /** Returns a copy of the Event File with one competitor assigned to a category, or to no category. */
     fun assignCompetitorCategory(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -384,7 +384,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with one competitor's club and index changed. */
+    /** Returns a copy of the Event File with one competitor's club and index changed. */
     fun updateCompetitorClubIndex(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -418,7 +418,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with one competitor's optional birth year changed. */
+    /** Returns a copy of the Event File with one competitor's optional birth year changed. */
     fun updateCompetitorBirthYear(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -459,7 +459,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with one competitor's optional drawn start time changed. */
+    /** Returns a copy of the Event File with one competitor's optional drawn start time changed. */
     fun updateCompetitorStartTime(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -543,7 +543,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with one competitor's validated numbers changed. */
+    /** Returns a copy of the Event File with one competitor's validated numbers changed. */
     fun updateCompetitorNumbers(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -610,7 +610,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with a new uncategorized competitor appended. */
+    /** Returns a copy of the Event File with a new uncategorized competitor appended. */
     fun addCompetitor(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -922,7 +922,7 @@ object EventProjectEditor {
     }
 
     /**
-     * Returns a copy of the project file with one competitor removed.
+     * Returns a copy of the Event File with one competitor removed.
      *
      * This mirrors Android's Room-backed deletion policy for retained results:
      * the competitor record is always removed, and its matched readout is either
@@ -966,10 +966,10 @@ object EventProjectEditor {
     }
 
     /**
-     * Returns a copy of the project file with one readout/result removed.
+     * Returns a copy of the Event File with one readout/result removed.
      *
      * Android deletes the result row and relies on Room to cascade punch rows.
-     * Desktop project files keep result and punch data together, so removing
+     * Desktop Event Files keep result and punch data together, so removing
      * the readout data from its matched competitor or unmatched list expresses
      * the same policy without a database.
      */
@@ -1045,7 +1045,7 @@ object EventProjectEditor {
     }
 
     /**
-     * Returns a copy of the project file with one readout set to a manual status.
+     * Returns a copy of the Event File with one readout set to a manual status.
      *
      * Android can recalculate automatic status because it has Room-backed race,
      * category, and punch services available. The desktop project editor keeps
@@ -1092,7 +1092,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with successfully exported matched readouts marked sent. */
+    /** Returns a copy of the Event File with successfully exported matched readouts marked sent. */
     fun markReadoutsSent(
         projectFile: EventProjectFile,
         resultIds: Set<String>
@@ -1426,7 +1426,7 @@ object EventProjectEditor {
         }
     }
 
-    /** Returns a copy of the project file with one validated alias changed. */
+    /** Returns a copy of the Event File with one validated alias changed. */
     fun updateAlias(
         projectFile: EventProjectFile,
         aliasId: String,
@@ -1463,7 +1463,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with a validated alias appended. */
+    /** Returns a copy of the Event File with a validated alias appended. */
     fun addAlias(
         projectFile: EventProjectFile,
         aliasId: String,
@@ -1504,7 +1504,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the project file with one alias removed. */
+    /** Returns a copy of the Event File with one alias removed. */
     fun removeAlias(projectFile: EventProjectFile, aliasId: String): EventProjectFile {
         require(projectFile.raceData.aliases.any { it.id == aliasId }) {
             "Alias was not found: $aliasId"

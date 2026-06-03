@@ -6,7 +6,7 @@ packaging is best-effort for this beta.
 
 ## Functional Acceptance
 
-- Create, open, edit, save, close, reopen, and export `.rom.json` projects.
+- Create, open, edit, save, close, reopen, and export `.rom.json` Event Files.
 - Manage races, categories, control points, aliases, competitors, readouts,
   start lists, in-forest state, and results from the desktop UI.
 - Import canonical competitor CSV and ARDFEvent registration CSV, including
@@ -22,7 +22,7 @@ packaging is best-effort for this beta.
 - Manually send ROBIS live results and verify background sending can be enabled
   and disabled visibly.
 - Serve loopback-only local result/category/start/in-forest pages and JSON
-  endpoints from the open desktop project.
+  endpoints from the open desktop Event File.
 
 ## Release Gates
 
@@ -42,7 +42,7 @@ packaging is best-effort for this beta.
 - macOS: packaged app opens, reads the attached SI download box, reports station
   warnings without blocking downloads, and prints a finish ticket through the
   selected system printer.
-- Windows: packaged app opens, loads a sample project, exports CSV/JSON/XML
+- Windows: packaged app opens, loads a sample Event File, exports CSV/JSON/XML
   files, and runs the desktop smoke workflow.
 - Android regression: run the Android unit gate and smoke import/export/readout
   basics so desktop-shared changes do not regress the production baseline.

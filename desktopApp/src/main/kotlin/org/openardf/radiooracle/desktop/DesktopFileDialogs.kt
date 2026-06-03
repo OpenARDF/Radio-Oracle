@@ -5,7 +5,7 @@ import java.awt.Frame
 import java.io.FilenameFilter
 import java.nio.file.Path
 
-/** Project-file path helpers shared by desktop file dialogs and tests. */
+/** Event File path helpers shared by desktop file dialogs and tests. */
 object DesktopProjectFilePaths {
     const val PROJECT_EXTENSION = ".rom.json"
     const val ANDROID_RACE_BACKUP_JSON_EXTENSION = ".ardfjs"
@@ -17,7 +17,7 @@ object DesktopProjectFilePaths {
     const val HTML_EXTENSION = ".html"
     const val TXT_EXTENSION = ".txt"
 
-    /** Returns a path with the standard Radio-Oracle desktop project extension. */
+    /** Returns a path with the standard Radio-Oracle desktop Event File extension. */
     fun withProjectExtension(path: Path): Path =
         if (path.fileName.toString().endsWith(PROJECT_EXTENSION)) {
             path
@@ -82,20 +82,20 @@ object DesktopProjectFilePaths {
         }
 }
 
-/** AWT-backed file chooser for desktop `.rom.json` project files. */
+/** AWT-backed file chooser for desktop `.rom.json` Event Files. */
 object DesktopFileDialogs {
-    /** Lets the user choose an existing project file, returning null when cancelled. */
+    /** Lets the user choose an existing Event File, returning null when cancelled. */
     fun chooseOpenProject(): Path? =
-        chooseFile("Open Radio-Oracle Project", FileDialog.LOAD, DesktopProjectFilePaths.PROJECT_EXTENSION)
+        chooseFile("Open Radio-Oracle Event File", FileDialog.LOAD, DesktopProjectFilePaths.PROJECT_EXTENSION)
 
     /** Lets the user choose a save location, returning null when cancelled. */
     fun chooseSaveProject(): Path? =
-        chooseFile("Save Radio-Oracle Project", FileDialog.SAVE, DesktopProjectFilePaths.PROJECT_EXTENSION)
+        chooseFile("Save Radio-Oracle Event File", FileDialog.SAVE, DesktopProjectFilePaths.PROJECT_EXTENSION)
             ?.let(DesktopProjectFilePaths::withProjectExtension)
 
     /** Lets the user choose an export-copy location, returning null when cancelled. */
     fun chooseExportProject(): Path? =
-        chooseFile("Export Radio-Oracle Project Copy", FileDialog.SAVE, DesktopProjectFilePaths.PROJECT_EXTENSION)
+        chooseFile("Export Radio-Oracle Event File Copy", FileDialog.SAVE, DesktopProjectFilePaths.PROJECT_EXTENSION)
             ?.let(DesktopProjectFilePaths::withProjectExtension)
 
     fun chooseExportCsv(title: String): Path? =

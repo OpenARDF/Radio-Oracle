@@ -6,7 +6,7 @@ import org.openardf.radiooracle.shared.event.EventValidationIssue
 import org.openardf.radiooracle.shared.event.EventValidationRules
 import org.openardf.radiooracle.shared.results.EventResultSending
 
-/** Read-only project and desktop-beta diagnostics shown in the Settings section. */
+/** Read-only Event File and desktop-beta diagnostics shown in the Settings section. */
 data class DesktopProjectDiagnostics(
     val projectState: String,
     val schemaText: String,
@@ -31,7 +31,7 @@ data class DesktopProjectDiagnostics(
                 ?: emptyList()
             val sendPlan = projectFile?.let { EventResultSending.plan(it.raceData) }
             return DesktopProjectDiagnostics(
-                projectState = if (projectFile == null) "No project open" else "Project open",
+                projectState = if (projectFile == null) "No Event File open" else "Event File open",
                 schemaText = projectFile?.let { "${it.appName} schema ${it.schemaVersion}" } ?: "",
                 raceId = projectFile?.raceData?.race?.id ?: "",
                 raceName = summary?.raceName ?: "",
@@ -41,7 +41,7 @@ data class DesktopProjectDiagnostics(
                 readoutCount = summary?.readoutCount ?: 0,
                 resultCount = summary?.resultCount ?: 0,
                 validationState = when {
-                    projectFile == null -> "No project open"
+                    projectFile == null -> "No Event File open"
                     validationIssues.isEmpty() -> "No validation issues"
                     else -> "${validationIssues.size} validation issue${if (validationIssues.size == 1) "" else "s"}"
                 },
@@ -51,12 +51,12 @@ data class DesktopProjectDiagnostics(
                         "${it.alreadySentCount} already sent; " +
                         "${it.missingReadoutCount} competitor${if (it.missingReadoutCount == 1) "" else "s"} without readouts; " +
                         "${it.unmatchedReadoutCount} unmatched readout${if (it.unmatchedReadoutCount == 1) "" else "s"}."
-                } ?: "No project open",
+                } ?: "No Event File open",
                 betaLimitations = listOf(
                     "SPORTident station maintenance and reprogramming remain post-beta.",
                     "Desktop Bluetooth printer transport remains post-beta.",
                     "Full Android result-service configuration remains post-beta.",
-                    "Project storage is file-backed .rom.json, not shared SQL."
+                    "Event File storage is file-backed .rom.json, not shared SQL."
                 )
             )
         }

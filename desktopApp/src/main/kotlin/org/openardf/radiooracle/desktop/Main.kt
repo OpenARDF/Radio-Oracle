@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
+import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Checkbox
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
@@ -293,7 +294,7 @@ fun main(args: Array<String>) = application {
             runCatching {
                 projectSession.closeProject(discardUnsavedChanges)
                 syncProjectState()
-                projectStatusText = "No project open."
+                projectStatusText = "No Event File open."
             }.onFailure { error ->
                 projectStatusText = "Close failed: ${error.message ?: error::class.simpleName}"
             }
@@ -307,7 +308,7 @@ fun main(args: Array<String>) = application {
             )
             projectSession.newProject(project)
             syncProjectState()
-            projectStatusText = "New unsaved project."
+            projectStatusText = "New unsaved Event File."
         }
 
         fun appendSportIdentDownload(download: DesktopSportIdentCardBlockDownload): DesktopSportIdentAppendOutcome {
@@ -348,7 +349,7 @@ fun main(args: Array<String>) = application {
                 return
             }
             if (projectSession.currentProject == null) {
-                projectStatusText = "Open or create a project before downloading SI cards."
+                projectStatusText = "Open or create an Event File before downloading SI cards."
                 return
             }
             isDownloadingSiReadout = true
@@ -404,7 +405,7 @@ fun main(args: Array<String>) = application {
                 return
             }
             if (projectSession.currentProject == null) {
-                projectStatusText = "Open or create a project before downloading SI cards."
+                projectStatusText = "Open or create an Event File before downloading SI cards."
                 return
             }
             val stopRequested = AtomicBoolean(false)
@@ -489,7 +490,7 @@ fun main(args: Array<String>) = application {
             val currentProjectForPlan = projectSession.currentProject
             if (currentProjectForPlan == null) {
                 if (!automatic) {
-                    projectStatusText = "Open or create a project before sending live results."
+                    projectStatusText = "Open or create an Event File before sending live results."
                 }
                 return
             }
@@ -560,7 +561,7 @@ fun main(args: Array<String>) = application {
             return runCatching {
                 projectSession.save()
                 syncProjectState()
-                projectStatusText = "Saved ${projectSession.currentPath?.fileName ?: "project"}"
+                projectStatusText = "Saved ${projectSession.currentPath?.fileName ?: "Event File"}"
             }.onFailure { error ->
                 projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
             }.isSuccess
@@ -803,134 +804,157 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun chooseOpenEventFile() {
+            DesktopFileDialogs.chooseOpenProject()?.let { path ->
+                pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
+                    hasUnsavedChanges,
+                    PendingDirtyProjectAction.OpenProject(path)
+                )
+                if (pendingDirtyProjectAction == null) {
+                    openProject(path)
+                }
+            }
+        }
+
+        fun chooseImportAndroidRaceBackupJson() {
+            DesktopFileDialogs.chooseImportAndroidRaceBackupJson()?.let { path ->
+                pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
+                    hasUnsavedChanges,
+                    PendingDirtyProjectAction.ImportAndroidRaceBackup(path)
+                )
+                if (pendingDirtyProjectAction == null) {
+                    importAndroidRaceBackupJson(path)
+                }
+            }
+        }
+
+        fun saveAsCurrentProject() {
+            DesktopFileDialogs.chooseSaveProject()?.let { path ->
+                runCatching {
+                    projectSession.saveAs(path)
+                    projectFile = projectSession.currentProject
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText = "Saved ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
+        fun exportEventFileCopy() {
+            DesktopFileDialogs.chooseExportProject()?.let { path ->
+                runCatching {
+                    projectSession.exportCopy(path)
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
+        fun requestNewEventFile() {
+            pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
+                hasUnsavedChanges,
+                PendingDirtyProjectAction.NewProject
+            )
+            if (pendingDirtyProjectAction == null) {
+                createNewProject()
+            }
+        }
+
+        fun requestCloseEventFile() {
+            pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
+                hasUnsavedChanges,
+                PendingDirtyProjectAction.CloseProject
+            )
+            if (pendingDirtyProjectAction == null) {
+                closeProject()
+            }
+        }
+
+        fun isNavActionEnabled(action: DesktopNavAction): Boolean =
+            when (action) {
+                DesktopNavAction.NewEventFile,
+                DesktopNavAction.OpenEventFile,
+                DesktopNavAction.ImportAndroidRaceBackup -> true
+                DesktopNavAction.SaveEventFile -> projectFile != null && hasUnsavedChanges
+                DesktopNavAction.StopContinuousSiReadout -> isContinuousSiReadoutActive
+                DesktopNavAction.StartLocalResultDisplay -> projectFile != null && localResultServerUrl == null
+                DesktopNavAction.StopLocalResultDisplay -> localResultServerUrl != null
+                DesktopNavAction.SendRobis -> projectFile != null && !isSendingLiveResults
+                DesktopNavAction.DownloadSiCard -> projectFile != null && !isDownloadingSiReadout && !isContinuousSiReadoutActive
+                DesktopNavAction.StartContinuousSiReadout ->
+                    projectFile != null && !isDownloadingSiReadout && !isContinuousSiReadoutActive
+                else -> projectFile != null
+            }
+
+        fun handleNavAction(action: DesktopNavAction) {
+            when (action) {
+                DesktopNavAction.NewEventFile -> requestNewEventFile()
+                DesktopNavAction.OpenEventFile -> chooseOpenEventFile()
+                DesktopNavAction.ImportAndroidRaceBackup -> chooseImportAndroidRaceBackupJson()
+                DesktopNavAction.SaveEventFile -> saveCurrentProject()
+                DesktopNavAction.SaveEventFileAs -> saveAsCurrentProject()
+                DesktopNavAction.CloseEventFile -> requestCloseEventFile()
+                DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
+                DesktopNavAction.ImportCompetitorsCsv -> importCompetitorsCsv()
+                DesktopNavAction.ImportStartsCsv -> importCompetitorStartsCsv()
+                DesktopNavAction.ExportEventFileCopy -> exportEventFileCopy()
+                DesktopNavAction.ExportCategoriesCsv ->
+                    exportCsv("Export Categories CSV", DesktopProjectFiles::exportCategoriesCsv)
+                DesktopNavAction.ExportCompetitorsCsv ->
+                    exportCsv("Export Competitors CSV", DesktopProjectFiles::exportCompetitorsCsv)
+                DesktopNavAction.ExportStartsCsv ->
+                    exportCsv("Export Starts CSV", DesktopProjectFiles::exportCompetitorStartsCsv)
+                DesktopNavAction.ExportStartsByCategoryCsv ->
+                    exportCsv("Export Starts by Category CSV", DesktopProjectFiles::exportCompetitorStartsByCategoryCsv)
+                DesktopNavAction.ExportStartsByMinuteCsv ->
+                    exportCsv("Export Starts by Minute CSV", DesktopProjectFiles::exportCompetitorStartsByMinuteCsv)
+                DesktopNavAction.ExportRobisStartListCsv ->
+                    exportCsv("Export ROBIS Start List CSV", DesktopProjectFiles::exportRobisStartListCsv)
+                DesktopNavAction.ExportReadoutsCsv ->
+                    exportCsv("Export Readouts CSV", DesktopProjectFiles::exportReadoutsCsv)
+                DesktopNavAction.ExportResultsCsv ->
+                    exportCsv("Export Results CSV", DesktopProjectFiles::exportResultsCsv)
+                DesktopNavAction.ExportArdfEventResultsCsv ->
+                    exportCsv("Export ARDFEvent Results CSV", DesktopProjectFiles::exportArdfEventResultsCsv)
+                DesktopNavAction.ExportResultsText -> exportResultsText()
+                DesktopNavAction.ExportResultsHtml -> exportResultsHtml()
+                DesktopNavAction.ExportArdfJson -> exportArdfJson()
+                DesktopNavAction.ExportAndroidRaceBackupJson -> exportAndroidRaceBackupJson()
+                DesktopNavAction.ExportLiveResultsJson -> exportLiveResultsJson()
+                DesktopNavAction.ExportFinalResultsJson -> exportFinalResultsJson()
+                DesktopNavAction.ExportIofStartListXml -> exportIofStartListXml()
+                DesktopNavAction.ExportIofResultListXml -> exportIofResultListXml()
+                DesktopNavAction.DownloadSiCard -> downloadSportIdentReadout()
+                DesktopNavAction.StartContinuousSiReadout -> startContinuousSportIdentReadout()
+                DesktopNavAction.StopContinuousSiReadout -> stopContinuousSportIdentReadout()
+                DesktopNavAction.StartLocalResultDisplay -> {
+                    val url = localResultServer.start()
+                    localResultServerUrl = url
+                    projectStatusText = "Local result display running at $url"
+                }
+                DesktopNavAction.StopLocalResultDisplay -> {
+                    localResultServer.stop()
+                    localResultServerUrl = null
+                    projectStatusText = "Local result display stopped."
+                }
+                DesktopNavAction.SendRobis -> sendRobisLiveResults()
+            }
+        }
+
         MenuBar {
             Menu("File") {
-                Item("New Project", onClick = {
-                    pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
-                        hasUnsavedChanges,
-                        PendingDirtyProjectAction.NewProject
-                    )
-                    if (pendingDirtyProjectAction == null) {
-                        createNewProject()
-                    }
-                })
-                Item("Open...", onClick = {
-                    DesktopFileDialogs.chooseOpenProject()?.let { path ->
-                        pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
-                            hasUnsavedChanges,
-                            PendingDirtyProjectAction.OpenProject(path)
-                        )
-                        if (pendingDirtyProjectAction == null) {
-                            openProject(path)
-                        }
-                    }
-                })
-                Item("Import Android Race Backup JSON...", onClick = {
-                    DesktopFileDialogs.chooseImportAndroidRaceBackupJson()?.let { path ->
-                        pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
-                            hasUnsavedChanges,
-                            PendingDirtyProjectAction.ImportAndroidRaceBackup(path)
-                        )
-                        if (pendingDirtyProjectAction == null) {
-                            importAndroidRaceBackupJson(path)
-                        }
-                    }
-                })
+                Item("New Event File", onClick = ::requestNewEventFile)
+                Item("Open...", onClick = ::chooseOpenEventFile)
                 Item("Save", enabled = projectFile != null && hasUnsavedChanges, onClick = {
                     saveCurrentProject()
                 })
                 Item("Save As...", enabled = projectFile != null, onClick = {
-                    DesktopFileDialogs.chooseSaveProject()?.let { path ->
-                        runCatching {
-                            projectSession.saveAs(path)
-                            projectFile = projectSession.currentProject
-                            hasUnsavedChanges = projectSession.hasUnsavedChanges
-                            projectStatusText = "Saved ${path.fileName}"
-                        }.onFailure { error ->
-                            projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
-                        }
-                    }
+                    saveAsCurrentProject()
                 })
-                Item("Export Copy...", enabled = projectFile != null, onClick = {
-                    DesktopFileDialogs.chooseExportProject()?.let { path ->
-                        runCatching {
-                            projectSession.exportCopy(path)
-                            syncProjectState()
-                            projectStatusText = "Exported ${path.fileName}"
-                        }.onFailure { error ->
-                            projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
-                        }
-                    }
-                })
-                Item("Export ARDF JSON...", enabled = projectFile != null, onClick = {
-                    exportArdfJson()
-                })
-                Item("Export Android Race Backup JSON...", enabled = projectFile != null, onClick = {
-                    exportAndroidRaceBackupJson()
-                })
-                Item("Export Live Results JSON...", enabled = projectFile != null, onClick = {
-                    exportLiveResultsJson()
-                })
-                Item("Export Final Results JSON...", enabled = projectFile != null, onClick = {
-                    exportFinalResultsJson()
-                })
-                Item("Export IOF Start List XML...", enabled = projectFile != null, onClick = {
-                    exportIofStartListXml()
-                })
-                Item("Export IOF Result List XML...", enabled = projectFile != null, onClick = {
-                    exportIofResultListXml()
-                })
-                Item("Import Categories CSV...", enabled = projectFile != null, onClick = {
-                    importCategoriesCsv()
-                })
-                Item("Import Competitors CSV...", enabled = projectFile != null, onClick = {
-                    importCompetitorsCsv()
-                })
-                Item("Import Starts CSV...", enabled = projectFile != null, onClick = {
-                    importCompetitorStartsCsv()
-                })
-                Item("Export Categories CSV...", enabled = projectFile != null, onClick = {
-                    exportCsv("Export Categories CSV", DesktopProjectFiles::exportCategoriesCsv)
-                })
-                Item("Export Competitors CSV...", enabled = projectFile != null, onClick = {
-                    exportCsv("Export Competitors CSV", DesktopProjectFiles::exportCompetitorsCsv)
-                })
-                Item("Export Starts CSV...", enabled = projectFile != null, onClick = {
-                    exportCsv("Export Starts CSV", DesktopProjectFiles::exportCompetitorStartsCsv)
-                })
-                Item("Export Starts by Category CSV...", enabled = projectFile != null, onClick = {
-                    exportCsv("Export Starts by Category CSV", DesktopProjectFiles::exportCompetitorStartsByCategoryCsv)
-                })
-                Item("Export Starts by Minute CSV...", enabled = projectFile != null, onClick = {
-                    exportCsv("Export Starts by Minute CSV", DesktopProjectFiles::exportCompetitorStartsByMinuteCsv)
-                })
-                Item("Export ROBIS Start List CSV...", enabled = projectFile != null, onClick = {
-                    exportCsv("Export ROBIS Start List CSV", DesktopProjectFiles::exportRobisStartListCsv)
-                })
-                Item("Export Readouts CSV...", enabled = projectFile != null, onClick = {
-                    exportCsv("Export Readouts CSV", DesktopProjectFiles::exportReadoutsCsv)
-                })
-                Item("Export Results CSV...", enabled = projectFile != null, onClick = {
-                    exportCsv("Export Results CSV", DesktopProjectFiles::exportResultsCsv)
-                })
-                Item("Export ARDFEvent Results CSV...", enabled = projectFile != null, onClick = {
-                    exportCsv("Export ARDFEvent Results CSV", DesktopProjectFiles::exportArdfEventResultsCsv)
-                })
-                Item("Export Results TXT...", enabled = projectFile != null, onClick = {
-                    exportResultsText()
-                })
-                Item("Export Results HTML...", enabled = projectFile != null, onClick = {
-                    exportResultsHtml()
-                })
-                Item("Close Project", enabled = projectFile != null, onClick = {
-                    pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
-                        hasUnsavedChanges,
-                        PendingDirtyProjectAction.CloseProject
-                    )
-                    if (pendingDirtyProjectAction == null) {
-                        closeProject()
-                    }
-                })
+                Item("Close Event File", enabled = projectFile != null, onClick = ::requestCloseEventFile)
             }
         }
 
@@ -961,9 +985,12 @@ fun main(args: Array<String>) = application {
             isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
             readoutDuplicatePolicy = readoutDuplicatePolicy,
             isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
+            areAliasesEnabled = areAliasesEnabled,
             localResultServerUrl = localResultServerUrl,
             printerDiagnostics = printerDiagnostics,
             raceClockTick = raceClockTick,
+            isNavActionEnabled = ::isNavActionEnabled,
+            onNavAction = ::handleNavAction,
             onRenameRace = { name ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -1252,7 +1279,7 @@ fun main(args: Array<String>) = application {
             onPreviewFinishTicket = { resultId ->
                 runCatching {
                     val currentProject = requireNotNull(projectSession.currentProject) {
-                        "Open or create a project before previewing finish tickets."
+                        "Open or create an Event File before previewing finish tickets."
                     }
                     FinishTicketRenderer.render(currentProject.raceData, resultId, useAliases = areAliasesEnabled)
                 }.getOrElse { error ->
@@ -1262,7 +1289,7 @@ fun main(args: Array<String>) = application {
             onPrintFinishTicket = { resultId ->
                 val currentProject = projectSession.currentProject
                 if (currentProject == null) {
-                    projectStatusText = "Open or create a project before printing finish tickets."
+                    projectStatusText = "Open or create an Event File before printing finish tickets."
                 } else {
                     projectStatusText = "Printing finish ticket..."
                     appCoroutineScope.launch {
@@ -1386,7 +1413,7 @@ fun main(args: Array<String>) = application {
     }
 }
 
-/** Prompts for the standard save/discard/cancel decision before replacing or closing a dirty project. */
+/** Prompts for the standard save/discard/cancel decision before replacing or closing a dirty Event File. */
 @Composable
 private fun UnsavedChangesDialog(
     onSave: () -> Unit,
@@ -1425,7 +1452,7 @@ private fun UnsavedChangesDialog(
 @Composable
 private fun RadioOManagerDesktopApp(
     projectFile: EventProjectFile? = null,
-    projectStatusText: String = "No project open.",
+    projectStatusText: String = "No Event File open.",
     hasUnsavedChanges: Boolean = false,
     siReaderState: DesktopSiReaderUiState = DesktopSiReaderUiState.disconnected(),
     isDownloadingSiReadout: Boolean = false,
@@ -1475,7 +1502,9 @@ private fun RadioOManagerDesktopApp(
     onSetReadoutAlertSoundEnabled: (Boolean) -> Unit = {},
     onSetAliasesEnabled: (Boolean) -> Unit = {},
     onStartLocalResultServer: () -> Unit = {},
-    onStopLocalResultServer: () -> Unit = {}
+    onStopLocalResultServer: () -> Unit = {},
+    isNavActionEnabled: (DesktopNavAction) -> Boolean = { false },
+    onNavAction: (DesktopNavAction) -> Unit = {}
 ) {
     MaterialTheme(
         colors = MaterialTheme.colors.copy(
@@ -1488,69 +1517,88 @@ private fun RadioOManagerDesktopApp(
             onError = DesktopPalette.White
         )
     ) {
-        var selectedSection by remember { mutableStateOf(DesktopSection.Races) }
+        var navState by remember { mutableStateOf(DesktopNavState()) }
 
         Surface(modifier = Modifier.fillMaxSize(), color = DesktopPalette.White) {
             Column(modifier = Modifier.fillMaxSize()) {
                 AppTopBar()
                 Row(modifier = Modifier.weight(1f)) {
                     NavigationRail(
-                        selectedSection = selectedSection,
-                        onSectionSelected = { selectedSection = it }
+                        navState = navState,
+                        isNavActionEnabled = isNavActionEnabled,
+                        onBack = { navState = navState.back() },
+                        onItemSelected = { item ->
+                            when {
+                                item.children.isNotEmpty() -> navState = navState.enter(item)
+                                item.section != null -> navState = navState.enter(item)
+                                item.action != null -> onNavAction(item.action)
+                            }
+                        }
                     )
-                    SectionWorkspace(
-                        section = selectedSection,
-                        projectFile = projectFile,
-                        projectStatusText = projectStatusText,
-                        onRenameRace = onRenameRace,
-                        onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
-                        onUpdateRaceSettings = onUpdateRaceSettings,
-                        onRenameCategory = onRenameCategory,
-                        onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
-                        onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
-                        onAddCategory = onAddCategory,
-                        onRemoveCategory = onRemoveCategory,
-                        onRenameCompetitor = onRenameCompetitor,
-                        onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
-                        onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
-                        onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
-                        onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
-                        onDrawStartList = onDrawStartList,
-                        onAddCompetitor = onAddCompetitor,
-                        onAssignCompetitorCategory = onAssignCompetitorCategory,
-                        onRemoveCompetitor = onRemoveCompetitor,
-                        onMarkCompetitorDidNotStart = onMarkCompetitorDidNotStart,
-                        onRemoveReadout = onRemoveReadout,
-                        onUpdateReadoutStatus = onUpdateReadoutStatus,
-                        onAssignUnmatchedReadout = onAssignUnmatchedReadout,
-                        onDownloadSportIdentReadout = onDownloadSportIdentReadout,
-                        onStartContinuousSportIdentReadout = onStartContinuousSportIdentReadout,
-                        onStopContinuousSportIdentReadout = onStopContinuousSportIdentReadout,
-                        onPreviewFinishTicket = onPreviewFinishTicket,
-                        onPrintFinishTicket = onPrintFinishTicket,
-                        isDownloadingSiReadout = isDownloadingSiReadout,
-                        isContinuousSiReadoutActive = isContinuousSiReadoutActive,
-                        siDownloadStatusText = siDownloadStatusText,
-                        onAddManualReadout = onAddManualReadout,
-                        onUpdateAlias = onUpdateAlias,
-                        onAddAlias = onAddAlias,
-                        onRemoveAlias = onRemoveAlias,
-                        isSendingLiveResults = isSendingLiveResults,
-                        isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
-                        readoutDuplicatePolicy = readoutDuplicatePolicy,
-                        isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
-                        areAliasesEnabled = areAliasesEnabled,
-                        localResultServerUrl = localResultServerUrl,
-                        printerDiagnostics = printerDiagnostics,
-                        raceClockTick = raceClockTick,
-                        onSendRobisLiveResults = onSendRobisLiveResults,
-                        onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
-                        onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
-                        onSetReadoutAlertSoundEnabled = onSetReadoutAlertSoundEnabled,
-                        onSetAliasesEnabled = onSetAliasesEnabled,
-                        onStartLocalResultServer = onStartLocalResultServer,
-                        onStopLocalResultServer = onStopLocalResultServer
-                    )
+                    Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                            SectionWorkspace(
+                                section = navState.selectedSection,
+                                breadcrumb = DesktopNavigation.breadcrumb(navState),
+                                projectFile = projectFile,
+                                projectStatusText = projectStatusText,
+                                onRenameRace = onRenameRace,
+                                onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
+                                onUpdateRaceSettings = onUpdateRaceSettings,
+                                onRenameCategory = onRenameCategory,
+                                onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
+                                onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
+                                onAddCategory = onAddCategory,
+                                onRemoveCategory = onRemoveCategory,
+                                onRenameCompetitor = onRenameCompetitor,
+                                onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
+                                onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
+                                onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
+                                onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
+                                onDrawStartList = onDrawStartList,
+                                onAddCompetitor = onAddCompetitor,
+                                onAssignCompetitorCategory = onAssignCompetitorCategory,
+                                onRemoveCompetitor = onRemoveCompetitor,
+                                onMarkCompetitorDidNotStart = onMarkCompetitorDidNotStart,
+                                onRemoveReadout = onRemoveReadout,
+                                onUpdateReadoutStatus = onUpdateReadoutStatus,
+                                onAssignUnmatchedReadout = onAssignUnmatchedReadout,
+                                onDownloadSportIdentReadout = onDownloadSportIdentReadout,
+                                onStartContinuousSportIdentReadout = onStartContinuousSportIdentReadout,
+                                onStopContinuousSportIdentReadout = onStopContinuousSportIdentReadout,
+                                onPreviewFinishTicket = onPreviewFinishTicket,
+                                onPrintFinishTicket = onPrintFinishTicket,
+                                isDownloadingSiReadout = isDownloadingSiReadout,
+                                isContinuousSiReadoutActive = isContinuousSiReadoutActive,
+                                siDownloadStatusText = siDownloadStatusText,
+                                onAddManualReadout = onAddManualReadout,
+                                onUpdateAlias = onUpdateAlias,
+                                onAddAlias = onAddAlias,
+                                onRemoveAlias = onRemoveAlias,
+                                isSendingLiveResults = isSendingLiveResults,
+                                isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
+                                readoutDuplicatePolicy = readoutDuplicatePolicy,
+                                isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
+                                areAliasesEnabled = areAliasesEnabled,
+                                localResultServerUrl = localResultServerUrl,
+                                printerDiagnostics = printerDiagnostics,
+                                raceClockTick = raceClockTick,
+                                onSendRobisLiveResults = onSendRobisLiveResults,
+                                onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
+                                onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
+                                onSetReadoutAlertSoundEnabled = onSetReadoutAlertSoundEnabled,
+                                onSetAliasesEnabled = onSetAliasesEnabled,
+                                onStartLocalResultServer = onStartLocalResultServer,
+                                onStopLocalResultServer = onStopLocalResultServer
+                            )
+                        }
+                        WorkflowBar(
+                            selectedWorkflow = navState.workflow,
+                            onWorkflowSelected = { workflow ->
+                                navState = navState.switchWorkflow(workflow)
+                            }
+                        )
+                    }
                 }
                 StatusStrip(projectStatusText, hasUnsavedChanges, siReaderState)
             }
@@ -1584,29 +1632,95 @@ private fun AppTopBar() {
     }
 }
 
-/** Shows the main event-admin sections using the same names as Android. */
+/** Shows workflow-specific navigation with optional submenu replacement. */
 @Composable
 private fun NavigationRail(
-    selectedSection: DesktopSection,
-    onSectionSelected: (DesktopSection) -> Unit
+    navState: DesktopNavState,
+    isNavActionEnabled: (DesktopNavAction) -> Boolean,
+    onBack: () -> Unit,
+    onItemSelected: (DesktopNavItem) -> Unit
 ) {
+    val items = DesktopNavigation.currentItems(navState)
     Column(
         modifier = Modifier
-            .width(180.dp)
+            .width(220.dp)
             .fillMaxHeight()
             .background(Color(0xFFF5F5F5))
             .border(1.dp, DesktopPalette.LightGrey)
             .padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        DesktopSection.entries.forEach { section ->
+        items.forEach { item ->
+            val isSelected = item.section != null && item.section == navState.selectedSection && item.children.isEmpty()
+            val isEnabled = item.action?.let(isNavActionEnabled) ?: true
             Button(
-                onClick = { onSectionSelected(section) },
+                onClick = { onItemSelected(item) },
+                enabled = isEnabled,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = section.label,
-                    fontWeight = if (section == selectedSection) FontWeight.Bold else FontWeight.Normal
+                    text = if (item.children.isEmpty()) item.label else "${item.label} >",
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                )
+            }
+        }
+        if (navState.submenuStack.isNotEmpty()) {
+            Spacer(modifier = Modifier.weight(1f))
+            Button(
+                onClick = onBack,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    backgroundColor = DesktopPalette.SecondaryVariant,
+                    contentColor = DesktopPalette.White
+                )
+            ) {
+                Text("Back")
+            }
+        }
+    }
+}
+
+/** Keeps the primary workflow groups visible as the desktop return-to-top path. */
+@Composable
+private fun WorkflowBar(
+    selectedWorkflow: DesktopWorkflow,
+    onWorkflowSelected: (DesktopWorkflow) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .background(Color(0xFFE7E7E7))
+            .border(2.dp, DesktopPalette.Disconnected)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        DesktopWorkflow.entries.forEach { workflow ->
+            val isSelected = workflow == selectedWorkflow
+            Button(
+                onClick = { onWorkflowSelected(workflow) },
+                modifier = Modifier
+                    .weight(1f)
+                    .border(
+                        width = if (isSelected) 2.dp else 1.dp,
+                        color = if (isSelected) DesktopPalette.Black else DesktopPalette.LightGrey
+                    ),
+                colors = if (isSelected) {
+                    ButtonDefaults.buttonColors(
+                        backgroundColor = DesktopPalette.PrimaryVariant,
+                        contentColor = DesktopPalette.White
+                    )
+                } else {
+                    ButtonDefaults.buttonColors(
+                        backgroundColor = DesktopPalette.White,
+                        contentColor = DesktopPalette.Black
+                    )
+                }
+            ) {
+                Text(
+                    text = workflow.shortLabel,
+                    fontSize = 13.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                 )
             }
         }
@@ -1617,6 +1731,7 @@ private fun NavigationRail(
 @Composable
 private fun SectionWorkspace(
     section: DesktopSection,
+    breadcrumb: String,
     projectFile: EventProjectFile?,
     projectStatusText: String,
     onRenameRace: (String) -> Unit,
@@ -1675,6 +1790,12 @@ private fun SectionWorkspace(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        Text(
+            text = breadcrumb,
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
         Text(
             text = section.label,
             fontSize = 24.sp,
@@ -1806,7 +1927,7 @@ private fun SectionWorkspace(
     }
 }
 
-/** Shows read-only project diagnostics and the desktop-beta scope boundary. */
+/** Shows read-only Event File diagnostics and the desktop-beta scope boundary. */
 @Composable
 private fun SettingsDetailsPanel(
     diagnostics: DesktopProjectDiagnostics,
@@ -1826,7 +1947,7 @@ private fun SettingsDetailsPanel(
     onStopLocalResultServer: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        DetailRow("Project", diagnostics.projectState)
+        DetailRow("Event File", diagnostics.projectState)
         DetailRow("Schema", diagnostics.schemaText.ifBlank { "None" })
         DetailRow("Race ID", diagnostics.raceId.ifBlank { "None" })
         DetailRow("Race name", diagnostics.raceName.ifBlank { "None" })
@@ -1861,7 +1982,7 @@ private fun SettingsDetailsPanel(
             Checkbox(
                 checked = areAliasesEnabled,
                 onCheckedChange = onSetAliasesEnabled,
-                enabled = diagnostics.projectState == "Project open"
+                enabled = diagnostics.projectState == "Event File open"
             )
             Text(
                 text = "Use aliases",
@@ -1878,7 +1999,7 @@ private fun SettingsDetailsPanel(
         Row(horizontalArrangement = Arrangement.spacedBy(TableColumnGap)) {
             Button(
                 onClick = onStartLocalResultServer,
-                enabled = diagnostics.projectState == "Project open" && localResultServerUrl == null
+                enabled = diagnostics.projectState == "Event File open" && localResultServerUrl == null
             ) {
                 ButtonLabel("Start Display")
             }
@@ -1894,7 +2015,7 @@ private fun SettingsDetailsPanel(
             Checkbox(
                 checked = isBackgroundLiveResultSendingEnabled,
                 onCheckedChange = onSetBackgroundLiveResultSendingEnabled,
-                enabled = diagnostics.projectState == "Project open"
+                enabled = diagnostics.projectState == "Event File open"
             )
             Text(
                 text = "Background ROBIS sending",
@@ -1904,7 +2025,7 @@ private fun SettingsDetailsPanel(
         }
         Button(
             onClick = onSendRobisLiveResults,
-            enabled = diagnostics.projectState == "Project open" && !isSendingLiveResults
+            enabled = diagnostics.projectState == "Event File open" && !isSendingLiveResults
         ) {
             ButtonLabel(if (isSendingLiveResults) "Sending" else "Send ROBIS")
         }
@@ -2425,7 +2546,7 @@ private fun ManualReadoutAddRow(
     }
 }
 
-/** Shows one readout row with deletion routed through shared project-editing rules. */
+/** Shows one readout row with deletion routed through shared Event File editing rules. */
 @Composable
 private fun ReadoutDetailRow(
     readout: EventReadoutDetails,
@@ -3528,7 +3649,7 @@ private fun CategoryDeleteButton(
     }
 }
 
-/** Shows editable race metadata backed by shared project-editing rules. */
+/** Shows editable race metadata backed by shared Event File editing rules. */
 @Composable
 private fun RaceDetailsPanel(
     details: EventRaceDetails,
@@ -3950,7 +4071,7 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
         DesktopSection.Readouts -> "${summary?.readoutCount ?: 0} SI-card readouts loaded."
         DesktopSection.InForest -> "Started competitors without readouts."
         DesktopSection.Results -> "${summary?.resultCount ?: 0} results loaded."
-        DesktopSection.Settings -> "Project diagnostics and desktop beta scope."
+        DesktopSection.Settings -> "Event File diagnostics and desktop beta scope."
     }
 }
 
@@ -3967,7 +4088,7 @@ private fun EventReadoutDuplicatePolicy.toDisplayLabel(): String =
         EventReadoutDuplicatePolicy.CreateNew -> "Create new readout"
     }
 
-/** Shows the current SI-reader connection state and project-save status. */
+/** Shows the current SI-reader connection state and Event File save status. */
 @Composable
 private fun StatusStrip(
     projectStatusText: String,

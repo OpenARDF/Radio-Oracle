@@ -7,7 +7,7 @@ import org.openardf.radiooracle.shared.domain.RaceType
 /** Creates shared project-file aggregates for new desktop and future non-Android projects. */
 object EventProjectFactory {
     /**
-     * Builds an empty event project using the same conservative defaults as Android's new race model.
+     * Builds an empty Event File using the same conservative defaults as Android's new race model.
      *
      * The caller supplies IDs and time text so UI layers can choose platform-specific UUID and clock
      * sources while shared code owns the event defaults and aggregate shape.

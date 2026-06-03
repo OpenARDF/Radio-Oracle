@@ -29,7 +29,7 @@ Windows observations:
 
 Request:
 - Please fetch latest `codex/multiplatform-beta-work` and confirm Mac is on/after `1f2a843`.
-- Open the same sample project, `samples/desktop-smoke.rom.json`, in the Mac desktop app.
+- Open the same sample Event File, `samples/desktop-smoke.rom.json`, in the Mac desktop app.
 - Compare visible sections/actions with Windows: Races, Categories, Competitors, Aliases, Start List, Readouts, In Forest, Results, Settings, File-menu import/export actions, Readouts actions, local result controls, printer controls, and duplicate-readout settings.
 - If possible, capture or describe Mac screenshots/viewport details for the main sections so we can align Windows visual sizing against the same commit.
 - Please reply here with Mac commit tested, whether feature/action parity holds, and any specific Mac-vs-Windows layout differences you see.
@@ -59,7 +59,7 @@ Launch and sample:
 Feature/action parity:
 - The Mac build shows the same left-rail sections requested for comparison: Races, Categories, Competitors, Start List, Aliases, Readouts, In Forest, Results, and Settings.
 - The desktop UI source for these sections is shared Compose Desktop code in `desktopApp/src/main/kotlin/org/openardf/radiooracle/desktop/Main.kt`; I did not find separate Mac-vs-Windows screen implementations.
-- File-menu actions are present in the shared code: New Project, Open, Import Android Race Backup JSON, Save, Save As, Export Copy, ARDF JSON, Android Race Backup JSON, Live Results JSON, Final Results JSON, IOF Start List XML, IOF Result List XML, category/competitor/start CSV imports, category/competitor/start/readout/result CSV exports, ROBIS start-list CSV export, ARDFEvent results CSV export, Results TXT, Results HTML, and Close Project.
+- File-menu actions are present in the shared code: New Event File, Open, Import Android Race Backup JSON, Save, Save As, Export Copy, ARDF JSON, Android Race Backup JSON, Live Results JSON, Final Results JSON, IOF Start List XML, IOF Result List XML, category/competitor/start CSV imports, category/competitor/start/readout/result CSV exports, ROBIS start-list CSV export, ARDFEvent results CSV export, Results TXT, Results HTML, and Close Event File.
 - Readouts actions are present on Mac: Download SI, Start SI, Stop SI, manual readout add controls, unmatched assignment/status controls, delete, result status controls, finish-ticket preview, and print.
 - Settings controls are present on Mac: duplicate SI-card policy, readout alert sounds, aliases toggle, printer diagnostics, local result controls, ROBIS send controls, and background ROBIS sending.
 - Printer detection worked in this Mac session and reported `Ready: EPSON ET-2720 Series`.

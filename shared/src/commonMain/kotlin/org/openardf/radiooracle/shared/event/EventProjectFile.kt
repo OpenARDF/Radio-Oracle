@@ -5,7 +5,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-/** File envelope for future shared event project import/export. */
+/** File envelope for future shared Event File import/export. */
 @Serializable
 data class EventProjectFile(
     val schemaVersion: Int = EventProjectFileFormat.CURRENT_SCHEMA_VERSION,
@@ -17,7 +17,7 @@ data class EventProjectFile(
         EventProjectFileFormat.isSupportedSchema(schemaVersion)
 }
 
-/** JSON codec for portable `.rom.json` project files. */
+/** JSON codec for portable `.rom.json` Event Files. */
 object EventProjectFileJson {
     private val json = Json {
         encodeDefaults = true
@@ -25,12 +25,12 @@ object EventProjectFileJson {
         prettyPrint = true
     }
 
-    /** Encodes a project file using the stable, shared desktop-beta JSON format. */
+    /** Encodes an Event File using the stable, shared desktop-beta JSON format. */
     fun encode(projectFile: EventProjectFile): String =
         json.encodeToString(projectFile)
 
     /**
-     * Decodes a project file and rejects schema versions this build does not support.
+     * Decodes an Event File and rejects schema versions this build does not support.
      *
      * Unknown fields are tolerated for additive metadata inside a supported schema
      * version, but schema upgrades must still increment `schemaVersion`.
@@ -38,13 +38,13 @@ object EventProjectFileJson {
     fun decode(text: String): EventProjectFile {
         val projectFile = json.decodeFromString<EventProjectFile>(text)
         require(projectFile.isSupportedSchema()) {
-            "Unsupported Radio-Oracle project file schema version: ${projectFile.schemaVersion}"
+            "Unsupported Radio-Oracle Event File schema version: ${projectFile.schemaVersion}"
         }
         return projectFile
     }
 }
 
-/** Schema metadata for portable Radio-Oracle project files. */
+/** Schema metadata for portable Radio-Oracle Event Files. */
 object EventProjectFileFormat {
     const val APP_NAME = "Radio-Oracle"
     const val CURRENT_SCHEMA_VERSION = 1

@@ -38,7 +38,7 @@ finish table:
   print target and detected system printers;
 - serve auto-refreshing loopback-only local result/category/start-list/in-forest
   displays plus `/results.json`, `/categories.json`, `/starts.json`, and
-  `/in-forest.json` endpoints from the open desktop project;
+  `/in-forest.json` endpoints from the open desktop Event File;
 - track started competitors without readouts in an In Forest desktop view;
 - recalculate results using shared services;
 - import/export supported event and result formats as they move into shared
@@ -84,8 +84,8 @@ The current desktop beta decisions are:
 
 ## Storage
 
-Use file-backed project storage for the beta, most likely a `.rom.json` project
-file. Shared SQL remains post-beta. A later SQL spike should compare Room KMP as
+Use file-backed Event File storage for the beta, most likely a `.rom.json`
+Event File. Shared SQL remains post-beta. A later SQL spike should compare Room KMP as
 the baseline candidate against SQLDelight as the fallback/comparison option.
 
 ## UI And Module Shape
@@ -132,6 +132,44 @@ product. Reuse the Android visual language where practical:
 Desktop ergonomics can adapt to larger screens, menus, keyboard shortcuts, and
 resizable windows, but those adaptations should extend the Android interface
 rather than inventing a separate desktop visual identity.
+
+The provisional desktop navigation direction is workflow-first and should be
+tested with real event use before treating it as a fixed design. Keep four
+top-level workflow groups visible along the bottom of the desktop app, echoing
+Android bottom navigation:
+
+- Preparation/Setup;
+- Race Operations;
+- Results/File Export;
+- Help/About/App Settings.
+
+Selecting a workflow group should change the left-side navigation to show
+task-specific items for that workflow. Lower-level items may replace the
+left-side navigation with one submenu level, but that submenu must include a
+visually distinct Back button that returns to the previous menu. The bottom
+workflow navigation should remain available as the user's return-to-top path.
+Use breadcrumbs or equivalent context text, such as
+`Preparation/Setup > Categories`, so testers can tell where they are.
+
+Initial placement guidance:
+
+- Preparation/Setup: Event File commands, race details, categories, competitors,
+  aliases/control names, start-list setup, setup imports, setup exports, and
+  Event File diagnostics/validation under a Utils item.
+- Race Operations: SI readout, continuous readout, unmatched readouts,
+  competitor race-day status, in-forest monitoring, finish tickets, download
+  station status, and printer readiness.
+- Results/File Export: results review, manual result status edits, live/local
+  result display, ROBIS sending, result exports, JSON/XML/TXT/HTML exports, and
+  archival Event File copy export.
+- Help/About/App Settings: settings that affect app behavior, such as alias
+  display, race-discipline mode, duplicate-SI policy, readout alert sounds,
+  hardware/app preferences, logs, beta scope, help, and about information.
+
+This grouping is a beta UX hypothesis. If an action does not fit naturally in
+one of these workflows, treat that as evidence that the action name, behavior,
+or location needs more product review rather than forcing the action into the
+nearest bucket.
 
 The desktop app should keep platform concerns thin:
 
@@ -235,14 +273,14 @@ alignment before any intentional publish.
 
 After a public publish, `npm run jdeploy:registry-smoke -- <version>` installs
 that exact registry version in a temporary directory, launches it with the smoke
-project, confirms startup, and quits the app.
+Event File, confirms startup, and quits the app.
 
 Current local packaging evidence: the Gradle app-image checks,
 `npm run jdeploy:pack-preview`, `npm run jdeploy:release-preflight`,
 `npm run jdeploy:local-smoke`, and
 `npm run jdeploy:registry-smoke -- 1.0.1` pass on macOS with JDK 17 selected.
 Windows packaged-app smoke reached the installed executable and loaded the
-sample project; the npm helper scripts are cross-platform, but final Windows
+sample Event File; the npm helper scripts are cross-platform, but final Windows
 confirmation is still tracked through `CODEX_MAILBOX.md`.
 
 ### Desktop USB Feasibility
@@ -342,7 +380,7 @@ compares raw system-info offsets against the first detected station. Use
 an explicit comparison order.
 
 For local macOS smoke tests, prefer copying the generated `.app` and sample
-project file to `/tmp` before launching with `open ... --args <sample.rom.json>`.
+Event File to `/tmp` before launching with `open ... --args <sample.rom.json>`.
 Launching the checkout-built app bundle directly from `Documents/GitHub` can
 trigger a macOS Documents-folder permission prompt, which is not useful for
 repeatable package validation.
@@ -353,22 +391,22 @@ repeatable package validation.
 2. Done: add a desktop app module with a minimal launch window and no event editing.
    The shell uses Compose Desktop, Android-derived colors, Android navigation
    vocabulary, and a non-editing status strip.
-3. In progress: add file-backed open/save for a shared project envelope.
+3. In progress: add file-backed open/save for a shared Event File envelope.
    The shared `.rom.json` envelope now has a tested JSON codec; desktop file
-   filesystem wiring and current-project session state now live in the desktop
+   filesystem wiring and current Event File session state now live in the desktop
    app module. File menu open/save/export-copy/close wiring is present, dirty
    open/close/exit paths prompt to save, discard, or cancel, and the app can
-   create a new empty project using shared Android-compatible race defaults or
+   create a new empty Event File using shared Android-compatible race defaults or
    accept a startup `.rom.json` path for repeatable smoke runs.
 4. In progress: add the first event-admin screen backed by shared models and
    services. The Races section now shows race details from shared display models
    and can edit the race name, start date/time, race type, race level, race
-   band, and time limit through shared project-editing rules. Desktop
-   project-session state now tracks unsaved edits and can save back to the
-   current project path. The
+   band, and time limit through shared Event File editing rules. Desktop
+   Event File session state now tracks unsaved edits and can save back to the
+   current Event File path. The
    Categories section now shows category rows using shared effective race settings, can add categories with conservative
    defaults, and can edit category names, length, climb, and control-point
-   strings through shared project-editing rules. Dense category and competitor
+   strings through shared Event File editing rules. Dense category and competitor
    grids use fixed-width columns with horizontal scrolling. Category,
    competitor, alias, readout, and result rows use one-line row action buttons;
    add actions stay reachable beside scrollable entry fields where the entry
@@ -379,20 +417,20 @@ repeatable package validation.
    and display formatting, can add uncategorized competitors with conservative
    defaults, and can edit competitor first and last names, category assignment,
    club, index, birth year, start numbers, SI numbers, and competitor deletion
-   through shared project-editing rules. Deleted competitor readouts can be kept
+   through shared Event File editing rules. Deleted competitor readouts can be kept
    as unmatched readouts or deleted with the competitor, matching the Android
    deletion policy.
    The Aliases section can
    add/delete aliases and edit existing alias SI codes and names through shared
    alias validation rules. The Readouts section now shows matched and unmatched
-   SI-card readout rows and can delete readouts through shared project-editing
+   SI-card readout rows and can delete readouts through shared Event File editing
    rules, set an explicit manual result status, or create manual readouts with
    competitor matching, SI number, start/finish seconds, and control punch
    codes. The Start List section can draw start times by category with a
    configurable interval and club rotation. The Results section now shows
    competitor result rows and can set the same explicit manual result status for
    matched readouts. The Settings
-   section now shows project diagnostics, shared event validation issues, and
+   section now shows Event File diagnostics, shared event validation issues, and
    the desktop beta scope boundary. The File menu can import Android-compatible
    category, competitor, ARDFEvent registration, start-list CSV, and
    race-backup JSON files; export
@@ -401,7 +439,7 @@ repeatable package validation.
    ROBIS start-list CSV, ARDFEvent-style results CSV, result TXT/HTML, IOF
    start/result-list XML, Android-shaped race-backup, live-result, and
    final-result JSON, and standards-facing ARDF JSON. A sample
-   smoke-test project is available at `samples/desktop-smoke.rom.json`, with
+   smoke-test Event File is available at `samples/desktop-smoke.rom.json`, with
    automated desktop coverage for the session-level open, edit, save, close,
    reopen, export-copy, CSV export, and ARDF JSON export flows.
 5. In progress: add jDeploy metadata after the desktop app can complete a real
@@ -424,7 +462,7 @@ repeatable package validation.
    download stations for response timing and system-info differences. The
    desktop Readouts screen now has a single-shot "Download SI" action and
    experimental continuous "Start SI" / "Stop SI" controls that add
-   SI5/SI6/SI8/SI9/SIAC card readouts to the open project when the attached
+   SI5/SI6/SI8/SI9/SIAC card readouts to the open Event File when the attached
    station is present and in READOUT/SI MASTER mode.
 7. Long-term: add Station Maintenance after the desktop event-admin beta is
    stable. The first version should be read-only for the attached USB
