@@ -1539,6 +1539,7 @@ private fun RadioOManagerDesktopApp(
                         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                             SectionWorkspace(
                                 section = navState.selectedSection,
+                                title = DesktopNavigation.selectedLabel(navState),
                                 breadcrumb = DesktopNavigation.breadcrumb(navState),
                                 projectFile = projectFile,
                                 projectStatusText = projectStatusText,
@@ -1651,7 +1652,7 @@ private fun NavigationRail(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         items.forEach { item ->
-            val isSelected = item.section != null && item.section == navState.selectedSection && item.children.isEmpty()
+            val isSelected = item.id == navState.selectedItemId && item.children.isEmpty()
             val isEnabled = item.action?.let(isNavActionEnabled) ?: true
             Button(
                 onClick = { onItemSelected(item) },
@@ -1731,6 +1732,7 @@ private fun WorkflowBar(
 @Composable
 private fun SectionWorkspace(
     section: DesktopSection,
+    title: String,
     breadcrumb: String,
     projectFile: EventProjectFile?,
     projectStatusText: String,
@@ -1797,7 +1799,7 @@ private fun SectionWorkspace(
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = section.label,
+            text = title,
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = DesktopPalette.Black

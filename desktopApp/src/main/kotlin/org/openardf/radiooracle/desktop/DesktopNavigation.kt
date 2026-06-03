@@ -58,13 +58,15 @@ data class DesktopNavItem(
 data class DesktopNavState(
     val workflow: DesktopWorkflow = DesktopWorkflow.Setup,
     val submenuStack: List<String> = emptyList(),
-    val selectedSection: DesktopSection = DesktopSection.Races
+    val selectedSection: DesktopSection = DesktopSection.Races,
+    val selectedItemId: String = "setup.race"
 ) {
     fun switchWorkflow(nextWorkflow: DesktopWorkflow): DesktopNavState =
         copy(
             workflow = nextWorkflow,
             submenuStack = emptyList(),
-            selectedSection = DesktopNavigation.defaultSection(nextWorkflow)
+            selectedSection = DesktopNavigation.defaultSection(nextWorkflow),
+            selectedItemId = DesktopNavigation.defaultItemId(nextWorkflow)
         )
 
     fun enter(item: DesktopNavItem): DesktopNavState =
@@ -72,7 +74,7 @@ data class DesktopNavState(
             item.children.isNotEmpty() && submenuStack.size < MaxSubmenuDepth ->
                 copy(submenuStack = submenuStack + item.id)
             item.section != null ->
-                copy(selectedSection = item.section)
+                copy(selectedSection = item.section, selectedItemId = item.id)
             else -> this
         }
 
@@ -260,7 +262,7 @@ object DesktopNavigation {
             labels += item.label
             items = item.children
         }
-        currentItems(state).firstOrNull { it.section == state.selectedSection }?.let { selected ->
+        currentItems(state).firstOrNull { it.id == state.selectedItemId }?.let { selected ->
             if (selected.label !in labels) {
                 labels += selected.label
             }
@@ -275,6 +277,24 @@ object DesktopNavigation {
             DesktopWorkflow.ResultsExport -> DesktopSection.Results
             DesktopWorkflow.SettingsHelp -> DesktopSection.Settings
         }
+
+    fun defaultItemId(workflow: DesktopWorkflow): String =
+        when (workflow) {
+            DesktopWorkflow.Setup -> "setup.race"
+            DesktopWorkflow.RaceOps -> "race.readouts"
+            DesktopWorkflow.ResultsExport -> "results.results"
+            DesktopWorkflow.SettingsHelp -> "settings.app"
+        }
+
+    fun selectedLabel(state: DesktopNavState): String =
+        allItems(state.workflow).firstOrNull { it.id == state.selectedItemId }?.label
+            ?: state.selectedSection.label
+
+    private fun allItems(workflow: DesktopWorkflow): List<DesktopNavItem> {
+        fun flatten(items: List<DesktopNavItem>): List<DesktopNavItem> =
+            items + items.flatMap { flatten(it.children) }
+        return flatten(roots.getValue(workflow))
+    }
 
     private fun eventFileActions(workflow: DesktopWorkflow): List<DesktopNavItem> =
         listOf(

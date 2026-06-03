@@ -40,7 +40,6 @@ class DesktopNavigationTest {
             .enter(DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Start List" })
             .enter(DesktopNavigation.currentItems(DesktopNavState(submenuStack = listOf("setup.start-list")))
                 .first { it.label == "Exports" })
-            .copy(selectedSection = DesktopSection.StartList)
 
         assertEquals(
             "Preparation/Setup > Start List > Exports",
@@ -75,6 +74,19 @@ class DesktopNavigationTest {
         assertEquals(DesktopWorkflow.RaceOps, state.workflow)
         assertTrue(state.submenuStack.isEmpty())
         assertEquals(DesktopSection.Readouts, state.selectedSection)
+        assertEquals("race.readouts", state.selectedItemId)
+    }
+
+    @Test
+    fun preservesSelectedMenuItemWhenMultipleItemsShareASection() {
+        val finishTickets = DesktopNavigation.rootItems(DesktopWorkflow.RaceOps)
+            .first { it.label == "Finish Tickets" }
+        val state = DesktopNavState().switchWorkflow(DesktopWorkflow.RaceOps).enter(finishTickets)
+
+        assertEquals(DesktopSection.Readouts, state.selectedSection)
+        assertEquals("race.finish-tickets", state.selectedItemId)
+        assertEquals("Finish Tickets", DesktopNavigation.selectedLabel(state))
+        assertEquals("Race Operations > Finish Tickets", DesktopNavigation.breadcrumb(state))
     }
 
     @Test
