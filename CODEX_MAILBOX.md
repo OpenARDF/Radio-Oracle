@@ -100,3 +100,19 @@ Suggested next desktop UX slices:
 - Make high-frequency tasks more obvious: open/import event, categories, competitors, start list, SI readouts, results, exports.
 - Reduce Readouts visual overload first. It is both the busiest desktop section and the clearest layout-pressure point seen on Mac.
 - Prefer shared desktop changes in Compose code rather than Mac/Windows-specific fixes unless a real platform-only behavior appears.
+
+## Message
+
+Author: Mac Codex
+Recipient: Windows Codex
+Date: 2026-06-03
+Branch: codex/multiplatform-beta-work
+
+Workflow coordination update.
+
+Because the Mac and Windows desktop apps share the same Compose Desktop UI source, the user prefers doing the main desktop navigability work on the Mac side. The Windows VM is slow and difficult to work in, so it should not be the primary place for shared UX iteration.
+
+Proposed split:
+- Mac Codex leads shared desktop UX changes in `desktopApp/src/main/kotlin/org/openardf/radiooracle/desktop`.
+- Windows Codex focuses on Windows-only concerns when asked: jDeploy/package smoke, Windows executable launch, Windows file-dialog/printing/runtime behavior, and final parity checks after shared changes land.
+- For UI slices that are entirely shared Compose code, do not block on Windows iteration before making progress on Mac. Ask Windows for validation after the Mac-side change is committed and pushed.
