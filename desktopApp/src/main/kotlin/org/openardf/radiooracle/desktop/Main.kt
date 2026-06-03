@@ -92,7 +92,9 @@ import java.awt.Toolkit
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.YearMonth
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -246,6 +248,7 @@ fun main(args: Array<String>) = application {
         var areAliasesEnabled by remember { mutableStateOf(true) }
         var localResultServerUrl by remember { mutableStateOf<String?>(null) }
         var isAboutDialogVisible by remember { mutableStateOf(false) }
+        var newEventFileDialogStart by remember { mutableStateOf<LocalDateTime?>(null) }
         var raceClockTick by remember { mutableStateOf(0L) }
         var printerDiagnostics by remember { mutableStateOf(DesktopPrinterDiagnostics.from(emptyList())) }
         val siPortMutex = remember { Mutex() }
@@ -301,11 +304,15 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun createNewProject() {
+        fun showNewEventFileDialog() {
+            newEventFileDialogStart = DesktopDateTimeText.defaultStartDateTime()
+        }
+
+        fun createNewProject(raceName: String, startDateTime: LocalDateTime) {
             val project = EventProjectFactory.createEmptyProject(
                 raceId = UUID.randomUUID().toString(),
-                raceName = "New Event",
-                startDateTimeIso = LocalDateTime.now().withNano(0).toString()
+                raceName = raceName.ifBlank { "New Event" },
+                startDateTimeIso = DesktopDateTimeText.isoText(startDateTime)
             )
             projectSession.newProject(project)
             syncProjectState()
@@ -785,7 +792,7 @@ fun main(args: Array<String>) = application {
                     localResultServer.stop()
                     exitApplication()
                 }
-                PendingDirtyProjectAction.NewProject -> createNewProject()
+                PendingDirtyProjectAction.NewProject -> showNewEventFileDialog()
                 is PendingDirtyProjectAction.OpenProject -> openProject(action.path)
                 is PendingDirtyProjectAction.ImportAndroidRaceBackup -> importAndroidRaceBackupJson(action.path)
                 PendingDirtyProjectAction.CloseProject -> closeProject(
@@ -860,7 +867,7 @@ fun main(args: Array<String>) = application {
                 PendingDirtyProjectAction.NewProject
             )
             if (pendingDirtyProjectAction == null) {
-                createNewProject()
+                showNewEventFileDialog()
             }
         }
 
@@ -983,6 +990,16 @@ fun main(args: Array<String>) = application {
         }
         if (isAboutDialogVisible) {
             AboutRadioOracleDialog(onDismiss = { isAboutDialogVisible = false })
+        }
+        newEventFileDialogStart?.let { initialStart ->
+            NewEventFileDialog(
+                initialStartDateTime = initialStart,
+                onCreate = { raceName, startDateTime ->
+                    newEventFileDialogStart = null
+                    createNewProject(raceName, startDateTime)
+                },
+                onDismiss = { newEventFileDialogStart = null }
+            )
         }
 
         RadioOManagerDesktopApp(
@@ -3696,8 +3713,11 @@ private fun RaceDetailsPanel(
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit
 ) {
     var raceNameDraft by remember(details.name) { mutableStateOf(details.name) }
+    val savedStartDateTime = remember(details.startDateTimeIso) {
+        DesktopDateTimeText.parseIsoOrNull(details.startDateTimeIso) ?: DesktopDateTimeText.defaultStartDateTime()
+    }
     var startDateTimeDraft by remember(details.startDateTimeIso) {
-        mutableStateOf(details.startDateTimeIso)
+        mutableStateOf(savedStartDateTime)
     }
     var selectedRaceType by remember(details.raceType) { mutableStateOf(details.raceType) }
     var selectedRaceLevel by remember(details.raceLevel) { mutableStateOf(details.raceLevel) }
@@ -3730,15 +3750,15 @@ private fun RaceDetailsPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextField(
+            DateTimePickerField(
+                label = "Start date/time",
                 value = startDateTimeDraft,
                 onValueChange = { startDateTimeDraft = it },
                 modifier = Modifier.weight(1f),
-                label = { Text("Start date/time") }
             )
             Button(
-                onClick = { onUpdateRaceStartDateTime(startDateTimeDraft) },
-                enabled = startDateTimeDraft != details.startDateTimeIso
+                onClick = { onUpdateRaceStartDateTime(DesktopDateTimeText.isoText(startDateTimeDraft)) },
+                enabled = !startDateTimeDraft.isEqual(savedStartDateTime)
             ) {
                 Text("Apply")
             }
@@ -3775,6 +3795,261 @@ private fun RaceDetailsPanel(
             }
         }
         DetailRow("Time limit", details.timeLimitText)
+    }
+}
+
+@Composable
+private fun NewEventFileDialog(
+    initialStartDateTime: LocalDateTime,
+    onCreate: (String, LocalDateTime) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var raceNameDraft by remember(initialStartDateTime) { mutableStateOf("New Event") }
+    var startDateTimeDraft by remember(initialStartDateTime) { mutableStateOf(initialStartDateTime) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("New Event File") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                TextField(
+                    value = raceNameDraft,
+                    onValueChange = { raceNameDraft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Event name") }
+                )
+                DateTimePickerField(
+                    label = "Start date/time",
+                    value = startDateTimeDraft,
+                    onValueChange = { startDateTimeDraft = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onCreate(raceNameDraft.trim(), startDateTimeDraft) }) {
+                Text("Create")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun DateTimePickerField(
+    label: String,
+    value: LocalDateTime,
+    onValueChange: (LocalDateTime) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isPickerOpen by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextField(
+            value = DesktopDateTimeText.isoText(value),
+            onValueChange = {},
+            readOnly = true,
+            modifier = Modifier.weight(1f),
+            label = { Text(label) }
+        )
+        Button(onClick = { isPickerOpen = true }) {
+            Text("Pick")
+        }
+    }
+    if (isPickerOpen) {
+        DateTimePickerDialog(
+            initialValue = value,
+            onValueSelected = {
+                isPickerOpen = false
+                onValueChange(it)
+            },
+            onDismiss = { isPickerOpen = false }
+        )
+    }
+}
+
+@Composable
+private fun DateTimePickerDialog(
+    initialValue: LocalDateTime,
+    onValueSelected: (LocalDateTime) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedDate by remember(initialValue) { mutableStateOf(initialValue.toLocalDate()) }
+    var visibleMonth by remember(initialValue) { mutableStateOf(YearMonth.from(initialValue)) }
+    var hourText by remember(initialValue) { mutableStateOf(initialValue.hour.toString().padStart(2, '0')) }
+    var minuteText by remember(initialValue) { mutableStateOf(initialValue.minute.toString().padStart(2, '0')) }
+    var secondText by remember(initialValue) { mutableStateOf(initialValue.second.toString().padStart(2, '0')) }
+
+    fun setFromDateTime(value: LocalDateTime) {
+        selectedDate = value.toLocalDate()
+        visibleMonth = YearMonth.from(selectedDate)
+        hourText = value.hour.toString().padStart(2, '0')
+        minuteText = value.minute.toString().padStart(2, '0')
+        secondText = value.second.toString().padStart(2, '0')
+    }
+
+    val selectedDateTime = DesktopDateTimeText.parseOrNull(
+        selectedDate.toString(),
+        "$hourText:$minuteText:$secondText"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Pick start date/time") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                CalendarMonthPicker(
+                    visibleMonth = visibleMonth,
+                    selectedDate = selectedDate,
+                    onPreviousMonth = { visibleMonth = visibleMonth.minusMonths(1) },
+                    onNextMonth = { visibleMonth = visibleMonth.plusMonths(1) },
+                    onDateSelected = { selectedDate = it }
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextField(
+                        value = hourText,
+                        onValueChange = { hourText = it.take(2) },
+                        modifier = Modifier.width(64.dp),
+                        label = { Text("Hour") }
+                    )
+                    TextField(
+                        value = minuteText,
+                        onValueChange = { minuteText = it.take(2) },
+                        modifier = Modifier.width(64.dp),
+                        label = { Text("Min") }
+                    )
+                    TextField(
+                        value = secondText,
+                        onValueChange = { secondText = it.take(2) },
+                        modifier = Modifier.width(64.dp),
+                        label = { Text("Sec") }
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { setFromDateTime(DesktopDateTimeText.defaultStartDateTime()) }) {
+                        Text("Now")
+                    }
+                    Button(
+                        onClick = { selectedDateTime?.minusHours(1)?.let(::setFromDateTime) },
+                        enabled = selectedDateTime != null
+                    ) {
+                        Text("-1 hr")
+                    }
+                    Button(
+                        onClick = { selectedDateTime?.plusHours(1)?.let(::setFromDateTime) },
+                        enabled = selectedDateTime != null
+                    ) {
+                        Text("+1 hr")
+                    }
+                    Button(
+                        onClick = { selectedDateTime?.plusMinutes(15)?.let(::setFromDateTime) },
+                        enabled = selectedDateTime != null
+                    ) {
+                        Text("+15 min")
+                    }
+                }
+                if (selectedDateTime == null) {
+                    Text("Enter a valid 24-hour time.", color = DesktopPalette.Error)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { selectedDateTime?.let(onValueSelected) },
+                enabled = selectedDateTime != null
+            ) {
+                Text("Use")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun CalendarMonthPicker(
+    visibleMonth: YearMonth,
+    selectedDate: LocalDate,
+    onPreviousMonth: () -> Unit,
+    onNextMonth: () -> Unit,
+    onDateSelected: (LocalDate) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(onClick = onPreviousMonth) {
+                Text("<")
+            }
+            Text(
+                text = "${visibleMonth.month.name.lowercase().replaceFirstChar(Char::titlecase)} ${visibleMonth.year}",
+                fontWeight = FontWeight.Bold
+            )
+            Button(onClick = onNextMonth) {
+                Text(">")
+            }
+        }
+        CalendarWeekRow(listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")) { label ->
+            Text(
+                text = label,
+                modifier = Modifier.width(42.dp),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        val firstDayOffset = visibleMonth.atDay(1).dayOfWeek.value - 1
+        val dayCells = List<LocalDate?>(firstDayOffset) { null } +
+                (1..visibleMonth.lengthOfMonth()).map { visibleMonth.atDay(it) }
+        dayCells.chunked(7).forEach { week ->
+            CalendarWeekRow(week) { date ->
+                if (date == null) {
+                    Spacer(modifier = Modifier.width(42.dp).height(32.dp))
+                } else {
+                    Button(
+                        onClick = { onDateSelected(date) },
+                        modifier = Modifier.width(42.dp).height(32.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            backgroundColor = if (date.isEqual(selectedDate)) {
+                                DesktopPalette.SecondaryVariant
+                            } else {
+                                MaterialTheme.colors.primary
+                            },
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text(date.dayOfMonth.toString(), fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun <T> CalendarWeekRow(values: List<T>, content: @Composable (T) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        values.forEach { value ->
+            content(value)
+        }
+        repeat(7 - values.size) {
+            Spacer(modifier = Modifier.width(42.dp).height(32.dp))
+        }
     }
 }
 
