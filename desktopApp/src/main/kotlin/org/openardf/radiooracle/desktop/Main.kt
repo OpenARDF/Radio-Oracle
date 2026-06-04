@@ -4597,18 +4597,27 @@ private fun WorkflowHomePanel(workflow: DesktopWorkflow, projectFile: EventProje
 /** Provides section-specific content summaries without introducing editing behavior. */
 private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFile?): String {
     val summary = projectFile?.let(EventProjectSummary::from)
+    fun requiresEventFile(action: String): String =
+        "Open or create an Event File before $action."
     return when (section) {
         DesktopSection.WorkflowHome -> "Workflow overview for event setup, race operations, results, exports, and app support."
         DesktopSection.EventFile -> summary?.let { "Event File open: ${it.raceName}" }
             ?: "Create a new Event File or open an existing one to begin."
         DesktopSection.Races -> summary?.raceName ?: "Create a new Event File or open an existing one to begin."
-        DesktopSection.Categories -> "${summary?.categoryCount ?: 0} categories loaded."
-        DesktopSection.Competitors -> "${summary?.competitorCount ?: 0} competitors loaded."
-        DesktopSection.StartList -> "Competitors sorted by drawn start time."
-        DesktopSection.Aliases -> "${projectFile?.raceData?.aliases?.size ?: 0} aliases loaded."
-        DesktopSection.Readouts -> "${summary?.readoutCount ?: 0} SI-card readouts loaded."
-        DesktopSection.InForest -> "Started competitors without readouts."
-        DesktopSection.Results -> "${summary?.resultCount ?: 0} results loaded."
+        DesktopSection.Categories -> summary?.let { "${it.categoryCount} categories loaded." }
+            ?: requiresEventFile("editing categories")
+        DesktopSection.Competitors -> summary?.let { "${it.competitorCount} competitors loaded." }
+            ?: requiresEventFile("editing competitors")
+        DesktopSection.StartList -> summary?.let { "Competitors sorted by drawn start time." }
+            ?: requiresEventFile("working with the start list")
+        DesktopSection.Aliases -> projectFile?.let { "${it.raceData.aliases.size} aliases loaded." }
+            ?: requiresEventFile("editing aliases")
+        DesktopSection.Readouts -> summary?.let { "${it.readoutCount} SI-card readouts loaded." }
+            ?: requiresEventFile("working with SI-card readouts")
+        DesktopSection.InForest -> summary?.let { "Started competitors without readouts." }
+            ?: requiresEventFile("reviewing competitors in the forest")
+        DesktopSection.Results -> summary?.let { "${it.resultCount} results loaded." }
+            ?: requiresEventFile("viewing results")
         DesktopSection.Settings -> "Event File diagnostics and desktop beta scope."
     }
 }
