@@ -95,6 +95,16 @@ data class DesktopNavState(
         if (submenuStack.isEmpty()) {
             return this
         }
+        if (
+            selectedItemId != submenuStack.last() &&
+            DesktopNavigation.currentItems(this).any { it.id == selectedItemId }
+        ) {
+            val currentMenu = DesktopNavigation.itemById(workflow, submenuStack.last())
+            return copy(
+                selectedSection = currentMenu?.section ?: selectedSection,
+                selectedItemId = submenuStack.last()
+            )
+        }
         val nextStack = submenuStack.dropLast(1)
         return if (nextStack.isEmpty()) {
             copy(
@@ -313,6 +323,15 @@ object DesktopNavigation {
 
     fun itemById(workflow: DesktopWorkflow, id: String): DesktopNavItem? =
         allItems(workflow).firstOrNull { it.id == id }
+
+    fun shouldGuardUnsavedNewEventDraft(
+        currentState: DesktopNavState,
+        nextState: DesktopNavState,
+        isUnsavedNewEventDraft: Boolean
+    ): Boolean =
+        isUnsavedNewEventDraft &&
+            currentState.selectedItemId == "setup.event-file.new" &&
+            currentState != nextState
 
     fun breadcrumb(state: DesktopNavState): String {
         val labels = mutableListOf(state.workflow.label)

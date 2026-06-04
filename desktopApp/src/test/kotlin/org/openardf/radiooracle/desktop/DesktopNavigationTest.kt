@@ -120,6 +120,52 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun backFromNewEventFileActionReturnsToEventFileMenu() {
+        val eventFileState = DesktopNavigation.selectItem(
+            DesktopNavState(),
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+        ).state
+        val newEventState = DesktopNavigation.selectItem(
+            eventFileState,
+            DesktopNavigation.currentItems(eventFileState).first { it.action == DesktopNavAction.NewEventFile }
+        ).state
+
+        val state = newEventState.back()
+
+        assertEquals(listOf("setup.event-file"), state.submenuStack)
+        assertEquals(DesktopSection.EventFile, state.selectedSection)
+        assertEquals("setup.event-file", state.selectedItemId)
+        assertEquals("Preparation/Setup > Event File", DesktopNavigation.breadcrumb(state))
+    }
+
+    @Test
+    fun unsavedNewEventDraftGuardBlocksNavigationAway() {
+        val eventFileState = DesktopNavigation.selectItem(
+            DesktopNavState(),
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+        ).state
+        val newEventState = DesktopNavigation.selectItem(
+            eventFileState,
+            DesktopNavigation.currentItems(eventFileState).first { it.action == DesktopNavAction.NewEventFile }
+        ).state
+
+        assertTrue(
+            DesktopNavigation.shouldGuardUnsavedNewEventDraft(
+                currentState = newEventState,
+                nextState = newEventState.back(),
+                isUnsavedNewEventDraft = true
+            )
+        )
+        assertFalse(
+            DesktopNavigation.shouldGuardUnsavedNewEventDraft(
+                currentState = newEventState,
+                nextState = newEventState.back(),
+                isUnsavedNewEventDraft = false
+            )
+        )
+    }
+
+    @Test
     fun preservesSelectedMenuItemWhenMultipleItemsShareASection() {
         val finishTickets = DesktopNavigation.rootItems(DesktopWorkflow.RaceOps)
             .first { it.label == "Finish Tickets" }

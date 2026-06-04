@@ -74,6 +74,29 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun navSelectDraftModeReportsGuardBeforeLeavingNewEventFile() {
+        val result = runAutomation("nav-select", "--draft", "Event File > New Event File > < Back")
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Event File\", \"New Event File\", \"< Back\"]"))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > New Event File\""))
+        assertTrue(result.stdout.contains("\"selectedItemId\":\"setup.event-file.new\""))
+        assertTrue(result.stdout.contains("\"action\":\"NewEventFile\""))
+        assertTrue(result.stdout.contains("\"guarded\":true"))
+    }
+
+    @Test
+    fun navSelectDraftModeReportsGuardBeforeWorkflowSwitch() {
+        val result = runAutomation("nav-select", "--draft", "Event File > New Event File > Race Ops")
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Event File\", \"New Event File\", \"Race Ops\"]"))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > New Event File\""))
+        assertTrue(result.stdout.contains("\"selectedItemId\":\"setup.event-file.new\""))
+        assertTrue(result.stdout.contains("\"guarded\":true"))
+    }
+
+    @Test
     fun siStatusDoesNotFailWithoutHardwareUnlessRequired() {
         val result = runAutomation("si-status")
 

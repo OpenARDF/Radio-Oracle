@@ -132,13 +132,44 @@ object DesktopAutomationCli {
             err.println("nav-select requires one or more menu labels.")
             return 64
         }
-        val labels = navSelectLabels(args)
+        val simulateDraft = args.firstOrNull() == "--draft"
+        val labels = navSelectLabels(if (simulateDraft) args.drop(1) else args)
         var state = DesktopNavState()
         var action: DesktopNavAction? = null
+        var isUnsavedNewEventDraft = false
         val selectedLabels = mutableListOf<String>()
         labels.forEach { label ->
+            val workflow = DesktopWorkflow.entries.firstOrNull { it.label == label || it.shortLabel == label }
+            if (workflow != null) {
+                val nextState = state.switchWorkflow(workflow)
+                if (
+                    DesktopNavigation.shouldGuardUnsavedNewEventDraft(
+                        state,
+                        nextState,
+                        isUnsavedNewEventDraft
+                    )
+                ) {
+                    out.println(navSelectJson(selectedLabels + label, state, action, guarded = true))
+                    return 0
+                }
+                state = nextState
+                action = null
+                selectedLabels += label
+                return@forEach
+            }
             if (label == "< Back") {
-                state = state.back()
+                val nextState = state.back()
+                if (
+                    DesktopNavigation.shouldGuardUnsavedNewEventDraft(
+                        state,
+                        nextState,
+                        isUnsavedNewEventDraft
+                    )
+                ) {
+                    out.println(navSelectJson(selectedLabels + label, state, action, guarded = true))
+                    return 0
+                }
+                state = nextState
                 action = null
                 selectedLabels += label
                 return@forEach
@@ -149,23 +180,43 @@ object DesktopAutomationCli {
                 return 66
             }
             val selection = DesktopNavigation.selectItem(state, item)
+            if (
+                DesktopNavigation.shouldGuardUnsavedNewEventDraft(
+                    state,
+                    selection.state,
+                    isUnsavedNewEventDraft
+                )
+            ) {
+                out.println(navSelectJson(selectedLabels + label, state, action, guarded = true))
+                return 0
+            }
             state = selection.state
             action = selection.action
+            if (simulateDraft && action == DesktopNavAction.NewEventFile) {
+                isUnsavedNewEventDraft = true
+            }
             selectedLabels += label
         }
-        out.println(
-            jsonObject(
-                "command" to "nav-select",
-                "selectedLabels" to selectedLabels,
-                "workflow" to state.workflow.label,
-                "breadcrumb" to DesktopNavigation.breadcrumb(state),
-                "selectedSection" to state.selectedSection.label,
-                "selectedItemId" to state.selectedItemId,
-                "action" to action?.name
-            )
-        )
+        out.println(navSelectJson(selectedLabels, state, action, guarded = false))
         return 0
     }
+
+    private fun navSelectJson(
+        selectedLabels: List<String>,
+        state: DesktopNavState,
+        action: DesktopNavAction?,
+        guarded: Boolean
+    ): String =
+        jsonObject(
+            "command" to "nav-select",
+            "selectedLabels" to selectedLabels,
+            "workflow" to state.workflow.label,
+            "breadcrumb" to DesktopNavigation.breadcrumb(state),
+            "selectedSection" to state.selectedSection.label,
+            "selectedItemId" to state.selectedItemId,
+            "action" to action?.name,
+            "guarded" to guarded
+        )
 
     private fun navSelectLabels(args: List<String>): List<String> =
         args.joinToString(" ")
@@ -267,7 +318,7 @@ object DesktopAutomationCli {
           logs                            Initialize logging and print current log files as JSON.
           log-test [message]              Write a desktop automation log entry.
           open-event-file <path>          Decode and validate an Event File.
-          nav-select <path>               Simulate menu selection, using > between labels. Supports < Back.
+          nav-select [--draft] <path>     Simulate menu selection, using > between labels. Supports < Back.
           si-status [--require] [--port]  Probe attached SI station state.
           printer-status [--require]      Inspect desktop printer selection state.
     """.trimIndent()

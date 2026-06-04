@@ -238,6 +238,7 @@ fun main(args: Array<String>) = application {
         var projectFile by remember { mutableStateOf(projectSession.currentProject) }
         var projectStatusText by remember { mutableStateOf(startupStatus) }
         var hasUnsavedChanges by remember { mutableStateOf(projectSession.hasUnsavedChanges) }
+        var newEventDraftProject by remember { mutableStateOf<EventProjectFile?>(null) }
         var pendingDirtyProjectAction by remember { mutableStateOf<PendingDirtyProjectAction?>(null) }
         var siReaderState by remember { mutableStateOf(DesktopSiReaderUiState.disconnected()) }
         var pendingSiModeWarning by remember { mutableStateOf<DesktopSiReaderUiState?>(null) }
@@ -301,6 +302,7 @@ fun main(args: Array<String>) = application {
         fun openProject(path: Path) {
             runCatching {
                 projectFile = projectSession.open(path)
+                newEventDraftProject = null
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
                 projectStatusText = "Opened ${path.fileName}"
                 DesktopDebugLog.info("EventFile", "Opened ${path.fileName}")
@@ -313,6 +315,7 @@ fun main(args: Array<String>) = application {
         fun closeProject(discardUnsavedChanges: Boolean = false) {
             runCatching {
                 projectSession.closeProject(discardUnsavedChanges)
+                newEventDraftProject = null
                 syncProjectState()
                 projectStatusText = "No Event File open."
                 DesktopDebugLog.info("EventFile", "Closed Event File")
@@ -329,6 +332,7 @@ fun main(args: Array<String>) = application {
                 startDateTimeIso = DesktopDateTimeText.isoText(DesktopDateTimeText.defaultStartDateTime())
             )
             projectSession.newProject(project)
+            newEventDraftProject = project
             syncProjectState()
             projectStatusText = "New unsaved Event File."
             DesktopDebugLog.info("EventFile", "Created new unsaved Event File")
@@ -608,6 +612,7 @@ fun main(args: Array<String>) = application {
                 ) ?: return false
                 return runCatching {
                     projectSession.saveAs(path)
+                    newEventDraftProject = null
                     syncProjectState()
                     projectStatusText = "Saved ${path.fileName}"
                     DesktopDebugLog.info("EventFile", "Saved ${path.fileName}")
@@ -618,6 +623,7 @@ fun main(args: Array<String>) = application {
             }
             return runCatching {
                 projectSession.save()
+                newEventDraftProject = null
                 syncProjectState()
                 projectStatusText = "Saved ${projectSession.currentPath?.fileName ?: "Event File"}"
                 DesktopDebugLog.info("EventFile", "Saved ${projectSession.currentPath?.fileName ?: "Event File"}")
@@ -644,6 +650,7 @@ fun main(args: Array<String>) = application {
             runCatching {
                 val imported = DesktopProjectFiles.importAndroidRaceBackupJson(path) { UUID.randomUUID().toString() }
                 projectFile = projectSession.newProject(imported)
+                newEventDraftProject = null
                 syncProjectState()
                 projectStatusText = "Imported ${path.fileName}"
             }.onFailure { error ->
@@ -1485,6 +1492,13 @@ fun main(args: Array<String>) = application {
                 localResultServer.stop()
                 localResultServerUrl = null
                 projectStatusText = "Local result display stopped."
+            },
+            isUnsavedNewEventFileDraft = newEventDraftProject != null && projectSession.currentPath == null,
+            onSaveEventFileForNavigation = ::saveCurrentProject,
+            onDiscardUnsavedNewEventFile = {
+                closeProject(discardUnsavedChanges = true)
+                newEventDraftProject = null
+                projectStatusText = "New Event File discarded."
             }
         )
     }
@@ -1501,6 +1515,36 @@ private fun UnsavedChangesDialog(
         onDismissRequest = onCancel,
         title = { Text("Unsaved changes") },
         text = { Text("Save changes before continuing?") },
+        confirmButton = {
+            Button(onClick = onSave) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onDiscard) {
+                    Text("Discard")
+                }
+                Button(onClick = onCancel) {
+                    Text("Cancel")
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun UnsavedNewEventFileDialog(
+    onSave: () -> Unit,
+    onDiscard: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Unsaved new Event File") },
+        text = {
+            Text("Save this new Event File before leaving this page, or discard it?")
+        },
         confirmButton = {
             Button(onClick = onSave) {
                 Text("Save")
@@ -1539,6 +1583,12 @@ private fun AboutRadioOracleDialog(onDismiss: () -> Unit) {
             }
         }
     )
+}
+
+private sealed interface DesktopPendingNavigation {
+    data object Back : DesktopPendingNavigation
+    data class Workflow(val workflow: DesktopWorkflow) : DesktopPendingNavigation
+    data class Item(val itemId: String) : DesktopPendingNavigation
 }
 
 /**
@@ -1603,7 +1653,10 @@ private fun RadioOManagerDesktopApp(
     onStartLocalResultServer: () -> Unit = {},
     onStopLocalResultServer: () -> Unit = {},
     isNavActionEnabled: (DesktopNavAction) -> Boolean = { false },
-    onNavAction: (DesktopNavAction) -> Unit = {}
+    onNavAction: (DesktopNavAction) -> Unit = {},
+    isUnsavedNewEventFileDraft: Boolean = false,
+    onSaveEventFileForNavigation: () -> Boolean = { false },
+    onDiscardUnsavedNewEventFile: () -> Unit = {}
 ) {
     MaterialTheme(
         colors = MaterialTheme.colors.copy(
@@ -1617,6 +1670,37 @@ private fun RadioOManagerDesktopApp(
         )
     ) {
         var navState by remember { mutableStateOf(DesktopNavState()) }
+        var pendingNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
+
+        fun applyNavigation(intent: DesktopPendingNavigation) {
+            when (intent) {
+                DesktopPendingNavigation.Back -> navState = navState.back()
+                is DesktopPendingNavigation.Workflow -> navState = navState.switchWorkflow(intent.workflow)
+                is DesktopPendingNavigation.Item -> {
+                    DesktopNavigation.currentItems(navState).firstOrNull { it.id == intent.itemId }?.let { item ->
+                        val selection = DesktopNavigation.selectItem(navState, item)
+                        navState = selection.state
+                        selection.action?.let(onNavAction)
+                    }
+                }
+            }
+        }
+
+        fun requestNavigation(intent: DesktopPendingNavigation) {
+            val nextState = when (intent) {
+                DesktopPendingNavigation.Back -> navState.back()
+                is DesktopPendingNavigation.Workflow -> navState.switchWorkflow(intent.workflow)
+                is DesktopPendingNavigation.Item -> DesktopNavigation.currentItems(navState)
+                    .firstOrNull { it.id == intent.itemId }
+                    ?.let { DesktopNavigation.selectItem(navState, it).state }
+                    ?: navState
+            }
+            if (DesktopNavigation.shouldGuardUnsavedNewEventDraft(navState, nextState, isUnsavedNewEventFileDraft)) {
+                pendingNavigation = intent
+            } else {
+                applyNavigation(intent)
+            }
+        }
 
         Surface(modifier = Modifier.fillMaxSize(), color = DesktopPalette.White) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -1625,13 +1709,9 @@ private fun RadioOManagerDesktopApp(
                     NavigationRail(
                         navState = navState,
                         isNavActionEnabled = isNavActionEnabled,
-                        onBack = { navState = navState.back() },
+                        onBack = { requestNavigation(DesktopPendingNavigation.Back) },
                         onItemSelected = { item ->
-                            val selection = DesktopNavigation.selectItem(navState, item)
-                            navState = selection.state
-                            selection.action?.let { action ->
-                                onNavAction(action)
-                            }
+                            requestNavigation(DesktopPendingNavigation.Item(item.id))
                         }
                     )
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
@@ -1696,7 +1776,7 @@ private fun RadioOManagerDesktopApp(
                         WorkflowBar(
                             selectedWorkflow = navState.workflow,
                             onWorkflowSelected = { workflow ->
-                                navState = navState.switchWorkflow(workflow)
+                                requestNavigation(DesktopPendingNavigation.Workflow(workflow))
                             }
                         )
                     }
@@ -1708,6 +1788,22 @@ private fun RadioOManagerDesktopApp(
                     isEventFileOpen = projectFile != null
                 )
             }
+        }
+        pendingNavigation?.let { navigation ->
+            UnsavedNewEventFileDialog(
+                onSave = {
+                    if (onSaveEventFileForNavigation()) {
+                        pendingNavigation = null
+                        applyNavigation(navigation)
+                    }
+                },
+                onDiscard = {
+                    onDiscardUnsavedNewEventFile()
+                    pendingNavigation = null
+                    applyNavigation(navigation)
+                },
+                onCancel = { pendingNavigation = null }
+            )
         }
     }
 }
