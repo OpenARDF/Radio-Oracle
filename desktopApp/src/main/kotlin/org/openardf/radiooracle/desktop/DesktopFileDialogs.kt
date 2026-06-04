@@ -7,7 +7,8 @@ import java.nio.file.Path
 
 /** Event File path helpers shared by desktop file dialogs and tests. */
 object DesktopProjectFilePaths {
-    const val PROJECT_EXTENSION = ".rom.json"
+    const val PROJECT_EXTENSION = ".json"
+    private const val LEGACY_PROJECT_EXTENSION = ".rom.json"
     const val ANDROID_RACE_BACKUP_JSON_EXTENSION = ".ardfjs"
     const val ARDF_JSON_EXTENSION = ".ardf.json"
     const val FINAL_RESULTS_JSON_EXTENSION = ".final-results.json"
@@ -19,11 +20,27 @@ object DesktopProjectFilePaths {
 
     /** Returns a path with the standard Radio-Oracle desktop Event File extension. */
     fun withProjectExtension(path: Path): Path =
-        if (path.fileName.toString().endsWith(PROJECT_EXTENSION)) {
+        if (hasProjectExtension(path.fileName.toString())) {
             path
         } else {
             path.resolveSibling("${path.fileName}$PROJECT_EXTENSION")
         }
+
+    fun defaultProjectFileName(raceName: String): String {
+        val sanitizedName = raceName
+            .trim()
+            .map { character ->
+                if (character.isISOControl() || character in """\/:*?"<>|""") ' ' else character
+            }
+            .joinToString("")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .ifBlank { "Event File" }
+        return withProjectExtension(Path.of(sanitizedName)).fileName.toString()
+    }
+
+    private fun hasProjectExtension(fileName: String): Boolean =
+        fileName.endsWith(PROJECT_EXTENSION) || fileName.endsWith(LEGACY_PROJECT_EXTENSION)
 
     fun withCsvExtension(path: Path): Path =
         if (path.fileName.toString().endsWith(CSV_EXTENSION)) {
@@ -89,8 +106,13 @@ object DesktopFileDialogs {
         chooseFile("Open Radio-Oracle Event File", FileDialog.LOAD, DesktopProjectFilePaths.PROJECT_EXTENSION)
 
     /** Lets the user choose a save location, returning null when cancelled. */
-    fun chooseSaveProject(): Path? =
-        chooseFile("Save Radio-Oracle Event File", FileDialog.SAVE, DesktopProjectFilePaths.PROJECT_EXTENSION)
+    fun chooseSaveProject(raceName: String? = null): Path? =
+        chooseFile(
+            title = "Save Radio-Oracle Event File",
+            mode = FileDialog.SAVE,
+            extension = DesktopProjectFilePaths.PROJECT_EXTENSION,
+            defaultFileName = raceName?.let(DesktopProjectFilePaths::defaultProjectFileName)
+        )
             ?.let(DesktopProjectFilePaths::withProjectExtension)
 
     /** Lets the user choose an export-copy location, returning null when cancelled. */
@@ -143,10 +165,10 @@ object DesktopFileDialogs {
             DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION
         )
 
-    private fun chooseFile(title: String, mode: Int, extension: String): Path? {
+    private fun chooseFile(title: String, mode: Int, extension: String, defaultFileName: String? = null): Path? {
         val dialog = FileDialog(null as Frame?, title, mode)
         dialog.filenameFilter = FilenameFilter { _, name -> name.endsWith(extension) }
-        dialog.file = "*$extension"
+        dialog.file = defaultFileName ?: "*$extension"
         dialog.isVisible = true
 
         val directory = dialog.directory ?: return null

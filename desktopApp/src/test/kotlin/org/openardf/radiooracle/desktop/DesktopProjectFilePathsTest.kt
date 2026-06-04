@@ -7,6 +7,13 @@ import java.nio.file.Path
 class DesktopProjectFilePathsTest {
     @Test
     fun keepsExistingProjectFileExtension() {
+        val path = Path.of("event.json")
+
+        assertEquals(path, DesktopProjectFilePaths.withProjectExtension(path))
+    }
+
+    @Test
+    fun keepsExistingLegacyProjectFileExtension() {
         val path = Path.of("event.rom.json")
 
         assertEquals(path, DesktopProjectFilePaths.withProjectExtension(path))
@@ -15,8 +22,24 @@ class DesktopProjectFilePathsTest {
     @Test
     fun appendsProjectFileExtensionWhenMissing() {
         assertEquals(
-            Path.of("event.rom.json"),
+            Path.of("event.json"),
             DesktopProjectFilePaths.withProjectExtension(Path.of("event"))
+        )
+    }
+
+    @Test
+    fun buildsDefaultProjectFileNameFromRaceName() {
+        assertEquals(
+            "Demo Event.json",
+            DesktopProjectFilePaths.defaultProjectFileName("Demo Event")
+        )
+        assertEquals(
+            "Demo Event.json",
+            DesktopProjectFilePaths.defaultProjectFileName("Demo/Event")
+        )
+        assertEquals(
+            "Event File.json",
+            DesktopProjectFilePaths.defaultProjectFileName(" ")
         )
     }
 

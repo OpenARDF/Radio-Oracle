@@ -312,7 +312,6 @@ object DesktopNavigation {
                 requiresEventFile = false
             ),
             action("setup.event-file.save", "Save", workflow, DesktopNavAction.SaveEventFile),
-            action("setup.event-file.save-as", "Save As...", workflow, DesktopNavAction.SaveEventFileAs),
             action("setup.event-file.close", "Close Event File", workflow, DesktopNavAction.CloseEventFile)
         )
 

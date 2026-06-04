@@ -2,6 +2,7 @@ package org.openardf.radiooracle.desktop
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.HorizontalScrollbar
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -557,7 +558,9 @@ fun main(args: Array<String>) = application {
 
         fun saveCurrentProject(): Boolean {
             if (projectSession.currentPath == null) {
-                val path = DesktopFileDialogs.chooseSaveProject() ?: return false
+                val path = DesktopFileDialogs.chooseSaveProject(
+                    projectSession.currentProject?.raceData?.race?.name
+                ) ?: return false
                 return runCatching {
                     projectSession.saveAs(path)
                     syncProjectState()
@@ -837,7 +840,7 @@ fun main(args: Array<String>) = application {
         }
 
         fun saveAsCurrentProject() {
-            DesktopFileDialogs.chooseSaveProject()?.let { path ->
+            DesktopFileDialogs.chooseSaveProject(projectSession.currentProject?.raceData?.race?.name)?.let { path ->
                 runCatching {
                     projectSession.saveAs(path)
                     projectFile = projectSession.currentProject
@@ -1729,7 +1732,7 @@ private fun NavigationRail(
                     contentColor = DesktopPalette.White
                 )
             ) {
-                Text("Back")
+                Text("< Back")
             }
         }
     }
@@ -3875,15 +3878,19 @@ private fun DateTimePickerField(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TextField(
-            value = DesktopDateTimeText.displayText(value),
-            onValueChange = {},
-            readOnly = true,
-            modifier = Modifier.weight(1f),
-            label = { Text(label) }
-        )
-        Button(onClick = { isPickerOpen = true }) {
-            Text("Pick")
+        Box(modifier = Modifier.weight(1f)) {
+            TextField(
+                value = DesktopDateTimeText.displayText(value),
+                onValueChange = {},
+                readOnly = true,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(label) }
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable { isPickerOpen = true }
+            )
         }
     }
     if (isPickerOpen) {
