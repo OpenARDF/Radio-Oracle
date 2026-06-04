@@ -45,8 +45,13 @@ object DesktopProjectFilePaths {
     fun defaultAndroidEventJsonFileName(eventName: String): String =
         withAndroidRaceBackupJsonExtension(Path.of(defaultFileStem(eventName))).fileName.toString()
 
-    fun defaultCsvFileName(eventName: String): String =
-        withCsvExtension(Path.of(defaultFileStem(eventName))).fileName.toString()
+    fun defaultCsvFileName(eventName: String, suffix: String? = null): String {
+        val sanitizedSuffix = suffix
+            ?.let(::defaultFileStem)
+            ?.takeUnless { it == "Event File" }
+        val stem = listOfNotNull(defaultFileStem(eventName), sanitizedSuffix).joinToString(" ")
+        return withCsvExtension(Path.of(stem)).fileName.toString()
+    }
 
     fun isProjectFileName(fileName: String): Boolean =
         fileName.endsWith(PROJECT_EXTENSION) || fileName.endsWith(LEGACY_PROJECT_EXTENSION)
@@ -159,12 +164,12 @@ object DesktopFileDialogs {
         chooseEventFile("Export Radio-Oracle Event File Copy", FileDialog.SAVE)
             ?.let(DesktopProjectFilePaths::withProjectExtension)
 
-    fun chooseExportCsv(title: String, eventName: String? = null): Path? =
+    fun chooseExportCsv(title: String, eventName: String? = null, suffix: String? = null): Path? =
         chooseFile(
             title,
             FileDialog.SAVE,
             DesktopProjectFilePaths.CSV_EXTENSION,
-            defaultFileName = eventName?.let(DesktopProjectFilePaths::defaultCsvFileName)
+            defaultFileName = eventName?.let { DesktopProjectFilePaths.defaultCsvFileName(it, suffix) }
         )
             ?.let(DesktopProjectFilePaths::withCsvExtension)
 

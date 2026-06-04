@@ -651,9 +651,9 @@ fun main(args: Array<String>) = application {
             }.isSuccess
         }
 
-        fun exportCsv(title: String, export: (Path, EventProjectFile) -> Unit) {
+        fun exportCsv(title: String, suffix: String, export: (Path, EventProjectFile) -> Unit) {
             val currentProject = projectSession.currentProject ?: return
-            DesktopFileDialogs.chooseExportCsv(title, currentProject.raceData.race.name)?.let { path ->
+            DesktopFileDialogs.chooseExportCsv(title, currentProject.raceData.race.name, suffix)?.let { path ->
                 runCatching {
                     export(path, currentProject)
                     syncProjectState()
@@ -993,23 +993,31 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportStartsCsv -> importCompetitorStartsCsv()
                 DesktopNavAction.ExportEventFileCopy -> exportEventFileCopy()
                 DesktopNavAction.ExportCategoriesCsv ->
-                    exportCsv("Export Categories CSV", DesktopProjectFiles::exportCategoriesCsv)
+                    exportCsv("Export Categories CSV", "categories", DesktopProjectFiles::exportCategoriesCsv)
                 DesktopNavAction.ExportCompetitorsCsv ->
-                    exportCsv("Export Competitors CSV", DesktopProjectFiles::exportCompetitorsCsv)
+                    exportCsv("Export Competitors CSV", "competitors", DesktopProjectFiles::exportCompetitorsCsv)
                 DesktopNavAction.ExportStartsCsv ->
-                    exportCsv("Export Starts CSV", DesktopProjectFiles::exportCompetitorStartsCsv)
+                    exportCsv("Export Starts CSV", "starts", DesktopProjectFiles::exportCompetitorStartsCsv)
                 DesktopNavAction.ExportStartsByCategoryCsv ->
-                    exportCsv("Export Starts by Category CSV", DesktopProjectFiles::exportCompetitorStartsByCategoryCsv)
+                    exportCsv(
+                        "Export Starts by Category CSV",
+                        "starts by category",
+                        DesktopProjectFiles::exportCompetitorStartsByCategoryCsv
+                    )
                 DesktopNavAction.ExportStartsByMinuteCsv ->
-                    exportCsv("Export Starts by Minute CSV", DesktopProjectFiles::exportCompetitorStartsByMinuteCsv)
+                    exportCsv(
+                        "Export Starts by Minute CSV",
+                        "starts by minute",
+                        DesktopProjectFiles::exportCompetitorStartsByMinuteCsv
+                    )
                 DesktopNavAction.ExportRobisStartListCsv ->
-                    exportCsv("Export ROBIS Start List CSV", DesktopProjectFiles::exportRobisStartListCsv)
+                    exportCsv("Export ROBIS Start List CSV", "robis start list", DesktopProjectFiles::exportRobisStartListCsv)
                 DesktopNavAction.ExportReadoutsCsv ->
-                    exportCsv("Export Readouts CSV", DesktopProjectFiles::exportReadoutsCsv)
+                    exportCsv("Export Readouts CSV", "readouts", DesktopProjectFiles::exportReadoutsCsv)
                 DesktopNavAction.ExportResultsCsv ->
-                    exportCsv("Export Results CSV", DesktopProjectFiles::exportResultsCsv)
+                    exportCsv("Export Results CSV", "results", DesktopProjectFiles::exportResultsCsv)
                 DesktopNavAction.ExportArdfEventResultsCsv ->
-                    exportCsv("Export ARDFEvent Results CSV", DesktopProjectFiles::exportArdfEventResultsCsv)
+                    exportCsv("Export ARDFEvent Results CSV", "ardfevent results", DesktopProjectFiles::exportArdfEventResultsCsv)
                 DesktopNavAction.ExportResultsText -> exportResultsText()
                 DesktopNavAction.ExportResultsHtml -> exportResultsHtml()
                 DesktopNavAction.ExportArdfJson -> exportArdfJson()
