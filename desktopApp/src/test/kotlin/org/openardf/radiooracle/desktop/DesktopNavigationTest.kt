@@ -17,7 +17,7 @@ class DesktopNavigationTest {
     @Test
     fun placesCurrentDesktopSectionsUnderWorkflowGroups() {
         assertEquals(
-            listOf("Event File", "Categories", "Competitors", "Start List", "Aliases", "Setup Exports", "Utils"),
+            listOf("Event File", "Categories", "Competitors", "Start List", "Aliases", "Utils"),
             DesktopNavigation.rootItems(DesktopWorkflow.Setup).map { it.label }
         )
         assertEquals(
@@ -203,27 +203,29 @@ class DesktopNavigationTest {
         assertTrue(setupItems.first { it.label == "Competitors" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Start List" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Aliases" }.requiresEventFile)
-        assertTrue(setupItems.first { it.label == "Setup Exports" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Utils" }.requiresEventFile)
     }
 
     @Test
-    fun importActionsLiveUnderTheirSetupSections() {
+    fun categoryAndCompetitorCsvActionsLiveUnderTheirSetupSections() {
         val setupItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
         val categoryItems = setupItems.first { it.label == "Categories" }.children
         val competitorItems = setupItems.first { it.label == "Competitors" }.children
 
         assertEquals(
-            listOf("Categories", "Import Categories CSV..."),
+            listOf("Categories", "Import Categories CSV...", "Export Categories CSV..."),
             categoryItems.map { it.label }
         )
         assertEquals(
-            listOf("Competitors", "Import Competitors CSV..."),
+            listOf("Competitors", "Import Competitors CSV...", "Export Competitors CSV..."),
             competitorItems.map { it.label }
         )
         assertEquals(DesktopNavAction.ImportCategoriesCsv, categoryItems.first { it.label == "Import Categories CSV..." }.action)
+        assertEquals(DesktopNavAction.ExportCategoriesCsv, categoryItems.first { it.label == "Export Categories CSV..." }.action)
         assertEquals(DesktopNavAction.ImportCompetitorsCsv, competitorItems.first { it.label == "Import Competitors CSV..." }.action)
+        assertEquals(DesktopNavAction.ExportCompetitorsCsv, competitorItems.first { it.label == "Export Competitors CSV..." }.action)
         assertFalse(setupItems.any { it.label == "Imports" })
+        assertFalse(setupItems.any { it.label == "Setup Exports" })
     }
 
     @Test

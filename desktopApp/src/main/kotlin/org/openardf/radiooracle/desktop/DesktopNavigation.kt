@@ -149,6 +149,12 @@ object DesktopNavigation {
                             "Import Categories CSV...",
                             workflow,
                             DesktopNavAction.ImportCategoriesCsv
+                        ),
+                        action(
+                            "setup.categories.export",
+                            "Export Categories CSV...",
+                            workflow,
+                            DesktopNavAction.ExportCategoriesCsv
                         )
                     ),
                     DesktopSection.Categories
@@ -164,6 +170,12 @@ object DesktopNavigation {
                             "Import Competitors CSV...",
                             workflow,
                             DesktopNavAction.ImportCompetitorsCsv
+                        ),
+                        action(
+                            "setup.competitors.export",
+                            "Export Competitors CSV...",
+                            workflow,
+                            DesktopNavAction.ExportCompetitorsCsv
                         )
                     ),
                     DesktopSection.Competitors
@@ -211,15 +223,6 @@ object DesktopNavigation {
                     DesktopSection.StartList
                 ),
                 item("setup.aliases", "Aliases", workflow, DesktopSection.Aliases),
-                group(
-                    "setup.exports",
-                    "Setup Exports",
-                    workflow,
-                    listOf(
-                        action("setup.export-categories", "Export Categories CSV...", workflow, DesktopNavAction.ExportCategoriesCsv),
-                        action("setup.export-competitors", "Export Competitors CSV...", workflow, DesktopNavAction.ExportCompetitorsCsv)
-                    )
-                ),
                 group(
                     "setup.utils",
                     "Utils",
