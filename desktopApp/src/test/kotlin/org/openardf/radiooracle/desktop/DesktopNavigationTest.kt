@@ -73,8 +73,32 @@ class DesktopNavigationTest {
 
         assertEquals(DesktopWorkflow.RaceOps, state.workflow)
         assertTrue(state.submenuStack.isEmpty())
-        assertEquals(DesktopSection.Readouts, state.selectedSection)
-        assertEquals("race.readouts", state.selectedItemId)
+        assertEquals(DesktopSection.WorkflowHome, state.selectedSection)
+        assertEquals("race.home", state.selectedItemId)
+        assertEquals("Race Operations", DesktopNavigation.selectedLabel(state))
+    }
+
+    @Test
+    fun defaultStartupStateShowsWorkflowHome() {
+        val state = DesktopNavState()
+
+        assertEquals(DesktopWorkflow.Setup, state.workflow)
+        assertEquals(DesktopSection.WorkflowHome, state.selectedSection)
+        assertEquals("setup.home", state.selectedItemId)
+        assertEquals("Preparation/Setup", DesktopNavigation.selectedLabel(state))
+        assertEquals("Preparation/Setup", DesktopNavigation.breadcrumb(state))
+    }
+
+    @Test
+    fun backFromFirstLevelSubmenuReturnsToWorkflowHome() {
+        val eventFile = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
+            .first { it.label == "Event File" }
+        val state = DesktopNavState().enter(eventFile).back()
+
+        assertTrue(state.submenuStack.isEmpty())
+        assertEquals(DesktopSection.WorkflowHome, state.selectedSection)
+        assertEquals("setup.home", state.selectedItemId)
+        assertEquals("Preparation/Setup", DesktopNavigation.breadcrumb(state))
     }
 
     @Test

@@ -8,6 +8,7 @@ class DesktopPaletteTest {
     fun exposesAndroidNavigationVocabulary() {
         assertEquals(
             listOf(
+                "Radio-Oracle",
                 "Event File",
                 "Races",
                 "Categories",

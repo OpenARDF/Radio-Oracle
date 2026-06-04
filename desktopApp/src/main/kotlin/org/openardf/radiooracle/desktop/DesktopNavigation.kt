@@ -60,8 +60,8 @@ data class DesktopNavItem(
 data class DesktopNavState(
     val workflow: DesktopWorkflow = DesktopWorkflow.Setup,
     val submenuStack: List<String> = emptyList(),
-    val selectedSection: DesktopSection = DesktopSection.Races,
-    val selectedItemId: String = "setup.race"
+    val selectedSection: DesktopSection = DesktopSection.WorkflowHome,
+    val selectedItemId: String = "setup.home"
 ) {
     fun switchWorkflow(nextWorkflow: DesktopWorkflow): DesktopNavState =
         copy(
@@ -86,8 +86,21 @@ data class DesktopNavState(
             else -> this
         }
 
-    fun back(): DesktopNavState =
-        if (submenuStack.isEmpty()) this else copy(submenuStack = submenuStack.dropLast(1))
+    fun back(): DesktopNavState {
+        if (submenuStack.isEmpty()) {
+            return this
+        }
+        val nextStack = submenuStack.dropLast(1)
+        return if (nextStack.isEmpty()) {
+            copy(
+                submenuStack = emptyList(),
+                selectedSection = DesktopNavigation.defaultSection(workflow),
+                selectedItemId = DesktopNavigation.defaultItemId(workflow)
+            )
+        } else {
+            copy(submenuStack = nextStack)
+        }
+    }
 }
 
 object DesktopNavigation {
@@ -250,8 +263,22 @@ object DesktopNavigation {
                     workflow,
                     listOf(
                         item("settings.beta-scope", "Beta Scope", workflow, DesktopSection.Settings),
-                        action("settings.logs", "Logs", workflow, DesktopNavAction.ShowDebugLogHelp, requiresEventFile = false),
-                        action("settings.about", "About Radio-Oracle", workflow, DesktopNavAction.ShowAbout, requiresEventFile = false)
+                        action(
+                            "settings.logs",
+                            "Logs",
+                            workflow,
+                            DesktopNavAction.ShowDebugLogHelp,
+                            requiresEventFile = false,
+                            section = DesktopSection.Settings
+                        ),
+                        action(
+                            "settings.about",
+                            "About Radio-Oracle",
+                            workflow,
+                            DesktopNavAction.ShowAbout,
+                            requiresEventFile = false,
+                            section = DesktopSection.Settings
+                        )
                     )
                 )
             )
@@ -280,23 +307,27 @@ object DesktopNavigation {
 
     fun defaultSection(workflow: DesktopWorkflow): DesktopSection =
         when (workflow) {
-            DesktopWorkflow.Setup -> DesktopSection.Races
-            DesktopWorkflow.RaceOps -> DesktopSection.Readouts
-            DesktopWorkflow.ResultsExport -> DesktopSection.Results
-            DesktopWorkflow.SettingsHelp -> DesktopSection.Settings
+            DesktopWorkflow.Setup,
+            DesktopWorkflow.RaceOps,
+            DesktopWorkflow.ResultsExport,
+            DesktopWorkflow.SettingsHelp -> DesktopSection.WorkflowHome
         }
 
     fun defaultItemId(workflow: DesktopWorkflow): String =
         when (workflow) {
-            DesktopWorkflow.Setup -> "setup.race"
-            DesktopWorkflow.RaceOps -> "race.readouts"
-            DesktopWorkflow.ResultsExport -> "results.results"
-            DesktopWorkflow.SettingsHelp -> "settings.app"
+            DesktopWorkflow.Setup -> "setup.home"
+            DesktopWorkflow.RaceOps -> "race.home"
+            DesktopWorkflow.ResultsExport -> "results.home"
+            DesktopWorkflow.SettingsHelp -> "settings.home"
         }
 
     fun selectedLabel(state: DesktopNavState): String =
-        allItems(state.workflow).firstOrNull { it.id == state.selectedItemId }?.label
-            ?: state.selectedSection.label
+        if (state.selectedSection == DesktopSection.WorkflowHome) {
+            state.workflow.label
+        } else {
+            allItems(state.workflow).firstOrNull { it.id == state.selectedItemId }?.label
+                ?: state.selectedSection.label
+        }
 
     private fun allItems(workflow: DesktopWorkflow): List<DesktopNavItem> {
         fun flatten(items: List<DesktopNavItem>): List<DesktopNavItem> =

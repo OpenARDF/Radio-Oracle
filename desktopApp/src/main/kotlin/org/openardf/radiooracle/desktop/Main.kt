@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.HorizontalScrollbar
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -89,6 +92,7 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.printing.FinishTicketRenderer
 import org.openardf.radiooracle.shared.results.EventResultSending
+import org.jetbrains.skia.Image as SkiaImage
 import java.awt.Toolkit
 import java.nio.file.Files
 import java.nio.file.Path
@@ -1636,6 +1640,7 @@ private fun RadioOManagerDesktopApp(
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                             SectionWorkspace(
+                                workflow = navState.workflow,
                                 section = navState.selectedSection,
                                 title = DesktopNavigation.selectedLabel(navState),
                                 breadcrumb = DesktopNavigation.breadcrumb(navState),
@@ -1834,6 +1839,7 @@ private fun WorkflowBar(
 /** Displays an Android-style empty state for the selected section. */
 @Composable
 private fun SectionWorkspace(
+    workflow: DesktopWorkflow,
     section: DesktopSection,
     title: String,
     breadcrumb: String,
@@ -1912,6 +1918,9 @@ private fun SectionWorkspace(
             color = DesktopPalette.Black,
             fontSize = 14.sp
         )
+        if (section == DesktopSection.WorkflowHome) {
+            WorkflowHomePanel(workflow, projectFile)
+        }
         if (section == DesktopSection.Races && projectFile != null) {
             RaceDetailsPanel(
                 details = EventRaceDetails.from(projectFile.raceData.race),
@@ -4406,10 +4415,64 @@ private fun DetailRow(label: String, value: String) {
     }
 }
 
+@Composable
+private fun WorkflowHomePanel(workflow: DesktopWorkflow, projectFile: EventProjectFile?) {
+    val logoBitmap = remember {
+        val logoBytes = requireNotNull(
+            Thread.currentThread().contextClassLoader.getResourceAsStream("radio-oracle-logo.png")
+        ) {
+            "Radio-Oracle desktop logo resource is missing."
+        }.use { stream -> stream.readBytes() }
+        SkiaImage.makeFromEncoded(logoBytes).toComposeImageBitmap()
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(22.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            bitmap = logoBitmap,
+            contentDescription = "Radio-Oracle logo",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .width(128.dp)
+                .height(128.dp)
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                text = "Radio-Oracle",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = DesktopPalette.Black
+            )
+            Text(
+                text = "Event administration for radio orienteering: prepare the Event File, run SI-card download operations, and publish results from one desktop workspace.",
+                color = DesktopPalette.Black,
+                fontSize = 15.sp
+            )
+            Text(
+                text = "Current workflow: ${workflow.label}",
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = projectFile?.let { "Event File open: ${EventProjectSummary.from(it).raceName}" }
+                    ?: "No Event File open.",
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
+    }
+}
+
 /** Provides section-specific content summaries without introducing editing behavior. */
 private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFile?): String {
     val summary = projectFile?.let(EventProjectSummary::from)
     return when (section) {
+        DesktopSection.WorkflowHome -> "Workflow overview for event setup, race operations, results, exports, and app support."
         DesktopSection.EventFile -> summary?.let { "Event File open: ${it.raceName}" } ?: "No Event File open."
         DesktopSection.Races -> summary?.raceName ?: "No races loaded."
         DesktopSection.Categories -> "${summary?.categoryCount ?: 0} categories loaded."

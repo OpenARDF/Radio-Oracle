@@ -43,6 +43,7 @@ object DesktopPalette {
  * vocabulary now keeps later event-admin screens familiar to existing users.
  */
 enum class DesktopSection(val label: String) {
+    WorkflowHome("Radio-Oracle"),
     EventFile("Event File"),
     Races("Races"),
     Categories("Categories"),
