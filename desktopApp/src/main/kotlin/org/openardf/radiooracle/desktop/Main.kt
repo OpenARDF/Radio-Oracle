@@ -251,7 +251,13 @@ fun main(args: Array<String>) = application {
         var isAboutDialogVisible by remember { mutableStateOf(false) }
         var raceClockTick by remember { mutableStateOf(0L) }
         var printerDiagnostics by remember { mutableStateOf(DesktopPrinterDiagnostics.from(emptyList())) }
+        var lastLoggedSiReaderStatus by remember { mutableStateOf<String?>(null) }
         val siPortMutex = remember { Mutex() }
+
+        LaunchedEffect(Unit) {
+            DesktopDebugLog.initialize()
+            DesktopDebugLog.info("App", "Desktop app started version=${DesktopBuildInfo.displayVersion}")
+        }
 
         LaunchedEffect(Unit) {
             while (true) {
@@ -261,6 +267,10 @@ fun main(args: Array<String>) = application {
                     }
                 }
                 siReaderState = nextSiReaderState
+                if (nextSiReaderState.statusText != lastLoggedSiReaderStatus) {
+                    DesktopDebugLog.info("SI", nextSiReaderState.statusText)
+                    lastLoggedSiReaderStatus = nextSiReaderState.statusText
+                }
                 if (
                     nextSiReaderState.warningKey != null &&
                     nextSiReaderState.warningKey != lastShownSiModeWarningKey
@@ -289,8 +299,10 @@ fun main(args: Array<String>) = application {
                 projectFile = projectSession.open(path)
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
                 projectStatusText = "Opened ${path.fileName}"
+                DesktopDebugLog.info("EventFile", "Opened ${path.fileName}")
             }.onFailure { error ->
                 projectStatusText = "Open failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("EventFile", "Open failed: ${error.message ?: error::class.simpleName}")
             }
         }
 
@@ -299,8 +311,10 @@ fun main(args: Array<String>) = application {
                 projectSession.closeProject(discardUnsavedChanges)
                 syncProjectState()
                 projectStatusText = "No Event File open."
+                DesktopDebugLog.info("EventFile", "Closed Event File")
             }.onFailure { error ->
                 projectStatusText = "Close failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("EventFile", "Close failed: ${error.message ?: error::class.simpleName}")
             }
         }
 
@@ -313,6 +327,7 @@ fun main(args: Array<String>) = application {
             projectSession.newProject(project)
             syncProjectState()
             projectStatusText = "New unsaved Event File."
+            DesktopDebugLog.info("EventFile", "Created new unsaved Event File")
         }
 
         fun appendSportIdentDownload(download: DesktopSportIdentCardBlockDownload): DesktopSportIdentAppendOutcome {
@@ -354,11 +369,13 @@ fun main(args: Array<String>) = application {
             }
             if (projectSession.currentProject == null) {
                 projectStatusText = "Open or create an Event File before downloading SI cards."
+                DesktopDebugLog.warn("SI", "Single SI download requested with no Event File open")
                 return
             }
             isDownloadingSiReadout = true
             siDownloadStatusText = "Waiting for SI card; keep it seated until the read finishes."
             projectStatusText = "Waiting for SI card..."
+            DesktopDebugLog.info("SI", "Single SI download started")
             appCoroutineScope.launch {
                 val downloadResult = runCatching {
                     withContext(Dispatchers.IO) {
@@ -370,27 +387,36 @@ fun main(args: Array<String>) = application {
                 downloadResult.onSuccess { download ->
                     runCatching {
                         when (appendSportIdentDownload(download)) {
-                            DesktopSportIdentAppendOutcome.Added ->
+                            DesktopSportIdentAppendOutcome.Added -> {
                                 projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
+                                DesktopDebugLog.info("SI", "Downloaded SI card ${download.readout.siNumber}")
+                            }
                             DesktopSportIdentAppendOutcome.DuplicateIgnored -> {
                                 projectStatusText = "SI card ${download.readout.siNumber} was already downloaded."
+                                DesktopDebugLog.warn("SI", "Duplicate SI card ${download.readout.siNumber} ignored")
                                 if (isReadoutAlertSoundEnabled) {
                                     beepDesktopReadoutAlert()
                                 }
                             }
-                            DesktopSportIdentAppendOutcome.DuplicateReplaced ->
+                            DesktopSportIdentAppendOutcome.DuplicateReplaced -> {
                                 projectStatusText = "Replaced existing readout for SI card ${download.readout.siNumber}."
-                            DesktopSportIdentAppendOutcome.DuplicateCreatedNew ->
+                                DesktopDebugLog.info("SI", "Duplicate SI card ${download.readout.siNumber} replaced")
+                            }
+                            DesktopSportIdentAppendOutcome.DuplicateCreatedNew -> {
                                 projectStatusText = "Created new duplicate readout for SI card ${download.readout.siNumber}."
+                                DesktopDebugLog.info("SI", "Duplicate SI card ${download.readout.siNumber} stored as new readout")
+                            }
                         }
                         siDownloadStatusText = null
                     }.onFailure { error ->
                         projectStatusText = "SI download failed: ${error.message ?: error::class.simpleName}"
                         siDownloadStatusText = projectStatusText
+                        DesktopDebugLog.error("SI", projectStatusText)
                     }
                 }.onFailure { error ->
                     projectStatusText = "SI download failed: ${error.message ?: error::class.simpleName}"
                     siDownloadStatusText = projectStatusText
+                    DesktopDebugLog.error("SI", projectStatusText)
                 }
                 isDownloadingSiReadout = false
             }
@@ -401,6 +427,7 @@ fun main(args: Array<String>) = application {
             if (isContinuousSiReadoutActive) {
                 siDownloadStatusText = "Stopping continuous SI readout after the current card wait finishes."
                 projectStatusText = "Stopping continuous SI readout..."
+                DesktopDebugLog.info("SI", "Continuous SI readout stop requested")
             }
         }
 
@@ -410,6 +437,7 @@ fun main(args: Array<String>) = application {
             }
             if (projectSession.currentProject == null) {
                 projectStatusText = "Open or create an Event File before downloading SI cards."
+                DesktopDebugLog.warn("SI", "Continuous SI readout requested with no Event File open")
                 return
             }
             val stopRequested = AtomicBoolean(false)
@@ -417,6 +445,7 @@ fun main(args: Array<String>) = application {
             isContinuousSiReadoutActive = true
             siDownloadStatusText = "Continuous SI readout is running; insert SI cards and keep each seated until it reads."
             projectStatusText = "Continuous SI readout running..."
+            DesktopDebugLog.info("SI", "Continuous SI readout started")
             appCoroutineScope.launch {
                 val result = runCatching {
                     withContext(Dispatchers.IO) {
@@ -429,12 +458,17 @@ fun main(args: Array<String>) = application {
                                             when (appendSportIdentDownload(download)) {
                                                 DesktopSportIdentAppendOutcome.Added -> {
                                                     projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
+                                                    DesktopDebugLog.info("SI", "Downloaded SI card ${download.readout.siNumber}")
                                                     siDownloadStatusText =
                                                         "Continuous SI readout running; waiting for the next card."
                                                 }
                                                 DesktopSportIdentAppendOutcome.DuplicateIgnored -> {
                                                     projectStatusText =
                                                         "SI card ${download.readout.siNumber} was already downloaded."
+                                                    DesktopDebugLog.warn(
+                                                        "SI",
+                                                        "Duplicate SI card ${download.readout.siNumber} ignored"
+                                                    )
                                                     if (isReadoutAlertSoundEnabled) {
                                                         beepDesktopReadoutAlert()
                                                     }
@@ -444,12 +478,20 @@ fun main(args: Array<String>) = application {
                                                 DesktopSportIdentAppendOutcome.DuplicateReplaced -> {
                                                     projectStatusText =
                                                         "Replaced existing readout for SI card ${download.readout.siNumber}."
+                                                    DesktopDebugLog.info(
+                                                        "SI",
+                                                        "Duplicate SI card ${download.readout.siNumber} replaced"
+                                                    )
                                                     siDownloadStatusText =
                                                         "Duplicate SI card replaced; waiting for the next card."
                                                 }
                                                 DesktopSportIdentAppendOutcome.DuplicateCreatedNew -> {
                                                     projectStatusText =
                                                         "Created new duplicate readout for SI card ${download.readout.siNumber}."
+                                                    DesktopDebugLog.info(
+                                                        "SI",
+                                                        "Duplicate SI card ${download.readout.siNumber} stored as new readout"
+                                                    )
                                                     siDownloadStatusText =
                                                         "Duplicate SI card stored as a new readout; waiting for the next card."
                                                 }
@@ -457,6 +499,7 @@ fun main(args: Array<String>) = application {
                                         }.onFailure { error ->
                                             projectStatusText = "SI download failed: ${error.message ?: error::class.simpleName}"
                                             siDownloadStatusText = projectStatusText
+                                            DesktopDebugLog.error("SI", projectStatusText)
                                             stopRequested.set(true)
                                         }
                                     }
@@ -466,6 +509,7 @@ fun main(args: Array<String>) = application {
                                         if (!stopRequested.get()) {
                                             siDownloadStatusText = "Continuous SI readout timed out waiting for a card."
                                             projectStatusText = siDownloadStatusText ?: projectStatusText
+                                            DesktopDebugLog.warn("SI", "Continuous SI readout timed out waiting for a card")
                                         }
                                     }
                                 },
@@ -477,10 +521,12 @@ fun main(args: Array<String>) = application {
                 result.onFailure { error ->
                     projectStatusText = "SI continuous download failed: ${error.message ?: error::class.simpleName}"
                     siDownloadStatusText = projectStatusText
+                    DesktopDebugLog.error("SI", projectStatusText)
                 }
                 if (stopRequested.get() && result.isSuccess) {
                     projectStatusText = "Continuous SI readout stopped."
                     siDownloadStatusText = null
+                    DesktopDebugLog.info("SI", "Continuous SI readout stopped")
                 }
                 isContinuousSiReadoutActive = false
                 continuousSiReadoutStopRequested = null
@@ -560,16 +606,20 @@ fun main(args: Array<String>) = application {
                     projectSession.saveAs(path)
                     syncProjectState()
                     projectStatusText = "Saved ${path.fileName}"
+                    DesktopDebugLog.info("EventFile", "Saved ${path.fileName}")
                 }.onFailure { error ->
                     projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("EventFile", "Save failed: ${error.message ?: error::class.simpleName}")
                 }.isSuccess
             }
             return runCatching {
                 projectSession.save()
                 syncProjectState()
                 projectStatusText = "Saved ${projectSession.currentPath?.fileName ?: "Event File"}"
+                DesktopDebugLog.info("EventFile", "Saved ${projectSession.currentPath?.fileName ?: "Event File"}")
             }.onFailure { error ->
                 projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("EventFile", "Save failed: ${error.message ?: error::class.simpleName}")
             }.isSuccess
         }
 
@@ -841,8 +891,10 @@ fun main(args: Array<String>) = application {
                     projectFile = projectSession.currentProject
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Saved ${path.fileName}"
+                    DesktopDebugLog.info("EventFile", "Saved As ${path.fileName}")
                 }.onFailure { error ->
                     projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("EventFile", "Save As failed: ${error.message ?: error::class.simpleName}")
                 }
             }
         }
@@ -853,8 +905,10 @@ fun main(args: Array<String>) = application {
                     projectSession.exportCopy(path)
                     syncProjectState()
                     projectStatusText = "Exported ${path.fileName}"
+                    DesktopDebugLog.info("EventFile", "Exported copy ${path.fileName}")
                 }.onFailure { error ->
                     projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("EventFile", "Export copy failed: ${error.message ?: error::class.simpleName}")
                 }
             }
         }
@@ -950,7 +1004,9 @@ fun main(args: Array<String>) = application {
                 }
                 DesktopNavAction.SendRobis -> sendRobisLiveResults()
                 DesktopNavAction.ShowDebugLogHelp -> {
-                    projectStatusText = "Desktop logs are not exposed yet. Android debug-log extraction is documented in docs/debug-logging.md."
+                    val logDirectory = DesktopDebugLog.logDirectory()
+                    DesktopDebugLog.info("App", "User requested desktop log location")
+                    projectStatusText = "Desktop logs: $logDirectory"
                 }
                 DesktopNavAction.ShowAbout -> {
                     isAboutDialogVisible = true
