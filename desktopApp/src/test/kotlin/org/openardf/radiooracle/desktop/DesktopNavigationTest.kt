@@ -195,6 +195,32 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun setupRowsDeclareWhichButtonsRequireAnOpenEventFile() {
+        val setupItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
+
+        assertFalse(setupItems.first { it.label == "Event File" }.requiresEventFile)
+        assertTrue(setupItems.first { it.label == "Categories" }.requiresEventFile)
+        assertTrue(setupItems.first { it.label == "Competitors" }.requiresEventFile)
+        assertTrue(setupItems.first { it.label == "Start List" }.requiresEventFile)
+        assertTrue(setupItems.first { it.label == "Aliases" }.requiresEventFile)
+        assertTrue(setupItems.first { it.label == "Imports" }.requiresEventFile)
+        assertTrue(setupItems.first { it.label == "Setup Exports" }.requiresEventFile)
+        assertTrue(setupItems.first { it.label == "Utils" }.requiresEventFile)
+    }
+
+    @Test
+    fun settingsAndHardwareRowsRemainAvailableWithoutAnOpenEventFile() {
+        val raceOpsItems = DesktopNavigation.rootItems(DesktopWorkflow.RaceOps)
+        val settingsItems = DesktopNavigation.rootItems(DesktopWorkflow.SettingsHelp)
+
+        assertTrue(raceOpsItems.first { it.label == "Readouts" }.requiresEventFile)
+        assertFalse(raceOpsItems.first { it.label == "Hardware Status" }.requiresEventFile)
+        assertFalse(settingsItems.first { it.label == "App Settings" }.requiresEventFile)
+        assertFalse(settingsItems.first { it.label == "Hardware Preferences" }.requiresEventFile)
+        assertFalse(settingsItems.first { it.label == "Help" }.requiresEventFile)
+    }
+
+    @Test
     fun androidEventFileExportLivesWithEventFileActions() {
         val eventFileActions = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
             .first { it.label == "Event File" }

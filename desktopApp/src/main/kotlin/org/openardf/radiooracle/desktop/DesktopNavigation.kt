@@ -130,7 +130,14 @@ object DesktopNavigation {
     fun rootItems(workflow: DesktopWorkflow): List<DesktopNavItem> =
         when (workflow) {
             DesktopWorkflow.Setup -> listOf(
-                group("setup.event-file", "Event File", workflow, eventFileActions(workflow), DesktopSection.Races),
+                group(
+                    "setup.event-file",
+                    "Event File",
+                    workflow,
+                    eventFileActions(workflow),
+                    DesktopSection.Races,
+                    requiresEventFile = false
+                ),
                 item("setup.categories", "Categories", workflow, DesktopSection.Categories),
                 item("setup.competitors", "Competitors", workflow, DesktopSection.Competitors),
                 group(
@@ -216,7 +223,7 @@ object DesktopNavigation {
                 item("race.in-forest", "In Forest", workflow, DesktopSection.InForest),
                 item("race.unmatched", "Unmatched Readouts", workflow, DesktopSection.Readouts),
                 item("race.finish-tickets", "Finish Tickets", workflow, DesktopSection.Readouts),
-                item("race.hardware", "Hardware Status", workflow, DesktopSection.Settings)
+                item("race.hardware", "Hardware Status", workflow, DesktopSection.Settings, requiresEventFile = false)
             )
             DesktopWorkflow.ResultsExport -> listOf(
                 item("results.results", "Results", workflow, DesktopSection.Results),
@@ -228,7 +235,7 @@ object DesktopNavigation {
                         action("results.start-display", "Start Display", workflow, DesktopNavAction.StartLocalResultDisplay),
                         action("results.stop-display", "Stop Display", workflow, DesktopNavAction.StopLocalResultDisplay),
                         action("results.send-robis", "Send ROBIS", workflow, DesktopNavAction.SendRobis),
-                        item("results.live-settings", "Live Result Settings", workflow, DesktopSection.Settings)
+                        item("results.live-settings", "Live Result Settings", workflow, DesktopSection.Settings, requiresEventFile = false)
                     )
                 ),
                 group(
@@ -269,14 +276,14 @@ object DesktopNavigation {
                 )
             )
             DesktopWorkflow.SettingsHelp -> listOf(
-                item("settings.app", "App Settings", workflow, DesktopSection.Settings),
-                item("settings.hardware", "Hardware Preferences", workflow, DesktopSection.Settings),
+                item("settings.app", "App Settings", workflow, DesktopSection.Settings, requiresEventFile = false),
+                item("settings.hardware", "Hardware Preferences", workflow, DesktopSection.Settings, requiresEventFile = false),
                 group(
                     "settings.help",
                     "Help",
                     workflow,
                     listOf(
-                        item("settings.beta-scope", "Beta Scope", workflow, DesktopSection.Settings),
+                        item("settings.beta-scope", "Beta Scope", workflow, DesktopSection.Settings, requiresEventFile = false),
                         action(
                             "settings.logs",
                             "Logs",
@@ -293,7 +300,8 @@ object DesktopNavigation {
                             requiresEventFile = false,
                             section = DesktopSection.Settings
                         )
-                    )
+                    ),
+                    requiresEventFile = false
                 )
             )
         }
@@ -411,8 +419,20 @@ object DesktopNavigation {
             action("setup.event-file.save", "Save", workflow, DesktopNavAction.SaveEventFile, section = DesktopSection.EventFile)
         )
 
-    private fun item(id: String, label: String, workflow: DesktopWorkflow, section: DesktopSection): DesktopNavItem =
-        DesktopNavItem(id = id, label = label, workflow = workflow, section = section)
+    private fun item(
+        id: String,
+        label: String,
+        workflow: DesktopWorkflow,
+        section: DesktopSection,
+        requiresEventFile: Boolean = true
+    ): DesktopNavItem =
+        DesktopNavItem(
+            id = id,
+            label = label,
+            workflow = workflow,
+            section = section,
+            requiresEventFile = requiresEventFile
+        )
 
     private fun action(
         id: String,
@@ -436,7 +456,15 @@ object DesktopNavigation {
         label: String,
         workflow: DesktopWorkflow,
         children: List<DesktopNavItem>,
-        section: DesktopSection? = null
+        section: DesktopSection? = null,
+        requiresEventFile: Boolean = true
     ): DesktopNavItem =
-        DesktopNavItem(id = id, label = label, workflow = workflow, section = section, children = children)
+        DesktopNavItem(
+            id = id,
+            label = label,
+            workflow = workflow,
+            section = section,
+            requiresEventFile = requiresEventFile,
+            children = children
+        )
 }

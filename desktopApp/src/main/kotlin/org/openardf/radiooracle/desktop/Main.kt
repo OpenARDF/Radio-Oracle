@@ -1745,6 +1745,7 @@ private fun RadioOManagerDesktopApp(
                 Row(modifier = Modifier.weight(1f)) {
                     NavigationRail(
                         navState = navState,
+                        hasEventFile = projectFile != null,
                         isNavActionEnabled = isNavActionEnabled,
                         onBack = { requestNavigation(DesktopPendingNavigation.Back) },
                         onItemSelected = { item ->
@@ -1875,6 +1876,7 @@ private fun AppTopBar() {
 @Composable
 private fun NavigationRail(
     navState: DesktopNavState,
+    hasEventFile: Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
     onBack: () -> Unit,
     onItemSelected: (DesktopNavItem) -> Unit
@@ -1891,7 +1893,8 @@ private fun NavigationRail(
     ) {
         items.forEach { item ->
             val isSelected = item.id == navState.selectedItemId && item.children.isEmpty()
-            val isEnabled = item.action?.let(isNavActionEnabled) ?: true
+            val hasRequiredEventFile = !item.requiresEventFile || hasEventFile
+            val isEnabled = hasRequiredEventFile && (item.action?.let(isNavActionEnabled) ?: true)
             Button(
                 onClick = { onItemSelected(item) },
                 enabled = isEnabled,
