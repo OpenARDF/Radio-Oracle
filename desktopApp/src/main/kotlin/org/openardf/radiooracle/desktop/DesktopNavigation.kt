@@ -441,8 +441,7 @@ object DesktopNavigation {
                 "setup.event-file.diagnostics",
                 "Settings",
                 workflow,
-                DesktopSection.Settings,
-                requiresEventFile = false
+                DesktopSection.Settings
             )
         )
 

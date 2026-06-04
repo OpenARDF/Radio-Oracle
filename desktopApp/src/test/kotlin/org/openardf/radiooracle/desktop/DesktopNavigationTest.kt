@@ -231,7 +231,7 @@ class DesktopNavigationTest {
             eventFileItems.map { it.label }
         )
         assertTrue(eventFileItems.first { it.label == "Aliases" }.requiresEventFile)
-        assertFalse(eventFileItems.first { it.label == "Settings" }.requiresEventFile)
+        assertTrue(eventFileItems.first { it.label == "Settings" }.requiresEventFile)
         assertFalse(DesktopNavigation.rootItems(DesktopWorkflow.Setup).any { it.label == "Aliases" })
         assertFalse(DesktopNavigation.rootItems(DesktopWorkflow.Setup).any { it.label == "Utils" })
     }
