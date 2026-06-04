@@ -182,7 +182,6 @@ object DesktopFileDialogs {
             defaultFileName = eventName?.let { DesktopProjectFilePaths.defaultCsvFileName(it, suffix) }
         )
             ?.let(DesktopProjectFilePaths::withCsvExtension)
-            ?.let(::confirmOverwrite)
 
     fun chooseExportArdfJson(): Path? =
         chooseFile("Export ARDF JSON", FileDialog.SAVE, DesktopProjectFilePaths.ARDF_JSON_EXTENSION)
