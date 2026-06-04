@@ -185,11 +185,31 @@ class DesktopNavigationTest {
 
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.NewEventFile }.requiresEventFile)
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.OpenEventFile }.requiresEventFile)
+        assertFalse(eventFileActions.first { it.action == DesktopNavAction.ImportAndroidRaceBackup }.requiresEventFile)
+        assertTrue(eventFileActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFile }.requiresEventFile)
         assertEquals(
-            listOf("New Event File", "Open...", "Import Android Race Backup JSON...", "Save"),
+            listOf("New Event File", "Open...", "Import Android Event JSON...", "Export Android Event JSON...", "Save"),
             eventFileActions.map { it.label }
         )
+    }
+
+    @Test
+    fun androidEventJsonExportLivesWithEventFileActions() {
+        val eventFileActions = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
+            .first { it.label == "Event File" }
+            .children
+        val resultJsonActions = DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport)
+            .first { it.label == "Exports" }
+            .children
+            .first { it.label == "JSON/XML" }
+            .children
+
+        assertEquals(
+            "Export Android Event JSON...",
+            eventFileActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.label
+        )
+        assertFalse(resultJsonActions.any { it.action == DesktopNavAction.ExportAndroidRaceBackupJson })
     }
 
     @Test

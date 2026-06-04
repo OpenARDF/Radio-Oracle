@@ -262,13 +262,7 @@ object DesktopNavigation {
                                 action("results.export-live-json", "Export Live Results JSON...", workflow, DesktopNavAction.ExportLiveResultsJson),
                                 action("results.export-final-json", "Export Final Results JSON...", workflow, DesktopNavAction.ExportFinalResultsJson),
                                 action("results.export-iof", "Export IOF Result List XML...", workflow, DesktopNavAction.ExportIofResultListXml),
-                                action("results.export-ardf-json", "Export ARDF JSON...", workflow, DesktopNavAction.ExportArdfJson),
-                                action(
-                                    "results.export-android-json",
-                                    "Export Android Race Backup JSON...",
-                                    workflow,
-                                    DesktopNavAction.ExportAndroidRaceBackupJson
-                                )
+                                action("results.export-ardf-json", "Export ARDF JSON...", workflow, DesktopNavAction.ExportArdfJson)
                             )
                         ),
                         action("results.export-copy", "Export Event File Copy...", workflow, DesktopNavAction.ExportEventFileCopy)
@@ -402,11 +396,18 @@ object DesktopNavigation {
             ),
             action(
                 "setup.event-file.import-android",
-                "Import Android Race Backup JSON...",
+                "Import Android Event JSON...",
                 workflow,
                 DesktopNavAction.ImportAndroidRaceBackup,
                 requiresEventFile = false,
                 section = DesktopSection.Races
+            ),
+            action(
+                "setup.event-file.export-android",
+                "Export Android Event JSON...",
+                workflow,
+                DesktopNavAction.ExportAndroidRaceBackupJson,
+                section = DesktopSection.EventFile
             ),
             action("setup.event-file.save", "Save", workflow, DesktopNavAction.SaveEventFile, section = DesktopSection.EventFile)
         )

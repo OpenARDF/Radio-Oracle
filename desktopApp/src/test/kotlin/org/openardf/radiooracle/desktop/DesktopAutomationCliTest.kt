@@ -128,6 +128,20 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun navSelectReportsAndroidEventJsonActionsUnderEventFile() {
+        val importResult = runAutomation("nav-select", "Event File > Import Android Event JSON...")
+        val exportResult = runAutomation("nav-select", "Event File > Export Android Event JSON...")
+
+        assertEquals(0, importResult.exitCode)
+        assertTrue(importResult.stdout.contains("\"action\":\"ImportAndroidRaceBackup\""))
+        assertTrue(importResult.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > Import Android Event JSON...\""))
+
+        assertEquals(0, exportResult.exitCode)
+        assertTrue(exportResult.stdout.contains("\"action\":\"ExportAndroidRaceBackupJson\""))
+        assertTrue(exportResult.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > Export Android Event JSON...\""))
+    }
+
+    @Test
     fun navSelectPrefersCurrentMenuItemAfterWorkflowSelection() {
         val result = runAutomation("nav-select", "Results > Results")
 
