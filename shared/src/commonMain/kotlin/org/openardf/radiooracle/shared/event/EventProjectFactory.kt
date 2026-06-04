@@ -22,7 +22,7 @@ object EventProjectFactory {
             "Race ID cannot be blank."
         }
         require(trimmedName.isNotEmpty()) {
-            "Race name cannot be blank."
+            "Event name cannot be blank."
         }
         require(startDateTimeIso.isNotBlank()) {
             "Race start date/time cannot be blank."

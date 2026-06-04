@@ -28,8 +28,8 @@ object DesktopProjectFilePaths {
             path.resolveSibling("${path.fileName}$PROJECT_EXTENSION")
         }
 
-    fun defaultProjectFileName(raceName: String): String {
-        val sanitizedName = raceName
+    private fun defaultFileStem(eventName: String): String =
+        eventName
             .trim()
             .map { character ->
                 if (character.isISOControl() || character in """\/:*?"<>|""") ' ' else character
@@ -38,8 +38,12 @@ object DesktopProjectFilePaths {
             .replace(Regex("\\s+"), " ")
             .trim()
             .ifBlank { "Event File" }
-        return withProjectExtension(Path.of(sanitizedName)).fileName.toString()
-    }
+
+    fun defaultProjectFileName(eventName: String): String =
+        withProjectExtension(Path.of(defaultFileStem(eventName))).fileName.toString()
+
+    fun defaultAndroidEventJsonFileName(eventName: String): String =
+        withAndroidRaceBackupJsonExtension(Path.of(defaultFileStem(eventName))).fileName.toString()
 
     fun isProjectFileName(fileName: String): Boolean =
         fileName.endsWith(PROJECT_EXTENSION) || fileName.endsWith(LEGACY_PROJECT_EXTENSION)
@@ -160,11 +164,12 @@ object DesktopFileDialogs {
         chooseFile("Export ARDF JSON", FileDialog.SAVE, DesktopProjectFilePaths.ARDF_JSON_EXTENSION)
             ?.let(DesktopProjectFilePaths::withArdfJsonExtension)
 
-    fun chooseExportAndroidRaceBackupJson(): Path? =
+    fun chooseExportAndroidRaceBackupJson(eventName: String? = null): Path? =
         chooseFile(
-            "Export Android Event JSON",
-            FileDialog.SAVE,
-            DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION
+            title = "Export Android Event JSON",
+            mode = FileDialog.SAVE,
+            extension = DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION,
+            defaultFileName = eventName?.let(DesktopProjectFilePaths::defaultAndroidEventJsonFileName)
         )?.let(DesktopProjectFilePaths::withAndroidRaceBackupJsonExtension)
 
     fun chooseExportFinalResultsJson(): Path? =

@@ -37,7 +37,7 @@ object EventProjectEditor {
     fun renameRace(projectFile: EventProjectFile, name: String): EventProjectFile {
         val trimmedName = name.trim()
         require(trimmedName.isNotEmpty()) {
-            "Race name cannot be blank."
+            "Event name cannot be blank."
         }
 
         return projectFile.copy(

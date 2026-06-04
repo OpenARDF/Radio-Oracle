@@ -67,7 +67,7 @@ class DesktopProjectDiagnosticsTest {
         val diagnostics = DesktopProjectDiagnostics.from(projectFile(raceName = ""))
 
         assertEquals("1 validation issue", diagnostics.validationState)
-        assertTrue(diagnostics.validationIssues.any { it.contains("Race name is blank") })
+        assertTrue(diagnostics.validationIssues.any { it.contains("Event name is blank") })
     }
 
     @Test

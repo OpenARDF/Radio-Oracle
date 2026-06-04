@@ -63,7 +63,7 @@ data class DesktopProjectDiagnostics(
 
         private fun validationIssueText(issue: EventValidationIssue): String =
             when (issue) {
-                EventValidationIssue.BlankRaceName -> "Race name is blank."
+                EventValidationIssue.BlankRaceName -> "Event name is blank."
                 is EventValidationIssue.DuplicateCategoryNames ->
                     "Duplicate category names: ${issue.names.joinToString()}."
                 is EventValidationIssue.DuplicateAliasNames ->

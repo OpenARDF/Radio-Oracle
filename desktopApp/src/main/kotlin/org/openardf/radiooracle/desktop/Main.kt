@@ -691,7 +691,7 @@ fun main(args: Array<String>) = application {
 
         fun exportAndroidRaceBackupJson() {
             val currentProject = projectSession.currentProject ?: return
-            DesktopFileDialogs.chooseExportAndroidRaceBackupJson()?.let { path ->
+            DesktopFileDialogs.chooseExportAndroidRaceBackupJson(currentProject.raceData.race.name)?.let { path ->
                 runCatching {
                     DesktopProjectFiles.exportAndroidRaceBackupJson(path, currentProject)
                     syncProjectState()
@@ -2194,7 +2194,7 @@ private fun SettingsDetailsPanel(
         DetailRow("Event File", diagnostics.projectState)
         DetailRow("Schema", diagnostics.schemaText.ifBlank { "None" })
         DetailRow("Race ID", diagnostics.raceId.ifBlank { "None" })
-        DetailRow("Race name", diagnostics.raceName.ifBlank { "None" })
+        DetailRow("Event name", diagnostics.raceName.ifBlank { "None" })
         DetailRow(
             "Start",
             diagnostics.startDateTimeIso.takeIf { it.isNotBlank() }
@@ -3944,7 +3944,7 @@ private fun RaceDetailsPanel(
                     onRenameRace(it)
                 },
                 modifier = Modifier.weight(1f),
-                label = { Text("Race name") }
+                label = { Text("Event name") }
             )
         }
         Row(

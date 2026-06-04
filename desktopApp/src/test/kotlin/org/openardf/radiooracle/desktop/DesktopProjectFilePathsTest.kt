@@ -45,7 +45,7 @@ class DesktopProjectFilePathsTest {
     }
 
     @Test
-    fun buildsDefaultProjectFileNameFromRaceName() {
+    fun buildsDefaultProjectFileNameFromEventName() {
         assertEquals(
             "Demo Event.json",
             DesktopProjectFilePaths.defaultProjectFileName("Demo Event")
@@ -57,6 +57,22 @@ class DesktopProjectFilePathsTest {
         assertEquals(
             "Event File.json",
             DesktopProjectFilePaths.defaultProjectFileName(" ")
+        )
+    }
+
+    @Test
+    fun buildsDefaultAndroidEventJsonFileNameFromEventName() {
+        assertEquals(
+            "Demo Event.ardfjs",
+            DesktopProjectFilePaths.defaultAndroidEventJsonFileName("Demo Event")
+        )
+        assertEquals(
+            "Demo Event.ardfjs",
+            DesktopProjectFilePaths.defaultAndroidEventJsonFileName("Demo/Event")
+        )
+        assertEquals(
+            "Event File.ardfjs",
+            DesktopProjectFilePaths.defaultAndroidEventJsonFileName(" ")
         )
     }
 
