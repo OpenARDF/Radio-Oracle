@@ -312,7 +312,7 @@ object DesktopNavigation {
                 workflow,
                 DesktopNavAction.NewEventFile,
                 requiresEventFile = false,
-                section = DesktopSection.EventFile
+                section = DesktopSection.Races
             ),
             action(
                 "setup.event-file.open",
@@ -320,7 +320,7 @@ object DesktopNavigation {
                 workflow,
                 DesktopNavAction.OpenEventFile,
                 requiresEventFile = false,
-                section = DesktopSection.EventFile
+                section = DesktopSection.Races
             ),
             action(
                 "setup.event-file.import-android",
@@ -328,7 +328,7 @@ object DesktopNavigation {
                 workflow,
                 DesktopNavAction.ImportAndroidRaceBackup,
                 requiresEventFile = false,
-                section = DesktopSection.EventFile
+                section = DesktopSection.Races
             ),
             action("setup.event-file.save", "Save", workflow, DesktopNavAction.SaveEventFile, section = DesktopSection.EventFile)
         )
