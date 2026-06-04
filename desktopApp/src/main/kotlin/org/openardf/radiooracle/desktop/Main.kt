@@ -4509,11 +4509,6 @@ private fun StatusStrip(
     } else {
         siReaderState.severity
     }
-    val siStatusText = if (siReaderState.severity == DesktopSiReaderSeverity.CONNECTED && !isEventFileOpen) {
-        "${siReaderState.statusText}; open/create Event File to download"
-    } else {
-        siReaderState.statusText
-    }
     val backgroundColor = when (effectiveSeverity) {
         DesktopSiReaderSeverity.DISCONNECTED -> DesktopPalette.Disconnected
         DesktopSiReaderSeverity.CONNECTED -> DesktopPalette.Connected
@@ -4535,7 +4530,7 @@ private fun StatusStrip(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "$siStatusText - $projectStatusText${if (hasUnsavedChanges) " *" else ""}",
+            text = "${siReaderState.statusText} - $projectStatusText${if (hasUnsavedChanges) " *" else ""}",
             color = textColor,
             fontSize = 13.sp
         )
