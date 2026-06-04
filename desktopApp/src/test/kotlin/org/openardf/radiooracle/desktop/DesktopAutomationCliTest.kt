@@ -117,6 +117,17 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun navSelectReportsEventFileSaveAction() {
+        val result = runAutomation("nav-select", "Event File > Save")
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > Save\""))
+        assertTrue(result.stdout.contains("\"selectedSection\":\"Event File\""))
+        assertTrue(result.stdout.contains("\"action\":\"SaveEventFile\""))
+        assertTrue(result.stdout.contains("\"guarded\":false"))
+    }
+
+    @Test
     fun navSelectPrefersCurrentMenuItemAfterWorkflowSelection() {
         val result = runAutomation("nav-select", "Results > Results")
 

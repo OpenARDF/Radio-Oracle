@@ -964,8 +964,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportAndroidRaceBackup -> true
                 DesktopNavAction.ShowDebugLogHelp,
                 DesktopNavAction.ShowAbout -> true
-                DesktopNavAction.SaveEventFile -> projectFile != null &&
-                    (projectSession.currentPath == null || hasProtectedUnsavedChanges())
+                DesktopNavAction.SaveEventFile -> projectFile != null
                 DesktopNavAction.StopContinuousSiReadout -> isContinuousSiReadoutActive
                 DesktopNavAction.StartLocalResultDisplay -> projectFile != null && localResultServerUrl == null
                 DesktopNavAction.StopLocalResultDisplay -> localResultServerUrl != null
@@ -981,7 +980,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.NewEventFile -> requestNewEventFile()
                 DesktopNavAction.OpenEventFile -> chooseOpenEventFile()
                 DesktopNavAction.ImportAndroidRaceBackup -> chooseImportAndroidRaceBackupJson()
-                DesktopNavAction.SaveEventFile -> saveCurrentProject()
+                DesktopNavAction.SaveEventFile -> saveAsCurrentProject()
                 DesktopNavAction.SaveEventFileAs -> saveAsCurrentProject()
                 DesktopNavAction.CloseEventFile -> requestCloseEventFile()
                 DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
