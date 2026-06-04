@@ -6,6 +6,7 @@ import java.io.FilenameFilter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.prefs.Preferences
+import javax.swing.JOptionPane
 
 /** Event File path helpers shared by desktop file dialogs and tests. */
 object DesktopProjectFilePaths {
@@ -113,6 +114,15 @@ object DesktopProjectFilePaths {
         }
 }
 
+object DesktopFileOverwriteConfirmation {
+    fun confirmedPath(
+        path: Path,
+        exists: (Path) -> Boolean,
+        confirmOverwrite: (Path) -> Boolean
+    ): Path? =
+        if (!exists(path) || confirmOverwrite(path)) path else null
+}
+
 /** Remembers and prepares the desktop directory used for user-visible Event Files. */
 object DesktopEventFileLocations {
     private const val APP_DOCUMENTS_FOLDER = "Radio-Oracle"
@@ -172,10 +182,12 @@ object DesktopFileDialogs {
             defaultFileName = eventName?.let { DesktopProjectFilePaths.defaultCsvFileName(it, suffix) }
         )
             ?.let(DesktopProjectFilePaths::withCsvExtension)
+            ?.let(::confirmOverwrite)
 
     fun chooseExportArdfJson(): Path? =
         chooseFile("Export ARDF JSON", FileDialog.SAVE, DesktopProjectFilePaths.ARDF_JSON_EXTENSION)
             ?.let(DesktopProjectFilePaths::withArdfJsonExtension)
+            ?.let(::confirmOverwrite)
 
     fun chooseExportAndroidRaceBackupJson(eventName: String? = null): Path? =
         chooseFile(
@@ -183,27 +195,34 @@ object DesktopFileDialogs {
             mode = FileDialog.SAVE,
             extension = DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION,
             defaultFileName = eventName?.let(DesktopProjectFilePaths::defaultAndroidEventJsonFileName)
-        )?.let(DesktopProjectFilePaths::withAndroidRaceBackupJsonExtension)
+        )
+            ?.let(DesktopProjectFilePaths::withAndroidRaceBackupJsonExtension)
+            ?.let(::confirmOverwrite)
 
     fun chooseExportFinalResultsJson(): Path? =
         chooseFile("Export Final Results JSON", FileDialog.SAVE, DesktopProjectFilePaths.FINAL_RESULTS_JSON_EXTENSION)
             ?.let(DesktopProjectFilePaths::withFinalResultsJsonExtension)
+            ?.let(::confirmOverwrite)
 
     fun chooseExportLiveResultsJson(): Path? =
         chooseFile("Export Live Results JSON", FileDialog.SAVE, DesktopProjectFilePaths.LIVE_RESULTS_JSON_EXTENSION)
             ?.let(DesktopProjectFilePaths::withLiveResultsJsonExtension)
+            ?.let(::confirmOverwrite)
 
     fun chooseExportIofXml(title: String): Path? =
         chooseFile(title, FileDialog.SAVE, DesktopProjectFilePaths.IOF_XML_EXTENSION)
             ?.let(DesktopProjectFilePaths::withIofXmlExtension)
+            ?.let(::confirmOverwrite)
 
     fun chooseExportHtml(title: String): Path? =
         chooseFile(title, FileDialog.SAVE, DesktopProjectFilePaths.HTML_EXTENSION)
             ?.let(DesktopProjectFilePaths::withHtmlExtension)
+            ?.let(::confirmOverwrite)
 
     fun chooseExportTxt(title: String): Path? =
         chooseFile(title, FileDialog.SAVE, DesktopProjectFilePaths.TXT_EXTENSION)
             ?.let(DesktopProjectFilePaths::withTxtExtension)
+            ?.let(::confirmOverwrite)
 
     fun chooseImportCsv(title: String): Path? =
         chooseFile(title, FileDialog.LOAD, DesktopProjectFilePaths.CSV_EXTENSION)
@@ -225,6 +244,17 @@ object DesktopFileDialogs {
         val file = dialog.file ?: return null
         return Path.of(directory, file)
     }
+
+    private fun confirmOverwrite(path: Path): Path? =
+        DesktopFileOverwriteConfirmation.confirmedPath(path, Files::exists) { selectedPath ->
+            JOptionPane.showConfirmDialog(
+                null,
+                "${selectedPath.fileName} already exists. Replace it?",
+                "Replace Existing File?",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+            ) == JOptionPane.YES_OPTION
+        }
 
     private fun chooseEventFile(title: String, mode: Int, defaultFileName: String? = null): Path? {
         val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()

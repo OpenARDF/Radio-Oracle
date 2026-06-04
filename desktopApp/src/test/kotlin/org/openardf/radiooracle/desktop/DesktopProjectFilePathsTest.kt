@@ -124,6 +124,51 @@ class DesktopProjectFilePathsTest {
     }
 
     @Test
+    fun overwriteConfirmationKeepsNewFileWithoutPrompt() {
+        val path = Path.of("event.csv")
+        var prompted = false
+
+        assertEquals(
+            path,
+            DesktopFileOverwriteConfirmation.confirmedPath(
+                path = path,
+                exists = { false },
+                confirmOverwrite = {
+                    prompted = true
+                    false
+                }
+            )
+        )
+        assertFalse(prompted)
+    }
+
+    @Test
+    fun overwriteConfirmationKeepsExistingFileWhenConfirmed() {
+        val path = Path.of("event.csv")
+
+        assertEquals(
+            path,
+            DesktopFileOverwriteConfirmation.confirmedPath(
+                path = path,
+                exists = { true },
+                confirmOverwrite = { true }
+            )
+        )
+    }
+
+    @Test
+    fun overwriteConfirmationCancelsExistingFileWhenRejected() {
+        assertEquals(
+            null,
+            DesktopFileOverwriteConfirmation.confirmedPath(
+                path = Path.of("event.csv"),
+                exists = { true },
+                confirmOverwrite = { false }
+            )
+        )
+    }
+
+    @Test
     fun keepsExistingArdfJsonExtension() {
         val path = Path.of("event.ardf.json")
 
