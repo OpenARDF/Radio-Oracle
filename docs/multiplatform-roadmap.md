@@ -275,6 +275,12 @@ Goal: add platform-specific capabilities after the event-admin beta is stable.
   immediate read-back validation. The UI must warn that applying station
   settings can overwrite station configuration and may clear backup data, and
   it must refuse to report success unless the station re-reads as READOUT.
+- Add explicit multi-download-station support after beta. The desktop beta may
+  read multiple cards from one attached SPORTident download station, but
+  post-beta desktop should detect multiple connected stations, show their
+  serial numbers/modes/ports, let the user choose or assign active stations,
+  and prevent independent polls/readout loops from fighting over the same
+  serial device.
 - Add desktop printing behind a platform print interface.
 - Validate and harden Android Bluetooth ESC/POS printing before beta against the
   target Bluetooth printer hardware.

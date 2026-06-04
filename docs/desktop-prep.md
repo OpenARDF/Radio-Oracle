@@ -53,6 +53,9 @@ The desktop beta should not include:
 - Bluetooth printer transport;
 - Android Room database migration or shared SQL persistence;
 - SPORTident station write/reprogramming actions;
+- multi-download-station support; the beta may read multiple cards from one
+  attached SPORTident download station, but not coordinate multiple connected
+  stations;
 - unverified OCheckList/new-card imports;
 - LAN-exposed local web displays;
 - any promise that desktop can replace the Android race-day download workflow.

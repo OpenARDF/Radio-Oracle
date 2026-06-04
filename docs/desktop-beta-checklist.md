@@ -52,6 +52,8 @@ packaging is best-effort for this beta.
 - Desktop Bluetooth printer transport.
 - Android Room/shared SQL migration.
 - SPORTident station write/reprogramming actions.
+- Multi-download-station support. Beta downloads may use one attached
+  SPORTident download station, not multiple connected stations at once.
 - OCheckList/new-card import without a verified schema or sample.
 - LAN-exposed local result displays.
 - A promise that desktop replaces Android for normal race-day downloads.
