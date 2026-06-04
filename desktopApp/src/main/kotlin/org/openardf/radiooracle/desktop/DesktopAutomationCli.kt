@@ -9,7 +9,12 @@ import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinter
 import org.openardf.radiooracle.desktop.usb.DesktopSerialPortProvider
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
 import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
+import org.openardf.radiooracle.shared.event.CompetitorCsvImportDuplicatePolicy
+import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventValidationRules
+import org.openardf.radiooracle.shared.files.CompetitorCsvImportProfile
+import org.openardf.radiooracle.shared.files.EventCsvImports
+import java.nio.file.Files
 
 fun main(args: Array<String>) {
     exitProcess(DesktopAutomationCli.run(args))
@@ -89,6 +94,7 @@ object DesktopAutomationCli {
             }
             "open-event-file" -> openEventFile(commandArgs, out, err)
             "import-android-event-file" -> importAndroidEventFile(commandArgs, out, err)
+            "import-competitors-csv" -> importCompetitorsCsv(commandArgs, out, err)
             "nav-select" -> navSelect(commandArgs, out, err)
             "si-status" -> siStatus(commandArgs, out, err, serialPortProvider)
             "printer-status" -> printerStatus(commandArgs, out, err, printerDiagnostics)
@@ -160,6 +166,57 @@ object DesktopAutomationCli {
             0
         }.getOrElse { error ->
             err.println("Failed to import Android Event File: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
+    private fun importCompetitorsCsv(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val eventFileText = args.getOrNull(0)
+        val csvText = args.getOrNull(1)
+        if (eventFileText.isNullOrBlank() || csvText.isNullOrBlank()) {
+            err.println("import-competitors-csv requires Event File and competitors CSV paths.")
+            return 64
+        }
+        return runCatching {
+            val eventFilePath = Path.of(eventFileText)
+            val csvPath = Path.of(csvText)
+            val originalProjectFile = DesktopProjectFiles.read(eventFilePath)
+            val csv = Files.readString(csvPath)
+            val profile = EventCsvImports.detectCompetitorProfile(csv)
+            val result = EventCsvImports.parseAndroidCompetitorRows(csv)
+            val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
+                projectFile = originalProjectFile,
+                rows = result.rows,
+                competitorIdFactory = { UUID.randomUUID().toString() },
+                categoryIdFactory = { UUID.randomUUID().toString() },
+                duplicatePolicy = if (profile == CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION) {
+                    CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_INDEX
+                } else {
+                    CompetitorCsvImportDuplicatePolicy.REJECT_DUPLICATES
+                }
+            )
+            DesktopProjectFiles.write(eventFilePath, outcome.projectFile)
+            val validationErrors = EventValidationRules.validateRaceData(outcome.projectFile.raceData)
+            out.println(
+                jsonObject(
+                    "command" to "import-competitors-csv",
+                    "eventFile" to eventFilePath.toAbsolutePath().normalize().toString(),
+                    "csv" to csvPath.toAbsolutePath().normalize().toString(),
+                    "profile" to profile.name,
+                    "raceName" to outcome.projectFile.raceData.race.name,
+                    "importedCount" to outcome.importedCount,
+                    "updatedCount" to outcome.updatedCount,
+                    "invalidRowCount" to result.invalidLines.size,
+                    "warnings" to outcome.warnings,
+                    "categoryCount" to outcome.projectFile.raceData.categories.size,
+                    "competitorCount" to outcome.projectFile.raceData.competitorData.size,
+                    "validationErrorCount" to validationErrors.size,
+                    "validationErrors" to validationErrors
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Failed to import Competitors CSV: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -378,6 +435,8 @@ object DesktopAutomationCli {
           open-event-file <path>          Decode and validate an Event File.
           import-android-event-file <android-path> <desktop-path>
                                           Import Android Event File and write a desktop Event File.
+          import-competitors-csv <event-path> <csv-path>
+                                          Import competitors CSV into an Event File.
           nav-select [--default-draft|--draft] <path>
                                           Simulate menu selection, using > between labels. Supports < Back.
           si-status [--require] [--port]  Probe attached SI station state.

@@ -90,6 +90,31 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun importCompetitorsCsvCommandUpdatesDesktopEventFile() {
+        val directory = Files.createTempDirectory("radio-oracle-automation")
+        val eventFilePath = directory.resolve("Automation Event.json")
+        val csvPath = directory.resolve("competitors.csv")
+        DesktopProjectFiles.write(eventFilePath, projectFile("Automation Event"))
+        Files.writeString(
+            csvPath,
+            """
+                si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent
+                2007001;101;Alice;Runner;M50;0;1974;BOK;BOK-101;00:00;0
+            """.trimIndent()
+        )
+
+        val importResult = runAutomation("import-competitors-csv", eventFilePath.toString(), csvPath.toString())
+        val openResult = runAutomation("open-event-file", eventFilePath.toString())
+
+        assertEquals(0, importResult.exitCode)
+        assertTrue(importResult.stdout.contains("\"command\":\"import-competitors-csv\""))
+        assertTrue(importResult.stdout.contains("\"importedCount\":1"))
+        assertTrue(importResult.stdout.contains("\"competitorCount\":1"))
+        assertEquals(0, openResult.exitCode)
+        assertTrue(openResult.stdout.contains("\"competitorCount\":1"))
+    }
+
+    @Test
     fun navSelectReportsNewEventFileAction() {
         val result = runAutomation("nav-select", "Event File > New Event File")
 
