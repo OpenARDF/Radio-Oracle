@@ -138,8 +138,36 @@ object DesktopNavigation {
                     DesktopSection.Races,
                     requiresEventFile = false
                 ),
-                item("setup.categories", "Categories", workflow, DesktopSection.Categories),
-                item("setup.competitors", "Competitors", workflow, DesktopSection.Competitors),
+                group(
+                    "setup.categories",
+                    "Categories",
+                    workflow,
+                    listOf(
+                        item("setup.categories.view", "Categories", workflow, DesktopSection.Categories),
+                        action(
+                            "setup.categories.import",
+                            "Import Categories CSV...",
+                            workflow,
+                            DesktopNavAction.ImportCategoriesCsv
+                        )
+                    ),
+                    DesktopSection.Categories
+                ),
+                group(
+                    "setup.competitors",
+                    "Competitors",
+                    workflow,
+                    listOf(
+                        item("setup.competitors.view", "Competitors", workflow, DesktopSection.Competitors),
+                        action(
+                            "setup.competitors.import",
+                            "Import Competitors CSV...",
+                            workflow,
+                            DesktopNavAction.ImportCompetitorsCsv
+                        )
+                    ),
+                    DesktopSection.Competitors
+                ),
                 group(
                     "setup.start-list",
                     "Start List",
@@ -183,15 +211,6 @@ object DesktopNavigation {
                     DesktopSection.StartList
                 ),
                 item("setup.aliases", "Aliases", workflow, DesktopSection.Aliases),
-                group(
-                    "setup.imports",
-                    "Imports",
-                    workflow,
-                    listOf(
-                        action("setup.import-categories", "Import Categories CSV...", workflow, DesktopNavAction.ImportCategoriesCsv),
-                        action("setup.import-competitors", "Import Competitors CSV...", workflow, DesktopNavAction.ImportCompetitorsCsv)
-                    )
-                ),
                 group(
                     "setup.exports",
                     "Setup Exports",
