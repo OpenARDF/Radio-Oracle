@@ -130,8 +130,7 @@ object DesktopNavigation {
     fun rootItems(workflow: DesktopWorkflow): List<DesktopNavItem> =
         when (workflow) {
             DesktopWorkflow.Setup -> listOf(
-                group("setup.event-file", "Event File", workflow, eventFileActions(workflow), DesktopSection.EventFile),
-                item("setup.race", "Race", workflow, DesktopSection.Races),
+                group("setup.event-file", "Event File", workflow, eventFileActions(workflow), DesktopSection.Races),
                 item("setup.categories", "Categories", workflow, DesktopSection.Categories),
                 item("setup.competitors", "Competitors", workflow, DesktopSection.Competitors),
                 group(

@@ -17,7 +17,7 @@ class DesktopNavigationTest {
     @Test
     fun placesCurrentDesktopSectionsUnderWorkflowGroups() {
         assertEquals(
-            listOf("Event File", "Race", "Categories", "Competitors", "Start List", "Aliases", "Imports", "Setup Exports", "Utils"),
+            listOf("Event File", "Categories", "Competitors", "Start List", "Aliases", "Imports", "Setup Exports", "Utils"),
             DesktopNavigation.rootItems(DesktopWorkflow.Setup).map { it.label }
         )
         assertEquals(
@@ -133,7 +133,7 @@ class DesktopNavigationTest {
         val state = newEventState.back()
 
         assertEquals(listOf("setup.event-file"), state.submenuStack)
-        assertEquals(DesktopSection.EventFile, state.selectedSection)
+        assertEquals(DesktopSection.Races, state.selectedSection)
         assertEquals("setup.event-file", state.selectedItemId)
         assertEquals("Preparation/Setup > Event File", DesktopNavigation.breadcrumb(state))
     }
@@ -195,7 +195,7 @@ class DesktopNavigationTest {
     }
 
     @Test
-    fun androidEventJsonExportLivesWithEventFileActions() {
+    fun androidEventFileExportLivesWithEventFileActions() {
         val eventFileActions = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
             .first { it.label == "Event File" }
             .children
@@ -213,19 +213,19 @@ class DesktopNavigationTest {
     }
 
     @Test
-    fun enteringEventFileMenuSelectsEventFileWorkspace() {
+    fun enteringEventFileMenuSelectsEventDetailsWorkspace() {
         val eventFile = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
             .first { it.label == "Event File" }
 
         val state = DesktopNavState().enter(eventFile)
 
-        assertEquals(DesktopSection.EventFile, state.selectedSection)
+        assertEquals(DesktopSection.Races, state.selectedSection)
         assertEquals("setup.event-file", state.selectedItemId)
         assertEquals("Preparation/Setup > Event File", DesktopNavigation.breadcrumb(state))
     }
 
     @Test
-    fun newEventFileActionSelectsRaceWorkspaceForImmediateEditing() {
+    fun newEventFileActionSelectsEventDetailsWorkspaceForImmediateEditing() {
         val eventFileState = DesktopNavState().enter(
             DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
         )

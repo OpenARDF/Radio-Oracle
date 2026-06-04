@@ -4601,7 +4601,7 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
         DesktopSection.WorkflowHome -> "Workflow overview for event setup, race operations, results, exports, and app support."
         DesktopSection.EventFile -> summary?.let { "Event File open: ${it.raceName}" }
             ?: "Create a new Event File or open an existing one to begin."
-        DesktopSection.Races -> summary?.raceName ?: "No races loaded."
+        DesktopSection.Races -> summary?.raceName ?: "Create a new Event File or open an existing one to begin."
         DesktopSection.Categories -> "${summary?.categoryCount ?: 0} categories loaded."
         DesktopSection.Competitors -> "${summary?.competitorCount ?: 0} competitors loaded."
         DesktopSection.StartList -> "Competitors sorted by drawn start time."
