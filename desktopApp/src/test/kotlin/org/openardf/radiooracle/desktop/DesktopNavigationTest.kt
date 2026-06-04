@@ -105,6 +105,33 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun enteringEventFileMenuSelectsEventFileWorkspace() {
+        val eventFile = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
+            .first { it.label == "Event File" }
+
+        val state = DesktopNavState().enter(eventFile)
+
+        assertEquals(DesktopSection.EventFile, state.selectedSection)
+        assertEquals("setup.event-file", state.selectedItemId)
+        assertEquals("Preparation/Setup > Event File", DesktopNavigation.breadcrumb(state))
+    }
+
+    @Test
+    fun eventFileActionsKeepEventFileWorkspaceSelected() {
+        val eventFileState = DesktopNavState().enter(
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+        )
+        val newEventFile = DesktopNavigation.currentItems(eventFileState)
+            .first { it.action == DesktopNavAction.NewEventFile }
+
+        val state = eventFileState.enter(newEventFile)
+
+        assertEquals(DesktopSection.EventFile, state.selectedSection)
+        assertEquals("setup.event-file.new", state.selectedItemId)
+        assertEquals("Preparation/Setup > Event File > New Event File", DesktopNavigation.breadcrumb(state))
+    }
+
+    @Test
     fun helpMenuExposesConcreteActions() {
         val helpActions = DesktopNavigation.rootItems(DesktopWorkflow.SettingsHelp)
             .first { it.label == "Help" }

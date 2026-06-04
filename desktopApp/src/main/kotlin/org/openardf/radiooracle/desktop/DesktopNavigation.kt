@@ -74,7 +74,11 @@ data class DesktopNavState(
     fun enter(item: DesktopNavItem): DesktopNavState =
         when {
             item.children.isNotEmpty() && submenuStack.size < MaxSubmenuDepth ->
-                copy(submenuStack = submenuStack + item.id)
+                copy(
+                    submenuStack = submenuStack + item.id,
+                    selectedSection = item.section ?: selectedSection,
+                    selectedItemId = item.id
+                )
             item.section != null ->
                 copy(selectedSection = item.section, selectedItemId = item.id)
             item.action != null ->
@@ -93,7 +97,7 @@ object DesktopNavigation {
     fun rootItems(workflow: DesktopWorkflow): List<DesktopNavItem> =
         when (workflow) {
             DesktopWorkflow.Setup -> listOf(
-                group("setup.event-file", "Event File", workflow, eventFileActions(workflow)),
+                group("setup.event-file", "Event File", workflow, eventFileActions(workflow), DesktopSection.EventFile),
                 item("setup.race", "Race", workflow, DesktopSection.Races),
                 item("setup.categories", "Categories", workflow, DesktopSection.Categories),
                 item("setup.competitors", "Competitors", workflow, DesktopSection.Competitors),
@@ -302,16 +306,31 @@ object DesktopNavigation {
 
     private fun eventFileActions(workflow: DesktopWorkflow): List<DesktopNavItem> =
         listOf(
-            action("setup.event-file.new", "New Event File", workflow, DesktopNavAction.NewEventFile, requiresEventFile = false),
-            action("setup.event-file.open", "Open...", workflow, DesktopNavAction.OpenEventFile, requiresEventFile = false),
+            action(
+                "setup.event-file.new",
+                "New Event File",
+                workflow,
+                DesktopNavAction.NewEventFile,
+                requiresEventFile = false,
+                section = DesktopSection.EventFile
+            ),
+            action(
+                "setup.event-file.open",
+                "Open...",
+                workflow,
+                DesktopNavAction.OpenEventFile,
+                requiresEventFile = false,
+                section = DesktopSection.EventFile
+            ),
             action(
                 "setup.event-file.import-android",
                 "Import Android Race Backup JSON...",
                 workflow,
                 DesktopNavAction.ImportAndroidRaceBackup,
-                requiresEventFile = false
+                requiresEventFile = false,
+                section = DesktopSection.EventFile
             ),
-            action("setup.event-file.save", "Save", workflow, DesktopNavAction.SaveEventFile)
+            action("setup.event-file.save", "Save", workflow, DesktopNavAction.SaveEventFile, section = DesktopSection.EventFile)
         )
 
     private fun item(id: String, label: String, workflow: DesktopWorkflow, section: DesktopSection): DesktopNavItem =
@@ -322,12 +341,14 @@ object DesktopNavigation {
         label: String,
         workflow: DesktopWorkflow,
         action: DesktopNavAction,
-        requiresEventFile: Boolean = true
+        requiresEventFile: Boolean = true,
+        section: DesktopSection? = null
     ): DesktopNavItem =
         DesktopNavItem(
             id = id,
             label = label,
             workflow = workflow,
+            section = section,
             action = action,
             requiresEventFile = requiresEventFile
         )
@@ -336,7 +357,8 @@ object DesktopNavigation {
         id: String,
         label: String,
         workflow: DesktopWorkflow,
-        children: List<DesktopNavItem>
+        children: List<DesktopNavItem>,
+        section: DesktopSection? = null
     ): DesktopNavItem =
-        DesktopNavItem(id = id, label = label, workflow = workflow, children = children)
+        DesktopNavItem(id = id, label = label, workflow = workflow, section = section, children = children)
 }

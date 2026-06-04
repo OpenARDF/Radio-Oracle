@@ -4410,6 +4410,7 @@ private fun DetailRow(label: String, value: String) {
 private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFile?): String {
     val summary = projectFile?.let(EventProjectSummary::from)
     return when (section) {
+        DesktopSection.EventFile -> summary?.let { "Event File open: ${it.raceName}" } ?: "No Event File open."
         DesktopSection.Races -> summary?.raceName ?: "No races loaded."
         DesktopSection.Categories -> "${summary?.categoryCount ?: 0} categories loaded."
         DesktopSection.Competitors -> "${summary?.competitorCount ?: 0} competitors loaded."
