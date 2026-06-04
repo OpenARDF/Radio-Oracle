@@ -499,7 +499,8 @@ object EventProjectEditor {
     /** Draws start times by category order, rotating clubs within each category where possible. */
     fun drawStartList(
         projectFile: EventProjectFile,
-        intervalText: String
+        intervalText: String,
+        options: StartDrawOptions = StartDrawOptions()
     ): EventProjectFile {
         val intervalSeconds = DurationFormatter.minuteStringToSeconds(intervalText.trim())
         require(intervalSeconds > 0) {
@@ -518,12 +519,16 @@ object EventProjectEditor {
                             data.competitorCategory.competitor.categoryId == categoryData.category.id
                     }
                     .map { it.competitorCategory.competitor }
-                val drawnCategoryCompetitors = drawClubRotatedCategory(categoryCompetitors, previousClub)
+                val drawnCategoryCompetitors = drawCategoryCompetitors(categoryCompetitors, previousClub, options)
                 drawnCategoryCompetitors.forEach { competitor ->
                     competitorStartTimes[competitor.id] = nextStartSeconds
                     nextStartSeconds += intervalSeconds
                 }
-                previousClub = drawnCategoryCompetitors.lastOrNull()?.clubKey() ?: previousClub
+                previousClub = if (options.clubHandling == StartDrawClubHandling.AVOID_BACK_TO_BACK) {
+                    drawnCategoryCompetitors.lastOrNull()?.clubKey() ?: previousClub
+                } else {
+                    null
+                }
             }
 
         val competitorData = projectFile.raceData.competitorData.map { data ->
@@ -1869,6 +1874,16 @@ object EventProjectEditor {
             drawnStartTimeSeconds = null
         )
     }
+
+    private fun drawCategoryCompetitors(
+        competitors: List<EventCompetitor>,
+        previousClub: String?,
+        options: StartDrawOptions
+    ): List<EventCompetitor> =
+        when (options.clubHandling) {
+            StartDrawClubHandling.IGNORE -> competitors.sortedWith(compareBy({ it.startNumber }, { it.fullName() }))
+            StartDrawClubHandling.AVOID_BACK_TO_BACK -> drawClubRotatedCategory(competitors, previousClub)
+        }
 
     private fun drawClubRotatedCategory(
         competitors: List<EventCompetitor>,

@@ -83,6 +83,8 @@ import org.openardf.radiooracle.shared.event.EventReadoutDetails
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.EventStartListDetails
 import org.openardf.radiooracle.shared.event.EventStartListRow
+import org.openardf.radiooracle.shared.event.StartDrawClubHandling
+import org.openardf.radiooracle.shared.event.StartDrawOptions
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportProfile
@@ -1267,10 +1269,10 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
-            onDrawStartList = { interval ->
+            onDrawStartList = { interval, options ->
                 runCatching {
                     val drawnProject = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.drawStartList(currentProject, interval)
+                        EventProjectEditor.drawStartList(currentProject, interval, options)
                     }
                     projectFile = drawnProject
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
@@ -1659,7 +1661,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateCompetitorClubIndex: (String, String, String) -> Unit = { _, _, _ -> },
     onUpdateCompetitorBirthYear: (String, String) -> Unit = { _, _ -> },
     onUpdateCompetitorStartTime: (String, String) -> Unit = { _, _ -> },
-    onDrawStartList: (String) -> Unit = {},
+    onDrawStartList: (String, StartDrawOptions) -> Unit = { _, _ -> },
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean = { _, _, _, _, _, _, _, _ -> false },
     onAssignCompetitorCategory: (String, String?) -> Unit = { _, _ -> },
     onRemoveCompetitor: (String, Boolean) -> Unit = { _, _ -> },
@@ -2003,7 +2005,7 @@ private fun SectionWorkspace(
     onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
-    onDrawStartList: (String) -> Unit,
+    onDrawStartList: (String, StartDrawOptions) -> Unit,
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit,
@@ -2394,11 +2396,12 @@ private fun ResultDetailRow(
 @Composable
 private fun StartListDetailsPanel(
     details: EventStartListDetails,
-    onDrawStartList: (String) -> Unit
+    onDrawStartList: (String, StartDrawOptions) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(StartListTableColumns)
     var intervalDraft by remember { mutableStateOf("02:00") }
+    var clubHandling by remember { mutableStateOf(StartDrawClubHandling.AVOID_BACK_TO_BACK) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -2411,7 +2414,16 @@ private fun StartListDetailsPanel(
                 label = { Text("Interval") },
                 modifier = Modifier.width(132.dp)
             )
-            Button(onClick = { onDrawStartList(intervalDraft) }) {
+            EnumPicker(
+                selectedValue = clubHandling,
+                values = StartDrawClubHandling.entries,
+                label = StartDrawClubHandling::toDisplayLabel,
+                onValueSelected = { clubHandling = it },
+                modifier = Modifier.width(190.dp)
+            )
+            Button(
+                onClick = { onDrawStartList(intervalDraft, StartDrawOptions(clubHandling = clubHandling)) }
+            ) {
                 Text("Draw starts")
             }
         }
@@ -4648,6 +4660,12 @@ private fun EventReadoutDuplicatePolicy.toDisplayLabel(): String =
         EventReadoutDuplicatePolicy.Reject -> "Ignore"
         EventReadoutDuplicatePolicy.Replace -> "Replace"
         EventReadoutDuplicatePolicy.CreateNew -> "Create new readout"
+    }
+
+private fun StartDrawClubHandling.toDisplayLabel(): String =
+    when (this) {
+        StartDrawClubHandling.AVOID_BACK_TO_BACK -> "Avoid same club"
+        StartDrawClubHandling.IGNORE -> "Ignore clubs"
     }
 
 /** Shows the current SI-reader connection state and Event File save status. */

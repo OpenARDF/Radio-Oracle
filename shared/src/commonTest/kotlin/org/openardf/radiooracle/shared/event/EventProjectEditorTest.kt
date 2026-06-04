@@ -1419,6 +1419,29 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun drawStartListCanIgnoreClubs() {
+        val m21 = category("cat-m21", "M21", order = 0)
+        val original = projectFile(
+            categories = listOf(categoryData(m21.id, m21.name, order = m21.order)),
+            competitors = listOf(
+                competitorData("a1", "Alice", "Alpha", startNumber = 1, category = m21, club = "A"),
+                competitorData("a2", "Aaron", "Alpha", startNumber = 2, category = m21, club = "A"),
+                competitorData("b1", "Bob", "Bravo", startNumber = 3, category = m21, club = "B")
+            )
+        )
+
+        val drawn = EventProjectEditor.drawStartList(
+            original,
+            "01:00",
+            StartDrawOptions(clubHandling = StartDrawClubHandling.IGNORE)
+        )
+
+        assertEquals(0L, drawn.startTimeFor("a1"))
+        assertEquals(60L, drawn.startTimeFor("a2"))
+        assertEquals(120L, drawn.startTimeFor("b1"))
+    }
+
+    @Test
     fun rejectsInvalidStartListDrawIntervals() {
         assertFailsWith<IllegalArgumentException> {
             EventProjectEditor.drawStartList(projectFile(), "2")
