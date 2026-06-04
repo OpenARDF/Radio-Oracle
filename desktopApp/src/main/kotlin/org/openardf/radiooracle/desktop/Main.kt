@@ -3996,7 +3996,7 @@ private fun RaceDetailsPanel(
                 label = { Text("Limit min") }
             )
         }
-        DetailRow("Time limit", details.timeLimitText)
+        DetailRow("Time limit:", "${details.timeLimitMinutesText} min")
     }
 }
 
