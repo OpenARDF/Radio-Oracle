@@ -1813,6 +1813,7 @@ private fun RadioOManagerDesktopApp(
                         }
                         WorkflowBar(
                             selectedWorkflow = navState.workflow,
+                            hasEventFile = projectFile != null,
                             onWorkflowSelected = { workflow ->
                                 requestNavigation(DesktopPendingNavigation.Workflow(workflow))
                             }
@@ -1926,6 +1927,7 @@ private fun NavigationRail(
 @Composable
 private fun WorkflowBar(
     selectedWorkflow: DesktopWorkflow,
+    hasEventFile: Boolean,
     onWorkflowSelected: (DesktopWorkflow) -> Unit
 ) {
     Row(
@@ -1939,8 +1941,10 @@ private fun WorkflowBar(
     ) {
         DesktopWorkflow.bottomBarEntries.forEach { workflow ->
             val isSelected = workflow == selectedWorkflow
+            val isEnabled = !workflow.requiresEventFileInBottomBar || hasEventFile
             Button(
                 onClick = { onWorkflowSelected(workflow) },
+                enabled = isEnabled,
                 modifier = Modifier
                     .weight(1f)
                     .border(

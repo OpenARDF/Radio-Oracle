@@ -2,11 +2,15 @@ package org.openardf.radiooracle.desktop
 
 private const val MaxSubmenuDepth = 2
 
-enum class DesktopWorkflow(val label: String, val shortLabel: String) {
-    Setup("Preparation/Setup", "Setup"),
+enum class DesktopWorkflow(
+    val label: String,
+    val shortLabel: String,
+    val requiresEventFileInBottomBar: Boolean = true
+) {
+    Setup("Preparation/Setup", "Setup", requiresEventFileInBottomBar = false),
     RaceOps("Race Operations", "Race Ops"),
     ResultsExport("Results/File Export", "Results"),
-    SettingsHelp("Help/About/App Settings", "Settings");
+    SettingsHelp("Help/About/App Settings", "Settings", requiresEventFileInBottomBar = false);
 
     companion object {
         val bottomBarEntries: List<DesktopWorkflow> = listOf(Setup, RaceOps, ResultsExport)

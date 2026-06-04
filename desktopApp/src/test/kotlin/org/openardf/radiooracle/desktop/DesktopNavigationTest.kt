@@ -15,6 +15,13 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun bottomNavigationDisablesWorkflowsThatNeedAnOpenEventFile() {
+        assertFalse(DesktopWorkflow.Setup.requiresEventFileInBottomBar)
+        assertTrue(DesktopWorkflow.RaceOps.requiresEventFileInBottomBar)
+        assertTrue(DesktopWorkflow.ResultsExport.requiresEventFileInBottomBar)
+    }
+
+    @Test
     fun placesCurrentDesktopSectionsUnderWorkflowGroups() {
         assertEquals(
             listOf("Event File", "Categories", "Competitors", "Start List"),
