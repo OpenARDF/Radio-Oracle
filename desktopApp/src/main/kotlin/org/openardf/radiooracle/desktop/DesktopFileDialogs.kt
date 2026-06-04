@@ -166,7 +166,7 @@ object DesktopFileDialogs {
 
     fun chooseExportAndroidRaceBackupJson(eventName: String? = null): Path? =
         chooseFile(
-            title = "Export Android Event JSON",
+            title = "Export Android Event File",
             mode = FileDialog.SAVE,
             extension = DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION,
             defaultFileName = eventName?.let(DesktopProjectFilePaths::defaultAndroidEventJsonFileName)
@@ -197,7 +197,7 @@ object DesktopFileDialogs {
 
     fun chooseImportAndroidRaceBackupJson(): Path? =
         chooseFile(
-            "Import Android Event JSON",
+            "Import Android Event File",
             FileDialog.LOAD,
             DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION
         )

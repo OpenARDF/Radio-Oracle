@@ -396,7 +396,7 @@ object DesktopNavigation {
             ),
             action(
                 "setup.event-file.import-android",
-                "Import Android Event JSON...",
+                "Import Android Event File...",
                 workflow,
                 DesktopNavAction.ImportAndroidRaceBackup,
                 requiresEventFile = false,
@@ -404,7 +404,7 @@ object DesktopNavigation {
             ),
             action(
                 "setup.event-file.export-android",
-                "Export Android Event JSON...",
+                "Export Android Event File...",
                 workflow,
                 DesktopNavAction.ExportAndroidRaceBackupJson,
                 section = DesktopSection.EventFile

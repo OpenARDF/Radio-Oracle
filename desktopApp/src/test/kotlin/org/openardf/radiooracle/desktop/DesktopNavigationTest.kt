@@ -189,7 +189,7 @@ class DesktopNavigationTest {
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFile }.requiresEventFile)
         assertEquals(
-            listOf("New Event File", "Open...", "Import Android Event JSON...", "Export Android Event JSON...", "Save"),
+            listOf("New Event File", "Open...", "Import Android Event File...", "Export Android Event File...", "Save"),
             eventFileActions.map { it.label }
         )
     }
@@ -206,7 +206,7 @@ class DesktopNavigationTest {
             .children
 
         assertEquals(
-            "Export Android Event JSON...",
+            "Export Android Event File...",
             eventFileActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.label
         )
         assertFalse(resultJsonActions.any { it.action == DesktopNavAction.ExportAndroidRaceBackupJson })

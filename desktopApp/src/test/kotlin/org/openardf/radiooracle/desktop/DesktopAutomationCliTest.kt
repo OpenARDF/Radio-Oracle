@@ -128,17 +128,17 @@ class DesktopAutomationCliTest {
     }
 
     @Test
-    fun navSelectReportsAndroidEventJsonActionsUnderEventFile() {
-        val importResult = runAutomation("nav-select", "Event File > Import Android Event JSON...")
-        val exportResult = runAutomation("nav-select", "Event File > Export Android Event JSON...")
+    fun navSelectReportsAndroidEventFileActionsUnderEventFile() {
+        val importResult = runAutomation("nav-select", "Event File > Import Android Event File...")
+        val exportResult = runAutomation("nav-select", "Event File > Export Android Event File...")
 
         assertEquals(0, importResult.exitCode)
         assertTrue(importResult.stdout.contains("\"action\":\"ImportAndroidRaceBackup\""))
-        assertTrue(importResult.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > Import Android Event JSON...\""))
+        assertTrue(importResult.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > Import Android Event File...\""))
 
         assertEquals(0, exportResult.exitCode)
         assertTrue(exportResult.stdout.contains("\"action\":\"ExportAndroidRaceBackupJson\""))
-        assertTrue(exportResult.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > Export Android Event JSON...\""))
+        assertTrue(exportResult.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > Export Android Event File...\""))
     }
 
     @Test
