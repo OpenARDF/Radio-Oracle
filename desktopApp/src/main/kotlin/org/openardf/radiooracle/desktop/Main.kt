@@ -221,7 +221,7 @@ private val AliasTableColumns = listOf(
 /** Starts the first Compose Desktop shell for Radio-Oracle. */
 fun main(args: Array<String>) = application {
     lateinit var requestWindowClose: () -> Unit
-    Window(onCloseRequest = { requestWindowClose() }, title = "Radio-Oracle Desktop") {
+    Window(onCloseRequest = { requestWindowClose() }, title = DesktopBuildInfo.windowTitle) {
         val startupPath = remember(args.toList()) { args.firstOrNull()?.let(Path::of) }
         val projectSession = remember { DesktopProjectSession(DesktopProjectFiles) }
         val localResultServer = remember {
@@ -1479,6 +1479,7 @@ private fun AboutRadioOracleDialog(onDismiss: () -> Unit) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Radio-Oracle Desktop")
+                Text("Version ${DesktopBuildInfo.displayVersion}")
                 Text("Desktop event administration beta for radio orienteering events.")
                 Text("Maintained by OpenARDF.")
                 Text("GitHub: https://github.com/OpenARDF/Radio-Oracle")
