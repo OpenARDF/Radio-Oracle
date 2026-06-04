@@ -139,6 +139,11 @@ private fun EventRaceData.containsReadoutForSiNumber(siNumber: Int): Boolean =
     competitorData.any { it.readoutData?.result?.siNumber == siNumber } ||
         unmatchedReadoutData.any { it.result.siNumber == siNumber }
 
+private fun desktopTimeLimitText(timeLimitText: String): String {
+    val minutes = timeLimitText.substringBefore(':').toLongOrNull()
+    return if (minutes != null) "$minutes min" else timeLimitText
+}
+
 private enum class DesktopSportIdentAppendOutcome {
     Added,
     DuplicateIgnored,
@@ -3807,7 +3812,7 @@ private fun CategoryDetailRow(
             fontSize = 13.sp
         )
         Text(
-            category.timeLimitText,
+            desktopTimeLimitText(category.timeLimitText),
             modifier = Modifier.width(CategoryTableColumns[5].width),
             color = DesktopPalette.Black,
             fontSize = 13.sp
@@ -3996,7 +4001,6 @@ private fun RaceDetailsPanel(
                 label = { Text("Limit min") }
             )
         }
-        DetailRow("Time limit:", "${details.timeLimitMinutesText} min")
     }
 }
 
