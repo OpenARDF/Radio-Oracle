@@ -51,6 +51,17 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun navSelectReportsNewEventFileAction() {
+        val result = runAutomation("nav-select", "Event File > New Event File")
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"nav-select\""))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > New Event File\""))
+        assertTrue(result.stdout.contains("\"selectedSection\":\"Races\""))
+        assertTrue(result.stdout.contains("\"action\":\"NewEventFile\""))
+    }
+
+    @Test
     fun siStatusDoesNotFailWithoutHardwareUnlessRequired() {
         val result = runAutomation("si-status")
 

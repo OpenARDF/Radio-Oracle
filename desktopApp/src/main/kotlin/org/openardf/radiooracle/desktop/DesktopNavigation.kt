@@ -57,6 +57,11 @@ data class DesktopNavItem(
     val children: List<DesktopNavItem> = emptyList()
 )
 
+data class DesktopNavSelection(
+    val state: DesktopNavState,
+    val action: DesktopNavAction? = null
+)
+
 data class DesktopNavState(
     val workflow: DesktopWorkflow = DesktopWorkflow.Setup,
     val submenuStack: List<String> = emptyList(),
@@ -288,6 +293,17 @@ object DesktopNavigation {
         state.submenuStack.fold(roots.getValue(state.workflow)) { items, id ->
             items.firstOrNull { it.id == id }?.children ?: items
         }
+
+    fun selectItem(state: DesktopNavState, item: DesktopNavItem): DesktopNavSelection =
+        when {
+            item.children.isNotEmpty() -> DesktopNavSelection(state.enter(item))
+            item.action != null -> DesktopNavSelection(state.enter(item), item.action)
+            item.section != null -> DesktopNavSelection(state.enter(item))
+            else -> DesktopNavSelection(state)
+        }
+
+    fun findCurrentItemByLabel(state: DesktopNavState, label: String): DesktopNavItem? =
+        currentItems(state).firstOrNull { it.label == label }
 
     fun breadcrumb(state: DesktopNavState): String {
         val labels = mutableListOf(state.workflow.label)

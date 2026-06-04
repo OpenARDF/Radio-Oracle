@@ -156,6 +156,22 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun selectingNewEventFileDispatchesCreateAction() {
+        val eventFileState = DesktopNavigation.selectItem(
+            DesktopNavState(),
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+        ).state
+        val newEventFile = DesktopNavigation.currentItems(eventFileState)
+            .first { it.action == DesktopNavAction.NewEventFile }
+
+        val selection = DesktopNavigation.selectItem(eventFileState, newEventFile)
+
+        assertEquals(DesktopNavAction.NewEventFile, selection.action)
+        assertEquals(DesktopSection.Races, selection.state.selectedSection)
+        assertEquals("setup.event-file.new", selection.state.selectedItemId)
+    }
+
+    @Test
     fun helpMenuExposesConcreteActions() {
         val helpActions = DesktopNavigation.rootItems(DesktopWorkflow.SettingsHelp)
             .first { it.label == "Help" }

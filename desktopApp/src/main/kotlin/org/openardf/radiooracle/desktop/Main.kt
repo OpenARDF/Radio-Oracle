@@ -1627,13 +1627,10 @@ private fun RadioOManagerDesktopApp(
                         isNavActionEnabled = isNavActionEnabled,
                         onBack = { navState = navState.back() },
                         onItemSelected = { item ->
-                            when {
-                                item.children.isNotEmpty() -> navState = navState.enter(item)
-                                item.section != null -> navState = navState.enter(item)
-                                item.action != null -> {
-                                    navState = navState.enter(item)
-                                    onNavAction(item.action)
-                                }
+                            val selection = DesktopNavigation.selectItem(navState, item)
+                            navState = selection.state
+                            selection.action?.let { action ->
+                                onNavAction(action)
                             }
                         }
                     )

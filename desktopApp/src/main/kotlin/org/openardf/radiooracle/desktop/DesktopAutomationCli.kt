@@ -87,6 +87,7 @@ object DesktopAutomationCli {
                 0
             }
             "open-event-file" -> openEventFile(commandArgs, out, err)
+            "nav-select" -> navSelect(commandArgs, out, err)
             "si-status" -> siStatus(commandArgs, out, err, serialPortProvider)
             "printer-status" -> printerStatus(commandArgs, out, err, printerDiagnostics)
             else -> {
@@ -125,6 +126,46 @@ object DesktopAutomationCli {
             66
         }
     }
+
+    private fun navSelect(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        if (args.isEmpty()) {
+            err.println("nav-select requires one or more menu labels.")
+            return 64
+        }
+        val labels = navSelectLabels(args)
+        var state = DesktopNavState()
+        var action: DesktopNavAction? = null
+        val selectedLabels = mutableListOf<String>()
+        labels.forEach { label ->
+            val item = DesktopNavigation.findCurrentItemByLabel(state, label)
+            if (item == null) {
+                err.println("Menu item '$label' is not available from ${DesktopNavigation.breadcrumb(state)}.")
+                return 66
+            }
+            val selection = DesktopNavigation.selectItem(state, item)
+            state = selection.state
+            action = selection.action
+            selectedLabels += label
+        }
+        out.println(
+            jsonObject(
+                "command" to "nav-select",
+                "selectedLabels" to selectedLabels,
+                "workflow" to state.workflow.label,
+                "breadcrumb" to DesktopNavigation.breadcrumb(state),
+                "selectedSection" to state.selectedSection.label,
+                "selectedItemId" to state.selectedItemId,
+                "action" to action?.name
+            )
+        )
+        return 0
+    }
+
+    private fun navSelectLabels(args: List<String>): List<String> =
+        args.joinToString(" ")
+            .split(">")
+            .map(String::trim)
+            .filter(String::isNotEmpty)
 
     private fun siStatus(
         args: List<String>,
@@ -220,6 +261,7 @@ object DesktopAutomationCli {
           logs                            Initialize logging and print current log files as JSON.
           log-test [message]              Write a desktop automation log entry.
           open-event-file <path>          Decode and validate an Event File.
+          nav-select <label> [label...]   Simulate menu selection by visible labels.
           si-status [--require] [--port]  Probe attached SI station state.
           printer-status [--require]      Inspect desktop printer selection state.
     """.trimIndent()
