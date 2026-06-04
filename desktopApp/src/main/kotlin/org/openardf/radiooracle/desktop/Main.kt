@@ -4586,7 +4586,7 @@ private fun WorkflowHomePanel(workflow: DesktopWorkflow, projectFile: EventProje
             )
             Text(
                 text = projectFile?.let { "Event File open: ${EventProjectSummary.from(it).raceName}" }
-                    ?: "No Event File open.",
+                    ?: "Create a new Event File or open an existing one to begin.",
                 color = DesktopPalette.Disconnected,
                 fontSize = 13.sp
             )
@@ -4599,7 +4599,8 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
     val summary = projectFile?.let(EventProjectSummary::from)
     return when (section) {
         DesktopSection.WorkflowHome -> "Workflow overview for event setup, race operations, results, exports, and app support."
-        DesktopSection.EventFile -> summary?.let { "Event File open: ${it.raceName}" } ?: "No Event File open."
+        DesktopSection.EventFile -> summary?.let { "Event File open: ${it.raceName}" }
+            ?: "Create a new Event File or open an existing one to begin."
         DesktopSection.Races -> summary?.raceName ?: "No races loaded."
         DesktopSection.Categories -> "${summary?.categoryCount ?: 0} categories loaded."
         DesktopSection.Competitors -> "${summary?.competitorCount ?: 0} competitors loaded."
