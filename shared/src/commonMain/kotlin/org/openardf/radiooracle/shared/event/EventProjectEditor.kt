@@ -508,6 +508,7 @@ object EventProjectEditor {
 
         val competitorStartTimes = mutableMapOf<String, Long>()
         var nextStartSeconds = 0L
+        var previousClub: String? = null
         projectFile.raceData.categories
             .sortedWith(compareBy({ it.category.order }, { it.category.name }))
             .forEach { categoryData ->
@@ -517,11 +518,12 @@ object EventProjectEditor {
                             data.competitorCategory.competitor.categoryId == categoryData.category.id
                     }
                     .map { it.competitorCategory.competitor }
-                val drawnCategoryCompetitors = drawClubRotatedCategory(categoryCompetitors)
+                val drawnCategoryCompetitors = drawClubRotatedCategory(categoryCompetitors, previousClub)
                 drawnCategoryCompetitors.forEach { competitor ->
                     competitorStartTimes[competitor.id] = nextStartSeconds
                     nextStartSeconds += intervalSeconds
                 }
+                previousClub = drawnCategoryCompetitors.lastOrNull()?.clubKey() ?: previousClub
             }
 
         val competitorData = projectFile.raceData.competitorData.map { data ->
@@ -1868,32 +1870,56 @@ object EventProjectEditor {
         )
     }
 
-    private fun drawClubRotatedCategory(competitors: List<EventCompetitor>): List<EventCompetitor> {
+    private fun drawClubRotatedCategory(
+        competitors: List<EventCompetitor>,
+        previousClub: String?
+    ): List<EventCompetitor> {
         val clubQueues = competitors
-            .groupBy { it.club.trim() }
+            .groupBy { it.clubKey() ?: "competitor:${it.id}" }
             .values
             .map { clubCompetitors ->
-                clubCompetitors
-                    .sortedWith(compareBy({ it.startNumber }, { it.fullName() }))
-                    .toMutableList()
+                ClubStartQueue(
+                    club = clubCompetitors.firstOrNull()?.clubKey(),
+                    competitors = clubCompetitors
+                        .sortedWith(compareBy({ it.startNumber }, { it.fullName() }))
+                        .toMutableList()
+                )
             }
             .sortedWith(
-                compareByDescending<MutableList<EventCompetitor>> { it.size }
-                    .thenBy { it.firstOrNull()?.club ?: "" }
+                compareByDescending<ClubStartQueue> { it.competitors.size }
+                    .thenBy { it.club ?: "" }
+                    .thenBy { it.competitors.firstOrNull()?.startNumber ?: Int.MAX_VALUE }
             )
             .toMutableList()
 
         val drawn = mutableListOf<EventCompetitor>()
+        var lastClub = previousClub
         while (clubQueues.isNotEmpty()) {
-            clubQueues.toList().forEach { clubQueue ->
-                if (clubQueue.isNotEmpty()) {
-                    drawn += clubQueue.removeAt(0)
-                }
-                if (clubQueue.isEmpty()) {
-                    clubQueues.remove(clubQueue)
-                }
+            val selectedQueue = clubQueues
+                .filterNot { it.club != null && it.club == lastClub }
+                .sortedWith(clubStartQueueComparator)
+                .firstOrNull()
+                ?: clubQueues.sortedWith(clubStartQueueComparator).first()
+            val competitor = selectedQueue.competitors.removeAt(0)
+            drawn += competitor
+            lastClub = selectedQueue.club
+            if (selectedQueue.competitors.isEmpty()) {
+                clubQueues.remove(selectedQueue)
             }
         }
         return drawn
     }
+
+    private val clubStartQueueComparator: Comparator<ClubStartQueue> =
+        compareByDescending<ClubStartQueue> { it.competitors.size }
+            .thenBy { it.club ?: "" }
+            .thenBy { it.competitors.firstOrNull()?.startNumber ?: Int.MAX_VALUE }
+
+    private data class ClubStartQueue(
+        val club: String?,
+        val competitors: MutableList<EventCompetitor>
+    )
+
+    private fun EventCompetitor.clubKey(): String? =
+        club.trim().takeIf { it.isNotEmpty() }
 }

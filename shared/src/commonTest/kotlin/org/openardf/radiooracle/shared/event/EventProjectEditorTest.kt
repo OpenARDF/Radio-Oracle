@@ -1373,6 +1373,52 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun drawStartListAvoidsAvoidableSameClubAdjacencyInUnevenCategory() {
+        val m21 = category("cat-m21", "M21", order = 0)
+        val original = projectFile(
+            categories = listOf(categoryData(m21.id, m21.name, order = m21.order)),
+            competitors = listOf(
+                competitorData("a1", "Alice", "Alpha", startNumber = 1, category = m21, club = "A"),
+                competitorData("a2", "Aaron", "Alpha", startNumber = 2, category = m21, club = "A"),
+                competitorData("a3", "Ava", "Alpha", startNumber = 3, category = m21, club = "A"),
+                competitorData("b1", "Bob", "Bravo", startNumber = 4, category = m21, club = "B"),
+                competitorData("c1", "Cara", "Charlie", startNumber = 5, category = m21, club = "C")
+            )
+        )
+
+        val drawn = EventProjectEditor.drawStartList(original, "01:00")
+
+        assertEquals(0L, drawn.startTimeFor("a1"))
+        assertEquals(60L, drawn.startTimeFor("b1"))
+        assertEquals(120L, drawn.startTimeFor("a2"))
+        assertEquals(180L, drawn.startTimeFor("c1"))
+        assertEquals(240L, drawn.startTimeFor("a3"))
+    }
+
+    @Test
+    fun drawStartListAvoidsSameClubAcrossCategoryBoundaryWhenPossible() {
+        val m21 = category("cat-m21", "M21", order = 0)
+        val m40 = category("cat-m40", "M40", order = 1)
+        val original = projectFile(
+            categories = listOf(
+                categoryData(m21.id, m21.name, order = m21.order),
+                categoryData(m40.id, m40.name, order = m40.order)
+            ),
+            competitors = listOf(
+                competitorData("m21-a", "Alice", "Alpha", startNumber = 1, category = m21, club = "A"),
+                competitorData("m40-a", "Aaron", "Alpha", startNumber = 2, category = m40, club = "A"),
+                competitorData("m40-b", "Bob", "Bravo", startNumber = 3, category = m40, club = "B")
+            )
+        )
+
+        val drawn = EventProjectEditor.drawStartList(original, "01:00")
+
+        assertEquals(0L, drawn.startTimeFor("m21-a"))
+        assertEquals(60L, drawn.startTimeFor("m40-b"))
+        assertEquals(120L, drawn.startTimeFor("m40-a"))
+    }
+
+    @Test
     fun rejectsInvalidStartListDrawIntervals() {
         assertFailsWith<IllegalArgumentException> {
             EventProjectEditor.drawStartList(projectFile(), "2")
