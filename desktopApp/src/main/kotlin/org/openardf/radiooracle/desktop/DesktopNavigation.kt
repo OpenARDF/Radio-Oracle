@@ -221,13 +221,6 @@ object DesktopNavigation {
                         )
                     ),
                     DesktopSection.StartList
-                ),
-                item("setup.aliases", "Aliases", workflow, DesktopSection.Aliases),
-                group(
-                    "setup.utils",
-                    "Utils",
-                    workflow,
-                    listOf(item("setup.utils.diagnostics", "Event File Diagnostics", workflow, DesktopSection.Settings))
                 )
             )
             DesktopWorkflow.RaceOps -> listOf(
@@ -438,7 +431,15 @@ object DesktopNavigation {
                 DesktopNavAction.ExportAndroidRaceBackupJson,
                 section = DesktopSection.EventFile
             ),
-            action("setup.event-file.save", "Save", workflow, DesktopNavAction.SaveEventFile, section = DesktopSection.EventFile)
+            action("setup.event-file.save", "Save", workflow, DesktopNavAction.SaveEventFile, section = DesktopSection.EventFile),
+            item("setup.event-file.aliases", "Aliases", workflow, DesktopSection.Aliases),
+            item(
+                "setup.event-file.diagnostics",
+                "Event File Diagnostics",
+                workflow,
+                DesktopSection.Settings,
+                requiresEventFile = false
+            )
         )
 
     private fun item(

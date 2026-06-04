@@ -17,7 +17,7 @@ class DesktopNavigationTest {
     @Test
     fun placesCurrentDesktopSectionsUnderWorkflowGroups() {
         assertEquals(
-            listOf("Event File", "Categories", "Competitors", "Start List", "Aliases", "Utils"),
+            listOf("Event File", "Categories", "Competitors", "Start List"),
             DesktopNavigation.rootItems(DesktopWorkflow.Setup).map { it.label }
         )
         assertEquals(
@@ -189,7 +189,15 @@ class DesktopNavigationTest {
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFile }.requiresEventFile)
         assertEquals(
-            listOf("New Event File", "Open...", "Import Android Event File...", "Export Android Event File...", "Save"),
+            listOf(
+                "New Event File",
+                "Open...",
+                "Import Android Event File...",
+                "Export Android Event File...",
+                "Save",
+                "Aliases",
+                "Event File Diagnostics"
+            ),
             eventFileActions.map { it.label }
         )
     }
@@ -202,8 +210,30 @@ class DesktopNavigationTest {
         assertTrue(setupItems.first { it.label == "Categories" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Competitors" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Start List" }.requiresEventFile)
-        assertTrue(setupItems.first { it.label == "Aliases" }.requiresEventFile)
-        assertTrue(setupItems.first { it.label == "Utils" }.requiresEventFile)
+    }
+
+    @Test
+    fun eventFileMenuOwnsAliasesAndDiagnostics() {
+        val eventFileItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
+            .first { it.label == "Event File" }
+            .children
+
+        assertEquals(
+            listOf(
+                "New Event File",
+                "Open...",
+                "Import Android Event File...",
+                "Export Android Event File...",
+                "Save",
+                "Aliases",
+                "Event File Diagnostics"
+            ),
+            eventFileItems.map { it.label }
+        )
+        assertTrue(eventFileItems.first { it.label == "Aliases" }.requiresEventFile)
+        assertFalse(eventFileItems.first { it.label == "Event File Diagnostics" }.requiresEventFile)
+        assertFalse(DesktopNavigation.rootItems(DesktopWorkflow.Setup).any { it.label == "Aliases" })
+        assertFalse(DesktopNavigation.rootItems(DesktopWorkflow.Setup).any { it.label == "Utils" })
     }
 
     @Test
