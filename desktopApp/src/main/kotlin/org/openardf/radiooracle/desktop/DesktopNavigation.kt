@@ -311,8 +311,7 @@ object DesktopNavigation {
                 DesktopNavAction.ImportAndroidRaceBackup,
                 requiresEventFile = false
             ),
-            action("setup.event-file.save", "Save", workflow, DesktopNavAction.SaveEventFile),
-            action("setup.event-file.close", "Close Event File", workflow, DesktopNavAction.CloseEventFile)
+            action("setup.event-file.save", "Save", workflow, DesktopNavAction.SaveEventFile)
         )
 
     private fun item(id: String, label: String, workflow: DesktopWorkflow, section: DesktopSection): DesktopNavItem =

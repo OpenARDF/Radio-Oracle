@@ -249,7 +249,6 @@ fun main(args: Array<String>) = application {
         var areAliasesEnabled by remember { mutableStateOf(true) }
         var localResultServerUrl by remember { mutableStateOf<String?>(null) }
         var isAboutDialogVisible by remember { mutableStateOf(false) }
-        var newEventFileDialogStart by remember { mutableStateOf<LocalDateTime?>(null) }
         var raceClockTick by remember { mutableStateOf(0L) }
         var printerDiagnostics by remember { mutableStateOf(DesktopPrinterDiagnostics.from(emptyList())) }
         val siPortMutex = remember { Mutex() }
@@ -305,15 +304,11 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun showNewEventFileDialog() {
-            newEventFileDialogStart = DesktopDateTimeText.defaultStartDateTime()
-        }
-
-        fun createNewProject(raceName: String, startDateTime: LocalDateTime) {
+        fun createNewProject() {
             val project = EventProjectFactory.createEmptyProject(
                 raceId = UUID.randomUUID().toString(),
-                raceName = raceName.ifBlank { "New Event" },
-                startDateTimeIso = DesktopDateTimeText.isoText(startDateTime)
+                raceName = "New Event",
+                startDateTimeIso = DesktopDateTimeText.isoText(DesktopDateTimeText.defaultStartDateTime())
             )
             projectSession.newProject(project)
             syncProjectState()
@@ -795,7 +790,7 @@ fun main(args: Array<String>) = application {
                     localResultServer.stop()
                     exitApplication()
                 }
-                PendingDirtyProjectAction.NewProject -> showNewEventFileDialog()
+                PendingDirtyProjectAction.NewProject -> createNewProject()
                 is PendingDirtyProjectAction.OpenProject -> openProject(action.path)
                 is PendingDirtyProjectAction.ImportAndroidRaceBackup -> importAndroidRaceBackupJson(action.path)
                 PendingDirtyProjectAction.CloseProject -> closeProject(
@@ -870,7 +865,7 @@ fun main(args: Array<String>) = application {
                 PendingDirtyProjectAction.NewProject
             )
             if (pendingDirtyProjectAction == null) {
-                showNewEventFileDialog()
+                createNewProject()
             }
         }
 
@@ -993,16 +988,6 @@ fun main(args: Array<String>) = application {
         }
         if (isAboutDialogVisible) {
             AboutRadioOracleDialog(onDismiss = { isAboutDialogVisible = false })
-        }
-        newEventFileDialogStart?.let { initialStart ->
-            NewEventFileDialog(
-                initialStartDateTime = initialStart,
-                onCreate = { raceName, startDateTime ->
-                    newEventFileDialogStart = null
-                    createNewProject(raceName, startDateTime)
-                },
-                onDismiss = { newEventFileDialogStart = null }
-            )
         }
 
         RadioOManagerDesktopApp(
@@ -3821,47 +3806,6 @@ private fun RaceDetailsPanel(
         }
         DetailRow("Time limit", details.timeLimitText)
     }
-}
-
-@Composable
-private fun NewEventFileDialog(
-    initialStartDateTime: LocalDateTime,
-    onCreate: (String, LocalDateTime) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var raceNameDraft by remember(initialStartDateTime) { mutableStateOf("New Event") }
-    var startDateTimeDraft by remember(initialStartDateTime) { mutableStateOf(initialStartDateTime) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("New Event File") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                TextField(
-                    value = raceNameDraft,
-                    onValueChange = { raceNameDraft = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Event name") }
-                )
-                DateTimePickerField(
-                    label = "Start date/time",
-                    value = startDateTimeDraft,
-                    onValueChange = { startDateTimeDraft = it },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = { onCreate(raceNameDraft.trim(), startDateTimeDraft) }) {
-                Text("Create")
-            }
-        },
-        dismissButton = {
-            Button(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
 }
 
 @Composable

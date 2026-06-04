@@ -98,9 +98,8 @@ class DesktopNavigationTest {
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.NewEventFile }.requiresEventFile)
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.OpenEventFile }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFile }.requiresEventFile)
-        assertTrue(eventFileActions.first { it.action == DesktopNavAction.CloseEventFile }.requiresEventFile)
         assertEquals(
-            listOf("New Event File", "Open...", "Import Android Race Backup JSON...", "Save", "Close Event File"),
+            listOf("New Event File", "Open...", "Import Android Race Backup JSON...", "Save"),
             eventFileActions.map { it.label }
         )
     }
