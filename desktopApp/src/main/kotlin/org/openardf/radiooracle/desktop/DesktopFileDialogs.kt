@@ -3,7 +3,9 @@ package org.openardf.radiooracle.desktop
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.FilenameFilter
+import java.nio.file.Files
 import java.nio.file.Path
+import java.util.prefs.Preferences
 
 /** Event File path helpers shared by desktop file dialogs and tests. */
 object DesktopProjectFilePaths {
@@ -20,7 +22,7 @@ object DesktopProjectFilePaths {
 
     /** Returns a path with the standard Radio-Oracle desktop Event File extension. */
     fun withProjectExtension(path: Path): Path =
-        if (hasProjectExtension(path.fileName.toString())) {
+        if (isProjectFileName(path.fileName.toString())) {
             path
         } else {
             path.resolveSibling("${path.fileName}$PROJECT_EXTENSION")
@@ -39,7 +41,7 @@ object DesktopProjectFilePaths {
         return withProjectExtension(Path.of(sanitizedName)).fileName.toString()
     }
 
-    private fun hasProjectExtension(fileName: String): Boolean =
+    fun isProjectFileName(fileName: String): Boolean =
         fileName.endsWith(PROJECT_EXTENSION) || fileName.endsWith(LEGACY_PROJECT_EXTENSION)
 
     fun withCsvExtension(path: Path): Path =
@@ -99,25 +101,55 @@ object DesktopProjectFilePaths {
         }
 }
 
-/** AWT-backed file chooser for desktop `.rom.json` Event Files. */
+/** Remembers and prepares the desktop directory used for user-visible Event Files. */
+object DesktopEventFileLocations {
+    private const val APP_DOCUMENTS_FOLDER = "Radio-Oracle"
+    private const val LAST_EVENT_FILE_DIRECTORY_KEY = "lastEventFileDirectory"
+    private val preferences: Preferences =
+        Preferences.userNodeForPackage(DesktopEventFileLocations::class.java)
+
+    fun defaultEventFileDirectory(userHome: Path = Path.of(System.getProperty("user.home"))): Path =
+        userHome.resolve("Documents").resolve(APP_DOCUMENTS_FOLDER)
+
+    fun preferredEventFileDirectory(): Path {
+        val remembered = preferences.get(LAST_EVENT_FILE_DIRECTORY_KEY, null)
+            ?.takeIf { it.isNotBlank() }
+            ?.let(Path::of)
+        return remembered ?: defaultEventFileDirectory()
+    }
+
+    fun preparePreferredEventFileDirectory(): Path {
+        val directory = preferredEventFileDirectory()
+        Files.createDirectories(directory)
+        return directory
+    }
+
+    fun rememberEventFileDirectory(path: Path) {
+        val directory = if (Files.isDirectory(path)) path else path.parent
+        directory?.let {
+            preferences.put(LAST_EVENT_FILE_DIRECTORY_KEY, it.toAbsolutePath().toString())
+        }
+    }
+}
+
+/** AWT-backed file chooser for desktop Event Files. */
 object DesktopFileDialogs {
     /** Lets the user choose an existing Event File, returning null when cancelled. */
     fun chooseOpenProject(): Path? =
-        chooseFile("Open Radio-Oracle Event File", FileDialog.LOAD, DesktopProjectFilePaths.PROJECT_EXTENSION)
+        chooseEventFile("Open Radio-Oracle Event File", FileDialog.LOAD)
 
     /** Lets the user choose a save location, returning null when cancelled. */
     fun chooseSaveProject(raceName: String? = null): Path? =
-        chooseFile(
+        chooseEventFile(
             title = "Save Radio-Oracle Event File",
             mode = FileDialog.SAVE,
-            extension = DesktopProjectFilePaths.PROJECT_EXTENSION,
             defaultFileName = raceName?.let(DesktopProjectFilePaths::defaultProjectFileName)
         )
             ?.let(DesktopProjectFilePaths::withProjectExtension)
 
     /** Lets the user choose an export-copy location, returning null when cancelled. */
     fun chooseExportProject(): Path? =
-        chooseFile("Export Radio-Oracle Event File Copy", FileDialog.SAVE, DesktopProjectFilePaths.PROJECT_EXTENSION)
+        chooseEventFile("Export Radio-Oracle Event File Copy", FileDialog.SAVE)
             ?.let(DesktopProjectFilePaths::withProjectExtension)
 
     fun chooseExportCsv(title: String): Path? =
@@ -174,5 +206,18 @@ object DesktopFileDialogs {
         val directory = dialog.directory ?: return null
         val file = dialog.file ?: return null
         return Path.of(directory, file)
+    }
+
+    private fun chooseEventFile(title: String, mode: Int, defaultFileName: String? = null): Path? {
+        val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
+        val dialog = FileDialog(null as Frame?, title, mode)
+        dialog.filenameFilter = FilenameFilter { _, name -> DesktopProjectFilePaths.isProjectFileName(name) }
+        dialog.directory = directory.toString()
+        dialog.file = defaultFileName ?: "*${DesktopProjectFilePaths.PROJECT_EXTENSION}"
+        dialog.isVisible = true
+
+        val selectedDirectory = dialog.directory ?: return null
+        val file = dialog.file ?: return null
+        return Path.of(selectedDirectory, file).also(DesktopEventFileLocations::rememberEventFileDirectory)
     }
 }

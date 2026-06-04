@@ -1,10 +1,20 @@
 package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Path
 
 class DesktopProjectFilePathsTest {
+    @Test
+    fun defaultsEventFilesToRadioOracleFolderUnderDocuments() {
+        assertEquals(
+            Path.of("/Users/example/Documents/Radio-Oracle"),
+            DesktopEventFileLocations.defaultEventFileDirectory(Path.of("/Users/example"))
+        )
+    }
+
     @Test
     fun keepsExistingProjectFileExtension() {
         val path = Path.of("event.json")
@@ -17,6 +27,13 @@ class DesktopProjectFilePathsTest {
         val path = Path.of("event.rom.json")
 
         assertEquals(path, DesktopProjectFilePaths.withProjectExtension(path))
+    }
+
+    @Test
+    fun recognizesCurrentAndLegacyEventFileNames() {
+        assertTrue(DesktopProjectFilePaths.isProjectFileName("event.json"))
+        assertTrue(DesktopProjectFilePaths.isProjectFileName("event.rom.json"))
+        assertFalse(DesktopProjectFilePaths.isProjectFileName("event.csv"))
     }
 
     @Test
