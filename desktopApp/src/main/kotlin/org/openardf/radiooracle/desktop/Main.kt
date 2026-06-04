@@ -32,11 +32,13 @@ import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -3282,6 +3284,30 @@ private fun CompetitorDetailRow(
     }
     var siNumberDraft by remember(competitor.id, competitor.siNumberText) { mutableStateOf(competitor.siNumberText) }
     var selectedCategoryId by remember(competitor.id, competitor.categoryId) { mutableStateOf(competitor.categoryId) }
+    fun applyPendingDrafts() {
+        if (firstNameDraft != competitor.firstName || lastNameDraft != competitor.lastName) {
+            onRenameCompetitor(competitor.id, firstNameDraft, lastNameDraft)
+        }
+        if (startNumberDraft != competitor.startNumberText || siNumberDraft != competitor.siNumberText) {
+            onUpdateCompetitorNumbers(competitor.id, startNumberDraft, siNumberDraft)
+        }
+        if (clubDraft != competitor.club || indexDraft != competitor.index) {
+            onUpdateCompetitorClubIndex(competitor.id, clubDraft, indexDraft)
+        }
+        if (birthYearDraft != competitor.birthYearText) {
+            onUpdateCompetitorBirthYear(competitor.id, birthYearDraft)
+        }
+        if (startTimeDraft != competitor.startTimeText) {
+            onUpdateCompetitorStartTime(competitor.id, startTimeDraft)
+        }
+        if (selectedCategoryId != competitor.categoryId) {
+            onAssignCompetitorCategory(competitor.id, selectedCategoryId)
+        }
+    }
+    val applyLatestPendingDrafts by rememberUpdatedState(::applyPendingDrafts)
+    DisposableEffect(competitor.id) {
+        onDispose { applyLatestPendingDrafts() }
+    }
     Row(
         modifier = Modifier.width(fixedTableWidth(CompetitorTableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
