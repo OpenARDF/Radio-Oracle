@@ -2,6 +2,7 @@ package org.openardf.radiooracle.desktop
 
 import java.io.PrintStream
 import java.nio.file.Path
+import java.util.UUID
 import kotlin.system.exitProcess
 import org.openardf.radiooracle.desktop.printing.DesktopPrinterDiagnostics
 import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinter
@@ -87,6 +88,7 @@ object DesktopAutomationCli {
                 0
             }
             "open-event-file" -> openEventFile(commandArgs, out, err)
+            "import-android-event-file" -> importAndroidEventFile(commandArgs, out, err)
             "nav-select" -> navSelect(commandArgs, out, err)
             "si-status" -> siStatus(commandArgs, out, err, serialPortProvider)
             "printer-status" -> printerStatus(commandArgs, out, err, printerDiagnostics)
@@ -123,6 +125,41 @@ object DesktopAutomationCli {
             0
         }.getOrElse { error ->
             err.println("Failed to open Event File: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
+    private fun importAndroidEventFile(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val sourceText = args.getOrNull(0)
+        val targetText = args.getOrNull(1)
+        if (sourceText.isNullOrBlank() || targetText.isNullOrBlank()) {
+            err.println("import-android-event-file requires Android Event File and target desktop Event File paths.")
+            return 64
+        }
+        return runCatching {
+            val source = Path.of(sourceText)
+            val target = Path.of(targetText)
+            val projectFile = DesktopProjectFiles.importAndroidRaceBackupJson(source) {
+                UUID.randomUUID().toString()
+            }
+            DesktopProjectFiles.write(target, projectFile)
+            val validationErrors = EventValidationRules.validateRaceData(projectFile.raceData)
+            out.println(
+                jsonObject(
+                    "command" to "import-android-event-file",
+                    "source" to source.toAbsolutePath().normalize().toString(),
+                    "target" to target.toAbsolutePath().normalize().toString(),
+                    "raceName" to projectFile.raceData.race.name,
+                    "categoryCount" to projectFile.raceData.categories.size,
+                    "competitorCount" to projectFile.raceData.competitorData.size,
+                    "unmatchedReadoutCount" to projectFile.raceData.unmatchedReadoutData.size,
+                    "validationErrorCount" to validationErrors.size,
+                    "validationErrors" to validationErrors
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Failed to import Android Event File: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -339,6 +376,8 @@ object DesktopAutomationCli {
           logs                            Initialize logging and print current log files as JSON.
           log-test [message]              Write a desktop automation log entry.
           open-event-file <path>          Decode and validate an Event File.
+          import-android-event-file <android-path> <desktop-path>
+                                          Import Android Event File and write a desktop Event File.
           nav-select [--default-draft|--draft] <path>
                                           Simulate menu selection, using > between labels. Supports < Back.
           si-status [--require] [--port]  Probe attached SI station state.

@@ -297,6 +297,7 @@ tasks.register("desktopAutomation", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.DesktopAutomationCliKt")
+    workingDir(rootProject.projectDir)
 }
 
 tasks.register("desktopPrinterProbe", JavaExec) {

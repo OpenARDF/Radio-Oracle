@@ -51,6 +51,45 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun importAndroidEventFileCommandWritesDesktopEventFile() {
+        val directory = Files.createTempDirectory("radio-oracle-automation")
+        val androidPath = directory.resolve("Android Event.ardfjs")
+        val desktopPath = directory.resolve("Android Event.json")
+        Files.writeString(
+            androidPath,
+            """
+                {
+                  "race_name": "Android Event",
+                  "race_start": "2026-06-03T10:00:00",
+                  "race_type": "CLASSIC",
+                  "race_band": "M80",
+                  "race_level": "PRACTICE",
+                  "race_time_limit": "120",
+                  "race_api_key": "",
+                  "categories": [],
+                  "aliases": [],
+                  "competitors": [],
+                  "unmatched_results": []
+                }
+            """.trimIndent()
+        )
+
+        val importResult = runAutomation(
+            "import-android-event-file",
+            androidPath.toString(),
+            desktopPath.toString()
+        )
+        val openResult = runAutomation("open-event-file", desktopPath.toString())
+
+        assertEquals(0, importResult.exitCode)
+        assertTrue(importResult.stdout.contains("\"command\":\"import-android-event-file\""))
+        assertTrue(importResult.stdout.contains("\"raceName\":\"Android Event\""))
+        assertTrue(Files.exists(desktopPath))
+        assertEquals(0, openResult.exitCode)
+        assertTrue(openResult.stdout.contains("\"raceName\":\"Android Event\""))
+    }
+
+    @Test
     fun navSelectReportsNewEventFileAction() {
         val result = runAutomation("nav-select", "Event File > New Event File")
 
