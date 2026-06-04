@@ -2404,6 +2404,7 @@ private fun StartListDetailsPanel(
     val tableWidth = fixedTableWidth(StartListTableColumns)
     var intervalDraft by remember { mutableStateOf("02:00") }
     var clubHandling by remember { mutableStateOf(StartDrawClubHandling.AVOID_BACK_TO_BACK) }
+    var startersPerStartTime by remember { mutableStateOf(StartDrawOptions.MIN_STARTERS_PER_START_TIME) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -2423,8 +2424,23 @@ private fun StartListDetailsPanel(
                 onValueSelected = { clubHandling = it },
                 modifier = Modifier.width(190.dp)
             )
+            EnumPicker(
+                selectedValue = startersPerStartTime,
+                values = (StartDrawOptions.MIN_STARTERS_PER_START_TIME..StartDrawOptions.MAX_STARTERS_PER_START_TIME).toList(),
+                label = { "$it per time" },
+                onValueSelected = { startersPerStartTime = it },
+                modifier = Modifier.width(132.dp)
+            )
             Button(
-                onClick = { onDrawStartList(intervalDraft, StartDrawOptions(clubHandling = clubHandling)) }
+                onClick = {
+                    onDrawStartList(
+                        intervalDraft,
+                        StartDrawOptions(
+                            clubHandling = clubHandling,
+                            startersPerStartTime = startersPerStartTime
+                        )
+                    )
+                }
             ) {
                 Text("Draw starts")
             }

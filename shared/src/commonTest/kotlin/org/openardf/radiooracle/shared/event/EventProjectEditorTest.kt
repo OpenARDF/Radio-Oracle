@@ -1442,6 +1442,101 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun drawStartListSupportsMultipleStartersPerStartTimeWithoutSameCategoryWhenPossible() {
+        val m21 = category("cat-m21", "M21", order = 0)
+        val m40 = category("cat-m40", "M40", order = 1)
+        val m60 = category("cat-m60", "M60", order = 2)
+        val original = projectFile(
+            categories = listOf(
+                categoryData(m21.id, m21.name, order = m21.order),
+                categoryData(m40.id, m40.name, order = m40.order),
+                categoryData(m60.id, m60.name, order = m60.order)
+            ),
+            competitors = listOf(
+                competitorData("m21-a", "Alice", "Alpha", startNumber = 1, category = m21, club = "A"),
+                competitorData("m21-b", "Aaron", "Alpha", startNumber = 2, category = m21, club = "B"),
+                competitorData("m40-a", "Bob", "Bravo", startNumber = 3, category = m40, club = "C"),
+                competitorData("m60-a", "Cara", "Charlie", startNumber = 4, category = m60, club = "D")
+            )
+        )
+
+        val drawn = EventProjectEditor.drawStartList(
+            original,
+            "01:00",
+            StartDrawOptions(startersPerStartTime = 2)
+        )
+
+        assertEquals(0L, drawn.startTimeFor("m21-a"))
+        assertEquals(0L, drawn.startTimeFor("m40-a"))
+        assertEquals(60L, drawn.startTimeFor("m21-b"))
+        assertEquals(60L, drawn.startTimeFor("m60-a"))
+    }
+
+    @Test
+    fun drawStartListAvoidsSameFirstFoxForSimilarSpeedCategoriesWhenPossible() {
+        val m21 = category("cat-m21", "M21", order = 0)
+        val m40 = category("cat-m40", "M40", order = 1)
+        val m60 = category("cat-m60", "M60", order = 2)
+        val original = projectFile(
+            categories = listOf(
+                categoryData(m21.id, m21.name, order = m21.order, controlSiCodes = listOf(31, 32)),
+                categoryData(m40.id, m40.name, order = m40.order, controlSiCodes = listOf(31, 33)),
+                categoryData(m60.id, m60.name, order = m60.order, controlSiCodes = listOf(31, 34))
+            ),
+            competitors = listOf(
+                competitorData("m21-a", "Alice", "Alpha", startNumber = 1, category = m21, club = "A"),
+                competitorData("m40-a", "Bob", "Bravo", startNumber = 2, category = m40, club = "B"),
+                competitorData("m60-a", "Cara", "Charlie", startNumber = 3, category = m60, club = "C")
+            )
+        )
+
+        val drawn = EventProjectEditor.drawStartList(
+            original,
+            "01:00",
+            StartDrawOptions(startersPerStartTime = 2)
+        )
+
+        assertEquals(0L, drawn.startTimeFor("m21-a"))
+        assertEquals(0L, drawn.startTimeFor("m60-a"))
+        assertEquals(60L, drawn.startTimeFor("m40-a"))
+    }
+
+    @Test
+    fun drawStartListAllowsPartiallyFilledStartTimesToAvoidFirstFoxSpeedConflict() {
+        val m21 = category("cat-m21", "M21", order = 0)
+        val m40 = category("cat-m40", "M40", order = 1)
+        val original = projectFile(
+            categories = listOf(
+                categoryData(m21.id, m21.name, order = m21.order, controlSiCodes = listOf(31, 32)),
+                categoryData(m40.id, m40.name, order = m40.order, controlSiCodes = listOf(31, 33))
+            ),
+            competitors = listOf(
+                competitorData("m21-a", "Alice", "Alpha", startNumber = 1, category = m21, club = "A"),
+                competitorData("m40-a", "Bob", "Bravo", startNumber = 2, category = m40, club = "B")
+            )
+        )
+
+        val drawn = EventProjectEditor.drawStartList(
+            original,
+            "01:00",
+            StartDrawOptions(startersPerStartTime = 2)
+        )
+
+        assertEquals(0L, drawn.startTimeFor("m21-a"))
+        assertEquals(60L, drawn.startTimeFor("m40-a"))
+    }
+
+    @Test
+    fun rejectsInvalidStartListStartersPerTime() {
+        assertFailsWith<IllegalArgumentException> {
+            StartDrawOptions(startersPerStartTime = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            StartDrawOptions(startersPerStartTime = 7)
+        }
+    }
+
+    @Test
     fun rejectsInvalidStartListDrawIntervals() {
         assertFailsWith<IllegalArgumentException> {
             EventProjectEditor.drawStartList(projectFile(), "2")
