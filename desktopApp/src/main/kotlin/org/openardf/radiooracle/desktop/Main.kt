@@ -1699,7 +1699,12 @@ private fun RadioOManagerDesktopApp(
                         )
                     }
                 }
-                StatusStrip(projectStatusText, hasUnsavedChanges, siReaderState)
+                StatusStrip(
+                    projectStatusText = projectStatusText,
+                    hasUnsavedChanges = hasUnsavedChanges,
+                    siReaderState = siReaderState,
+                    isEventFileOpen = projectFile != null
+                )
             }
         }
     }
@@ -4435,15 +4440,26 @@ private fun EventReadoutDuplicatePolicy.toDisplayLabel(): String =
 private fun StatusStrip(
     projectStatusText: String,
     hasUnsavedChanges: Boolean,
-    siReaderState: DesktopSiReaderUiState
+    siReaderState: DesktopSiReaderUiState,
+    isEventFileOpen: Boolean
 ) {
-    val backgroundColor = when (siReaderState.severity) {
+    val effectiveSeverity = if (siReaderState.severity == DesktopSiReaderSeverity.CONNECTED && !isEventFileOpen) {
+        DesktopSiReaderSeverity.WARNING
+    } else {
+        siReaderState.severity
+    }
+    val siStatusText = if (siReaderState.severity == DesktopSiReaderSeverity.CONNECTED && !isEventFileOpen) {
+        "${siReaderState.statusText}; open/create Event File to download"
+    } else {
+        siReaderState.statusText
+    }
+    val backgroundColor = when (effectiveSeverity) {
         DesktopSiReaderSeverity.DISCONNECTED -> DesktopPalette.Disconnected
         DesktopSiReaderSeverity.CONNECTED -> DesktopPalette.Connected
         DesktopSiReaderSeverity.WARNING -> DesktopPalette.Warning
         DesktopSiReaderSeverity.ERROR -> DesktopPalette.Error
     }
-    val textColor = when (siReaderState.severity) {
+    val textColor = when (effectiveSeverity) {
         DesktopSiReaderSeverity.WARNING,
         DesktopSiReaderSeverity.CONNECTED -> DesktopPalette.Black
         DesktopSiReaderSeverity.DISCONNECTED,
@@ -4458,7 +4474,7 @@ private fun StatusStrip(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "${siReaderState.statusText} - $projectStatusText${if (hasUnsavedChanges) " *" else ""}",
+            text = "$siStatusText - $projectStatusText${if (hasUnsavedChanges) " *" else ""}",
             color = textColor,
             fontSize = 13.sp
         )
