@@ -316,6 +316,41 @@ Current local evidence on this Mac: `npm run desktop:usb-diagnostic --
 the platform-detection showstopper for desktop SI work; the remaining spike is
 serial-protocol access and card-readout parity with the Android `SIPort` path.
 
+### Desktop Automation Hooks
+
+Desktop beta builds include a non-UI automation CLI for repeatable checks and
+debug operations. Run it through Gradle with `--args`:
+
+```shell
+./gradlew :desktopApp:desktopAutomation --args='version'
+./gradlew :desktopApp:desktopAutomation --args='paths'
+./gradlew :desktopApp:desktopAutomation --args='logs'
+./gradlew :desktopApp:desktopAutomation --args='log-test smoke'
+./gradlew :desktopApp:desktopAutomation --args='open-event-file /path/to/Event.json'
+./gradlew :desktopApp:desktopAutomation --args='si-status'
+./gradlew :desktopApp:desktopAutomation --args='printer-status'
+```
+
+The same entrypoint is exposed through npm:
+
+```shell
+npm run desktop:automation -- --args='version'
+```
+
+Automation commands print one JSON object to stdout for machine parsing. Hardware
+status commands are non-failing by default when hardware is absent, which keeps
+CI usable. Add `--require` when a local Gradle validation run must fail if no SI
+station or printer is available:
+
+```shell
+./gradlew :desktopApp:desktopAutomation --args='si-status --require'
+./gradlew :desktopApp:desktopAutomation --args='printer-status --require'
+```
+
+The CLI is deliberately separate from the Compose UI. It is meant for Codex,
+CI, and local diagnostics, not as a hidden remote-control listener in the beta
+app.
+
 The desktop serial probe uses jSerialComm in the desktop module only. It
 discovers the SPORTident USB VID/PID, opens the selected serial device, sends
 the same small SI probe command that Android uses during station setup, reads a

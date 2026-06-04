@@ -28,6 +28,7 @@
     "jdeploy:pack-preview": "npm run jdeploy:package && npm pack --dry-run --ignore-scripts",
     "jdeploy:registry-smoke": "./scripts/jdeploy-registry-smoke.sh",
     "jdeploy:release-preflight": "node ./scripts/check-jdeploy-release-ready.mjs",
+    "desktop:automation": "./gradlew :desktopApp:desktopAutomation",
     "desktop:usb-diagnostic": "./scripts/desktop-usb-diagnostic.sh",
     "desktop:usb-probe": "./gradlew :desktopApp:desktopUsbProbe",
     "desktop:usb-station-diagnostic": "./gradlew :desktopApp:desktopUsbStationDiagnostic",

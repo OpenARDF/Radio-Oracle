@@ -290,6 +290,15 @@ tasks.register("desktopUsbStationDiagnostic", JavaExec) {
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationDiagnosticKt")
 }
 
+tasks.register("desktopAutomation", JavaExec) {
+    group = "verification"
+    description = "Runs Radio-Oracle desktop automation and debug-control commands."
+
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.DesktopAutomationCliKt")
+}
+
 tasks.register("desktopPrinterProbe", JavaExec) {
     group = "verification"
     description = "Lists desktop system printers and optionally submits a plain-text Radio-Oracle test ticket."
