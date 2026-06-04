@@ -137,6 +137,12 @@ object DesktopAutomationCli {
         var action: DesktopNavAction? = null
         val selectedLabels = mutableListOf<String>()
         labels.forEach { label ->
+            if (label == "< Back") {
+                state = state.back()
+                action = null
+                selectedLabels += label
+                return@forEach
+            }
             val item = DesktopNavigation.findCurrentItemByLabel(state, label)
             if (item == null) {
                 err.println("Menu item '$label' is not available from ${DesktopNavigation.breadcrumb(state)}.")
@@ -261,7 +267,7 @@ object DesktopAutomationCli {
           logs                            Initialize logging and print current log files as JSON.
           log-test [message]              Write a desktop automation log entry.
           open-event-file <path>          Decode and validate an Event File.
-          nav-select <label> [label...]   Simulate menu selection by visible labels.
+          nav-select <path>               Simulate menu selection, using > between labels. Supports < Back.
           si-status [--require] [--port]  Probe attached SI station state.
           printer-status [--require]      Inspect desktop printer selection state.
     """.trimIndent()

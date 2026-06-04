@@ -103,7 +103,12 @@ data class DesktopNavState(
                 selectedItemId = DesktopNavigation.defaultItemId(workflow)
             )
         } else {
-            copy(submenuStack = nextStack)
+            val parentItem = DesktopNavigation.itemById(workflow, nextStack.last())
+            copy(
+                submenuStack = nextStack,
+                selectedSection = parentItem?.section ?: selectedSection,
+                selectedItemId = nextStack.last()
+            )
         }
     }
 }
@@ -158,7 +163,8 @@ object DesktopNavigation {
                                 )
                             )
                         )
-                    )
+                    ),
+                    DesktopSection.StartList
                 ),
                 item("setup.aliases", "Aliases", workflow, DesktopSection.Aliases),
                 group(
@@ -304,6 +310,9 @@ object DesktopNavigation {
 
     fun findCurrentItemByLabel(state: DesktopNavState, label: String): DesktopNavItem? =
         currentItems(state).firstOrNull { it.label == label }
+
+    fun itemById(workflow: DesktopWorkflow, id: String): DesktopNavItem? =
+        allItems(workflow).firstOrNull { it.id == id }
 
     fun breadcrumb(state: DesktopNavState): String {
         val labels = mutableListOf(state.workflow.label)

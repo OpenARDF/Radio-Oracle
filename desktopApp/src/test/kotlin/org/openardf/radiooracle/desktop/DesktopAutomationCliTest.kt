@@ -62,6 +62,18 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun navSelectSupportsBackToPreviousMenu() {
+        val result = runAutomation("nav-select", "Start List > Exports > < Back")
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Start List\", \"Exports\", \"< Back\"]"))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Start List\""))
+        assertTrue(result.stdout.contains("\"selectedSection\":\"Start List\""))
+        assertTrue(result.stdout.contains("\"selectedItemId\":\"setup.start-list\""))
+        assertTrue(result.stdout.contains("\"action\":null"))
+    }
+
+    @Test
     fun siStatusDoesNotFailWithoutHardwareUnlessRequired() {
         val result = runAutomation("si-status")
 

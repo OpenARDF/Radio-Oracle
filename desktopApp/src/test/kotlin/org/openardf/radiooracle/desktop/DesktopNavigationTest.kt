@@ -102,6 +102,24 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun backFromSecondLevelSubmenuReturnsToPreviousMenu() {
+        val startList = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Start List" }
+        val firstLevel = DesktopNavState().enter(startList)
+        val exports = DesktopNavigation.currentItems(firstLevel).first { it.label == "Exports" }
+
+        val state = firstLevel.enter(exports).back()
+
+        assertEquals(listOf("setup.start-list"), state.submenuStack)
+        assertEquals("setup.start-list", state.selectedItemId)
+        assertEquals(DesktopSection.StartList, state.selectedSection)
+        assertEquals("Preparation/Setup > Start List", DesktopNavigation.breadcrumb(state))
+        assertEquals(
+            listOf("Start List", "Import Starts CSV...", "Exports"),
+            DesktopNavigation.currentItems(state).map { it.label }
+        )
+    }
+
+    @Test
     fun preservesSelectedMenuItemWhenMultipleItemsShareASection() {
         val finishTickets = DesktopNavigation.rootItems(DesktopWorkflow.RaceOps)
             .first { it.label == "Finish Tickets" }
