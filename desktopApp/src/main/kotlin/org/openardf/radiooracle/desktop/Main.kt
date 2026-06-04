@@ -653,7 +653,7 @@ fun main(args: Array<String>) = application {
 
         fun exportCsv(title: String, export: (Path, EventProjectFile) -> Unit) {
             val currentProject = projectSession.currentProject ?: return
-            DesktopFileDialogs.chooseExportCsv(title)?.let { path ->
+            DesktopFileDialogs.chooseExportCsv(title, currentProject.raceData.race.name)?.let { path ->
                 runCatching {
                     export(path, currentProject)
                     syncProjectState()

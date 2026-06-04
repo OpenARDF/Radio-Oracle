@@ -77,6 +77,22 @@ class DesktopProjectFilePathsTest {
     }
 
     @Test
+    fun buildsDefaultCsvFileNameFromEventName() {
+        assertEquals(
+            "Demo Event.csv",
+            DesktopProjectFilePaths.defaultCsvFileName("Demo Event")
+        )
+        assertEquals(
+            "Demo Event.csv",
+            DesktopProjectFilePaths.defaultCsvFileName("Demo/Event")
+        )
+        assertEquals(
+            "Event File.csv",
+            DesktopProjectFilePaths.defaultCsvFileName(" ")
+        )
+    }
+
+    @Test
     fun keepsExistingCsvExtension() {
         val path = Path.of("event.csv")
 
