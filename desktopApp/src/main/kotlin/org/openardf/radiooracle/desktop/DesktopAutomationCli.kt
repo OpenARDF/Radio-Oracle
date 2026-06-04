@@ -141,7 +141,9 @@ object DesktopAutomationCli {
         var hasEditedUnsavedNewEventDraft = false
         val selectedLabels = mutableListOf<String>()
         labels.forEach { label ->
-            val workflow = DesktopWorkflow.entries.firstOrNull { it.label == label || it.shortLabel == label }
+            val currentItem = DesktopNavigation.findCurrentItemByLabel(state, label)
+            val workflow = DesktopWorkflow.entries
+                .firstOrNull { currentItem == null && (it.label == label || it.shortLabel == label) }
             if (workflow != null) {
                 val nextState = state.switchWorkflow(workflow)
                 if (
@@ -182,7 +184,7 @@ object DesktopAutomationCli {
                 selectedLabels += label
                 return@forEach
             }
-            val item = DesktopNavigation.findCurrentItemByLabel(state, label)
+            val item = currentItem
             if (item == null) {
                 err.println("Menu item '$label' is not available from ${DesktopNavigation.breadcrumb(state)}.")
                 return 66

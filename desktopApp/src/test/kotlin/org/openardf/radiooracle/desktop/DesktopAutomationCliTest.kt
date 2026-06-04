@@ -117,6 +117,17 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun navSelectPrefersCurrentMenuItemAfterWorkflowSelection() {
+        val result = runAutomation("nav-select", "Results > Results")
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"workflow\":\"Results/File Export\""))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Results/File Export > Results\""))
+        assertTrue(result.stdout.contains("\"selectedSection\":\"Results\""))
+        assertTrue(result.stdout.contains("\"selectedItemId\":\"results.results\""))
+    }
+
+    @Test
     fun siStatusDoesNotFailWithoutHardwareUnlessRequired() {
         val result = runAutomation("si-status")
 
