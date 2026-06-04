@@ -299,6 +299,19 @@ fun main(args: Array<String>) = application {
             hasUnsavedChanges = projectSession.hasUnsavedChanges
         }
 
+        fun isDefaultUnsavedNewEventFileDraft(): Boolean =
+            newEventDraftProject != null &&
+                projectSession.currentPath == null &&
+                projectSession.currentProject == newEventDraftProject
+
+        fun hasEditedUnsavedNewEventFileDraft(): Boolean =
+            newEventDraftProject != null &&
+                projectSession.currentPath == null &&
+                projectSession.currentProject != newEventDraftProject
+
+        fun hasProtectedUnsavedChanges(): Boolean =
+            hasUnsavedChanges && !isDefaultUnsavedNewEventFileDraft()
+
         fun openProject(path: Path) {
             runCatching {
                 projectFile = projectSession.open(path)
@@ -862,7 +875,7 @@ fun main(args: Array<String>) = application {
 
         requestWindowClose = {
             pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
-                hasUnsavedChanges,
+                hasProtectedUnsavedChanges(),
                 PendingDirtyProjectAction.ExitApplication
             )
             if (pendingDirtyProjectAction == null) {
@@ -874,7 +887,7 @@ fun main(args: Array<String>) = application {
         fun chooseOpenEventFile() {
             DesktopFileDialogs.chooseOpenProject()?.let { path ->
                 pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
-                    hasUnsavedChanges,
+                    hasProtectedUnsavedChanges(),
                     PendingDirtyProjectAction.OpenProject(path)
                 )
                 if (pendingDirtyProjectAction == null) {
@@ -886,7 +899,7 @@ fun main(args: Array<String>) = application {
         fun chooseImportAndroidRaceBackupJson() {
             DesktopFileDialogs.chooseImportAndroidRaceBackupJson()?.let { path ->
                 pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
-                    hasUnsavedChanges,
+                    hasProtectedUnsavedChanges(),
                     PendingDirtyProjectAction.ImportAndroidRaceBackup(path)
                 )
                 if (pendingDirtyProjectAction == null) {
@@ -926,7 +939,7 @@ fun main(args: Array<String>) = application {
 
         fun requestNewEventFile() {
             pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
-                hasUnsavedChanges,
+                hasProtectedUnsavedChanges(),
                 PendingDirtyProjectAction.NewProject
             )
             if (pendingDirtyProjectAction == null) {
@@ -936,11 +949,11 @@ fun main(args: Array<String>) = application {
 
         fun requestCloseEventFile() {
             pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
-                hasUnsavedChanges,
+                hasProtectedUnsavedChanges(),
                 PendingDirtyProjectAction.CloseProject
             )
             if (pendingDirtyProjectAction == null) {
-                closeProject()
+                closeProject(discardUnsavedChanges = isDefaultUnsavedNewEventFileDraft())
             }
         }
 
@@ -951,7 +964,8 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportAndroidRaceBackup -> true
                 DesktopNavAction.ShowDebugLogHelp,
                 DesktopNavAction.ShowAbout -> true
-                DesktopNavAction.SaveEventFile -> projectFile != null && hasUnsavedChanges
+                DesktopNavAction.SaveEventFile -> projectFile != null &&
+                    (projectSession.currentPath == null || hasProtectedUnsavedChanges())
                 DesktopNavAction.StopContinuousSiReadout -> isContinuousSiReadoutActive
                 DesktopNavAction.StartLocalResultDisplay -> projectFile != null && localResultServerUrl == null
                 DesktopNavAction.StopLocalResultDisplay -> localResultServerUrl != null
@@ -1029,9 +1043,13 @@ fun main(args: Array<String>) = application {
             Menu("File") {
                 Item("New Event File", onClick = ::requestNewEventFile)
                 Item("Open...", onClick = ::chooseOpenEventFile)
-                Item("Save", enabled = projectFile != null && hasUnsavedChanges, onClick = {
-                    saveCurrentProject()
-                })
+                Item(
+                    "Save",
+                    enabled = projectFile != null && (projectSession.currentPath == null || hasProtectedUnsavedChanges()),
+                    onClick = {
+                        saveCurrentProject()
+                    }
+                )
                 Item("Save As...", enabled = projectFile != null, onClick = {
                     saveAsCurrentProject()
                 })
@@ -1493,7 +1511,8 @@ fun main(args: Array<String>) = application {
                 localResultServerUrl = null
                 projectStatusText = "Local result display stopped."
             },
-            isUnsavedNewEventFileDraft = newEventDraftProject != null && projectSession.currentPath == null,
+            hasDefaultUnsavedNewEventFileDraft = isDefaultUnsavedNewEventFileDraft(),
+            hasEditedUnsavedNewEventFileDraft = hasEditedUnsavedNewEventFileDraft(),
             onSaveEventFileForNavigation = ::saveCurrentProject,
             onDiscardUnsavedNewEventFile = {
                 closeProject(discardUnsavedChanges = true)
@@ -1654,7 +1673,8 @@ private fun RadioOManagerDesktopApp(
     onStopLocalResultServer: () -> Unit = {},
     isNavActionEnabled: (DesktopNavAction) -> Boolean = { false },
     onNavAction: (DesktopNavAction) -> Unit = {},
-    isUnsavedNewEventFileDraft: Boolean = false,
+    hasDefaultUnsavedNewEventFileDraft: Boolean = false,
+    hasEditedUnsavedNewEventFileDraft: Boolean = false,
     onSaveEventFileForNavigation: () -> Boolean = { false },
     onDiscardUnsavedNewEventFile: () -> Unit = {}
 ) {
@@ -1672,32 +1692,45 @@ private fun RadioOManagerDesktopApp(
         var navState by remember { mutableStateOf(DesktopNavState()) }
         var pendingNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
 
-        fun applyNavigation(intent: DesktopPendingNavigation) {
+        fun selectionFor(intent: DesktopPendingNavigation): Pair<DesktopNavState, DesktopNavAction?> =
             when (intent) {
-                DesktopPendingNavigation.Back -> navState = navState.back()
-                is DesktopPendingNavigation.Workflow -> navState = navState.switchWorkflow(intent.workflow)
-                is DesktopPendingNavigation.Item -> {
-                    DesktopNavigation.currentItems(navState).firstOrNull { it.id == intent.itemId }?.let { item ->
-                        val selection = DesktopNavigation.selectItem(navState, item)
-                        navState = selection.state
-                        selection.action?.let(onNavAction)
+                DesktopPendingNavigation.Back -> navState.back() to null
+                is DesktopPendingNavigation.Workflow -> navState.switchWorkflow(intent.workflow) to null
+                is DesktopPendingNavigation.Item -> DesktopNavigation.currentItems(navState)
+                    .firstOrNull { it.id == intent.itemId }
+                    ?.let {
+                        val selection = DesktopNavigation.selectItem(navState, it)
+                        selection.state to selection.action
                     }
-                }
+                    ?: (navState to null)
             }
+
+        fun applyNavigation(intent: DesktopPendingNavigation) {
+            val (nextState, action) = selectionFor(intent)
+            navState = nextState
+            action?.let(onNavAction)
         }
 
         fun requestNavigation(intent: DesktopPendingNavigation) {
-            val nextState = when (intent) {
-                DesktopPendingNavigation.Back -> navState.back()
-                is DesktopPendingNavigation.Workflow -> navState.switchWorkflow(intent.workflow)
-                is DesktopPendingNavigation.Item -> DesktopNavigation.currentItems(navState)
-                    .firstOrNull { it.id == intent.itemId }
-                    ?.let { DesktopNavigation.selectItem(navState, it).state }
-                    ?: navState
-            }
-            if (DesktopNavigation.shouldGuardUnsavedNewEventDraft(navState, nextState, isUnsavedNewEventFileDraft)) {
+            val (nextState, action) = selectionFor(intent)
+            val shouldBypassGuard = action == DesktopNavAction.SaveEventFile
+            if (
+                !shouldBypassGuard &&
+                DesktopNavigation.shouldGuardUnsavedNewEventDraft(
+                    navState,
+                    nextState,
+                    hasEditedUnsavedNewEventFileDraft
+                )
+            ) {
                 pendingNavigation = intent
             } else {
+                if (
+                    !shouldBypassGuard &&
+                    hasDefaultUnsavedNewEventFileDraft &&
+                    DesktopNavigation.isLeavingNewEventFilePage(navState, nextState)
+                ) {
+                    onDiscardUnsavedNewEventFile()
+                }
                 applyNavigation(intent)
             }
         }
@@ -3902,16 +3935,13 @@ private fun RaceDetailsPanel(
         ) {
             TextField(
                 value = raceNameDraft,
-                onValueChange = { raceNameDraft = it },
+                onValueChange = {
+                    raceNameDraft = it
+                    onRenameRace(it)
+                },
                 modifier = Modifier.weight(1f),
                 label = { Text("Race name") }
             )
-            Button(
-                onClick = { onRenameRace(raceNameDraft) },
-                enabled = raceNameDraft != details.name
-            ) {
-                Text("Apply")
-            }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),

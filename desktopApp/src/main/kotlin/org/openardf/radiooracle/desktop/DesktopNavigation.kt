@@ -327,11 +327,14 @@ object DesktopNavigation {
     fun shouldGuardUnsavedNewEventDraft(
         currentState: DesktopNavState,
         nextState: DesktopNavState,
-        isUnsavedNewEventDraft: Boolean
+        hasEditedUnsavedNewEventDraft: Boolean
     ): Boolean =
-        isUnsavedNewEventDraft &&
+        hasEditedUnsavedNewEventDraft &&
             currentState.selectedItemId == "setup.event-file.new" &&
             currentState != nextState
+
+    fun isLeavingNewEventFilePage(currentState: DesktopNavState, nextState: DesktopNavState): Boolean =
+        currentState.selectedItemId == "setup.event-file.new" && currentState != nextState
 
     fun breadcrumb(state: DesktopNavState): String {
         val labels = mutableListOf(state.workflow.label)

@@ -132,11 +132,13 @@ object DesktopAutomationCli {
             err.println("nav-select requires one or more menu labels.")
             return 64
         }
-        val simulateDraft = args.firstOrNull() == "--draft"
-        val labels = navSelectLabels(if (simulateDraft) args.drop(1) else args)
+        val simulateDefaultDraft = args.firstOrNull() == "--default-draft"
+        val simulateEditedDraft = args.firstOrNull() == "--draft" || args.firstOrNull() == "--edited-draft"
+        val labels = navSelectLabels(if (simulateDefaultDraft || simulateEditedDraft) args.drop(1) else args)
         var state = DesktopNavState()
         var action: DesktopNavAction? = null
-        var isUnsavedNewEventDraft = false
+        var hasDefaultUnsavedNewEventDraft = false
+        var hasEditedUnsavedNewEventDraft = false
         val selectedLabels = mutableListOf<String>()
         labels.forEach { label ->
             val workflow = DesktopWorkflow.entries.firstOrNull { it.label == label || it.shortLabel == label }
@@ -146,11 +148,14 @@ object DesktopAutomationCli {
                     DesktopNavigation.shouldGuardUnsavedNewEventDraft(
                         state,
                         nextState,
-                        isUnsavedNewEventDraft
+                        hasEditedUnsavedNewEventDraft
                     )
                 ) {
                     out.println(navSelectJson(selectedLabels + label, state, action, guarded = true))
                     return 0
+                }
+                if (hasDefaultUnsavedNewEventDraft && DesktopNavigation.isLeavingNewEventFilePage(state, nextState)) {
+                    hasDefaultUnsavedNewEventDraft = false
                 }
                 state = nextState
                 action = null
@@ -163,11 +168,14 @@ object DesktopAutomationCli {
                     DesktopNavigation.shouldGuardUnsavedNewEventDraft(
                         state,
                         nextState,
-                        isUnsavedNewEventDraft
+                        hasEditedUnsavedNewEventDraft
                     )
                 ) {
                     out.println(navSelectJson(selectedLabels + label, state, action, guarded = true))
                     return 0
+                }
+                if (hasDefaultUnsavedNewEventDraft && DesktopNavigation.isLeavingNewEventFilePage(state, nextState)) {
+                    hasDefaultUnsavedNewEventDraft = false
                 }
                 state = nextState
                 action = null
@@ -181,19 +189,30 @@ object DesktopAutomationCli {
             }
             val selection = DesktopNavigation.selectItem(state, item)
             if (
+                selection.action != DesktopNavAction.SaveEventFile &&
                 DesktopNavigation.shouldGuardUnsavedNewEventDraft(
                     state,
                     selection.state,
-                    isUnsavedNewEventDraft
+                    hasEditedUnsavedNewEventDraft
                 )
             ) {
                 out.println(navSelectJson(selectedLabels + label, state, action, guarded = true))
                 return 0
             }
+            if (
+                selection.action != DesktopNavAction.SaveEventFile &&
+                hasDefaultUnsavedNewEventDraft &&
+                DesktopNavigation.isLeavingNewEventFilePage(state, selection.state)
+            ) {
+                hasDefaultUnsavedNewEventDraft = false
+            }
             state = selection.state
             action = selection.action
-            if (simulateDraft && action == DesktopNavAction.NewEventFile) {
-                isUnsavedNewEventDraft = true
+            if (simulateDefaultDraft && action == DesktopNavAction.NewEventFile) {
+                hasDefaultUnsavedNewEventDraft = true
+            }
+            if (simulateEditedDraft && action == DesktopNavAction.NewEventFile) {
+                hasEditedUnsavedNewEventDraft = true
             }
             selectedLabels += label
         }
@@ -318,7 +337,8 @@ object DesktopAutomationCli {
           logs                            Initialize logging and print current log files as JSON.
           log-test [message]              Write a desktop automation log entry.
           open-event-file <path>          Decode and validate an Event File.
-          nav-select [--draft] <path>     Simulate menu selection, using > between labels. Supports < Back.
+          nav-select [--default-draft|--draft] <path>
+                                          Simulate menu selection, using > between labels. Supports < Back.
           si-status [--require] [--port]  Probe attached SI station state.
           printer-status [--require]      Inspect desktop printer selection state.
     """.trimIndent()

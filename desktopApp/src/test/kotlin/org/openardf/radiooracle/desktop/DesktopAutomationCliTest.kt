@@ -97,6 +97,26 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun navSelectDefaultDraftModeDoesNotGuardBeforeWorkflowSwitch() {
+        val result = runAutomation("nav-select", "--default-draft", "Event File > New Event File > Race Ops")
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Event File\", \"New Event File\", \"Race Ops\"]"))
+        assertTrue(result.stdout.contains("\"workflow\":\"Race Operations\""))
+        assertTrue(result.stdout.contains("\"guarded\":false"))
+    }
+
+    @Test
+    fun navSelectDraftModeDoesNotGuardSaveFromNewEventFile() {
+        val result = runAutomation("nav-select", "--draft", "Event File > New Event File > Save")
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Event File\", \"New Event File\", \"Save\"]"))
+        assertTrue(result.stdout.contains("\"action\":\"SaveEventFile\""))
+        assertTrue(result.stdout.contains("\"guarded\":false"))
+    }
+
+    @Test
     fun siStatusDoesNotFailWithoutHardwareUnlessRequired() {
         val result = runAutomation("si-status")
 

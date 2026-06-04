@@ -153,14 +153,14 @@ class DesktopNavigationTest {
             DesktopNavigation.shouldGuardUnsavedNewEventDraft(
                 currentState = newEventState,
                 nextState = newEventState.back(),
-                isUnsavedNewEventDraft = true
+                hasEditedUnsavedNewEventDraft = true
             )
         )
         assertFalse(
             DesktopNavigation.shouldGuardUnsavedNewEventDraft(
                 currentState = newEventState,
                 nextState = newEventState.back(),
-                isUnsavedNewEventDraft = false
+                hasEditedUnsavedNewEventDraft = false
             )
         )
     }
