@@ -6,7 +6,11 @@ enum class DesktopWorkflow(val label: String, val shortLabel: String) {
     Setup("Preparation/Setup", "Setup"),
     RaceOps("Race Operations", "Race Ops"),
     ResultsExport("Results/File Export", "Results"),
-    SettingsHelp("Help/About/App Settings", "Settings")
+    SettingsHelp("Help/About/App Settings", "Settings");
+
+    companion object {
+        val bottomBarEntries: List<DesktopWorkflow> = listOf(Setup, RaceOps, ResultsExport)
+    }
 }
 
 enum class DesktopNavAction {
@@ -435,7 +439,7 @@ object DesktopNavigation {
             item("setup.event-file.aliases", "Aliases", workflow, DesktopSection.Aliases),
             item(
                 "setup.event-file.diagnostics",
-                "Event File Diagnostics",
+                "Settings",
                 workflow,
                 DesktopSection.Settings,
                 requiresEventFile = false

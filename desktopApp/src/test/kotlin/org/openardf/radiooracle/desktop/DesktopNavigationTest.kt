@@ -7,10 +7,10 @@ import org.junit.Test
 
 class DesktopNavigationTest {
     @Test
-    fun exposesWorkflowGroupsInBottomNavigationOrder() {
+    fun exposesVisibleWorkflowGroupsInBottomNavigationOrder() {
         assertEquals(
-            listOf("Preparation/Setup", "Race Operations", "Results/File Export", "Help/About/App Settings"),
-            DesktopWorkflow.entries.map { it.label }
+            listOf("Preparation/Setup", "Race Operations", "Results/File Export"),
+            DesktopWorkflow.bottomBarEntries.map { it.label }
         )
     }
 
@@ -196,7 +196,7 @@ class DesktopNavigationTest {
                 "Export Android Event File...",
                 "Save",
                 "Aliases",
-                "Event File Diagnostics"
+                "Settings"
             ),
             eventFileActions.map { it.label }
         )
@@ -226,12 +226,12 @@ class DesktopNavigationTest {
                 "Export Android Event File...",
                 "Save",
                 "Aliases",
-                "Event File Diagnostics"
+                "Settings"
             ),
             eventFileItems.map { it.label }
         )
         assertTrue(eventFileItems.first { it.label == "Aliases" }.requiresEventFile)
-        assertFalse(eventFileItems.first { it.label == "Event File Diagnostics" }.requiresEventFile)
+        assertFalse(eventFileItems.first { it.label == "Settings" }.requiresEventFile)
         assertFalse(DesktopNavigation.rootItems(DesktopWorkflow.Setup).any { it.label == "Aliases" })
         assertFalse(DesktopNavigation.rootItems(DesktopWorkflow.Setup).any { it.label == "Utils" })
     }

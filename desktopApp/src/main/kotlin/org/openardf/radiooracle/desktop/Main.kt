@@ -1937,7 +1937,7 @@ private fun WorkflowBar(
             .padding(horizontal = 10.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        DesktopWorkflow.entries.forEach { workflow ->
+        DesktopWorkflow.bottomBarEntries.forEach { workflow ->
             val isSelected = workflow == selectedWorkflow
             Button(
                 onClick = { onWorkflowSelected(workflow) },
