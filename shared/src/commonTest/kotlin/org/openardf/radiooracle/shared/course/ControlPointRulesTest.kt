@@ -31,9 +31,13 @@ class ControlPointRulesTest {
             }.error
         )
         assertEquals(
+            listOf(ControlPointDefinition(511, ControlPointType.CONTROL, 1)),
+            ControlPointRules.parseControlPoints("511", RaceType.CLASSIC)
+        )
+        assertEquals(
             ControlPointValidationError.INVALID_RANGE,
             assertFailsWith<ControlPointValidationException> {
-                ControlPointRules.parseControlPoints("256", RaceType.CLASSIC)
+                ControlPointRules.parseControlPoints("512", RaceType.CLASSIC)
             }.error
         )
     }

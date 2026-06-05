@@ -43,7 +43,8 @@ object EventProjectFactory {
                 categories = emptyList(),
                 aliases = emptyList(),
                 competitorData = emptyList(),
-                unmatchedReadoutData = emptyList()
+                unmatchedReadoutData = emptyList(),
+                controls = EventControlCatalog.classicPreset(raceId)
             )
         )
     }

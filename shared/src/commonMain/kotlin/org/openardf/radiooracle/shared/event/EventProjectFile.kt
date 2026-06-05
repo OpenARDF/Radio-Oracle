@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 
 /** File envelope for future shared Event File import/export. */
 @Serializable
@@ -36,18 +37,28 @@ object EventProjectFileJson {
      * version, but schema upgrades must still increment `schemaVersion`.
      */
     fun decode(text: String): EventProjectFile {
+        val raceDataJson = json.parseToJsonElement(text)
+            .jsonObject["raceData"]
+            ?.jsonObject
+        val hasControlsField = raceDataJson
+            ?.containsKey("controls") == true
+        val hasPublicControlIdsField = raceDataJson
+            ?.get("categories")
+            ?.toString()
+            ?.contains("publicControlIds") == true
+        val needsControlBackfill = !hasControlsField || !hasPublicControlIdsField || !text.contains("\"controlId\"")
         val projectFile = json.decodeFromString<EventProjectFile>(text)
         require(projectFile.isSupportedSchema()) {
             "Unsupported Radio-Oracle Event File schema version: ${projectFile.schemaVersion}"
         }
-        return projectFile
+        return if (needsControlBackfill) EventControlCatalog.backfillControls(projectFile) else projectFile
     }
 }
 
 /** Schema metadata for portable Radio-Oracle Event Files. */
 object EventProjectFileFormat {
     const val APP_NAME = "Radio-Oracle"
-    const val CURRENT_SCHEMA_VERSION = 1
+    const val CURRENT_SCHEMA_VERSION = 2
 
     /** Returns true when the supplied schema version is within the supported range. */
     fun isSupportedSchema(schemaVersion: Int): Boolean =

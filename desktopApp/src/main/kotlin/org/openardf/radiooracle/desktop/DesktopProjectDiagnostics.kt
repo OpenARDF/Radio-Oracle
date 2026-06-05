@@ -70,6 +70,10 @@ data class DesktopProjectDiagnostics(
                     "Duplicate alias names: ${issue.names.joinToString()}."
                 is EventValidationIssue.DuplicateAliasCodes ->
                     "Duplicate alias SI codes: ${issue.codes.joinToString()}."
+                is EventValidationIssue.DuplicateControlIds ->
+                    "Duplicate control IDs: ${issue.ids.joinToString()}."
+                is EventValidationIssue.DuplicateControlLabels ->
+                    "Duplicate control labels: ${issue.labels.joinToString()}."
                 is EventValidationIssue.DuplicateStartNumbers ->
                     "Duplicate start numbers: ${issue.startNumbers.joinToString()}."
                 is EventValidationIssue.DuplicateSINumbers ->
@@ -78,6 +82,14 @@ data class DesktopProjectDiagnostics(
                     "Readout has multiple start punches: ${issue.siNumber ?: "unknown SI"}."
                 is EventValidationIssue.MultipleFinishPunches ->
                     "Readout has multiple finish punches: ${issue.siNumber ?: "unknown SI"}."
+                is EventValidationIssue.LegacyIncompatibleCategoryControlCodes ->
+                    "Category ${issue.categoryName} uses control codes above 255: ${issue.codes.joinToString()}."
+                is EventValidationIssue.LegacyIncompatibleAliasCodes ->
+                    "Aliases use control codes above 255: ${issue.codes.joinToString()}."
+                is EventValidationIssue.LegacyIncompatibleControlCodes ->
+                    "Controls use codes above 255: ${issue.codes.joinToString()}."
+                is EventValidationIssue.MissingCategoryControlReferences ->
+                    "Category ${issue.categoryName} references missing controls: ${issue.controlIds.joinToString()}."
                 is EventValidationIssue.InvalidCategoryControlPoints ->
                     "Invalid control points for ${issue.categoryName}: ${
                         DesktopControlPointValidationText.messageFor(issue.error, issue.token, issue.siCode)

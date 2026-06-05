@@ -6,7 +6,8 @@ object SportIdentCodes {
     const val SI_MAX_NUMBER = 9999999
 
     const val SI_MIN_CODE = 1
-    const val SI_MAX_CODE = 255
+    const val SI_LEGACY_MAX_CODE = 255
+    const val SI_MAX_CODE = 511
 
     const val SECONDS_DAY = 86400L
     const val SECONDS_WEEK = 604800L
@@ -19,5 +20,10 @@ object SportIdentCodes {
     /** Returns true when the supplied control code is within the supported station-code range. */
     fun isSICodeValid(siCode: Int): Boolean {
         return siCode in SI_MIN_CODE..SI_MAX_CODE
+    }
+
+    /** Returns true when the code is in the legacy SI-Card5 / older software compatibility range. */
+    fun isLegacyCompatibleSICode(siCode: Int): Boolean {
+        return siCode in SI_MIN_CODE..SI_LEGACY_MAX_CODE
     }
 }

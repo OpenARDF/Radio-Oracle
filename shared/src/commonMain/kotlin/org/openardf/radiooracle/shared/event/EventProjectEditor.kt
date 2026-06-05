@@ -243,21 +243,30 @@ object EventProjectEditor {
             raceType = categoryData.category.effectiveRaceType(projectFile.raceData.race)
         )
         val controlPoints = definitions.mapIndexed { index, definition ->
+            val control = EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, definition)
             EventControlPoint(
                 id = controlPointIdFactory(index),
                 categoryId = categoryId,
+                controlId = control.id,
                 siCode = definition.siCode,
                 type = definition.type,
                 order = definition.order
             )
         }
+        val controls = EventControlCatalog.mergeControls(
+            projectFile.raceData.controls,
+            definitions.map { EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, it) }
+        )
         val formattedControlPoints = ControlPointRules.formatControlPoints(definitions)
 
         val categories = projectFile.raceData.categories.map { data ->
             if (data.category.id == categoryId) {
                 data.copy(
                     category = data.category.copy(controlPointsString = formattedControlPoints),
-                    controlPoints = controlPoints
+                    controlPoints = controlPoints,
+                    publicControlIds = controlPoints
+                        .sortedWith(compareBy<EventControlPoint>({ controls.firstOrNull { control -> control.id == it.controlId }?.label ?: "" }, { it.siCode }))
+                        .map { it.controlId }
                 )
             } else {
                 data
@@ -265,7 +274,7 @@ object EventProjectEditor {
         }
 
         return projectFile.copy(
-            raceData = projectFile.raceData.copy(categories = categories)
+            raceData = projectFile.raceData.copy(categories = categories, controls = controls)
         )
     }
 
@@ -784,9 +793,11 @@ object EventProjectEditor {
                 raceType = category.effectiveRaceType(projectFile.raceData.race)
             )
             val controlPoints = definitions.mapIndexed { index, definition ->
+                val control = EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, definition)
                 EventControlPoint(
                     id = controlPointIdFactory(categoryId, index),
                     categoryId = categoryId,
+                    controlId = control.id,
                     siCode = definition.siCode,
                     type = definition.type,
                     order = definition.order
@@ -796,13 +807,32 @@ object EventProjectEditor {
             EventCategoryData(
                 category = category.copy(controlPointsString = ControlPointRules.formatControlPoints(definitions)),
                 controlPoints = controlPoints,
-                competitors = emptyList()
+                competitors = emptyList(),
+                publicControlIds = controlPoints
+                    .sortedBy { it.siCode }
+                    .map { it.controlId }
             )
+        }
+        val importedControls = importedCategories.flatMap { categoryData ->
+            categoryData.controlPoints.map { controlPoint ->
+                EventControl(
+                    id = controlPoint.controlId,
+                    raceId = projectFile.raceData.race.id,
+                    label = when (controlPoint.type) {
+                        org.openardf.radiooracle.shared.domain.ControlPointType.BEACON -> "${controlPoint.siCode}B"
+                        org.openardf.radiooracle.shared.domain.ControlPointType.SEPARATOR -> "${controlPoint.siCode}S"
+                        org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL -> controlPoint.siCode.toString()
+                    },
+                    siCode = controlPoint.siCode,
+                    type = controlPoint.type
+                )
+            }
         }
 
         return projectFile.copy(
             raceData = projectFile.raceData.copy(
-                categories = projectFile.raceData.categories + importedCategories
+                categories = projectFile.raceData.categories + importedCategories,
+                controls = EventControlCatalog.mergeControls(projectFile.raceData.controls, importedControls)
             )
         )
     }

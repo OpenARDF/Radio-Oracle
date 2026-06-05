@@ -12,7 +12,8 @@ class AliasRulesTest {
         assertEquals(AliasValidationResult.Invalid, AliasRules.validateName("TOOLONG", emptyList(), 0))
         assertEquals(AliasValidationResult.Invalid, AliasRules.validateName("F-1", emptyList(), 0))
         assertEquals(AliasValidationResult.Invalid, AliasRules.validateName("31", emptyList(), 0))
-        assertEquals(AliasValidationResult.Valid, AliasRules.validateName("256", emptyList(), 0))
+        assertEquals(AliasValidationResult.Invalid, AliasRules.validateName("511", emptyList(), 0))
+        assertEquals(AliasValidationResult.Valid, AliasRules.validateName("512", emptyList(), 0))
         assertEquals(AliasValidationResult.Valid, AliasRules.validateName("90B", emptyList(), 0))
         assertEquals(AliasValidationResult.Duplicate, AliasRules.validateName("F1", listOf("F1", "F1"), 1))
     }
@@ -22,7 +23,8 @@ class AliasRulesTest {
         assertEquals(AliasValidationResult.Required, AliasRules.validateCode("", emptyList(), 0))
         assertEquals(AliasValidationResult.Invalid, AliasRules.validateCode("abc", emptyList(), 0))
         assertEquals(AliasValidationResult.Invalid, AliasRules.validateCode("0", emptyList(), 0))
-        assertEquals(AliasValidationResult.Invalid, AliasRules.validateCode("256", emptyList(), 0))
+        assertEquals(AliasValidationResult.Valid, AliasRules.validateCode("256", emptyList(), 0))
+        assertEquals(AliasValidationResult.Invalid, AliasRules.validateCode("512", emptyList(), 0))
         assertEquals(AliasValidationResult.Valid, AliasRules.validateCode("31", listOf(31), 0))
         assertEquals(AliasValidationResult.Duplicate, AliasRules.validateCode("31", listOf(31, 31), 1))
     }

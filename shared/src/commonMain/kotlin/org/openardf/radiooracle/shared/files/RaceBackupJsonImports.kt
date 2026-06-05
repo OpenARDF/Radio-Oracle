@@ -116,7 +116,16 @@ object RaceBackupJsonImports {
                 categories = categoriesWithCompetitors,
                 aliases = aliases,
                 competitorData = competitorData,
-                unmatchedReadoutData = unmatchedReadouts
+                unmatchedReadoutData = unmatchedReadouts,
+                controls = org.openardf.radiooracle.shared.event.EventControlCatalog.deriveFromRaceData(
+                    EventRaceData(
+                        race = race,
+                        categories = categoriesWithCompetitors,
+                        aliases = aliases,
+                        competitorData = competitorData,
+                        unmatchedReadoutData = unmatchedReadouts
+                    )
+                )
             )
         )
     }
@@ -133,6 +142,11 @@ object RaceBackupJsonImports {
             EventControlPoint(
                 id = idFactory(),
                 categoryId = categoryId,
+                controlId = org.openardf.radiooracle.shared.event.EventControlCatalog.stableId(
+                    label = controlPointJson.requiredInt("si_code").toString(),
+                    siCode = controlPointJson.requiredInt("si_code"),
+                    type = controlPointJson.enumValue("control_type", ControlPointType.CONTROL)
+                ),
                 siCode = controlPointJson.requiredInt("si_code"),
                 type = controlPointJson.enumValue("control_type", ControlPointType.CONTROL),
                 order = index
@@ -154,7 +168,12 @@ object RaceBackupJsonImports {
             timeLimitSeconds = categoryJson.durationSeconds("category_time_limit"),
             controlPointsString = controlPoints.joinToString(" ") { it.controlPointToken() }
         )
-        return EventCategoryData(category, controlPoints, emptyList())
+        return EventCategoryData(
+            category = category,
+            controlPoints = controlPoints,
+            competitors = emptyList(),
+            publicControlIds = controlPoints.sortedBy { it.siCode }.map { it.controlId }
+        )
     }
 
     private fun parseMatchedReadout(

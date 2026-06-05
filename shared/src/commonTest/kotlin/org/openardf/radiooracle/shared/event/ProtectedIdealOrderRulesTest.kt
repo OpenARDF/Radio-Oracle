@@ -7,14 +7,14 @@ import kotlin.test.assertFailsWith
 class ProtectedIdealOrderRulesTest {
     @Test
     fun resolvesMixedControlCodesAndAliases() {
-        val aliases = listOf(
-            EventAlias("alias-fox", "race", 31, "Fox"),
-            EventAlias("alias-90b", "race", 90, "90B"),
-            EventAlias("alias-256", "race", 41, "256")
+        val controls = listOf(
+            EventControl("control-fox", "race", "Fox", 31, org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL),
+            EventControl("control-90b", "race", "90B", 90, org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL),
+            EventControl("control-512", "race", "512", 41, org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL)
         )
 
-        assertEquals(listOf(31, 32, 90, 41), ProtectedIdealOrderRules.resolveControlCodes("Fox 32 90B 256", aliases))
-        assertEquals(31, ProtectedIdealOrderRules.firstControlCode("Fox 32 90B 256", aliases))
+        assertEquals(listOf(31, 32, 90, 511, 41), ProtectedIdealOrderRules.resolveControlCodes("Fox 32 90B 511 512", controls))
+        assertEquals(31, ProtectedIdealOrderRules.firstControlCode("Fox 32 90B 511 512", controls))
     }
 
     @Test
@@ -34,7 +34,7 @@ class ProtectedIdealOrderRulesTest {
     @Test
     fun treatsNumericTokensAboveTheControlCodeMaximumAsAliasNames() {
         assertFailsWith<IllegalArgumentException> {
-            ProtectedIdealOrderRules.resolveControlCodes("256", emptyList())
+            ProtectedIdealOrderRules.resolveControlCodes("512", emptyList())
         }
     }
 }

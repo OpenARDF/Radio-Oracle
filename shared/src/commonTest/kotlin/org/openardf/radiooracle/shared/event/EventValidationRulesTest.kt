@@ -88,6 +88,19 @@ class EventValidationRulesTest {
         )
     }
 
+    @Test
+    fun warnsAboutControlCodesAboveLegacyCompatibilityRange() {
+        val issues = EventValidationRules.validateRaceData(
+            raceData(
+                categories = listOf(categoryData("M21", controlPointsString = "31 256")),
+                aliases = listOf(alias("F256", 256))
+            )
+        )
+
+        assertTrue(issues.contains(EventValidationIssue.LegacyIncompatibleCategoryControlCodes("M21", setOf(256))))
+        assertTrue(issues.contains(EventValidationIssue.LegacyIncompatibleAliasCodes(setOf(256))))
+    }
+
     private fun raceData(
         race: EventRace = race(),
         categories: List<EventCategoryData> = listOf(categoryData("M21")),

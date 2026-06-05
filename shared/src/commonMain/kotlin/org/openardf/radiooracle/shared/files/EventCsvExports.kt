@@ -16,16 +16,25 @@ object EventCsvExports {
         raceData.categories
             .sortedWith(compareBy({ it.category.order }, { it.category.name }))
             .joinRows { categoryData ->
-                val controlPoints = categoryData.controlPoints
-                    .sortedBy { it.siCode }
-                    .map {
-                        ControlPointRules.formatControlPoints(
-                            listOf(ControlPointDefinition(it.siCode, it.type, it.order))
-                        )
+                val controlsById = raceData.controls.associateBy { it.id }
+                val exportControlPoints = if (categoryData.publicControlIds.isNotEmpty()) {
+                    categoryData.publicControlIds.mapNotNull { controlId ->
+                        controlsById[controlId]?.let { control ->
+                            ControlPointDefinition(control.siCode, control.type, 0)
+                        }
                     }
+                } else {
+                    categoryData.controlPoints
+                    .map {
+                        ControlPointDefinition(it.siCode, it.type, it.order)
+                    }
+                }
+                val controlPoints = exportControlPoints
+                    .sortedBy { it.siCode }
+                    .map { ControlPointRules.formatControlPoints(listOf(it)) }
                     .joinToString(EventCsvFormat.CONTROL_POINT_DELIMITER.toString())
                 val publicFields = "${EventCsvRows.categoryRow(categoryData.category)}${EventCsvFormat.DELIMITER}" +
-                        "${categoryData.controlPoints.size}${EventCsvFormat.DELIMITER}$controlPoints"
+                        "${exportControlPoints.size}${EventCsvFormat.DELIMITER}$controlPoints"
                 if (includeEncryptedIdealOrder) {
                     "$publicFields${EventCsvFormat.DELIMITER}${categoryData.category.encryptedIdealOrder ?: ""}"
                 } else {

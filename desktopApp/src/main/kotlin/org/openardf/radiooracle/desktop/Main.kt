@@ -337,8 +337,8 @@ fun main(args: Array<String>) = application {
 
         fun unlockedIdealFirstFoxByCategoryId(): Map<String, Int> =
             protectedIdealOrderByCategoryId.mapNotNull { (categoryId, idealOrderText) ->
-                projectFile?.raceData?.aliases?.let { aliases ->
-                    ProtectedIdealOrderRules.firstControlCode(idealOrderText, aliases)?.let { categoryId to it }
+                projectFile?.raceData?.controls?.let { controls ->
+                    ProtectedIdealOrderRules.firstControlCode(idealOrderText, controls)?.let { categoryId to it }
                 }
             }.toMap()
 
@@ -743,8 +743,8 @@ fun main(args: Array<String>) = application {
                 return
             }
             runCatching {
-                projectFile?.raceData?.aliases?.let { aliases ->
-                    ProtectedIdealOrderRules.validate(idealOrderText, aliases)
+                projectFile?.raceData?.controls?.let { controls ->
+                    ProtectedIdealOrderRules.validate(idealOrderText, controls)
                 }
                 val encryptedIdealOrder = idealOrderText.trim().takeIf { it.isNotEmpty() }?.let {
                     DesktopProtectedCourseOrder.encrypt(it, password)

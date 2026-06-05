@@ -37,6 +37,7 @@ data class EventCategory(
     val raceType: RaceType?,
     val raceBand: RaceBand?,
     val timeLimitSeconds: Long?,
+    @Deprecated("Use EventCategoryData.controlPoints plus EventRaceData.controls.")
     val controlPointsString: String,
     val encryptedIdealOrder: String? = null
 ) {
@@ -58,9 +59,27 @@ data class EventCategory(
 data class EventControlPoint(
     val id: String,
     val categoryId: String,
+    @Deprecated("Use controlId and resolve through EventRaceData.controls.")
+    val siCode: Int,
+    @Deprecated("Use controlId and resolve through EventRaceData.controls.")
+    val type: ControlPointType,
+    val order: Int,
+    val controlId: String = ""
+)
+
+/** Race-level logical control backed by a physical SportIdent code. */
+@Serializable
+data class EventControl(
+    val id: String,
+    val raceId: String,
+    val label: String,
     val siCode: Int,
     val type: ControlPointType,
-    val order: Int
+    val mandatory: Boolean = false,
+    val publicLabel: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val notes: String? = null
 )
 
 /** Portable display alias for a SportIdent control code. */
@@ -153,7 +172,8 @@ data class EventReadoutData(
 data class EventCategoryData(
     val category: EventCategory,
     val controlPoints: List<EventControlPoint>,
-    val competitors: List<EventCompetitor>
+    val competitors: List<EventCompetitor>,
+    val publicControlIds: List<String> = emptyList()
 )
 
 /** Portable competitor plus optional category aggregate used by result lists. */
@@ -177,5 +197,6 @@ data class EventRaceData(
     val categories: List<EventCategoryData>,
     val aliases: List<EventAlias>,
     val competitorData: List<EventCompetitorData>,
-    val unmatchedReadoutData: List<EventReadoutData>
+    val unmatchedReadoutData: List<EventReadoutData>,
+    val controls: List<EventControl> = emptyList()
 )

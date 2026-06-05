@@ -15,9 +15,9 @@ class DesktopControlPointValidationTextTest {
             )
         )
         assertEquals(
-            "Invalid SI range: 256. The code must be between 1 and 255.",
+            "Invalid SI range: 512. The code must be between 1 and 511.",
             DesktopControlPointValidationText.messageFor(
-                ControlPointValidationException(ControlPointValidationError.INVALID_RANGE, token = "256")
+                ControlPointValidationException(ControlPointValidationError.INVALID_RANGE, token = "512")
             )
         )
         assertEquals(

@@ -18,7 +18,7 @@ class EventProjectFileTest {
     fun defaultsToCurrentSchemaAndAppName() {
         val projectFile = EventProjectFile(raceData = raceData())
 
-        assertEquals(1, projectFile.schemaVersion)
+        assertEquals(2, projectFile.schemaVersion)
         assertEquals("Radio-Oracle", projectFile.appName)
         assertTrue(projectFile.isSupportedSchema())
     }
@@ -36,7 +36,7 @@ class EventProjectFileTest {
         val encoded = EventProjectFileJson.encode(original)
         val decoded = EventProjectFileJson.decode(encoded)
 
-        assertTrue(encoded.contains("\"schemaVersion\": 1"))
+        assertTrue(encoded.contains("\"schemaVersion\": 2"))
         assertTrue(encoded.contains("\"appName\": \"Radio-Oracle\""))
         assertEquals(original, decoded)
     }
@@ -44,7 +44,7 @@ class EventProjectFileTest {
     @Test
     fun refusesProjectFilesWithUnsupportedSchemaVersions() {
         val encoded = EventProjectFileJson.encode(EventProjectFile(raceData = raceData()))
-            .replace("\"schemaVersion\": 1", "\"schemaVersion\": 2")
+            .replace("\"schemaVersion\": 2", "\"schemaVersion\": 3")
 
         assertFailsWith<IllegalArgumentException> {
             EventProjectFileJson.decode(encoded)
@@ -57,6 +57,21 @@ class EventProjectFileTest {
             .replace("\"appName\": \"Radio-Oracle\"", "\"appName\": \"Radio-Oracle\", \"futureField\": true")
 
         assertEquals(EventProjectFileFormat.APP_NAME, EventProjectFileJson.decode(encoded).appName)
+    }
+
+    @Test
+    fun backfillsControlsWhenOlderProjectFileOmitsControlCatalog() {
+        val encoded = EventProjectFileJson.encode(EventProjectFile(raceData = raceData()))
+            .replace(
+                Regex(""",\n\s+"controls": \[\]"""),
+                ""
+            )
+
+        val decoded = EventProjectFileJson.decode(encoded)
+
+        assertEquals(listOf("FOX 1"), decoded.raceData.controls.map { it.label })
+        assertEquals(listOf(31), decoded.raceData.controls.map { it.siCode })
+        assertEquals(listOf(ControlPointType.CONTROL), decoded.raceData.controls.map { it.type })
     }
 
     private fun raceData(): EventRaceData =

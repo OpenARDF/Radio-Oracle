@@ -18,6 +18,10 @@ class SportIdentCodesTest {
         assertFalse(SportIdentCodes.isSICodeValid(0))
         assertTrue(SportIdentCodes.isSICodeValid(1))
         assertTrue(SportIdentCodes.isSICodeValid(255))
-        assertFalse(SportIdentCodes.isSICodeValid(256))
+        assertTrue(SportIdentCodes.isSICodeValid(256))
+        assertTrue(SportIdentCodes.isSICodeValid(511))
+        assertFalse(SportIdentCodes.isSICodeValid(512))
+        assertTrue(SportIdentCodes.isLegacyCompatibleSICode(255))
+        assertFalse(SportIdentCodes.isLegacyCompatibleSICode(256))
     }
 }

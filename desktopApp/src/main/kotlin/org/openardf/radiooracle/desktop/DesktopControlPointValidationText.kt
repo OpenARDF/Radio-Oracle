@@ -2,6 +2,7 @@ package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.course.ControlPointValidationError
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
+import org.openardf.radiooracle.shared.sportident.SportIdentCodes
 
 /** Desktop text for shared control-point validation failures, aligned with Android meanings. */
 object DesktopControlPointValidationText {
@@ -14,7 +15,7 @@ object DesktopControlPointValidationText {
                 "Unknown special control specifier: ${token ?: ""}"
 
             ControlPointValidationError.INVALID_RANGE ->
-                "Invalid SI range: ${token ?: ""}. The code must be between 1 and 255."
+                "Invalid SI range: ${token ?: ""}. The code must be between ${SportIdentCodes.SI_MIN_CODE} and ${SportIdentCodes.SI_MAX_CODE}."
 
             ControlPointValidationError.TWO_IN_ROW ->
                 "Two identical control points cannot be in a row."
