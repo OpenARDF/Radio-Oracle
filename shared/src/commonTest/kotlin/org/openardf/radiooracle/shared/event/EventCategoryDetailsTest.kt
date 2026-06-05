@@ -13,20 +13,20 @@ class EventCategoryDetailsTest {
         val rows = EventCategoryDetails.from(raceData())
 
         assertEquals(2, rows.size)
-        assertEquals("M21", rows[0].id)
-        assertEquals("M21", rows[0].name)
+        assertEquals("W21", rows[0].id)
+        assertEquals("W21", rows[0].name)
         assertEquals("5000", rows[0].lengthMetersText)
         assertEquals("100", rows[0].climbMetersText)
-        assertEquals("Classic", rows[0].raceTypeLabel)
-        assertEquals("80m", rows[0].raceBandLabel)
-        assertEquals("120:00", rows[0].timeLimitText)
+        assertEquals("Sprint", rows[0].raceTypeLabel)
+        assertEquals("2m", rows[0].raceBandLabel)
+        assertEquals("60:00", rows[0].timeLimitText)
         assertEquals("32 Foxhole", rows[0].controlPointsText)
 
-        assertEquals("W21", rows[1].id)
-        assertEquals("W21", rows[1].name)
-        assertEquals("Sprint", rows[1].raceTypeLabel)
-        assertEquals("2m", rows[1].raceBandLabel)
-        assertEquals("60:00", rows[1].timeLimitText)
+        assertEquals("M21", rows[1].id)
+        assertEquals("M21", rows[1].name)
+        assertEquals("Classic", rows[1].raceTypeLabel)
+        assertEquals("80m", rows[1].raceBandLabel)
+        assertEquals("120:00", rows[1].timeLimitText)
     }
 
     @Test
@@ -43,21 +43,21 @@ class EventCategoryDetailsTest {
             )
         )
 
-        assertEquals(listOf("M21", "M50", "M60", "W12", "W55"), rows.map { it.name })
+        assertEquals(listOf("W12", "W55", "M21", "M50", "M60"), rows.map { it.name })
     }
 
     @Test
     fun buildsDisplayRowsWithRawControlsWhenAliasesAreDisabled() {
         val rows = EventCategoryDetails.from(raceData(), useAliases = false)
 
-        assertEquals("31 32", rows[0].controlPointsText)
+        assertEquals("31 32", rows[1].controlPointsText)
     }
 
     @Test
     fun leavesOrienteeringControlDisplayUnchanged() {
         val rows = EventCategoryDetails.from(raceData(defaultRaceType = RaceType.ORIENTEERING))
 
-        assertEquals("31 32", rows[0].controlPointsText)
+        assertEquals("31 32", rows.first { it.name == "M21" }.controlPointsText)
     }
 
     private fun raceData(defaultRaceType: RaceType = RaceType.CLASSIC): EventRaceData =
