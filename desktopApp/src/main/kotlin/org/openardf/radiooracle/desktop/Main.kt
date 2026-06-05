@@ -3946,29 +3946,50 @@ private fun ProtectedCourseOrderPanel(
         return
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        DetailHeaderRow(listOf("Category", "Protected ideal order"))
-        projectFile.raceData.categories
-            .sortedWith(compareBy({ it.category.order }, { it.category.name }))
-            .forEach { categoryData ->
-                ProtectedCourseOrderRow(
-                    categoryId = categoryData.category.id,
-                    categoryName = categoryData.category.name,
-                    idealOrderText = idealOrderByCategoryId[categoryData.category.id].orEmpty(),
-                    onUpdateIdealOrder = onUpdateIdealOrder
-                )
+    val categories = projectFile.raceData.categories
+        .sortedWith(compareBy({ it.category.order }, { it.category.name }))
+    var idealOrderDrafts by remember(projectFile.raceData.race.id, idealOrderByCategoryId) {
+        mutableStateOf(
+            categories.associate { categoryData ->
+                categoryData.category.id to idealOrderByCategoryId[categoryData.category.id].orEmpty()
             }
+        )
+    }
+    val changedDrafts = idealOrderDrafts.filter { (categoryId, draft) ->
+        draft.trim() != idealOrderByCategoryId[categoryId].orEmpty()
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(
+            onClick = {
+                changedDrafts.forEach { (categoryId, idealOrderText) ->
+                    onUpdateIdealOrder(categoryId, idealOrderText)
+                }
+            },
+            enabled = changedDrafts.isNotEmpty()
+        ) {
+            ButtonLabel("Save")
+        }
+        DetailHeaderRow(listOf("Category", "Protected ideal order"))
+        categories.forEach { categoryData ->
+            val categoryId = categoryData.category.id
+            ProtectedCourseOrderRow(
+                categoryName = categoryData.category.name,
+                idealOrderDraft = idealOrderDrafts[categoryId].orEmpty(),
+                onIdealOrderChange = { idealOrderText ->
+                    idealOrderDrafts = idealOrderDrafts + (categoryId to idealOrderText)
+                }
+            )
+        }
     }
 }
 
 @Composable
 private fun ProtectedCourseOrderRow(
-    categoryId: String,
     categoryName: String,
-    idealOrderText: String,
-    onUpdateIdealOrder: (String, String) -> Unit
+    idealOrderDraft: String,
+    onIdealOrderChange: (String) -> Unit
 ) {
-    var idealOrderDraft by remember(categoryId, idealOrderText) { mutableStateOf(idealOrderText) }
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -3981,17 +4002,11 @@ private fun ProtectedCourseOrderRow(
         )
         TextField(
             value = idealOrderDraft,
-            onValueChange = { idealOrderDraft = it },
+            onValueChange = onIdealOrderChange,
             modifier = Modifier.width(360.dp),
             singleLine = true,
             label = { Text("Ideal order") }
         )
-        Button(
-            onClick = { onUpdateIdealOrder(categoryId, idealOrderDraft) },
-            enabled = idealOrderDraft.trim() != idealOrderText
-        ) {
-            ButtonLabel("Save")
-        }
     }
 }
 
