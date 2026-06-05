@@ -21,6 +21,7 @@ enum class DesktopNavAction {
     NewEventFile,
     OpenEventFile,
     ImportAndroidRaceBackup,
+    ImportEventRegWebsite,
     SaveEventFile,
     SaveEventFileAs,
     CloseEventFile,
@@ -438,6 +439,14 @@ object DesktopNavigation {
                 "Import Android Event File...",
                 workflow,
                 DesktopNavAction.ImportAndroidRaceBackup,
+                requiresEventFile = false,
+                section = DesktopSection.Races
+            ),
+            action(
+                "setup.event-file.import-eventreg",
+                "Import EventReg Website...",
+                workflow,
+                DesktopNavAction.ImportEventRegWebsite,
                 requiresEventFile = false,
                 section = DesktopSection.Races
             ),

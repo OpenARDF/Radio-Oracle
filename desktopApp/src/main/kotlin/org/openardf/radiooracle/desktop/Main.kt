@@ -276,6 +276,9 @@ fun main(args: Array<String>) = application {
         var lastLoggedSiReaderStatus by remember { mutableStateOf<String?>(null) }
         var protectedCoursePassword by remember { mutableStateOf<String?>(null) }
         var protectedIdealOrderByCategoryId by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+        var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
+        var eventRegImportUrl by remember { mutableStateOf(DesktopEventRegImportPreferences.lastRegistrationUrl()) }
+        var isImportingEventRegWebsite by remember { mutableStateOf(false) }
         val siPortMutex = remember { Mutex() }
 
         LaunchedEffect(Unit) {
@@ -1016,6 +1019,46 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun showEventRegImportDialog() {
+            eventRegImportUrl = DesktopEventRegImportPreferences.lastRegistrationUrl()
+            isEventRegImportDialogVisible = true
+        }
+
+        fun importEventRegWebsite(url: String) {
+            if (isImportingEventRegWebsite) {
+                return
+            }
+            val trimmedUrl = url.trim()
+            isImportingEventRegWebsite = true
+            projectStatusText = "Importing EventReg website..."
+            DesktopEventRegImportPreferences.rememberRegistrationUrl(trimmedUrl)
+            appCoroutineScope.launch {
+                val result = runCatching {
+                    withContext(Dispatchers.IO) {
+                        DesktopEventRegImporter.importFromWebsite(
+                            url = trimmedUrl,
+                            outputDirectory = DesktopEventFileLocations.preparePreferredEventFileDirectory(),
+                            startDateTimeIso = DesktopDateTimeText.isoText(DesktopDateTimeText.defaultStartDateTime())
+                        )
+                    }
+                }
+                result.onSuccess { importResult ->
+                    val totalCompetitors = importResult.generatedFiles.sumOf { it.competitorCount }
+                    projectStatusText =
+                        "Generated ${importResult.generatedFiles.size} Event Files with $totalCompetitors competitor entries in ${importResult.outputDirectory}."
+                    isEventRegImportDialogVisible = false
+                    DesktopDebugLog.info(
+                        "EventReg",
+                        "Generated ${importResult.generatedFiles.size} Event Files from ${importResult.sourceUrl}"
+                    )
+                }.onFailure { error ->
+                    projectStatusText = "EventReg import failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("EventReg", projectStatusText)
+                }
+                isImportingEventRegWebsite = false
+            }
+        }
+
         fun saveAsCurrentProject() {
             DesktopFileDialogs.chooseSaveProject(projectSession.currentProject?.raceData?.race?.name)?.let { path ->
                 runCatching {
@@ -1069,7 +1112,8 @@ fun main(args: Array<String>) = application {
             when (action) {
                 DesktopNavAction.NewEventFile,
                 DesktopNavAction.OpenEventFile,
-                DesktopNavAction.ImportAndroidRaceBackup -> true
+                DesktopNavAction.ImportAndroidRaceBackup,
+                DesktopNavAction.ImportEventRegWebsite -> true
                 DesktopNavAction.ShowDebugLogHelp,
                 DesktopNavAction.ShowAbout -> true
                 DesktopNavAction.SaveEventFile -> projectFile != null
@@ -1088,6 +1132,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.NewEventFile -> requestNewEventFile()
                 DesktopNavAction.OpenEventFile -> chooseOpenEventFile()
                 DesktopNavAction.ImportAndroidRaceBackup -> chooseImportAndroidRaceBackupJson()
+                DesktopNavAction.ImportEventRegWebsite -> showEventRegImportDialog()
                 DesktopNavAction.SaveEventFile -> saveAsCurrentProject()
                 DesktopNavAction.SaveEventFileAs -> saveAsCurrentProject()
                 DesktopNavAction.CloseEventFile -> requestCloseEventFile()
@@ -1157,6 +1202,7 @@ fun main(args: Array<String>) = application {
             Menu("File") {
                 Item("New Event File", onClick = ::requestNewEventFile)
                 Item("Open...", onClick = ::chooseOpenEventFile)
+                Item("Import EventReg Website...", onClick = ::showEventRegImportDialog)
                 Item(
                     "Save",
                     enabled = projectFile != null && (projectSession.currentPath == null || hasProtectedUnsavedChanges()),
@@ -1187,6 +1233,19 @@ fun main(args: Array<String>) = application {
         }
         if (isAboutDialogVisible) {
             AboutRadioOracleDialog(onDismiss = { isAboutDialogVisible = false })
+        }
+        if (isEventRegImportDialogVisible) {
+            EventRegImportDialog(
+                url = eventRegImportUrl,
+                isImporting = isImportingEventRegWebsite,
+                onUrlChange = { eventRegImportUrl = it },
+                onImport = { importEventRegWebsite(eventRegImportUrl) },
+                onCancel = {
+                    if (!isImportingEventRegWebsite) {
+                        isEventRegImportDialogVisible = false
+                    }
+                }
+            )
         }
 
         RadioOManagerDesktopApp(
@@ -1708,6 +1767,54 @@ private fun UnsavedNewEventFileDialog(
                 Button(onClick = onCancel) {
                     Text("Cancel")
                 }
+            }
+        }
+    )
+}
+
+@Composable
+private fun EventRegImportDialog(
+    url: String,
+    isImporting: Boolean,
+    onUrlChange: (String) -> Unit,
+    onImport: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Import EventReg Website") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextField(
+                    value = url,
+                    onValueChange = onUrlChange,
+                    enabled = !isImporting,
+                    label = { Text("Registration list URL") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = if (isImporting) {
+                        "Downloading registration table and generating Event Files..."
+                    } else {
+                        "Creates one Event File for each competition class column with registered competitors."
+                    },
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onImport,
+                enabled = !isImporting && url.isNotBlank()
+            ) {
+                Text(if (isImporting) "Importing..." else "Import")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel, enabled = !isImporting) {
+                Text("Cancel")
             }
         }
     )

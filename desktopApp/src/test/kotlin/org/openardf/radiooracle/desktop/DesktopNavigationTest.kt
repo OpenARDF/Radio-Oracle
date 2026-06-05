@@ -193,6 +193,7 @@ class DesktopNavigationTest {
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.NewEventFile }.requiresEventFile)
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.OpenEventFile }.requiresEventFile)
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.ImportAndroidRaceBackup }.requiresEventFile)
+        assertFalse(eventFileActions.first { it.action == DesktopNavAction.ImportEventRegWebsite }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFile }.requiresEventFile)
         assertEquals(
@@ -200,6 +201,7 @@ class DesktopNavigationTest {
                 "New Event File",
                 "Open...",
                 "Import Android Event File...",
+                "Import EventReg Website...",
                 "Export Android Event File...",
                 "Save",
                 "Controls",
@@ -230,6 +232,7 @@ class DesktopNavigationTest {
                 "New Event File",
                 "Open...",
                 "Import Android Event File...",
+                "Import EventReg Website...",
                 "Export Android Event File...",
                 "Save",
                 "Controls",
