@@ -20,6 +20,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
@@ -118,10 +119,70 @@ class ArdfJsonExportsTest {
         assertEquals("DSQ", result["result_status"]!!.jsonPrimitive.content)
     }
 
+    @Test
+    fun exportsGlobalControlsAsArdfAliasesAndPunchLabels() {
+        val raceData = raceData(
+            controls = listOf(
+                EventControl(
+                    id = "control-31",
+                    raceId = "race",
+                    label = "F1",
+                    siCode = 31,
+                    type = ControlPointType.CONTROL
+                )
+            )
+        )
+
+        val race = Json.parseToJsonElement(ArdfJsonExports.event("Test Event", raceData))
+            .jsonObject["races"]!!.jsonArray.single().jsonObject
+        val alias = race["aliases"]!!.jsonArray.first().jsonObject
+        val punch = race["competitors"]!!.jsonArray.single().jsonObject["result"]!!
+            .jsonObject["punches"]!!.jsonArray.first().jsonObject
+
+        assertEquals(31, alias["alias_si_code"]!!.jsonPrimitive.int)
+        assertEquals("F1", alias["alias_name"]!!.jsonPrimitive.content)
+        assertEquals("F1", punch["code"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun resolvesArdfCategoryControlPointsThroughGlobalControls() {
+        val raceData = raceData(
+            categoryControlPoints = listOf(
+                EventControlPoint(
+                    id = "cp-legacy",
+                    categoryId = "category",
+                    siCode = 31,
+                    type = ControlPointType.CONTROL,
+                    order = 1,
+                    controlId = "control-35"
+                )
+            ),
+            controls = listOf(
+                EventControl(
+                    id = "control-35",
+                    raceId = "race",
+                    label = "M",
+                    siCode = 35,
+                    type = ControlPointType.BEACON
+                )
+            )
+        )
+
+        val controlPoint = ArdfJsonExports.eventDocument("Test Event", raceData)
+            .races.single()
+            .categories.single()
+            .categoryControlPoints.single()
+
+        assertEquals(35, controlPoint.siCode)
+        assertEquals("BEACON", controlPoint.controlType)
+    }
+
     private fun raceData(
         category: EventCategory = category(),
         resultStatus: ResultStatus = ResultStatus.OK,
-        punchStatuses: List<PunchStatus> = listOf(PunchStatus.UNKNOWN, PunchStatus.VALID)
+        punchStatuses: List<PunchStatus> = listOf(PunchStatus.UNKNOWN, PunchStatus.VALID),
+        categoryControlPoints: List<EventControlPoint>? = null,
+        controls: List<EventControl> = emptyList()
     ): EventRaceData {
         val race = EventRace(
             id = "race",
@@ -150,7 +211,7 @@ class ArdfJsonExportsTest {
         )
         val categoryData = EventCategoryData(
             category = category,
-            controlPoints = listOf(
+            controlPoints = categoryControlPoints ?: listOf(
                 EventControlPoint("control-1", category.id, 31, ControlPointType.CONTROL, 1),
                 EventControlPoint("control-2", category.id, 90, ControlPointType.BEACON, 2)
             ),
@@ -191,7 +252,8 @@ class ArdfJsonExportsTest {
                     readoutData = readout
                 )
             ),
-            unmatchedReadoutData = emptyList()
+            unmatchedReadoutData = emptyList(),
+            controls = controls
         )
     }
 

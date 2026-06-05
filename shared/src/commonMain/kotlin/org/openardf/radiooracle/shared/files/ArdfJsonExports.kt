@@ -12,10 +12,10 @@ import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
-import org.openardf.radiooracle.shared.event.EventAlias
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
@@ -45,8 +45,9 @@ object ArdfJsonExports {
             races = listOf(raceData.toArdfRace())
         )
 
-    private fun EventRaceData.toArdfRace(): ArdfRace =
-        ArdfRace(
+    private fun EventRaceData.toArdfRace(): ArdfRace {
+        val controlsById = controls.associateBy { it.id }
+        return ArdfRace(
             raceName = race.name,
             raceStart = race.startDateTimeIso,
             raceType = race.raceType.toArdfRaceType(),
@@ -56,9 +57,8 @@ object ArdfJsonExports {
             raceApiKey = race.apiKey.takeIf { it.isNotBlank() },
             categories = categories
                 .sortedWith(compareBy({ it.category.order }, { it.category.name }))
-                .map { it.toArdfCategory(race) },
-            aliases = aliases
-                .sortedBy { it.siCode }
+                .map { it.toArdfCategory(race, controlsById) },
+            aliases = FinalResultJsonExports.androidAliases(this)
                 .map { it.toArdfAlias() },
             competitors = competitorData
                 .sortedWith(compareBy({ it.competitorCategory.competitor.startNumber }, { it.competitorCategory.competitor.fullName() }))
@@ -66,8 +66,12 @@ object ArdfJsonExports {
             unmatchedResults = unmatchedReadoutData
                 .map { it.toArdfUnmatchedResult(this) }
         )
+    }
 
-    private fun EventCategoryData.toArdfCategory(race: org.openardf.radiooracle.shared.event.EventRace): ArdfCategory =
+    private fun EventCategoryData.toArdfCategory(
+        race: org.openardf.radiooracle.shared.event.EventRace,
+        controlsById: Map<String, EventControl>
+    ): ArdfCategory =
         ArdfCategory(
             categoryName = category.name,
             categoryGender = category.isMan,
@@ -76,24 +80,23 @@ object ArdfJsonExports {
             categoryClimb = category.climbMeters,
             categoryControlPoints = controlPoints
                 .sortedBy { it.order }
-                .map { it.toArdfControlPoint() },
+                .map { it.toArdfControlPoint(controlsById) },
             categoryDifferentProperties = category.differentProperties,
             categoryRaceType = category.raceType?.takeIf { category.differentProperties }?.toArdfRaceType(),
             categoryTimeLimit = category.timeLimitSeconds?.takeIf { category.differentProperties }?.toMinutes(),
             categoryBand = category.raceBand?.takeIf { category.differentProperties }?.toArdfCategoryBand()
         )
 
-    private fun EventControlPoint.toArdfControlPoint(): ArdfControlPoint =
-        ArdfControlPoint(
-            siCode = siCode,
-            controlType = type.toArdfControlType()
+    private fun EventControlPoint.toArdfControlPoint(controlsById: Map<String, EventControl>): ArdfControlPoint {
+        val control = controlsById[controlId]
+        return ArdfControlPoint(
+            siCode = control?.siCode ?: siCode,
+            controlType = (control?.type ?: type).toArdfControlType()
         )
+    }
 
-    private fun EventAlias.toArdfAlias(): ArdfAlias =
-        ArdfAlias(
-            aliasSiCode = siCode,
-            aliasName = name
-        )
+    private fun FinalResultJsonExports.FinalAliasJson.toArdfAlias(): ArdfAlias =
+        ArdfAlias(aliasSiCode = aliasSiCode, aliasName = aliasName)
 
     private fun EventCompetitorData.toArdfCompetitor(raceData: EventRaceData): ArdfCompetitor {
         val competitor = competitorCategory.competitor
@@ -113,8 +116,9 @@ object ArdfJsonExports {
         )
     }
 
-    private fun EventReadoutData.toArdfResult(raceData: EventRaceData, categoryId: String?): ArdfResult =
-        ArdfResult(
+    private fun EventReadoutData.toArdfResult(raceData: EventRaceData, categoryId: String?): ArdfResult {
+        val punchLabelsByCode = FinalResultJsonExports.controlLabelsByCode(raceData)
+        return ArdfResult(
             runTime = DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinutes = true),
             resultStatus = result.resultStatus.toArdfResultStatus(),
             place = result.place,
@@ -124,7 +128,7 @@ object ArdfJsonExports {
                 .map { aliasPunch ->
                     val punch = aliasPunch.punch
                     ArdfPunch(
-                        code = aliasPunch.alias?.name ?: punch.siCode.toString(),
+                        code = punchLabelsByCode[punch.siCode] ?: aliasPunch.alias?.name ?: punch.siCode.toString(),
                         controlType = punch.toArdfControlType(raceData, categoryId),
                         splitTime = punch.splitSeconds.takeIf { it > 0 }?.let {
                             DurationFormatter.secondsToFormattedString(it, useMinutes = true)
@@ -133,15 +137,17 @@ object ArdfJsonExports {
                     )
                 }
         )
+    }
 
-    private fun EventReadoutData.toArdfUnmatchedResult(raceData: EventRaceData): ArdfUnmatchedResult =
-        ArdfUnmatchedResult(
+    private fun EventReadoutData.toArdfUnmatchedResult(raceData: EventRaceData): ArdfUnmatchedResult {
+        val punchLabelsByCode = FinalResultJsonExports.controlLabelsByCode(raceData)
+        return ArdfUnmatchedResult(
             siNumber = result.siNumber,
             runTime = DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinutes = true),
             punches = punches.map { aliasPunch ->
                 val punch = aliasPunch.punch
                 ArdfPunch(
-                    code = aliasPunch.alias?.name ?: punch.siCode.toString(),
+                    code = punchLabelsByCode[punch.siCode] ?: aliasPunch.alias?.name ?: punch.siCode.toString(),
                     siCode = punch.siCode,
                     controlType = punch.toArdfControlType(raceData, categoryId = null),
                     splitTime = punch.splitSeconds.takeIf { it > 0 }?.let {
@@ -150,6 +156,7 @@ object ArdfJsonExports {
                 )
             }
         )
+    }
 
     private fun org.openardf.radiooracle.shared.event.EventPunch.toArdfControlType(
         raceData: EventRaceData,
@@ -163,11 +170,12 @@ object ArdfJsonExports {
 
     private fun EventRaceData.controlPointTypeFor(categoryId: String?, siCode: Int): ControlPointType? =
         categoryId?.let { id ->
+            val controlsById = controls.associateBy { it.id }
             categories
                 .firstOrNull { it.category.id == id }
                 ?.controlPoints
-                ?.firstOrNull { it.siCode == siCode }
-                ?.type
+                ?.firstOrNull { controlPoint -> (controlsById[controlPoint.controlId]?.siCode ?: controlPoint.siCode) == siCode }
+                ?.let { controlPoint -> controlsById[controlPoint.controlId]?.type ?: controlPoint.type }
         }
 
     private fun EventRaceData.categoryNameFor(categoryId: String?): String =
