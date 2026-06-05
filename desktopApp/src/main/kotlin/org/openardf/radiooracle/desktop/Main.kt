@@ -325,8 +325,12 @@ fun main(args: Array<String>) = application {
             hasUnsavedChanges && !isDefaultUnsavedNewEventFileDraft()
 
         fun lockProtectedCourseOrder() {
+            val wasUnlocked = protectedCoursePassword != null
             protectedCoursePassword = null
             protectedIdealOrderByCategoryId = emptyMap()
+            if (wasUnlocked) {
+                projectStatusText = "Protected course order locked."
+            }
         }
 
         fun unlockedIdealFirstFoxByCategoryId(): Map<String, Int> =
