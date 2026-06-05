@@ -633,11 +633,7 @@ object EventProjectEditor {
         }
 
         val competitorStartTimes = mutableMapOf<String, Long>()
-        if (options.startersPerStartTime == 1) {
-            drawSingleStarterStartList(projectFile, options, competitorStartTimes, intervalSeconds)
-        } else {
-            drawMultiStarterStartList(projectFile, options, competitorStartTimes, intervalSeconds)
-        }
+        drawQueuedStartList(projectFile, options, competitorStartTimes, intervalSeconds)
 
         val competitorData = projectFile.raceData.competitorData.map { data ->
             val competitor = data.competitorCategory.competitor
@@ -654,41 +650,17 @@ object EventProjectEditor {
         }
 
         return projectFile.copy(
-            raceData = projectFile.raceData.copy(competitorData = competitorData)
+            raceData = projectFile.raceData.copy(
+                competitorData = competitorData,
+                startDrawSettings = StartDrawSettings(
+                    intervalSeconds = intervalSeconds,
+                    options = options.copy(idealFirstFoxByCategoryId = emptyMap())
+                )
+            )
         )
     }
 
-    private fun drawSingleStarterStartList(
-        projectFile: EventProjectFile,
-        options: StartDrawOptions,
-        competitorStartTimes: MutableMap<String, Long>,
-        intervalSeconds: Long
-    ) {
-        var nextStartSeconds = 0L
-        var previousClub: String? = null
-        projectFile.raceData.categories
-            .sortedWith(compareBy({ it.category.order }, { it.category.name }))
-            .forEach { categoryData ->
-                val categoryCompetitors = projectFile.raceData.competitorData
-                    .filter { data ->
-                        data.competitorCategory.category?.id == categoryData.category.id ||
-                            data.competitorCategory.competitor.categoryId == categoryData.category.id
-                    }
-                    .map { it.competitorCategory.competitor }
-                val drawnCategoryCompetitors = drawCategoryCompetitors(categoryCompetitors, previousClub, options)
-                drawnCategoryCompetitors.forEach { competitor ->
-                    competitorStartTimes[competitor.id] = nextStartSeconds
-                    nextStartSeconds += intervalSeconds
-                }
-                previousClub = if (options.clubHandling == StartDrawClubHandling.AVOID_BACK_TO_BACK) {
-                    drawnCategoryCompetitors.lastOrNull()?.clubKey() ?: previousClub
-                } else {
-                    null
-                }
-            }
-    }
-
-    private fun drawMultiStarterStartList(
+    private fun drawQueuedStartList(
         projectFile: EventProjectFile,
         options: StartDrawOptions,
         competitorStartTimes: MutableMap<String, Long>,
@@ -719,13 +691,22 @@ object EventProjectEditor {
 
         var nextStartSeconds = 0L
         var previousClub: String? = null
+        var previousCategoryId: String? = null
         while (categoryQueues.isNotEmpty()) {
             val selectedQueues = mutableListOf<CategoryStartQueue>()
             val selectedCompetitors = mutableListOf<EventCompetitor>()
             repeat(options.startersPerStartTime) {
-                val selectedQueue = selectStartSlotQueue(categoryQueues, selectedQueues, selectedCompetitors, previousClub, options)
+                val selectedQueue = selectStartSlotQueue(
+                    categoryQueues,
+                    selectedQueues,
+                    selectedCompetitors,
+                    previousClub,
+                    previousCategoryId,
+                    options
+                )
                     ?: return@repeat
-                val competitor = selectedQueue.competitors.removeAt(0)
+                val competitorIndex = selectedQueue.competitorIndexForStartSlot(selectedCompetitors, previousClub, options)
+                val competitor = selectedQueue.competitors.removeAt(competitorIndex)
                 selectedQueues += selectedQueue
                 selectedCompetitors += competitor
                 competitorStartTimes[competitor.id] = nextStartSeconds
@@ -733,7 +714,10 @@ object EventProjectEditor {
                     categoryQueues.remove(selectedQueue)
                 }
             }
-            selectedCompetitors.lastOrNull()?.clubKey()?.let { previousClub = it }
+            if (options.clubHandling == StartDrawClubHandling.AVOID_BACK_TO_BACK) {
+                selectedCompetitors.lastOrNull()?.clubKey()?.let { previousClub = it }
+            }
+            selectedQueues.lastOrNull()?.category?.id?.let { previousCategoryId = it }
             nextStartSeconds += intervalSeconds
         }
     }
@@ -2131,8 +2115,8 @@ object EventProjectEditor {
         options: StartDrawOptions
     ): List<EventCompetitor> =
         when (options.clubHandling) {
-            StartDrawClubHandling.IGNORE -> competitors.sortedWith(compareBy({ it.startNumber }, { it.fullName() }))
-            StartDrawClubHandling.AVOID_BACK_TO_BACK -> drawClubRotatedCategory(competitors, previousClub)
+            StartDrawClubHandling.IGNORE -> competitors.sortedWith(competitorStartDrawComparator(options, "category"))
+            StartDrawClubHandling.AVOID_BACK_TO_BACK -> drawClubRotatedCategory(competitors, previousClub, options)
         }
 
     private fun selectStartSlotQueue(
@@ -2140,6 +2124,7 @@ object EventProjectEditor {
         selectedQueues: List<CategoryStartQueue>,
         selectedCompetitors: List<EventCompetitor>,
         previousClub: String?,
+        previousCategoryId: String?,
         options: StartDrawOptions
     ): CategoryStartQueue? {
         val compatibleQueues = if (selectedQueues.isEmpty()) {
@@ -2155,9 +2140,14 @@ object EventProjectEditor {
             return null
         }
 
+        val categorySafe = compatibleQueues
+            .filterNot { it.category.id == previousCategoryId }
+            .takeIf { it.isNotEmpty() }
+            ?: compatibleQueues
+
         val clubSafe = if (options.clubHandling == StartDrawClubHandling.AVOID_BACK_TO_BACK) {
             val selectedClubs = selectedCompetitors.mapNotNull { it.clubKey() }.toSet()
-            val clubSafeAfterSelectedClubs = compatibleQueues
+            val clubSafeAfterSelectedClubs = categorySafe
                 .filterNot { candidate ->
                     val candidateClub = candidate.competitors.firstOrNull()?.clubKey()
                     candidateClub != null && candidateClub in selectedClubs
@@ -2173,9 +2163,9 @@ object EventProjectEditor {
                 .takeIf { it.isNotEmpty() }
                 ?: clubSafeAfterSelectedClubs
         } else {
-            compatibleQueues
+            categorySafe
         }
-        return clubSafe.sortedWith(categoryStartQueueComparator).firstOrNull()
+        return clubSafe.sortedWith(categoryStartQueueComparator(options)).firstOrNull()
     }
 
     private fun CategoryStartQueue.hasFirstFoxSpeedConflict(selectedQueues: List<CategoryStartQueue>): Boolean =
@@ -2183,9 +2173,25 @@ object EventProjectEditor {
             selected.firstFox == firstFox && selected.speedGroup == speedGroup
         }
 
+    private fun CategoryStartQueue.competitorIndexForStartSlot(
+        selectedCompetitors: List<EventCompetitor>,
+        previousClub: String?,
+        options: StartDrawOptions
+    ): Int {
+        if (options.clubHandling == StartDrawClubHandling.IGNORE) {
+            return 0
+        }
+        val selectedClubs = selectedCompetitors.mapNotNull { it.clubKey() }.toSet()
+        return competitors.indexOfFirst { competitor ->
+            val club = competitor.clubKey()
+            club == null || (club !in selectedClubs && club != previousClub)
+        }.takeIf { it >= 0 } ?: 0
+    }
+
     private fun drawClubRotatedCategory(
         competitors: List<EventCompetitor>,
-        previousClub: String?
+        previousClub: String?,
+        options: StartDrawOptions
     ): List<EventCompetitor> {
         val clubQueues = competitors
             .groupBy { it.clubKey() ?: "competitor:${it.id}" }
@@ -2194,15 +2200,11 @@ object EventProjectEditor {
                 ClubStartQueue(
                     club = clubCompetitors.firstOrNull()?.clubKey(),
                     competitors = clubCompetitors
-                        .sortedWith(compareBy({ it.startNumber }, { it.fullName() }))
+                        .sortedWith(competitorStartDrawComparator(options, "club:${clubCompetitors.firstOrNull()?.clubKey() ?: ""}"))
                         .toMutableList()
                 )
             }
-            .sortedWith(
-                compareByDescending<ClubStartQueue> { it.competitors.size }
-                    .thenBy { it.club ?: "" }
-                    .thenBy { it.competitors.firstOrNull()?.startNumber ?: Int.MAX_VALUE }
-            )
+            .sortedWith(clubStartQueueComparator(options))
             .toMutableList()
 
         val drawn = mutableListOf<EventCompetitor>()
@@ -2210,9 +2212,9 @@ object EventProjectEditor {
         while (clubQueues.isNotEmpty()) {
             val selectedQueue = clubQueues
                 .filterNot { it.club != null && it.club == lastClub }
-                .sortedWith(clubStartQueueComparator)
+                .sortedWith(clubStartQueueComparator(options))
                 .firstOrNull()
-                ?: clubQueues.sortedWith(clubStartQueueComparator).first()
+                ?: clubQueues.sortedWith(clubStartQueueComparator(options)).first()
             val competitor = selectedQueue.competitors.removeAt(0)
             drawn += competitor
             lastClub = selectedQueue.club
@@ -2223,10 +2225,17 @@ object EventProjectEditor {
         return drawn
     }
 
-    private val clubStartQueueComparator: Comparator<ClubStartQueue> =
-        compareByDescending<ClubStartQueue> { it.competitors.size }
-            .thenBy { it.club ?: "" }
-            .thenBy { it.competitors.firstOrNull()?.startNumber ?: Int.MAX_VALUE }
+    private fun clubStartQueueComparator(options: StartDrawOptions): Comparator<ClubStartQueue> =
+        if (options.seed.isBlank()) {
+            compareByDescending<ClubStartQueue> { it.competitors.size }
+                .thenBy { it.club ?: "" }
+                .thenBy { it.competitors.firstOrNull()?.startNumber ?: Int.MAX_VALUE }
+        } else {
+            compareByDescending<ClubStartQueue> { it.competitors.size }
+                .thenBy { seededRank(options.seed, "club:${it.club ?: it.competitors.firstOrNull()?.id ?: ""}") }
+                .thenBy { it.club ?: "" }
+                .thenBy { it.competitors.firstOrNull()?.startNumber ?: Int.MAX_VALUE }
+        }
 
     private data class ClubStartQueue(
         val club: String?,
@@ -2245,10 +2254,40 @@ object EventProjectEditor {
         SLOW
     }
 
-    private val categoryStartQueueComparator: Comparator<CategoryStartQueue> =
-        compareBy<CategoryStartQueue> { it.category.order }
-            .thenBy { it.category.name }
-            .thenBy { it.competitors.firstOrNull()?.startNumber ?: Int.MAX_VALUE }
+    private fun categoryStartQueueComparator(options: StartDrawOptions): Comparator<CategoryStartQueue> =
+        if (options.seed.isBlank()) {
+            compareBy<CategoryStartQueue> { it.category.order }
+                .thenBy { it.category.name }
+                .thenBy { it.competitors.firstOrNull()?.startNumber ?: Int.MAX_VALUE }
+        } else {
+            compareByDescending<CategoryStartQueue> { it.competitors.size }
+                .thenBy { seededRank(options.seed, "category:${it.category.id}:${it.competitors.firstOrNull()?.id ?: ""}") }
+                .thenBy { it.category.order }
+                .thenBy { it.category.name }
+        }
+
+    private fun competitorStartDrawComparator(options: StartDrawOptions, scope: String): Comparator<EventCompetitor> =
+        if (options.seed.isBlank()) {
+            compareBy<EventCompetitor> { it.startNumber }
+                .thenBy { it.fullName() }
+        } else {
+            compareBy<EventCompetitor> { seededRank(options.seed, "$scope:${it.id}:${it.startNumber}:${it.fullName()}") }
+                .thenBy { it.startNumber }
+                .thenBy { it.fullName() }
+        }
+
+    private fun seededRank(seed: String, value: String): Long {
+        var hash = 0xcbf29ce484222325UL
+        val text = "$seed|$value"
+        text.encodeToByteArray().forEach { byte ->
+            hash = hash xor byte.toUByte().toULong()
+            hash *= 0x100000001b3UL
+        }
+        var mixed = hash.toLong()
+        mixed = (mixed xor (mixed ushr 30)) * -4658895280553007687L
+        mixed = (mixed xor (mixed ushr 27)) * -7723592293110705685L
+        return mixed xor (mixed ushr 31)
+    }
 
     private fun EventCategory.startDrawSpeedGroup(): StartDrawSpeedGroup? {
         val ageClass = Regex("""\d+""").find(name)?.value?.toIntOrNull() ?: return null

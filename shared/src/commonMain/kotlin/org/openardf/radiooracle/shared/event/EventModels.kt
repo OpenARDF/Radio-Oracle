@@ -198,5 +198,6 @@ data class EventRaceData(
     val aliases: List<EventAlias>,
     val competitorData: List<EventCompetitorData>,
     val unmatchedReadoutData: List<EventReadoutData>,
-    val controls: List<EventControl> = emptyList()
+    val controls: List<EventControl> = emptyList(),
+    val startDrawSettings: StartDrawSettings? = null
 )

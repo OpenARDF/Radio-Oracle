@@ -86,6 +86,7 @@ import org.openardf.radiooracle.shared.event.EventReadoutDuplicatePolicy
 import org.openardf.radiooracle.shared.event.EventReadoutDetails
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.EventStartListDetails
+import org.openardf.radiooracle.shared.event.EventStartListRuleSeverity
 import org.openardf.radiooracle.shared.event.EventStartListRow
 import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
@@ -2649,9 +2650,13 @@ private fun StartListDetailsPanel(
 ) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(StartListTableColumns)
-    var intervalDraft by remember { mutableStateOf("02:00") }
-    var clubHandling by remember { mutableStateOf(StartDrawClubHandling.AVOID_BACK_TO_BACK) }
-    var startersPerStartTime by remember { mutableStateOf(StartDrawOptions.MIN_STARTERS_PER_START_TIME) }
+    val settings = details.settings
+    var intervalDraft by remember(settings.intervalSeconds) { mutableStateOf(settings.intervalText) }
+    var clubHandling by remember(settings.options.clubHandling) { mutableStateOf(settings.options.clubHandling) }
+    var startersPerStartTime by remember(settings.options.startersPerStartTime) {
+        mutableStateOf(settings.options.startersPerStartTime)
+    }
+    var seedDraft by remember(settings.options.seed) { mutableStateOf(settings.options.seed) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -2678,13 +2683,20 @@ private fun StartListDetailsPanel(
                 onValueSelected = { startersPerStartTime = it },
                 modifier = Modifier.width(132.dp)
             )
+            TextField(
+                value = seedDraft,
+                onValueChange = { seedDraft = it },
+                label = { Text("Seed") },
+                modifier = Modifier.width(180.dp)
+            )
             Button(
                 onClick = {
                     onDrawStartList(
                         intervalDraft,
                         StartDrawOptions(
                             clubHandling = clubHandling,
-                            startersPerStartTime = startersPerStartTime
+                            startersPerStartTime = startersPerStartTime,
+                            seed = seedDraft
                         )
                     )
                 }
@@ -2694,6 +2706,19 @@ private fun StartListDetailsPanel(
         }
         DetailHeaderRow(listOf("Scheduled", "No start time"))
         DetailGridRow(listOf(details.scheduledCount.toString(), details.unscheduledCount.toString()))
+        Text(
+            text = "Score ${details.quality.score}/100 - ${details.quality.summary}",
+            color = details.quality.severity.toStartListColor(),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        details.quality.messages.take(3).forEach { message ->
+            Text(
+                text = message,
+                color = details.quality.severity.toStartListColor(),
+                fontSize = 12.sp
+            )
+        }
         if (details.rows.isEmpty()) {
             Text(
                 text = "No competitors are loaded.",
@@ -2727,11 +2752,12 @@ private fun StartListDetailRow(row: EventStartListRow) {
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        FixedTableText(row.startTimeText, StartListTableColumns[0].width)
-        FixedTableText(row.startNumberText, StartListTableColumns[1].width)
-        FixedTableText(row.competitorName, StartListTableColumns[2].width)
-        FixedTableText(row.categoryName, StartListTableColumns[3].width)
-        FixedTableText(row.siNumberText, StartListTableColumns[4].width)
+        val rowColor = row.ruleSeverity.toStartListColor()
+        FixedTableText(row.startTimeText, StartListTableColumns[0].width, rowColor)
+        FixedTableText(row.startNumberText, StartListTableColumns[1].width, rowColor)
+        FixedTableText(row.competitorName, StartListTableColumns[2].width, rowColor)
+        FixedTableText(row.categoryName, StartListTableColumns[3].width, rowColor)
+        FixedTableText(row.siNumberText, StartListTableColumns[4].width, rowColor)
     }
 }
 
@@ -4879,17 +4905,24 @@ private fun ButtonLabel(text: String) {
 }
 
 @Composable
-private fun FixedTableText(text: String, width: Dp) {
+private fun FixedTableText(text: String, width: Dp, color: Color = DesktopPalette.Black) {
     Text(
         text = text,
         modifier = Modifier.width(width),
-        color = DesktopPalette.Black,
+        color = color,
         fontSize = 13.sp,
         maxLines = 1,
         softWrap = false,
         overflow = TextOverflow.Ellipsis
     )
 }
+
+private fun EventStartListRuleSeverity.toStartListColor(): Color =
+    when (this) {
+        EventStartListRuleSeverity.GREEN -> Color(0xFF1B7F3A)
+        EventStartListRuleSeverity.ORANGE -> Color(0xFFC46A00)
+        EventStartListRuleSeverity.RED -> Color(0xFFB00020)
+    }
 
 private fun fixedActionRailModifier(): Modifier =
     Modifier
@@ -4922,10 +4955,11 @@ private fun importStatusText(action: String, importedRows: Int, invalidRows: Int
 
 private fun startListDrawStatusText(details: EventStartListDetails): String {
     val scheduledText = "${details.scheduledCount} scheduled"
+    val qualityText = "score ${details.quality.score}/100, ${details.quality.summary}"
     return if (details.unscheduledCount == 0) {
-        "Drew start list; $scheduledText."
+        "Drew start list; $scheduledText; $qualityText"
     } else {
-        "Drew start list; $scheduledText, ${details.unscheduledCount} without start times."
+        "Drew start list; $scheduledText, ${details.unscheduledCount} without start times; $qualityText"
     }
 }
 

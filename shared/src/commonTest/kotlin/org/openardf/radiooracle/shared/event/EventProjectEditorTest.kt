@@ -16,6 +16,7 @@ import org.openardf.radiooracle.shared.sportident.SportIdentTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotEquals
 
 class EventProjectEditorTest {
     @Test
@@ -1539,6 +1540,96 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun drawStartListPersistsGeneratorSettings() {
+        val m21 = category("cat-m21", "M21", order = 0)
+        val original = projectFile(
+            categories = listOf(categoryData(m21.id, m21.name, order = m21.order)),
+            competitors = listOf(
+                competitorData("a1", "Alice", "Alpha", startNumber = 1, category = m21, club = "A"),
+                competitorData("a2", "Aaron", "Alpha", startNumber = 2, category = m21, club = "A")
+            )
+        )
+
+        val drawn = EventProjectEditor.drawStartList(
+            original,
+            "05:00",
+            StartDrawOptions(
+                clubHandling = StartDrawClubHandling.IGNORE,
+                startersPerStartTime = 2,
+                seed = "test-seed",
+                idealFirstFoxByCategoryId = mapOf(m21.id to 31)
+            )
+        )
+
+        val settings = drawn.raceData.startDrawSettings!!
+        assertEquals(300L, settings.intervalSeconds)
+        assertEquals(StartDrawClubHandling.IGNORE, settings.options.clubHandling)
+        assertEquals(2, settings.options.startersPerStartTime)
+        assertEquals("test-seed", settings.options.seed)
+        assertEquals(emptyMap(), settings.options.idealFirstFoxByCategoryId)
+    }
+
+    @Test
+    fun startListDefaultsUseEventTypeIntervals() {
+        assertEquals(300L, projectFile(raceType = RaceType.CLASSIC).raceData.effectiveStartDrawSettings().intervalSeconds)
+        assertEquals(120L, projectFile(raceType = RaceType.SPRINT).raceData.effectiveStartDrawSettings().intervalSeconds)
+        assertEquals(120L, projectFile(raceType = RaceType.FOXORING).raceData.effectiveStartDrawSettings().intervalSeconds)
+    }
+
+    @Test
+    fun drawStartListUsesRepeatableSeededRandomization() {
+        val m21 = category("cat-m21", "M21", order = 0)
+        val m40 = category("cat-m40", "M40", order = 1)
+        val m60 = category("cat-m60", "M60", order = 2)
+        val original = projectFile(
+            categories = listOf(
+                categoryData(m21.id, m21.name, order = m21.order),
+                categoryData(m40.id, m40.name, order = m40.order),
+                categoryData(m60.id, m60.name, order = m60.order)
+            ),
+            competitors = listOf(
+                competitorData("m21-a", "Alice", "Alpha", startNumber = 1, category = m21, club = "A"),
+                competitorData("m21-b", "Aaron", "Alpha", startNumber = 2, category = m21, club = "B"),
+                competitorData("m40-a", "Bob", "Bravo", startNumber = 3, category = m40, club = "C"),
+                competitorData("m40-b", "Bill", "Bravo", startNumber = 4, category = m40, club = "D"),
+                competitorData("m60-a", "Cara", "Charlie", startNumber = 5, category = m60, club = "E"),
+                competitorData("m60-b", "Cory", "Charlie", startNumber = 6, category = m60, club = "F")
+            )
+        )
+
+        val first = EventProjectEditor.drawStartList(original, "02:00", StartDrawOptions(seed = "repeatable")).startOrder()
+        val second = EventProjectEditor.drawStartList(original, "02:00", StartDrawOptions(seed = "repeatable")).startOrder()
+        val different = EventProjectEditor.drawStartList(original, "02:00", StartDrawOptions(seed = "different")).startOrder()
+
+        assertEquals(first, second)
+        assertNotEquals(first, different)
+    }
+
+    @Test
+    fun drawStartListAvoidsConsecutiveSameCategoryWhenPossible() {
+        val m21 = category("cat-m21", "M21", order = 0)
+        val m40 = category("cat-m40", "M40", order = 1)
+        val original = projectFile(
+            categories = listOf(
+                categoryData(m21.id, m21.name, order = m21.order),
+                categoryData(m40.id, m40.name, order = m40.order)
+            ),
+            competitors = listOf(
+                competitorData("m21-a", "Alice", "Alpha", startNumber = 1, category = m21, club = "A"),
+                competitorData("m21-b", "Aaron", "Alpha", startNumber = 2, category = m21, club = "B"),
+                competitorData("m40-a", "Bob", "Bravo", startNumber = 3, category = m40, club = "C"),
+                competitorData("m40-b", "Bill", "Bravo", startNumber = 4, category = m40, club = "D")
+            )
+        )
+
+        val drawn = EventProjectEditor.drawStartList(original, "02:00")
+        val categoryOrder = drawn.startOrderCategories()
+
+        assertEquals(listOf("cat-m21", "cat-m40", "cat-m21", "cat-m40"), categoryOrder)
+        assertEquals(EventStartListRuleSeverity.GREEN, EventStartListDetails.from(drawn.raceData).quality.severity)
+    }
+
+    @Test
     fun rejectsInvalidStartListStartersPerTime() {
         assertFailsWith<IllegalArgumentException> {
             StartDrawOptions(startersPerStartTime = 0)
@@ -1560,6 +1651,7 @@ class EventProjectEditorTest {
 
     private fun projectFile(
         name: String = "Original Race",
+        raceType: RaceType = RaceType.CLASSIC,
         categories: List<EventCategoryData> = emptyList(),
         competitors: List<EventCompetitorData> = emptyList(),
         aliases: List<EventAlias> = emptyList(),
@@ -1572,7 +1664,7 @@ class EventProjectEditorTest {
                     name = name,
                     apiKey = "",
                     startDateTimeIso = "2026-05-31T10:00",
-                    raceType = RaceType.CLASSIC,
+                    raceType = raceType,
                     raceLevel = RaceLevel.PRACTICE,
                     raceBand = RaceBand.M80,
                     timeLimitSeconds = 7_200
@@ -1658,6 +1750,16 @@ class EventProjectEditorTest {
         raceData.competitorData
             .first { it.competitorCategory.competitor.id == competitorId }
             .competitorCategory.competitor.drawnStartTimeSeconds
+
+    private fun EventProjectFile.startOrder(): List<String> =
+        raceData.competitorData
+            .sortedWith(compareBy({ it.competitorCategory.competitor.drawnStartTimeSeconds }, { it.competitorCategory.competitor.startNumber }))
+            .map { it.competitorCategory.competitor.id }
+
+    private fun EventProjectFile.startOrderCategories(): List<String?> =
+        raceData.competitorData
+            .sortedWith(compareBy({ it.competitorCategory.competitor.drawnStartTimeSeconds }, { it.competitorCategory.competitor.startNumber }))
+            .map { it.competitorCategory.competitor.categoryId }
 
     private fun categoryImportRow(
         name: String = "W21",
