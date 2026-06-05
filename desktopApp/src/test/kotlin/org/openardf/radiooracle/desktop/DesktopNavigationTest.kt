@@ -276,7 +276,7 @@ class DesktopNavigationTest {
 
         assertFalse(setupItems.first { it.label == "Event File" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Categories" }.requiresEventFile)
-        assertFalse(setupItems.first { it.label == "Competitors" }.requiresEventFile)
+        assertTrue(setupItems.first { it.label == "Competitors" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Start List" }.requiresEventFile)
     }
 
@@ -325,7 +325,7 @@ class DesktopNavigationTest {
         assertEquals(DesktopNavAction.ExportCategoriesCsv, categoryItems.first { it.label == "Export Categories CSV..." }.action)
         assertEquals(DesktopNavAction.ImportCompetitorsCsv, competitorItems.first { it.label == "Import Competitors CSV..." }.action)
         assertEquals(DesktopNavAction.ImportEventRegCompetitorsCsv, competitorItems.first { it.label == "Import EventReg Website..." }.action)
-        assertFalse(competitorItems.first { it.label == "Import EventReg Website..." }.requiresEventFile)
+        assertTrue(competitorItems.first { it.label == "Import EventReg Website..." }.requiresEventFile)
         assertEquals(DesktopNavAction.ExportCompetitorsCsv, competitorItems.first { it.label == "Export Competitors CSV..." }.action)
         assertFalse(setupItems.any { it.label == "Imports" })
         assertFalse(setupItems.any { it.label == "Setup Exports" })

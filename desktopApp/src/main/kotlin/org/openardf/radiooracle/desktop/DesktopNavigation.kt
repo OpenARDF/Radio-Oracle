@@ -197,8 +197,7 @@ object DesktopNavigation {
                             "setup.competitors.import-eventreg",
                             "Import EventReg Website...",
                             workflow,
-                            DesktopNavAction.ImportEventRegCompetitorsCsv,
-                            requiresEventFile = false
+                            DesktopNavAction.ImportEventRegCompetitorsCsv
                         ),
                         action(
                             "setup.competitors.export",
@@ -207,8 +206,7 @@ object DesktopNavigation {
                             DesktopNavAction.ExportCompetitorsCsv
                         )
                     ),
-                    DesktopSection.Competitors,
-                    requiresEventFile = false
+                    DesktopSection.Competitors
                 ),
                 group(
                     "setup.start-list",

@@ -1324,8 +1324,8 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.NewEventFile,
                 DesktopNavAction.OpenEventFile,
                 DesktopNavAction.ImportAndroidRaceBackup,
-                DesktopNavAction.ImportEventRegWebsite,
-                DesktopNavAction.ImportEventRegCompetitorsCsv -> true
+                DesktopNavAction.ImportEventRegWebsite -> true
+                DesktopNavAction.ImportEventRegCompetitorsCsv -> projectFile != null
                 DesktopNavAction.ShowDebugLogHelp,
                 DesktopNavAction.ShowAbout -> true
                 DesktopNavAction.SaveEventFile -> projectFile != null
