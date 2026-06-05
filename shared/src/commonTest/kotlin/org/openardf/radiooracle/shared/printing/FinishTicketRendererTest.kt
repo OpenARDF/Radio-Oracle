@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.shared.printing
 
 import org.openardf.radiooracle.shared.domain.PunchStatus
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -12,6 +13,7 @@ import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -149,6 +151,29 @@ class FinishTicketRendererTest {
     }
 
     @Test
+    fun rendersRadioOTicketWithGlobalControlLabelsBeforeLegacyAliases() {
+        val text = FinishTicketRenderer.render(
+            raceData(
+                controls = listOf(
+                    EventControl(
+                        id = "control-31",
+                        raceId = "race",
+                        label = "F1",
+                        siCode = 31,
+                        type = ControlPointType.CONTROL,
+                        publicLabel = "1"
+                    )
+                )
+            ),
+            resultId = "matched",
+            useAliases = true
+        )
+
+        assertEquals("1 (1)OK", text.lines()[7].substringAfter("[L]").substringBefore("[R]"))
+        assertEquals("2 (32)MP", text.lines()[8].substringAfter("[L]").substringBefore("[R]"))
+    }
+
+    @Test
     fun leavesOrienteeringTicketControlLabelsUnchanged() {
         val text = FinishTicketRenderer.render(
             raceData(raceType = RaceType.ORIENTEERING),
@@ -163,7 +188,8 @@ class FinishTicketRendererTest {
     private fun raceData(
         longName: Boolean = false,
         raceType: RaceType = RaceType.CLASSIC,
-        unmatchedCardName: String? = null
+        unmatchedCardName: String? = null,
+        controls: List<EventControl> = emptyList()
     ): EventRaceData {
         val race = EventRace(
             id = "race",
@@ -239,14 +265,15 @@ class FinishTicketRendererTest {
                     competitorId = null,
                     siNumber = 654321,
                     resultStatus = ResultStatus.NO_RANKING,
-	                    points = 0,
-	                    runTimeSeconds = 0,
-                        cardName = unmatchedCardName,
-	                    punches = listOf(
-	                        punch("u1", 41, 1, SIRecordType.CONTROL, PunchStatus.UNKNOWN, 39_900, 0, null)
-	                    )
+                    points = 0,
+                    runTimeSeconds = 0,
+                    cardName = unmatchedCardName,
+                    punches = listOf(
+                        punch("u1", 41, 1, SIRecordType.CONTROL, PunchStatus.UNKNOWN, 39_900, 0, null)
+                    )
                 )
-            )
+            ),
+            controls = controls
         )
     }
 

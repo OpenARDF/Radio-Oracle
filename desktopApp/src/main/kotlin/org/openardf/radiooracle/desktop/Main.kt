@@ -2393,7 +2393,7 @@ private fun SettingsDetailsPanel(
                 enabled = diagnostics.projectState == "Event File open"
             )
             Text(
-                text = "Use aliases",
+                text = "Use control labels",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )

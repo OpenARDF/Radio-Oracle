@@ -3,6 +3,7 @@ package org.openardf.radiooracle.shared.event
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
@@ -42,6 +43,26 @@ class EventReadoutDetailsTest {
     }
 
     @Test
+    fun prefersGlobalControlLabelsOverLegacyAliases() {
+        val rows = EventReadoutDetails.from(
+            raceData(
+                controls = listOf(
+                    EventControl(
+                        id = "control-31",
+                        raceId = "race",
+                        label = "F1",
+                        siCode = 31,
+                        type = ControlPointType.CONTROL,
+                        publicLabel = "1"
+                    )
+                )
+            )
+        )
+
+        assertEquals("1 32", rows[0].punchCodesText)
+    }
+
+    @Test
     fun usesCardNameForUnmatchedReadouts() {
         val rows = EventReadoutDetails.from(raceData(unmatchedCardName = "Runner Alice"))
 
@@ -55,7 +76,11 @@ class EventReadoutDetailsTest {
         assertEquals("31 32", rows[0].punchCodesText)
     }
 
-    private fun raceData(raceType: RaceType = RaceType.CLASSIC, unmatchedCardName: String? = null): EventRaceData {
+    private fun raceData(
+        raceType: RaceType = RaceType.CLASSIC,
+        unmatchedCardName: String? = null,
+        controls: List<EventControl> = emptyList()
+    ): EventRaceData {
         val alias = EventAlias(
             id = "alias",
             raceId = "race",
@@ -105,7 +130,8 @@ class EventReadoutDetailsTest {
                     listOf(41),
                     cardName = unmatchedCardName
                 )
-            )
+            ),
+            controls = controls
         )
     }
 

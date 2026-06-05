@@ -4,6 +4,7 @@ import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAliasPunch
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
@@ -39,7 +40,14 @@ object FinishTicketRenderer {
             append("[L]$competitorName\n")
             append("[L]$siAndIndex\n")
             append("[L]$categoryName\n\n")
-            append(readoutContext.readoutData.punches.formatPunches(raceData.race.raceType, useMinuteTimeFormat, useAliases))
+            append(
+                readoutContext.readoutData.punches.formatPunches(
+                    raceType = raceData.race.raceType,
+                    controls = raceData.controls,
+                    useMinuteTimeFormat = useMinuteTimeFormat,
+                    useAliases = useAliases
+                )
+            )
             append("\n\n")
             append("[R]<b>$runTime</b>\n")
             append("[R]$controls\n")
@@ -63,13 +71,22 @@ object FinishTicketRenderer {
 
     private fun List<EventAliasPunch>.formatPunches(
         raceType: RaceType,
+        controls: List<EventControl>,
         useMinuteTimeFormat: Boolean,
         useAliases: Boolean
-    ): String =
-        joinToString("\n") { aliasPunch -> aliasPunch.format(raceType, useMinuteTimeFormat, useAliases) }
+    ): String {
+        val controlLabelsByCode = controls.associateBy(
+            keySelector = { it.siCode },
+            valueTransform = { it.publicLabel?.takeIf(String::isNotBlank) ?: it.label }
+        )
+        return joinToString("\n") { aliasPunch ->
+            aliasPunch.format(raceType, controlLabelsByCode, useMinuteTimeFormat, useAliases)
+        }
+    }
 
     private fun EventAliasPunch.format(
         raceType: RaceType,
+        controlLabelsByCode: Map<Int, String>,
         useMinuteTimeFormat: Boolean,
         useAliases: Boolean
     ): String =
@@ -79,13 +96,22 @@ object FinishTicketRenderer {
             SIRecordType.FINISH ->
                 "[L]Finish[R]${punch.siTimeSeconds.toTimeOfDay()}[R]${punch.splitSeconds.toDuration(useMinuteTimeFormat)}"
             SIRecordType.CONTROL ->
-                "[L]${formatCode(raceType, useAliases)}[R]${punch.siTimeSeconds.toTimeOfDay()}[R]${punch.splitSeconds.toDuration(useMinuteTimeFormat)}"
+                "[L]${formatCode(raceType, controlLabelsByCode, useAliases)}[R]${punch.siTimeSeconds.toTimeOfDay()}[R]${punch.splitSeconds.toDuration(useMinuteTimeFormat)}"
             SIRecordType.CHECK -> ""
         }
 
-    private fun EventAliasPunch.formatCode(raceType: RaceType, useAliases: Boolean): String {
+    private fun EventAliasPunch.formatCode(
+        raceType: RaceType,
+        controlLabelsByCode: Map<Int, String>,
+        useAliases: Boolean
+    ): String {
+        val displayCode = if (useAliases) {
+            controlLabelsByCode[punch.siCode] ?: alias?.name ?: punch.siCode.toString()
+        } else {
+            punch.siCode.toString()
+        }
         val code = if (raceType == RaceType.ORIENTEERING || useAliases) {
-            "${punch.order} (${alias?.name ?: punch.siCode})"
+            "${punch.order} ($displayCode)"
         } else {
             punch.siCode.toString()
         }

@@ -21,6 +21,10 @@ data class EventReadoutDetails(
     companion object {
         /** Builds readout display rows for competitor-linked and unmatched readouts. */
         fun from(raceData: EventRaceData, useAliases: Boolean = true): List<EventReadoutDetails> {
+            val controlLabelsByCode = raceData.controls.associateBy(
+                keySelector = { it.siCode },
+                valueTransform = { it.publicLabel?.takeIf(String::isNotBlank) ?: it.label }
+            )
             val matched = raceData.competitorData.mapNotNull { competitorData ->
                 val readoutData = competitorData.readoutData ?: return@mapNotNull null
                 fromReadout(
@@ -28,7 +32,8 @@ data class EventReadoutDetails(
                     competitorName = competitorData.competitorCategory.competitor.fullName(),
                     matched = true,
                     raceType = raceData.race.raceType,
-                    useAliases = useAliases
+                    useAliases = useAliases,
+                    controlLabelsByCode = controlLabelsByCode
                 )
             }
             val unmatched = raceData.unmatchedReadoutData.map { readoutData ->
@@ -37,7 +42,8 @@ data class EventReadoutDetails(
                     competitorName = readoutData.result.cardName ?: "",
                     matched = false,
                     raceType = raceData.race.raceType,
-                    useAliases = useAliases
+                    useAliases = useAliases,
+                    controlLabelsByCode = controlLabelsByCode
                 )
             }
             return matched + unmatched
@@ -48,7 +54,8 @@ data class EventReadoutDetails(
             competitorName: String,
             matched: Boolean,
             raceType: RaceType,
-            useAliases: Boolean
+            useAliases: Boolean,
+            controlLabelsByCode: Map<Int, String>
         ): EventReadoutDetails {
             val result = readoutData.result
             return EventReadoutDetails(
@@ -64,8 +71,10 @@ data class EventReadoutDetails(
                 punchCodesText = readoutData.punches
                     .filter { it.punch.punchType == SIRecordType.CONTROL }
                     .joinToString(" ") { aliasPunch ->
-                        if (raceType != RaceType.ORIENTEERING && useAliases && aliasPunch.alias?.name != null) {
-                            aliasPunch.alias.name
+                        if (raceType != RaceType.ORIENTEERING && useAliases) {
+                            controlLabelsByCode[aliasPunch.punch.siCode]
+                                ?: aliasPunch.alias?.name
+                                ?: aliasPunch.punch.siCode.toString()
                         } else {
                             aliasPunch.punch.siCode.toString()
                         }
