@@ -71,6 +71,19 @@ data class EventStartListDetails(
     }
 }
 
+/**
+ * Human- and UI-facing evaluation of a drawn start list.
+ *
+ * Severity is intentionally split from score:
+ * - RED means a hard rule or saved capacity setting is violated.
+ * - ORANGE means the generated order is legal but did not satisfy every best
+ *   practice, usually because the remaining field made spacing impossible.
+ * - GREEN means the current evaluator found no violations or compromises.
+ *
+ * The numerical score is a compact "goodness factor" for comparison and status
+ * display. It is not a proof of optimality; it is a weighted summary of the
+ * concrete findings emitted in `messages` and `rowFindings`.
+ */
 data class EventStartListQuality(
     val score: Int,
     val severity: EventStartListRuleSeverity,
@@ -79,6 +92,12 @@ data class EventStartListQuality(
     val rowFindings: List<EventStartListRowFinding>
 ) {
     companion object {
+        /**
+         * Evaluates the current start times against the same settings used by
+         * the generator. This method deliberately does not re-run or optimize
+         * the draw. It only grades the Event File as saved, which lets manual
+         * edits and imported start lists receive the same color/score treatment.
+         */
         fun evaluate(raceData: EventRaceData, settings: StartDrawSettings): EventStartListQuality {
             val categoryById = raceData.categories.associateBy { it.category.id }
             val scheduled = raceData.competitorData

@@ -2729,7 +2729,9 @@ private fun StartListDetailsPanel(
                 value = seedDraft,
                 onValueChange = {
                     seedDraft = it
-                    persistSettingsIfIntervalIsValid(intervalDraft, startDrawOptions(seedValue = it))
+                    if (it.isNotBlank()) {
+                        persistSettingsIfIntervalIsValid(intervalDraft, startDrawOptions(seedValue = it))
+                    }
                 },
                 label = { Text("Seed") },
                 modifier = Modifier.width(180.dp)

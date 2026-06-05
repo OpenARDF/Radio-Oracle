@@ -636,13 +636,22 @@ object EventProjectEditor {
             raceData = projectFile.raceData.copy(
                 startDrawSettings = StartDrawSettings(
                     intervalSeconds = intervalSeconds,
-                    options = options.copy(idealFirstFoxByCategoryId = emptyMap())
+                    options = options.withDefaultSeed().copy(idealFirstFoxByCategoryId = emptyMap())
                 )
             )
         )
     }
 
-    /** Draws start times by category order, rotating clubs within each category where possible. */
+    /**
+     * Draws start times from per-category queues.
+     *
+     * The implementation keeps "must not exceed N starters at a time" as a hard
+     * capacity rule and treats spacing rules as best-effort constraints. Category,
+     * club, and first-fox conflicts are avoided whenever an alternate queue or
+     * alternate competitor is available. If the remaining field makes a best
+     * practice impossible, the draw still completes and EventStartListQuality
+     * reports the compromise as orange or red.
+     */
     fun drawStartList(
         projectFile: EventProjectFile,
         intervalText: String,
@@ -653,8 +662,9 @@ object EventProjectEditor {
             "Start interval must be greater than zero."
         }
 
+        val drawOptions = options.withDefaultSeed()
         val competitorStartTimes = mutableMapOf<String, Long>()
-        drawQueuedStartList(projectFile, options, competitorStartTimes, intervalSeconds)
+        drawQueuedStartList(projectFile, drawOptions, competitorStartTimes, intervalSeconds)
 
         val competitorData = projectFile.raceData.competitorData.map { data ->
             val competitor = data.competitorCategory.competitor
@@ -673,7 +683,7 @@ object EventProjectEditor {
         return projectFile.copy(
             raceData = projectFile.raceData.copy(
                 competitorData = competitorData,
-                startDrawSettings = updateStartDrawSettings(projectFile, intervalText, options)
+                startDrawSettings = updateStartDrawSettings(projectFile, intervalText, drawOptions)
                     .raceData
                     .startDrawSettings
             )
@@ -686,6 +696,10 @@ object EventProjectEditor {
         competitorStartTimes: MutableMap<String, Long>,
         intervalSeconds: Long
     ) {
+        // Each category is represented as a queue. Queue order is stable for the
+        // default seed and repeatably shuffled for non-default seeds, but the
+        // selection phase below is still responsible for enforcing cross-category
+        // rules such as "do not start the same category consecutively".
         val categoryQueues = projectFile.raceData.categories
             .sortedWith(compareBy({ it.category.order }, { it.category.name }))
             .mapNotNull { categoryData ->
@@ -713,6 +727,9 @@ object EventProjectEditor {
         var previousClub: String? = null
         var previousCategoryId: String? = null
         while (categoryQueues.isNotEmpty()) {
+            // A start slot can contain more than one competitor. We build the
+            // slot incrementally so every additional starter can be checked
+            // against the starters already placed at this same start time.
             val selectedQueues = mutableListOf<CategoryStartQueue>()
             val selectedCompetitors = mutableListOf<EventCompetitor>()
             repeat(options.startersPerStartTime) {
@@ -725,6 +742,9 @@ object EventProjectEditor {
                     options
                 )
                     ?: return@repeat
+                // A selected category queue may still have a club conflict at
+                // its head. When possible, take a later competitor from the same
+                // queue rather than rejecting the category entirely.
                 val competitorIndex = selectedQueue.competitorIndexForStartSlot(selectedCompetitors, previousClub, options)
                 val competitor = selectedQueue.competitors.removeAt(competitorIndex)
                 selectedQueues += selectedQueue
@@ -737,6 +757,9 @@ object EventProjectEditor {
             if (options.clubHandling == StartDrawClubHandling.AVOID_BACK_TO_BACK) {
                 selectedCompetitors.lastOrNull()?.clubKey()?.let { previousClub = it }
             }
+            // The last selected category is the one adjacent to the next slot.
+            // With multiple starters per slot, earlier categories in the same
+            // slot are not consecutive with the next start time.
             selectedQueues.lastOrNull()?.category?.id?.let { previousCategoryId = it }
             nextStartSeconds += intervalSeconds
         }
@@ -2147,6 +2170,10 @@ object EventProjectEditor {
         previousCategoryId: String?,
         options: StartDrawOptions
     ): CategoryStartQueue? {
+        // First remove queues that are incompatible with the current start slot:
+        // duplicate category at the same time, or same first fox among categories
+        // expected to have similar speed. If all queues conflict, the slot is
+        // left partially filled and the next start time is attempted.
         val compatibleQueues = if (selectedQueues.isEmpty()) {
             categoryQueues
         } else {
@@ -2160,6 +2187,9 @@ object EventProjectEditor {
             return null
         }
 
+        // Category adjacency is a best practice, not a hard stop. Prefer any
+        // category other than the one that ended the previous start time, but
+        // fall back when only that category remains.
         val categorySafe = compatibleQueues
             .filterNot { it.category.id == previousCategoryId }
             .takeIf { it.isNotEmpty() }
@@ -2167,6 +2197,9 @@ object EventProjectEditor {
 
         val clubSafe = if (options.clubHandling == StartDrawClubHandling.AVOID_BACK_TO_BACK) {
             val selectedClubs = selectedCompetitors.mapNotNull { it.clubKey() }.toSet()
+            // Same-club starters at the same time are worse than a partially
+            // filled time slot, so return null if every compatible queue would
+            // duplicate a club already chosen for this slot.
             val clubSafeAfterSelectedClubs = categorySafe
                 .filterNot { candidate ->
                     val candidateClub = candidate.competitors.firstOrNull()?.clubKey()
@@ -2175,6 +2208,9 @@ object EventProjectEditor {
                 .takeIf { it.isNotEmpty() }
                 ?: return null
 
+            // Same-club adjacency across start times is avoidable only when at
+            // least one otherwise compatible queue has a different club at its
+            // head. Fall back when the field leaves no alternative.
             clubSafeAfterSelectedClubs
                 .filterNot { candidate ->
                     val candidateClub = candidate.competitors.firstOrNull()?.clubKey()
@@ -2193,6 +2229,14 @@ object EventProjectEditor {
             selected.firstFox == firstFox && selected.speedGroup == speedGroup
         }
 
+    /**
+     * Chooses the competitor to remove from an already-selected category queue.
+     *
+     * Most of the draw works at category-queue granularity, but club rules are
+     * competitor-specific. Looking past the head of the queue preserves the
+     * selected category while avoiding same-club adjacency when that category has
+     * a later runner from a different club.
+     */
     private fun CategoryStartQueue.competitorIndexForStartSlot(
         selectedCompetitors: List<EventCompetitor>,
         previousClub: String?,
@@ -2213,6 +2257,10 @@ object EventProjectEditor {
         previousClub: String?,
         options: StartDrawOptions
     ): List<EventCompetitor> {
+        // Within one category, competitors are grouped by club and the largest
+        // club queues are drained first. This "largest first" rule is the
+        // standard greedy strategy for avoiding adjacency in uneven groups: it
+        // spreads the most constrained club before smaller clubs are exhausted.
         val clubQueues = competitors
             .groupBy { it.clubKey() ?: "competitor:${it.id}" }
             .values
@@ -2245,8 +2293,15 @@ object EventProjectEditor {
         return drawn
     }
 
+    /*
+     * Comparator policy:
+     * - Default seed: preserve predictable category/start-number order for users
+     *   who do not request randomization.
+     * - Non-default seed: keep the same high-level constraints, but use a stable
+     *   seed hash to break otherwise equal or flexible choices.
+     */
     private fun clubStartQueueComparator(options: StartDrawOptions): Comparator<ClubStartQueue> =
-        if (options.seed.isBlank()) {
+        if (!options.usesSeededRandomization()) {
             compareByDescending<ClubStartQueue> { it.competitors.size }
                 .thenBy { it.club ?: "" }
                 .thenBy { it.competitors.firstOrNull()?.startNumber ?: Int.MAX_VALUE }
@@ -2275,7 +2330,7 @@ object EventProjectEditor {
     }
 
     private fun categoryStartQueueComparator(options: StartDrawOptions): Comparator<CategoryStartQueue> =
-        if (options.seed.isBlank()) {
+        if (!options.usesSeededRandomization()) {
             compareBy<CategoryStartQueue> { it.category.order }
                 .thenBy { it.category.name }
                 .thenBy { it.competitors.firstOrNull()?.startNumber ?: Int.MAX_VALUE }
@@ -2287,7 +2342,7 @@ object EventProjectEditor {
         }
 
     private fun competitorStartDrawComparator(options: StartDrawOptions, scope: String): Comparator<EventCompetitor> =
-        if (options.seed.isBlank()) {
+        if (!options.usesSeededRandomization()) {
             compareBy<EventCompetitor> { it.startNumber }
                 .thenBy { it.fullName() }
         } else {
@@ -2296,7 +2351,13 @@ object EventProjectEditor {
                 .thenBy { it.fullName() }
         }
 
+    private fun StartDrawOptions.usesSeededRandomization(): Boolean =
+        seed != StartDrawOptions.DEFAULT_SEED
+
     private fun seededRank(seed: String, value: String): Long {
+        // FNV-1a followed by MurmurHash3-style finalization. Kotlin/Native/JVM
+        // Random APIs are intentionally avoided here because the draw must be
+        // reproducible across platforms and future runtime versions.
         var hash = 0xcbf29ce484222325UL
         val text = "$seed|$value"
         text.encodeToByteArray().forEach { byte ->

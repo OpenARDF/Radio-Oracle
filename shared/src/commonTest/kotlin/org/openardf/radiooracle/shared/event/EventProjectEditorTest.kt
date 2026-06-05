@@ -1590,8 +1590,21 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun updateStartDrawSettingsUsesDefaultSeedWhenSeedIsBlank() {
+        val updated = EventProjectEditor.updateStartDrawSettings(
+            projectFile(),
+            "02:00",
+            StartDrawOptions(seed = "")
+        )
+
+        assertEquals(StartDrawOptions.DEFAULT_SEED, updated.raceData.effectiveStartDrawSettings().options.seed)
+    }
+
+    @Test
     fun startListDefaultsUseEventTypeIntervals() {
-        assertEquals(300L, projectFile(raceType = RaceType.CLASSIC).raceData.effectiveStartDrawSettings().intervalSeconds)
+        val classicSettings = projectFile(raceType = RaceType.CLASSIC).raceData.effectiveStartDrawSettings()
+        assertEquals(300L, classicSettings.intervalSeconds)
+        assertEquals(StartDrawOptions.DEFAULT_SEED, classicSettings.options.seed)
         assertEquals(120L, projectFile(raceType = RaceType.SPRINT).raceData.effectiveStartDrawSettings().intervalSeconds)
         assertEquals(120L, projectFile(raceType = RaceType.FOXORING).raceData.effectiveStartDrawSettings().intervalSeconds)
     }
