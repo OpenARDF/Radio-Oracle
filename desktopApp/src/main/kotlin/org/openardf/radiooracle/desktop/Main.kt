@@ -87,6 +87,7 @@ import org.openardf.radiooracle.shared.event.EventReadoutDetails
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.EventStartListDetails
 import org.openardf.radiooracle.shared.event.EventStartListRow
+import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
 import org.openardf.radiooracle.shared.event.toDisplayLabel
@@ -336,7 +337,9 @@ fun main(args: Array<String>) = application {
 
         fun unlockedIdealFirstFoxByCategoryId(): Map<String, Int> =
             protectedIdealOrderByCategoryId.mapNotNull { (categoryId, idealOrderText) ->
-                protectedIdealFirstFox(idealOrderText)?.let { categoryId to it }
+                projectFile?.raceData?.aliases?.let { aliases ->
+                    ProtectedIdealOrderRules.firstControlCode(idealOrderText, aliases)?.let { categoryId to it }
+                }
             }.toMap()
 
         fun openProject(path: Path) {
@@ -740,6 +743,9 @@ fun main(args: Array<String>) = application {
                 return
             }
             runCatching {
+                projectFile?.raceData?.aliases?.let { aliases ->
+                    ProtectedIdealOrderRules.validate(idealOrderText, aliases)
+                }
                 val encryptedIdealOrder = idealOrderText.trim().takeIf { it.isNotEmpty() }?.let {
                     DesktopProtectedCourseOrder.encrypt(it, password)
                 }
@@ -4671,13 +4677,6 @@ private fun categoryControlPointErrorText(error: Throwable): String =
 
 private fun genericEditErrorText(error: Throwable): String =
     error.message ?: error::class.simpleName ?: "Unknown error"
-
-private fun protectedIdealFirstFox(idealOrderText: String): Int? =
-    idealOrderText
-        .split(Regex("""[\s,;]+"""))
-        .firstOrNull { it.isNotBlank() }
-        ?.trim()
-        ?.toIntOrNull()
 
 private fun fixedTableWidth(columns: List<FixedTableColumn>): Dp =
     columns.fold(0.dp) { total, column -> total + column.width } +

@@ -6,6 +6,7 @@ import org.openardf.radiooracle.shared.sportident.SportIdentCodes
 object AliasRules {
     const val MAX_NAME_LENGTH = 6
     const val ALLOWED_NAME_CHARACTERS = "abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ/"
+    private val numericName = Regex("""\d+""")
 
     /** Validates an alias display name against length, character-set, and duplicate rules. */
     fun validateName(name: String, existingNames: List<String>, position: Int): AliasValidationResult {
@@ -13,6 +14,10 @@ object AliasRules {
             return AliasValidationResult.Required
         }
         if (name.length > MAX_NAME_LENGTH || name.any { it !in ALLOWED_NAME_CHARACTERS }) {
+            return AliasValidationResult.Invalid
+        }
+        val numericValue = name.takeIf { it.matches(numericName) }?.toIntOrNull()
+        if (numericValue != null && numericValue in SportIdentCodes.SI_MIN_CODE..SportIdentCodes.SI_MAX_CODE) {
             return AliasValidationResult.Invalid
         }
         if (existingNames.withIndex().any { (index, value) -> index != position && value == name }) {
