@@ -312,7 +312,7 @@ class DesktopNavigationTest {
         val competitorItems = setupItems.first { it.label == "Competitors" }.children
 
         assertEquals(
-            listOf("Protected Course Order", "Import Categories CSV...", "Export Categories CSV..."),
+            listOf("Protected Course Order", "Import Categories CSV...", "Import Course KML/KMZ...", "Export Categories CSV..."),
             categoryItems.map { it.label }
         )
         assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Protected Course Order" }.section)
@@ -321,6 +321,7 @@ class DesktopNavigationTest {
             competitorItems.map { it.label }
         )
         assertEquals(DesktopNavAction.ImportCategoriesCsv, categoryItems.first { it.label == "Import Categories CSV..." }.action)
+        assertEquals(DesktopNavAction.ImportCourseKmlKmz, categoryItems.first { it.label == "Import Course KML/KMZ..." }.action)
         assertEquals(DesktopNavAction.ExportCategoriesCsv, categoryItems.first { it.label == "Export Categories CSV..." }.action)
         assertEquals(DesktopNavAction.ImportCompetitorsCsv, competitorItems.first { it.label == "Import Competitors CSV..." }.action)
         assertEquals(DesktopNavAction.ImportEventRegCompetitorsCsv, competitorItems.first { it.label == "Import EventReg Website..." }.action)

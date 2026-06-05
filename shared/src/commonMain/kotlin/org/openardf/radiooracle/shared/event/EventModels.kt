@@ -39,7 +39,8 @@ data class EventCategory(
     val timeLimitSeconds: Long?,
     @Deprecated("Use EventCategoryData.controlPoints plus EventRaceData.controls.")
     val controlPointsString: String,
-    val encryptedIdealOrder: String? = null
+    val encryptedIdealOrder: String? = null,
+    val encryptedCourseInfo: String? = null
 ) {
     /** Returns the race type that should be used for this category. */
     fun effectiveRaceType(race: EventRace): RaceType =
@@ -53,6 +54,32 @@ data class EventCategory(
     fun effectiveTimeLimitSeconds(race: EventRace): Long =
         if (differentProperties) timeLimitSeconds ?: race.timeLimitSeconds else race.timeLimitSeconds
 }
+
+/**
+ * Password-protected route-derived course data.
+ *
+ * KML/KMZ files may live outside the Event File, but their derived length, climb,
+ * ideal order, and route geometry are sensitive before competition day. The
+ * desktop app therefore encrypts this payload before storing it in
+ * EventCategory.encryptedCourseInfo instead of copying those values into public
+ * category length/climb/control fields.
+ */
+@Serializable
+data class ProtectedCourseInfo(
+    val idealOrder: String = "",
+    val lengthMeters: Int? = null,
+    val climbMeters: Int? = null,
+    val sourceName: String = "",
+    val sampledPointCount: Int = 0,
+    val route: List<ProtectedCourseRoutePoint> = emptyList()
+)
+
+@Serializable
+data class ProtectedCourseRoutePoint(
+    val latitude: Double,
+    val longitude: Double,
+    val elevationMeters: Double? = null
+)
 
 /** Portable control-point definition for a category course. */
 @Serializable

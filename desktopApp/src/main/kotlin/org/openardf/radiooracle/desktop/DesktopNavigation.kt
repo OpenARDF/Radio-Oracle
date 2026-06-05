@@ -27,6 +27,7 @@ enum class DesktopNavAction {
     SaveEventFileAs,
     CloseEventFile,
     ImportCategoriesCsv,
+    ImportCourseKmlKmz,
     ImportCompetitorsCsv,
     ImportStartsCsv,
     ExportEventFileCopy,
@@ -164,6 +165,12 @@ object DesktopNavigation {
                             "Import Categories CSV...",
                             workflow,
                             DesktopNavAction.ImportCategoriesCsv
+                        ),
+                        action(
+                            "setup.categories.import-course-kml",
+                            "Import Course KML/KMZ...",
+                            workflow,
+                            DesktopNavAction.ImportCourseKmlKmz
                         ),
                         action(
                             "setup.categories.export",

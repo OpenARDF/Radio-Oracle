@@ -17,6 +17,7 @@ dependencies {
     implementation(project(":shared"))
     implementation(compose.desktop.currentOs)
     implementation(libs.jserialcomm)
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)
 }

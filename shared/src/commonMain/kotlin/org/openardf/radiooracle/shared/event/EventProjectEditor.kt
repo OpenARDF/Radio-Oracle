@@ -343,6 +343,34 @@ object EventProjectEditor {
         )
     }
 
+    /** Returns a copy of the Event File with one category's encrypted protected course data changed. */
+    fun updateCategoryEncryptedCourseInfo(
+        projectFile: EventProjectFile,
+        categoryId: String,
+        encryptedCourseInfo: String?
+    ): EventProjectFile {
+        var foundCategory = false
+        val categories = projectFile.raceData.categories.map { categoryData ->
+            if (categoryData.category.id == categoryId) {
+                foundCategory = true
+                categoryData.copy(
+                    category = categoryData.category.copy(
+                        encryptedCourseInfo = encryptedCourseInfo?.trim()?.takeIf { it.isNotEmpty() }
+                    )
+                )
+            } else {
+                categoryData
+            }
+        }
+        require(foundCategory) {
+            "Category was not found: $categoryId"
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(categories = categories)
+        )
+    }
+
     /** Returns a copy of the Event File with one global logical control changed. */
     fun updateControl(
         projectFile: EventProjectFile,

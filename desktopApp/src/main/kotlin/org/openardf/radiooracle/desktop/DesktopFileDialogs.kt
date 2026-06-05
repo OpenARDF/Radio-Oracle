@@ -229,6 +229,19 @@ object DesktopFileDialogs {
     fun chooseImportCsvFiles(title: String): List<Path> =
         chooseFiles(title, DesktopProjectFilePaths.CSV_EXTENSION)
 
+    fun chooseImportKmlKmz(): Path? {
+        val dialog = FileDialog(null as Frame?, "Import Course KML/KMZ", FileDialog.LOAD)
+        dialog.filenameFilter = FilenameFilter { _, name ->
+            name.endsWith(".kml", ignoreCase = true) || name.endsWith(".kmz", ignoreCase = true)
+        }
+        dialog.file = "*.kml;*.kmz"
+        dialog.isVisible = true
+
+        val directory = dialog.directory ?: return null
+        val file = dialog.file ?: return null
+        return Path.of(directory, file)
+    }
+
     fun chooseImportAndroidRaceBackupJson(): Path? =
         chooseFile(
             "Import Android Event File",

@@ -1,5 +1,9 @@
 package org.openardf.radiooracle.desktop
 
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.EventProjectFile
 import java.security.SecureRandom
 import java.security.spec.KeySpec
 import java.util.Base64
@@ -20,6 +24,10 @@ object DesktopProtectedCourseOrder {
     private val random = SecureRandom()
     private val base64: Base64.Encoder = Base64.getUrlEncoder().withoutPadding()
     private val decoder: Base64.Decoder = Base64.getUrlDecoder()
+    private val json = Json {
+        encodeDefaults = true
+        ignoreUnknownKeys = true
+    }
 
     fun encrypt(plainText: String, password: String): String {
         val trimmedPassword = password.trim()
@@ -65,6 +73,46 @@ object DesktopProtectedCourseOrder {
         }.getOrElse {
             throw IllegalArgumentException("Password did not unlock protected course order.")
         }
+    }
+
+    fun encryptCourseInfo(courseInfo: ProtectedCourseInfo, password: String): String =
+        encrypt(json.encodeToString(courseInfo), password)
+
+    fun decryptCourseInfo(encryptedValue: String, password: String): ProtectedCourseInfo =
+        json.decodeFromString(ProtectedCourseInfo.serializer(), decrypt(encryptedValue, password))
+
+    fun reencryptProjectCourseProtection(
+        projectFile: EventProjectFile,
+        oldPassword: String,
+        newPassword: String
+    ): EventProjectFile {
+        val trimmedOldPassword = oldPassword.trim()
+        val trimmedNewPassword = newPassword.trim()
+        require(trimmedOldPassword.isNotEmpty()) {
+            "Old password cannot be blank."
+        }
+        require(trimmedNewPassword.isNotEmpty()) {
+            "New password cannot be blank."
+        }
+
+        val categories = projectFile.raceData.categories.map { categoryData ->
+            val category = categoryData.category
+            val reencryptedIdealOrder = category.encryptedIdealOrder?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
+                encrypt(decrypt(encryptedValue, trimmedOldPassword), trimmedNewPassword)
+            }
+            val reencryptedCourseInfo = category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
+                encryptCourseInfo(decryptCourseInfo(encryptedValue, trimmedOldPassword), trimmedNewPassword)
+            }
+            categoryData.copy(
+                category = category.copy(
+                    encryptedIdealOrder = reencryptedIdealOrder,
+                    encryptedCourseInfo = reencryptedCourseInfo
+                )
+            )
+        }
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(categories = categories)
+        )
     }
 
     private fun secretKey(password: String, salt: ByteArray, iterations: Int = ITERATIONS): SecretKeySpec {

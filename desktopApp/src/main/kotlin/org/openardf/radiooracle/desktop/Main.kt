@@ -90,6 +90,7 @@ import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.EventStartListDetails
 import org.openardf.radiooracle.shared.event.EventStartListRuleSeverity
 import org.openardf.radiooracle.shared.event.EventStartListRow
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
@@ -290,11 +291,13 @@ fun main(args: Array<String>) = application {
         var lastLoggedSiReaderStatus by remember { mutableStateOf<String?>(null) }
         var protectedCoursePassword by remember { mutableStateOf<String?>(null) }
         var protectedIdealOrderByCategoryId by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+        var protectedCourseInfoByCategoryId by remember { mutableStateOf<Map<String, ProtectedCourseInfo>>(emptyMap()) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var eventRegImportUrl by remember { mutableStateOf(DesktopEventRegImportPreferences.lastRegistrationUrl()) }
         var isImportingEventRegWebsite by remember { mutableStateOf(false) }
         var isImportingEventRegCompetitorCsvs by remember { mutableStateOf(false) }
+        var isImportingCourseKmlKmz by remember { mutableStateOf(false) }
         var pendingCompetitorsCsvImportPath by remember { mutableStateOf<Path?>(null) }
         var syncCompetitorsCsvImport by remember { mutableStateOf(false) }
         val siPortMutex = remember { Mutex() }
@@ -356,6 +359,7 @@ fun main(args: Array<String>) = application {
             val wasUnlocked = protectedCoursePassword != null
             protectedCoursePassword = null
             protectedIdealOrderByCategoryId = emptyMap()
+            protectedCourseInfoByCategoryId = emptyMap()
             if (wasUnlocked) {
                 projectStatusText = "Protected course order locked."
             }
@@ -777,9 +781,20 @@ fun main(args: Array<String>) = application {
                 projectStatusText = error.message ?: "Protected course order unlock failed."
                 return false
             }
+            val decryptedCourseInfo = runCatching {
+                currentProject.raceData.categories.mapNotNull { categoryData ->
+                    categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
+                        categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, trimmedPassword)
+                    }
+                }.toMap()
+            }.getOrElse { error ->
+                projectStatusText = error.message ?: "Protected course data unlock failed."
+                return false
+            }
 
             protectedCoursePassword = trimmedPassword
             protectedIdealOrderByCategoryId = decrypted
+            protectedCourseInfoByCategoryId = decryptedCourseInfo
             projectStatusText = "Protected course order unlocked."
             return true
         }
@@ -804,6 +819,115 @@ fun main(args: Array<String>) = application {
                 projectStatusText = "Unsaved changes."
             }.onFailure { error ->
                 projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
+        fun updateProtectedCoursePassword(oldPassword: String, newPassword: String, confirmPassword: String): Boolean {
+            val currentProject = projectSession.currentProject ?: return false
+            val currentPassword = protectedCoursePassword ?: run {
+                projectStatusText = "Unlock protected course order before changing its password."
+                return false
+            }
+            val trimmedOldPassword = oldPassword.trim()
+            val trimmedNewPassword = newPassword.trim()
+            val trimmedConfirmPassword = confirmPassword.trim()
+            if (trimmedOldPassword.isEmpty()) {
+                projectStatusText = "Old password cannot be blank."
+                return false
+            }
+            if (trimmedNewPassword.isEmpty()) {
+                projectStatusText = "New password cannot be blank."
+                return false
+            }
+            if (trimmedNewPassword != trimmedConfirmPassword) {
+                projectStatusText = "New protected course passwords do not match."
+                return false
+            }
+
+            val hasEncryptedCourseProtection = currentProject.raceData.categories.any { categoryData ->
+                !categoryData.category.encryptedIdealOrder.isNullOrBlank() ||
+                    !categoryData.category.encryptedCourseInfo.isNullOrBlank()
+            }
+            if (!hasEncryptedCourseProtection && trimmedOldPassword != currentPassword) {
+                projectStatusText = "Old password did not match the unlocked protected course password."
+                return false
+            }
+
+            return runCatching {
+                val updatedProject = DesktopProtectedCourseOrder.reencryptProjectCourseProtection(
+                    currentProject,
+                    oldPassword = trimmedOldPassword,
+                    newPassword = trimmedNewPassword
+                )
+                projectFile = projectSession.updateCurrentProject { updatedProject }
+                protectedCoursePassword = trimmedNewPassword
+                protectedIdealOrderByCategoryId = updatedProject.raceData.categories.associate { categoryData ->
+                    val encryptedValue = categoryData.category.encryptedIdealOrder
+                    categoryData.category.id to if (encryptedValue.isNullOrBlank()) {
+                        ""
+                    } else {
+                        DesktopProtectedCourseOrder.decrypt(encryptedValue, trimmedNewPassword)
+                    }
+                }
+                protectedCourseInfoByCategoryId = updatedProject.raceData.categories.mapNotNull { categoryData ->
+                    categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
+                        categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, trimmedNewPassword)
+                    }
+                }.toMap()
+                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                projectStatusText = "Protected course password updated. Unsaved changes."
+                true
+            }.getOrElse { error ->
+                projectStatusText = "Password update failed: ${error.message ?: error::class.simpleName}"
+                false
+            }
+        }
+
+        fun chooseImportCourseKmlKmz() {
+            val currentProject = projectSession.currentProject ?: return
+            val password = protectedCoursePassword ?: run {
+                projectStatusText = "Unlock protected course order before importing KML/KMZ course data."
+                return
+            }
+            if (isImportingCourseKmlKmz) {
+                return
+            }
+            DesktopFileDialogs.chooseImportKmlKmz()?.let { path ->
+                isImportingCourseKmlKmz = true
+                projectStatusText = "Importing protected course KML/KMZ..."
+                appCoroutineScope.launch {
+                    val result = runCatching {
+                        withContext(Dispatchers.IO) {
+                            DesktopCourseKmlImporter.importProtectedCourseInfo(
+                                path = path,
+                                projectFile = currentProject,
+                                password = password
+                            )
+                        }
+                    }
+                    result.onSuccess { (updatedProject, summary) ->
+                        projectFile = projectSession.updateCurrentProject { updatedProject }
+                        protectedIdealOrderByCategoryId = updatedProject.raceData.categories.associate { categoryData ->
+                            val encryptedValue = categoryData.category.encryptedIdealOrder
+                            categoryData.category.id to if (encryptedValue.isNullOrBlank()) {
+                                ""
+                            } else {
+                                DesktopProtectedCourseOrder.decrypt(encryptedValue, password)
+                            }
+                        }
+                        protectedCourseInfoByCategoryId = updatedProject.raceData.categories.mapNotNull { categoryData ->
+                            categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
+                                categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
+                            }
+                        }.toMap()
+                        hasUnsavedChanges = projectSession.hasUnsavedChanges
+                        projectStatusText =
+                            "Imported protected course data for ${summary.matchedCategoryCount} categories; sampled ${summary.sampledElevationCount} USGS elevation points."
+                    }.onFailure { error ->
+                        projectStatusText = "Course KML/KMZ import failed: ${error.message ?: error::class.simpleName}"
+                    }
+                    isImportingCourseKmlKmz = false
+                }
             }
         }
 
@@ -1226,6 +1350,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.SaveEventFileAs -> saveAsCurrentProject()
                 DesktopNavAction.CloseEventFile -> requestCloseEventFile()
                 DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
+                DesktopNavAction.ImportCourseKmlKmz -> chooseImportCourseKmlKmz()
                 DesktopNavAction.ImportCompetitorsCsv -> importCompetitorsCsv()
                 DesktopNavAction.ImportStartsCsv -> importCompetitorStartsCsv()
                 DesktopNavAction.ExportEventFileCopy -> exportEventFileCopy()
@@ -1394,8 +1519,10 @@ fun main(args: Array<String>) = application {
             onNavAction = ::handleNavAction,
             isProtectedCourseOrderUnlocked = protectedCoursePassword != null,
             protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
             onUnlockProtectedCourseOrder = ::unlockProtectedCourseOrder,
             onUpdateProtectedIdealOrder = ::updateProtectedIdealOrder,
+            onUpdateProtectedCoursePassword = ::updateProtectedCoursePassword,
             onLockProtectedCourseOrder = ::lockProtectedCourseOrder,
             onRenameRace = { name ->
                 runCatching {
@@ -2203,8 +2330,10 @@ private fun RadioOManagerDesktopApp(
     onStopLocalResultServer: () -> Unit = {},
     isProtectedCourseOrderUnlocked: Boolean = false,
     protectedIdealOrderByCategoryId: Map<String, String> = emptyMap(),
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
     onUnlockProtectedCourseOrder: (String) -> Boolean = { false },
     onUpdateProtectedIdealOrder: (String, String) -> Unit = { _, _ -> },
+    onUpdateProtectedCoursePassword: (String, String, String) -> Boolean = { _, _, _ -> false },
     onLockProtectedCourseOrder: () -> Unit = {},
     isNavActionEnabled: (DesktopNavAction) -> Boolean = { false },
     onNavAction: (DesktopNavAction) -> Unit = {},
@@ -2359,8 +2488,10 @@ private fun RadioOManagerDesktopApp(
                                 onStopLocalResultServer = onStopLocalResultServer,
                                 isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
                                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+                                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                                 onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
-                                onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder
+                                onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
+                                onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword
                             )
                         }
                         WorkflowBar(
@@ -2625,8 +2756,10 @@ private fun SectionWorkspace(
     onStopLocalResultServer: () -> Unit,
     isProtectedCourseOrderUnlocked: Boolean,
     protectedIdealOrderByCategoryId: Map<String, String>,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onUnlockProtectedCourseOrder: (String) -> Boolean,
-    onUpdateProtectedIdealOrder: (String, String) -> Unit
+    onUpdateProtectedIdealOrder: (String, String) -> Unit,
+    onUpdateProtectedCoursePassword: (String, String, String) -> Boolean
 ) {
     Column(
         modifier = Modifier
@@ -2678,8 +2811,10 @@ private fun SectionWorkspace(
                 projectFile = projectFile,
                 isUnlocked = isProtectedCourseOrderUnlocked,
                 idealOrderByCategoryId = protectedIdealOrderByCategoryId,
+                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                 onUnlock = onUnlockProtectedCourseOrder,
-                onUpdateIdealOrder = onUpdateProtectedIdealOrder
+                onUpdateIdealOrder = onUpdateProtectedIdealOrder,
+                onUpdatePassword = onUpdateProtectedCoursePassword
             )
         }
         if (section == DesktopSection.Competitors && projectFile != null) {
@@ -4574,10 +4709,15 @@ private fun ProtectedCourseOrderPanel(
     projectFile: EventProjectFile,
     isUnlocked: Boolean,
     idealOrderByCategoryId: Map<String, String>,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onUnlock: (String) -> Boolean,
-    onUpdateIdealOrder: (String, String) -> Unit
+    onUpdateIdealOrder: (String, String) -> Unit,
+    onUpdatePassword: (String, String, String) -> Boolean
 ) {
     var passwordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
+    var oldPasswordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
+    var newPasswordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
+    var confirmPasswordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
 
     if (!isUnlocked) {
         Row(
@@ -4620,6 +4760,49 @@ private fun ProtectedCourseOrderPanel(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = oldPasswordDraft,
+                onValueChange = { oldPasswordDraft = it },
+                label = { Text("Old password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.width(190.dp)
+            )
+            TextField(
+                value = newPasswordDraft,
+                onValueChange = { newPasswordDraft = it },
+                label = { Text("New password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.width(190.dp)
+            )
+            TextField(
+                value = confirmPasswordDraft,
+                onValueChange = { confirmPasswordDraft = it },
+                label = { Text("Confirm new") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.width(190.dp)
+            )
+            Button(
+                onClick = {
+                    if (onUpdatePassword(oldPasswordDraft, newPasswordDraft, confirmPasswordDraft)) {
+                        oldPasswordDraft = ""
+                        newPasswordDraft = ""
+                        confirmPasswordDraft = ""
+                    }
+                },
+                enabled = oldPasswordDraft.isNotBlank() &&
+                    newPasswordDraft.isNotBlank() &&
+                    confirmPasswordDraft.isNotBlank()
+            ) {
+                ButtonLabel("Update Password")
+            }
+        }
         Button(
             onClick = {
                 changedDrafts.forEach { (categoryId, idealOrderText) ->
@@ -4630,12 +4813,14 @@ private fun ProtectedCourseOrderPanel(
         ) {
             ButtonLabel("Save")
         }
-        DetailHeaderRow(listOf("Category", "Protected ideal order"))
+        DetailHeaderRow(listOf("Category", "Protected ideal order", "Length", "Climb", "Route"))
         categories.forEach { categoryData ->
             val categoryId = categoryData.category.id
+            val courseInfo = protectedCourseInfoByCategoryId[categoryId]
             ProtectedCourseOrderRow(
                 categoryName = categoryData.category.name,
                 idealOrderDraft = idealOrderDrafts[categoryId].orEmpty(),
+                protectedCourseInfo = courseInfo,
                 onIdealOrderChange = { idealOrderText ->
                     idealOrderDrafts = idealOrderDrafts + (categoryId to idealOrderText)
                 }
@@ -4648,6 +4833,7 @@ private fun ProtectedCourseOrderPanel(
 private fun ProtectedCourseOrderRow(
     categoryName: String,
     idealOrderDraft: String,
+    protectedCourseInfo: ProtectedCourseInfo?,
     onIdealOrderChange: (String) -> Unit
 ) {
     Row(
@@ -4666,6 +4852,24 @@ private fun ProtectedCourseOrderRow(
             modifier = Modifier.width(360.dp),
             singleLine = true,
             label = { Text("Ideal order") }
+        )
+        Text(
+            text = protectedCourseInfo?.lengthMeters?.let { "$it m" } ?: "",
+            modifier = Modifier.width(96.dp),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        Text(
+            text = protectedCourseInfo?.climbMeters?.let { "$it m" } ?: "",
+            modifier = Modifier.width(96.dp),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        Text(
+            text = protectedCourseInfo?.let { "${it.sampledPointCount} pts" } ?: "",
+            modifier = Modifier.width(120.dp),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
         )
     }
 }
