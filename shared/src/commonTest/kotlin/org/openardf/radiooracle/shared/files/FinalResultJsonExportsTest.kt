@@ -20,6 +20,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
@@ -100,10 +101,72 @@ class FinalResultJsonExportsTest {
         assertNull(document.competitors[1].result)
     }
 
+    @Test
+    fun exportsGlobalControlsAsAndroidAliasesAndPunchLabels() {
+        val document = Json.parseToJsonElement(
+            FinalResultJsonExports.results(
+                raceData(
+                    controls = listOf(
+                        EventControl(
+                            id = "control-31",
+                            raceId = "race",
+                            label = "F1",
+                            siCode = 31,
+                            type = ControlPointType.CONTROL
+                        )
+                    )
+                )
+            )
+        ).jsonObject
+        val alias = document["aliases"]!!.jsonArray.single().jsonObject
+        val punch = document["competitors"]!!
+            .jsonArray.single()
+            .jsonObject["result"]!!
+            .jsonObject["punches"]!!
+            .jsonArray.first()
+            .jsonObject
+
+        assertEquals(31, alias["alias_si_code"]!!.jsonPrimitive.int)
+        assertEquals("F1", alias["alias_name"]!!.jsonPrimitive.content)
+        assertEquals("F1", punch["code"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun resolvesAndroidCategoryControlPointsThroughGlobalControls() {
+        val category = category()
+        val document = FinalResultJsonExports.resultDocument(
+            raceData(
+                categoryControlPoint = EventControlPoint(
+                    id = "cp-legacy",
+                    categoryId = category.id,
+                    siCode = 31,
+                    type = ControlPointType.CONTROL,
+                    order = 0,
+                    controlId = "control-35"
+                ),
+                controls = listOf(
+                    EventControl(
+                        id = "control-35",
+                        raceId = "race",
+                        label = "F5",
+                        siCode = 35,
+                        type = ControlPointType.BEACON
+                    )
+                )
+            )
+        )
+        val controlPoint = document.categories.single().categoryControlPoints.single()
+
+        assertEquals(35, controlPoint.siCode)
+        assertEquals(ControlPointType.BEACON, controlPoint.controlType)
+    }
+
     private fun raceData(
         competitors: List<EventCompetitorData>? = null,
         resultStatus: ResultStatus = ResultStatus.OK,
-        punchStatus: PunchStatus = PunchStatus.UNKNOWN
+        punchStatus: PunchStatus = PunchStatus.UNKNOWN,
+        categoryControlPoint: EventControlPoint? = null,
+        controls: List<EventControl> = emptyList()
     ): EventRaceData {
         val category = category()
         val alias = EventAlias("alias", "race", 31, "Fox")
@@ -122,7 +185,9 @@ class FinalResultJsonExportsTest {
             categories = listOf(
                 EventCategoryData(
                     category = category,
-                    controlPoints = listOf(EventControlPoint("cp-31", category.id, 31, ControlPointType.CONTROL, 0)),
+                    controlPoints = listOf(
+                        categoryControlPoint ?: EventControlPoint("cp-31", category.id, 31, ControlPointType.CONTROL, 0)
+                    ),
                     competitors = listOf(competitor)
                 )
             ),
@@ -130,7 +195,8 @@ class FinalResultJsonExportsTest {
             competitorData = competitors ?: listOf(
                 competitorData("competitor", category, readout("result", resultStatus, punchStatus, alias))
             ),
-            unmatchedReadoutData = emptyList()
+            unmatchedReadoutData = emptyList(),
+            controls = controls
         )
     }
 

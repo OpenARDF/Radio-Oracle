@@ -15,6 +15,7 @@ import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAliasPunch
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
@@ -94,7 +95,38 @@ class RaceBackupJsonExportsTest {
         assertFalse(exported.contains(encryptedIdealOrder))
     }
 
-    private fun raceData(): EventRaceData =
+    @Test
+    fun exportsGlobalControlsAsAndroidAliasesAndUnmatchedPunchLabels() {
+        val document = Json.parseToJsonElement(
+            RaceBackupJsonExports.race(
+                raceData(
+                    unmatchedPunchSiCode = 31,
+                    unmatchedPunchType = SIRecordType.CONTROL,
+                    controls = listOf(
+                        EventControl(
+                            id = "control-31",
+                            raceId = "race",
+                            label = "F1",
+                            siCode = 31,
+                            type = ControlPointType.CONTROL
+                        )
+                    )
+                )
+            )
+        ).jsonObject
+        val alias = document["aliases"]!!.jsonArray.single().jsonObject
+        val punch = document["unmatched_results"]!!.jsonArray.single().jsonObject["punches"]!!.jsonArray.single().jsonObject
+
+        assertEquals(31, alias["alias_si_code"]!!.jsonPrimitive.int)
+        assertEquals("F1", alias["alias_name"]!!.jsonPrimitive.content)
+        assertEquals("F1", punch["code"]!!.jsonPrimitive.content)
+    }
+
+    private fun raceData(
+        unmatchedPunchSiCode: Int = 0,
+        unmatchedPunchType: SIRecordType = SIRecordType.FINISH,
+        controls: List<EventControl> = emptyList()
+    ): EventRaceData =
         EventRaceData(
             race = EventRace(
                 id = "race",
@@ -135,10 +167,10 @@ class RaceBackupJsonExportsTest {
                                 raceId = "race",
                                 resultId = "result",
                                 cardNumber = 654321,
-                                siCode = 0,
+                                siCode = unmatchedPunchSiCode,
                                 siTimeSeconds = 37_500,
                                 originalSiTimeSeconds = 37_500,
-                                punchType = SIRecordType.FINISH,
+                                punchType = unmatchedPunchType,
                                 order = 0,
                                 punchStatus = PunchStatus.VALID,
                                 splitSeconds = 1_500
@@ -147,6 +179,7 @@ class RaceBackupJsonExportsTest {
                         )
                     )
                 )
-            )
+            ),
+            controls = controls
         )
 }

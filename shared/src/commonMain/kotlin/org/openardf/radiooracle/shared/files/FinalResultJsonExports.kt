@@ -15,6 +15,7 @@ import org.openardf.radiooracle.shared.event.EventAlias
 import org.openardf.radiooracle.shared.event.EventAliasPunch
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
@@ -32,17 +33,18 @@ object FinalResultJsonExports {
     fun results(raceData: EventRaceData): String =
         json.encodeToString(resultDocument(raceData))
 
-    fun resultDocument(raceData: EventRaceData): FinalResultsJson =
-        FinalResultsJson(
+    fun resultDocument(raceData: EventRaceData): FinalResultsJson {
+        val controlsById = raceData.controls.associateBy { it.id }
+        return FinalResultsJson(
             categories = raceData.categories
-                .map { it.toFinalCategory() },
-            aliases = raceData.aliases
-                .map { it.toFinalAlias() },
+                .map { it.toFinalCategory(controlsById) },
+            aliases = androidAliases(raceData),
             competitors = raceData.competitorData
                 .map { it.toFinalCompetitor(raceData) }
         )
+    }
 
-    private fun EventCategoryData.toFinalCategory(): FinalCategoryJson =
+    private fun EventCategoryData.toFinalCategory(controlsById: Map<String, EventControl>): FinalCategoryJson =
         FinalCategoryJson(
             categoryName = category.name,
             categoryGender = category.isMan,
@@ -51,7 +53,7 @@ object FinalResultJsonExports {
             categoryClimb = category.climbMeters,
             categoryControlPoints = controlPoints
                 .sortedBy { it.order }
-                .map { it.toFinalControlPoint() },
+                .map { it.toFinalControlPoint(controlsById) },
             categoryDifferentProperties = category.differentProperties,
             categoryRaceType = category.raceType,
             categoryTimeLimit = category.timeLimitSeconds
@@ -60,8 +62,34 @@ object FinalResultJsonExports {
             categoryBand = category.raceBand
         )
 
-    private fun EventControlPoint.toFinalControlPoint(): FinalControlPointJson =
-        FinalControlPointJson(siCode = siCode, controlType = type)
+    private fun EventControlPoint.toFinalControlPoint(controlsById: Map<String, EventControl>): FinalControlPointJson {
+        val control = controlsById[controlId]
+        return FinalControlPointJson(
+            siCode = control?.siCode ?: siCode,
+            controlType = control?.type ?: type
+        )
+    }
+
+    internal fun androidAliases(raceData: EventRaceData): List<FinalAliasJson> {
+        val controlAliases = raceData.controls
+            .sortedWith(compareBy<EventControl>({ it.siCode }, { it.type.name }, { it.label }))
+            .map { control ->
+                FinalAliasJson(
+                    aliasSiCode = control.siCode,
+                    aliasName = control.androidDisplayLabel()
+                )
+            }
+        val legacyAliases = raceData.aliases.map { it.toFinalAlias() }
+        return (controlAliases + legacyAliases)
+            .filter { it.aliasName != it.aliasSiCode.toString() }
+            .distinctBy { it.aliasSiCode }
+    }
+
+    internal fun controlLabelsByCode(raceData: EventRaceData): Map<Int, String> =
+        androidAliases(raceData).associate { it.aliasSiCode to it.aliasName }
+
+    private fun EventControl.androidDisplayLabel(): String =
+        publicLabel?.takeIf { it.isNotBlank() } ?: label
 
     private fun EventAlias.toFinalAlias(): FinalAliasJson =
         FinalAliasJson(aliasSiCode = siCode, aliasName = name)
@@ -87,8 +115,9 @@ object FinalResultJsonExports {
         )
     }
 
-    private fun EventReadoutData.toFinalResult(raceData: EventRaceData): FinalResultJson =
-        FinalResultJson(
+    private fun EventReadoutData.toFinalResult(raceData: EventRaceData): FinalResultJson {
+        val punchLabelsByCode = controlLabelsByCode(raceData)
+        return FinalResultJson(
             checkTime = result.checkTimeSeconds?.toRaceDateTime(raceData.race.startDateTimeIso),
             startTime = result.startTimeSeconds?.toRaceDateTime(raceData.race.startDateTimeIso),
             finishTime = result.finishTimeSeconds?.toRaceDateTime(raceData.race.startDateTimeIso),
@@ -101,11 +130,12 @@ object FinalResultJsonExports {
             automaticStatus = result.automaticStatus,
             punches = punches
                 .filter { it.punch.punchType != SIRecordType.START }
-                .map { it.toFinalPunch() }
+                .map { it.toFinalPunch(punchLabelsByCode) }
         )
+    }
 
-    private fun EventAliasPunch.toFinalPunch(): FinalPunchJson {
-        val rawCode = alias?.name ?: punch.siCode.toString()
+    private fun EventAliasPunch.toFinalPunch(controlLabelsByCode: Map<Int, String>): FinalPunchJson {
+        val rawCode = controlLabelsByCode[punch.siCode] ?: alias?.name ?: punch.siCode.toString()
         val code = if (punch.punchType == SIRecordType.FINISH && rawCode == "0") "F" else rawCode
         return FinalPunchJson(
             code = code,

@@ -46,19 +46,20 @@ object RaceBackupJsonExports {
     private fun EventReadoutData.toRaceBackupUnmatched(raceData: EventRaceData): RaceBackupUnmatchedResultJson? {
         val startTime = result.startTimeSeconds ?: return null
         val finishTime = result.finishTimeSeconds ?: return null
+        val punchLabelsByCode = FinalResultJsonExports.controlLabelsByCode(raceData)
         return RaceBackupUnmatchedResultJson(
             siNumber = result.siNumber,
             checkTime = result.checkTimeSeconds?.toRaceDateTime(raceData.race.startDateTimeIso),
             startTime = startTime.toRaceDateTime(raceData.race.startDateTimeIso),
             finishTime = finishTime.toRaceDateTime(raceData.race.startDateTimeIso),
             runTime = DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinutes = true),
-            punches = punches.map { it.toRaceBackupPunch() }
+            punches = punches.map { it.toRaceBackupPunch(punchLabelsByCode) }
         )
     }
 
-    private fun EventAliasPunch.toRaceBackupPunch(): FinalResultJsonExports.FinalPunchJson =
+    private fun EventAliasPunch.toRaceBackupPunch(punchLabelsByCode: Map<Int, String>): FinalResultJsonExports.FinalPunchJson =
         FinalResultJsonExports.FinalPunchJson(
-            code = alias?.name ?: punch.siCode.toString(),
+            code = punchLabelsByCode[punch.siCode] ?: alias?.name ?: punch.siCode.toString(),
             siCode = punch.siCode,
             controlType = punch.punchType.name,
             punchStatus = punch.punchStatus.toRaceBackupPunchStatus(),
