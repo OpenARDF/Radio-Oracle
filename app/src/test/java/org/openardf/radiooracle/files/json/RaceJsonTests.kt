@@ -27,6 +27,14 @@ import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.event.EventCategory
+import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlPoint
+import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventProjectFileJson
+import org.openardf.radiooracle.shared.event.EventRace
+import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.sportident.SITime
 import org.junit.Assert.assertEquals
@@ -121,6 +129,77 @@ class RaceJsonTests {
                 dataProcessor
             )
         }
+    }
+
+    @Test
+    fun importsRadioOracleEventFileJson() {
+        val eventFileJson = EventProjectFileJson.encode(
+            EventProjectFile(
+                raceData = EventRaceData(
+                    race = EventRace(
+                        id = "desktop-race",
+                        name = "Desktop Event",
+                        apiKey = "",
+                        startDateTimeIso = "2026-06-05T09:00",
+                        raceType = RaceType.CLASSIC,
+                        raceLevel = RaceLevel.PRACTICE,
+                        raceBand = RaceBand.M80,
+                        timeLimitSeconds = 7_200
+                    ),
+                    categories = listOf(
+                        EventCategoryData(
+                            category = EventCategory(
+                                id = "category-m21",
+                                raceId = "desktop-race",
+                                name = "M21",
+                                isMan = true,
+                                maxAge = null,
+                                lengthMeters = 5_000,
+                                climbMeters = 100,
+                                order = 0,
+                                differentProperties = false,
+                                raceType = null,
+                                raceBand = null,
+                                timeLimitSeconds = null,
+                                controlPointsString = ""
+                            ),
+                            controlPoints = listOf(
+                                EventControlPoint(
+                                    id = "category-m21-control-1",
+                                    categoryId = "category-m21",
+                                    siCode = 0,
+                                    type = ControlPointType.CONTROL,
+                                    order = 1,
+                                    controlId = "control-fox1-31-control"
+                                )
+                            ),
+                            competitors = emptyList(),
+                            publicControlIds = listOf("control-fox1-31-control")
+                        )
+                    ),
+                    aliases = emptyList(),
+                    competitorData = emptyList(),
+                    unmatchedReadoutData = emptyList(),
+                    controls = listOf(
+                        EventControl(
+                            id = "control-fox1-31-control",
+                            raceId = "desktop-race",
+                            label = "FOX 1",
+                            siCode = 31,
+                            type = ControlPointType.CONTROL
+                        )
+                    )
+                )
+            )
+        )
+
+        val raceData = JsonProcessor.importRaceData(eventFileJson, dataProcessor)
+
+        assertEquals("Desktop Event", raceData.race.name)
+        assertEquals("M21", raceData.categories.single().category.name)
+        assertEquals("31", raceData.categories.single().category.controlPointsString)
+        assertEquals(31, raceData.categories.single().controlPoints.single().siCode)
+        assertEquals(listOf("FOX 1"), raceData.aliases.map { it.name })
     }
 
     private fun goldenRaceData(): RaceData {

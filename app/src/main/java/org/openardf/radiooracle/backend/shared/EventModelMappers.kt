@@ -406,13 +406,14 @@ fun EventRaceData.toRoomRaceData(): RaceData {
 
 private fun EventRaceData.androidCompatibleAliases(idMapper: RoomIdMapper): List<Alias> {
     val existingAliases = aliases.map { it.toRoomAlias(idMapper) }
-    val existingKeys = existingAliases.map { AliasKey(it.siCode, it.name) }.toSet()
+    val existingCodes = existingAliases.map { it.siCode }.toSet()
     val controlAliases = controls
         .filter { control -> control.label.isNotBlank() }
         .map { it.toRoomAlias(idMapper) }
-        .filterNot { AliasKey(it.siCode, it.name) in existingKeys }
+        .filterNot { it.siCode in existingCodes }
+        .distinctBy { it.siCode }
     return (existingAliases + controlAliases)
-        .distinctBy { AliasKey(it.siCode, it.name) }
+        .distinctBy { it.siCode }
 }
 
 private class RoomIdMapper {
@@ -424,5 +425,3 @@ private class RoomIdMapper {
                 .getOrElse { UUID.nameUUIDFromBytes(id.toByteArray(Charsets.UTF_8)) }
         }
 }
-
-private data class AliasKey(val siCode: Int, val name: String)

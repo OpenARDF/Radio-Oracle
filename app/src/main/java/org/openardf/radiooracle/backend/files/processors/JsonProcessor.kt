@@ -19,6 +19,8 @@ import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
+import org.openardf.radiooracle.backend.shared.toRoomRaceData
+import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.InputStream
@@ -97,6 +99,10 @@ object JsonProcessor : FormatProcessor {
 
     /** Imports a full race backup from a JSON string using the race-data Moshi adapter. */
     fun importRaceData(jsonString: String, dataProcessor: DataProcessor): RaceData {
+        if (jsonString.contains("\"appName\"") && jsonString.contains("\"raceData\"")) {
+            return EventProjectFileJson.decode(jsonString).raceData.toRoomRaceData()
+        }
+
         val moshi: Moshi = Moshi.Builder()
             .add(RaceDataJsonAdapter(dataProcessor))
             .add(LocalDateTimeAdapter())
