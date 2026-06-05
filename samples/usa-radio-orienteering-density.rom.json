@@ -1,5 +1,5 @@
 {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "appName": "Radio-Oracle",
     "raceData": {
         "race": {
@@ -27,7 +27,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "31 32 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -35,24 +35,32 @@
                         "categoryId": "category-w12",
                         "siCode": 31,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-fox1-31-control"
                     },
                     {
                         "id": "control-w12-32",
                         "categoryId": "category-w12",
                         "siCode": 32,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-32-32-control"
                     },
                     {
                         "id": "control-w12-90",
                         "categoryId": "category-w12",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-32-32-control",
+                    "control-finishbeacon-90-beacon",
+                    "control-fox1-31-control"
+                ]
             },
             {
                 "category": {
@@ -68,7 +76,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "31 32 33 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -76,31 +84,41 @@
                         "categoryId": "category-w14",
                         "siCode": 31,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-fox1-31-control"
                     },
                     {
                         "id": "control-w14-32",
                         "categoryId": "category-w14",
                         "siCode": 32,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-32-32-control"
                     },
                     {
                         "id": "control-w14-33",
                         "categoryId": "category-w14",
                         "siCode": 33,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-33-33-control"
                     },
                     {
                         "id": "control-w14-90",
                         "categoryId": "category-w14",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-32-32-control",
+                    "control-33-33-control",
+                    "control-finishbeacon-90-beacon",
+                    "control-fox1-31-control"
+                ]
             },
             {
                 "category": {
@@ -116,7 +134,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "31 32 33 34 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -124,38 +142,50 @@
                         "categoryId": "category-w16",
                         "siCode": 31,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-fox1-31-control"
                     },
                     {
                         "id": "control-w16-32",
                         "categoryId": "category-w16",
                         "siCode": 32,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-32-32-control"
                     },
                     {
                         "id": "control-w16-33",
                         "categoryId": "category-w16",
                         "siCode": 33,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-33-33-control"
                     },
                     {
                         "id": "control-w16-34",
                         "categoryId": "category-w16",
                         "siCode": 34,
                         "type": "CONTROL",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-34-34-control"
                     },
                     {
                         "id": "control-w16-90",
                         "categoryId": "category-w16",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 5
+                        "order": 5,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-32-32-control",
+                    "control-33-33-control",
+                    "control-34-34-control",
+                    "control-finishbeacon-90-beacon",
+                    "control-fox1-31-control"
+                ]
             },
             {
                 "category": {
@@ -171,7 +201,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "31 32 33 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -179,31 +209,41 @@
                         "categoryId": "category-w19",
                         "siCode": 31,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-fox1-31-control"
                     },
                     {
                         "id": "control-w19-32",
                         "categoryId": "category-w19",
                         "siCode": 32,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-32-32-control"
                     },
                     {
                         "id": "control-w19-33",
                         "categoryId": "category-w19",
                         "siCode": 33,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-33-33-control"
                     },
                     {
                         "id": "control-w19-90",
                         "categoryId": "category-w19",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-32-32-control",
+                    "control-33-33-control",
+                    "control-finishbeacon-90-beacon",
+                    "control-fox1-31-control"
+                ]
             },
             {
                 "category": {
@@ -219,7 +259,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "31 32 33 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -227,31 +267,41 @@
                         "categoryId": "category-w21",
                         "siCode": 31,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-fox1-31-control"
                     },
                     {
                         "id": "control-w21-32",
                         "categoryId": "category-w21",
                         "siCode": 32,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-32-32-control"
                     },
                     {
                         "id": "control-w21-33",
                         "categoryId": "category-w21",
                         "siCode": 33,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-33-33-control"
                     },
                     {
                         "id": "control-w21-90",
                         "categoryId": "category-w21",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-32-32-control",
+                    "control-33-33-control",
+                    "control-finishbeacon-90-beacon",
+                    "control-fox1-31-control"
+                ]
             },
             {
                 "category": {
@@ -267,7 +317,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "31 32 33 34 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -275,38 +325,50 @@
                         "categoryId": "category-w35",
                         "siCode": 31,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-fox1-31-control"
                     },
                     {
                         "id": "control-w35-32",
                         "categoryId": "category-w35",
                         "siCode": 32,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-32-32-control"
                     },
                     {
                         "id": "control-w35-33",
                         "categoryId": "category-w35",
                         "siCode": 33,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-33-33-control"
                     },
                     {
                         "id": "control-w35-34",
                         "categoryId": "category-w35",
                         "siCode": 34,
                         "type": "CONTROL",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-34-34-control"
                     },
                     {
                         "id": "control-w35-90",
                         "categoryId": "category-w35",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 5
+                        "order": 5,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-32-32-control",
+                    "control-33-33-control",
+                    "control-34-34-control",
+                    "control-finishbeacon-90-beacon",
+                    "control-fox1-31-control"
+                ]
             },
             {
                 "category": {
@@ -322,7 +384,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "31 32 33 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -330,31 +392,41 @@
                         "categoryId": "category-w45",
                         "siCode": 31,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-fox1-31-control"
                     },
                     {
                         "id": "control-w45-32",
                         "categoryId": "category-w45",
                         "siCode": 32,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-32-32-control"
                     },
                     {
                         "id": "control-w45-33",
                         "categoryId": "category-w45",
                         "siCode": 33,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-33-33-control"
                     },
                     {
                         "id": "control-w45-90",
                         "categoryId": "category-w45",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-32-32-control",
+                    "control-33-33-control",
+                    "control-finishbeacon-90-beacon",
+                    "control-fox1-31-control"
+                ]
             },
             {
                 "category": {
@@ -370,7 +442,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "31 32 33 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -378,31 +450,41 @@
                         "categoryId": "category-w55",
                         "siCode": 31,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-fox1-31-control"
                     },
                     {
                         "id": "control-w55-32",
                         "categoryId": "category-w55",
                         "siCode": 32,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-32-32-control"
                     },
                     {
                         "id": "control-w55-33",
                         "categoryId": "category-w55",
                         "siCode": 33,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-33-33-control"
                     },
                     {
                         "id": "control-w55-90",
                         "categoryId": "category-w55",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-32-32-control",
+                    "control-33-33-control",
+                    "control-finishbeacon-90-beacon",
+                    "control-fox1-31-control"
+                ]
             },
             {
                 "category": {
@@ -418,7 +500,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "31 32 33 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -426,31 +508,41 @@
                         "categoryId": "category-w65",
                         "siCode": 31,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-fox1-31-control"
                     },
                     {
                         "id": "control-w65-32",
                         "categoryId": "category-w65",
                         "siCode": 32,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-32-32-control"
                     },
                     {
                         "id": "control-w65-33",
                         "categoryId": "category-w65",
                         "siCode": 33,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-33-33-control"
                     },
                     {
                         "id": "control-w65-90",
                         "categoryId": "category-w65",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-32-32-control",
+                    "control-33-33-control",
+                    "control-finishbeacon-90-beacon",
+                    "control-fox1-31-control"
+                ]
             },
             {
                 "category": {
@@ -466,7 +558,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "31 32 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -474,24 +566,32 @@
                         "categoryId": "category-w75",
                         "siCode": 31,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-fox1-31-control"
                     },
                     {
                         "id": "control-w75-32",
                         "categoryId": "category-w75",
                         "siCode": 32,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-32-32-control"
                     },
                     {
                         "id": "control-w75-90",
                         "categoryId": "category-w75",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-32-32-control",
+                    "control-finishbeacon-90-beacon",
+                    "control-fox1-31-control"
+                ]
             },
             {
                 "category": {
@@ -507,7 +607,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "41 42 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -515,24 +615,32 @@
                         "categoryId": "category-m12",
                         "siCode": 41,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-41-41-control"
                     },
                     {
                         "id": "control-m12-42",
                         "categoryId": "category-m12",
                         "siCode": 42,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-42-42-control"
                     },
                     {
                         "id": "control-m12-90",
                         "categoryId": "category-m12",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-41-41-control",
+                    "control-42-42-control",
+                    "control-finishbeacon-90-beacon"
+                ]
             },
             {
                 "category": {
@@ -548,7 +656,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "41 42 43 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -556,31 +664,41 @@
                         "categoryId": "category-m14",
                         "siCode": 41,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-41-41-control"
                     },
                     {
                         "id": "control-m14-42",
                         "categoryId": "category-m14",
                         "siCode": 42,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-42-42-control"
                     },
                     {
                         "id": "control-m14-43",
                         "categoryId": "category-m14",
                         "siCode": 43,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-43-43-control"
                     },
                     {
                         "id": "control-m14-90",
                         "categoryId": "category-m14",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-41-41-control",
+                    "control-42-42-control",
+                    "control-43-43-control",
+                    "control-finishbeacon-90-beacon"
+                ]
             },
             {
                 "category": {
@@ -596,7 +714,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "41 42 43 44 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -604,38 +722,50 @@
                         "categoryId": "category-m16",
                         "siCode": 41,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-41-41-control"
                     },
                     {
                         "id": "control-m16-42",
                         "categoryId": "category-m16",
                         "siCode": 42,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-42-42-control"
                     },
                     {
                         "id": "control-m16-43",
                         "categoryId": "category-m16",
                         "siCode": 43,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-43-43-control"
                     },
                     {
                         "id": "control-m16-44",
                         "categoryId": "category-m16",
                         "siCode": 44,
                         "type": "CONTROL",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-44-44-control"
                     },
                     {
                         "id": "control-m16-90",
                         "categoryId": "category-m16",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 5
+                        "order": 5,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-41-41-control",
+                    "control-42-42-control",
+                    "control-43-43-control",
+                    "control-44-44-control",
+                    "control-finishbeacon-90-beacon"
+                ]
             },
             {
                 "category": {
@@ -651,7 +781,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "41 42 43 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -659,31 +789,41 @@
                         "categoryId": "category-m19",
                         "siCode": 41,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-41-41-control"
                     },
                     {
                         "id": "control-m19-42",
                         "categoryId": "category-m19",
                         "siCode": 42,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-42-42-control"
                     },
                     {
                         "id": "control-m19-43",
                         "categoryId": "category-m19",
                         "siCode": 43,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-43-43-control"
                     },
                     {
                         "id": "control-m19-90",
                         "categoryId": "category-m19",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-41-41-control",
+                    "control-42-42-control",
+                    "control-43-43-control",
+                    "control-finishbeacon-90-beacon"
+                ]
             },
             {
                 "category": {
@@ -699,7 +839,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "41 42 43 44 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -707,38 +847,50 @@
                         "categoryId": "category-m21",
                         "siCode": 41,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-41-41-control"
                     },
                     {
                         "id": "control-m21-42",
                         "categoryId": "category-m21",
                         "siCode": 42,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-42-42-control"
                     },
                     {
                         "id": "control-m21-43",
                         "categoryId": "category-m21",
                         "siCode": 43,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-43-43-control"
                     },
                     {
                         "id": "control-m21-44",
                         "categoryId": "category-m21",
                         "siCode": 44,
                         "type": "CONTROL",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-44-44-control"
                     },
                     {
                         "id": "control-m21-90",
                         "categoryId": "category-m21",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 5
+                        "order": 5,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-41-41-control",
+                    "control-42-42-control",
+                    "control-43-43-control",
+                    "control-44-44-control",
+                    "control-finishbeacon-90-beacon"
+                ]
             },
             {
                 "category": {
@@ -754,7 +906,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "41 42 43 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -762,31 +914,41 @@
                         "categoryId": "category-m40",
                         "siCode": 41,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-41-41-control"
                     },
                     {
                         "id": "control-m40-42",
                         "categoryId": "category-m40",
                         "siCode": 42,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-42-42-control"
                     },
                     {
                         "id": "control-m40-43",
                         "categoryId": "category-m40",
                         "siCode": 43,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-43-43-control"
                     },
                     {
                         "id": "control-m40-90",
                         "categoryId": "category-m40",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-41-41-control",
+                    "control-42-42-control",
+                    "control-43-43-control",
+                    "control-finishbeacon-90-beacon"
+                ]
             },
             {
                 "category": {
@@ -802,7 +964,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "41 42 43 44 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -810,38 +972,50 @@
                         "categoryId": "category-m50",
                         "siCode": 41,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-41-41-control"
                     },
                     {
                         "id": "control-m50-42",
                         "categoryId": "category-m50",
                         "siCode": 42,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-42-42-control"
                     },
                     {
                         "id": "control-m50-43",
                         "categoryId": "category-m50",
                         "siCode": 43,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-43-43-control"
                     },
                     {
                         "id": "control-m50-44",
                         "categoryId": "category-m50",
                         "siCode": 44,
                         "type": "CONTROL",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-44-44-control"
                     },
                     {
                         "id": "control-m50-90",
                         "categoryId": "category-m50",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 5
+                        "order": 5,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-41-41-control",
+                    "control-42-42-control",
+                    "control-43-43-control",
+                    "control-44-44-control",
+                    "control-finishbeacon-90-beacon"
+                ]
             },
             {
                 "category": {
@@ -857,7 +1031,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "41 42 43 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -865,31 +1039,41 @@
                         "categoryId": "category-m60",
                         "siCode": 41,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-41-41-control"
                     },
                     {
                         "id": "control-m60-42",
                         "categoryId": "category-m60",
                         "siCode": 42,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-42-42-control"
                     },
                     {
                         "id": "control-m60-43",
                         "categoryId": "category-m60",
                         "siCode": 43,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-43-43-control"
                     },
                     {
                         "id": "control-m60-90",
                         "categoryId": "category-m60",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-41-41-control",
+                    "control-42-42-control",
+                    "control-43-43-control",
+                    "control-finishbeacon-90-beacon"
+                ]
             },
             {
                 "category": {
@@ -905,7 +1089,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "41 42 43 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -913,31 +1097,41 @@
                         "categoryId": "category-m70",
                         "siCode": 41,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-41-41-control"
                     },
                     {
                         "id": "control-m70-42",
                         "categoryId": "category-m70",
                         "siCode": 42,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-42-42-control"
                     },
                     {
                         "id": "control-m70-43",
                         "categoryId": "category-m70",
                         "siCode": 43,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-43-43-control"
                     },
                     {
                         "id": "control-m70-90",
                         "categoryId": "category-m70",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 4
+                        "order": 4,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-41-41-control",
+                    "control-42-42-control",
+                    "control-43-43-control",
+                    "control-finishbeacon-90-beacon"
+                ]
             },
             {
                 "category": {
@@ -953,7 +1147,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "41 42 90"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -961,46 +1155,35 @@
                         "categoryId": "category-m80",
                         "siCode": 41,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-41-41-control"
                     },
                     {
                         "id": "control-m80-42",
                         "categoryId": "category-m80",
                         "siCode": 42,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-42-42-control"
                     },
                     {
                         "id": "control-m80-90",
                         "categoryId": "category-m80",
                         "siCode": 90,
                         "type": "BEACON",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-finishbeacon-90-beacon"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-41-41-control",
+                    "control-42-42-control",
+                    "control-finishbeacon-90-beacon"
+                ]
             }
         ],
-        "aliases": [
-            {
-                "id": "alias-31",
-                "raceId": "usa-density-race",
-                "siCode": 31,
-                "name": "Fox 1"
-            },
-            {
-                "id": "alias-90",
-                "raceId": "usa-density-race",
-                "siCode": 90,
-                "name": "Finish Beacon"
-            },
-            {
-                "id": "alias-53",
-                "raceId": "usa-density-race",
-                "siCode": 53,
-                "name": "Youth Beacon"
-            }
-        ],
+        "aliases": [],
         "competitorData": [
             {
                 "competitorCategory": {
@@ -1496,6 +1679,116 @@
                     "place": 0
                 },
                 "punches": []
+            }
+        ],
+        "controls": [
+            {
+                "id": "control-fox1-31-control",
+                "raceId": "usa-density-race",
+                "label": "Fox 1",
+                "siCode": 31,
+                "type": "CONTROL",
+                "mandatory": false,
+                "publicLabel": null,
+                "latitude": null,
+                "longitude": null,
+                "notes": null
+            },
+            {
+                "id": "control-32-32-control",
+                "raceId": "usa-density-race",
+                "label": "32",
+                "siCode": 32,
+                "type": "CONTROL",
+                "mandatory": false,
+                "publicLabel": null,
+                "latitude": null,
+                "longitude": null,
+                "notes": null
+            },
+            {
+                "id": "control-33-33-control",
+                "raceId": "usa-density-race",
+                "label": "33",
+                "siCode": 33,
+                "type": "CONTROL",
+                "mandatory": false,
+                "publicLabel": null,
+                "latitude": null,
+                "longitude": null,
+                "notes": null
+            },
+            {
+                "id": "control-34-34-control",
+                "raceId": "usa-density-race",
+                "label": "34",
+                "siCode": 34,
+                "type": "CONTROL",
+                "mandatory": false,
+                "publicLabel": null,
+                "latitude": null,
+                "longitude": null,
+                "notes": null
+            },
+            {
+                "id": "control-41-41-control",
+                "raceId": "usa-density-race",
+                "label": "41",
+                "siCode": 41,
+                "type": "CONTROL",
+                "mandatory": false,
+                "publicLabel": null,
+                "latitude": null,
+                "longitude": null,
+                "notes": null
+            },
+            {
+                "id": "control-42-42-control",
+                "raceId": "usa-density-race",
+                "label": "42",
+                "siCode": 42,
+                "type": "CONTROL",
+                "mandatory": false,
+                "publicLabel": null,
+                "latitude": null,
+                "longitude": null,
+                "notes": null
+            },
+            {
+                "id": "control-43-43-control",
+                "raceId": "usa-density-race",
+                "label": "43",
+                "siCode": 43,
+                "type": "CONTROL",
+                "mandatory": false,
+                "publicLabel": null,
+                "latitude": null,
+                "longitude": null,
+                "notes": null
+            },
+            {
+                "id": "control-44-44-control",
+                "raceId": "usa-density-race",
+                "label": "44",
+                "siCode": 44,
+                "type": "CONTROL",
+                "mandatory": false,
+                "publicLabel": null,
+                "latitude": null,
+                "longitude": null,
+                "notes": null
+            },
+            {
+                "id": "control-finishbeacon-90-beacon",
+                "raceId": "usa-density-race",
+                "label": "Finish Beacon",
+                "siCode": 90,
+                "type": "BEACON",
+                "mandatory": false,
+                "publicLabel": null,
+                "latitude": null,
+                "longitude": null,
+                "notes": null
             }
         ]
     }

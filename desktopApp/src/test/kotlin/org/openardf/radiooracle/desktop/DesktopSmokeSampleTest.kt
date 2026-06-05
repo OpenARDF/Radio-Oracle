@@ -40,14 +40,20 @@ class DesktopSmokeSampleTest {
         assertEquals(12, EventReadoutDetails.from(raceData).size)
         assertEquals(11, EventResultDetails.from(raceData).size)
         assertTrue(raceData.categories.all { category ->
-            category.category.controlPointsString
-                .split(" ")
-                .all { token -> token.all(Char::isDigit) }
+            category.category.controlPointsString.isBlank()
+        })
+        assertTrue(raceData.categories.all { category ->
+            category.controlPoints.all { it.controlId.isNotBlank() }
+        })
+        assertTrue(raceData.categories.all { category ->
+            category.publicControlIds.containsAll(category.controlPoints.map { it.controlId })
         })
         assertTrue(raceData.categories.all { category ->
             category.controlPoints.last().siCode == 90 &&
                     category.controlPoints.last().type == ControlPointType.BEACON
         })
+        assertTrue(raceData.aliases.isEmpty())
+        assertTrue(raceData.controls.isNotEmpty())
     }
 
     @Test
@@ -72,11 +78,11 @@ class DesktopSmokeSampleTest {
         val categoryId = original.raceData.categories.first().category.id
         val removedCategoryId = original.raceData.categories.last().category.id
         val competitorId = original.raceData.competitorData.first().competitorCategory.competitor.id
-        val aliasId = original.raceData.aliases.first().id
+        val controlId = original.raceData.controls.first().id
 
         val edited = EventProjectEditor.assignCompetitorCategory(
             EventProjectEditor.removeCategory(
-                EventProjectEditor.updateAlias(
+                EventProjectEditor.updateControl(
                     EventProjectEditor.updateCompetitorNumbers(
                         EventProjectEditor.renameCompetitor(
                             EventProjectEditor.updateCategoryControlPoints(
@@ -96,9 +102,13 @@ class DesktopSmokeSampleTest {
                         "501",
                         "7654321"
                     ),
-                    aliasId,
-                    "40",
-                    "F4"
+                    controlId,
+                    "F1",
+                    "31",
+                    ControlPointType.CONTROL,
+                    false,
+                    "",
+                    "Edited control"
                 ),
                 removedCategoryId,
                 deleteCompetitors = false
@@ -150,7 +160,8 @@ class DesktopSmokeSampleTest {
         )
         assertEquals(501, readBack.raceData.competitorData.first().competitorCategory.competitor.startNumber)
         assertEquals(7_654_321, readBack.raceData.competitorData.first().competitorCategory.competitor.siNumber)
-        assertEquals("F4", readBack.raceData.aliases.first { it.id == aliasId }.name)
+        assertEquals("F1", readBack.raceData.controls.first { it.id == controlId }.label)
+        assertEquals("Edited control", readBack.raceData.controls.first { it.id == controlId }.notes)
     }
 
     @Test
@@ -546,7 +557,7 @@ class DesktopSmokeSampleTest {
         assertEquals(competitorWithoutReadout.id, readout.result.competitorId)
         assertEquals(222222, readout.result.siNumber)
         assertEquals(1_000, readout.result.runTimeSeconds)
-        assertEquals(ResultStatus.NO_RANKING, readout.result.resultStatus)
+        assertEquals(ResultStatus.OK, readout.result.resultStatus)
         assertEquals(listOf(0, 41, 42, 0), readout.punches.map { it.punch.siCode })
         assertEquals(
             "41 42",

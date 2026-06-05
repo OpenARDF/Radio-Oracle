@@ -1,5 +1,5 @@
 {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "appName": "Radio-Oracle",
     "raceData": {
         "race": {
@@ -27,7 +27,7 @@
                     "raceType": null,
                     "raceBand": null,
                     "timeLimitSeconds": null,
-                    "controlPointsString": "31 32 33"
+                    "controlPointsString": ""
                 },
                 "controlPoints": [
                     {
@@ -35,24 +35,32 @@
                         "categoryId": "category-m21",
                         "siCode": 31,
                         "type": "CONTROL",
-                        "order": 1
+                        "order": 1,
+                        "controlId": "control-fox1-31-control"
                     },
                     {
                         "id": "control-32",
                         "categoryId": "category-m21",
                         "siCode": 32,
                         "type": "CONTROL",
-                        "order": 2
+                        "order": 2,
+                        "controlId": "control-32-32-control"
                     },
                     {
                         "id": "control-33",
                         "categoryId": "category-m21",
                         "siCode": 33,
                         "type": "CONTROL",
-                        "order": 3
+                        "order": 3,
+                        "controlId": "control-33-33-control"
                     }
                 ],
-                "competitors": []
+                "competitors": [],
+                "publicControlIds": [
+                    "control-32-32-control",
+                    "control-33-33-control",
+                    "control-fox1-31-control"
+                ]
             },
             {
                 "category": {
@@ -68,20 +76,34 @@
                     "raceType": "SPRINT",
                     "raceBand": "M2",
                     "timeLimitSeconds": 3600,
-                    "controlPointsString": "41 42"
+                    "controlPointsString": ""
                 },
-                "controlPoints": [],
-                "competitors": []
+                "controlPoints": [
+                    {
+                        "id": "control-w21-41",
+                        "categoryId": "category-w21",
+                        "siCode": 41,
+                        "type": "CONTROL",
+                        "order": 1,
+                        "controlId": "control-41-41-control"
+                    },
+                    {
+                        "id": "control-w21-42",
+                        "categoryId": "category-w21",
+                        "siCode": 42,
+                        "type": "CONTROL",
+                        "order": 2,
+                        "controlId": "control-42-42-control"
+                    }
+                ],
+                "competitors": [],
+                "publicControlIds": [
+                    "control-41-41-control",
+                    "control-42-42-control"
+                ]
             }
         ],
-        "aliases": [
-            {
-                "id": "alias-31",
-                "raceId": "desktop-smoke-race",
-                "siCode": 31,
-                "name": "FOX 1"
-            }
-        ],
+        "aliases": [],
         "competitorData": [
             {
                 "competitorCategory": {
@@ -167,6 +189,68 @@
                     "place": 0
                 },
                 "punches": []
+            }
+        ],
+        "controls": [
+            {
+                "id": "control-fox1-31-control",
+                "raceId": "desktop-smoke-race",
+                "label": "FOX 1",
+                "siCode": 31,
+                "type": "CONTROL",
+                "mandatory": false,
+                "publicLabel": null,
+                "latitude": null,
+                "longitude": null,
+                "notes": null
+            },
+            {
+                "id": "control-32-32-control",
+                "raceId": "desktop-smoke-race",
+                "label": "32",
+                "siCode": 32,
+                "type": "CONTROL",
+                "mandatory": false,
+                "publicLabel": null,
+                "latitude": null,
+                "longitude": null,
+                "notes": null
+            },
+            {
+                "id": "control-33-33-control",
+                "raceId": "desktop-smoke-race",
+                "label": "33",
+                "siCode": 33,
+                "type": "CONTROL",
+                "mandatory": false,
+                "publicLabel": null,
+                "latitude": null,
+                "longitude": null,
+                "notes": null
+            },
+            {
+                "id": "control-41-41-control",
+                "raceId": "desktop-smoke-race",
+                "label": "41",
+                "siCode": 41,
+                "type": "CONTROL",
+                "mandatory": false,
+                "publicLabel": null,
+                "latitude": null,
+                "longitude": null,
+                "notes": null
+            },
+            {
+                "id": "control-42-42-control",
+                "raceId": "desktop-smoke-race",
+                "label": "42",
+                "siCode": 42,
+                "type": "CONTROL",
+                "mandatory": false,
+                "publicLabel": null,
+                "latitude": null,
+                "longitude": null,
+                "notes": null
             }
         ]
     }
