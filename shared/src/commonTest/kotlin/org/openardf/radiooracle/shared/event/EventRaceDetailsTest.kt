@@ -23,6 +23,12 @@ class EventRaceDetailsTest {
         assertEquals("120:00", details.timeLimitText)
     }
 
+    @Test
+    fun nationalRaceLevelDefaultsTo180MinuteLimit() {
+        assertEquals(180L, RaceLevel.NATIONAL.defaultTimeLimitMinutes())
+        assertEquals(null, RaceLevel.PRACTICE.defaultTimeLimitMinutes())
+    }
+
     private fun race(): EventRace =
         EventRace(
             id = "race",

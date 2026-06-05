@@ -92,6 +92,7 @@ import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
 import org.openardf.radiooracle.shared.event.StartDrawStartGroupMode
+import org.openardf.radiooracle.shared.event.defaultTimeLimitMinutes
 import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.files.EventCsvImports
@@ -4715,8 +4716,13 @@ private fun RaceDetailsPanel(
             RaceLevelPicker(
                 selectedRaceLevel,
                 {
+                    val defaultLimitMinutes = it.defaultTimeLimitMinutes()?.toString()
+                    val nextTimeLimitMinutes = defaultLimitMinutes ?: timeLimitMinutesDraft
                     selectedRaceLevel = it
-                    applyRaceSettings(raceLevel = it)
+                    if (defaultLimitMinutes != null) {
+                        timeLimitMinutesDraft = nextTimeLimitMinutes
+                    }
+                    applyRaceSettings(raceLevel = it, timeLimitMinutes = nextTimeLimitMinutes)
                 },
                 Modifier.weight(1f)
             )
@@ -4735,7 +4741,7 @@ private fun RaceDetailsPanel(
                     applyRaceSettings(timeLimitMinutes = it)
                 },
                 modifier = Modifier.weight(1f),
-                label = { Text("Limit min") }
+                label = { Text("Limit (min.)") }
             )
         }
     }

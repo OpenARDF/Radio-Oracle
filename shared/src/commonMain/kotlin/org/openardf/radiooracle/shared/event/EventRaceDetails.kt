@@ -5,6 +5,8 @@ import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
+const val NATIONAL_RACE_TIME_LIMIT_MINUTES = 180L
+
 /** Shared read-only race details prepared for Android and desktop presentation. */
 data class EventRaceDetails(
     val name: String,
@@ -55,6 +57,13 @@ fun RaceLevel.toDisplayLabel(): String =
         RaceLevel.DISTRICT -> "District"
         RaceLevel.PRACTICE -> "Practice"
         RaceLevel.OTHER -> "Other"
+    }
+
+/** Returns the race-level time-limit default that should replace the current Limit field, if any. */
+fun RaceLevel.defaultTimeLimitMinutes(): Long? =
+    when (this) {
+        RaceLevel.NATIONAL -> NATIONAL_RACE_TIME_LIMIT_MINUTES
+        else -> null
     }
 
 /** English race-band labels matching the existing Android default resources. */
