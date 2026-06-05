@@ -690,6 +690,50 @@ object EventProjectEditor {
         )
     }
 
+    /**
+     * Draws the current event after deriving current-day start thirds from
+     * previously exported start-list CSVs.
+     *
+     * The historical inputs are intentionally the simple starts CSV rows rather
+     * than full Event Files: organizers can select the exported starts from
+     * previous championship days and Radio-Oracle can infer which third each
+     * competitor occupied on each day. Matching is by SI number when available,
+     * with start number as a fallback for older or incomplete starts files.
+     */
+    fun drawStartListWithBalancedStartGroups(
+        projectFile: EventProjectFile,
+        intervalText: String,
+        options: StartDrawOptions,
+        previousStartLists: List<List<CompetitorStartCsvImportRow>>
+    ): EventProjectFile {
+        val drawOptions = options.withDefaultSeed().copy(startGroupMode = StartDrawStartGroupMode.BALANCED_MULTI_DAY_THIRDS)
+        val historyByCompetitorKey = previousStartLists
+            .flatMap(::startGroupHistoryFromStartRows)
+            .groupBy({ it.competitorKey }, { it.startGroup })
+            .mapValues { (_, startGroups) -> startGroups.groupingBy { it }.eachCount() }
+        val currentCompetitors = projectFile.raceData.competitorData.map { it.competitorCategory.competitor }
+        val assignedStartGroups = balancedStartGroupAssignments(
+            competitors = currentCompetitors,
+            historyByCompetitorKey = historyByCompetitorKey,
+            options = drawOptions
+        )
+
+        val projectWithAssignedGroups = projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                competitorData = projectFile.raceData.competitorData.map { data ->
+                    val competitor = data.competitorCategory.competitor
+                    data.copy(
+                        competitorCategory = data.competitorCategory.copy(
+                            competitor = competitor.copy(preferredStartGroup = assignedStartGroups[competitor.id])
+                        )
+                    )
+                }
+            )
+        )
+
+        return drawStartList(projectWithAssignedGroups, intervalText, drawOptions)
+    }
+
     private fun drawQueuedStartList(
         projectFile: EventProjectFile,
         options: StartDrawOptions,
@@ -2376,6 +2420,11 @@ object EventProjectEditor {
         val competitors: MutableList<EventCompetitor>
     )
 
+    private data class CompetitorStartGroupHistory(
+        val competitorKey: String,
+        val startGroup: Int
+    )
+
     private data class CategoryStartQueue(
         val category: EventCategory,
         val firstFox: Int?,
@@ -2414,7 +2463,7 @@ object EventProjectEditor {
         seed != StartDrawOptions.DEFAULT_SEED
 
     private fun StartDrawOptions.preferredStartGroupForSlot(startSlotIndex: Int, totalStartSlots: Int): Int? =
-        if (startGroupMode != StartDrawStartGroupMode.PREFERRED_THIRDS || totalStartSlots <= 0) {
+        if (startGroupMode == StartDrawStartGroupMode.DISABLED || totalStartSlots <= 0) {
             null
         } else {
             ((startSlotIndex * 3) / totalStartSlots + 1).coerceIn(1, 3)
@@ -2425,6 +2474,138 @@ object EventProjectEditor {
 
     private fun ceilDiv(value: Int, divisor: Int): Int =
         if (value == 0) 0 else (value + divisor - 1) / divisor
+
+    private fun startGroupHistoryFromStartRows(rows: List<CompetitorStartCsvImportRow>): List<CompetitorStartGroupHistory> {
+        val scheduledRows = rows
+            .map { row ->
+                val startSeconds = DurationFormatter.minuteStringToSeconds(row.startTimeText.trim())
+                val competitorKey = row.historyKey()
+                row to startSeconds to competitorKey
+            }
+        val startSlotIndexBySeconds = scheduledRows
+            .map { it.first.second }
+            .distinct()
+            .sorted()
+            .withIndex()
+            .associate { it.value to it.index }
+        val totalStartSlots = startSlotIndexBySeconds.size
+        if (totalStartSlots == 0) {
+            return emptyList()
+        }
+
+        return scheduledRows.map { rowWithKey ->
+            val startSeconds = rowWithKey.first.second
+            CompetitorStartGroupHistory(
+                competitorKey = rowWithKey.second,
+                startGroup = startGroupForSlotIndex(startSlotIndexBySeconds.getValue(startSeconds), totalStartSlots)
+            )
+        }
+    }
+
+    private fun balancedStartGroupAssignments(
+        competitors: List<EventCompetitor>,
+        historyByCompetitorKey: Map<String, Map<Int, Int>>,
+        options: StartDrawOptions
+    ): Map<String, Int> {
+        val totalStartSlots = ceilDiv(competitors.size, options.startersPerStartTime)
+        val capacityByStartGroup = (0 until totalStartSlots)
+            .map { startGroupForSlotIndex(it, totalStartSlots) }
+            .groupingBy { it }
+            .eachCount()
+            .mapValues { (_, slots) -> slots * options.startersPerStartTime }
+        val assignedCountByStartGroup = mutableMapOf(1 to 0, 2 to 0, 3 to 0)
+        val assignments = mutableMapOf<String, Int>()
+
+        /*
+         * Draw the most constrained people first. A person who already has two
+         * starts in one third has fewer fair choices than a person with no
+         * history, so assigning constrained competitors first reduces the need
+         * for late fallbacks.
+         */
+        competitors
+            .sortedWith(
+                compareByDescending<EventCompetitor> { competitor ->
+                    historyByCompetitorKey[competitor.historyKey()]?.values?.maxOrNull() ?: 0
+                }
+                    .thenByDescending { competitor -> historyByCompetitorKey[competitor.historyKey()]?.values?.sum() ?: 0 }
+                    .then(competitorStartDrawComparator(options, "balanced-start-groups"))
+            )
+            .forEach { competitor ->
+                val history = historyByCompetitorKey[competitor.historyKey()].orEmpty()
+                val selectedStartGroup = (1..3)
+                    .minWithOrNull(
+                        compareBy<Int> { candidateStartGroup ->
+                            balancedStartGroupCost(
+                                candidateStartGroup = candidateStartGroup,
+                                history = history,
+                                assignedCountByStartGroup = assignedCountByStartGroup,
+                                capacityByStartGroup = capacityByStartGroup
+                            )
+                        }
+                            .thenBy { candidateStartGroup ->
+                                if (options.usesSeededRandomization()) {
+                                    seededRank(options.seed, "balanced:${competitor.id}:$candidateStartGroup")
+                                } else {
+                                    candidateStartGroup
+                                }
+                            }
+                    )
+                    ?: 1
+                assignments[competitor.id] = selectedStartGroup
+                assignedCountByStartGroup[selectedStartGroup] = assignedCountByStartGroup.getValue(selectedStartGroup) + 1
+            }
+
+        return assignments
+    }
+
+    private fun balancedStartGroupCost(
+        candidateStartGroup: Int,
+        history: Map<Int, Int>,
+        assignedCountByStartGroup: Map<Int, Int>,
+        capacityByStartGroup: Map<Int, Int>
+    ): Int {
+        val previousCountForGroup = history[candidateStartGroup] ?: 0
+        val historyAfterAssignment = history + (candidateStartGroup to (previousCountForGroup + 1))
+        val previousStarts = history.values.sum()
+        val currentAssignments = assignedCountByStartGroup[candidateStartGroup] ?: 0
+        val currentCapacity = capacityByStartGroup[candidateStartGroup] ?: 0
+
+        /*
+         * Cost order:
+         * 1. Do not exceed physical capacity in the current event's third.
+         * 2. Avoid assigning the same person to one third more than twice over
+         *    the multi-day series.
+         * 3. If this is likely the fourth event and the person has never had an
+         *    early start, strongly prefer the first third now.
+         * 4. Keep the current event balanced across thirds.
+         * 5. Normalize desirability over the series: middle is best, late is
+         *    second, early is least desirable.
+         */
+        val capacityPenalty = if (currentAssignments >= currentCapacity) 20_000 else 0
+        val repeatPenalty = if (previousCountForGroup >= 2) 10_000 + previousCountForGroup * 500 else previousCountForGroup * 300
+        val noEarlyStartPenalty = if (previousStarts >= 3 && (historyAfterAssignment[1] ?: 0) == 0) 4_000 else 0
+        val balancePenalty = currentAssignments * 80
+        val desirabilityPenalty = startGroupDesirability(candidateStartGroup) * 20 +
+            ((historyAfterAssignment[2] ?: 0) + (historyAfterAssignment[3] ?: 0) - (historyAfterAssignment[1] ?: 0)).coerceAtLeast(0) * 30
+
+        return capacityPenalty + repeatPenalty + noEarlyStartPenalty + balancePenalty + desirabilityPenalty
+    }
+
+    private fun startGroupForSlotIndex(startSlotIndex: Int, totalStartSlots: Int): Int =
+        ((startSlotIndex * 3) / totalStartSlots + 1).coerceIn(1, 3)
+
+    private fun startGroupDesirability(startGroup: Int): Int =
+        when (startGroup) {
+            2 -> 3
+            3 -> 2
+            else -> 1
+        }
+
+    private fun CompetitorStartCsvImportRow.historyKey(): String =
+        siNumber?.let { "si:$it" } ?: "start:$startNumber"
+
+    private fun EventCompetitor.historyKey(): String =
+        siNumber?.let { "si:$it" } ?: "start:$startNumber"
 
     private fun seededRank(seed: String, value: String): Long {
         // FNV-1a followed by MurmurHash3-style finalization. Kotlin/Native/JVM

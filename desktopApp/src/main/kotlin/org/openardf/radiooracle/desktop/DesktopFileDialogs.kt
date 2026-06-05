@@ -226,6 +226,9 @@ object DesktopFileDialogs {
     fun chooseImportCsv(title: String): Path? =
         chooseFile(title, FileDialog.LOAD, DesktopProjectFilePaths.CSV_EXTENSION)
 
+    fun chooseImportCsvFiles(title: String): List<Path> =
+        chooseFiles(title, DesktopProjectFilePaths.CSV_EXTENSION)
+
     fun chooseImportAndroidRaceBackupJson(): Path? =
         chooseFile(
             "Import Android Event File",
@@ -242,6 +245,16 @@ object DesktopFileDialogs {
         val directory = dialog.directory ?: return null
         val file = dialog.file ?: return null
         return Path.of(directory, file)
+    }
+
+    private fun chooseFiles(title: String, extension: String): List<Path> {
+        val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD)
+        dialog.filenameFilter = FilenameFilter { _, name -> name.endsWith(extension) }
+        dialog.file = "*$extension"
+        dialog.isMultipleMode = true
+        dialog.isVisible = true
+
+        return dialog.files.orEmpty().map { it.toPath() }
     }
 
     private fun confirmOverwrite(path: Path): Path? =

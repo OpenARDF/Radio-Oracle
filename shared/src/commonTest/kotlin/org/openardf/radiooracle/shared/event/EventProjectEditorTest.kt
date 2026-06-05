@@ -1628,6 +1628,73 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun drawStartListWithBalancedStartGroupsAvoidsThirdUsedTwiceInPriorStarts() {
+        val m21 = category("cat-m21", "M21", order = 0)
+        val original = projectFile(
+            categories = listOf(categoryData(m21.id, m21.name, order = m21.order)),
+            competitors = listOf(
+                competitorData("avoid-middle", "Alice", "Alpha", startNumber = 1, siNumber = 101, category = m21),
+                competitorData("avoid-late", "Bob", "Bravo", startNumber = 2, siNumber = 102, category = m21),
+                competitorData("avoid-early", "Cara", "Charlie", startNumber = 3, siNumber = 103, category = m21),
+                competitorData("new-one", "Drew", "Delta", startNumber = 4, siNumber = 104, category = m21),
+                competitorData("new-two", "Evan", "Echo", startNumber = 5, siNumber = 105, category = m21),
+                competitorData("new-three", "Fran", "Foxtrot", startNumber = 6, siNumber = 106, category = m21)
+            )
+        )
+        val priorDayOne = listOf(
+            startRow(1, "00:00", 103),
+            startRow(2, "01:00", 101),
+            startRow(3, "02:00", 102)
+        )
+        val priorDayTwo = listOf(
+            startRow(1, "00:00", 103),
+            startRow(2, "01:00", 101),
+            startRow(3, "02:00", 102)
+        )
+
+        val drawn = EventProjectEditor.drawStartListWithBalancedStartGroups(
+            original,
+            "01:00",
+            StartDrawOptions(seed = "balanced"),
+            listOf(priorDayOne, priorDayTwo)
+        )
+
+        assertNotEquals(2, drawn.startGroupFor("avoid-middle"))
+        assertNotEquals(3, drawn.startGroupFor("avoid-late"))
+        assertNotEquals(1, drawn.startGroupFor("avoid-early"))
+        assertEquals(StartDrawStartGroupMode.BALANCED_MULTI_DAY_THIRDS, drawn.raceData.effectiveStartDrawSettings().options.startGroupMode)
+    }
+
+    @Test
+    fun drawStartListWithBalancedStartGroupsPrefersEarlyAfterThreeDesirableStarts() {
+        val m21 = category("cat-m21", "M21", order = 0)
+        val original = projectFile(
+            categories = listOf(categoryData(m21.id, m21.name, order = m21.order)),
+            competitors = listOf(
+                competitorData("needs-early", "Alice", "Alpha", startNumber = 1, siNumber = 101, category = m21),
+                competitorData("other-one", "Bob", "Bravo", startNumber = 2, siNumber = 102, category = m21),
+                competitorData("other-two", "Cara", "Charlie", startNumber = 3, siNumber = 103, category = m21),
+                competitorData("new-one", "Drew", "Delta", startNumber = 4, siNumber = 104, category = m21),
+                competitorData("new-two", "Evan", "Echo", startNumber = 5, siNumber = 105, category = m21),
+                competitorData("new-three", "Fran", "Foxtrot", startNumber = 6, siNumber = 106, category = m21)
+            )
+        )
+
+        val drawn = EventProjectEditor.drawStartListWithBalancedStartGroups(
+            original,
+            "01:00",
+            StartDrawOptions(seed = "balanced"),
+            listOf(
+                listOf(startRow(1, "00:00", 102), startRow(2, "01:00", 101), startRow(3, "02:00", 103)),
+                listOf(startRow(1, "00:00", 102), startRow(2, "01:00", 103), startRow(3, "02:00", 101)),
+                listOf(startRow(1, "00:00", 102), startRow(2, "01:00", 101), startRow(3, "02:00", 103))
+            )
+        )
+
+        assertEquals(1, drawn.startGroupFor("needs-early"))
+    }
+
+    @Test
     fun startListQualityFlagsPreferredStartThirdViolations() {
         val m21 = category("cat-m21", "M21", order = 0)
         val raceData = projectFile(
@@ -1852,6 +1919,13 @@ class EventProjectEditorTest {
                 category = category
             ),
             readoutData = readoutData
+        )
+
+    private fun startRow(startNumber: Int, startTimeText: String, siNumber: Int? = null): CompetitorStartCsvImportRow =
+        CompetitorStartCsvImportRow(
+            startNumber = startNumber,
+            startTimeText = startTimeText,
+            siNumber = siNumber
         )
 
     private fun EventCompetitorData.withStartTime(startTimeSeconds: Long): EventCompetitorData =

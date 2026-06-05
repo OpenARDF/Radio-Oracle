@@ -135,7 +135,7 @@ data class EventStartListQuality(
             var redCount = 0
             var orangeCount = 0
 
-            if (settings.options.startGroupMode == StartDrawStartGroupMode.PREFERRED_THIRDS) {
+            if (settings.options.startGroupMode != StartDrawStartGroupMode.DISABLED) {
                 val startSlotIndexBySeconds = scheduled.map { it.startSeconds }
                     .distinct()
                     .sorted()

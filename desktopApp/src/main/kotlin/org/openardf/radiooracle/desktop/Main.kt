@@ -1463,6 +1463,36 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Draw failed: ${error.message ?: error::class.simpleName}"
                 }
             },
+            onDrawBalancedStartList = { interval, options ->
+                val paths = DesktopFileDialogs.chooseImportCsvFiles("Select Previous Starts CSV Files")
+                if (paths.isNotEmpty()) runCatching {
+                    val previousStartLists = paths.map { path ->
+                        EventCsvImports.parseAndroidCompetitorStartRows(Files.readString(path)).also { result ->
+                            require(result.invalidLines.isEmpty()) {
+                                "${path.fileName} has ${result.invalidLines.size} invalid start rows."
+                            }
+                        }.rows
+                    }
+                    val protectedOptions = options.copy(
+                        startGroupMode = StartDrawStartGroupMode.BALANCED_MULTI_DAY_THIRDS,
+                        idealFirstFoxByCategoryId = unlockedIdealFirstFoxByCategoryId()
+                    )
+                    val drawnProject = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.drawStartListWithBalancedStartGroups(
+                            currentProject,
+                            interval,
+                            protectedOptions,
+                            previousStartLists
+                        )
+                    }
+                    projectFile = drawnProject
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText = "Balanced starts from ${paths.size} prior CSV file(s); " +
+                        startListDrawStatusText(EventStartListDetails.from(drawnProject.raceData))
+                }.onFailure { error ->
+                    projectStatusText = "Balanced draw failed: ${error.message ?: error::class.simpleName}"
+                }
+            },
             onAddCompetitor = { firstName, lastName, club, index, birthYear, categoryId, startNumber, siNumber ->
                 val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -1902,6 +1932,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateCompetitorStartTime: (String, String) -> Unit = { _, _ -> },
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit = { _, _ -> },
     onDrawStartList: (String, StartDrawOptions) -> Unit = { _, _ -> },
+    onDrawBalancedStartList: (String, StartDrawOptions) -> Unit = { _, _ -> },
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean = { _, _, _, _, _, _, _, _ -> false },
     onAssignCompetitorCategory: (String, String?) -> Unit = { _, _ -> },
     onRemoveCompetitor: (String, Boolean) -> Unit = { _, _ -> },
@@ -2034,6 +2065,7 @@ private fun RadioOManagerDesktopApp(
                                 onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
                                 onUpdateStartDrawSettings = onUpdateStartDrawSettings,
                                 onDrawStartList = onDrawStartList,
+                                onDrawBalancedStartList = onDrawBalancedStartList,
                                 onAddCompetitor = onAddCompetitor,
                                 onAssignCompetitorCategory = onAssignCompetitorCategory,
                                 onRemoveCompetitor = onRemoveCompetitor,
@@ -2260,6 +2292,7 @@ private fun SectionWorkspace(
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit,
     onDrawStartList: (String, StartDrawOptions) -> Unit,
+    onDrawBalancedStartList: (String, StartDrawOptions) -> Unit,
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit,
@@ -2380,7 +2413,8 @@ private fun SectionWorkspace(
             StartListDetailsPanel(
                 details = EventStartListDetails.from(projectFile.raceData),
                 onUpdateStartDrawSettings = onUpdateStartDrawSettings,
-                onDrawStartList = onDrawStartList
+                onDrawStartList = onDrawStartList,
+                onDrawBalancedStartList = onDrawBalancedStartList
             )
         }
         if (section == DesktopSection.Readouts && projectFile != null) {
@@ -2665,7 +2699,8 @@ private fun ResultDetailRow(
 private fun StartListDetailsPanel(
     details: EventStartListDetails,
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit,
-    onDrawStartList: (String, StartDrawOptions) -> Unit
+    onDrawStartList: (String, StartDrawOptions) -> Unit,
+    onDrawBalancedStartList: (String, StartDrawOptions) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(StartListTableColumns)
@@ -2747,7 +2782,7 @@ private fun StartListDetailsPanel(
             )
             EnumPicker(
                 selectedValue = startGroupMode,
-                values = StartDrawStartGroupMode.entries,
+                values = listOf(StartDrawStartGroupMode.DISABLED, StartDrawStartGroupMode.PREFERRED_THIRDS),
                 label = StartDrawStartGroupMode::toDisplayLabel,
                 onValueSelected = {
                     startGroupMode = it
@@ -2764,6 +2799,17 @@ private fun StartListDetailsPanel(
                 }
             ) {
                 Text("Draw starts")
+            }
+            Button(
+                onClick = {
+                    onDrawBalancedStartList(
+                        intervalDraft,
+                        startDrawOptions(startGroupModeValue = StartDrawStartGroupMode.BALANCED_MULTI_DAY_THIRDS)
+                    )
+                },
+                enabled = startGroupMode != StartDrawStartGroupMode.PREFERRED_THIRDS
+            ) {
+                Text("Balance from CSVs")
             }
         }
         DetailHeaderRow(listOf("Scheduled", "No start time"))
@@ -5271,6 +5317,7 @@ private fun StartDrawStartGroupMode.toDisplayLabel(): String =
     when (this) {
         StartDrawStartGroupMode.DISABLED -> "No start groups"
         StartDrawStartGroupMode.PREFERRED_THIRDS -> "Preferred thirds"
+        StartDrawStartGroupMode.BALANCED_MULTI_DAY_THIRDS -> "Balanced thirds"
     }
 
 /** Shows the current SI-reader connection state and Event File save status. */

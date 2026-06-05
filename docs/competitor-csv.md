@@ -5,7 +5,7 @@ Radio-Oracle imports and exports competitor registration data as semicolon-delim
 The canonical header is:
 
 ```text
-si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent
+si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent;preferred_start_group
 ```
 
 Columns:
@@ -21,13 +21,14 @@ Columns:
 - `index`: Optional callsign or registration index.
 - `start_time`: Optional start time relative to the race start, formatted as `HH:MM` or `MM:SS` according to the app's duration parser.
 - `si_rent`: `1` when the SI card is rented, otherwise `0`.
+- `preferred_start_group`: Optional start third assignment for championship-style draws. Use `1`, `2`, or `3`; leave blank for no assignment.
 
 Example:
 
 ```text
-si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent
-123456;7;Test;Runner;M21;0;1985;OK Test;OK001;10:00;0
-;8;Practice;Attendee;;1;;Local Club;;;0
+si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent;preferred_start_group
+123456;7;Test;Runner;M21;0;1985;OK Test;OK001;10:00;0;2
+;8;Practice;Attendee;;1;;Local Club;;;0;
 ```
 
 Fields containing semicolons, quotes, or line breaks are quoted with double quotes. Quotes inside a quoted field are doubled.
@@ -68,3 +69,22 @@ the existing competitor is updated instead of creating a duplicate. If the
 incoming SI number belongs to a different competitor, the import is rejected.
 Missing categories create placeholder categories and are reported as warnings;
 empty categories leave competitors category-less and are also reported.
+
+## Multi-Day Starts CSV
+
+The desktop Start List panel can balance start thirds across a multi-day
+competition by reading one or more previously exported starts CSV files. Use
+`Export Starts CSV` after each completed event day, then use `Balance from CSVs`
+on the next day's Event File and select those prior starts files.
+
+The starts CSV is the existing three-column start-list import/export format; it
+does not include a header row. The field order is:
+
+```text
+start_number;start_time;si_number
+```
+
+Radio-Oracle matches prior starts to current competitors by `si_number` when
+available. If `si_number` is blank, `start_number` is used as a fallback.
+Because start numbers may change between days, SI numbers give the most reliable
+multi-day fairness history.

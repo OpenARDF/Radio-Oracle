@@ -95,7 +95,8 @@ enum class StartDrawClubHandling {
 @Serializable
 enum class StartDrawStartGroupMode {
     DISABLED,
-    PREFERRED_THIRDS
+    PREFERRED_THIRDS,
+    BALANCED_MULTI_DAY_THIRDS
 }
 
 fun EventRaceData.effectiveStartDrawSettings(): StartDrawSettings =
