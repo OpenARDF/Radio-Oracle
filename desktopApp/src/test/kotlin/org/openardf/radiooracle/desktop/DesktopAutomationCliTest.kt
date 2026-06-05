@@ -199,17 +199,17 @@ class DesktopAutomationCliTest {
 
     @Test
     fun navSelectDraftModeDoesNotGuardSaveFromNewEventFile() {
-        val result = runAutomation("nav-select", "--draft", "Event File > New Event File > Save")
+        val result = runAutomation("nav-select", "--draft", "Event File > New Event File > Save Event")
 
         assertEquals(0, result.exitCode)
-        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Event File\", \"New Event File\", \"Save\"]"))
+        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Event File\", \"New Event File\", \"Save Event\"]"))
         assertTrue(result.stdout.contains("\"action\":\"SaveEventFile\""))
         assertTrue(result.stdout.contains("\"guarded\":false"))
     }
 
     @Test
     fun navSelectReportsEventFileSaveAction() {
-        val result = runAutomation("nav-select", "Event File > Save")
+        val result = runAutomation("nav-select", "Event File > Save Event")
 
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File\""))

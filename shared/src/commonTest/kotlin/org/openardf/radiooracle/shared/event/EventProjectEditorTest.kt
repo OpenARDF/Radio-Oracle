@@ -253,6 +253,50 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun addsControlWithGeneratedLabelWhenLabelIsBlank() {
+        val updated = EventProjectEditor.addControl(
+            projectFile(),
+            controlId = "control-31",
+            label = "",
+            siCode = "31",
+            type = ControlPointType.CONTROL,
+            publicLabel = "Fox 1"
+        )
+
+        val control = updated.raceData.controls.single()
+        assertEquals("31", control.label)
+        assertEquals("Fox 1", control.publicLabel)
+    }
+
+    @Test
+    fun updatesControlWithGeneratedLabelWhenLabelIsBlank() {
+        val original = EventProjectEditor.addControl(
+            projectFile(),
+            controlId = "control-31",
+            label = "Original",
+            siCode = "31",
+            type = ControlPointType.CONTROL
+        )
+
+        val updated = EventProjectEditor.updateControl(
+            original,
+            controlId = "control-31",
+            label = "",
+            siCode = "99",
+            type = ControlPointType.BEACON,
+            mandatory = true,
+            publicLabel = "Finish beacon",
+            notes = "Updated from UI"
+        )
+
+        val control = updated.raceData.controls.single()
+        assertEquals("99B", control.label)
+        assertEquals(99, control.siCode)
+        assertEquals(ControlPointType.BEACON, control.type)
+        assertEquals("Finish beacon", control.publicLabel)
+    }
+
+    @Test
     fun updatesCategoryPhysicalStats() {
         val original = projectFile(categories = listOf(categoryData("cat-1", "M21")))
 

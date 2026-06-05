@@ -1834,18 +1834,16 @@ object EventProjectEditor {
         publicLabel: String,
         notes: String
     ): EventControl {
-        val trimmedLabel = label.trim()
         val trimmedCode = siCode.trim()
         val trimmedPublicLabel = publicLabel.trim()
         val trimmedNotes = notes.trim()
-        require(trimmedLabel.isNotEmpty()) {
-            "Control label cannot be blank."
-        }
         val code = trimmedCode.toIntOrNull()
             ?: throw IllegalArgumentException("Control SI code is invalid.")
         require(SportIdentCodes.isSICodeValid(code)) {
             "Control SI code is outside the supported SportIdent station range."
         }
+        val trimmedLabel = label.trim().takeIf { it.isNotEmpty() }
+            ?: EventControlCatalog.defaultLabel(code, type)
         require(projectFile.raceData.controls.noneIndexed { index, control ->
             index != existingControlPosition && control.label == trimmedLabel
         }) {

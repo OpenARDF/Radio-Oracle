@@ -130,7 +130,7 @@ object EventControlCatalog {
     private fun defaultLabel(controlPoint: EventControlPoint): String =
         defaultLabel(controlPoint.siCode, controlPoint.type)
 
-    private fun defaultLabel(siCode: Int, type: ControlPointType): String {
+    fun defaultLabel(siCode: Int, type: ControlPointType): String {
         val suffix = when (type) {
             ControlPointType.BEACON -> "B"
             ControlPointType.SEPARATOR -> "S"

@@ -3,8 +3,10 @@ package org.openardf.radiooracle.desktop
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.HorizontalScrollbar
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -237,12 +239,19 @@ private val InForestTableColumns = listOf(
 
 private val ControlTableColumns = listOf(
     FixedTableColumn("SI code", 112.dp),
-    FixedTableColumn("Label", 120.dp),
     FixedTableColumn("Role", 120.dp),
     FixedTableColumn("Mandatory", 104.dp),
     FixedTableColumn("Public label", 160.dp),
     FixedTableColumn("Notes", 220.dp),
     FixedTableColumn("", 104.dp)
+)
+
+private val ControlTableColumnHints = mapOf(
+    "SI code" to "Physical SPORTident control code recorded by the station.",
+    "Role" to "How this station is interpreted, such as control, start, finish, or beacon role.",
+    "Mandatory" to "Requires this control for every applicable course when evaluating results.",
+    "Public label" to "Optional public-facing name used on tickets, readout displays, course lists, and exported results. If blank, Radio-Oracle uses the generated control label.",
+    "Notes" to "Private organizer notes for this logical control."
 )
 
 /** Starts the first Compose Desktop shell for Radio-Oracle. */
@@ -1160,7 +1169,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.OpenEventFile -> chooseOpenEventFile()
                 DesktopNavAction.ImportAndroidRaceBackup -> chooseImportAndroidRaceBackupJson()
                 DesktopNavAction.ImportEventRegWebsite -> showEventRegImportDialog()
-                DesktopNavAction.SaveEventFile -> saveAsCurrentProject()
+                DesktopNavAction.SaveEventFile -> saveCurrentProject()
                 DesktopNavAction.SaveEventFileAs -> saveAsCurrentProject()
                 DesktopNavAction.CloseEventFile -> requestCloseEventFile()
                 DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
@@ -1231,7 +1240,7 @@ fun main(args: Array<String>) = application {
                 Item("Open...", onClick = ::chooseOpenEventFile)
                 Item("Import EventReg Website...", onClick = ::showEventRegImportDialog)
                 Item(
-                    "Save",
+                    "Save Event",
                     enabled = projectFile != null && (projectSession.currentPath == null || hasProtectedUnsavedChanges()),
                     onClick = {
                         saveCurrentProject()
@@ -1862,6 +1871,37 @@ private fun UnsavedNewEventFileDialog(
 }
 
 @Composable
+private fun UnsavedSubmenuChangesDialog(
+    onSave: () -> Unit,
+    onDontSave: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Unsaved Event changes") },
+        text = { Text("Save Event changes before leaving this menu?") },
+        confirmButton = {
+            Button(
+                onClick = onSave,
+                colors = saveEventButtonColors()
+            ) {
+                Text("Save Event")
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onDontSave) {
+                    Text("Don't Save")
+                }
+                Button(onClick = onCancel) {
+                    Text("Cancel")
+                }
+            }
+        }
+    )
+}
+
+@Composable
 private fun NationalStartListDefaultsDialog(
     onReset: () -> Unit,
     onKeepCurrent: () -> Unit
@@ -2052,6 +2092,7 @@ private fun RadioOManagerDesktopApp(
     ) {
         var navState by remember { mutableStateOf(DesktopNavState()) }
         var pendingNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
+        var pendingDirtySubmenuNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
 
         fun selectionFor(intent: DesktopPendingNavigation): Pair<DesktopNavState, DesktopNavAction?> =
             when (intent) {
@@ -2068,6 +2109,9 @@ private fun RadioOManagerDesktopApp(
 
         fun applyNavigation(intent: DesktopPendingNavigation) {
             val (nextState, action) = selectionFor(intent)
+            if (isProtectedCourseOrderUnlocked && DesktopNavigation.isLeavingCategoriesMenu(navState, nextState)) {
+                onLockProtectedCourseOrder()
+            }
             navState = nextState
             action?.let(onNavAction)
         }
@@ -2075,9 +2119,6 @@ private fun RadioOManagerDesktopApp(
         fun requestNavigation(intent: DesktopPendingNavigation) {
             val (nextState, action) = selectionFor(intent)
             val shouldBypassGuard = action == DesktopNavAction.SaveEventFile
-            if (isProtectedCourseOrderUnlocked && DesktopNavigation.isLeavingCategoriesMenu(navState, nextState)) {
-                onLockProtectedCourseOrder()
-            }
             if (
                 !shouldBypassGuard &&
                 DesktopNavigation.shouldGuardUnsavedNewEventDraft(
@@ -2087,6 +2128,16 @@ private fun RadioOManagerDesktopApp(
                 )
             ) {
                 pendingNavigation = intent
+            } else if (
+                !shouldBypassGuard &&
+                !hasDefaultUnsavedNewEventFileDraft &&
+                DesktopNavigation.shouldGuardDirtySubmenuExit(
+                    currentState = navState,
+                    nextState = nextState,
+                    hasUnsavedChanges = hasUnsavedChanges
+                )
+            ) {
+                pendingDirtySubmenuNavigation = intent
             } else {
                 if (
                     !shouldBypassGuard &&
@@ -2108,6 +2159,7 @@ private fun RadioOManagerDesktopApp(
                         hasEventFile = projectFile != null,
                         isNavActionEnabled = isNavActionEnabled,
                         onBack = { requestNavigation(DesktopPendingNavigation.Back) },
+                        onSaveEvent = { onNavAction(DesktopNavAction.SaveEventFile) },
                         onItemSelected = { item ->
                             requestNavigation(DesktopPendingNavigation.Item(item.id))
                         }
@@ -2210,6 +2262,21 @@ private fun RadioOManagerDesktopApp(
                 onCancel = { pendingNavigation = null }
             )
         }
+        pendingDirtySubmenuNavigation?.let { navigation ->
+            UnsavedSubmenuChangesDialog(
+                onSave = {
+                    if (onSaveEventFileForNavigation()) {
+                        pendingDirtySubmenuNavigation = null
+                        applyNavigation(navigation)
+                    }
+                },
+                onDontSave = {
+                    pendingDirtySubmenuNavigation = null
+                    applyNavigation(navigation)
+                },
+                onCancel = { pendingDirtySubmenuNavigation = null }
+            )
+        }
     }
 }
 
@@ -2239,6 +2306,13 @@ private fun AppTopBar() {
     }
 }
 
+@Composable
+private fun saveEventButtonColors() =
+    ButtonDefaults.buttonColors(
+        backgroundColor = DesktopPalette.Connected,
+        contentColor = DesktopPalette.Black
+    )
+
 /** Shows workflow-specific navigation with optional submenu replacement. */
 @Composable
 private fun NavigationRail(
@@ -2246,9 +2320,11 @@ private fun NavigationRail(
     hasEventFile: Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
     onBack: () -> Unit,
+    onSaveEvent: () -> Unit,
     onItemSelected: (DesktopNavItem) -> Unit
 ) {
     val items = DesktopNavigation.currentItems(navState)
+    val hasMenuSaveEvent = items.any { it.action == DesktopNavAction.SaveEventFile }
     Column(
         modifier = Modifier
             .width(220.dp)
@@ -2265,7 +2341,12 @@ private fun NavigationRail(
             Button(
                 onClick = { onItemSelected(item) },
                 enabled = isEnabled,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = if (item.action == DesktopNavAction.SaveEventFile) {
+                    saveEventButtonColors()
+                } else {
+                    ButtonDefaults.buttonColors()
+                }
             ) {
                 Text(
                     text = if (item.children.isEmpty()) item.label else "${item.label} >",
@@ -2275,6 +2356,16 @@ private fun NavigationRail(
         }
         if (navState.submenuStack.isNotEmpty()) {
             Spacer(modifier = Modifier.weight(1f))
+            if (!hasMenuSaveEvent) {
+                Button(
+                    onClick = onSaveEvent,
+                    enabled = isNavActionEnabled(DesktopNavAction.SaveEventFile),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = saveEventButtonColors()
+                ) {
+                    Text("Save Event")
+                }
+            }
             Button(
                 onClick = onBack,
                 modifier = Modifier.fillMaxWidth(),
@@ -4005,7 +4096,6 @@ private fun ControlDetailsPanel(
 ) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(ControlTableColumns)
-    var labelDraft by remember { mutableStateOf("") }
     var siCodeDraft by remember { mutableStateOf("") }
     var typeDraft by remember { mutableStateOf(ControlPointType.CONTROL) }
     var mandatoryDraft by remember { mutableStateOf(false) }
@@ -4020,9 +4110,8 @@ private fun ControlDetailsPanel(
         ) {
             Button(
                 onClick = {
-                    val didAdd = onAddControl(labelDraft, siCodeDraft, typeDraft, mandatoryDraft, publicLabelDraft, notesDraft)
+                    val didAdd = onAddControl("", siCodeDraft, typeDraft, mandatoryDraft, publicLabelDraft, notesDraft)
                     if (didAdd) {
-                        labelDraft = ""
                         siCodeDraft = ""
                         typeDraft = ControlPointType.CONTROL
                         mandatoryDraft = false
@@ -4031,7 +4120,7 @@ private fun ControlDetailsPanel(
                     }
                 },
                 modifier = fixedActionRailModifier(),
-                enabled = labelDraft.isNotBlank() || siCodeDraft.isNotBlank()
+                enabled = siCodeDraft.isNotBlank()
             ) {
                 ButtonLabel("Add")
             }
@@ -4041,8 +4130,6 @@ private fun ControlDetailsPanel(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     ControlAddRow(
-                        labelDraft = labelDraft,
-                        onLabelChange = { labelDraft = it },
                         siCodeDraft = siCodeDraft,
                         onSiCodeChange = { siCodeDraft = it },
                         typeDraft = typeDraft,
@@ -4054,7 +4141,7 @@ private fun ControlDetailsPanel(
                         notesDraft = notesDraft,
                         onNotesChange = { notesDraft = it }
                     )
-                    FixedDetailHeaderRow(ControlTableColumns)
+                    FixedDetailHeaderRow(ControlTableColumns, ControlTableColumnHints)
                 }
             }
         }
@@ -4088,8 +4175,6 @@ private fun ControlDetailsPanel(
 
 @Composable
 private fun ControlAddRow(
-    labelDraft: String,
-    onLabelChange: (String) -> Unit,
     siCodeDraft: String,
     onSiCodeChange: (String) -> Unit,
     typeDraft: ControlPointType,
@@ -4113,20 +4198,13 @@ private fun ControlAddRow(
             singleLine = true,
             label = { Text("New SI code") }
         )
-        TextField(
-            value = labelDraft,
-            onValueChange = onLabelChange,
-            modifier = Modifier.width(ControlTableColumns[1].width),
-            singleLine = true,
-            label = { Text("New label") }
-        )
         ControlTypeDropdown(
             type = typeDraft,
             onTypeChange = onTypeChange,
-            modifier = Modifier.width(ControlTableColumns[2].width)
+            modifier = Modifier.width(ControlTableColumns[1].width)
         )
         Row(
-            modifier = Modifier.width(ControlTableColumns[3].width),
+            modifier = Modifier.width(ControlTableColumns[2].width),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Checkbox(checked = mandatoryDraft, onCheckedChange = onMandatoryChange)
@@ -4134,18 +4212,18 @@ private fun ControlAddRow(
         TextField(
             value = publicLabelDraft,
             onValueChange = onPublicLabelChange,
-            modifier = Modifier.width(ControlTableColumns[4].width),
+            modifier = Modifier.width(ControlTableColumns[3].width),
             singleLine = true,
             label = { Text("Public label") }
         )
         TextField(
             value = notesDraft,
             onValueChange = onNotesChange,
-            modifier = Modifier.width(ControlTableColumns[5].width),
+            modifier = Modifier.width(ControlTableColumns[4].width),
             singleLine = true,
             label = { Text("Notes") }
         )
-        Spacer(modifier = Modifier.width(ControlTableColumns[6].width))
+        Spacer(modifier = Modifier.width(ControlTableColumns[5].width))
     }
 }
 
@@ -4155,7 +4233,6 @@ private fun ControlDetailRow(
     onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit
 ) {
     var siCodeDraft by remember(control.id, control.siCodeText) { mutableStateOf(control.siCodeText) }
-    var labelDraft by remember(control.id, control.label) { mutableStateOf(control.label) }
     var typeDraft by remember(control.id, control.type) { mutableStateOf(control.type) }
     var mandatoryDraft by remember(control.id, control.mandatory) { mutableStateOf(control.mandatory) }
     var publicLabelDraft by remember(control.id, control.publicLabel) { mutableStateOf(control.publicLabel) }
@@ -4173,20 +4250,13 @@ private fun ControlDetailRow(
             singleLine = true,
             label = { Text("SI code") }
         )
-        TextField(
-            value = labelDraft,
-            onValueChange = { labelDraft = it },
-            modifier = Modifier.width(ControlTableColumns[1].width),
-            singleLine = true,
-            label = { Text("Label") }
-        )
         ControlTypeDropdown(
             type = typeDraft,
             onTypeChange = { typeDraft = it },
-            modifier = Modifier.width(ControlTableColumns[2].width)
+            modifier = Modifier.width(ControlTableColumns[1].width)
         )
         Row(
-            modifier = Modifier.width(ControlTableColumns[3].width),
+            modifier = Modifier.width(ControlTableColumns[2].width),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Checkbox(checked = mandatoryDraft, onCheckedChange = { mandatoryDraft = it })
@@ -4194,22 +4264,24 @@ private fun ControlDetailRow(
         TextField(
             value = publicLabelDraft,
             onValueChange = { publicLabelDraft = it },
-            modifier = Modifier.width(ControlTableColumns[4].width),
+            modifier = Modifier.width(ControlTableColumns[3].width),
             singleLine = true,
             label = { Text("Public label") }
         )
         TextField(
             value = notesDraft,
             onValueChange = { notesDraft = it },
-            modifier = Modifier.width(ControlTableColumns[5].width),
+            modifier = Modifier.width(ControlTableColumns[4].width),
             singleLine = true,
             label = { Text("Notes") }
         )
         Button(
-            onClick = { onUpdateControl(control.id, labelDraft, siCodeDraft, typeDraft, mandatoryDraft, publicLabelDraft, notesDraft) },
-            modifier = Modifier.width(ControlTableColumns[6].width),
+            onClick = {
+                val nextLabel = if (siCodeDraft != control.siCodeText || typeDraft != control.type) "" else control.label
+                onUpdateControl(control.id, nextLabel, siCodeDraft, typeDraft, mandatoryDraft, publicLabelDraft, notesDraft)
+            },
+            modifier = Modifier.width(ControlTableColumns[5].width),
             enabled = siCodeDraft != control.siCodeText ||
-                labelDraft != control.label ||
                 typeDraft != control.type ||
                 mandatoryDraft != control.mandatory ||
                 publicLabelDraft != control.publicLabel ||
@@ -4226,6 +4298,7 @@ private fun ControlDeleteButton(
     onRemoveControl: (String) -> Unit
 ) {
     var showDeleteDialog by remember(control.id) { mutableStateOf(false) }
+    val displayLabel = control.publicLabel.takeIf { it.isNotBlank() } ?: control.label
 
     Button(
         onClick = { showDeleteDialog = true },
@@ -4238,7 +4311,7 @@ private fun ControlDeleteButton(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete control") },
-            text = { Text("Delete control ${control.label} (${control.siCodeText})?") },
+            text = { Text("Delete control $displayLabel (${control.siCodeText})?") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -5070,19 +5143,52 @@ private fun DetailHeaderRow(values: List<String>) {
 
 /** Displays a fixed-width header row for horizontally scrollable desktop detail grids. */
 @Composable
-private fun FixedDetailHeaderRow(columns: List<FixedTableColumn>) {
+private fun FixedDetailHeaderRow(
+    columns: List<FixedTableColumn>,
+    tooltipByTitle: Map<String, String> = emptyMap()
+) {
     Row(
         modifier = Modifier.width(fixedTableWidth(columns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap)
     ) {
         columns.forEach { column ->
-            Text(
-                text = column.title,
-                modifier = Modifier.width(column.width),
-                color = DesktopPalette.Disconnected,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
+            FixedDetailHeaderCell(column, tooltipByTitle[column.title])
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+private fun FixedDetailHeaderCell(column: FixedTableColumn, tooltipText: String?) {
+    val header: @Composable () -> Unit = {
+        Text(
+            text = column.title,
+            modifier = Modifier.width(column.width),
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+    if (tooltipText == null || column.title.isBlank()) {
+        header()
+    } else {
+        TooltipArea(
+            tooltip = {
+                Surface(
+                    color = DesktopPalette.PrimaryVariant,
+                    contentColor = DesktopPalette.White,
+                    elevation = 4.dp
+                ) {
+                    Text(
+                        text = tooltipText,
+                        modifier = Modifier.width(280.dp).padding(8.dp),
+                        fontSize = 12.sp
+                    )
+                }
+            },
+            delayMillis = 350
+        ) {
+            header()
         }
     }
 }

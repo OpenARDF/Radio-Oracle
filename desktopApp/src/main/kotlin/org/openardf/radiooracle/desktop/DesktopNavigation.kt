@@ -364,6 +364,18 @@ object DesktopNavigation {
             currentState.selectedItemId == "setup.event-file.new" &&
             currentState != nextState
 
+    fun shouldGuardDirtySubmenuExit(
+        currentState: DesktopNavState,
+        nextState: DesktopNavState,
+        hasUnsavedChanges: Boolean
+    ): Boolean =
+        hasUnsavedChanges &&
+            currentState.submenuStack.isNotEmpty() &&
+            (
+                currentState.workflow != nextState.workflow ||
+                    nextState.submenuStack.size < currentState.submenuStack.size
+            )
+
     fun isLeavingNewEventFilePage(currentState: DesktopNavState, nextState: DesktopNavState): Boolean =
         currentState.selectedItemId == "setup.event-file.new" && currentState != nextState
 
@@ -457,14 +469,14 @@ object DesktopNavigation {
                 DesktopNavAction.ExportAndroidRaceBackupJson,
                 section = DesktopSection.EventFile
             ),
-            action("setup.event-file.save", "Save", workflow, DesktopNavAction.SaveEventFile),
             item("setup.event-file.controls", "Controls", workflow, DesktopSection.Controls),
             item(
                 "setup.event-file.diagnostics",
                 "Settings",
                 workflow,
                 DesktopSection.Settings
-            )
+            ),
+            action("setup.event-file.save", "Save Event", workflow, DesktopNavAction.SaveEventFile)
         )
 
     private fun item(

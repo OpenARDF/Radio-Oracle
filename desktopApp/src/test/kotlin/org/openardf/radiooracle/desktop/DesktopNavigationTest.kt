@@ -192,6 +192,46 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun dirtySubmenuGuardBlocksLeavingSubmenuWhenEventHasUnsavedChanges() {
+        val startListState = DesktopNavigation.selectItem(
+            DesktopNavState(),
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Start List" }
+        ).state
+
+        assertTrue(
+            DesktopNavigation.shouldGuardDirtySubmenuExit(
+                currentState = startListState,
+                nextState = startListState.back(),
+                hasUnsavedChanges = true
+            )
+        )
+        assertTrue(
+            DesktopNavigation.shouldGuardDirtySubmenuExit(
+                currentState = startListState,
+                nextState = startListState.switchWorkflow(DesktopWorkflow.RaceOps),
+                hasUnsavedChanges = true
+            )
+        )
+        assertFalse(
+            DesktopNavigation.shouldGuardDirtySubmenuExit(
+                currentState = startListState,
+                nextState = startListState.back(),
+                hasUnsavedChanges = false
+            )
+        )
+        assertFalse(
+            DesktopNavigation.shouldGuardDirtySubmenuExit(
+                currentState = startListState,
+                nextState = DesktopNavigation.selectItem(
+                    startListState,
+                    DesktopNavigation.currentItems(startListState).first { it.label == "Start List" }
+                ).state,
+                hasUnsavedChanges = true
+            )
+        )
+    }
+
+    @Test
     fun preservesSelectedMenuItemWhenMultipleItemsShareASection() {
         val finishTickets = DesktopNavigation.rootItems(DesktopWorkflow.RaceOps)
             .first { it.label == "Finish Tickets" }
@@ -222,9 +262,9 @@ class DesktopNavigationTest {
                 "Import Android Event File...",
                 "Import EventReg Website...",
                 "Export Android Event File...",
-                "Save",
                 "Controls",
-                "Settings"
+                "Settings",
+                "Save Event"
             ),
             eventFileActions.map { it.label }
         )
@@ -253,9 +293,9 @@ class DesktopNavigationTest {
                 "Import Android Event File...",
                 "Import EventReg Website...",
                 "Export Android Event File...",
-                "Save",
                 "Controls",
-                "Settings"
+                "Settings",
+                "Save Event"
             ),
             eventFileItems.map { it.label }
         )
