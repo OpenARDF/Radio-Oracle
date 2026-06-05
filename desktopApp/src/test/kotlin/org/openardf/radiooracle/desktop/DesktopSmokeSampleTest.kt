@@ -29,8 +29,8 @@ class DesktopSmokeSampleTest {
         assertEquals("USA Radio Orienteering Category Density", EventProjectSummary.from(projectFile).raceName)
         assertEquals(
             listOf(
-                "W12", "W14", "W16", "W19", "W21", "W35", "W45", "W55", "W65", "W75",
-                "M12", "M14", "M16", "M19", "M21", "M40", "M50", "M60", "M70", "M80"
+                "M12", "M14", "M16", "M19", "M21", "M40", "M50", "M60", "M70", "M80",
+                "W12", "W14", "W16", "W19", "W21", "W35", "W45", "W55", "W65", "W75"
             ),
             categoryDetails.map { it.name }
         )

@@ -21,7 +21,7 @@ data class EventCategoryDetails(
         /** Builds display rows sorted the same way category administration presents them. */
         fun from(raceData: EventRaceData, useAliases: Boolean = true): List<EventCategoryDetails> =
             raceData.categories
-                .sortedWith(compareBy<EventCategoryData> { it.category.order }.thenBy { it.category.name })
+                .sortedWith(EventCategorySort.byDisplayName)
                 .map { categoryData ->
                     val category = categoryData.category
                     val raceType = category.effectiveRaceType(raceData.race)

@@ -70,6 +70,7 @@ import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
 import org.openardf.radiooracle.shared.event.EventAliasDetails
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
+import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventCompetitorDetails
 import org.openardf.radiooracle.shared.event.EventInForestDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutDetails
@@ -3951,7 +3952,7 @@ private fun ProtectedCourseOrderPanel(
     }
 
     val categories = projectFile.raceData.categories
-        .sortedWith(compareBy({ it.category.order }, { it.category.name }))
+        .sortedWith(EventCategorySort.byDisplayName)
     var idealOrderDrafts by remember(projectFile.raceData.race.id, idealOrderByCategoryId) {
         mutableStateOf(
             categories.associate { categoryData ->
