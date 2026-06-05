@@ -11,6 +11,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -5311,6 +5312,9 @@ private fun CalendarMonthPicker(
     onNextMonth: () -> Unit,
     onDateSelected: (LocalDate) -> Unit
 ) {
+    val dayCellWidth = 50.dp
+    val dayCellHeight = 36.dp
+
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -5331,7 +5335,7 @@ private fun CalendarMonthPicker(
         CalendarWeekRow(listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")) { label ->
             Text(
                 text = label,
-                modifier = Modifier.width(42.dp),
+                modifier = Modifier.width(dayCellWidth),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -5342,11 +5346,12 @@ private fun CalendarMonthPicker(
         dayCells.chunked(7).forEach { week ->
             CalendarWeekRow(week) { date ->
                 if (date == null) {
-                    Spacer(modifier = Modifier.width(42.dp).height(32.dp))
+                    Spacer(modifier = Modifier.width(dayCellWidth).height(dayCellHeight))
                 } else {
                     Button(
                         onClick = { onDateSelected(date) },
-                        modifier = Modifier.width(42.dp).height(32.dp),
+                        modifier = Modifier.width(dayCellWidth).height(dayCellHeight),
+                        contentPadding = PaddingValues(0.dp),
                         colors = ButtonDefaults.buttonColors(
                             backgroundColor = if (date.isEqual(selectedDate)) {
                                 DesktopPalette.SecondaryVariant
@@ -5366,12 +5371,15 @@ private fun CalendarMonthPicker(
 
 @Composable
 private fun <T> CalendarWeekRow(values: List<T>, content: @Composable (T) -> Unit) {
+    val dayCellWidth = 50.dp
+    val dayCellHeight = 36.dp
+
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         values.forEach { value ->
             content(value)
         }
         repeat(7 - values.size) {
-            Spacer(modifier = Modifier.width(42.dp).height(32.dp))
+            Spacer(modifier = Modifier.width(dayCellWidth).height(dayCellHeight))
         }
     }
 }
