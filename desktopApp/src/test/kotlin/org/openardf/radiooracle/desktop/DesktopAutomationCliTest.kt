@@ -90,6 +90,33 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun exportAndroidEventFileCommandWritesAndroidEventFile() {
+        val directory = Files.createTempDirectory("radio-oracle-automation")
+        val desktopPath = directory.resolve("Desktop Event.json")
+        val androidPath = directory.resolve("Desktop Event.ardfjs")
+        DesktopProjectFiles.write(desktopPath, projectFile("Desktop Event"))
+
+        val exportResult = runAutomation(
+            "export-android-event-file",
+            desktopPath.toString(),
+            androidPath.toString()
+        )
+        val importResult = runAutomation(
+            "import-android-event-file",
+            androidPath.toString(),
+            directory.resolve("Desktop Event Round Trip.json").toString()
+        )
+
+        assertEquals(0, exportResult.exitCode)
+        assertTrue(exportResult.stdout.contains("\"command\":\"export-android-event-file\""))
+        assertTrue(exportResult.stdout.contains("\"raceName\":\"Desktop Event\""))
+        assertTrue(Files.exists(androidPath))
+        assertTrue(Files.readString(androidPath).contains("\"race_name\": \"Desktop Event\""))
+        assertEquals(0, importResult.exitCode)
+        assertTrue(importResult.stdout.contains("\"raceName\":\"Desktop Event\""))
+    }
+
+    @Test
     fun importCompetitorsCsvCommandUpdatesDesktopEventFile() {
         val directory = Files.createTempDirectory("radio-oracle-automation")
         val eventFilePath = directory.resolve("Automation Event.json")

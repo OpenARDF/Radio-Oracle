@@ -5,6 +5,7 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
@@ -12,6 +13,9 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAliasPunch
+import org.openardf.radiooracle.shared.event.EventCategory
+import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -19,6 +23,7 @@ import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class RaceBackupJsonExportsTest {
     @Test
@@ -45,6 +50,48 @@ class RaceBackupJsonExportsTest {
         assertEquals("0", punch["code"]!!.jsonPrimitive.content)
         assertEquals("FINISH", punch["control_type"]!!.jsonPrimitive.content)
         assertEquals("OK", punch["punch_status"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun doesNotExportDesktopProtectedIdealOrderToAndroidBackup() {
+        val encryptedIdealOrder = "radio-oracle-protected-order"
+        val exported = RaceBackupJsonExports.race(
+            raceData().copy(
+                categories = listOf(
+                    EventCategoryData(
+                        category = EventCategory(
+                            id = "category",
+                            raceId = "race",
+                            name = "M21",
+                            isMan = true,
+                            maxAge = 99,
+                            lengthMeters = 6_000,
+                            climbMeters = 200,
+                            order = 0,
+                            differentProperties = false,
+                            raceType = null,
+                            raceBand = null,
+                            timeLimitSeconds = null,
+                            controlPointsString = "31 32 33",
+                            encryptedIdealOrder = encryptedIdealOrder
+                        ),
+                        controlPoints = listOf(
+                            EventControlPoint(
+                                id = "control-31",
+                                categoryId = "category",
+                                siCode = 31,
+                                type = ControlPointType.CONTROL,
+                                order = 0
+                            )
+                        ),
+                        competitors = emptyList()
+                    )
+                )
+            )
+        )
+
+        assertFalse(exported.contains("encryptedIdealOrder"))
+        assertFalse(exported.contains(encryptedIdealOrder))
     }
 
     private fun raceData(): EventRaceData =

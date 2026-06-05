@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.desktop
 
 import java.io.PrintStream
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
 import kotlin.system.exitProcess
@@ -14,7 +15,6 @@ import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventValidationRules
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportProfile
 import org.openardf.radiooracle.shared.files.EventCsvImports
-import java.nio.file.Files
 
 fun main(args: Array<String>) {
     exitProcess(DesktopAutomationCli.run(args))
@@ -94,6 +94,7 @@ object DesktopAutomationCli {
             }
             "open-event-file" -> openEventFile(commandArgs, out, err)
             "import-android-event-file" -> importAndroidEventFile(commandArgs, out, err)
+            "export-android-event-file" -> exportAndroidEventFile(commandArgs, out, err)
             "import-competitors-csv" -> importCompetitorsCsv(commandArgs, out, err)
             "nav-select" -> navSelect(commandArgs, out, err)
             "si-status" -> siStatus(commandArgs, out, err, serialPortProvider)
@@ -166,6 +167,39 @@ object DesktopAutomationCli {
             0
         }.getOrElse { error ->
             err.println("Failed to import Android Event File: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
+    private fun exportAndroidEventFile(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val sourceText = args.getOrNull(0)
+        val targetText = args.getOrNull(1)
+        if (sourceText.isNullOrBlank() || targetText.isNullOrBlank()) {
+            err.println("export-android-event-file requires desktop Event File and target Android Event File paths.")
+            return 64
+        }
+        return runCatching {
+            val source = Path.of(sourceText)
+            val target = Path.of(targetText)
+            val projectFile = DesktopProjectFiles.read(source)
+            DesktopProjectFiles.exportAndroidRaceBackupJson(target, projectFile)
+            val validationErrors = EventValidationRules.validateRaceData(projectFile.raceData)
+            out.println(
+                jsonObject(
+                    "command" to "export-android-event-file",
+                    "source" to source.toAbsolutePath().normalize().toString(),
+                    "target" to target.toAbsolutePath().normalize().toString(),
+                    "raceName" to projectFile.raceData.race.name,
+                    "categoryCount" to projectFile.raceData.categories.size,
+                    "competitorCount" to projectFile.raceData.competitorData.size,
+                    "unmatchedReadoutCount" to projectFile.raceData.unmatchedReadoutData.size,
+                    "validationErrorCount" to validationErrors.size,
+                    "validationErrors" to validationErrors
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Failed to export Android Event File: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -435,6 +469,8 @@ object DesktopAutomationCli {
           open-event-file <path>          Decode and validate an Event File.
           import-android-event-file <android-path> <desktop-path>
                                           Import Android Event File and write a desktop Event File.
+          export-android-event-file <desktop-path> <android-path>
+                                          Export a desktop Event File as an Android Event File.
           import-competitors-csv <event-path> <csv-path>
                                           Import competitors CSV into an Event File.
           nav-select [--default-draft|--draft] <path>
