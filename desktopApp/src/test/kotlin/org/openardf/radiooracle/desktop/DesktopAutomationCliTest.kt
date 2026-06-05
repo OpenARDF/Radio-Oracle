@@ -147,7 +147,7 @@ class DesktopAutomationCliTest {
 
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"command\":\"nav-select\""))
-        assertTrue(result.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > New Event File\""))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Event File > New Event File\""))
         assertTrue(result.stdout.contains("\"selectedSection\":\"Races\""))
         assertTrue(result.stdout.contains("\"action\":\"NewEventFile\""))
     }
@@ -158,7 +158,7 @@ class DesktopAutomationCliTest {
 
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"selectedLabels\":[\"Start List\", \"Exports\", \"< Back\"]"))
-        assertTrue(result.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Start List\""))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Start List\""))
         assertTrue(result.stdout.contains("\"selectedSection\":\"Start List\""))
         assertTrue(result.stdout.contains("\"selectedItemId\":\"setup.start-list\""))
         assertTrue(result.stdout.contains("\"action\":null"))
@@ -170,7 +170,7 @@ class DesktopAutomationCliTest {
 
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"selectedLabels\":[\"Event File\", \"New Event File\", \"< Back\"]"))
-        assertTrue(result.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > New Event File\""))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Event File > New Event File\""))
         assertTrue(result.stdout.contains("\"selectedItemId\":\"setup.event-file.new\""))
         assertTrue(result.stdout.contains("\"action\":\"NewEventFile\""))
         assertTrue(result.stdout.contains("\"guarded\":true"))
@@ -182,7 +182,7 @@ class DesktopAutomationCliTest {
 
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"selectedLabels\":[\"Event File\", \"New Event File\", \"Race Ops\"]"))
-        assertTrue(result.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > New Event File\""))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Event File > New Event File\""))
         assertTrue(result.stdout.contains("\"selectedItemId\":\"setup.event-file.new\""))
         assertTrue(result.stdout.contains("\"guarded\":true"))
     }
@@ -212,7 +212,7 @@ class DesktopAutomationCliTest {
         val result = runAutomation("nav-select", "Event File > Save Event")
 
         assertEquals(0, result.exitCode)
-        assertTrue(result.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File\""))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Event File\""))
         assertTrue(result.stdout.contains("\"selectedSection\":\"Races\""))
         assertTrue(result.stdout.contains("\"action\":\"SaveEventFile\""))
         assertTrue(result.stdout.contains("\"guarded\":false"))
@@ -225,11 +225,11 @@ class DesktopAutomationCliTest {
 
         assertEquals(0, importResult.exitCode)
         assertTrue(importResult.stdout.contains("\"action\":\"ImportAndroidRaceBackup\""))
-        assertTrue(importResult.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > Import Android Event File...\""))
+        assertTrue(importResult.stdout.contains("\"breadcrumb\":\"Setup > Event File > Import Android Event File...\""))
 
         assertEquals(0, exportResult.exitCode)
         assertTrue(exportResult.stdout.contains("\"action\":\"ExportAndroidRaceBackupJson\""))
-        assertTrue(exportResult.stdout.contains("\"breadcrumb\":\"Preparation/Setup > Event File > Export Android Event File...\""))
+        assertTrue(exportResult.stdout.contains("\"breadcrumb\":\"Setup > Event File > Export Android Event File...\""))
     }
 
     @Test

@@ -730,6 +730,127 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun skipsExistingCompetitorRowsByImportKeyWhenPolicyAllows() {
+        val category = category("cat-1", "M21")
+        val existing = competitorData(
+            "comp-1",
+            "Alice",
+            "Runner",
+            startNumber = 1,
+            siNumber = 1111,
+            category = category,
+            club = "BOK"
+        )
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21", competitors = listOf(existing.competitorCategory.competitor))),
+            competitors = listOf(existing)
+        )
+
+        val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
+            projectFile = original,
+            rows = listOf(
+                competitorImportRow(
+                    firstName = "Alice",
+                    lastName = "Runner",
+                    club = "BOK",
+                    startNumber = 99,
+                    siNumber = 9999,
+                    categoryName = "W21",
+                    index = ""
+                ),
+                competitorImportRow(
+                    firstName = "New",
+                    lastName = "Starter",
+                    club = "MTHD",
+                    startNumber = 2,
+                    siNumber = 2222,
+                    categoryName = "M21",
+                    index = ""
+                )
+            ),
+            competitorIdFactory = { "comp-2" },
+            categoryIdFactory = { "cat-2" },
+            duplicatePolicy = CompetitorCsvImportDuplicatePolicy.SKIP_EXISTING_BY_IMPORT_KEY
+        )
+
+        val competitors = outcome.projectFile.raceData.competitorData.map { it.competitorCategory.competitor }
+        assertEquals(1, outcome.importedCount)
+        assertEquals(0, outcome.updatedCount)
+        assertEquals(1, outcome.skippedCount)
+        assertEquals(0, outcome.deletedCount)
+        assertEquals(listOf("comp-1", "comp-2"), competitors.map { it.id })
+        assertEquals(1111, competitors.first { it.id == "comp-1" }.siNumber)
+        assertEquals("M21", outcome.projectFile.raceData.categories.single().category.name)
+    }
+
+    @Test
+    fun synchronizesCompetitorRowsByImportKeyAndMovesRemovedReadoutsToUnmatched() {
+        val category = category("cat-1", "M21")
+        val kept = competitorData(
+            "comp-1",
+            "Alice",
+            "Runner",
+            startNumber = 1,
+            siNumber = 1111,
+            category = category,
+            club = "BOK"
+        )
+        val removed = competitorData(
+            "comp-2",
+            "Bob",
+            "Missing",
+            startNumber = 2,
+            siNumber = 2222,
+            category = category,
+            club = "NMO",
+            readoutData = readout("result-1", "comp-2", 2222)
+        )
+        val original = projectFile(
+            categories = listOf(
+                categoryData(
+                    "cat-1",
+                    "M21",
+                    competitors = listOf(kept.competitorCategory.competitor, removed.competitorCategory.competitor)
+                )
+            ),
+            competitors = listOf(kept, removed)
+        )
+
+        val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
+            projectFile = original,
+            rows = listOf(
+                competitorImportRow(
+                    firstName = "Alice",
+                    lastName = "Runner",
+                    club = "BOK",
+                    startNumber = null,
+                    siNumber = 3333,
+                    categoryName = "W21",
+                    index = ""
+                )
+            ),
+            competitorIdFactory = { "comp-new" },
+            categoryIdFactory = { "cat-2" },
+            duplicatePolicy = CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY,
+            deleteMissingByImportKey = true
+        )
+
+        val updatedCompetitor = outcome.projectFile.raceData.competitorData.single().competitorCategory.competitor
+        assertEquals(0, outcome.importedCount)
+        assertEquals(1, outcome.updatedCount)
+        assertEquals(0, outcome.skippedCount)
+        assertEquals(1, outcome.deletedCount)
+        assertEquals("comp-1", updatedCompetitor.id)
+        assertEquals("Alice", updatedCompetitor.firstName)
+        assertEquals(3333, updatedCompetitor.siNumber)
+        assertEquals(1, updatedCompetitor.startNumber)
+        assertEquals("cat-2", updatedCompetitor.categoryId)
+        assertEquals(listOf("M21", "W21"), outcome.projectFile.raceData.categories.map { it.category.name })
+        assertEquals("result-1", outcome.projectFile.raceData.unmatchedReadoutData.single().result.id)
+        assertEquals(null, outcome.projectFile.raceData.unmatchedReadoutData.single().result.competitorId)
+    }
+
+    @Test
     fun rejectsDuplicateCompetitorImportNumbers() {
         val original = projectFile(
             competitors = listOf(

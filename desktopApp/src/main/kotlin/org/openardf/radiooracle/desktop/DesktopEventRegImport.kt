@@ -7,6 +7,7 @@ import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
+import org.openardf.radiooracle.shared.files.EventCsvExports
 import java.io.StringReader
 import java.net.URI
 import java.net.http.HttpClient
@@ -33,6 +34,18 @@ data class DesktopEventRegImportResult(
     val sourceUrl: String,
     val outputDirectory: Path,
     val generatedFiles: List<DesktopEventRegGeneratedFile>
+)
+
+data class DesktopEventRegGeneratedCompetitorFile(
+    val competitionName: String,
+    val path: Path,
+    val competitorCount: Int
+)
+
+data class DesktopEventRegCompetitorCsvImportResult(
+    val sourceUrl: String,
+    val outputDirectory: Path,
+    val generatedFiles: List<DesktopEventRegGeneratedCompetitorFile>
 )
 
 data class DesktopEventRegRegistration(
@@ -67,6 +80,50 @@ object DesktopEventRegImportPreferences {
 }
 
 object DesktopEventRegImporter {
+    fun importCompetitorCsvsFromWebsite(
+        url: String,
+        outputDirectory: Path,
+        startDateTimeIso: String,
+        fetchHtml: (String) -> String = ::fetchHtml,
+        idFactory: () -> String = { UUID.randomUUID().toString() }
+    ): DesktopEventRegCompetitorCsvImportResult {
+        val normalizedUrl = normalizedUrl(url)
+        val registration = DesktopEventRegRegistrationParser.parse(fetchHtml(normalizedUrl))
+        val projects = DesktopEventRegProjectBuilder.buildProjects(
+            registration = registration,
+            startDateTimeIso = startDateTimeIso,
+            idFactory = idFactory
+        )
+
+        require(projects.isNotEmpty()) {
+            "No competition columns with registered competitors were found."
+        }
+
+        Files.createDirectories(outputDirectory)
+        val generatedFiles = projects.map { generatedProject ->
+            val path = uniqueCsvPath(
+                outputDirectory.resolve(
+                    DesktopProjectFilePaths.defaultCsvFileName(
+                        generatedProject.projectFile.raceData.race.name,
+                        "competitors"
+                    )
+                )
+            )
+            Files.writeString(path, EventCsvExports.competitors(generatedProject.projectFile.raceData), StandardCharsets.UTF_8)
+            DesktopEventRegGeneratedCompetitorFile(
+                competitionName = generatedProject.competitionName,
+                path = path,
+                competitorCount = generatedProject.competitorCount
+            )
+        }
+
+        return DesktopEventRegCompetitorCsvImportResult(
+            sourceUrl = normalizedUrl,
+            outputDirectory = outputDirectory,
+            generatedFiles = generatedFiles
+        )
+    }
+
     fun importFromWebsite(
         url: String,
         outputDirectory: Path,
@@ -143,10 +200,20 @@ object DesktopEventRegImporter {
     private fun uniqueProjectPath(initialPath: Path): Path {
         val basePath = DesktopProjectFilePaths.withProjectExtension(initialPath)
         val baseStem = basePath.fileName.toString().removeSuffix(DesktopProjectFilePaths.PROJECT_EXTENSION)
+        return uniquePath(basePath, baseStem, DesktopProjectFilePaths.PROJECT_EXTENSION)
+    }
+
+    private fun uniqueCsvPath(initialPath: Path): Path {
+        val basePath = DesktopProjectFilePaths.withCsvExtension(initialPath)
+        val baseStem = basePath.fileName.toString().removeSuffix(DesktopProjectFilePaths.CSV_EXTENSION)
+        return uniquePath(basePath, baseStem, DesktopProjectFilePaths.CSV_EXTENSION)
+    }
+
+    private fun uniquePath(basePath: Path, baseStem: String, extension: String): Path {
         var path = basePath
         var counter = 2
         while (Files.exists(path)) {
-            path = basePath.resolveSibling("$baseStem $counter${DesktopProjectFilePaths.PROJECT_EXTENSION}")
+            path = basePath.resolveSibling("$baseStem $counter$extension")
             counter++
         }
         return path
@@ -310,21 +377,7 @@ private object DesktopEventRegProjectBuilder {
             ).withRaceFormat(competition.name)
             val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
                 projectFile = project,
-                rows = competition.competitors.map { competitor ->
-                    CompetitorCsvImportRow(
-                        siNumber = null,
-                        startNumber = null,
-                        firstName = competitor.firstName,
-                        lastName = competitor.lastName,
-                        categoryName = competitor.categoryName,
-                        isMan = competitor.categoryName.trim().uppercase().startsWith("M"),
-                        birthYear = null,
-                        club = competitor.club,
-                        index = "",
-                        startTimeText = competitor.startTimeText,
-                        siRent = false
-                    )
-                },
+                rows = competition.competitors.map { it.toImportRow() },
                 competitorIdFactory = idFactory,
                 categoryIdFactory = idFactory,
                 duplicatePolicy = CompetitorCsvImportDuplicatePolicy.REJECT_DUPLICATES
@@ -337,27 +390,52 @@ private object DesktopEventRegProjectBuilder {
         }
 
     private fun EventProjectFile.withRaceFormat(competitionName: String): EventProjectFile {
-        val lower = competitionName.lowercase()
-        val raceType = when {
-            lower.contains("sprint") || lower.startsWith("spr") -> RaceType.SPRINT
-            lower.contains("fox") -> RaceType.FOXORING
-            else -> RaceType.CLASSIC
-        }
-        val raceBand = when {
-            lower.contains("2m") -> RaceBand.M2
-            lower.contains("80m") -> RaceBand.M80
-            else -> RaceBand.NONE
-        }
+        val format = competitionName.eventRegRaceFormat()
         return copy(
             raceData = raceData.copy(
                 race = raceData.race.copy(
-                    raceType = raceType,
-                    raceBand = raceBand
+                    raceType = format.raceType,
+                    raceBand = format.raceBand
                 )
             )
         )
     }
 }
+
+private data class EventRegRaceFormat(
+    val raceType: RaceType,
+    val raceBand: RaceBand
+)
+
+private fun String.eventRegRaceFormat(): EventRegRaceFormat {
+    val lower = lowercase()
+    val raceType = when {
+        lower.contains("sprint") || lower.startsWith("spr") -> RaceType.SPRINT
+        lower.contains("fox") -> RaceType.FOXORING
+        else -> RaceType.CLASSIC
+    }
+    val raceBand = when {
+        lower.contains("2m") -> RaceBand.M2
+        lower.contains("80m") -> RaceBand.M80
+        else -> RaceBand.NONE
+    }
+    return EventRegRaceFormat(raceType, raceBand)
+}
+
+private fun DesktopEventRegCompetitor.toImportRow(): CompetitorCsvImportRow =
+    CompetitorCsvImportRow(
+        siNumber = null,
+        startNumber = null,
+        firstName = firstName,
+        lastName = lastName,
+        categoryName = categoryName,
+        isMan = categoryName.trim().uppercase().startsWith("M"),
+        birthYear = null,
+        club = club,
+        index = "",
+        startTimeText = startTimeText,
+        siRent = false
+    )
 
 private class RegListTableParser : HTMLEditorKit.ParserCallback() {
     private val rows = mutableListOf<List<String>>()

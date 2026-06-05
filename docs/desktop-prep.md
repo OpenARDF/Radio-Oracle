@@ -141,7 +141,7 @@ tested with real event use before treating it as a fixed design. Keep four
 top-level workflow groups visible along the bottom of the desktop app, echoing
 Android bottom navigation:
 
-- Preparation/Setup;
+- Setup;
 - Race Operations;
 - Results/File Export;
 - Help/About/App Settings.
@@ -152,11 +152,11 @@ left-side navigation with one submenu level, but that submenu must include a
 visually distinct Back button that returns to the previous menu. The bottom
 workflow navigation should remain available as the user's return-to-top path.
 Use breadcrumbs or equivalent context text, such as
-`Preparation/Setup > Categories`, so testers can tell where they are.
+`Setup > Categories`, so testers can tell where they are.
 
 Initial placement guidance:
 
-- Preparation/Setup: Event File commands, race details, categories, competitors,
+- Setup: Event File commands, race details, categories, competitors,
   aliases/control names, start-list setup, setup imports, setup exports, and
   Event File diagnostics/validation under a Utils item.
 - Race Operations: SI readout, continuous readout, unmatched readouts,

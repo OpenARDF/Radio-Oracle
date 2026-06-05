@@ -6,6 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.files.EventCsvImports
 import java.nio.file.Files
 
 class DesktopEventRegImportTest {
@@ -76,6 +77,36 @@ class DesktopEventRegImportTest {
         )
         assertEquals(RaceBand.M2, twoMeterProject.raceData.race.raceBand)
         assertFalse(twoMeterProject.raceData.competitorData.any { it.competitorCategory.competitor.lastName == "Boyd" })
+    }
+
+    @Test
+    fun generatesOneCompetitorCsvPerCompetitionWithEventFileStem() {
+        val outputDirectory = Files.createTempDirectory("radio-oracle-eventreg-competitors-test")
+        val ids = generateSequence(1) { it + 1 }.map { "id-$it" }.iterator()
+
+        val result = DesktopEventRegImporter.importCompetitorCsvsFromWebsite(
+            url = "https://eventreg.example.test/reglist",
+            outputDirectory = outputDirectory,
+            startDateTimeIso = "2026-06-05T09:00",
+            fetchHtml = { sampleRegistrationHtml() },
+            idFactory = { ids.next() }
+        )
+
+        assertEquals(4, result.generatedFiles.size)
+        assertEquals(
+            listOf(
+                "Sample Radio Championships - Sprint competitors.csv",
+                "Sample Radio Championships - FoxO competitors.csv",
+                "Sample Radio Championships - 2m competitors.csv",
+                "Sample Radio Championships - SprMod-NC competitors.csv"
+            ),
+            result.generatedFiles.map { it.path.fileName.toString() }
+        )
+
+        val sprintCsv = Files.readString(result.generatedFiles.first { it.competitionName == "Sprint" }.path)
+        val sprintRows = EventCsvImports.parseAndroidCompetitorRows(sprintCsv).rows
+        assertEquals(listOf("Fala", "Kerns"), sprintRows.map { it.lastName })
+        assertEquals(listOf("M-21", "W-65"), sprintRows.map { it.categoryName })
     }
 
     private fun sampleRegistrationHtml(): String =

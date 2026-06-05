@@ -21,13 +21,17 @@ import org.openardf.radiooracle.shared.time.DurationFormatter
 
 enum class CompetitorCsvImportDuplicatePolicy {
     REJECT_DUPLICATES,
-    UPDATE_EXISTING_BY_INDEX
+    UPDATE_EXISTING_BY_INDEX,
+    SKIP_EXISTING_BY_IMPORT_KEY,
+    UPDATE_EXISTING_BY_IMPORT_KEY
 }
 
 data class CompetitorCsvImportOutcome(
     val projectFile: EventProjectFile,
     val importedCount: Int,
     val updatedCount: Int,
+    val skippedCount: Int = 0,
+    val deletedCount: Int = 0,
     val warnings: List<String>
 )
 
@@ -1028,7 +1032,8 @@ object EventProjectEditor {
         rows: List<CompetitorCsvImportRow>,
         competitorIdFactory: () -> String,
         categoryIdFactory: () -> String,
-        duplicatePolicy: CompetitorCsvImportDuplicatePolicy = CompetitorCsvImportDuplicatePolicy.REJECT_DUPLICATES
+        duplicatePolicy: CompetitorCsvImportDuplicatePolicy = CompetitorCsvImportDuplicatePolicy.REJECT_DUPLICATES,
+        deleteMissingByImportKey: Boolean = false
     ): CompetitorCsvImportOutcome {
         var categories = projectFile.raceData.categories
         val competitors = projectFile.raceData.competitorData.toMutableList()
@@ -1037,8 +1042,19 @@ object EventProjectEditor {
         var nextStartNumber = (competitors.maxOfOrNull { it.competitorCategory.competitor.startNumber } ?: 0) + 1
         var importedCount = 0
         var updatedCount = 0
+        var skippedCount = 0
+        val importKeys = rows.map { it.importKey() }.toSet()
 
         rows.forEachIndexed { rowIndex, row ->
+            val existingPosition = row.existingCompetitorPosition(competitors, duplicatePolicy)
+            if (
+                existingPosition >= 0 &&
+                duplicatePolicy == CompetitorCsvImportDuplicatePolicy.SKIP_EXISTING_BY_IMPORT_KEY
+            ) {
+                skippedCount++
+                return@forEachIndexed
+            }
+
             if (row.categoryName.isBlank()) {
                 warnings += "Line ${rowIndex + 1}: competitor ${row.lastName} ${row.firstName} has no category."
             }
@@ -1068,13 +1084,6 @@ object EventProjectEditor {
                     }
             }
 
-            val existingPosition = if (duplicatePolicy == CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_INDEX &&
-                row.index.isNotBlank()
-            ) {
-                competitors.indexOfFirst { it.competitorCategory.competitor.index == row.index }
-            } else {
-                -1
-            }
             val startNumber = row.startNumber ?: if (existingPosition >= 0) {
                 competitors[existingPosition].competitorCategory.competitor.startNumber
             } else {
@@ -1157,9 +1166,64 @@ object EventProjectEditor {
             importedCount++
         }
 
+        val removedCompetitors = if (deleteMissingByImportKey) {
+            competitors.filter { it.competitorCategory.competitor.importKey() !in importKeys }
+        } else {
+            emptyList()
+        }
+        if (removedCompetitors.isNotEmpty()) {
+            val removedIds = removedCompetitors
+                .map { it.competitorCategory.competitor.id }
+                .toSet()
+            val unmatchedReadouts = removedCompetitors.mapNotNull { data ->
+                data.readoutData?.let { readoutData ->
+                    readoutData.copy(result = readoutData.result.copy(competitorId = null))
+                }
+            }
+            competitors.removeAll { it.competitorCategory.competitor.id in removedIds }
+            if (unmatchedReadouts.isNotEmpty()) {
+                return importOutcome(
+                    projectFile = projectFile,
+                    categories = categories,
+                    competitors = competitors,
+                    unmatchedReadouts = projectFile.raceData.unmatchedReadoutData + unmatchedReadouts,
+                    importedCount = importedCount,
+                    updatedCount = updatedCount,
+                    skippedCount = skippedCount,
+                    deletedCount = removedCompetitors.size,
+                    warnings = warnings
+                )
+            }
+        }
+
+        return importOutcome(
+            projectFile = projectFile,
+            categories = categories,
+            competitors = competitors,
+            unmatchedReadouts = projectFile.raceData.unmatchedReadoutData,
+            importedCount = importedCount,
+            updatedCount = updatedCount,
+            skippedCount = skippedCount,
+            deletedCount = removedCompetitors.size,
+            warnings = warnings
+        )
+    }
+
+    private fun importOutcome(
+        projectFile: EventProjectFile,
+        categories: List<EventCategoryData>,
+        competitors: List<EventCompetitorData>,
+        unmatchedReadouts: List<EventReadoutData>,
+        importedCount: Int,
+        updatedCount: Int,
+        skippedCount: Int,
+        deletedCount: Int,
+        warnings: List<String>
+    ): CompetitorCsvImportOutcome {
         val raceData = projectFile.raceData.copy(
             categories = categories,
-            competitorData = competitors
+            competitorData = competitors,
+            unmatchedReadoutData = unmatchedReadouts
         )
         return CompetitorCsvImportOutcome(
             projectFile = projectFile.copy(
@@ -1175,6 +1239,8 @@ object EventProjectEditor {
             ),
             importedCount = importedCount,
             updatedCount = updatedCount,
+            skippedCount = skippedCount,
+            deletedCount = deletedCount,
             warnings = warnings
         )
     }
@@ -1822,6 +1888,52 @@ object EventProjectEditor {
 
     private inline fun <T> Iterable<T>.noneIndexed(predicate: (index: Int, T) -> Boolean): Boolean =
         withIndex().none { (index, value) -> predicate(index, value) }
+
+    private fun CompetitorCsvImportRow.existingCompetitorPosition(
+        competitors: List<EventCompetitorData>,
+        duplicatePolicy: CompetitorCsvImportDuplicatePolicy
+    ): Int =
+        when (duplicatePolicy) {
+            CompetitorCsvImportDuplicatePolicy.REJECT_DUPLICATES -> -1
+            CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_INDEX ->
+                index.takeIf { it.isNotBlank() }?.let { registrationIndex ->
+                    competitors.indexOfFirst { data ->
+                        data.competitorCategory.competitor.index == registrationIndex
+                    }
+                } ?: -1
+            CompetitorCsvImportDuplicatePolicy.SKIP_EXISTING_BY_IMPORT_KEY,
+            CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY ->
+                competitors.indexOfFirst { data ->
+                    data.competitorCategory.competitor.importKey() == importKey()
+                }
+        }
+
+    /*
+     * EventReg registration tables do not always expose a stable registration
+     * index.  When an index is available it remains the strongest identity; for
+     * EventReg website imports without an index, name plus club is the best
+     * repeatable key available for deciding whether a downloaded competitor is
+     * already present in the current Event File.
+     */
+    private fun CompetitorCsvImportRow.importKey(): String =
+        competitorImportKey(index = index, firstName = firstName, lastName = lastName, club = club)
+
+    private fun EventCompetitor.importKey(): String =
+        competitorImportKey(index = index, firstName = firstName, lastName = lastName, club = club)
+
+    private fun competitorImportKey(index: String, firstName: String, lastName: String, club: String): String {
+        val trimmedIndex = index.trim()
+        if (trimmedIndex.isNotEmpty()) {
+            return "index:${trimmedIndex.lowercase()}"
+        }
+        val normalizedName = "${lastName.trim().lowercase()}|${firstName.trim().lowercase()}"
+        val normalizedClub = club.trim().lowercase()
+        return if (normalizedClub.isEmpty()) {
+            "name:$normalizedName"
+        } else {
+            "name-club:$normalizedName|$normalizedClub"
+        }
+    }
 
     private fun validatedControl(
         projectFile: EventProjectFile,

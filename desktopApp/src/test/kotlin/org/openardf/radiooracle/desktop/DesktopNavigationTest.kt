@@ -9,7 +9,7 @@ class DesktopNavigationTest {
     @Test
     fun exposesVisibleWorkflowGroupsInBottomNavigationOrder() {
         assertEquals(
-            listOf("Preparation/Setup", "Race Operations", "Results/File Export"),
+            listOf("Setup", "Race Operations", "Results/File Export"),
             DesktopWorkflow.bottomBarEntries.map { it.label }
         )
     }
@@ -49,7 +49,7 @@ class DesktopNavigationTest {
                 .first { it.label == "Exports" })
 
         assertEquals(
-            "Preparation/Setup > Start List > Exports",
+            "Setup > Start List > Exports",
             DesktopNavigation.breadcrumb(state)
         )
     }
@@ -92,8 +92,8 @@ class DesktopNavigationTest {
         assertEquals(DesktopWorkflow.Setup, state.workflow)
         assertEquals(DesktopSection.WorkflowHome, state.selectedSection)
         assertEquals("setup.home", state.selectedItemId)
-        assertEquals("Preparation/Setup", DesktopNavigation.selectedLabel(state))
-        assertEquals("Preparation/Setup", DesktopNavigation.breadcrumb(state))
+        assertEquals("Setup", DesktopNavigation.selectedLabel(state))
+        assertEquals("Setup", DesktopNavigation.breadcrumb(state))
     }
 
     @Test
@@ -105,7 +105,7 @@ class DesktopNavigationTest {
         assertTrue(state.submenuStack.isEmpty())
         assertEquals(DesktopSection.WorkflowHome, state.selectedSection)
         assertEquals("setup.home", state.selectedItemId)
-        assertEquals("Preparation/Setup", DesktopNavigation.breadcrumb(state))
+        assertEquals("Setup", DesktopNavigation.breadcrumb(state))
     }
 
     @Test
@@ -119,7 +119,7 @@ class DesktopNavigationTest {
         assertEquals(listOf("setup.start-list"), state.submenuStack)
         assertEquals("setup.start-list", state.selectedItemId)
         assertEquals(DesktopSection.StartList, state.selectedSection)
-        assertEquals("Preparation/Setup > Start List", DesktopNavigation.breadcrumb(state))
+        assertEquals("Setup > Start List", DesktopNavigation.breadcrumb(state))
         assertEquals(
             listOf("Start List", "Import Starts CSV...", "Exports"),
             DesktopNavigation.currentItems(state).map { it.label }
@@ -142,7 +142,7 @@ class DesktopNavigationTest {
         assertEquals(listOf("setup.event-file"), state.submenuStack)
         assertEquals(DesktopSection.Races, state.selectedSection)
         assertEquals("setup.event-file", state.selectedItemId)
-        assertEquals("Preparation/Setup > Event File", DesktopNavigation.breadcrumb(state))
+        assertEquals("Setup > Event File", DesktopNavigation.breadcrumb(state))
     }
 
     @Test
@@ -161,7 +161,7 @@ class DesktopNavigationTest {
         assertEquals(listOf("setup.event-file"), selection.state.submenuStack)
         assertEquals(DesktopSection.Races, selection.state.selectedSection)
         assertEquals("setup.event-file", selection.state.selectedItemId)
-        assertEquals("Preparation/Setup > Event File", DesktopNavigation.breadcrumb(selection.state))
+        assertEquals("Setup > Event File", DesktopNavigation.breadcrumb(selection.state))
     }
 
     @Test
@@ -276,7 +276,7 @@ class DesktopNavigationTest {
 
         assertFalse(setupItems.first { it.label == "Event File" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Categories" }.requiresEventFile)
-        assertTrue(setupItems.first { it.label == "Competitors" }.requiresEventFile)
+        assertFalse(setupItems.first { it.label == "Competitors" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Start List" }.requiresEventFile)
     }
 
@@ -317,12 +317,14 @@ class DesktopNavigationTest {
         )
         assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Protected Course Order" }.section)
         assertEquals(
-            listOf("Competitors", "Import Competitors CSV...", "Export Competitors CSV..."),
+            listOf("Competitors", "Import Competitors CSV...", "Import EventReg Website...", "Export Competitors CSV..."),
             competitorItems.map { it.label }
         )
         assertEquals(DesktopNavAction.ImportCategoriesCsv, categoryItems.first { it.label == "Import Categories CSV..." }.action)
         assertEquals(DesktopNavAction.ExportCategoriesCsv, categoryItems.first { it.label == "Export Categories CSV..." }.action)
         assertEquals(DesktopNavAction.ImportCompetitorsCsv, competitorItems.first { it.label == "Import Competitors CSV..." }.action)
+        assertEquals(DesktopNavAction.ImportEventRegCompetitorsCsv, competitorItems.first { it.label == "Import EventReg Website..." }.action)
+        assertFalse(competitorItems.first { it.label == "Import EventReg Website..." }.requiresEventFile)
         assertEquals(DesktopNavAction.ExportCompetitorsCsv, competitorItems.first { it.label == "Export Competitors CSV..." }.action)
         assertFalse(setupItems.any { it.label == "Imports" })
         assertFalse(setupItems.any { it.label == "Setup Exports" })
@@ -367,7 +369,7 @@ class DesktopNavigationTest {
 
         assertEquals(DesktopSection.Races, state.selectedSection)
         assertEquals("setup.event-file", state.selectedItemId)
-        assertEquals("Preparation/Setup > Event File", DesktopNavigation.breadcrumb(state))
+        assertEquals("Setup > Event File", DesktopNavigation.breadcrumb(state))
     }
 
     @Test
@@ -382,7 +384,7 @@ class DesktopNavigationTest {
 
         assertEquals(DesktopSection.Races, state.selectedSection)
         assertEquals("setup.event-file.new", state.selectedItemId)
-        assertEquals("Preparation/Setup > Event File > New Event File", DesktopNavigation.breadcrumb(state))
+        assertEquals("Setup > Event File > New Event File", DesktopNavigation.breadcrumb(state))
     }
 
     @Test

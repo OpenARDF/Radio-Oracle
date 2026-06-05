@@ -7,7 +7,7 @@ enum class DesktopWorkflow(
     val shortLabel: String,
     val requiresEventFileInBottomBar: Boolean = true
 ) {
-    Setup("Preparation/Setup", "Setup", requiresEventFileInBottomBar = false),
+    Setup("Setup", "Setup", requiresEventFileInBottomBar = false),
     RaceOps("Race Operations", "Race Ops"),
     ResultsExport("Results/File Export", "Results"),
     SettingsHelp("Help/About/App Settings", "Settings", requiresEventFileInBottomBar = false);
@@ -22,6 +22,7 @@ enum class DesktopNavAction {
     OpenEventFile,
     ImportAndroidRaceBackup,
     ImportEventRegWebsite,
+    ImportEventRegCompetitorsCsv,
     SaveEventFile,
     SaveEventFileAs,
     CloseEventFile,
@@ -186,13 +187,21 @@ object DesktopNavigation {
                             DesktopNavAction.ImportCompetitorsCsv
                         ),
                         action(
+                            "setup.competitors.import-eventreg",
+                            "Import EventReg Website...",
+                            workflow,
+                            DesktopNavAction.ImportEventRegCompetitorsCsv,
+                            requiresEventFile = false
+                        ),
+                        action(
                             "setup.competitors.export",
                             "Export Competitors CSV...",
                             workflow,
                             DesktopNavAction.ExportCompetitorsCsv
                         )
                     ),
-                    DesktopSection.Competitors
+                    DesktopSection.Competitors,
+                    requiresEventFile = false
                 ),
                 group(
                     "setup.start-list",

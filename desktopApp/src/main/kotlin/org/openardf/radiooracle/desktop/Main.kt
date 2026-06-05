@@ -98,7 +98,6 @@ import org.openardf.radiooracle.shared.event.defaultTimeLimitMinutes
 import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.files.EventCsvImports
-import org.openardf.radiooracle.shared.files.CompetitorCsvImportProfile
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
@@ -292,8 +291,12 @@ fun main(args: Array<String>) = application {
         var protectedCoursePassword by remember { mutableStateOf<String?>(null) }
         var protectedIdealOrderByCategoryId by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
+        var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var eventRegImportUrl by remember { mutableStateOf(DesktopEventRegImportPreferences.lastRegistrationUrl()) }
         var isImportingEventRegWebsite by remember { mutableStateOf(false) }
+        var isImportingEventRegCompetitorCsvs by remember { mutableStateOf(false) }
+        var pendingCompetitorsCsvImportPath by remember { mutableStateOf<Path?>(null) }
+        var syncCompetitorsCsvImport by remember { mutableStateOf(false) }
         val siPortMutex = remember { Mutex() }
 
         LaunchedEffect(Unit) {
@@ -923,44 +926,52 @@ fun main(args: Array<String>) = application {
 
         fun importCompetitorsCsv() {
             DesktopFileDialogs.chooseImportCsv("Import Competitors CSV")?.let { path ->
-                runCatching {
-                    val csvText = Files.readString(path)
-                    val profile = EventCsvImports.detectCompetitorProfile(csvText)
-                    val result = EventCsvImports.parseAndroidCompetitorRows(csvText)
-                    var importWarnings = emptyList<String>()
-                    var importedRows = 0
-                    var updatedRows = 0
-                    projectFile = projectSession.updateCurrentProject { currentProject ->
-                        val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
-                            projectFile = currentProject,
-                            rows = result.rows,
-                            competitorIdFactory = { UUID.randomUUID().toString() },
-                            categoryIdFactory = { UUID.randomUUID().toString() },
-                            duplicatePolicy = if (profile == CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION) {
-                                CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_INDEX
-                            } else {
-                                CompetitorCsvImportDuplicatePolicy.REJECT_DUPLICATES
-                            }
-                        )
-                        importWarnings = outcome.warnings
-                        importedRows = outcome.importedCount
-                        updatedRows = outcome.updatedCount
-                        outcome.projectFile
-                    }
-                    syncProjectState()
-                    projectStatusText = if (profile == CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION) {
-                        competitorImportStatusText(
-                            importedRows = importedRows,
-                            updatedRows = updatedRows,
-                            invalidRows = result.invalidLines.size,
-                            fileName = path.fileName.toString()
-                        )
-                    } else {
-                        importStatusText("Imported", importedRows, result.invalidLines.size, path.fileName.toString())
-                    } + warningStatusSuffix(importWarnings)
-                }.onFailure { error ->
-                    projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+                pendingCompetitorsCsvImportPath = path
+                syncCompetitorsCsvImport = false
+            }
+        }
+
+        fun importCompetitorsCsv(path: Path, synchronizeToCsv: Boolean) {
+            runCatching {
+                val csvText = Files.readString(path)
+                val result = EventCsvImports.parseAndroidCompetitorRows(csvText)
+                var importWarnings = emptyList<String>()
+                var importedRows = 0
+                var updatedRows = 0
+                var skippedRows = 0
+                var deletedRows = 0
+                projectFile = projectSession.updateCurrentProject { currentProject ->
+                    val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
+                        projectFile = currentProject,
+                        rows = result.rows,
+                        competitorIdFactory = { UUID.randomUUID().toString() },
+                        categoryIdFactory = { UUID.randomUUID().toString() },
+                        duplicatePolicy = if (synchronizeToCsv) {
+                            CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY
+                        } else {
+                            CompetitorCsvImportDuplicatePolicy.SKIP_EXISTING_BY_IMPORT_KEY
+                        },
+                        deleteMissingByImportKey = synchronizeToCsv
+                    )
+                    importWarnings = outcome.warnings
+                    importedRows = outcome.importedCount
+                    updatedRows = outcome.updatedCount
+                    skippedRows = outcome.skippedCount
+                    deletedRows = outcome.deletedCount
+                    outcome.projectFile
                 }
+                syncProjectState()
+                pendingCompetitorsCsvImportPath = null
+                projectStatusText = competitorImportStatusText(
+                    importedRows = importedRows,
+                    updatedRows = updatedRows,
+                    skippedRows = skippedRows,
+                    deletedRows = deletedRows,
+                    invalidRows = result.invalidLines.size,
+                    fileName = path.fileName.toString()
+                ) + warningStatusSuffix(importWarnings)
+            }.onFailure { error ->
+                projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
             }
         }
 
@@ -1060,6 +1071,11 @@ fun main(args: Array<String>) = application {
             isEventRegImportDialogVisible = true
         }
 
+        fun showEventRegCompetitorCsvImportDialog() {
+            eventRegImportUrl = DesktopEventRegImportPreferences.lastRegistrationUrl()
+            isEventRegCompetitorCsvImportDialogVisible = true
+        }
+
         fun importEventRegWebsite(url: String) {
             if (isImportingEventRegWebsite) {
                 return
@@ -1092,6 +1108,41 @@ fun main(args: Array<String>) = application {
                     DesktopDebugLog.error("EventReg", projectStatusText)
                 }
                 isImportingEventRegWebsite = false
+            }
+        }
+
+        fun importEventRegCompetitorCsvs(url: String) {
+            if (isImportingEventRegCompetitorCsvs) {
+                return
+            }
+            val trimmedUrl = url.trim()
+            isImportingEventRegCompetitorCsvs = true
+            projectStatusText = "Importing EventReg website..."
+            DesktopEventRegImportPreferences.rememberRegistrationUrl(trimmedUrl)
+            appCoroutineScope.launch {
+                val result = runCatching {
+                    withContext(Dispatchers.IO) {
+                        DesktopEventRegImporter.importCompetitorCsvsFromWebsite(
+                            url = trimmedUrl,
+                            outputDirectory = DesktopEventFileLocations.preparePreferredEventFileDirectory(),
+                            startDateTimeIso = DesktopDateTimeText.isoText(DesktopDateTimeText.defaultStartDateTime())
+                        )
+                    }
+                }
+                result.onSuccess { importResult ->
+                    val totalCompetitors = importResult.generatedFiles.sumOf { it.competitorCount }
+                    projectStatusText =
+                        "Generated ${importResult.generatedFiles.size} competitor CSV files with $totalCompetitors competitor entries in ${importResult.outputDirectory}."
+                    isEventRegCompetitorCsvImportDialogVisible = false
+                    DesktopDebugLog.info(
+                        "EventReg",
+                        "Generated ${importResult.generatedFiles.size} competitor CSV files from ${importResult.sourceUrl}"
+                    )
+                }.onFailure { error ->
+                    projectStatusText = "EventReg competitor CSV import failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("EventReg", projectStatusText)
+                }
+                isImportingEventRegCompetitorCsvs = false
             }
         }
 
@@ -1149,7 +1200,8 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.NewEventFile,
                 DesktopNavAction.OpenEventFile,
                 DesktopNavAction.ImportAndroidRaceBackup,
-                DesktopNavAction.ImportEventRegWebsite -> true
+                DesktopNavAction.ImportEventRegWebsite,
+                DesktopNavAction.ImportEventRegCompetitorsCsv -> true
                 DesktopNavAction.ShowDebugLogHelp,
                 DesktopNavAction.ShowAbout -> true
                 DesktopNavAction.SaveEventFile -> projectFile != null
@@ -1169,6 +1221,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.OpenEventFile -> chooseOpenEventFile()
                 DesktopNavAction.ImportAndroidRaceBackup -> chooseImportAndroidRaceBackupJson()
                 DesktopNavAction.ImportEventRegWebsite -> showEventRegImportDialog()
+                DesktopNavAction.ImportEventRegCompetitorsCsv -> showEventRegCompetitorCsvImportDialog()
                 DesktopNavAction.SaveEventFile -> saveCurrentProject()
                 DesktopNavAction.SaveEventFileAs -> saveAsCurrentProject()
                 DesktopNavAction.CloseEventFile -> requestCloseEventFile()
@@ -1293,6 +1346,31 @@ fun main(args: Array<String>) = application {
                         isEventRegImportDialogVisible = false
                     }
                 }
+            )
+        }
+        if (isEventRegCompetitorCsvImportDialogVisible) {
+            EventRegImportDialog(
+                title = "Import EventReg Competitors",
+                idleDescription = "Creates one competitor CSV file for each competition class column with registered competitors.",
+                importingDescription = "Downloading registration table and generating competitor CSV files...",
+                url = eventRegImportUrl,
+                isImporting = isImportingEventRegCompetitorCsvs,
+                onUrlChange = { eventRegImportUrl = it },
+                onImport = { importEventRegCompetitorCsvs(eventRegImportUrl) },
+                onCancel = {
+                    if (!isImportingEventRegCompetitorCsvs) {
+                        isEventRegCompetitorCsvImportDialogVisible = false
+                    }
+                }
+            )
+        }
+        pendingCompetitorsCsvImportPath?.let { importPath ->
+            CompetitorCsvImportOptionsDialog(
+                fileName = importPath.fileName.toString(),
+                synchronizeToCsv = syncCompetitorsCsvImport,
+                onSynchronizeToCsvChange = { syncCompetitorsCsvImport = it },
+                onImport = { importCompetitorsCsv(importPath, syncCompetitorsCsvImport) },
+                onCancel = { pendingCompetitorsCsvImportPath = null }
             )
         }
 
@@ -1930,6 +2008,9 @@ private fun NationalStartListDefaultsDialog(
 
 @Composable
 private fun EventRegImportDialog(
+    title: String = "Import EventReg Website",
+    idleDescription: String = "Creates one Event File for each competition class column with registered competitors.",
+    importingDescription: String = "Downloading registration table and generating Event Files...",
     url: String,
     isImporting: Boolean,
     onUrlChange: (String) -> Unit,
@@ -1938,7 +2019,7 @@ private fun EventRegImportDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Import EventReg Website") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 TextField(
@@ -1951,9 +2032,9 @@ private fun EventRegImportDialog(
                 )
                 Text(
                     text = if (isImporting) {
-                        "Downloading registration table and generating Event Files..."
+                        importingDescription
                     } else {
-                        "Creates one Event File for each competition class column with registered competitors."
+                        idleDescription
                     },
                     fontSize = 13.sp,
                     color = Color.DarkGray
@@ -1970,6 +2051,59 @@ private fun EventRegImportDialog(
         },
         dismissButton = {
             Button(onClick = onCancel, enabled = !isImporting) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun CompetitorCsvImportOptionsDialog(
+    fileName: String,
+    synchronizeToCsv: Boolean,
+    onSynchronizeToCsvChange: (Boolean) -> Unit,
+    onImport: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Import Competitors CSV") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Import $fileName",
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = synchronizeToCsv,
+                        onCheckedChange = onSynchronizeToCsvChange
+                    )
+                    Text(
+                        text = "Synchronize competitors to CSV",
+                        fontSize = 13.sp,
+                        color = DesktopPalette.Black
+                    )
+                }
+                Text(
+                    text = if (synchronizeToCsv) {
+                        "Updates matching competitors and removes current competitors not included in the CSV."
+                    } else {
+                        "Default: adds new competitors and leaves matching existing competitors unchanged."
+                    },
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onImport) {
+                Text("Import")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
                 Text("Cancel")
             }
         }
@@ -5266,8 +5400,21 @@ private fun isValidStartListInterval(intervalText: String): Boolean =
     runCatching { DurationFormatter.minuteStringToSeconds(intervalText.trim()) > 0 }
         .getOrDefault(false)
 
-private fun competitorImportStatusText(importedRows: Int, updatedRows: Int, invalidRows: Int, fileName: String): String {
-    val summary = "Imported $importedRows and updated $updatedRows ARDFEvent competitor rows from $fileName."
+private fun competitorImportStatusText(
+    importedRows: Int,
+    updatedRows: Int,
+    skippedRows: Int,
+    deletedRows: Int,
+    invalidRows: Int,
+    fileName: String
+): String {
+    val actions = listOf(
+        "imported $importedRows",
+        "updated $updatedRows",
+        "skipped $skippedRows",
+        "deleted $deletedRows"
+    )
+    val summary = "Competitor CSV import from $fileName: ${actions.joinToString(", ")}."
     return if (invalidRows == 0) {
         summary
     } else {
