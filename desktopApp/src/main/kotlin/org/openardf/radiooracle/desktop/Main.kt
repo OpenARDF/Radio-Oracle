@@ -2792,20 +2792,6 @@ private fun StartListDetailsPanel(
             )
             Button(
                 onClick = {
-                    onDrawStartList(
-                        intervalDraft,
-                        startDrawOptions()
-                    )
-                },
-                colors = ButtonDefaults.buttonColors(
-                    backgroundColor = DesktopPalette.Primary,
-                    contentColor = DesktopPalette.White
-                )
-            ) {
-                Text("Generate Start List")
-            }
-            Button(
-                onClick = {
                     onDrawBalancedStartList(
                         intervalDraft,
                         startDrawOptions(startGroupModeValue = StartDrawStartGroupMode.BALANCED_MULTI_DAY_THIRDS)
@@ -2814,6 +2800,25 @@ private fun StartListDetailsPanel(
                 enabled = startGroupMode != StartDrawStartGroupMode.PREFERRED_THIRDS
             ) {
                 Text("Balance from CSVs")
+            }
+        }
+        Row(
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = {
+                    onDrawStartList(
+                        intervalDraft,
+                        startDrawOptions()
+                    )
+                },
+                colors = ButtonDefaults.buttonColors(
+                    backgroundColor = DesktopPalette.Connected,
+                    contentColor = DesktopPalette.Black
+                )
+            ) {
+                Text("Generate Start List")
             }
         }
         DetailHeaderRow(listOf("Scheduled", "No start time"))
