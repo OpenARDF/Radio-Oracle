@@ -343,6 +343,7 @@ object DesktopNavigation {
     fun selectItem(state: DesktopNavState, item: DesktopNavItem): DesktopNavSelection =
         when {
             item.children.isNotEmpty() -> DesktopNavSelection(state.enter(item))
+            item.action == DesktopNavAction.OpenEventFile -> DesktopNavSelection(state.returnToCurrentMenu(item), item.action)
             item.action != null -> DesktopNavSelection(if (item.section == null) state else state.enter(item), item.action)
             item.section != null -> DesktopNavSelection(state.enter(item))
             else -> DesktopNavSelection(state)
@@ -431,8 +432,7 @@ object DesktopNavigation {
                 "Open...",
                 workflow,
                 DesktopNavAction.OpenEventFile,
-                requiresEventFile = false,
-                section = DesktopSection.Races
+                requiresEventFile = false
             ),
             action(
                 "setup.event-file.import-android",
@@ -515,4 +515,13 @@ object DesktopNavigation {
             requiresEventFile = requiresEventFile,
             children = children
         )
+
+    private fun DesktopNavState.returnToCurrentMenu(item: DesktopNavItem): DesktopNavState {
+        val currentMenuId = submenuStack.lastOrNull() ?: return this
+        val currentMenu = itemById(workflow, currentMenuId)
+        return copy(
+            selectedSection = item.section ?: currentMenu?.section ?: selectedSection,
+            selectedItemId = currentMenuId
+        )
+    }
 }

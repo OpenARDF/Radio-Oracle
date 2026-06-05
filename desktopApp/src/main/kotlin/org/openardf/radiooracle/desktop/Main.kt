@@ -2796,9 +2796,13 @@ private fun StartListDetailsPanel(
                         intervalDraft,
                         startDrawOptions()
                     )
-                }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    backgroundColor = DesktopPalette.Primary,
+                    contentColor = DesktopPalette.White
+                )
             ) {
-                Text("Draw starts")
+                Text("Generate Start List")
             }
             Button(
                 onClick = {

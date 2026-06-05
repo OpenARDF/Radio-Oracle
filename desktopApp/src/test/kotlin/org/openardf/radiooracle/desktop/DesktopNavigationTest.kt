@@ -146,6 +146,25 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun openEventFileActionReturnsToEventFileMenu() {
+        val eventFileState = DesktopNavigation.selectItem(
+            DesktopNavState(),
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+        ).state
+
+        val selection = DesktopNavigation.selectItem(
+            eventFileState,
+            DesktopNavigation.currentItems(eventFileState).first { it.action == DesktopNavAction.OpenEventFile }
+        )
+
+        assertEquals(DesktopNavAction.OpenEventFile, selection.action)
+        assertEquals(listOf("setup.event-file"), selection.state.submenuStack)
+        assertEquals(DesktopSection.Races, selection.state.selectedSection)
+        assertEquals("setup.event-file", selection.state.selectedItemId)
+        assertEquals("Preparation/Setup > Event File", DesktopNavigation.breadcrumb(selection.state))
+    }
+
+    @Test
     fun unsavedNewEventDraftGuardBlocksNavigationAway() {
         val eventFileState = DesktopNavigation.selectItem(
             DesktopNavState(),
