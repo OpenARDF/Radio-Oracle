@@ -25,6 +25,12 @@ import org.openardf.radiooracle.backend.room.enums.SIRecordType
 import org.openardf.radiooracle.backend.shared.toEventRaceData
 import org.openardf.radiooracle.backend.shared.toRoomRaceData
 import org.openardf.radiooracle.backend.sportident.SITime
+import org.openardf.radiooracle.shared.event.EventCategory
+import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlPoint
+import org.openardf.radiooracle.shared.event.EventRace
+import org.openardf.radiooracle.shared.event.EventRaceData
 import org.junit.Test
 import java.time.Duration
 import java.time.LocalDateTime
@@ -148,6 +154,9 @@ class EventModelMappersTest {
         assertEquals(900L, shared.competitorData.single().readoutData!!.punches.single().punch.splitSeconds)
         assertEquals("F1", shared.competitorData.single().readoutData!!.punches.single().alias!!.name)
         assertEquals(1, shared.competitorData.single().readoutData!!.result.place)
+        assertEquals("F1", shared.controls.single().label)
+        assertEquals(shared.controls.single().id, shared.categories.single().controlPoints.single().controlId)
+        assertEquals(listOf(shared.controls.single().id), shared.categories.single().publicControlIds)
 
         val room = shared.toRoomRaceData()
         assertEquals(raceId, room.race.id)
@@ -167,6 +176,76 @@ class EventModelMappersTest {
         assertEquals(Duration.ofMinutes(10), room.competitorData.single().competitorCategory.competitor.drawnRelativeStartTime)
         assertEquals(Duration.ofMinutes(15), room.competitorData.single().readoutData!!.punches.single().punch.split)
         assertEquals(1, room.competitorData.single().readoutData!!.result.place)
+        assertEquals(listOf("F1"), room.aliases.map { it.name })
+    }
+
+    @Test
+    fun mapsPortableControlModelToAndroidRoomData() {
+        val projectRaceData = EventRaceData(
+            race = EventRace(
+                id = "desktop-smoke-race",
+                name = "Desktop Smoke Race",
+                apiKey = "",
+                startDateTimeIso = "2026-05-31T10:00",
+                raceType = RaceType.CLASSIC,
+                raceLevel = RaceLevel.PRACTICE,
+                raceBand = RaceBand.M80,
+                timeLimitSeconds = 7_200
+            ),
+            categories = listOf(
+                EventCategoryData(
+                    category = EventCategory(
+                        id = "category-m21",
+                        raceId = "desktop-smoke-race",
+                        name = "M21",
+                        isMan = true,
+                        maxAge = null,
+                        lengthMeters = 5_000,
+                        climbMeters = 100,
+                        order = 1,
+                        differentProperties = false,
+                        raceType = null,
+                        raceBand = null,
+                        timeLimitSeconds = null,
+                        controlPointsString = ""
+                    ),
+                    controlPoints = listOf(
+                        EventControlPoint(
+                            id = "category-m21-control-1",
+                            categoryId = "category-m21",
+                            siCode = 0,
+                            type = ControlPointType.CONTROL,
+                            order = 1,
+                            controlId = "control-fox1-31-control"
+                        )
+                    ),
+                    competitors = emptyList(),
+                    publicControlIds = listOf("control-fox1-31-control")
+                )
+            ),
+            aliases = emptyList(),
+            competitorData = emptyList(),
+            unmatchedReadoutData = emptyList(),
+            controls = listOf(
+                EventControl(
+                    id = "control-fox1-31-control",
+                    raceId = "desktop-smoke-race",
+                    label = "FOX 1",
+                    siCode = 31,
+                    type = ControlPointType.CONTROL
+                )
+            )
+        )
+
+        val room = projectRaceData.toRoomRaceData()
+
+        assertEquals("Desktop Smoke Race", room.race.name)
+        assertEquals("M21", room.categories.single().category.name)
+        assertEquals("31", room.categories.single().category.controlPointsString)
+        assertEquals(31, room.categories.single().controlPoints.single().siCode)
+        assertEquals(ControlPointType.CONTROL, room.categories.single().controlPoints.single().type)
+        assertEquals(listOf("FOX 1"), room.aliases.map { it.name })
+        assertEquals(listOf(31), room.aliases.map { it.siCode })
     }
 
     @Test

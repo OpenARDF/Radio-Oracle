@@ -20,12 +20,17 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventControlPoint
+import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
+import org.openardf.radiooracle.shared.course.ControlPointDefinition
+import org.openardf.radiooracle.shared.course.ControlPointRules
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
@@ -173,19 +178,24 @@ fun CompetitorData.toEventCompetitorData(): EventCompetitorData =
     )
 
 /** Converts a complete Android Room race aggregate into the portable shared event model. */
-fun RaceData.toEventRaceData(): EventRaceData =
-    EventRaceData(
+fun RaceData.toEventRaceData(): EventRaceData {
+    val raceData = EventRaceData(
         race = race.toEventRace(),
         categories = categories.map { it.toEventCategoryData() },
         aliases = aliases.map { it.toEventAlias() },
         competitorData = competitorData.map { it.toEventCompetitorData() },
         unmatchedReadoutData = unmatchedReadoutData.map { it.toEventReadoutData() }
     )
+    return EventControlCatalog.backfillControls(EventProjectFile(raceData = raceData)).raceData
+}
 
 /** Converts the portable shared race model back into an Android Room entity. */
 fun EventRace.toRoomRace(): Race =
+    toRoomRace(RoomIdMapper())
+
+private fun EventRace.toRoomRace(idMapper: RoomIdMapper): Race =
     Race(
-        id = UUID.fromString(id),
+        id = idMapper.uuidFor(id),
         name = name,
         apiKey = apiKey,
         startDateTime = LocalDateTime.parse(startDateTimeIso),
@@ -197,9 +207,12 @@ fun EventRace.toRoomRace(): Race =
 
 /** Converts the portable shared category model back into an Android Room entity. */
 fun EventCategory.toRoomCategory(): Category =
+    toRoomCategory(RoomIdMapper())
+
+private fun EventCategory.toRoomCategory(idMapper: RoomIdMapper): Category =
     Category(
-        id = UUID.fromString(id),
-        raceId = UUID.fromString(raceId),
+        id = idMapper.uuidFor(id),
+        raceId = idMapper.uuidFor(raceId),
         name = name,
         isMan = isMan,
         maxAge = maxAge,
@@ -215,29 +228,51 @@ fun EventCategory.toRoomCategory(): Category =
 
 /** Converts the portable shared control-point model back into an Android Room entity. */
 fun EventControlPoint.toRoomControlPoint(): ControlPoint =
-    ControlPoint(
-        id = UUID.fromString(id),
-        categoryId = UUID.fromString(categoryId),
-        siCode = siCode,
-        type = type,
+    toRoomControlPoint(RoomIdMapper(), emptyMap())
+
+private fun EventControlPoint.toRoomControlPoint(
+    idMapper: RoomIdMapper,
+    controlsById: Map<String, EventControl>
+): ControlPoint {
+    val control = controlsById[controlId]
+    return ControlPoint(
+        id = idMapper.uuidFor(id),
+        categoryId = idMapper.uuidFor(categoryId),
+        siCode = control?.siCode ?: siCode,
+        type = control?.type ?: type,
         order = order
     )
+}
 
 /** Converts the portable shared alias model back into an Android Room entity. */
 fun EventAlias.toRoomAlias(): Alias =
+    toRoomAlias(RoomIdMapper())
+
+private fun EventAlias.toRoomAlias(idMapper: RoomIdMapper): Alias =
     Alias(
-        id = UUID.fromString(id),
-        raceId = UUID.fromString(raceId),
+        id = idMapper.uuidFor(id),
+        raceId = idMapper.uuidFor(raceId),
         siCode = siCode,
         name = name
     )
 
+private fun EventControl.toRoomAlias(idMapper: RoomIdMapper): Alias =
+    Alias(
+        id = idMapper.uuidFor("alias-from-$id"),
+        raceId = idMapper.uuidFor(raceId),
+        siCode = siCode,
+        name = label
+    )
+
 /** Converts the portable shared competitor model back into an Android Room entity. */
 fun EventCompetitor.toRoomCompetitor(): Competitor =
+    toRoomCompetitor(RoomIdMapper())
+
+private fun EventCompetitor.toRoomCompetitor(idMapper: RoomIdMapper): Competitor =
     Competitor(
-        id = UUID.fromString(id),
-        raceId = UUID.fromString(raceId),
-        categoryId = categoryId?.let(UUID::fromString),
+        id = idMapper.uuidFor(id),
+        raceId = idMapper.uuidFor(raceId),
+        categoryId = categoryId?.let { idMapper.uuidFor(it) },
         firstName = firstName,
         lastName = lastName,
         club = club,
@@ -252,10 +287,13 @@ fun EventCompetitor.toRoomCompetitor(): Competitor =
 
 /** Converts the portable shared punch model back into an Android Room entity. */
 fun EventPunch.toRoomPunch(): Punch =
+    toRoomPunch(RoomIdMapper())
+
+private fun EventPunch.toRoomPunch(idMapper: RoomIdMapper): Punch =
     Punch(
-        id = UUID.fromString(id),
-        raceId = UUID.fromString(raceId),
-        resultId = resultId?.let(UUID::fromString),
+        id = idMapper.uuidFor(id),
+        raceId = idMapper.uuidFor(raceId),
+        resultId = resultId?.let { idMapper.uuidFor(it) },
         cardNumber = cardNumber,
         siCode = siCode,
         siTime = org.openardf.radiooracle.backend.sportident.SITime(siTimeSeconds),
@@ -268,10 +306,13 @@ fun EventPunch.toRoomPunch(): Punch =
 
 /** Converts the portable shared result model back into an Android Room entity. */
 fun EventResult.toRoomResult(): Result =
+    toRoomResult(RoomIdMapper())
+
+private fun EventResult.toRoomResult(idMapper: RoomIdMapper): Result =
     Result(
-        id = UUID.fromString(id),
-        raceId = UUID.fromString(raceId),
-        competitorId = competitorId?.let(UUID::fromString),
+        id = idMapper.uuidFor(id),
+        raceId = idMapper.uuidFor(raceId),
+        competitorId = competitorId?.let { idMapper.uuidFor(it) },
         siNumber = siNumber,
         cardType = cardType,
         checkTime = checkTimeSeconds?.let { org.openardf.radiooracle.backend.sportident.SITime(it) },
@@ -289,46 +330,99 @@ fun EventResult.toRoomResult(): Result =
 
 /** Converts the portable shared alias-punch model back into an Android relation object. */
 fun EventAliasPunch.toRoomAliasPunch(): AliasPunch =
+    toRoomAliasPunch(RoomIdMapper())
+
+private fun EventAliasPunch.toRoomAliasPunch(idMapper: RoomIdMapper): AliasPunch =
     AliasPunch(
-        punch = punch.toRoomPunch(),
-        alias = alias?.toRoomAlias()
+        punch = punch.toRoomPunch(idMapper),
+        alias = alias?.toRoomAlias(idMapper)
     )
 
 /** Converts the portable shared readout model back into an Android aggregate. */
 fun EventReadoutData.toRoomReadoutData(): ReadoutData =
+    toRoomReadoutData(RoomIdMapper())
+
+private fun EventReadoutData.toRoomReadoutData(idMapper: RoomIdMapper): ReadoutData =
     ReadoutData(
-        result = result.toRoomResult(),
-        punches = punches.map { it.toRoomAliasPunch() }
+        result = result.toRoomResult(idMapper),
+        punches = punches.map { it.toRoomAliasPunch(idMapper) }
     )
 
 /** Converts the portable shared category aggregate back into an Android aggregate. */
 fun EventCategoryData.toRoomCategoryData(): CategoryData =
-    CategoryData(
-        category = category.toRoomCategory(),
-        controlPoints = controlPoints.map { it.toRoomControlPoint() },
-        competitors = competitors.map { it.toRoomCompetitor() }
+    toRoomCategoryData(RoomIdMapper(), emptyMap())
+
+private fun EventCategoryData.toRoomCategoryData(
+    idMapper: RoomIdMapper,
+    controlsById: Map<String, EventControl>
+): CategoryData {
+    val controlPoints = controlPoints.map { it.toRoomControlPoint(idMapper, controlsById) }
+    val category = category.toRoomCategory(idMapper).also { roomCategory ->
+        if (roomCategory.controlPointsString.isBlank()) {
+            roomCategory.controlPointsString = ControlPointRules.formatControlPoints(
+                controlPoints.map { ControlPointDefinition(it.siCode, it.type, it.order) }
+            )
+        }
+    }
+    return CategoryData(
+        category = category,
+        controlPoints = controlPoints,
+        competitors = competitors.map { it.toRoomCompetitor(idMapper) }
     )
+}
 
 /** Converts the portable shared competitor/category model back into an Android relation object. */
 fun EventCompetitorCategory.toRoomCompetitorCategory(): CompetitorCategory =
+    toRoomCompetitorCategory(RoomIdMapper())
+
+private fun EventCompetitorCategory.toRoomCompetitorCategory(idMapper: RoomIdMapper): CompetitorCategory =
     CompetitorCategory(
-        competitor = competitor.toRoomCompetitor(),
-        category = category?.toRoomCategory()
+        competitor = competitor.toRoomCompetitor(idMapper),
+        category = category?.toRoomCategory(idMapper)
     )
 
 /** Converts the portable shared competitor aggregate back into an Android aggregate. */
 fun EventCompetitorData.toRoomCompetitorData(): CompetitorData =
+    toRoomCompetitorData(RoomIdMapper())
+
+private fun EventCompetitorData.toRoomCompetitorData(idMapper: RoomIdMapper): CompetitorData =
     CompetitorData(
-        competitorCategory = competitorCategory.toRoomCompetitorCategory(),
-        readoutData = readoutData?.toRoomReadoutData()
+        competitorCategory = competitorCategory.toRoomCompetitorCategory(idMapper),
+        readoutData = readoutData?.toRoomReadoutData(idMapper)
     )
 
 /** Converts a complete portable shared race aggregate back into Android Room aggregates. */
-fun EventRaceData.toRoomRaceData(): RaceData =
-    RaceData(
-        race = race.toRoomRace(),
-        categories = categories.map { it.toRoomCategoryData() },
-        aliases = aliases.map { it.toRoomAlias() },
-        competitorData = competitorData.map { it.toRoomCompetitorData() },
-        unmatchedReadoutData = unmatchedReadoutData.map { it.toRoomReadoutData() }
+fun EventRaceData.toRoomRaceData(): RaceData {
+    val idMapper = RoomIdMapper()
+    val controlsById = controls.associateBy { it.id }
+    return RaceData(
+        race = race.toRoomRace(idMapper),
+        categories = categories.map { it.toRoomCategoryData(idMapper, controlsById) },
+        aliases = androidCompatibleAliases(idMapper),
+        competitorData = competitorData.map { it.toRoomCompetitorData(idMapper) },
+        unmatchedReadoutData = unmatchedReadoutData.map { it.toRoomReadoutData(idMapper) }
     )
+}
+
+private fun EventRaceData.androidCompatibleAliases(idMapper: RoomIdMapper): List<Alias> {
+    val existingAliases = aliases.map { it.toRoomAlias(idMapper) }
+    val existingKeys = existingAliases.map { AliasKey(it.siCode, it.name) }.toSet()
+    val controlAliases = controls
+        .filter { control -> control.label.isNotBlank() }
+        .map { it.toRoomAlias(idMapper) }
+        .filterNot { AliasKey(it.siCode, it.name) in existingKeys }
+    return (existingAliases + controlAliases)
+        .distinctBy { AliasKey(it.siCode, it.name) }
+}
+
+private class RoomIdMapper {
+    private val ids = mutableMapOf<String, UUID>()
+
+    fun uuidFor(id: String): UUID =
+        ids.getOrPut(id) {
+            runCatching { UUID.fromString(id) }
+                .getOrElse { UUID.nameUUIDFromBytes(id.toByteArray(Charsets.UTF_8)) }
+        }
+}
+
+private data class AliasKey(val siCode: Int, val name: String)
