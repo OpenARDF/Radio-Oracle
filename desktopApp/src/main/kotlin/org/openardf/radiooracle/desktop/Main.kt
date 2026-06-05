@@ -195,15 +195,28 @@ private enum class DesktopSportIdentAppendOutcome {
 
 private val CategoryTableColumns = listOf(
     FixedTableColumn("Name", 150.dp),
-    FixedTableColumn("Length", 84.dp),
-    FixedTableColumn("Climb", 84.dp),
+    FixedTableColumn("Length (m)", 96.dp),
+    FixedTableColumn("Climb (m)", 92.dp),
     FixedTableColumn("Type", 96.dp),
     FixedTableColumn("Band", 104.dp),
-    FixedTableColumn("Limit", 80.dp),
+    FixedTableColumn("Limit (min.)", 104.dp),
     FixedTableColumn("Controls", 180.dp),
-    FixedTableColumn("", 92.dp),
-    FixedTableColumn("", 92.dp),
-    FixedTableColumn("", 92.dp)
+    FixedTableColumn("Rename", 92.dp),
+    FixedTableColumn("Stats", 92.dp),
+    FixedTableColumn("Ctrls", 92.dp)
+)
+
+private val CategoryTableColumnHints = mapOf(
+    "Name" to "Category/class name used for competitor assignment, start lists, and results.",
+    "Length (m)" to "Course length for this category in meters. This public value is used in exports and result displays.",
+    "Climb (m)" to "Total climb for this category in meters. This public value is used in exports and result displays.",
+    "Type" to "Race type used by this category. It normally follows the Event File setting unless category-specific properties are imported.",
+    "Band" to "Frequency band used by this category. It normally follows the Event File setting unless category-specific properties are imported.",
+    "Limit (min.)" to "Time limit for this category in minutes. It normally follows the Event File setting unless category-specific properties are imported.",
+    "Controls" to "Ordered controls for this category. Use SI codes, with suffixes such as B for beacon or S for separator where applicable.",
+    "Rename" to "Applies the edited category name.",
+    "Stats" to "Applies edited length and climb values.",
+    "Ctrls" to "Applies the edited category control sequence."
 )
 
 private val CompetitorTableColumns = listOf(
@@ -4683,7 +4696,7 @@ private fun CategoryDetailsPanel(
                         categoryNameDraft = categoryNameDraft,
                         onCategoryNameChange = { categoryNameDraft = it }
                     )
-                    FixedDetailHeaderRow(CategoryTableColumns)
+                    FixedDetailHeaderRow(CategoryTableColumns, CategoryTableColumnHints)
                 }
             }
         }
@@ -4955,14 +4968,14 @@ private fun CategoryDetailRow(
             onValueChange = { lengthMetersDraft = it },
             modifier = Modifier.width(CategoryTableColumns[1].width),
             singleLine = true,
-            label = { Text("Length") }
+            label = { Text("Length m") }
         )
         TextField(
             value = climbMetersDraft,
             onValueChange = { climbMetersDraft = it },
             modifier = Modifier.width(CategoryTableColumns[2].width),
             singleLine = true,
-            label = { Text("Climb") }
+            label = { Text("Climb m") }
         )
         Text(
             category.raceTypeLabel,
