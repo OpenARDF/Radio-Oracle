@@ -11,6 +11,7 @@ The generator assigns relative start times to competitors while balancing hard l
 - Avoid consecutive competitors from the same category when another category is available.
 - Avoid same-club starts when `Avoid same club` is enabled.
 - Avoid same first-fox conflicts for similarly fast categories when protected course-order data is available.
+- Honor assigned championship start thirds when `Preferred thirds` mode is enabled.
 - Make non-default seeded draws repeatable across machines and runs.
 
 Some events do not have enough categories or clubs to satisfy every best practice. In that case the generator completes the draw, and the evaluator reports the remaining compromises as orange or red findings.
@@ -23,8 +24,11 @@ Start List settings are stored in the event project data, not desktop-local pref
 - `clubHandling`
 - `startersPerStartTime`
 - `seed`
+- `startGroupMode`
 
 The default seed is `default`. That value is visible and persisted, but it preserves deterministic category/start-number ordering. Any non-default seed activates repeatable pseudo-random tie-breaking. Blank seeds are normalized back to `default` before settings are saved or a draw is run.
+
+`startGroupMode` defaults to `No start groups`. When changed to `Preferred thirds`, the generator uses each competitor's optional `preferredStartGroup` value. The canonical competitor CSV column is `preferred_start_group`; blank means no assignment, and accepted values are `1`, `2`, and `3`.
 
 ## Draw Model
 
@@ -44,16 +48,25 @@ For a start slot, queue selection applies filters in this order:
 
 1. Remove categories already selected for the same start time.
 2. Remove same-first-fox conflicts among similarly fast categories when protected ideal-order data supplies first foxes.
-3. Prefer a category different from the category that ended the previous start time.
-4. If club avoidance is enabled, reject queues whose head competitor would duplicate a club already selected for this same start time.
-5. If club avoidance is enabled, prefer a queue whose head competitor differs from the club that ended the previous start time.
-6. Apply deterministic or seeded tie-breakers to the remaining queues.
+3. In `Preferred thirds` mode, prefer queues that still contain a competitor allowed in the current third of the start period.
+4. Prefer a category different from the category that ended the previous start time.
+5. If club avoidance is enabled, reject queues whose next eligible competitor would duplicate a club already selected for this same start time.
+6. If club avoidance is enabled, prefer a queue whose next eligible competitor differs from the club that ended the previous start time.
+7. Apply deterministic or seeded tie-breakers to the remaining queues.
 
 Same-category adjacency and same-club adjacency across start times are best-practice filters. If every remaining queue violates one of those preferences, the algorithm falls back and continues the draw. Same-club duplication inside the same start time is stricter: the algorithm leaves the start time partially filled rather than knowingly adding a duplicate-club starter to that same slot.
 
 ## Competitor Selection Within a Queue
 
 Most selection happens at category level, but club conflicts are competitor-specific. After a category queue is selected, the algorithm may look past the first competitor in that category queue to find a later competitor whose club avoids the current slot and previous-slot club conflicts. This preserves the category choice while improving club spacing.
+
+In `Preferred thirds` mode, this same look-ahead first narrows the queue to competitors allowed in the current start third. A competitor with no preferred third may fill any third. If the remaining field makes the current third impossible, the draw falls back and completes; the quality evaluator then flags assigned competitors outside their preferred third as red findings.
+
+## Championship Preferred Thirds
+
+The championship procedure in the ARDF rules allows teams or societies to distribute runners across three start thirds. Radio-Oracle supports the computer-usable part of that process by storing an optional preferred third on each competitor and honoring it during the draw when `Preferred thirds` mode is enabled.
+
+This support is intentionally limited to explicit preferred-third assignments. The separate ARDF procedure for categories with more than 40 competitors requires historical results from the last two championships to split societies into top-runner and other-runner ballots. Radio-Oracle does not currently store that historical-results input, so that top-runner split is not inferred by the generator.
 
 ## Seeded Randomization
 

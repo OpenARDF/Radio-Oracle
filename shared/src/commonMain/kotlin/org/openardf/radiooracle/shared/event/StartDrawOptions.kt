@@ -52,12 +52,16 @@ data class StartDrawSettings(
  *   rule filters are applied before seeded tie-breaks, so seeded draws remain
  *   constrained by category, club, starters-per-time, and first-fox safety rules
  *   whenever the field allows those rules to be satisfied.
+ * - Preferred-thirds mode honors explicit competitor start-third assignments
+ *   used by championship-style draws. It is opt-in because most local events do
+ *   not collect that extra nomination data.
  */
 @Serializable
 data class StartDrawOptions(
     val clubHandling: StartDrawClubHandling = StartDrawClubHandling.AVOID_BACK_TO_BACK,
     val startersPerStartTime: Int = 1,
     val seed: String = DEFAULT_SEED,
+    val startGroupMode: StartDrawStartGroupMode = StartDrawStartGroupMode.DISABLED,
     val idealFirstFoxByCategoryId: Map<String, Int> = emptyMap()
 ) {
     init {
@@ -82,6 +86,16 @@ data class StartDrawOptions(
 enum class StartDrawClubHandling {
     IGNORE,
     AVOID_BACK_TO_BACK
+}
+
+/**
+ * Controls whether the generator should honor championship-style preferred
+ * start thirds assigned to individual competitors.
+ */
+@Serializable
+enum class StartDrawStartGroupMode {
+    DISABLED,
+    PREFERRED_THIRDS
 }
 
 fun EventRaceData.effectiveStartDrawSettings(): StartDrawSettings =

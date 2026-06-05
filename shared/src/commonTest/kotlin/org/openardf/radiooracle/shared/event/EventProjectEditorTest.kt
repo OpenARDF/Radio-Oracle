@@ -1557,6 +1557,7 @@ class EventProjectEditorTest {
                 clubHandling = StartDrawClubHandling.IGNORE,
                 startersPerStartTime = 2,
                 seed = "test-seed",
+                startGroupMode = StartDrawStartGroupMode.PREFERRED_THIRDS,
                 idealFirstFoxByCategoryId = mapOf(m21.id to 31)
             )
         )
@@ -1566,6 +1567,7 @@ class EventProjectEditorTest {
         assertEquals(StartDrawClubHandling.IGNORE, settings.options.clubHandling)
         assertEquals(2, settings.options.startersPerStartTime)
         assertEquals("test-seed", settings.options.seed)
+        assertEquals(StartDrawStartGroupMode.PREFERRED_THIRDS, settings.options.startGroupMode)
         assertEquals(emptyMap(), settings.options.idealFirstFoxByCategoryId)
     }
 
@@ -1577,7 +1579,8 @@ class EventProjectEditorTest {
             StartDrawOptions(
                 clubHandling = StartDrawClubHandling.IGNORE,
                 startersPerStartTime = 3,
-                seed = "settings-only"
+                seed = "settings-only",
+                startGroupMode = StartDrawStartGroupMode.PREFERRED_THIRDS
             )
         )
 
@@ -1587,6 +1590,76 @@ class EventProjectEditorTest {
         assertEquals(StartDrawClubHandling.IGNORE, details.settings.options.clubHandling)
         assertEquals(3, details.settings.options.startersPerStartTime)
         assertEquals("settings-only", details.settings.options.seed)
+        assertEquals(StartDrawStartGroupMode.PREFERRED_THIRDS, details.settings.options.startGroupMode)
+    }
+
+    @Test
+    fun drawStartListHonorsPreferredStartThirdsBeforeSpacingBestPractices() {
+        val m21 = category("cat-m21", "M21", order = 0)
+        val m40 = category("cat-m40", "M40", order = 1)
+        val original = projectFile(
+            categories = listOf(
+                categoryData(m21.id, m21.name, order = m21.order),
+                categoryData(m40.id, m40.name, order = m40.order)
+            ),
+            competitors = listOf(
+                competitorData("m21-g1", "Alice", "Alpha", startNumber = 1, category = m21, club = "A", preferredStartGroup = 1),
+                competitorData("m21-g2", "Aaron", "Alpha", startNumber = 2, category = m21, club = "B", preferredStartGroup = 2),
+                competitorData("m21-g3", "Ava", "Alpha", startNumber = 3, category = m21, club = "C", preferredStartGroup = 3),
+                competitorData("m40-g1", "Bob", "Bravo", startNumber = 4, category = m40, club = "D", preferredStartGroup = 1),
+                competitorData("m40-g2", "Bill", "Bravo", startNumber = 5, category = m40, club = "E", preferredStartGroup = 2),
+                competitorData("m40-g3", "Bea", "Bravo", startNumber = 6, category = m40, club = "F", preferredStartGroup = 3)
+            )
+        )
+
+        val drawn = EventProjectEditor.drawStartList(
+            original,
+            "01:00",
+            StartDrawOptions(startGroupMode = StartDrawStartGroupMode.PREFERRED_THIRDS)
+        )
+
+        assertEquals(1, drawn.startGroupFor("m21-g1"))
+        assertEquals(1, drawn.startGroupFor("m40-g1"))
+        assertEquals(2, drawn.startGroupFor("m21-g2"))
+        assertEquals(2, drawn.startGroupFor("m40-g2"))
+        assertEquals(3, drawn.startGroupFor("m21-g3"))
+        assertEquals(3, drawn.startGroupFor("m40-g3"))
+        assertEquals(listOf(m21.id, m40.id, m21.id, m40.id, m21.id, m40.id), drawn.startOrderCategories())
+    }
+
+    @Test
+    fun startListQualityFlagsPreferredStartThirdViolations() {
+        val m21 = category("cat-m21", "M21", order = 0)
+        val raceData = projectFile(
+            categories = listOf(categoryData(m21.id, m21.name, order = m21.order)),
+            competitors = listOf(
+                competitorData("early", "Alice", "Alpha", startNumber = 1, category = m21, preferredStartGroup = 3),
+                competitorData("middle", "Bob", "Bravo", startNumber = 2, category = m21, preferredStartGroup = 2),
+                competitorData("late", "Cara", "Charlie", startNumber = 3, category = m21, preferredStartGroup = 1)
+            )
+        ).raceData.copy(
+            competitorData = projectFile(
+                categories = listOf(categoryData(m21.id, m21.name, order = m21.order)),
+                competitors = listOf(
+                    competitorData("early", "Alice", "Alpha", startNumber = 1, category = m21, preferredStartGroup = 3)
+                        .withStartTime(0),
+                    competitorData("middle", "Bob", "Bravo", startNumber = 2, category = m21, preferredStartGroup = 2)
+                        .withStartTime(60),
+                    competitorData("late", "Cara", "Charlie", startNumber = 3, category = m21, preferredStartGroup = 1)
+                        .withStartTime(120)
+                )
+            ).raceData.competitorData,
+            startDrawSettings = StartDrawSettings(
+                intervalSeconds = 60,
+                options = StartDrawOptions(startGroupMode = StartDrawStartGroupMode.PREFERRED_THIRDS)
+            )
+        )
+
+        val quality = EventStartListDetails.from(raceData).quality
+
+        assertEquals(EventStartListRuleSeverity.RED, quality.severity)
+        assertEquals(true, quality.rowFindings.any { it.competitorId == "early" && it.text == "Outside preferred start third" })
+        assertEquals(true, quality.rowFindings.any { it.competitorId == "late" && it.text == "Outside preferred start third" })
     }
 
     @Test
@@ -1755,7 +1828,8 @@ class EventProjectEditorTest {
         siNumber: Int? = null,
         category: EventCategory? = null,
         club: String = "",
-        readoutData: EventReadoutData? = null
+        readoutData: EventReadoutData? = null,
+        preferredStartGroup: Int? = null
     ): EventCompetitorData =
         EventCompetitorData(
             competitorCategory = EventCompetitorCategory(
@@ -1772,17 +1846,35 @@ class EventProjectEditorTest {
                     siNumber = siNumber,
                     siRent = false,
                     startNumber = startNumber,
-                    drawnStartTimeSeconds = null
+                    drawnStartTimeSeconds = null,
+                    preferredStartGroup = preferredStartGroup
                 ),
                 category = category
             ),
             readoutData = readoutData
         )
 
+    private fun EventCompetitorData.withStartTime(startTimeSeconds: Long): EventCompetitorData =
+        copy(
+            competitorCategory = competitorCategory.copy(
+                competitor = competitorCategory.competitor.copy(drawnStartTimeSeconds = startTimeSeconds)
+            )
+        )
+
     private fun EventProjectFile.startTimeFor(competitorId: String): Long? =
         raceData.competitorData
             .first { it.competitorCategory.competitor.id == competitorId }
             .competitorCategory.competitor.drawnStartTimeSeconds
+
+    private fun EventProjectFile.startGroupFor(competitorId: String): Int {
+        val startTimes = raceData.competitorData
+            .mapNotNull { it.competitorCategory.competitor.drawnStartTimeSeconds }
+            .distinct()
+            .sorted()
+        val startTime = startTimeFor(competitorId)!!
+        val slotIndex = startTimes.indexOf(startTime)
+        return ((slotIndex * 3) / startTimes.size + 1).coerceIn(1, 3)
+    }
 
     private fun EventProjectFile.startOrder(): List<String> =
         raceData.competitorData

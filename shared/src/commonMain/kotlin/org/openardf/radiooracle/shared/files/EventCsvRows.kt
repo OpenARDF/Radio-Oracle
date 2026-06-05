@@ -42,7 +42,8 @@ object EventCsvRows {
             competitor.club,
             competitor.index,
             competitor.drawnStartTimeSeconds?.let { DurationFormatter.secondsToFormattedString(it, useMinutes = true) } ?: "",
-            if (competitor.siRent) 1 else 0
+            if (competitor.siRent) 1 else 0,
+            competitor.preferredStartGroup ?: ""
         ).joinToString(EventCsvFormat.DELIMITER.toString()) { it.toString().csvField() }
     }
 

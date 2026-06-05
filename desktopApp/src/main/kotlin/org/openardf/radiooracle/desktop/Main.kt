@@ -91,6 +91,7 @@ import org.openardf.radiooracle.shared.event.EventStartListRow
 import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
+import org.openardf.radiooracle.shared.event.StartDrawStartGroupMode
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportProfile
@@ -2675,15 +2676,18 @@ private fun StartListDetailsPanel(
         mutableStateOf(settings.options.startersPerStartTime)
     }
     var seedDraft by remember(settings.options.seed) { mutableStateOf(settings.options.seed) }
+    var startGroupMode by remember(settings.options.startGroupMode) { mutableStateOf(settings.options.startGroupMode) }
     fun startDrawOptions(
         clubHandlingValue: StartDrawClubHandling = clubHandling,
         startersPerStartTimeValue: Int = startersPerStartTime,
-        seedValue: String = seedDraft
+        seedValue: String = seedDraft,
+        startGroupModeValue: StartDrawStartGroupMode = startGroupMode
     ): StartDrawOptions =
         StartDrawOptions(
             clubHandling = clubHandlingValue,
             startersPerStartTime = startersPerStartTimeValue,
-            seed = seedValue
+            seed = seedValue,
+            startGroupMode = startGroupModeValue
         )
     fun persistSettingsIfIntervalIsValid(intervalValue: String, options: StartDrawOptions) {
         if (isValidStartListInterval(intervalValue)) {
@@ -2725,6 +2729,11 @@ private fun StartListDetailsPanel(
                 },
                 modifier = Modifier.width(132.dp)
             )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             TextField(
                 value = seedDraft,
                 onValueChange = {
@@ -2735,6 +2744,16 @@ private fun StartListDetailsPanel(
                 },
                 label = { Text("Seed") },
                 modifier = Modifier.width(180.dp)
+            )
+            EnumPicker(
+                selectedValue = startGroupMode,
+                values = StartDrawStartGroupMode.entries,
+                label = StartDrawStartGroupMode::toDisplayLabel,
+                onValueSelected = {
+                    startGroupMode = it
+                    persistSettingsIfIntervalIsValid(intervalDraft, startDrawOptions(startGroupModeValue = it))
+                },
+                modifier = Modifier.width(190.dp)
             )
             Button(
                 onClick = {
@@ -5246,6 +5265,12 @@ private fun StartDrawClubHandling.toDisplayLabel(): String =
     when (this) {
         StartDrawClubHandling.AVOID_BACK_TO_BACK -> "Avoid same club"
         StartDrawClubHandling.IGNORE -> "Ignore clubs"
+    }
+
+private fun StartDrawStartGroupMode.toDisplayLabel(): String =
+    when (this) {
+        StartDrawStartGroupMode.DISABLED -> "No start groups"
+        StartDrawStartGroupMode.PREFERRED_THIRDS -> "Preferred thirds"
     }
 
 /** Shows the current SI-reader connection state and Event File save status. */

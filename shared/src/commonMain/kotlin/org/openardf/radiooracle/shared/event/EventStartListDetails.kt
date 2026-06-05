@@ -114,7 +114,8 @@ data class EventStartListQuality(
                         startNumber = competitor.startNumber,
                         categoryId = categoryId,
                         categoryName = categoryName,
-                        club = competitor.club.trim().takeIf { it.isNotEmpty() }
+                        club = competitor.club.trim().takeIf { it.isNotEmpty() },
+                        preferredStartGroup = competitor.preferredStartGroup
                     )
                 }
                 .sortedWith(compareBy({ it.startSeconds }, { it.startNumber }, { it.competitorId }))
@@ -133,6 +134,32 @@ data class EventStartListQuality(
             val rowFindings = mutableListOf<EventStartListRowFinding>()
             var redCount = 0
             var orangeCount = 0
+
+            if (settings.options.startGroupMode == StartDrawStartGroupMode.PREFERRED_THIRDS) {
+                val startSlotIndexBySeconds = scheduled.map { it.startSeconds }
+                    .distinct()
+                    .sorted()
+                    .withIndex()
+                    .associate { it.value to it.index }
+                val totalStartSlots = startSlotIndexBySeconds.size
+
+                scheduled.forEach { row ->
+                    val expectedStartGroup = row.preferredStartGroup ?: return@forEach
+                    val actualStartGroup = startGroupForSlotIndex(
+                        startSlotIndexBySeconds[row.startSeconds] ?: return@forEach,
+                        totalStartSlots
+                    )
+                    if (actualStartGroup != expectedStartGroup) {
+                        redCount += 1
+                        messages += "${row.categoryName} start ${row.startNumber} is in start third $actualStartGroup; preferred third is $expectedStartGroup."
+                        rowFindings += EventStartListRowFinding(
+                            competitorId = row.competitorId,
+                            severity = EventStartListRuleSeverity.RED,
+                            text = "Outside preferred start third"
+                        )
+                    }
+                }
+            }
 
             scheduled.groupBy { it.startSeconds }.forEach { (startSeconds, starters) ->
                 if (starters.size > settings.options.startersPerStartTime) {
@@ -218,6 +245,9 @@ data class EventStartListQuality(
 
         private fun formatSeconds(seconds: Long): String =
             DurationFormatter.secondsToFormattedString(seconds, useMinutes = true)
+
+        private fun startGroupForSlotIndex(startSlotIndex: Int, totalStartSlots: Int): Int =
+            ((startSlotIndex * 3) / totalStartSlots + 1).coerceIn(1, 3)
     }
 }
 
@@ -246,5 +276,6 @@ private data class StartListEvaluationRow(
     val startNumber: Int,
     val categoryId: String?,
     val categoryName: String,
-    val club: String?
+    val club: String?,
+    val preferredStartGroup: Int?
 )

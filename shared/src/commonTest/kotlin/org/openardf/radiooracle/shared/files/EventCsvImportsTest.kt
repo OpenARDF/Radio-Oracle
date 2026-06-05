@@ -132,13 +132,14 @@ class EventCsvImportsTest {
         val result = EventCsvImports.parseAndroidCompetitorRows(
             """
             ${EventCsvFormat.Competitor.HEADER_ROW}
-            123456;42;Pavel;Kolsky;M21;0;1980;OK Lokomotiva;OK001;10:00;1
+            123456;42;Pavel;Kolsky;M21;0;1980;OK Lokomotiva;OK001;10:00;1;2
             """.trimIndent()
         )
 
         assertEquals(emptyList(), result.invalidLines)
         assertEquals(1, result.rows.size)
         assertEquals("Pavel", result.rows.single().firstName)
+        assertEquals(2, result.rows.single().preferredStartGroup)
     }
 
     @Test
@@ -159,6 +160,7 @@ class EventCsvImportsTest {
         assertEquals("", row.index)
         assertEquals(null, row.startTimeText)
         assertFalse(row.siRent)
+        assertEquals(null, row.preferredStartGroup)
     }
 
     @Test

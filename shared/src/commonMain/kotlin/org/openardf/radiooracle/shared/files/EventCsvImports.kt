@@ -26,7 +26,8 @@ data class CompetitorCsvImportRow(
     val club: String,
     val index: String,
     val startTimeText: String?,
-    val siRent: Boolean
+    val siRent: Boolean,
+    val preferredStartGroup: Int? = null
 )
 
 enum class CompetitorCsvImportProfile {
@@ -202,6 +203,11 @@ object EventCsvImports {
             "Invalid SI number at line: $lineIndex"
         }
 
+        val preferredStartGroup = fields.optionalTrimmedInt(EventCsvFormat.Competitor.PREFERRED_START_GROUP)
+        require(preferredStartGroup == null || preferredStartGroup in 1..3) {
+            "Preferred start group must be 1, 2, or 3 at line: $lineIndex"
+        }
+
         return CompetitorCsvImportRow(
             siNumber = siNumber,
             startNumber = fields[EventCsvFormat.Competitor.START_NUMBER].trim().takeIf { it.isNotEmpty() }?.toInt(),
@@ -213,7 +219,8 @@ object EventCsvImports {
             club = fields.optionalTrimmed(EventCsvFormat.Competitor.CLUB),
             index = fields.optionalTrimmed(EventCsvFormat.Competitor.INDEX),
             startTimeText = fields.optionalTrimmed(EventCsvFormat.Competitor.START_TIME).takeIf { it.isNotEmpty() },
-            siRent = fields.optionalTrimmedInt(EventCsvFormat.Competitor.SI_RENT) == 1
+            siRent = fields.optionalTrimmedInt(EventCsvFormat.Competitor.SI_RENT) == 1,
+            preferredStartGroup = preferredStartGroup
         )
     }
 

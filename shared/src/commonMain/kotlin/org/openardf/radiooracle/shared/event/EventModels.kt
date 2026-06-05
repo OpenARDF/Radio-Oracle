@@ -106,8 +106,15 @@ data class EventCompetitor(
     val siNumber: Int?,
     val siRent: Boolean,
     val startNumber: Int,
-    val drawnStartTimeSeconds: Long?
+    val drawnStartTimeSeconds: Long?,
+    val preferredStartGroup: Int? = null
 ) {
+    init {
+        require(preferredStartGroup == null || preferredStartGroup in 1..3) {
+            "Preferred start group must be 1, 2, or 3."
+        }
+    }
+
     /** Formats the competitor name in the app's existing LASTNAME Firstname style. */
     fun fullName(): String = "${lastName.uppercase()} $firstName"
 

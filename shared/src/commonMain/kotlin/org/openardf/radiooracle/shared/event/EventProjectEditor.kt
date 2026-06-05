@@ -723,13 +723,19 @@ object EventProjectEditor {
             }
             .toMutableList()
 
+        val totalStartSlots = ceilDiv(
+            categoryQueues.sumOf { it.competitors.size },
+            options.startersPerStartTime
+        )
         var nextStartSeconds = 0L
+        var startSlotIndex = 0
         var previousClub: String? = null
         var previousCategoryId: String? = null
         while (categoryQueues.isNotEmpty()) {
             // A start slot can contain more than one competitor. We build the
             // slot incrementally so every additional starter can be checked
             // against the starters already placed at this same start time.
+            val preferredStartGroup = options.preferredStartGroupForSlot(startSlotIndex, totalStartSlots)
             val selectedQueues = mutableListOf<CategoryStartQueue>()
             val selectedCompetitors = mutableListOf<EventCompetitor>()
             repeat(options.startersPerStartTime) {
@@ -739,13 +745,19 @@ object EventProjectEditor {
                     selectedCompetitors,
                     previousClub,
                     previousCategoryId,
+                    preferredStartGroup,
                     options
                 )
                     ?: return@repeat
                 // A selected category queue may still have a club conflict at
                 // its head. When possible, take a later competitor from the same
                 // queue rather than rejecting the category entirely.
-                val competitorIndex = selectedQueue.competitorIndexForStartSlot(selectedCompetitors, previousClub, options)
+                val competitorIndex = selectedQueue.competitorIndexForStartSlot(
+                    selectedCompetitors,
+                    previousClub,
+                    preferredStartGroup,
+                    options
+                )
                 val competitor = selectedQueue.competitors.removeAt(competitorIndex)
                 selectedQueues += selectedQueue
                 selectedCompetitors += competitor
@@ -762,6 +774,7 @@ object EventProjectEditor {
             // slot are not consecutive with the next start time.
             selectedQueues.lastOrNull()?.category?.id?.let { previousCategoryId = it }
             nextStartSeconds += intervalSeconds
+            startSlotIndex++
         }
     }
 
@@ -1061,7 +1074,8 @@ object EventProjectEditor {
                     siRent = row.siRent,
                     startNumber = startNumber,
                     drawnStartTimeSeconds = row.startTimeText?.let(DurationFormatter::minuteStringToSeconds)
-                        ?: existingCompetitor.drawnStartTimeSeconds
+                        ?: existingCompetitor.drawnStartTimeSeconds,
+                    preferredStartGroup = row.preferredStartGroup ?: existingCompetitor.preferredStartGroup
                 )
                 competitors[existingPosition] = existingData.copy(
                     competitorCategory = existingData.competitorCategory.copy(
@@ -1086,7 +1100,8 @@ object EventProjectEditor {
                 siNumber = row.siNumber,
                 siRent = row.siRent,
                 startNumber = startNumber,
-                drawnStartTimeSeconds = row.startTimeText?.let(DurationFormatter::minuteStringToSeconds)
+                drawnStartTimeSeconds = row.startTimeText?.let(DurationFormatter::minuteStringToSeconds),
+                preferredStartGroup = row.preferredStartGroup
             )
             competitors += EventCompetitorData(
                 competitorCategory = EventCompetitorCategory(
@@ -2168,6 +2183,7 @@ object EventProjectEditor {
         selectedCompetitors: List<EventCompetitor>,
         previousClub: String?,
         previousCategoryId: String?,
+        preferredStartGroup: Int?,
         options: StartDrawOptions
     ): CategoryStartQueue? {
         // First remove queues that are incompatible with the current start slot:
@@ -2187,13 +2203,26 @@ object EventProjectEditor {
             return null
         }
 
+        /*
+         * Championship preferred thirds are stronger than Radio-Oracle's normal
+         * spacing best practices. A queue is preferred for this start slot when
+         * it still has at least one competitor assigned to the current third, or
+         * a competitor with no assigned third who may fill any blank. If the
+         * remaining field makes the current third impossible, fall back so the
+         * draw completes; the quality evaluator will mark the saved order red.
+         */
+        val startGroupSafe = compatibleQueues
+            .filter { it.hasPreferredStartGroupCandidate(preferredStartGroup) }
+            .takeIf { it.isNotEmpty() }
+            ?: compatibleQueues
+
         // Category adjacency is a best practice, not a hard stop. Prefer any
         // category other than the one that ended the previous start time, but
         // fall back when only that category remains.
-        val categorySafe = compatibleQueues
+        val categorySafe = startGroupSafe
             .filterNot { it.category.id == previousCategoryId }
             .takeIf { it.isNotEmpty() }
-            ?: compatibleQueues
+            ?: startGroupSafe
 
         val clubSafe = if (options.clubHandling == StartDrawClubHandling.AVOID_BACK_TO_BACK) {
             val selectedClubs = selectedCompetitors.mapNotNull { it.clubKey() }.toSet()
@@ -2202,7 +2231,12 @@ object EventProjectEditor {
             // duplicate a club already chosen for this slot.
             val clubSafeAfterSelectedClubs = categorySafe
                 .filterNot { candidate ->
-                    val candidateClub = candidate.competitors.firstOrNull()?.clubKey()
+                    val candidateClub = candidate.competitorForStartSlot(
+                        selectedCompetitors,
+                        previousClub,
+                        preferredStartGroup,
+                        options
+                    )?.clubKey()
                     candidateClub != null && candidateClub in selectedClubs
                 }
                 .takeIf { it.isNotEmpty() }
@@ -2213,7 +2247,12 @@ object EventProjectEditor {
             // head. Fall back when the field leaves no alternative.
             clubSafeAfterSelectedClubs
                 .filterNot { candidate ->
-                    val candidateClub = candidate.competitors.firstOrNull()?.clubKey()
+                    val candidateClub = candidate.competitorForStartSlot(
+                        selectedCompetitors,
+                        previousClub,
+                        preferredStartGroup,
+                        options
+                    )?.clubKey()
                     candidateClub != null && candidateClub == previousClub
                 }
                 .takeIf { it.isNotEmpty() }
@@ -2240,17 +2279,37 @@ object EventProjectEditor {
     private fun CategoryStartQueue.competitorIndexForStartSlot(
         selectedCompetitors: List<EventCompetitor>,
         previousClub: String?,
+        preferredStartGroup: Int?,
         options: StartDrawOptions
     ): Int {
+        val startGroupIndexes = competitors.indices
+            .filter { competitors[it].isAllowedInPreferredStartGroup(preferredStartGroup) }
+            .takeIf { it.isNotEmpty() }
+            ?: competitors.indices.toList()
+
         if (options.clubHandling == StartDrawClubHandling.IGNORE) {
-            return 0
+            return startGroupIndexes.firstOrNull() ?: 0
         }
         val selectedClubs = selectedCompetitors.mapNotNull { it.clubKey() }.toSet()
-        return competitors.indexOfFirst { competitor ->
+        return startGroupIndexes.firstOrNull { index ->
+            val competitor = competitors[index]
             val club = competitor.clubKey()
             club == null || (club !in selectedClubs && club != previousClub)
-        }.takeIf { it >= 0 } ?: 0
+        } ?: startGroupIndexes.firstOrNull() ?: 0
     }
+
+    private fun CategoryStartQueue.competitorForStartSlot(
+        selectedCompetitors: List<EventCompetitor>,
+        previousClub: String?,
+        preferredStartGroup: Int?,
+        options: StartDrawOptions
+    ): EventCompetitor? =
+        competitors.getOrNull(
+            competitorIndexForStartSlot(selectedCompetitors, previousClub, preferredStartGroup, options)
+        )
+
+    private fun CategoryStartQueue.hasPreferredStartGroupCandidate(preferredStartGroup: Int?): Boolean =
+        preferredStartGroup == null || competitors.any { it.isAllowedInPreferredStartGroup(preferredStartGroup) }
 
     private fun drawClubRotatedCategory(
         competitors: List<EventCompetitor>,
@@ -2353,6 +2412,19 @@ object EventProjectEditor {
 
     private fun StartDrawOptions.usesSeededRandomization(): Boolean =
         seed != StartDrawOptions.DEFAULT_SEED
+
+    private fun StartDrawOptions.preferredStartGroupForSlot(startSlotIndex: Int, totalStartSlots: Int): Int? =
+        if (startGroupMode != StartDrawStartGroupMode.PREFERRED_THIRDS || totalStartSlots <= 0) {
+            null
+        } else {
+            ((startSlotIndex * 3) / totalStartSlots + 1).coerceIn(1, 3)
+        }
+
+    private fun EventCompetitor.isAllowedInPreferredStartGroup(startGroup: Int?): Boolean =
+        startGroup == null || preferredStartGroup == null || preferredStartGroup == startGroup
+
+    private fun ceilDiv(value: Int, divisor: Int): Int =
+        if (value == 0) 0 else (value + divisor - 1) / divisor
 
     private fun seededRank(seed: String, value: String): Long {
         // FNV-1a followed by MurmurHash3-style finalization. Kotlin/Native/JVM
