@@ -339,6 +339,94 @@ object EventProjectEditor {
         )
     }
 
+    /** Returns a copy of the Event File with one global logical control changed. */
+    fun updateControl(
+        projectFile: EventProjectFile,
+        controlId: String,
+        label: String,
+        siCode: String,
+        type: org.openardf.radiooracle.shared.domain.ControlPointType,
+        mandatory: Boolean,
+        publicLabel: String,
+        notes: String
+    ): EventProjectFile {
+        val controlPosition = projectFile.raceData.controls.indexOfFirst { it.id == controlId }
+        require(controlPosition >= 0) {
+            "Control was not found: $controlId"
+        }
+        val updatedControl = validatedControl(
+            projectFile = projectFile,
+            existingControlPosition = controlPosition,
+            controlId = controlId,
+            label = label,
+            siCode = siCode,
+            type = type,
+            mandatory = mandatory,
+            publicLabel = publicLabel,
+            notes = notes
+        )
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                controls = projectFile.raceData.controls.mapIndexed { index, control ->
+                    if (index == controlPosition) updatedControl else control
+                }
+            )
+        )
+    }
+
+    /** Returns a copy of the Event File with a global logical control appended. */
+    fun addControl(
+        projectFile: EventProjectFile,
+        controlId: String,
+        label: String,
+        siCode: String,
+        type: org.openardf.radiooracle.shared.domain.ControlPointType,
+        mandatory: Boolean = false,
+        publicLabel: String = "",
+        notes: String = ""
+    ): EventProjectFile {
+        require(controlId.isNotBlank()) {
+            "Control ID cannot be blank."
+        }
+        require(projectFile.raceData.controls.none { it.id == controlId }) {
+            "Control ID already exists: $controlId"
+        }
+        val control = validatedControl(
+            projectFile = projectFile,
+            existingControlPosition = null,
+            controlId = controlId,
+            label = label,
+            siCode = siCode,
+            type = type,
+            mandatory = mandatory,
+            publicLabel = publicLabel,
+            notes = notes
+        )
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                controls = EventControlCatalog.mergeControls(projectFile.raceData.controls, listOf(control))
+            )
+        )
+    }
+
+    /** Returns a copy of the Event File with an unused global logical control removed. */
+    fun removeControl(projectFile: EventProjectFile, controlId: String): EventProjectFile {
+        require(projectFile.raceData.controls.any { it.id == controlId }) {
+            "Control was not found: $controlId"
+        }
+        require(projectFile.raceData.categories.none { categoryData ->
+            categoryData.controlPoints.any { it.controlId == controlId } ||
+                categoryData.publicControlIds.contains(controlId)
+        }) {
+            "Control is used by one or more categories."
+        }
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                controls = projectFile.raceData.controls.filterNot { it.id == controlId }
+            )
+        )
+    }
+
     /** Returns a copy of the Event File with one competitor's validated name changed. */
     fun renameCompetitor(
         projectFile: EventProjectFile,
@@ -1648,6 +1736,46 @@ object EventProjectEditor {
 
     private inline fun <T> Iterable<T>.noneIndexed(predicate: (index: Int, T) -> Boolean): Boolean =
         withIndex().none { (index, value) -> predicate(index, value) }
+
+    private fun validatedControl(
+        projectFile: EventProjectFile,
+        existingControlPosition: Int?,
+        controlId: String,
+        label: String,
+        siCode: String,
+        type: org.openardf.radiooracle.shared.domain.ControlPointType,
+        mandatory: Boolean,
+        publicLabel: String,
+        notes: String
+    ): EventControl {
+        val trimmedLabel = label.trim()
+        val trimmedCode = siCode.trim()
+        val trimmedPublicLabel = publicLabel.trim()
+        val trimmedNotes = notes.trim()
+        require(trimmedLabel.isNotEmpty()) {
+            "Control label cannot be blank."
+        }
+        val code = trimmedCode.toIntOrNull()
+            ?: throw IllegalArgumentException("Control SI code is invalid.")
+        require(SportIdentCodes.isSICodeValid(code)) {
+            "Control SI code is outside the supported SportIdent station range."
+        }
+        require(projectFile.raceData.controls.noneIndexed { index, control ->
+            index != existingControlPosition && control.label == trimmedLabel
+        }) {
+            "Control label must be unique."
+        }
+        return EventControl(
+            id = controlId,
+            raceId = projectFile.raceData.race.id,
+            label = trimmedLabel,
+            siCode = code,
+            type = type,
+            mandatory = mandatory,
+            publicLabel = trimmedPublicLabel.takeIf { it.isNotEmpty() },
+            notes = trimmedNotes.takeIf { it.isNotEmpty() }
+        )
+    }
 
     private fun EventRaceData.containsReadout(resultId: String): Boolean =
         competitorData.any { it.readoutData?.result?.id == resultId } ||

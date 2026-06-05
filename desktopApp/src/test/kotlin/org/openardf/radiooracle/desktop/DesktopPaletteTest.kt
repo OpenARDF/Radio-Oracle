@@ -15,7 +15,7 @@ class DesktopPaletteTest {
                 "Protected Course Order",
                 "Competitors",
                 "Start List",
-                "Aliases",
+                "Controls",
                 "Readouts",
                 "In Forest",
                 "Results",

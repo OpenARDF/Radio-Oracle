@@ -449,7 +449,7 @@ object DesktopNavigation {
                 section = DesktopSection.EventFile
             ),
             action("setup.event-file.save", "Save", workflow, DesktopNavAction.SaveEventFile),
-            item("setup.event-file.aliases", "Aliases", workflow, DesktopSection.Aliases),
+            item("setup.event-file.controls", "Controls", workflow, DesktopSection.Controls),
             item(
                 "setup.event-file.diagnostics",
                 "Settings",

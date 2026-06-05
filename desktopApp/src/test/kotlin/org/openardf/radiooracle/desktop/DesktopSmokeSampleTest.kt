@@ -1,11 +1,13 @@
 package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCompetitorDetails
 import org.openardf.radiooracle.shared.event.EventProjectEditor
+import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventProjectSummary
 import org.openardf.radiooracle.shared.event.EventReadoutDetails
 import org.openardf.radiooracle.shared.event.EventResultDetails
@@ -149,6 +151,57 @@ class DesktopSmokeSampleTest {
         assertEquals(501, readBack.raceData.competitorData.first().competitorCategory.competitor.startNumber)
         assertEquals(7_654_321, readBack.raceData.competitorData.first().competitorCategory.competitor.siNumber)
         assertEquals("F4", readBack.raceData.aliases.first { it.id == aliasId }.name)
+    }
+
+    @Test
+    fun projectEditorCanAddUpdateAndRemoveGlobalControls() {
+        val original = EventProjectFactory.createEmptyProject(
+            raceId = "control-editor-race",
+            raceName = "Control Editor Race",
+            startDateTimeIso = "2026-06-05T09:00"
+        )
+
+        val added = EventProjectEditor.addControl(
+            original,
+            controlId = "custom-control",
+            label = "F6",
+            siCode = "46",
+            type = ControlPointType.CONTROL,
+            mandatory = true,
+            publicLabel = "6",
+            notes = "Fast course control"
+        )
+        val updated = EventProjectEditor.updateControl(
+            added,
+            controlId = "custom-control",
+            label = "F6A",
+            siCode = "47",
+            type = ControlPointType.SEPARATOR,
+            mandatory = false,
+            publicLabel = "",
+            notes = "Spectator pass"
+        )
+        val control = updated.raceData.controls.first { it.id == "custom-control" }
+
+        assertEquals("F6A", control.label)
+        assertEquals(47, control.siCode)
+        assertEquals(ControlPointType.SEPARATOR, control.type)
+        assertEquals(false, control.mandatory)
+        assertEquals(null, control.publicLabel)
+        assertEquals("Spectator pass", control.notes)
+
+        val removed = EventProjectEditor.removeControl(updated, "custom-control")
+        assertTrue(removed.raceData.controls.none { it.id == "custom-control" })
+    }
+
+    @Test
+    fun projectEditorRejectsRemovingCategoryControl() {
+        val projectFile = DesktopProjectFiles.read(Path.of("..", "samples", "desktop-smoke.rom.json"))
+        val usedControlId = projectFile.raceData.categories.first().controlPoints.first().controlId
+
+        assertThrows(IllegalArgumentException::class.java) {
+            EventProjectEditor.removeControl(projectFile, usedControlId)
+        }
     }
 
     @Test

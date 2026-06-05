@@ -50,7 +50,7 @@ enum class DesktopSection(val label: String) {
     ProtectedCourseOrder("Protected Course Order"),
     Competitors("Competitors"),
     StartList("Start List"),
-    Aliases("Aliases"),
+    Controls("Controls"),
     Readouts("Readouts"),
     InForest("In Forest"),
     Results("Results"),

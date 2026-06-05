@@ -202,7 +202,7 @@ class DesktopNavigationTest {
                 "Import Android Event File...",
                 "Export Android Event File...",
                 "Save",
-                "Aliases",
+                "Controls",
                 "Settings"
             ),
             eventFileActions.map { it.label }
@@ -220,7 +220,7 @@ class DesktopNavigationTest {
     }
 
     @Test
-    fun eventFileMenuOwnsAliasesAndDiagnostics() {
+    fun eventFileMenuOwnsControlsAndDiagnostics() {
         val eventFileItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
             .first { it.label == "Event File" }
             .children
@@ -232,14 +232,14 @@ class DesktopNavigationTest {
                 "Import Android Event File...",
                 "Export Android Event File...",
                 "Save",
-                "Aliases",
+                "Controls",
                 "Settings"
             ),
             eventFileItems.map { it.label }
         )
-        assertTrue(eventFileItems.first { it.label == "Aliases" }.requiresEventFile)
+        assertTrue(eventFileItems.first { it.label == "Controls" }.requiresEventFile)
         assertTrue(eventFileItems.first { it.label == "Settings" }.requiresEventFile)
-        assertFalse(DesktopNavigation.rootItems(DesktopWorkflow.Setup).any { it.label == "Aliases" })
+        assertFalse(DesktopNavigation.rootItems(DesktopWorkflow.Setup).any { it.label == "Controls" })
         assertFalse(DesktopNavigation.rootItems(DesktopWorkflow.Setup).any { it.label == "Utils" })
     }
 

@@ -68,10 +68,10 @@ import org.openardf.radiooracle.desktop.usb.DesktopSportIdentReadoutService
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
 import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
-import org.openardf.radiooracle.shared.event.EventAliasDetails
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventCompetitorDetails
+import org.openardf.radiooracle.shared.event.EventControlDetails
 import org.openardf.radiooracle.shared.event.EventInForestDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutSeverity
@@ -93,6 +93,7 @@ import org.openardf.radiooracle.shared.event.StartDrawOptions
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportProfile
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -229,9 +230,13 @@ private val InForestTableColumns = listOf(
     FixedTableColumn("State", 112.dp)
 )
 
-private val AliasTableColumns = listOf(
+private val ControlTableColumns = listOf(
     FixedTableColumn("SI code", 112.dp),
-    FixedTableColumn("Alias", 320.dp),
+    FixedTableColumn("Label", 120.dp),
+    FixedTableColumn("Role", 120.dp),
+    FixedTableColumn("Mandatory", 104.dp),
+    FixedTableColumn("Public label", 160.dp),
+    FixedTableColumn("Notes", 220.dp),
     FixedTableColumn("", 104.dp)
 )
 
@@ -1557,10 +1562,10 @@ fun main(args: Array<String>) = application {
                 }
                 result.isSuccess
             },
-            onUpdateAlias = { aliasId, siCode, name ->
+            onUpdateControl = { controlId, label, siCode, type, mandatory, publicLabel, notes ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.updateAlias(currentProject, aliasId, siCode, name)
+                        EventProjectEditor.updateControl(currentProject, controlId, label, siCode, type, mandatory, publicLabel, notes)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
@@ -1568,10 +1573,19 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
-            onAddAlias = { siCode, name ->
+            onAddControl = { label, siCode, type, mandatory, publicLabel, notes ->
                 val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.addAlias(currentProject, UUID.randomUUID().toString(), siCode, name)
+                        EventProjectEditor.addControl(
+                            currentProject,
+                            UUID.randomUUID().toString(),
+                            label,
+                            siCode,
+                            type,
+                            mandatory,
+                            publicLabel,
+                            notes
+                        )
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
@@ -1581,10 +1595,10 @@ fun main(args: Array<String>) = application {
                 }
                 result.isSuccess
             },
-            onRemoveAlias = { aliasId ->
+            onRemoveControl = { controlId ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.removeAlias(currentProject, aliasId)
+                        EventProjectEditor.removeControl(currentProject, controlId)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
@@ -1778,9 +1792,9 @@ private fun RadioOManagerDesktopApp(
     onPreviewFinishTicket: (String) -> String = { "" },
     onPrintFinishTicket: (String) -> Unit = {},
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean = { _, _, _, _, _, _ -> false },
-    onUpdateAlias: (String, String, String) -> Unit = { _, _, _ -> },
-    onAddAlias: (String, String) -> Boolean = { _, _ -> false },
-    onRemoveAlias: (String) -> Unit = {},
+    onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit = { _, _, _, _, _, _, _ -> },
+    onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean = { _, _, _, _, _, _ -> false },
+    onRemoveControl: (String) -> Unit = {},
     onSendRobisLiveResults: () -> Unit = {},
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit = {},
     onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit = {},
@@ -1912,9 +1926,9 @@ private fun RadioOManagerDesktopApp(
                                 isContinuousSiReadoutActive = isContinuousSiReadoutActive,
                                 siDownloadStatusText = siDownloadStatusText,
                                 onAddManualReadout = onAddManualReadout,
-                                onUpdateAlias = onUpdateAlias,
-                                onAddAlias = onAddAlias,
-                                onRemoveAlias = onRemoveAlias,
+                                onUpdateControl = onUpdateControl,
+                                onAddControl = onAddControl,
+                                onRemoveControl = onRemoveControl,
                                 isSendingLiveResults = isSendingLiveResults,
                                 isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
                                 readoutDuplicatePolicy = readoutDuplicatePolicy,
@@ -2137,9 +2151,9 @@ private fun SectionWorkspace(
     isContinuousSiReadoutActive: Boolean,
     siDownloadStatusText: String?,
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean,
-    onUpdateAlias: (String, String, String) -> Unit,
-    onAddAlias: (String, String) -> Boolean,
-    onRemoveAlias: (String) -> Unit,
+    onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit,
+    onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean,
+    onRemoveControl: (String) -> Unit,
     isSendingLiveResults: Boolean,
     isBackgroundLiveResultSendingEnabled: Boolean,
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
@@ -2229,12 +2243,12 @@ private fun SectionWorkspace(
                 onMarkCompetitorDidNotStart = onMarkCompetitorDidNotStart
             )
         }
-        if (section == DesktopSection.Aliases && projectFile != null) {
-            AliasDetailsPanel(
-                aliases = EventAliasDetails.from(projectFile.raceData),
-                onUpdateAlias = onUpdateAlias,
-                onAddAlias = onAddAlias,
-                onRemoveAlias = onRemoveAlias
+        if (section == DesktopSection.Controls && projectFile != null) {
+            ControlDetailsPanel(
+                controls = EventControlDetails.from(projectFile.raceData),
+                onUpdateControl = onUpdateControl,
+                onAddControl = onAddControl,
+                onRemoveControl = onRemoveControl
             )
         }
         if (section == DesktopSection.StartList && projectFile != null) {
@@ -3660,18 +3674,22 @@ private fun CategoryPicker(
     }
 }
 
-/** Shows editable alias rows backed by shared alias validation rules. */
+/** Shows editable global logical controls backed by shared Event File editing rules. */
 @Composable
-private fun AliasDetailsPanel(
-    aliases: List<EventAliasDetails>,
-    onUpdateAlias: (String, String, String) -> Unit,
-    onAddAlias: (String, String) -> Boolean,
-    onRemoveAlias: (String) -> Unit
+private fun ControlDetailsPanel(
+    controls: List<EventControlDetails>,
+    onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit,
+    onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean,
+    onRemoveControl: (String) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
-    val tableWidth = fixedTableWidth(AliasTableColumns)
+    val tableWidth = fixedTableWidth(ControlTableColumns)
+    var labelDraft by remember { mutableStateOf("") }
     var siCodeDraft by remember { mutableStateOf("") }
-    var nameDraft by remember { mutableStateOf("") }
+    var typeDraft by remember { mutableStateOf(ControlPointType.CONTROL) }
+    var mandatoryDraft by remember { mutableStateOf(false) }
+    var publicLabelDraft by remember { mutableStateOf("") }
+    var notesDraft by remember { mutableStateOf("") }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -3681,14 +3699,18 @@ private fun AliasDetailsPanel(
         ) {
             Button(
                 onClick = {
-                    val didAdd = onAddAlias(siCodeDraft, nameDraft)
+                    val didAdd = onAddControl(labelDraft, siCodeDraft, typeDraft, mandatoryDraft, publicLabelDraft, notesDraft)
                     if (didAdd) {
+                        labelDraft = ""
                         siCodeDraft = ""
-                        nameDraft = ""
+                        typeDraft = ControlPointType.CONTROL
+                        mandatoryDraft = false
+                        publicLabelDraft = ""
+                        notesDraft = ""
                     }
                 },
                 modifier = fixedActionRailModifier(),
-                enabled = siCodeDraft.isNotBlank() || nameDraft.isNotBlank()
+                enabled = labelDraft.isNotBlank() || siCodeDraft.isNotBlank()
             ) {
                 ButtonLabel("Add")
             }
@@ -3697,13 +3719,21 @@ private fun AliasDetailsPanel(
                     modifier = Modifier.width(tableWidth),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    AliasAddRow(
+                    ControlAddRow(
+                        labelDraft = labelDraft,
+                        onLabelChange = { labelDraft = it },
                         siCodeDraft = siCodeDraft,
                         onSiCodeChange = { siCodeDraft = it },
-                        nameDraft = nameDraft,
-                        onNameChange = { nameDraft = it }
+                        typeDraft = typeDraft,
+                        onTypeChange = { typeDraft = it },
+                        mandatoryDraft = mandatoryDraft,
+                        onMandatoryChange = { mandatoryDraft = it },
+                        publicLabelDraft = publicLabelDraft,
+                        onPublicLabelChange = { publicLabelDraft = it },
+                        notesDraft = notesDraft,
+                        onNotesChange = { notesDraft = it }
                     )
-                    FixedDetailHeaderRow(AliasTableColumns)
+                    FixedDetailHeaderRow(ControlTableColumns)
                 }
             }
         }
@@ -3717,8 +3747,8 @@ private fun AliasDetailsPanel(
             verticalAlignment = Alignment.Top
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                aliases.forEach { alias ->
-                    AliasDeleteButton(alias, onRemoveAlias)
+                controls.forEach { control ->
+                    ControlDeleteButton(control, onRemoveControl)
                 }
             }
             Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
@@ -3726,8 +3756,8 @@ private fun AliasDetailsPanel(
                     modifier = Modifier.width(tableWidth),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    aliases.forEach { alias ->
-                        AliasDetailRow(alias, onUpdateAlias)
+                    controls.forEach { control ->
+                        ControlDetailRow(control, onUpdateControl)
                     }
                 }
             }
@@ -3735,69 +3765,134 @@ private fun AliasDetailsPanel(
     }
 }
 
-/** Shows the new-alias entry row above the existing alias mappings. */
 @Composable
-private fun AliasAddRow(
+private fun ControlAddRow(
+    labelDraft: String,
+    onLabelChange: (String) -> Unit,
     siCodeDraft: String,
     onSiCodeChange: (String) -> Unit,
-    nameDraft: String,
-    onNameChange: (String) -> Unit
+    typeDraft: ControlPointType,
+    onTypeChange: (ControlPointType) -> Unit,
+    mandatoryDraft: Boolean,
+    onMandatoryChange: (Boolean) -> Unit,
+    publicLabelDraft: String,
+    onPublicLabelChange: (String) -> Unit,
+    notesDraft: String,
+    onNotesChange: (String) -> Unit
 ) {
     Row(
-        modifier = Modifier.width(fixedTableWidth(AliasTableColumns)),
+        modifier = Modifier.width(fixedTableWidth(ControlTableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
             value = siCodeDraft,
             onValueChange = onSiCodeChange,
-            modifier = Modifier.width(AliasTableColumns[0].width),
+            modifier = Modifier.width(ControlTableColumns[0].width),
             singleLine = true,
             label = { Text("New SI code") }
         )
         TextField(
-            value = nameDraft,
-            onValueChange = onNameChange,
-            modifier = Modifier.width(AliasTableColumns[1].width),
+            value = labelDraft,
+            onValueChange = onLabelChange,
+            modifier = Modifier.width(ControlTableColumns[1].width),
             singleLine = true,
-            label = { Text("New alias") }
+            label = { Text("New label") }
         )
-        Spacer(modifier = Modifier.width(AliasTableColumns[2].width))
+        ControlTypeDropdown(
+            type = typeDraft,
+            onTypeChange = onTypeChange,
+            modifier = Modifier.width(ControlTableColumns[2].width)
+        )
+        Row(
+            modifier = Modifier.width(ControlTableColumns[3].width),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(checked = mandatoryDraft, onCheckedChange = onMandatoryChange)
+        }
+        TextField(
+            value = publicLabelDraft,
+            onValueChange = onPublicLabelChange,
+            modifier = Modifier.width(ControlTableColumns[4].width),
+            singleLine = true,
+            label = { Text("Public label") }
+        )
+        TextField(
+            value = notesDraft,
+            onValueChange = onNotesChange,
+            modifier = Modifier.width(ControlTableColumns[5].width),
+            singleLine = true,
+            label = { Text("Notes") }
+        )
+        Spacer(modifier = Modifier.width(ControlTableColumns[6].width))
     }
 }
 
-/** Shows one editable alias row for a SportIdent control code mapping. */
 @Composable
-private fun AliasDetailRow(
-    alias: EventAliasDetails,
-    onUpdateAlias: (String, String, String) -> Unit
+private fun ControlDetailRow(
+    control: EventControlDetails,
+    onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit
 ) {
-    var siCodeDraft by remember(alias.id, alias.siCodeText) { mutableStateOf(alias.siCodeText) }
-    var nameDraft by remember(alias.id, alias.name) { mutableStateOf(alias.name) }
+    var siCodeDraft by remember(control.id, control.siCodeText) { mutableStateOf(control.siCodeText) }
+    var labelDraft by remember(control.id, control.label) { mutableStateOf(control.label) }
+    var typeDraft by remember(control.id, control.type) { mutableStateOf(control.type) }
+    var mandatoryDraft by remember(control.id, control.mandatory) { mutableStateOf(control.mandatory) }
+    var publicLabelDraft by remember(control.id, control.publicLabel) { mutableStateOf(control.publicLabel) }
+    var notesDraft by remember(control.id, control.notes) { mutableStateOf(control.notes) }
 
     Row(
-        modifier = Modifier.width(fixedTableWidth(AliasTableColumns)),
+        modifier = Modifier.width(fixedTableWidth(ControlTableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
             value = siCodeDraft,
             onValueChange = { siCodeDraft = it },
-            modifier = Modifier.width(AliasTableColumns[0].width),
+            modifier = Modifier.width(ControlTableColumns[0].width),
             singleLine = true,
             label = { Text("SI code") }
         )
         TextField(
-            value = nameDraft,
-            onValueChange = { nameDraft = it },
-            modifier = Modifier.width(AliasTableColumns[1].width),
+            value = labelDraft,
+            onValueChange = { labelDraft = it },
+            modifier = Modifier.width(ControlTableColumns[1].width),
             singleLine = true,
-            label = { Text("Alias") }
+            label = { Text("Label") }
+        )
+        ControlTypeDropdown(
+            type = typeDraft,
+            onTypeChange = { typeDraft = it },
+            modifier = Modifier.width(ControlTableColumns[2].width)
+        )
+        Row(
+            modifier = Modifier.width(ControlTableColumns[3].width),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(checked = mandatoryDraft, onCheckedChange = { mandatoryDraft = it })
+        }
+        TextField(
+            value = publicLabelDraft,
+            onValueChange = { publicLabelDraft = it },
+            modifier = Modifier.width(ControlTableColumns[4].width),
+            singleLine = true,
+            label = { Text("Public label") }
+        )
+        TextField(
+            value = notesDraft,
+            onValueChange = { notesDraft = it },
+            modifier = Modifier.width(ControlTableColumns[5].width),
+            singleLine = true,
+            label = { Text("Notes") }
         )
         Button(
-            onClick = { onUpdateAlias(alias.id, siCodeDraft, nameDraft) },
-            modifier = Modifier.width(AliasTableColumns[2].width),
-            enabled = siCodeDraft != alias.siCodeText || nameDraft != alias.name
+            onClick = { onUpdateControl(control.id, labelDraft, siCodeDraft, typeDraft, mandatoryDraft, publicLabelDraft, notesDraft) },
+            modifier = Modifier.width(ControlTableColumns[6].width),
+            enabled = siCodeDraft != control.siCodeText ||
+                labelDraft != control.label ||
+                typeDraft != control.type ||
+                mandatoryDraft != control.mandatory ||
+                publicLabelDraft != control.publicLabel ||
+                notesDraft != control.notes
         ) {
             ButtonLabel("Apply")
         }
@@ -3805,11 +3900,11 @@ private fun AliasDetailRow(
 }
 
 @Composable
-private fun AliasDeleteButton(
-    alias: EventAliasDetails,
-    onRemoveAlias: (String) -> Unit
+private fun ControlDeleteButton(
+    control: EventControlDetails,
+    onRemoveControl: (String) -> Unit
 ) {
-    var showDeleteDialog by remember(alias.id) { mutableStateOf(false) }
+    var showDeleteDialog by remember(control.id) { mutableStateOf(false) }
 
     Button(
         onClick = { showDeleteDialog = true },
@@ -3821,13 +3916,13 @@ private fun AliasDeleteButton(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete alias") },
-            text = { Text("Delete alias ${alias.siCodeText} -> ${alias.name}?") },
+            title = { Text("Delete control") },
+            text = { Text("Delete control ${control.label} (${control.siCodeText})?") },
             confirmButton = {
                 Button(
                     onClick = {
                         showDeleteDialog = false
-                        onRemoveAlias(alias.id)
+                        onRemoveControl(control.id)
                     }
                 ) {
                     Text("Delete")
@@ -3839,6 +3934,32 @@ private fun AliasDeleteButton(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ControlTypeDropdown(
+    type: ControlPointType,
+    onTypeChange: (ControlPointType) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        Button(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+            ButtonLabel(EventControlDetails.typeLabel(type))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            ControlPointType.entries.forEach { option ->
+                DropdownMenuItem(
+                    onClick = {
+                        expanded = false
+                        onTypeChange(option)
+                    }
+                ) {
+                    Text(EventControlDetails.typeLabel(option))
+                }
+            }
+        }
     }
 }
 
@@ -4908,8 +5029,8 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
             ?: requiresEventFile("editing competitors")
         DesktopSection.StartList -> summary?.let { "Competitors sorted by drawn start time." }
             ?: requiresEventFile("working with the start list")
-        DesktopSection.Aliases -> projectFile?.let { "${it.raceData.aliases.size} aliases loaded." }
-            ?: requiresEventFile("editing aliases")
+        DesktopSection.Controls -> projectFile?.let { "${it.raceData.controls.size} controls loaded." }
+            ?: requiresEventFile("editing controls")
         DesktopSection.Readouts -> summary?.let { "${it.readoutCount} SI-card readouts loaded." }
             ?: requiresEventFile("working with SI-card readouts")
         DesktopSection.InForest -> summary?.let { "Started competitors without readouts." }
