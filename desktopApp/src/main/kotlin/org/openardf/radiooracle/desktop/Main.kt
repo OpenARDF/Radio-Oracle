@@ -92,6 +92,7 @@ import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
 import org.openardf.radiooracle.shared.event.StartDrawStartGroupMode
+import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportProfile
@@ -260,6 +261,7 @@ fun main(args: Array<String>) = application {
         var hasUnsavedChanges by remember { mutableStateOf(projectSession.hasUnsavedChanges) }
         var newEventDraftProject by remember { mutableStateOf<EventProjectFile?>(null) }
         var pendingDirtyProjectAction by remember { mutableStateOf<PendingDirtyProjectAction?>(null) }
+        var isNationalStartListDefaultsDialogVisible by remember { mutableStateOf(false) }
         var siReaderState by remember { mutableStateOf(DesktopSiReaderUiState.disconnected()) }
         var pendingSiModeWarning by remember { mutableStateOf<DesktopSiReaderUiState?>(null) }
         var lastShownSiModeWarningKey by remember { mutableStateOf<String?>(null) }
@@ -352,6 +354,27 @@ fun main(args: Array<String>) = application {
                     ProtectedIdealOrderRules.firstControlCode(idealOrderText, controls)?.let { categoryId to it }
                 }
             }.toMap()
+
+        fun shouldOfferNationalStartListDefaults(project: EventProjectFile): Boolean =
+            !project.raceData.effectiveStartDrawSettings().options.hasNationalEventDefaults()
+
+        fun applyNationalStartListDefaults() {
+            runCatching {
+                val updatedProject = projectSession.updateCurrentProject { currentProject ->
+                    val settings = currentProject.raceData.effectiveStartDrawSettings()
+                    EventProjectEditor.updateStartDrawSettings(
+                        currentProject,
+                        settings.intervalText,
+                        settings.options.withNationalEventDefaults()
+                    )
+                }
+                projectFile = updatedProject
+                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                projectStatusText = "National Start List defaults applied."
+            }.onFailure { error ->
+                projectStatusText = "Start list defaults failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
 
         fun openProject(path: Path) {
             runCatching {
@@ -1234,6 +1257,18 @@ fun main(args: Array<String>) = application {
                 onDismiss = { pendingSiModeWarning = null }
             )
         }
+        if (isNationalStartListDefaultsDialogVisible) {
+            NationalStartListDefaultsDialog(
+                onReset = {
+                    isNationalStartListDefaultsDialogVisible = false
+                    applyNationalStartListDefaults()
+                },
+                onKeepCurrent = {
+                    isNationalStartListDefaultsDialogVisible = false
+                    projectStatusText = "National Start List defaults skipped."
+                }
+            )
+        }
         if (isAboutDialogVisible) {
             AboutRadioOracleDialog(onDismiss = { isAboutDialogVisible = false })
         }
@@ -1298,6 +1333,11 @@ fun main(args: Array<String>) = application {
             },
             onUpdateRaceSettings = { raceType, raceLevel, raceBand, timeLimitMinutes ->
                 runCatching {
+                    val currentProject = projectSession.currentProject
+                    val shouldPromptForNationalDefaults = currentProject != null &&
+                        currentProject.raceData.race.raceLevel != RaceLevel.NATIONAL &&
+                        raceLevel == RaceLevel.NATIONAL &&
+                        shouldOfferNationalStartListDefaults(currentProject)
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.updateRaceSettings(
                             currentProject,
@@ -1309,6 +1349,9 @@ fun main(args: Array<String>) = application {
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
+                    if (shouldPromptForNationalDefaults) {
+                        isNationalStartListDefaultsDialogVisible = true
+                    }
                 }.onFailure { error ->
                     projectStatusText = "Edit failed: ${genericEditErrorText(error)}"
                 }
@@ -1812,6 +1855,33 @@ private fun UnsavedNewEventFileDialog(
                 Button(onClick = onCancel) {
                     Text("Cancel")
                 }
+            }
+        }
+    )
+}
+
+@Composable
+private fun NationalStartListDefaultsDialog(
+    onReset: () -> Unit,
+    onKeepCurrent: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onKeepCurrent,
+        title = { Text("Reset Start List settings?") },
+        text = {
+            Text(
+                "National events usually use Ignore clubs, 2 per time, and No start groups. " +
+                    "Reset the current Start List settings to those defaults?"
+            )
+        },
+        confirmButton = {
+            Button(onClick = onReset) {
+                Text("Reset")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onKeepCurrent) {
+                Text("Keep current")
             }
         }
     )

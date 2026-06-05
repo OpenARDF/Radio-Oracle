@@ -74,10 +74,33 @@ data class StartDrawOptions(
     fun withDefaultSeed(): StartDrawOptions =
         if (seed.isBlank()) copy(seed = DEFAULT_SEED) else this
 
+    /** True when the Event File already uses the Start List defaults expected for National events. */
+    fun hasNationalEventDefaults(): Boolean =
+        clubHandling == StartDrawClubHandling.IGNORE &&
+            startersPerStartTime == NATIONAL_EVENT_STARTERS_PER_START_TIME &&
+            startGroupMode == StartDrawStartGroupMode.DISABLED
+
+    /**
+     * Applies the Start List policy Radio-Oracle expects for National events.
+     *
+     * The race-level default is intentionally limited to the three values that
+     * define the National draw profile: ignore club separation, start two
+     * competitors per start time, and do not use start groups. Seed and other
+     * generator fields are preserved so accepting the prompt does not silently
+     * discard repeatability choices unrelated to the National profile.
+     */
+    fun withNationalEventDefaults(): StartDrawOptions =
+        copy(
+            clubHandling = StartDrawClubHandling.IGNORE,
+            startersPerStartTime = NATIONAL_EVENT_STARTERS_PER_START_TIME,
+            startGroupMode = StartDrawStartGroupMode.DISABLED
+        )
+
     companion object {
         const val DEFAULT_SEED = "default"
         const val MIN_STARTERS_PER_START_TIME = 1
         const val MAX_STARTERS_PER_START_TIME = 6
+        const val NATIONAL_EVENT_STARTERS_PER_START_TIME = 2
     }
 }
 

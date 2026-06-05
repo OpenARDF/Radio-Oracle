@@ -16,7 +16,9 @@ import org.openardf.radiooracle.shared.sportident.SportIdentTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class EventProjectEditorTest {
     @Test
@@ -1591,6 +1593,27 @@ class EventProjectEditorTest {
         assertEquals(3, details.settings.options.startersPerStartTime)
         assertEquals("settings-only", details.settings.options.seed)
         assertEquals(StartDrawStartGroupMode.PREFERRED_THIRDS, details.settings.options.startGroupMode)
+    }
+
+    @Test
+    fun nationalStartListDefaultsOnlyChangeNationalProfileFields() {
+        val original = StartDrawOptions(
+            clubHandling = StartDrawClubHandling.AVOID_BACK_TO_BACK,
+            startersPerStartTime = 1,
+            seed = "review-seed",
+            startGroupMode = StartDrawStartGroupMode.PREFERRED_THIRDS,
+            idealFirstFoxByCategoryId = mapOf("cat-m21" to 31)
+        )
+
+        val nationalDefaults = original.withNationalEventDefaults()
+
+        assertFalse(original.hasNationalEventDefaults())
+        assertTrue(nationalDefaults.hasNationalEventDefaults())
+        assertEquals(StartDrawClubHandling.IGNORE, nationalDefaults.clubHandling)
+        assertEquals(2, nationalDefaults.startersPerStartTime)
+        assertEquals(StartDrawStartGroupMode.DISABLED, nationalDefaults.startGroupMode)
+        assertEquals("review-seed", nationalDefaults.seed)
+        assertEquals(mapOf("cat-m21" to 31), nationalDefaults.idealFirstFoxByCategoryId)
     }
 
     @Test
