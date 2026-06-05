@@ -101,6 +101,7 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.printing.FinishTicketRenderer
 import org.openardf.radiooracle.shared.results.EventResultSending
+import org.openardf.radiooracle.shared.time.DurationFormatter
 import org.jetbrains.skia.Image as SkiaImage
 import java.awt.Toolkit
 import java.nio.file.Files
@@ -1434,6 +1435,18 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
+            onUpdateStartDrawSettings = { interval, options ->
+                runCatching {
+                    val updatedProject = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.updateStartDrawSettings(currentProject, interval, options)
+                    }
+                    projectFile = updatedProject
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText = "Unsaved changes."
+                }.onFailure { error ->
+                    projectStatusText = "Start list settings failed: ${error.message ?: error::class.simpleName}"
+                }
+            },
             onDrawStartList = { interval, options ->
                 runCatching {
                     val protectedOptions = options.copy(
@@ -1886,6 +1899,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateCompetitorClubIndex: (String, String, String) -> Unit = { _, _, _ -> },
     onUpdateCompetitorBirthYear: (String, String) -> Unit = { _, _ -> },
     onUpdateCompetitorStartTime: (String, String) -> Unit = { _, _ -> },
+    onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit = { _, _ -> },
     onDrawStartList: (String, StartDrawOptions) -> Unit = { _, _ -> },
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean = { _, _, _, _, _, _, _, _ -> false },
     onAssignCompetitorCategory: (String, String?) -> Unit = { _, _ -> },
@@ -2017,6 +2031,7 @@ private fun RadioOManagerDesktopApp(
                                 onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
                                 onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
                                 onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
+                                onUpdateStartDrawSettings = onUpdateStartDrawSettings,
                                 onDrawStartList = onDrawStartList,
                                 onAddCompetitor = onAddCompetitor,
                                 onAssignCompetitorCategory = onAssignCompetitorCategory,
@@ -2242,6 +2257,7 @@ private fun SectionWorkspace(
     onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
+    onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit,
     onDrawStartList: (String, StartDrawOptions) -> Unit,
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean,
     onAssignCompetitorCategory: (String, String?) -> Unit,
@@ -2362,6 +2378,7 @@ private fun SectionWorkspace(
         if (section == DesktopSection.StartList && projectFile != null) {
             StartListDetailsPanel(
                 details = EventStartListDetails.from(projectFile.raceData),
+                onUpdateStartDrawSettings = onUpdateStartDrawSettings,
                 onDrawStartList = onDrawStartList
             )
         }
@@ -2646,6 +2663,7 @@ private fun ResultDetailRow(
 @Composable
 private fun StartListDetailsPanel(
     details: EventStartListDetails,
+    onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit,
     onDrawStartList: (String, StartDrawOptions) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
@@ -2657,6 +2675,21 @@ private fun StartListDetailsPanel(
         mutableStateOf(settings.options.startersPerStartTime)
     }
     var seedDraft by remember(settings.options.seed) { mutableStateOf(settings.options.seed) }
+    fun startDrawOptions(
+        clubHandlingValue: StartDrawClubHandling = clubHandling,
+        startersPerStartTimeValue: Int = startersPerStartTime,
+        seedValue: String = seedDraft
+    ): StartDrawOptions =
+        StartDrawOptions(
+            clubHandling = clubHandlingValue,
+            startersPerStartTime = startersPerStartTimeValue,
+            seed = seedValue
+        )
+    fun persistSettingsIfIntervalIsValid(intervalValue: String, options: StartDrawOptions) {
+        if (isValidStartListInterval(intervalValue)) {
+            onUpdateStartDrawSettings(intervalValue, options)
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -2665,7 +2698,10 @@ private fun StartListDetailsPanel(
         ) {
             TextField(
                 value = intervalDraft,
-                onValueChange = { intervalDraft = it },
+                onValueChange = {
+                    intervalDraft = it
+                    persistSettingsIfIntervalIsValid(it, startDrawOptions())
+                },
                 label = { Text("Interval") },
                 modifier = Modifier.width(132.dp)
             )
@@ -2673,19 +2709,28 @@ private fun StartListDetailsPanel(
                 selectedValue = clubHandling,
                 values = StartDrawClubHandling.entries,
                 label = StartDrawClubHandling::toDisplayLabel,
-                onValueSelected = { clubHandling = it },
+                onValueSelected = {
+                    clubHandling = it
+                    persistSettingsIfIntervalIsValid(intervalDraft, startDrawOptions(clubHandlingValue = it))
+                },
                 modifier = Modifier.width(190.dp)
             )
             EnumPicker(
                 selectedValue = startersPerStartTime,
                 values = (StartDrawOptions.MIN_STARTERS_PER_START_TIME..StartDrawOptions.MAX_STARTERS_PER_START_TIME).toList(),
                 label = { "$it per time" },
-                onValueSelected = { startersPerStartTime = it },
+                onValueSelected = {
+                    startersPerStartTime = it
+                    persistSettingsIfIntervalIsValid(intervalDraft, startDrawOptions(startersPerStartTimeValue = it))
+                },
                 modifier = Modifier.width(132.dp)
             )
             TextField(
                 value = seedDraft,
-                onValueChange = { seedDraft = it },
+                onValueChange = {
+                    seedDraft = it
+                    persistSettingsIfIntervalIsValid(intervalDraft, startDrawOptions(seedValue = it))
+                },
                 label = { Text("Seed") },
                 modifier = Modifier.width(180.dp)
             )
@@ -2693,11 +2738,7 @@ private fun StartListDetailsPanel(
                 onClick = {
                     onDrawStartList(
                         intervalDraft,
-                        StartDrawOptions(
-                            clubHandling = clubHandling,
-                            startersPerStartTime = startersPerStartTime,
-                            seed = seedDraft
-                        )
+                        startDrawOptions()
                     )
                 }
             ) {
@@ -4962,6 +5003,10 @@ private fun startListDrawStatusText(details: EventStartListDetails): String {
         "Drew start list; $scheduledText, ${details.unscheduledCount} without start times; $qualityText"
     }
 }
+
+private fun isValidStartListInterval(intervalText: String): Boolean =
+    runCatching { DurationFormatter.minuteStringToSeconds(intervalText.trim()) > 0 }
+        .getOrDefault(false)
 
 private fun competitorImportStatusText(importedRows: Int, updatedRows: Int, invalidRows: Int, fileName: String): String {
     val summary = "Imported $importedRows and updated $updatedRows ARDFEvent competitor rows from $fileName."

@@ -621,6 +621,27 @@ object EventProjectEditor {
         )
     }
 
+    /** Returns a copy of the Event File with persisted start-list generator settings changed. */
+    fun updateStartDrawSettings(
+        projectFile: EventProjectFile,
+        intervalText: String,
+        options: StartDrawOptions
+    ): EventProjectFile {
+        val intervalSeconds = DurationFormatter.minuteStringToSeconds(intervalText.trim())
+        require(intervalSeconds > 0) {
+            "Start interval must be greater than zero."
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                startDrawSettings = StartDrawSettings(
+                    intervalSeconds = intervalSeconds,
+                    options = options.copy(idealFirstFoxByCategoryId = emptyMap())
+                )
+            )
+        )
+    }
+
     /** Draws start times by category order, rotating clubs within each category where possible. */
     fun drawStartList(
         projectFile: EventProjectFile,
@@ -652,10 +673,9 @@ object EventProjectEditor {
         return projectFile.copy(
             raceData = projectFile.raceData.copy(
                 competitorData = competitorData,
-                startDrawSettings = StartDrawSettings(
-                    intervalSeconds = intervalSeconds,
-                    options = options.copy(idealFirstFoxByCategoryId = emptyMap())
-                )
+                startDrawSettings = updateStartDrawSettings(projectFile, intervalText, options)
+                    .raceData
+                    .startDrawSettings
             )
         )
     }

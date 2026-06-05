@@ -1570,6 +1570,26 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun updateStartDrawSettingsPersistsWithoutDrawingStarts() {
+        val updated = EventProjectEditor.updateStartDrawSettings(
+            projectFile(),
+            "05:00",
+            StartDrawOptions(
+                clubHandling = StartDrawClubHandling.IGNORE,
+                startersPerStartTime = 3,
+                seed = "settings-only"
+            )
+        )
+
+        val details = EventStartListDetails.from(updated.raceData)
+
+        assertEquals(300L, details.settings.intervalSeconds)
+        assertEquals(StartDrawClubHandling.IGNORE, details.settings.options.clubHandling)
+        assertEquals(3, details.settings.options.startersPerStartTime)
+        assertEquals("settings-only", details.settings.options.seed)
+    }
+
+    @Test
     fun startListDefaultsUseEventTypeIntervals() {
         assertEquals(300L, projectFile(raceType = RaceType.CLASSIC).raceData.effectiveStartDrawSettings().intervalSeconds)
         assertEquals(120L, projectFile(raceType = RaceType.SPRINT).raceData.effectiveStartDrawSettings().intervalSeconds)
