@@ -58,16 +58,21 @@ object TextResultExports {
     ) {
         val resultCompetitors = competitors.filter { it.readoutData != null }
         if (resultCompetitors.isEmpty()) return
+        val controlLabelsByCode = FinalResultJsonExports.controlLabelsByCode(raceData)
 
         appendLine("Category ${categoryData.category.name}\tLimit: ${categoryData.category.effectiveTimeLimitSeconds(raceData.race) / 60}\tLength: ${categoryData.category.lengthMeters / 1000.0} km\tControls: ${categoryData.category.controlPointsString}")
         appendLine(RULE)
         resultCompetitors.forEach { competitorData ->
-            appendCompetitorRow(competitorData, includeSplits)
+            appendCompetitorRow(competitorData, includeSplits, controlLabelsByCode)
         }
         appendLine()
     }
 
-    private fun StringBuilder.appendCompetitorRow(competitorData: EventCompetitorData, includeSplits: Boolean) {
+    private fun StringBuilder.appendCompetitorRow(
+        competitorData: EventCompetitorData,
+        includeSplits: Boolean,
+        controlLabelsByCode: Map<Int, String>
+    ) {
         val competitor = competitorData.competitorCategory.competitor
         val readoutData = competitorData.readoutData ?: return
         val result = readoutData.result
@@ -81,7 +86,7 @@ object TextResultExports {
         append('\t')
         append(result.points)
         append('\t')
-        append(readoutData.punches.toControlText())
+        append(readoutData.punches.toControlText(controlLabelsByCode))
         if (includeSplits) {
             append('\t')
             append(readoutData.punches.toSplitText())
@@ -109,9 +114,9 @@ object TextResultExports {
             ResultStatus.ERROR -> "ERR"
         }
 
-    private fun List<EventAliasPunch>.toControlText(): String =
+    private fun List<EventAliasPunch>.toControlText(controlLabelsByCode: Map<Int, String>): String =
         filter { it.punch.punchType == SIRecordType.CONTROL }
-            .joinToString(separator = " ") { it.alias?.name ?: it.punch.siCode.toString() }
+            .joinToString(separator = " ") { controlLabelsByCode[it.punch.siCode] ?: it.alias?.name ?: it.punch.siCode.toString() }
 
     private fun List<EventAliasPunch>.toSplitText(): String =
         filter { it.punch.punchType != SIRecordType.START }

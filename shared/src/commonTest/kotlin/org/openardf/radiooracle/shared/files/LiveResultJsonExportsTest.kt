@@ -18,6 +18,7 @@ import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -111,10 +112,26 @@ class LiveResultJsonExportsTest {
         assertEquals("DP", result.punches.first().punchStatus)
     }
 
+    @Test
+    fun exportsGlobalControlLabelsInPunchCodes() {
+        val punch = Json.parseToJsonElement(
+            LiveResultJsonExports.results(
+                raceData(
+                    controls = listOf(
+                        EventControl("control-31", "race", "F1", 31, org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL)
+                    )
+                )
+            )
+        ).jsonArray.single().jsonObject["result"]!!.jsonObject["punches"]!!.jsonArray.first().jsonObject
+
+        assertEquals("F1", punch["code"]!!.jsonPrimitive.content)
+    }
+
     private fun raceData(
         competitors: List<EventCompetitorData>? = null,
         resultStatus: ResultStatus = ResultStatus.OK,
-        punchStatus: PunchStatus = PunchStatus.UNKNOWN
+        punchStatus: PunchStatus = PunchStatus.UNKNOWN,
+        controls: List<EventControl> = emptyList()
     ): EventRaceData {
         val category = category()
         return EventRaceData(
@@ -137,7 +154,8 @@ class LiveResultJsonExportsTest {
                     readout = readout("result", resultStatus, punchStatus)
                 )
             ),
-            unmatchedReadoutData = emptyList()
+            unmatchedReadoutData = emptyList(),
+            controls = controls
         )
     }
 

@@ -57,6 +57,7 @@ object HtmlResultExports {
     ) {
         val resultCompetitors = competitors.filter { it.readoutData != null }
         if (resultCompetitors.isEmpty()) return
+        val controlLabelsByCode = FinalResultJsonExports.controlLabelsByCode(raceData)
 
         append("<h2>")
         appendHtml(categoryData.category.name)
@@ -69,12 +70,15 @@ object HtmlResultExports {
         }
         append("</tr></thead><tbody>")
         resultCompetitors.forEach { competitorData ->
-            appendCompetitorResult(competitorData)
+            appendCompetitorResult(competitorData, controlLabelsByCode)
         }
         append("</tbody></table>")
     }
 
-    private fun StringBuilder.appendCompetitorResult(competitorData: EventCompetitorData) {
+    private fun StringBuilder.appendCompetitorResult(
+        competitorData: EventCompetitorData,
+        controlLabelsByCode: Map<Int, String>
+    ) {
         val competitor = competitorData.competitorCategory.competitor
         val readoutData = competitorData.readoutData ?: return
         val result = readoutData.result
@@ -91,7 +95,7 @@ object HtmlResultExports {
         append("</td><td>")
         appendHtml(DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinutes = false))
         append("</td><td class=\"splits\">")
-        appendHtml(readoutData.punches.toSplitText())
+        appendHtml(readoutData.punches.toSplitText(controlLabelsByCode))
         append("</td></tr>")
     }
 
@@ -115,10 +119,10 @@ object HtmlResultExports {
             ResultStatus.ERROR -> "ERR"
         }
 
-    private fun List<EventAliasPunch>.toSplitText(): String =
+    private fun List<EventAliasPunch>.toSplitText(controlLabelsByCode: Map<Int, String>): String =
         filter { it.punch.punchType == SIRecordType.CONTROL }
             .joinToString(separator = " ") { aliasPunch ->
-                val code = aliasPunch.alias?.name ?: aliasPunch.punch.siCode.toString()
+                val code = controlLabelsByCode[aliasPunch.punch.siCode] ?: aliasPunch.alias?.name ?: aliasPunch.punch.siCode.toString()
                 val splitTime = DurationFormatter.secondsToFormattedString(aliasPunch.punch.splitSeconds, useMinutes = false)
                 "$code - $splitTime"
             }

@@ -12,6 +12,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -48,7 +49,23 @@ class HtmlResultExportsTest {
         assertFalse(html.contains("<td class=\"num\">1.</td>"))
     }
 
-    private fun raceData(resultStatus: ResultStatus = ResultStatus.OK): EventRaceData {
+    @Test
+    fun exportsGlobalControlLabelsInSplits() {
+        val html = HtmlResultExports.results(
+            raceData(
+                controls = listOf(
+                    EventControl("control-31", "race", "F1", 31, org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL)
+                )
+            )
+        )
+
+        assertTrue(html.contains("F1 - 00:10:00 32 - 00:25:00"))
+    }
+
+    private fun raceData(
+        resultStatus: ResultStatus = ResultStatus.OK,
+        controls: List<EventControl> = emptyList()
+    ): EventRaceData {
         val race = EventRace(
             id = "race",
             name = "HTML & Result Race",
@@ -99,7 +116,8 @@ class HtmlResultExportsTest {
                     readoutData = readout(resultStatus)
                 )
             ),
-            unmatchedReadoutData = emptyList()
+            unmatchedReadoutData = emptyList(),
+            controls = controls
         )
     }
 

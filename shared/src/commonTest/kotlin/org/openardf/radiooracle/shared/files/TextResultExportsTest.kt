@@ -12,6 +12,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -43,7 +44,23 @@ class TextResultExportsTest {
         assertFalse(text.contains("1.\tRUNNER Alice"))
     }
 
-    private fun raceData(resultStatus: ResultStatus = ResultStatus.OK): EventRaceData {
+    @Test
+    fun exportsGlobalControlLabelsInControlColumns() {
+        val text = TextResultExports.results(
+            raceData(
+                controls = listOf(
+                    EventControl("control-31", "race", "F1", 31, org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL)
+                )
+            )
+        )
+
+        assertTrue(text.contains("1.\tRUNNER Alice\tIDX\t00:45:00\t2\tF1 32"))
+    }
+
+    private fun raceData(
+        resultStatus: ResultStatus = ResultStatus.OK,
+        controls: List<EventControl> = emptyList()
+    ): EventRaceData {
         val race = EventRace(
             id = "race",
             name = "Text Result Race",
@@ -94,7 +111,8 @@ class TextResultExportsTest {
                     readoutData = readout(resultStatus)
                 )
             ),
-            unmatchedReadoutData = emptyList()
+            unmatchedReadoutData = emptyList(),
+            controls = controls
         )
     }
 

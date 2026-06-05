@@ -47,8 +47,9 @@ object LiveResultJsonExports {
             )
         }
 
-    private fun EventReadoutData.toLiveResultJson(raceData: EventRaceData): LiveResultJson =
-        LiveResultJson(
+    private fun EventReadoutData.toLiveResultJson(raceData: EventRaceData): LiveResultJson {
+        val punchLabelsByCode = FinalResultJsonExports.controlLabelsByCode(raceData)
+        return LiveResultJson(
             checkTime = result.checkTimeSeconds?.toRaceDateTime(raceData.race.startDateTimeIso),
             startTime = result.startTimeSeconds?.toRaceDateTime(raceData.race.startDateTimeIso),
             finishTime = result.finishTimeSeconds?.toRaceDateTime(raceData.race.startDateTimeIso),
@@ -61,11 +62,12 @@ object LiveResultJsonExports {
             automaticStatus = result.automaticStatus,
             punches = punches
                 .filter { it.punch.punchType != SIRecordType.START }
-                .map { it.toLivePunchJson() }
+                .map { it.toLivePunchJson(punchLabelsByCode) }
         )
+    }
 
-    private fun EventAliasPunch.toLivePunchJson(): LiveResultPunchJson {
-        val rawCode = alias?.name ?: punch.siCode.toString()
+    private fun EventAliasPunch.toLivePunchJson(punchLabelsByCode: Map<Int, String>): LiveResultPunchJson {
+        val rawCode = punchLabelsByCode[punch.siCode] ?: alias?.name ?: punch.siCode.toString()
         val code = if (punch.punchType == SIRecordType.FINISH && rawCode == "0") "F" else rawCode
         return LiveResultPunchJson(
             code = code,
