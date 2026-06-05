@@ -1241,6 +1241,44 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun addsAndUndoesManualDidNotStartReadoutThroughReadoutWorkflow() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", siNumber = 123456)
+            )
+        )
+
+        val withDns = EventProjectEditor.addManualReadout(
+            projectFile = original,
+            resultId = "dns-result",
+            competitorId = "comp-1",
+            siNumber = "",
+            startSeconds = "",
+            finishSeconds = "",
+            controlCodes = "",
+            resultStatus = ResultStatus.DID_NOT_START,
+            readoutDateTimeIso = "2026-05-31T12:00",
+            punchIdFactory = { index, type -> "punch-$index-${type.name}" }
+        )
+        val dnsReadout = withDns.raceData.competitorData.single().readoutData!!
+        assertEquals("dns-result", dnsReadout.result.id)
+        assertEquals("comp-1", dnsReadout.result.competitorId)
+        assertEquals(123456, dnsReadout.result.siNumber)
+        assertEquals(ResultStatus.DID_NOT_START, dnsReadout.result.resultStatus)
+        assertEquals(false, dnsReadout.result.automaticStatus)
+        assertEquals(emptyList(), dnsReadout.punches)
+
+        val statusChanged = EventProjectEditor.updateReadoutManualStatus(withDns, "dns-result", ResultStatus.NO_RANKING)
+        assertEquals(
+            ResultStatus.NO_RANKING,
+            statusChanged.raceData.competitorData.single().readoutData!!.result.resultStatus
+        )
+
+        val removed = EventProjectEditor.removeReadout(statusChanged, "dns-result")
+        assertEquals(null, removed.raceData.competitorData.single().readoutData)
+    }
+
+    @Test
     fun addsDownloadedSportIdentReadoutForMatchedCompetitorAndEvaluatesCourse() {
         val category = category("cat-1", "M21")
         val original = projectFile(

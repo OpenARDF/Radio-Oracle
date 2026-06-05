@@ -121,6 +121,32 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 private data class FixedTableColumn(val title: String, val width: Dp)
 
+private data class ControlDraft(
+    val siCodeText: String,
+    val type: ControlPointType,
+    val mandatory: Boolean,
+    val publicLabel: String,
+    val notes: String
+) {
+    fun isChangedFrom(control: EventControlDetails): Boolean =
+        siCodeText != control.siCodeText ||
+            type != control.type ||
+            mandatory != control.mandatory ||
+            publicLabel != control.publicLabel ||
+            notes != control.notes
+
+    companion object {
+        fun from(control: EventControlDetails): ControlDraft =
+            ControlDraft(
+                siCodeText = control.siCodeText,
+                type = control.type,
+                mandatory = control.mandatory,
+                publicLabel = control.publicLabel,
+                notes = control.notes
+            )
+    }
+}
+
 private val TableColumnGap = 12.dp
 private val ActionRailWidth = 104.dp
 private val FixedGridRowHeight = 56.dp
@@ -190,7 +216,6 @@ private val CompetitorTableColumns = listOf(
     FixedTableColumn("Start no.", 86.dp),
     FixedTableColumn("Start time", 104.dp),
     FixedTableColumn("SI no.", 110.dp),
-    FixedTableColumn("", 92.dp),
     FixedTableColumn("", 92.dp),
     FixedTableColumn("", 92.dp),
     FixedTableColumn("", 92.dp),
@@ -1811,22 +1836,6 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
-            onMarkCompetitorDidNotStart = { competitorId ->
-                runCatching {
-                    projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.markCompetitorDidNotStart(
-                            projectFile = currentProject,
-                            competitorId = competitorId,
-                            resultId = UUID.randomUUID().toString(),
-                            readoutDateTimeIso = LocalDateTime.now().withNano(0).toString()
-                        )
-                    }
-                    hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    projectStatusText = "Unsaved changes."
-                }.onFailure { error ->
-                    projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
-                }
-            },
             onRemoveReadout = { resultId ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -2309,7 +2318,6 @@ private fun RadioOManagerDesktopApp(
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean = { _, _, _, _, _, _, _, _ -> false },
     onAssignCompetitorCategory: (String, String?) -> Unit = { _, _ -> },
     onRemoveCompetitor: (String, Boolean) -> Unit = { _, _ -> },
-    onMarkCompetitorDidNotStart: (String) -> Unit = {},
     onRemoveReadout: (String) -> Unit = {},
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit = { _, _ -> },
     onAssignUnmatchedReadout: (String, String) -> Unit = { _, _ -> },
@@ -2456,7 +2464,6 @@ private fun RadioOManagerDesktopApp(
                                 onAddCompetitor = onAddCompetitor,
                                 onAssignCompetitorCategory = onAssignCompetitorCategory,
                                 onRemoveCompetitor = onRemoveCompetitor,
-                                onMarkCompetitorDidNotStart = onMarkCompetitorDidNotStart,
                                 onRemoveReadout = onRemoveReadout,
                                 onUpdateReadoutStatus = onUpdateReadoutStatus,
                                 onAssignUnmatchedReadout = onAssignUnmatchedReadout,
@@ -2724,7 +2731,6 @@ private fun SectionWorkspace(
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit,
-    onMarkCompetitorDidNotStart: (String) -> Unit,
     onRemoveReadout: (String) -> Unit,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
     onAssignUnmatchedReadout: (String, String) -> Unit,
@@ -2829,8 +2835,7 @@ private fun SectionWorkspace(
                 onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
                 onAddCompetitor = onAddCompetitor,
                 onAssignCompetitorCategory = onAssignCompetitorCategory,
-                onRemoveCompetitor = onRemoveCompetitor,
-                onMarkCompetitorDidNotStart = onMarkCompetitorDidNotStart
+                onRemoveCompetitor = onRemoveCompetitor
             )
         }
         if (section == DesktopSection.Controls && projectFile != null) {
@@ -3884,8 +3889,7 @@ private fun CompetitorDetailsPanel(
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean,
     onAssignCompetitorCategory: (String, String?) -> Unit,
-    onRemoveCompetitor: (String, Boolean) -> Unit,
-    onMarkCompetitorDidNotStart: (String) -> Unit
+    onRemoveCompetitor: (String, Boolean) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(CompetitorTableColumns)
@@ -3992,8 +3996,7 @@ private fun CompetitorDetailsPanel(
                             onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
                             onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
                             onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
-                            onAssignCompetitorCategory = onAssignCompetitorCategory,
-                            onMarkCompetitorDidNotStart = onMarkCompetitorDidNotStart
+                            onAssignCompetitorCategory = onAssignCompetitorCategory
                         )
                     }
                 }
@@ -4090,7 +4093,6 @@ private fun CompetitorAddRow(
         Spacer(modifier = Modifier.width(CompetitorTableColumns[12].width))
         Spacer(modifier = Modifier.width(CompetitorTableColumns[13].width))
         Spacer(modifier = Modifier.width(CompetitorTableColumns[14].width))
-        Spacer(modifier = Modifier.width(CompetitorTableColumns[15].width))
     }
 }
 
@@ -4104,8 +4106,7 @@ private fun CompetitorDetailRow(
     onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
-    onAssignCompetitorCategory: (String, String?) -> Unit,
-    onMarkCompetitorDidNotStart: (String) -> Unit
+    onAssignCompetitorCategory: (String, String?) -> Unit
 ) {
     var firstNameDraft by remember(competitor.id, competitor.firstName) { mutableStateOf(competitor.firstName) }
     var lastNameDraft by remember(competitor.id, competitor.lastName) { mutableStateOf(competitor.lastName) }
@@ -4255,13 +4256,6 @@ private fun CompetitorDetailRow(
         ) {
             ButtonLabel("Cat.")
         }
-        Button(
-            onClick = { onMarkCompetitorDidNotStart(competitor.id) },
-            modifier = Modifier.width(CompetitorTableColumns[15].width),
-            enabled = !competitor.hasReadout
-        ) {
-            ButtonLabel("DNS")
-        }
     }
 }
 
@@ -4371,6 +4365,14 @@ private fun ControlDetailsPanel(
     var mandatoryDraft by remember { mutableStateOf(false) }
     var publicLabelDraft by remember { mutableStateOf("") }
     var notesDraft by remember { mutableStateOf("") }
+    var controlDrafts by remember(controls) {
+        mutableStateOf(controls.associate { control -> control.id to ControlDraft.from(control) })
+    }
+    val changedControlDrafts = controls.mapNotNull { control ->
+        controlDrafts[control.id]
+            ?.takeIf { draft -> draft.isChangedFrom(control) }
+            ?.let { draft -> control to draft }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -4378,21 +4380,47 @@ private fun ControlDetailsPanel(
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
             verticalAlignment = Alignment.Top
         ) {
-            Button(
-                onClick = {
-                    val didAdd = onAddControl("", siCodeDraft, typeDraft, mandatoryDraft, publicLabelDraft, notesDraft)
-                    if (didAdd) {
-                        siCodeDraft = ""
-                        typeDraft = ControlPointType.CONTROL
-                        mandatoryDraft = false
-                        publicLabelDraft = ""
-                        notesDraft = ""
-                    }
-                },
-                modifier = fixedActionRailModifier(),
-                enabled = siCodeDraft.isNotBlank()
-            ) {
-                ButtonLabel("Add")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        val didAdd = onAddControl("", siCodeDraft, typeDraft, mandatoryDraft, publicLabelDraft, notesDraft)
+                        if (didAdd) {
+                            siCodeDraft = ""
+                            typeDraft = ControlPointType.CONTROL
+                            mandatoryDraft = false
+                            publicLabelDraft = ""
+                            notesDraft = ""
+                        }
+                    },
+                    modifier = fixedActionRailModifier(),
+                    enabled = siCodeDraft.isNotBlank()
+                ) {
+                    ButtonLabel("Add")
+                }
+                Button(
+                    onClick = {
+                        changedControlDrafts.forEach { (control, draft) ->
+                            val nextLabel = if (draft.siCodeText != control.siCodeText || draft.type != control.type) {
+                                ""
+                            } else {
+                                control.label
+                            }
+                            onUpdateControl(
+                                control.id,
+                                nextLabel,
+                                draft.siCodeText,
+                                draft.type,
+                                draft.mandatory,
+                                draft.publicLabel,
+                                draft.notes
+                            )
+                        }
+                    },
+                    modifier = fixedActionRailModifier(),
+                    enabled = changedControlDrafts.isNotEmpty()
+                ) {
+                    ButtonLabel("Apply")
+                }
             }
             Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
                 Column(
@@ -4435,7 +4463,13 @@ private fun ControlDetailsPanel(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     controls.forEach { control ->
-                        ControlDetailRow(control, onUpdateControl)
+                        val draft = controlDrafts[control.id] ?: ControlDraft.from(control)
+                        ControlDetailRow(
+                            draft = draft,
+                            onDraftChange = { nextDraft ->
+                                controlDrafts = controlDrafts + (control.id to nextDraft)
+                            }
+                        )
                     }
                 }
             }
@@ -4499,66 +4533,47 @@ private fun ControlAddRow(
 
 @Composable
 private fun ControlDetailRow(
-    control: EventControlDetails,
-    onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit
+    draft: ControlDraft,
+    onDraftChange: (ControlDraft) -> Unit
 ) {
-    var siCodeDraft by remember(control.id, control.siCodeText) { mutableStateOf(control.siCodeText) }
-    var typeDraft by remember(control.id, control.type) { mutableStateOf(control.type) }
-    var mandatoryDraft by remember(control.id, control.mandatory) { mutableStateOf(control.mandatory) }
-    var publicLabelDraft by remember(control.id, control.publicLabel) { mutableStateOf(control.publicLabel) }
-    var notesDraft by remember(control.id, control.notes) { mutableStateOf(control.notes) }
-
     Row(
         modifier = Modifier.width(fixedTableWidth(ControlTableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
-            value = siCodeDraft,
-            onValueChange = { siCodeDraft = it },
+            value = draft.siCodeText,
+            onValueChange = { onDraftChange(draft.copy(siCodeText = it)) },
             modifier = Modifier.width(ControlTableColumns[0].width),
             singleLine = true,
             label = { Text("SI code") }
         )
         ControlTypeDropdown(
-            type = typeDraft,
-            onTypeChange = { typeDraft = it },
+            type = draft.type,
+            onTypeChange = { onDraftChange(draft.copy(type = it)) },
             modifier = Modifier.width(ControlTableColumns[1].width)
         )
         Row(
             modifier = Modifier.width(ControlTableColumns[2].width),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Checkbox(checked = mandatoryDraft, onCheckedChange = { mandatoryDraft = it })
+            Checkbox(checked = draft.mandatory, onCheckedChange = { onDraftChange(draft.copy(mandatory = it)) })
         }
         TextField(
-            value = publicLabelDraft,
-            onValueChange = { publicLabelDraft = it },
+            value = draft.publicLabel,
+            onValueChange = { onDraftChange(draft.copy(publicLabel = it)) },
             modifier = Modifier.width(ControlTableColumns[3].width),
             singleLine = true,
             label = { Text("Public label") }
         )
         TextField(
-            value = notesDraft,
-            onValueChange = { notesDraft = it },
+            value = draft.notes,
+            onValueChange = { onDraftChange(draft.copy(notes = it)) },
             modifier = Modifier.width(ControlTableColumns[4].width),
             singleLine = true,
             label = { Text("Notes") }
         )
-        Button(
-            onClick = {
-                val nextLabel = if (siCodeDraft != control.siCodeText || typeDraft != control.type) "" else control.label
-                onUpdateControl(control.id, nextLabel, siCodeDraft, typeDraft, mandatoryDraft, publicLabelDraft, notesDraft)
-            },
-            modifier = Modifier.width(ControlTableColumns[5].width),
-            enabled = siCodeDraft != control.siCodeText ||
-                typeDraft != control.type ||
-                mandatoryDraft != control.mandatory ||
-                publicLabelDraft != control.publicLabel ||
-                notesDraft != control.notes
-        ) {
-            ButtonLabel("Apply")
-        }
+        Spacer(modifier = Modifier.width(ControlTableColumns[5].width))
     }
 }
 
