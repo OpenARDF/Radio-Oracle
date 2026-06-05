@@ -9,6 +9,7 @@ import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorStartCsvImportRow
+import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 import org.openardf.radiooracle.shared.sportident.SportIdentCardPunch
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadout
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
@@ -228,6 +229,31 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun updatesCategoryControlPointsUsingDefinedControlLabels() {
+        val control = EventControl(
+            id = "control-f1",
+            raceId = "race",
+            label = "F1",
+            siCode = 41,
+            type = ControlPointType.CONTROL,
+            publicLabel = "Fox1"
+        )
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21")),
+            controls = listOf(control)
+        )
+
+        val updated = EventProjectEditor.updateCategoryControlPoints(original, "cat-1", "Fox1") { index ->
+            "control-$index"
+        }
+
+        val categoryData = updated.raceData.categories.single()
+        assertEquals(listOf("control-f1"), categoryData.controlPoints.map { it.controlId })
+        assertEquals(listOf(41), categoryData.controlPoints.map { it.siCode })
+        assertEquals(listOf("control-f1"), categoryData.publicControlIds)
+    }
+
+    @Test
     fun clearsCategoryControlPoints() {
         val original = projectFile(categories = listOf(categoryData("cat-1", "M21", controlSiCodes = listOf(31, 32))))
 
@@ -266,6 +292,35 @@ class EventProjectEditorTest {
         val control = updated.raceData.controls.single()
         assertEquals("31", control.label)
         assertEquals("Fox 1", control.publicLabel)
+    }
+
+    @Test
+    fun importsControlRowsByAddingOrMergingControls() {
+        val original = projectFile(
+            controls = listOf(
+                EventControl(
+                    id = "existing-31",
+                    raceId = "race",
+                    label = "31",
+                    siCode = 31,
+                    type = ControlPointType.CONTROL
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.importControlRows(
+            original,
+            rows = listOf(
+                ControlCsvImportRow(31, ControlPointType.CONTROL, mandatory = true, publicLabel = "F1", notes = "first"),
+                ControlCsvImportRow(99, ControlPointType.BEACON, mandatory = false, publicLabel = "M", notes = "beacon")
+            ),
+            controlIdFactory = { "new-control" }
+        )
+
+        assertEquals(2, updated.raceData.controls.size)
+        assertEquals("existing-31", updated.raceData.controls.first { it.siCode == 31 }.id)
+        assertEquals("F1", updated.raceData.controls.first { it.siCode == 31 }.publicLabel)
+        assertEquals("new-control", updated.raceData.controls.first { it.siCode == 99 }.id)
     }
 
     @Test
@@ -2053,6 +2108,7 @@ class EventProjectEditorTest {
         raceType: RaceType = RaceType.CLASSIC,
         categories: List<EventCategoryData> = emptyList(),
         competitors: List<EventCompetitorData> = emptyList(),
+        controls: List<EventControl> = emptyList(),
         aliases: List<EventAlias> = emptyList(),
         unmatchedReadouts: List<EventReadoutData> = emptyList()
     ): EventProjectFile =
@@ -2070,6 +2126,7 @@ class EventProjectEditorTest {
                 ),
                 categories = categories,
                 aliases = aliases,
+                controls = controls,
                 competitorData = competitors,
                 unmatchedReadoutData = unmatchedReadouts
             )

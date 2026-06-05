@@ -76,6 +76,21 @@ object EventCsvFormat {
         const val SI_NUMBER = 2
     }
 
+    object Control {
+        const val COLUMN_COUNT = 5
+        const val SI_CODE = 0
+        const val ROLE = 1
+        const val MANDATORY = 2
+        const val PUBLIC_LABEL = 3
+        const val NOTES = 4
+
+        val HEADER = listOf("si_code", "role", "mandatory", "public_label", "notes")
+        val HEADER_ROW = HEADER.joinToString(DELIMITER.toString())
+
+        fun isHeader(fields: List<String>): Boolean =
+            fields.map { it.trim().lowercase() } == HEADER
+    }
+
     object ArdfEventRegistration {
         const val COLUMN_COUNT = 5
         const val FIRST_NAME = 0

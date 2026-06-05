@@ -1,8 +1,10 @@
 package org.openardf.radiooracle.shared.files
 
 import org.openardf.radiooracle.shared.sportident.SportIdentCodes
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.EventControlDetails
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 
 data class CsvImportError(
@@ -53,6 +55,14 @@ data class CategoryCsvImportRow(
     val raceBand: RaceBand?,
     val controlPointsText: String,
     val encryptedIdealOrder: String? = null
+)
+
+data class ControlCsvImportRow(
+    val siCode: Int,
+    val type: ControlPointType,
+    val mandatory: Boolean,
+    val publicLabel: String,
+    val notes: String
 )
 
 /** Shared parsers for CSV import formats currently accepted by Android and desktop. */
@@ -142,6 +152,27 @@ object EventCsvImports {
                 rows += parseAndroidCompetitorStartRow(parseSemicolonRow(line), lineIndex)
             } catch (error: IllegalArgumentException) {
                 invalidLines += CsvImportError(lineIndex, error.message ?: "Invalid competitor-start row")
+            }
+        }
+
+        return CsvImportResult(rows, invalidLines)
+    }
+
+    fun parseControlRows(csvText: String): CsvImportResult<ControlCsvImportRow> {
+        val rows = mutableListOf<ControlCsvImportRow>()
+        val invalidLines = mutableListOf<CsvImportError>()
+
+        csvText.lineSequence().forEachIndexed { lineIndex, line ->
+            if (line.isBlank()) return@forEachIndexed
+
+            try {
+                val fields = parseSemicolonRow(line)
+                if (lineIndex == 0 && EventCsvFormat.Control.isHeader(fields)) {
+                    return@forEachIndexed
+                }
+                rows += parseControlRow(fields, lineIndex)
+            } catch (error: IllegalArgumentException) {
+                invalidLines += CsvImportError(lineIndex, error.message ?: "Invalid control row")
             }
         }
 
@@ -273,9 +304,34 @@ object EventCsvImports {
         )
     }
 
+    private fun parseControlRow(fields: List<String>, lineIndex: Int): ControlCsvImportRow {
+        require(fields.size >= EventCsvFormat.Control.COLUMN_COUNT) {
+            "Expected at least ${EventCsvFormat.Control.COLUMN_COUNT} columns at line: $lineIndex"
+        }
+        val siCode = fields[EventCsvFormat.Control.SI_CODE].trim().toIntOrNull()
+            ?: throw IllegalArgumentException("Invalid control SI code at line: $lineIndex")
+        require(SportIdentCodes.isSICodeValid(siCode)) {
+            "Control SI code is outside the supported range at line: $lineIndex"
+        }
+        return ControlCsvImportRow(
+            siCode = siCode,
+            type = parseControlType(fields[EventCsvFormat.Control.ROLE].trim()),
+            mandatory = fields[EventCsvFormat.Control.MANDATORY].trim().let {
+                it == "1" || it.equals("true", ignoreCase = true) || it.equals("yes", ignoreCase = true)
+            },
+            publicLabel = fields[EventCsvFormat.Control.PUBLIC_LABEL].trim(),
+            notes = fields[EventCsvFormat.Control.NOTES].trim()
+        )
+    }
+
     private fun parseRaceType(value: String): RaceType =
         RaceType.entries.firstOrNull { it.name == value || it.toDisplayLabel() == value }
             ?: throw IllegalArgumentException("Unknown race type: $value")
+
+    private fun parseControlType(value: String): ControlPointType =
+        ControlPointType.entries.firstOrNull {
+            it.name == value || EventControlDetails.typeLabel(it) == value
+        } ?: throw IllegalArgumentException("Unknown control role: $value")
 
     private fun parseRaceBand(value: String): RaceBand =
         RaceBand.entries.firstOrNull { it.name == value || it.toDisplayLabel() == value }

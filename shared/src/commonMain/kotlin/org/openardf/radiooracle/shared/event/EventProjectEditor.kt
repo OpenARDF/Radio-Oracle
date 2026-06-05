@@ -2,6 +2,7 @@ package org.openardf.radiooracle.shared.event
 
 import org.openardf.radiooracle.shared.alias.AliasRules
 import org.openardf.radiooracle.shared.alias.AliasValidationResult
+import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
@@ -12,6 +13,7 @@ import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorStartCsvImportRow
+import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 import org.openardf.radiooracle.shared.results.CourseEvaluator
 import org.openardf.radiooracle.shared.results.EvaluationControlPoint
 import org.openardf.radiooracle.shared.results.EvaluationPunch
@@ -242,12 +244,20 @@ object EventProjectEditor {
         val categoryData = projectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
             ?: throw IllegalArgumentException("Category was not found: $categoryId")
 
+        val matchedControlsByOrder = mutableMapOf<Int, EventControl>()
+        val controlsByEntryToken = projectFile.raceData.controls.entryTokenMap()
         val definitions = ControlPointRules.parseControlPoints(
             input = controlPointsText.trim(),
             raceType = categoryData.category.effectiveRaceType(projectFile.raceData.race)
-        )
+        ) { token, order ->
+            controlsByEntryToken[token]?.let { control ->
+                matchedControlsByOrder[order] = control
+                ControlPointDefinition(control.siCode, control.type, order)
+            }
+        }
         val controlPoints = definitions.mapIndexed { index, definition ->
-            val control = EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, definition)
+            val control = matchedControlsByOrder[definition.order]
+                ?: EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, definition)
             EventControlPoint(
                 id = controlPointIdFactory(index),
                 categoryId = categoryId,
@@ -259,7 +269,10 @@ object EventProjectEditor {
         }
         val controls = EventControlCatalog.mergeControls(
             projectFile.raceData.controls,
-            definitions.map { EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, it) }
+            definitions.map {
+                matchedControlsByOrder[it.order]
+                    ?: EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, it)
+            }
         )
         val formattedControlPoints = ControlPointRules.formatControlPoints(definitions)
 
@@ -281,6 +294,17 @@ object EventProjectEditor {
             raceData = projectFile.raceData.copy(categories = categories, controls = controls)
         )
     }
+
+    private fun List<EventControl>.entryTokenMap(): Map<String, EventControl> =
+        flatMap { control ->
+            listOfNotNull(
+                control.label.takeIf { it.isNotBlank() }?.let { it to control },
+                control.publicLabel?.trim()?.takeIf { it.isNotBlank() }?.let { it to control }
+            )
+        }
+            .groupBy({ it.first }, { it.second })
+            .filterValues { controls -> controls.size == 1 }
+            .mapValues { (_, controls) -> controls.single() }
 
     /** Returns a copy of the Event File with validated category length and climb. */
     fun updateCategoryPhysicalStats(
@@ -440,6 +464,41 @@ object EventProjectEditor {
             )
         )
     }
+
+    /** Returns a copy of the Event File with imported global controls added or merged by SI code and role. */
+    fun importControlRows(
+        projectFile: EventProjectFile,
+        rows: List<ControlCsvImportRow>,
+        controlIdFactory: () -> String
+    ): EventProjectFile =
+        rows.fold(projectFile) { currentProject, row ->
+            val existingControl = currentProject.raceData.controls.firstOrNull {
+                it.siCode == row.siCode && it.type == row.type
+            }
+            if (existingControl == null) {
+                addControl(
+                    projectFile = currentProject,
+                    controlId = controlIdFactory(),
+                    label = "",
+                    siCode = row.siCode.toString(),
+                    type = row.type,
+                    mandatory = row.mandatory,
+                    publicLabel = row.publicLabel,
+                    notes = row.notes
+                )
+            } else {
+                updateControl(
+                    projectFile = currentProject,
+                    controlId = existingControl.id,
+                    label = existingControl.label,
+                    siCode = row.siCode.toString(),
+                    type = row.type,
+                    mandatory = row.mandatory,
+                    publicLabel = row.publicLabel,
+                    notes = row.notes
+                )
+            }
+        }
 
     /** Returns a copy of the Event File with an unused global logical control removed. */
     fun removeControl(projectFile: EventProjectFile, controlId: String): EventProjectFile {

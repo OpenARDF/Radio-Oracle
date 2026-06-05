@@ -5,6 +5,8 @@ import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlDetails
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.toDisplayLabel
@@ -51,6 +53,19 @@ object EventCsvExports {
                     competitor = competitorCategory.competitor,
                     categoryName = raceData.categoryNameFor(competitorCategory.competitor.categoryId)
                 )
+            }
+
+    fun controls(raceData: EventRaceData): String =
+        EventCsvFormat.Control.HEADER_ROW + "\n" + raceData.controls
+            .sortedWith(compareBy<EventControl>({ it.siCode }, { it.type.name }, { it.label }))
+            .joinRows { control ->
+                listOf(
+                    control.siCode,
+                    EventControlDetails.typeLabel(control.type),
+                    if (control.mandatory) 1 else 0,
+                    control.publicLabel ?: "",
+                    control.notes ?: ""
+                ).joinToString(EventCsvFormat.DELIMITER.toString()) { it.toString().csvField() }
             }
 
     fun competitorStarts(raceData: EventRaceData): String =
@@ -193,4 +208,11 @@ object EventCsvExports {
 
     private fun Long.asSiTimeText(): String =
         DurationFormatter.secondsToFormattedString(this, useMinutes = false)
+
+    private fun String.csvField(): String =
+        if (any { it == EventCsvFormat.DELIMITER || it == '"' || it == '\n' || it == '\r' }) {
+            "\"" + replace("\"", "\"\"") + "\""
+        } else {
+            this
+        }
 }

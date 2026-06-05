@@ -38,6 +38,10 @@ object DesktopProjectFiles : ProjectFileStore {
         writeText(path, EventCsvExports.competitors(projectFile.raceData))
     }
 
+    fun exportControlsCsv(path: Path, projectFile: EventProjectFile) {
+        writeText(path, EventCsvExports.controls(projectFile.raceData))
+    }
+
     fun exportCompetitorStartsCsv(path: Path, projectFile: EventProjectFile) {
         writeText(path, EventCsvExports.competitorStarts(projectFile.raceData))
     }

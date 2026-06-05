@@ -200,10 +200,7 @@ private val CategoryTableColumns = listOf(
     FixedTableColumn("Type", 96.dp),
     FixedTableColumn("Band", 104.dp),
     FixedTableColumn("Limit (min.)", 104.dp),
-    FixedTableColumn("Controls", 180.dp),
-    FixedTableColumn("Rename", 92.dp),
-    FixedTableColumn("Stats", 92.dp),
-    FixedTableColumn("Ctrls", 92.dp)
+    FixedTableColumn("Controls", 220.dp)
 )
 
 private val CategoryTableColumnHints = mapOf(
@@ -213,10 +210,7 @@ private val CategoryTableColumnHints = mapOf(
     "Type" to "Race type used by this category. It normally follows the Event File setting unless category-specific properties are imported.",
     "Band" to "Frequency band used by this category. It normally follows the Event File setting unless category-specific properties are imported.",
     "Limit (min.)" to "Time limit for this category in minutes. It normally follows the Event File setting unless category-specific properties are imported.",
-    "Controls" to "Ordered controls for this category. Use SI codes, with suffixes such as B for beacon or S for separator where applicable.",
-    "Rename" to "Applies the edited category name.",
-    "Stats" to "Applies edited length and climb values.",
-    "Ctrls" to "Applies the edited category control sequence."
+    "Controls" to "Ordered controls for this category. Separate entries with spaces, commas, or semicolons. Use SI codes, defined control labels, or Public label values; suffix numeric SI codes with B for beacon or ! for spectator/separator where applicable."
 )
 
 private val CompetitorTableColumns = listOf(
@@ -228,13 +222,19 @@ private val CompetitorTableColumns = listOf(
     FixedTableColumn("Category", 136.dp),
     FixedTableColumn("Start no.", 86.dp),
     FixedTableColumn("Start time", 104.dp),
-    FixedTableColumn("SI no.", 110.dp),
-    FixedTableColumn("", 92.dp),
-    FixedTableColumn("", 92.dp),
-    FixedTableColumn("", 92.dp),
-    FixedTableColumn("", 92.dp),
-    FixedTableColumn("", 92.dp),
-    FixedTableColumn("", 92.dp)
+    FixedTableColumn("SI no.", 110.dp)
+)
+
+private val CompetitorTableColumnHints = mapOf(
+    "First" to "Competitor first or given name.",
+    "Last" to "Competitor last or family name.",
+    "Club" to "Club, society, school, or team used for reports and start-list fairness checks.",
+    "Index" to "Optional external registration index kept for imported data and exports.",
+    "Birth" to "Optional birth year.",
+    "Category" to "Competition category assigned to this competitor.",
+    "Start no." to "Competitor start number or bib number.",
+    "Start time" to "Drawn start time in minutes and seconds from the event start, such as 012:00.",
+    "SI no." to "SPORTident card number assigned to this competitor."
 )
 
 private val ResultTableColumns = listOf(
@@ -286,10 +286,10 @@ private val ControlTableColumns = listOf(
 )
 
 private val ControlTableColumnHints = mapOf(
-    "SI code" to "Physical SPORTident control code recorded by the station.",
+    "SI code" to "Physical SPORTident control code recorded by the station. Category control lists can refer to this code, the generated control label, or the Public label.",
     "Role" to "How this station is interpreted, such as control, start, finish, or beacon role.",
     "Mandatory" to "Requires this control for every applicable course when evaluating results.",
-    "Public label" to "Optional public-facing name used on tickets, readout displays, course lists, and exported results. If blank, Radio-Oracle uses the generated control label.",
+    "Public label" to "Optional public-facing name used on tickets, readout displays, course lists, and exported results. Short labels can also be typed in category Controls fields.",
     "Notes" to "Private organizer notes for this logical control."
 )
 
@@ -1159,6 +1159,25 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun importControlsCsv() {
+            DesktopFileDialogs.chooseImportCsv("Import Controls CSV")?.let { path ->
+                runCatching {
+                    val result = EventCsvImports.parseControlRows(Files.readString(path))
+                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.importControlRows(
+                            currentProject,
+                            result.rows,
+                            controlIdFactory = { UUID.randomUUID().toString() }
+                        )
+                    }
+                    syncProjectState()
+                    projectStatusText = importStatusText("Imported", result.rows.size, result.invalidLines.size, path.fileName.toString())
+                }.onFailure { error ->
+                    projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun importCompetitorStartsCsv() {
             DesktopFileDialogs.chooseImportCsv("Import Starts CSV")?.let { path ->
                 runCatching {
@@ -1389,11 +1408,14 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.SaveEventFileAs -> saveAsCurrentProject()
                 DesktopNavAction.CloseEventFile -> requestCloseEventFile()
                 DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
+                DesktopNavAction.ImportControlsCsv -> importControlsCsv()
                 DesktopNavAction.ImportCourseKmlKmz -> chooseImportCourseKmlKmz()
                 DesktopNavAction.ImportCompetitorsCsv -> importCompetitorsCsv()
                 DesktopNavAction.ImportStartsCsv -> importCompetitorStartsCsv()
                 DesktopNavAction.ExportEventFileCopy -> exportEventFileCopy()
                 DesktopNavAction.ExportCategoriesCsv -> exportCategoriesCsv()
+                DesktopNavAction.ExportControlsCsv ->
+                    exportCsv("Export Controls CSV", "controls", DesktopProjectFiles::exportControlsCsv)
                 DesktopNavAction.ExportCompetitorsCsv ->
                     exportCsv("Export Competitors CSV", "competitors", DesktopProjectFiles::exportCompetitorsCsv)
                 DesktopNavAction.ExportStartsCsv ->
@@ -2378,6 +2400,7 @@ private fun RadioOManagerDesktopApp(
         var navState by remember { mutableStateOf(DesktopNavState()) }
         var pendingNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
         var pendingDirtySubmenuNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
+        val navigationReadiness = DesktopNavigationReadiness.from(projectFile)
 
         fun selectionFor(intent: DesktopPendingNavigation): Pair<DesktopNavState, DesktopNavAction?> =
             when (intent) {
@@ -2441,7 +2464,7 @@ private fun RadioOManagerDesktopApp(
                 Row(modifier = Modifier.weight(1f)) {
                     NavigationRail(
                         navState = navState,
-                        hasEventFile = projectFile != null,
+                        navigationReadiness = navigationReadiness,
                         isNavActionEnabled = isNavActionEnabled,
                         onBack = { requestNavigation(DesktopPendingNavigation.Back) },
                         onSaveEvent = { onNavAction(DesktopNavAction.SaveEventFile) },
@@ -2517,7 +2540,7 @@ private fun RadioOManagerDesktopApp(
                         }
                         WorkflowBar(
                             selectedWorkflow = navState.workflow,
-                            hasEventFile = projectFile != null,
+                            navigationReadiness = navigationReadiness,
                             onWorkflowSelected = { workflow ->
                                 requestNavigation(DesktopPendingNavigation.Workflow(workflow))
                             }
@@ -2603,7 +2626,7 @@ private fun saveEventButtonColors() =
 @Composable
 private fun NavigationRail(
     navState: DesktopNavState,
-    hasEventFile: Boolean,
+    navigationReadiness: DesktopNavigationReadiness,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
     onBack: () -> Unit,
     onSaveEvent: () -> Unit,
@@ -2622,8 +2645,8 @@ private fun NavigationRail(
     ) {
         items.forEach { item ->
             val isSelected = item.id == navState.selectedItemId && item.children.isEmpty()
-            val hasRequiredEventFile = !item.requiresEventFile || hasEventFile
-            val isEnabled = hasRequiredEventFile && (item.action?.let(isNavActionEnabled) ?: true)
+            val isEnabled = DesktopNavigation.isItemEnabled(item, navigationReadiness) &&
+                (item.action?.let(isNavActionEnabled) ?: true)
             Button(
                 onClick = { onItemSelected(item) },
                 enabled = isEnabled,
@@ -2670,7 +2693,7 @@ private fun NavigationRail(
 @Composable
 private fun WorkflowBar(
     selectedWorkflow: DesktopWorkflow,
-    hasEventFile: Boolean,
+    navigationReadiness: DesktopNavigationReadiness,
     onWorkflowSelected: (DesktopWorkflow) -> Unit
 ) {
     Row(
@@ -2684,7 +2707,7 @@ private fun WorkflowBar(
     ) {
         DesktopWorkflow.bottomBarEntries.forEach { workflow ->
             val isSelected = workflow == selectedWorkflow
-            val isEnabled = !workflow.requiresEventFileInBottomBar || hasEventFile
+            val isEnabled = DesktopNavigation.isWorkflowEnabled(workflow, navigationReadiness)
             Button(
                 onClick = { onWorkflowSelected(workflow) },
                 enabled = isEnabled,
@@ -3977,7 +4000,7 @@ private fun CompetitorDetailsPanel(
                         siNumberDraft = siNumberDraft,
                         onSiNumberChange = { siNumberDraft = it }
                     )
-                    FixedDetailHeaderRow(CompetitorTableColumns)
+                    FixedDetailHeaderRow(CompetitorTableColumns, CompetitorTableColumnHints)
                 }
             }
         }
@@ -4100,12 +4123,6 @@ private fun CompetitorAddRow(
             singleLine = true,
             label = { Text("SI") }
         )
-        Spacer(modifier = Modifier.width(CompetitorTableColumns[9].width))
-        Spacer(modifier = Modifier.width(CompetitorTableColumns[10].width))
-        Spacer(modifier = Modifier.width(CompetitorTableColumns[11].width))
-        Spacer(modifier = Modifier.width(CompetitorTableColumns[12].width))
-        Spacer(modifier = Modifier.width(CompetitorTableColumns[13].width))
-        Spacer(modifier = Modifier.width(CompetitorTableColumns[14].width))
     }
 }
 
@@ -4138,19 +4155,33 @@ private fun CompetitorDetailRow(
     var selectedCategoryId by remember(competitor.id, competitor.categoryId) { mutableStateOf(competitor.categoryId) }
     fun applyPendingDrafts() {
         if (firstNameDraft != competitor.firstName || lastNameDraft != competitor.lastName) {
-            onRenameCompetitor(competitor.id, firstNameDraft, lastNameDraft)
+            if (firstNameDraft.isNotBlank() && lastNameDraft.isNotBlank()) {
+                onRenameCompetitor(competitor.id, firstNameDraft, lastNameDraft)
+            }
         }
         if (startNumberDraft != competitor.startNumberText || siNumberDraft != competitor.siNumberText) {
-            onUpdateCompetitorNumbers(competitor.id, startNumberDraft, siNumberDraft)
+            if (startNumberDraft.trim().toIntOrNull() != null &&
+                (siNumberDraft.isBlank() || siNumberDraft.trim().toIntOrNull() != null)
+            ) {
+                onUpdateCompetitorNumbers(competitor.id, startNumberDraft, siNumberDraft)
+            }
         }
         if (clubDraft != competitor.club || indexDraft != competitor.index) {
             onUpdateCompetitorClubIndex(competitor.id, clubDraft, indexDraft)
         }
         if (birthYearDraft != competitor.birthYearText) {
-            onUpdateCompetitorBirthYear(competitor.id, birthYearDraft)
+            if (birthYearDraft.isBlank() || birthYearDraft.trim().toIntOrNull() != null) {
+                onUpdateCompetitorBirthYear(competitor.id, birthYearDraft)
+            }
         }
         if (startTimeDraft != competitor.startTimeText) {
-            onUpdateCompetitorStartTime(competitor.id, startTimeDraft)
+            runCatching {
+                if (startTimeDraft.isNotBlank()) {
+                    DurationFormatter.minuteStringToSeconds(startTimeDraft)
+                }
+            }.onSuccess {
+                onUpdateCompetitorStartTime(competitor.id, startTimeDraft)
+            }
         }
         if (selectedCategoryId != competitor.categoryId) {
             onAssignCompetitorCategory(competitor.id, selectedCategoryId)
@@ -4167,35 +4198,56 @@ private fun CompetitorDetailRow(
     ) {
         TextField(
             value = firstNameDraft,
-            onValueChange = { firstNameDraft = it },
+            onValueChange = {
+                firstNameDraft = it
+                if (it.isNotBlank() && lastNameDraft.isNotBlank()) {
+                    onRenameCompetitor(competitor.id, it, lastNameDraft)
+                }
+            },
             modifier = Modifier.width(CompetitorTableColumns[0].width),
             singleLine = true,
             label = { Text("First") }
         )
         TextField(
             value = lastNameDraft,
-            onValueChange = { lastNameDraft = it },
+            onValueChange = {
+                lastNameDraft = it
+                if (firstNameDraft.isNotBlank() && it.isNotBlank()) {
+                    onRenameCompetitor(competitor.id, firstNameDraft, it)
+                }
+            },
             modifier = Modifier.width(CompetitorTableColumns[1].width),
             singleLine = true,
             label = { Text("Last") }
         )
         TextField(
             value = clubDraft,
-            onValueChange = { clubDraft = it },
+            onValueChange = {
+                clubDraft = it
+                onUpdateCompetitorClubIndex(competitor.id, it, indexDraft)
+            },
             modifier = Modifier.width(CompetitorTableColumns[2].width),
             singleLine = true,
             label = { Text("Club") }
         )
         TextField(
             value = indexDraft,
-            onValueChange = { indexDraft = it },
+            onValueChange = {
+                indexDraft = it
+                onUpdateCompetitorClubIndex(competitor.id, clubDraft, it)
+            },
             modifier = Modifier.width(CompetitorTableColumns[3].width),
             singleLine = true,
             label = { Text("Index") }
         )
         TextField(
             value = birthYearDraft,
-            onValueChange = { birthYearDraft = it },
+            onValueChange = {
+                birthYearDraft = it
+                if (it.isBlank() || it.trim().toIntOrNull() != null) {
+                    onUpdateCompetitorBirthYear(competitor.id, it)
+                }
+            },
             modifier = Modifier.width(CompetitorTableColumns[4].width),
             singleLine = true,
             label = { Text("Birth") }
@@ -4203,72 +4255,59 @@ private fun CompetitorDetailRow(
         CategoryPicker(
             selectedCategoryId = selectedCategoryId,
             categories = categories,
-            onCategorySelected = { selectedCategoryId = it },
+            onCategorySelected = {
+                selectedCategoryId = it
+                onAssignCompetitorCategory(competitor.id, it)
+            },
             modifier = Modifier.width(CompetitorTableColumns[5].width)
         )
         TextField(
             value = startNumberDraft,
-            onValueChange = { startNumberDraft = it },
+            onValueChange = {
+                startNumberDraft = it
+                if (it.trim().toIntOrNull() != null &&
+                    (siNumberDraft.isBlank() || siNumberDraft.trim().toIntOrNull() != null)
+                ) {
+                    onUpdateCompetitorNumbers(competitor.id, it, siNumberDraft)
+                }
+            },
             modifier = Modifier.width(CompetitorTableColumns[6].width),
             singleLine = true,
             label = { Text("Start") }
         )
         TextField(
             value = startTimeDraft,
-            onValueChange = { startTimeDraft = it },
+            onValueChange = {
+                startTimeDraft = it
+                runCatching {
+                    if (it.isBlank()) {
+                        true
+                    } else {
+                        DurationFormatter.minuteStringToSeconds(it)
+                        true
+                    }
+                }.onSuccess {
+                    onUpdateCompetitorStartTime(competitor.id, startTimeDraft)
+                }
+            },
             modifier = Modifier.width(CompetitorTableColumns[7].width),
             singleLine = true,
             label = { Text("mmm:ss") }
         )
         TextField(
             value = siNumberDraft,
-            onValueChange = { siNumberDraft = it },
+            onValueChange = {
+                siNumberDraft = it
+                if (startNumberDraft.trim().toIntOrNull() != null &&
+                    (it.isBlank() || it.trim().toIntOrNull() != null)
+                ) {
+                    onUpdateCompetitorNumbers(competitor.id, startNumberDraft, it)
+                }
+            },
             modifier = Modifier.width(CompetitorTableColumns[8].width),
             singleLine = true,
             label = { Text("SI") }
         )
-        Button(
-            onClick = { onRenameCompetitor(competitor.id, firstNameDraft, lastNameDraft) },
-            modifier = Modifier.width(CompetitorTableColumns[9].width),
-            enabled = firstNameDraft != competitor.firstName || lastNameDraft != competitor.lastName
-        ) {
-            ButtonLabel("Name")
-        }
-        Button(
-            onClick = { onUpdateCompetitorNumbers(competitor.id, startNumberDraft, siNumberDraft) },
-            modifier = Modifier.width(CompetitorTableColumns[10].width),
-            enabled = startNumberDraft != competitor.startNumberText || siNumberDraft != competitor.siNumberText
-        ) {
-            ButtonLabel("Nos.")
-        }
-        Button(
-            onClick = { onUpdateCompetitorClubIndex(competitor.id, clubDraft, indexDraft) },
-            modifier = Modifier.width(CompetitorTableColumns[11].width),
-            enabled = clubDraft != competitor.club || indexDraft != competitor.index
-        ) {
-            ButtonLabel("Info")
-        }
-        Button(
-            onClick = { onUpdateCompetitorBirthYear(competitor.id, birthYearDraft) },
-            modifier = Modifier.width(CompetitorTableColumns[12].width),
-            enabled = birthYearDraft != competitor.birthYearText
-        ) {
-            ButtonLabel("Birth")
-        }
-        Button(
-            onClick = { onUpdateCompetitorStartTime(competitor.id, startTimeDraft) },
-            modifier = Modifier.width(CompetitorTableColumns[13].width),
-            enabled = startTimeDraft != competitor.startTimeText
-        ) {
-            ButtonLabel("Start")
-        }
-        Button(
-            onClick = { onAssignCompetitorCategory(competitor.id, selectedCategoryId) },
-            modifier = Modifier.width(CompetitorTableColumns[14].width),
-            enabled = selectedCategoryId != competitor.categoryId
-        ) {
-            ButtonLabel("Cat.")
-        }
     }
 }
 
@@ -4927,9 +4966,6 @@ private fun CategoryAddRow(
         Spacer(modifier = Modifier.width(CategoryTableColumns[4].width))
         Spacer(modifier = Modifier.width(CategoryTableColumns[5].width))
         Spacer(modifier = Modifier.width(CategoryTableColumns[6].width))
-        Spacer(modifier = Modifier.width(CategoryTableColumns[7].width))
-        Spacer(modifier = Modifier.width(CategoryTableColumns[8].width))
-        Spacer(modifier = Modifier.width(CategoryTableColumns[9].width))
     }
 }
 
@@ -4951,6 +4987,15 @@ private fun CategoryDetailRow(
     var controlPointsDraft by remember(category.id, category.controlPointsText) {
         mutableStateOf(category.controlPointsText)
     }
+    fun applyPhysicalStats(nextLength: String = lengthMetersDraft, nextClimb: String = climbMetersDraft) {
+        if (
+            nextLength.trim().toIntOrNull() != null &&
+            nextClimb.trim().toIntOrNull() != null &&
+            (nextLength != category.lengthMetersText || nextClimb != category.climbMetersText)
+        ) {
+            onUpdateCategoryPhysicalStats(category.id, nextLength, nextClimb)
+        }
+    }
     Row(
         modifier = Modifier.width(fixedTableWidth(CategoryTableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
@@ -4958,21 +5003,32 @@ private fun CategoryDetailRow(
     ) {
         TextField(
             value = categoryNameDraft,
-            onValueChange = { categoryNameDraft = it },
+            onValueChange = {
+                categoryNameDraft = it
+                if (it.isNotBlank()) {
+                    onRenameCategory(category.id, it)
+                }
+            },
             modifier = Modifier.width(CategoryTableColumns[0].width),
             singleLine = true,
             label = { Text("Category") }
         )
         TextField(
             value = lengthMetersDraft,
-            onValueChange = { lengthMetersDraft = it },
+            onValueChange = {
+                lengthMetersDraft = it
+                applyPhysicalStats(nextLength = it)
+            },
             modifier = Modifier.width(CategoryTableColumns[1].width),
             singleLine = true,
             label = { Text("Length m") }
         )
         TextField(
             value = climbMetersDraft,
-            onValueChange = { climbMetersDraft = it },
+            onValueChange = {
+                climbMetersDraft = it
+                applyPhysicalStats(nextClimb = it)
+            },
             modifier = Modifier.width(CategoryTableColumns[2].width),
             singleLine = true,
             label = { Text("Climb m") }
@@ -4997,35 +5053,14 @@ private fun CategoryDetailRow(
         )
         TextField(
             value = controlPointsDraft,
-            onValueChange = { controlPointsDraft = it },
+            onValueChange = {
+                controlPointsDraft = it
+                onUpdateCategoryControlPoints(category.id, it)
+            },
             modifier = Modifier.width(CategoryTableColumns[6].width),
             singleLine = true,
             label = { Text("Controls") }
         )
-        Button(
-            onClick = { onRenameCategory(category.id, categoryNameDraft) },
-            modifier = Modifier.width(CategoryTableColumns[7].width),
-            enabled = categoryNameDraft != category.name
-        ) {
-            ButtonLabel("Apply")
-        }
-        Button(
-            onClick = {
-                onUpdateCategoryPhysicalStats(category.id, lengthMetersDraft, climbMetersDraft)
-            },
-            modifier = Modifier.width(CategoryTableColumns[8].width),
-            enabled = lengthMetersDraft != category.lengthMetersText ||
-                    climbMetersDraft != category.climbMetersText
-        ) {
-            ButtonLabel("Stats")
-        }
-        Button(
-            onClick = { onUpdateCategoryControlPoints(category.id, controlPointsDraft) },
-            modifier = Modifier.width(CategoryTableColumns[9].width),
-            enabled = controlPointsDraft != category.controlPointsText
-        ) {
-            ButtonLabel("Ctrls")
-        }
     }
 }
 

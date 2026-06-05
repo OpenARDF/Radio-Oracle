@@ -13,6 +13,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
@@ -79,6 +80,32 @@ class EventCsvExportsTest {
             123456;7;Test;Runner;M21;0;1985;OK Test;OK001;10:00;0;
             """.trimIndent() + "\n",
             EventCsvExports.competitors(raceData())
+        )
+    }
+
+    @Test
+    fun exportsControlRows() {
+        val raceData = raceData(
+            controls = listOf(
+                EventControl(
+                    id = "control-31",
+                    raceId = "race",
+                    label = "31",
+                    siCode = 31,
+                    type = ControlPointType.CONTROL,
+                    mandatory = true,
+                    publicLabel = "F1",
+                    notes = "first fox"
+                )
+            )
+        )
+
+        assertEquals(
+            """
+            si_code;role;mandatory;public_label;notes
+            31;Control;1;F1;first fox
+            """.trimIndent() + "\n",
+            EventCsvExports.controls(raceData)
         )
     }
 
@@ -172,7 +199,7 @@ class EventCsvExportsTest {
         )
     }
 
-    private fun raceData(): EventRaceData {
+    private fun raceData(controls: List<EventControl> = emptyList()): EventRaceData {
         val race = EventRace(
             id = "race",
             name = "CSV Race",
@@ -257,7 +284,8 @@ class EventCsvExportsTest {
                     readoutData = readout
                 )
             ),
-            unmatchedReadoutData = emptyList()
+            unmatchedReadoutData = emptyList(),
+            controls = controls
         )
     }
 

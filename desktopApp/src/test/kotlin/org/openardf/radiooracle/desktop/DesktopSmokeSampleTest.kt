@@ -249,6 +249,7 @@ class DesktopSmokeSampleTest {
         val projectFile = DesktopProjectFiles.read(source)
         val categories = directory.resolve("categories.csv")
         val competitors = directory.resolve("competitors.csv")
+        val controls = directory.resolve("controls.csv")
         val starts = directory.resolve("starts.csv")
         val startsByCategory = directory.resolve("starts-by-category.csv")
         val startsByMinute = directory.resolve("starts-by-minute.csv")
@@ -257,6 +258,7 @@ class DesktopSmokeSampleTest {
 
         DesktopProjectFiles.exportCategoriesCsv(categories, projectFile)
         DesktopProjectFiles.exportCompetitorsCsv(competitors, projectFile)
+        DesktopProjectFiles.exportControlsCsv(controls, projectFile)
         DesktopProjectFiles.exportCompetitorStartsCsv(starts, projectFile)
         DesktopProjectFiles.exportCompetitorStartsByCategoryCsv(startsByCategory, projectFile)
         DesktopProjectFiles.exportCompetitorStartsByMinuteCsv(startsByMinute, projectFile)
@@ -265,6 +267,7 @@ class DesktopSmokeSampleTest {
 
         assertEquals(2, Files.readAllLines(categories).size)
         assertEquals(3, Files.readAllLines(competitors).size)
+        assertTrue(Files.readString(controls).startsWith("si_code;role;mandatory;public_label;notes"))
         assertEquals(2, Files.readAllLines(starts).size)
         assertEquals(2, Files.readAllLines(startsByCategory).size)
         assertEquals(2, Files.readAllLines(startsByMinute).size)

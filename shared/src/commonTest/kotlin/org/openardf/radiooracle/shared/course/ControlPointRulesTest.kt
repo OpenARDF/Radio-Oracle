@@ -23,6 +23,20 @@ class ControlPointRulesTest {
     }
 
     @Test
+    fun acceptsCommonControlPointSeparators() {
+        val controlPoints = ControlPointRules.parseControlPoints("31, 32;36B", RaceType.CLASSIC)
+
+        assertEquals(
+            listOf(
+                ControlPointDefinition(31, ControlPointType.CONTROL, 1),
+                ControlPointDefinition(32, ControlPointType.CONTROL, 2),
+                ControlPointDefinition(36, ControlPointType.BEACON, 3)
+            ),
+            controlPoints
+        )
+    }
+
+    @Test
     fun rejectsUnknownSpecifiersAndOutOfRangeCodes() {
         assertEquals(
             ControlPointValidationError.UNKNOWN_SPECIFIER,

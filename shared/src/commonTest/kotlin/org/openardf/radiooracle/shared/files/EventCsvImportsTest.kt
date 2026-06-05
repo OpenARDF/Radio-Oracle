@@ -48,6 +48,26 @@ class EventCsvImportsTest {
     }
 
     @Test
+    fun parsesControlRows() {
+        val result = EventCsvImports.parseControlRows(
+            """
+            si_code;role;mandatory;public_label;notes
+            31;Control;1;F1;first fox
+            99;Beacon;false;M;finish beacon
+            """.trimIndent()
+        )
+
+        assertEquals(emptyList(), result.invalidLines)
+        assertEquals(2, result.rows.size)
+        assertEquals(31, result.rows[0].siCode)
+        assertEquals(org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL, result.rows[0].type)
+        assertTrue(result.rows[0].mandatory)
+        assertEquals("F1", result.rows[0].publicLabel)
+        assertEquals(org.openardf.radiooracle.shared.domain.ControlPointType.BEACON, result.rows[1].type)
+        assertFalse(result.rows[1].mandatory)
+    }
+
+    @Test
     fun reportsInvalidCategoryImportLines() {
         val result = EventCsvImports.parseAndroidCategoryRows(
             """

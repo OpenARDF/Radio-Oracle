@@ -24,7 +24,7 @@ class DesktopNavigationTest {
     @Test
     fun placesCurrentDesktopSectionsUnderWorkflowGroups() {
         assertEquals(
-            listOf("Event File", "Categories", "Competitors", "Start List"),
+            listOf("Event File", "Controls", "Categories", "Competitors", "Start List"),
             DesktopNavigation.rootItems(DesktopWorkflow.Setup).map { it.label }
         )
         assertEquals(
@@ -262,7 +262,6 @@ class DesktopNavigationTest {
                 "Import Android Event File...",
                 "Import EventReg Website...",
                 "Export Android Event File...",
-                "Controls",
                 "Settings",
                 "Save Event"
             ),
@@ -275,13 +274,73 @@ class DesktopNavigationTest {
         val setupItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
 
         assertFalse(setupItems.first { it.label == "Event File" }.requiresEventFile)
+        assertTrue(setupItems.first { it.label == "Controls" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Categories" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Competitors" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Start List" }.requiresEventFile)
     }
 
     @Test
-    fun eventFileMenuOwnsControlsAndDiagnostics() {
+    fun setupMenusAreEnabledInWorkflowOrder() {
+        val setupItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
+        val controls = setupItems.first { it.label == "Controls" }
+        val categories = setupItems.first { it.label == "Categories" }
+        val competitors = setupItems.first { it.label == "Competitors" }
+        val startList = setupItems.first { it.label == "Start List" }
+
+        val noEvent = DesktopNavigationReadiness()
+        assertFalse(DesktopNavigation.isItemEnabled(controls, noEvent))
+        assertFalse(DesktopNavigation.isItemEnabled(categories, noEvent))
+        assertFalse(DesktopNavigation.isItemEnabled(competitors, noEvent))
+        assertFalse(DesktopNavigation.isItemEnabled(startList, noEvent))
+
+        val eventOnly = DesktopNavigationReadiness(hasEventFile = true)
+        assertTrue(DesktopNavigation.isItemEnabled(controls, eventOnly))
+        assertFalse(DesktopNavigation.isItemEnabled(categories, eventOnly))
+        assertFalse(DesktopNavigation.isItemEnabled(competitors, eventOnly))
+        assertFalse(DesktopNavigation.isItemEnabled(startList, eventOnly))
+
+        val controlsEntered = eventOnly.copy(hasControls = true)
+        assertTrue(DesktopNavigation.isItemEnabled(categories, controlsEntered))
+        assertFalse(DesktopNavigation.isItemEnabled(competitors, controlsEntered))
+        assertFalse(DesktopNavigation.isItemEnabled(startList, controlsEntered))
+
+        val categoriesEntered = controlsEntered.copy(hasCategories = true)
+        assertTrue(DesktopNavigation.isItemEnabled(competitors, categoriesEntered))
+        assertFalse(DesktopNavigation.isItemEnabled(startList, categoriesEntered))
+
+        val competitorsAssigned = categoriesEntered.copy(
+            hasCompetitors = true,
+            hasAssignedCompetitors = true
+        )
+        assertTrue(DesktopNavigation.isItemEnabled(startList, competitorsAssigned))
+    }
+
+    @Test
+    fun workflowTabsAreEnabledAfterTheirPrerequisites() {
+        val setupComplete = DesktopNavigationReadiness(
+            hasEventFile = true,
+            hasControls = true,
+            hasCategories = true,
+            hasCompetitors = true,
+            hasAssignedCompetitors = true,
+            hasStartList = true
+        )
+
+        assertTrue(DesktopNavigation.isWorkflowEnabled(DesktopWorkflow.Setup, DesktopNavigationReadiness()))
+        assertFalse(DesktopNavigation.isWorkflowEnabled(DesktopWorkflow.RaceOps, setupComplete.copy(hasStartList = false)))
+        assertTrue(DesktopNavigation.isWorkflowEnabled(DesktopWorkflow.RaceOps, setupComplete))
+        assertFalse(DesktopNavigation.isWorkflowEnabled(DesktopWorkflow.ResultsExport, setupComplete))
+        assertTrue(
+            DesktopNavigation.isWorkflowEnabled(
+                DesktopWorkflow.ResultsExport,
+                setupComplete.copy(hasRaceOpsData = true)
+            )
+        )
+    }
+
+    @Test
+    fun eventFileMenuOwnsDiagnostics() {
         val eventFileItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
             .first { it.label == "Event File" }
             .children
@@ -293,35 +352,40 @@ class DesktopNavigationTest {
                 "Import Android Event File...",
                 "Import EventReg Website...",
                 "Export Android Event File...",
-                "Controls",
                 "Settings",
                 "Save Event"
             ),
             eventFileItems.map { it.label }
         )
-        assertTrue(eventFileItems.first { it.label == "Controls" }.requiresEventFile)
         assertTrue(eventFileItems.first { it.label == "Settings" }.requiresEventFile)
-        assertFalse(DesktopNavigation.rootItems(DesktopWorkflow.Setup).any { it.label == "Controls" })
         assertFalse(DesktopNavigation.rootItems(DesktopWorkflow.Setup).any { it.label == "Utils" })
     }
 
     @Test
-    fun categoryAndCompetitorCsvActionsLiveUnderTheirSetupSections() {
+    fun controlsCategoriesAndCompetitorCsvActionsLiveUnderTheirSetupSections() {
         val setupItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
+        val controlItems = setupItems.first { it.label == "Controls" }.children
         val categoryItems = setupItems.first { it.label == "Categories" }.children
         val competitorItems = setupItems.first { it.label == "Competitors" }.children
 
         assertEquals(
-            listOf("Protected Course Order", "Import Categories CSV...", "Import Course KML/KMZ...", "Export Categories CSV..."),
+            listOf("Define Controls", "Import Controls CSV...", "Import Course KML/KMZ...", "Export Controls CSV..."),
+            controlItems.map { it.label }
+        )
+        assertEquals(
+            listOf("Protected Course Order", "Import Categories CSV...", "Export Categories CSV..."),
             categoryItems.map { it.label }
         )
+        assertEquals(DesktopSection.Controls, controlItems.first { it.label == "Define Controls" }.section)
         assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Protected Course Order" }.section)
         assertEquals(
             listOf("Competitors", "Import Competitors CSV...", "Import EventReg Website...", "Export Competitors CSV..."),
             competitorItems.map { it.label }
         )
+        assertEquals(DesktopNavAction.ImportControlsCsv, controlItems.first { it.label == "Import Controls CSV..." }.action)
+        assertEquals(DesktopNavAction.ImportCourseKmlKmz, controlItems.first { it.label == "Import Course KML/KMZ..." }.action)
+        assertEquals(DesktopNavAction.ExportControlsCsv, controlItems.first { it.label == "Export Controls CSV..." }.action)
         assertEquals(DesktopNavAction.ImportCategoriesCsv, categoryItems.first { it.label == "Import Categories CSV..." }.action)
-        assertEquals(DesktopNavAction.ImportCourseKmlKmz, categoryItems.first { it.label == "Import Course KML/KMZ..." }.action)
         assertEquals(DesktopNavAction.ExportCategoriesCsv, categoryItems.first { it.label == "Export Categories CSV..." }.action)
         assertEquals(DesktopNavAction.ImportCompetitorsCsv, competitorItems.first { it.label == "Import Competitors CSV..." }.action)
         assertEquals(DesktopNavAction.ImportEventRegCompetitorsCsv, competitorItems.first { it.label == "Import EventReg Website..." }.action)

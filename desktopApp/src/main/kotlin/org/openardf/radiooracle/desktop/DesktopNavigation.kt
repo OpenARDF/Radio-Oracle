@@ -1,5 +1,7 @@
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.EventProjectFile
+
 private const val MaxSubmenuDepth = 2
 
 enum class DesktopWorkflow(
@@ -28,10 +30,12 @@ enum class DesktopNavAction {
     CloseEventFile,
     ImportCategoriesCsv,
     ImportCourseKmlKmz,
+    ImportControlsCsv,
     ImportCompetitorsCsv,
     ImportStartsCsv,
     ExportEventFileCopy,
     ExportCategoriesCsv,
+    ExportControlsCsv,
     ExportCompetitorsCsv,
     ExportStartsCsv,
     ExportStartsByCategoryCsv,
@@ -56,6 +60,47 @@ enum class DesktopNavAction {
     SendRobis,
     ShowDebugLogHelp,
     ShowAbout
+}
+
+data class DesktopNavigationReadiness(
+    val hasEventFile: Boolean = false,
+    val hasControls: Boolean = false,
+    val hasCategories: Boolean = false,
+    val hasCompetitors: Boolean = false,
+    val hasAssignedCompetitors: Boolean = false,
+    val hasStartList: Boolean = false,
+    val hasRaceOpsData: Boolean = false
+) {
+    val isSetupComplete: Boolean
+        get() = hasEventFile &&
+            hasControls &&
+            hasCategories &&
+            hasAssignedCompetitors &&
+            hasStartList
+
+    companion object {
+        fun from(projectFile: EventProjectFile?): DesktopNavigationReadiness {
+            val raceData = projectFile?.raceData ?: return DesktopNavigationReadiness()
+            val categoryIds = raceData.categories.map { it.category.id }.toSet()
+            val competitors = raceData.competitorData.map { it.competitorCategory.competitor }
+            val hasCompetitors = competitors.isNotEmpty()
+            val hasAssignedCompetitors = hasCompetitors &&
+                competitors.all { competitor ->
+                    competitor.categoryId != null && categoryIds.contains(competitor.categoryId)
+                }
+
+            return DesktopNavigationReadiness(
+                hasEventFile = true,
+                hasControls = raceData.controls.isNotEmpty(),
+                hasCategories = raceData.categories.isNotEmpty(),
+                hasCompetitors = hasCompetitors,
+                hasAssignedCompetitors = hasAssignedCompetitors,
+                hasStartList = hasCompetitors && competitors.all { it.drawnStartTimeSeconds != null },
+                hasRaceOpsData = raceData.competitorData.any { it.readoutData != null } ||
+                    raceData.unmatchedReadoutData.isNotEmpty()
+            )
+        }
+    }
 }
 
 data class DesktopNavItem(
@@ -150,6 +195,33 @@ object DesktopNavigation {
                     requiresEventFile = false
                 ),
                 group(
+                    "setup.controls",
+                    "Controls",
+                    workflow,
+                    listOf(
+                        item("setup.controls.define", "Define Controls", workflow, DesktopSection.Controls),
+                        action(
+                            "setup.controls.import",
+                            "Import Controls CSV...",
+                            workflow,
+                            DesktopNavAction.ImportControlsCsv
+                        ),
+                        action(
+                            "setup.controls.import-course-kml",
+                            "Import Course KML/KMZ...",
+                            workflow,
+                            DesktopNavAction.ImportCourseKmlKmz
+                        ),
+                        action(
+                            "setup.controls.export",
+                            "Export Controls CSV...",
+                            workflow,
+                            DesktopNavAction.ExportControlsCsv
+                        )
+                    ),
+                    DesktopSection.Controls
+                ),
+                group(
                     "setup.categories",
                     "Categories",
                     workflow,
@@ -165,12 +237,6 @@ object DesktopNavigation {
                             "Import Categories CSV...",
                             workflow,
                             DesktopNavAction.ImportCategoriesCsv
-                        ),
-                        action(
-                            "setup.categories.import-course-kml",
-                            "Import Course KML/KMZ...",
-                            workflow,
-                            DesktopNavAction.ImportCourseKmlKmz
                         ),
                         action(
                             "setup.categories.export",
@@ -369,6 +435,30 @@ object DesktopNavigation {
     fun itemById(workflow: DesktopWorkflow, id: String): DesktopNavItem? =
         allItems(workflow).firstOrNull { it.id == id }
 
+    fun isWorkflowEnabled(workflow: DesktopWorkflow, readiness: DesktopNavigationReadiness): Boolean =
+        when (workflow) {
+            DesktopWorkflow.Setup,
+            DesktopWorkflow.SettingsHelp -> true
+            DesktopWorkflow.RaceOps -> readiness.isSetupComplete
+            DesktopWorkflow.ResultsExport -> readiness.hasRaceOpsData
+        }
+
+    fun isItemEnabled(item: DesktopNavItem, readiness: DesktopNavigationReadiness): Boolean {
+        if (item.requiresEventFile && !readiness.hasEventFile) {
+            return false
+        }
+        return when {
+            item.id.startsWith("setup.categories") -> readiness.hasControls
+            item.id.startsWith("setup.competitors") -> readiness.hasControls && readiness.hasCategories
+            item.id.startsWith("setup.start-list") -> readiness.hasControls &&
+                readiness.hasCategories &&
+                readiness.hasAssignedCompetitors
+            item.workflow == DesktopWorkflow.RaceOps -> readiness.isSetupComplete || !item.requiresEventFile
+            item.workflow == DesktopWorkflow.ResultsExport -> readiness.hasRaceOpsData
+            else -> true
+        }
+    }
+
     fun shouldGuardUnsavedNewEventDraft(
         currentState: DesktopNavState,
         nextState: DesktopNavState,
@@ -483,7 +573,6 @@ object DesktopNavigation {
                 DesktopNavAction.ExportAndroidRaceBackupJson,
                 section = DesktopSection.EventFile
             ),
-            item("setup.event-file.controls", "Controls", workflow, DesktopSection.Controls),
             item(
                 "setup.event-file.diagnostics",
                 "Settings",

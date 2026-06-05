@@ -10,18 +10,31 @@ object ControlPointRules {
     const val BEACON_CONTROL_MARKER = 'B'
 
     /** Parses a user-entered control string and validates it for the selected race type. */
-    fun parseControlPoints(input: String, raceType: RaceType): List<ControlPointDefinition> {
+    fun parseControlPoints(
+        input: String,
+        raceType: RaceType,
+        tokenResolver: (String, Int) -> ControlPointDefinition? = { _, _ -> null }
+    ): List<ControlPointDefinition> {
         if (input.isEmpty()) {
             return emptyList()
         }
 
-        val controlPoints = input.split("\\s+".toRegex()).mapIndexed { index, token ->
-            parseControlPoint(index + 1, token)
+        val controlPoints = tokenizeControlPoints(input).mapIndexed { index, token ->
+            val order = index + 1
+            tokenResolver(token, order) ?: parseControlPoint(order, token)
         }
 
         validateControlSequence(controlPoints, raceType)
         return controlPoints
     }
+
+    /** Splits category course input on any supported user-facing separator. */
+    fun tokenizeControlPoints(input: String): List<String> =
+        input.trim()
+            .takeIf { it.isNotEmpty() }
+            ?.split(Regex("[,;\\s]+"))
+            ?.filter { it.isNotEmpty() }
+            ?: emptyList()
 
     /** Formats parsed control definitions back into the compact user-facing course string. */
     fun formatControlPoints(controlPoints: List<ControlPointDefinition>): String {
