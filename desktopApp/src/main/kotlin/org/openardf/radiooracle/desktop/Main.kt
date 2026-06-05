@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -266,6 +267,8 @@ fun main(args: Array<String>) = application {
         var raceClockTick by remember { mutableStateOf(0L) }
         var printerDiagnostics by remember { mutableStateOf(DesktopPrinterDiagnostics.from(emptyList())) }
         var lastLoggedSiReaderStatus by remember { mutableStateOf<String?>(null) }
+        var protectedCoursePassword by remember { mutableStateOf<String?>(null) }
+        var protectedIdealOrderByCategoryId by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
         val siPortMutex = remember { Mutex() }
 
         LaunchedEffect(Unit) {
@@ -321,8 +324,19 @@ fun main(args: Array<String>) = application {
         fun hasProtectedUnsavedChanges(): Boolean =
             hasUnsavedChanges && !isDefaultUnsavedNewEventFileDraft()
 
+        fun lockProtectedCourseOrder() {
+            protectedCoursePassword = null
+            protectedIdealOrderByCategoryId = emptyMap()
+        }
+
+        fun unlockedIdealFirstFoxByCategoryId(): Map<String, Int> =
+            protectedIdealOrderByCategoryId.mapNotNull { (categoryId, idealOrderText) ->
+                protectedIdealFirstFox(idealOrderText)?.let { categoryId to it }
+            }.toMap()
+
         fun openProject(path: Path) {
             runCatching {
+                lockProtectedCourseOrder()
                 projectFile = projectSession.open(path)
                 newEventDraftProject = null
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
@@ -336,6 +350,7 @@ fun main(args: Array<String>) = application {
 
         fun closeProject(discardUnsavedChanges: Boolean = false) {
             runCatching {
+                lockProtectedCourseOrder()
                 projectSession.closeProject(discardUnsavedChanges)
                 newEventDraftProject = null
                 syncProjectState()
@@ -348,6 +363,7 @@ fun main(args: Array<String>) = application {
         }
 
         fun createNewProject() {
+            lockProtectedCourseOrder()
             val project = EventProjectFactory.createEmptyProject(
                 raceId = UUID.randomUUID().toString(),
                 raceName = "New Event",
@@ -668,8 +684,74 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun exportCategoriesCsv() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportCsv("Export Categories CSV", currentProject.raceData.race.name, "categories")?.let { path ->
+                runCatching {
+                    DesktopProjectFiles.exportCategoriesCsv(
+                        path,
+                        currentProject,
+                        includeEncryptedIdealOrder = protectedCoursePassword != null
+                    )
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
+        fun unlockProtectedCourseOrder(password: String): Boolean {
+            val currentProject = projectSession.currentProject ?: return false
+            val trimmedPassword = password.trim()
+            if (trimmedPassword.isEmpty()) {
+                projectStatusText = "Protected course order password cannot be blank."
+                return false
+            }
+
+            val decrypted = runCatching {
+                currentProject.raceData.categories.associate { categoryData ->
+                    val encryptedValue = categoryData.category.encryptedIdealOrder
+                    categoryData.category.id to if (encryptedValue.isNullOrBlank()) {
+                        ""
+                    } else {
+                        DesktopProtectedCourseOrder.decrypt(encryptedValue, trimmedPassword)
+                    }
+                }
+            }.getOrElse { error ->
+                projectStatusText = error.message ?: "Protected course order unlock failed."
+                return false
+            }
+
+            protectedCoursePassword = trimmedPassword
+            protectedIdealOrderByCategoryId = decrypted
+            projectStatusText = "Protected course order unlocked."
+            return true
+        }
+
+        fun updateProtectedIdealOrder(categoryId: String, idealOrderText: String) {
+            val password = protectedCoursePassword ?: run {
+                projectStatusText = "Unlock protected course order before editing."
+                return
+            }
+            runCatching {
+                val encryptedIdealOrder = idealOrderText.trim().takeIf { it.isNotEmpty() }?.let {
+                    DesktopProtectedCourseOrder.encrypt(it, password)
+                }
+                projectFile = projectSession.updateCurrentProject { currentProject ->
+                    EventProjectEditor.updateCategoryEncryptedIdealOrder(currentProject, categoryId, encryptedIdealOrder)
+                }
+                protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId + (categoryId to idealOrderText.trim())
+                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                projectStatusText = "Unsaved changes."
+            }.onFailure { error ->
+                projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
         fun importAndroidRaceBackupJson(path: Path) {
             runCatching {
+                lockProtectedCourseOrder()
                 val imported = DesktopProjectFiles.importAndroidRaceBackupJson(path) { UUID.randomUUID().toString() }
                 projectFile = projectSession.newProject(imported)
                 newEventDraftProject = null
@@ -830,6 +912,7 @@ fun main(args: Array<String>) = application {
         fun importCategoriesCsv() {
             DesktopFileDialogs.chooseImportCsv("Import Categories CSV")?.let { path ->
                 runCatching {
+                    lockProtectedCourseOrder()
                     val result = EventCsvImports.parseAndroidCategoryRows(Files.readString(path))
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.importCategoryRows(
@@ -996,8 +1079,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportCompetitorsCsv -> importCompetitorsCsv()
                 DesktopNavAction.ImportStartsCsv -> importCompetitorStartsCsv()
                 DesktopNavAction.ExportEventFileCopy -> exportEventFileCopy()
-                DesktopNavAction.ExportCategoriesCsv ->
-                    exportCsv("Export Categories CSV", "categories", DesktopProjectFiles::exportCategoriesCsv)
+                DesktopNavAction.ExportCategoriesCsv -> exportCategoriesCsv()
                 DesktopNavAction.ExportCompetitorsCsv ->
                     exportCsv("Export Competitors CSV", "competitors", DesktopProjectFiles::exportCompetitorsCsv)
                 DesktopNavAction.ExportStartsCsv ->
@@ -1109,6 +1191,11 @@ fun main(args: Array<String>) = application {
             raceClockTick = raceClockTick,
             isNavActionEnabled = ::isNavActionEnabled,
             onNavAction = ::handleNavAction,
+            isProtectedCourseOrderUnlocked = protectedCoursePassword != null,
+            protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+            onUnlockProtectedCourseOrder = ::unlockProtectedCourseOrder,
+            onUpdateProtectedIdealOrder = ::updateProtectedIdealOrder,
+            onLockProtectedCourseOrder = ::lockProtectedCourseOrder,
             onRenameRace = { name ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -1273,8 +1360,11 @@ fun main(args: Array<String>) = application {
             },
             onDrawStartList = { interval, options ->
                 runCatching {
+                    val protectedOptions = options.copy(
+                        idealFirstFoxByCategoryId = unlockedIdealFirstFoxByCategoryId()
+                    )
                     val drawnProject = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.drawStartList(currentProject, interval, options)
+                        EventProjectEditor.drawStartList(currentProject, interval, protectedOptions)
                     }
                     projectFile = drawnProject
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
@@ -1687,6 +1777,11 @@ private fun RadioOManagerDesktopApp(
     onSetAliasesEnabled: (Boolean) -> Unit = {},
     onStartLocalResultServer: () -> Unit = {},
     onStopLocalResultServer: () -> Unit = {},
+    isProtectedCourseOrderUnlocked: Boolean = false,
+    protectedIdealOrderByCategoryId: Map<String, String> = emptyMap(),
+    onUnlockProtectedCourseOrder: (String) -> Boolean = { false },
+    onUpdateProtectedIdealOrder: (String, String) -> Unit = { _, _ -> },
+    onLockProtectedCourseOrder: () -> Unit = {},
     isNavActionEnabled: (DesktopNavAction) -> Boolean = { false },
     onNavAction: (DesktopNavAction) -> Unit = {},
     hasDefaultUnsavedNewEventFileDraft: Boolean = false,
@@ -1730,6 +1825,9 @@ private fun RadioOManagerDesktopApp(
         fun requestNavigation(intent: DesktopPendingNavigation) {
             val (nextState, action) = selectionFor(intent)
             val shouldBypassGuard = action == DesktopNavAction.SaveEventFile
+            if (isProtectedCourseOrderUnlocked && DesktopNavigation.isLeavingCategoriesMenu(navState, nextState)) {
+                onLockProtectedCourseOrder()
+            }
             if (
                 !shouldBypassGuard &&
                 DesktopNavigation.shouldGuardUnsavedNewEventDraft(
@@ -1820,7 +1918,11 @@ private fun RadioOManagerDesktopApp(
                                 onSetReadoutAlertSoundEnabled = onSetReadoutAlertSoundEnabled,
                                 onSetAliasesEnabled = onSetAliasesEnabled,
                                 onStartLocalResultServer = onStartLocalResultServer,
-                                onStopLocalResultServer = onStopLocalResultServer
+                                onStopLocalResultServer = onStopLocalResultServer,
+                                isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
+                                protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+                                onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
+                                onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder
                             )
                         }
                         WorkflowBar(
@@ -2041,7 +2143,11 @@ private fun SectionWorkspace(
     onSetReadoutAlertSoundEnabled: (Boolean) -> Unit,
     onSetAliasesEnabled: (Boolean) -> Unit,
     onStartLocalResultServer: () -> Unit,
-    onStopLocalResultServer: () -> Unit
+    onStopLocalResultServer: () -> Unit,
+    isProtectedCourseOrderUnlocked: Boolean,
+    protectedIdealOrderByCategoryId: Map<String, String>,
+    onUnlockProtectedCourseOrder: (String) -> Boolean,
+    onUpdateProtectedIdealOrder: (String, String) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -2086,6 +2192,15 @@ private fun SectionWorkspace(
                 onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
                 onAddCategory = onAddCategory,
                 onRemoveCategory = onRemoveCategory
+            )
+        }
+        if (section == DesktopSection.ProtectedCourseOrder && projectFile != null) {
+            ProtectedCourseOrderPanel(
+                projectFile = projectFile,
+                isUnlocked = isProtectedCourseOrderUnlocked,
+                idealOrderByCategoryId = protectedIdealOrderByCategoryId,
+                onUnlock = onUnlockProtectedCourseOrder,
+                onUpdateIdealOrder = onUpdateProtectedIdealOrder
             )
         }
         if (section == DesktopSection.Competitors && projectFile != null) {
@@ -3794,6 +3909,92 @@ private fun CategoryDetailsPanel(
     }
 }
 
+@Composable
+private fun ProtectedCourseOrderPanel(
+    projectFile: EventProjectFile,
+    isUnlocked: Boolean,
+    idealOrderByCategoryId: Map<String, String>,
+    onUnlock: (String) -> Boolean,
+    onUpdateIdealOrder: (String, String) -> Unit
+) {
+    var passwordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
+
+    if (!isUnlocked) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = passwordDraft,
+                onValueChange = { passwordDraft = it },
+                label = { Text("Password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.width(260.dp)
+            )
+            Button(
+                onClick = {
+                    if (onUnlock(passwordDraft)) {
+                        passwordDraft = ""
+                    }
+                },
+                enabled = passwordDraft.isNotBlank()
+            ) {
+                ButtonLabel("Unlock")
+            }
+        }
+        return
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        DetailHeaderRow(listOf("Category", "Protected ideal order"))
+        projectFile.raceData.categories
+            .sortedWith(compareBy({ it.category.order }, { it.category.name }))
+            .forEach { categoryData ->
+                ProtectedCourseOrderRow(
+                    categoryId = categoryData.category.id,
+                    categoryName = categoryData.category.name,
+                    idealOrderText = idealOrderByCategoryId[categoryData.category.id].orEmpty(),
+                    onUpdateIdealOrder = onUpdateIdealOrder
+                )
+            }
+    }
+}
+
+@Composable
+private fun ProtectedCourseOrderRow(
+    categoryId: String,
+    categoryName: String,
+    idealOrderText: String,
+    onUpdateIdealOrder: (String, String) -> Unit
+) {
+    var idealOrderDraft by remember(categoryId, idealOrderText) { mutableStateOf(idealOrderText) }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = categoryName,
+            modifier = Modifier.width(160.dp),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        TextField(
+            value = idealOrderDraft,
+            onValueChange = { idealOrderDraft = it },
+            modifier = Modifier.width(360.dp),
+            singleLine = true,
+            label = { Text("Ideal order") }
+        )
+        Button(
+            onClick = { onUpdateIdealOrder(categoryId, idealOrderDraft) },
+            enabled = idealOrderDraft.trim() != idealOrderText
+        ) {
+            ButtonLabel("Save")
+        }
+    }
+}
+
 /** Shows the new-category entry row above existing category definitions. */
 @Composable
 private fun CategoryAddRow(
@@ -4451,6 +4652,13 @@ private fun categoryControlPointErrorText(error: Throwable): String =
 private fun genericEditErrorText(error: Throwable): String =
     error.message ?: error::class.simpleName ?: "Unknown error"
 
+private fun protectedIdealFirstFox(idealOrderText: String): Int? =
+    idealOrderText
+        .split(Regex("""[\s,;]+"""))
+        .firstOrNull { it.isNotBlank() }
+        ?.trim()
+        ?.toIntOrNull()
+
 private fun fixedTableWidth(columns: List<FixedTableColumn>): Dp =
     columns.fold(0.dp) { total, column -> total + column.width } +
             TableColumnGap * (columns.size - 1)
@@ -4675,6 +4883,8 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
         DesktopSection.Races -> summary?.raceName ?: "Create a new Event File or open an existing one to begin."
         DesktopSection.Categories -> summary?.let { "${it.categoryCount} categories loaded." }
             ?: requiresEventFile("editing categories")
+        DesktopSection.ProtectedCourseOrder -> summary?.let { "${it.categoryCount} categories loaded." }
+            ?: requiresEventFile("editing protected course order")
         DesktopSection.Competitors -> summary?.let { "${it.competitorCount} competitors loaded." }
             ?: requiresEventFile("editing competitors")
         DesktopSection.StartList -> summary?.let { "Competitors sorted by drawn start time." }

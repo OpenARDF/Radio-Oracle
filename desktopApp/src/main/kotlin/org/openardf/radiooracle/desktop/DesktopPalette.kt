@@ -47,6 +47,7 @@ enum class DesktopSection(val label: String) {
     EventFile("Event File"),
     Races("Races"),
     Categories("Categories"),
+    ProtectedCourseOrder("Protected Course Order"),
     Competitors("Competitors"),
     StartList("Start List"),
     Aliases("Aliases"),

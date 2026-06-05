@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.shared.event
 
 import org.openardf.radiooracle.shared.course.ControlPointDisplayToken
+import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.time.DurationFormatter
@@ -44,12 +45,21 @@ data class EventCategoryDetails(
             raceType: RaceType,
             useAliases: Boolean
         ): String {
-            if (raceType == RaceType.ORIENTEERING) {
-                return category.controlPointsString
-            }
             val aliasesByCode = raceData.aliases.associateBy { it.siCode }
+            val sortedControlPoints = if (useAliases && raceType != RaceType.ORIENTEERING) {
+                controlPoints.sortedWith(compareBy({ aliasesByCode[it.siCode]?.name ?: it.siCode.toString() }, { it.siCode }))
+            } else {
+                controlPoints.sortedBy { it.siCode }
+            }
+            if (!useAliases || raceType == RaceType.ORIENTEERING) {
+                return ControlPointRules.formatControlPoints(
+                    sortedControlPoints.map {
+                        ControlPointDefinition(it.siCode, it.type, it.order)
+                    }
+                )
+            }
             return ControlPointRules.formatDisplayTokens(
-                controlPoints.map { controlPoint ->
+                sortedControlPoints.map { controlPoint ->
                     ControlPointDisplayToken(
                         siCode = controlPoint.siCode,
                         aliasName = aliasesByCode[controlPoint.siCode]?.name

@@ -12,6 +12,7 @@ class DesktopPaletteTest {
                 "Event File",
                 "Races",
                 "Categories",
+                "Protected Course Order",
                 "Competitors",
                 "Start List",
                 "Aliases",

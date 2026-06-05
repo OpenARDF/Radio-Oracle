@@ -151,7 +151,12 @@ object DesktopNavigation {
                     "Categories",
                     workflow,
                     listOf(
-                        item("setup.categories.view", "Categories", workflow, DesktopSection.Categories),
+                        item(
+                            "setup.categories.protected-course-order",
+                            "Protected Course Order",
+                            workflow,
+                            DesktopSection.ProtectedCourseOrder
+                        ),
                         action(
                             "setup.categories.import",
                             "Import Categories CSV...",
@@ -337,7 +342,7 @@ object DesktopNavigation {
     fun selectItem(state: DesktopNavState, item: DesktopNavItem): DesktopNavSelection =
         when {
             item.children.isNotEmpty() -> DesktopNavSelection(state.enter(item))
-            item.action != null -> DesktopNavSelection(state.enter(item), item.action)
+            item.action != null -> DesktopNavSelection(if (item.section == null) state else state.enter(item), item.action)
             item.section != null -> DesktopNavSelection(state.enter(item))
             else -> DesktopNavSelection(state)
         }
@@ -359,6 +364,10 @@ object DesktopNavigation {
 
     fun isLeavingNewEventFilePage(currentState: DesktopNavState, nextState: DesktopNavState): Boolean =
         currentState.selectedItemId == "setup.event-file.new" && currentState != nextState
+
+    fun isLeavingCategoriesMenu(currentState: DesktopNavState, nextState: DesktopNavState): Boolean =
+        currentState.submenuStack.contains("setup.categories") &&
+            !nextState.submenuStack.contains("setup.categories")
 
     fun breadcrumb(state: DesktopNavState): String {
         val labels = mutableListOf(state.workflow.label)
@@ -439,7 +448,7 @@ object DesktopNavigation {
                 DesktopNavAction.ExportAndroidRaceBackupJson,
                 section = DesktopSection.EventFile
             ),
-            action("setup.event-file.save", "Save", workflow, DesktopNavAction.SaveEventFile, section = DesktopSection.EventFile),
+            action("setup.event-file.save", "Save", workflow, DesktopNavAction.SaveEventFile),
             item("setup.event-file.aliases", "Aliases", workflow, DesktopSection.Aliases),
             item(
                 "setup.event-file.diagnostics",

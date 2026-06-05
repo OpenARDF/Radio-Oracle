@@ -30,8 +30,8 @@ object DesktopProjectFiles : ProjectFileStore {
     fun importAndroidRaceBackupJson(path: Path, idFactory: () -> String): EventProjectFile =
         RaceBackupJsonImports.projectFile(Files.readString(path, StandardCharsets.UTF_8), idFactory)
 
-    fun exportCategoriesCsv(path: Path, projectFile: EventProjectFile) {
-        writeText(path, EventCsvExports.categories(projectFile.raceData))
+    fun exportCategoriesCsv(path: Path, projectFile: EventProjectFile, includeEncryptedIdealOrder: Boolean = false) {
+        writeText(path, EventCsvExports.categories(projectFile.raceData, includeEncryptedIdealOrder))
     }
 
     fun exportCompetitorsCsv(path: Path, projectFile: EventProjectFile) {

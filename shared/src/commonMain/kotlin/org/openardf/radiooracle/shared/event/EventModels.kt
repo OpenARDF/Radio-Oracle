@@ -37,7 +37,8 @@ data class EventCategory(
     val raceType: RaceType?,
     val raceBand: RaceBand?,
     val timeLimitSeconds: Long?,
-    val controlPointsString: String
+    val controlPointsString: String,
+    val encryptedIdealOrder: String? = null
 ) {
     /** Returns the race type that should be used for this category. */
     fun effectiveRaceType(race: EventRace): RaceType =

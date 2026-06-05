@@ -50,7 +50,8 @@ data class CategoryCsvImportRow(
     val raceType: RaceType?,
     val timeLimitMinutes: Long?,
     val raceBand: RaceBand?,
-    val controlPointsText: String
+    val controlPointsText: String,
+    val encryptedIdealOrder: String? = null
 )
 
 /** Shared parsers for CSV import formats currently accepted by Android and desktop. */
@@ -147,8 +148,8 @@ object EventCsvImports {
     }
 
     private fun parseAndroidCategoryRow(fields: List<String>, lineIndex: Int): CategoryCsvImportRow {
-        require(fields.size == EventCsvFormat.Category.COLUMN_COUNT) {
-            "Expected ${EventCsvFormat.Category.COLUMN_COUNT} columns at line: $lineIndex"
+        require(fields.size >= EventCsvFormat.Category.COLUMN_COUNT) {
+            "Expected at least ${EventCsvFormat.Category.COLUMN_COUNT} columns at line: $lineIndex"
         }
 
         val name = fields[EventCsvFormat.Category.NAME].trim()
@@ -174,7 +175,10 @@ object EventCsvImports {
             raceType = raceType,
             timeLimitMinutes = timeLimitMinutes,
             raceBand = raceBand,
-            controlPointsText = EventCsvFormat.Category.controlPointsFrom(fields)
+            controlPointsText = EventCsvFormat.Category.controlPointsFrom(fields),
+            encryptedIdealOrder = fields.getOrNull(EventCsvFormat.Category.ENCRYPTED_IDEAL_ORDER)
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
         )
     }
 

@@ -6,7 +6,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class StartDrawOptions(
     val clubHandling: StartDrawClubHandling = StartDrawClubHandling.AVOID_BACK_TO_BACK,
-    val startersPerStartTime: Int = 1
+    val startersPerStartTime: Int = 1,
+    val idealFirstFoxByCategoryId: Map<String, Int> = emptyMap()
 ) {
     init {
         require(startersPerStartTime in MIN_STARTERS_PER_START_TIME..MAX_STARTERS_PER_START_TIME) {

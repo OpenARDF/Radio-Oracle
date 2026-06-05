@@ -3,7 +3,6 @@ package org.openardf.radiooracle.shared.event
 import org.openardf.radiooracle.shared.alias.AliasRules
 import org.openardf.radiooracle.shared.alias.AliasValidationResult
 import org.openardf.radiooracle.shared.course.ControlPointRules
-import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -303,6 +302,34 @@ object EventProjectEditor {
         )
     }
 
+    /** Returns a copy of the Event File with one category's encrypted protected course order changed. */
+    fun updateCategoryEncryptedIdealOrder(
+        projectFile: EventProjectFile,
+        categoryId: String,
+        encryptedIdealOrder: String?
+    ): EventProjectFile {
+        var foundCategory = false
+        val categories = projectFile.raceData.categories.map { categoryData ->
+            if (categoryData.category.id == categoryId) {
+                foundCategory = true
+                categoryData.copy(
+                    category = categoryData.category.copy(
+                        encryptedIdealOrder = encryptedIdealOrder?.trim()?.takeIf { it.isNotEmpty() }
+                    )
+                )
+            } else {
+                categoryData
+            }
+        }
+        require(foundCategory) {
+            "Category was not found: $categoryId"
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(categories = categories)
+        )
+    }
+
     /** Returns a copy of the Event File with one competitor's validated name changed. */
     fun renameCompetitor(
         projectFile: EventProjectFile,
@@ -585,7 +612,7 @@ object EventProjectEditor {
                 } else {
                     CategoryStartQueue(
                         category = categoryData.category,
-                        firstFox = categoryData.firstFoxSiCode(),
+                        firstFox = options.idealFirstFoxByCategoryId[categoryData.category.id],
                         speedGroup = categoryData.category.startDrawSpeedGroup(),
                         competitors = drawnCompetitors.toMutableList()
                     )
@@ -749,7 +776,8 @@ object EventProjectEditor {
                 raceType = row.raceType,
                 raceBand = row.raceBand,
                 timeLimitSeconds = row.timeLimitMinutes?.times(60),
-                controlPointsString = ""
+                controlPointsString = "",
+                encryptedIdealOrder = row.encryptedIdealOrder
             )
             val definitions = ControlPointRules.parseControlPoints(
                 input = row.controlPointsText,
@@ -2063,13 +2091,6 @@ object EventProjectEditor {
         compareBy<CategoryStartQueue> { it.category.order }
             .thenBy { it.category.name }
             .thenBy { it.competitors.firstOrNull()?.startNumber ?: Int.MAX_VALUE }
-
-    private fun EventCategoryData.firstFoxSiCode(): Int? =
-        controlPoints
-            .filter { it.type == ControlPointType.CONTROL }
-            .sortedBy { it.order }
-            .firstOrNull()
-            ?.siCode
 
     private fun EventCategory.startDrawSpeedGroup(): StartDrawSpeedGroup? {
         val ageClass = Regex("""\d+""").find(name)?.value?.toIntOrNull() ?: return null

@@ -1493,7 +1493,13 @@ class EventProjectEditorTest {
         val drawn = EventProjectEditor.drawStartList(
             original,
             "01:00",
-            StartDrawOptions(startersPerStartTime = 2)
+            StartDrawOptions(
+                startersPerStartTime = 2,
+                idealFirstFoxByCategoryId = mapOf(
+                    m21.id to 31,
+                    m40.id to 31
+                )
+            )
         )
 
         assertEquals(0L, drawn.startTimeFor("m21-a"))
@@ -1519,7 +1525,13 @@ class EventProjectEditorTest {
         val drawn = EventProjectEditor.drawStartList(
             original,
             "01:00",
-            StartDrawOptions(startersPerStartTime = 2)
+            StartDrawOptions(
+                startersPerStartTime = 2,
+                idealFirstFoxByCategoryId = mapOf(
+                    m21.id to 31,
+                    m40.id to 31
+                )
+            )
         )
 
         assertEquals(0L, drawn.startTimeFor("m21-a"))

@@ -42,6 +42,36 @@ class EventCsvExportsTest {
     }
 
     @Test
+    fun lockedCategoryExportOmitsEncryptedIdealOrderColumn() {
+        val raceData = raceData().withEncryptedIdealOrder("ro-ideal-v1:test")
+
+        assertEquals(
+            "M21;1;99;5000;100;1;;;;2;31,32\n",
+            EventCsvExports.categories(raceData)
+        )
+    }
+
+    @Test
+    fun unlockedCategoryExportIncludesEncryptedIdealOrderColumn() {
+        val raceData = raceData().withEncryptedIdealOrder("ro-ideal-v1:test")
+
+        assertEquals(
+            "M21;1;99;5000;100;1;;;;2;31,32;ro-ideal-v1:test\n",
+            EventCsvExports.categories(raceData, includeEncryptedIdealOrder = true)
+        )
+    }
+
+    @Test
+    fun categoryImportAcceptsEncryptedIdealOrderColumn() {
+        val result = EventCsvImports.parseAndroidCategoryRows(
+            "M21;1;99;5000;100;1;;;;2;31,32;ro-ideal-v1:test\n"
+        )
+
+        assertEquals(emptyList(), result.invalidLines)
+        assertEquals("ro-ideal-v1:test", result.rows.single().encryptedIdealOrder)
+    }
+
+    @Test
     fun exportsPortableCompetitorRows() {
         assertEquals(
             """
@@ -230,6 +260,17 @@ class EventCsvExportsTest {
             unmatchedReadoutData = emptyList()
         )
     }
+
+    private fun EventRaceData.withEncryptedIdealOrder(value: String): EventRaceData =
+        copy(
+            categories = categories.mapIndexed { index, categoryData ->
+                if (index == 0) {
+                    categoryData.copy(category = categoryData.category.copy(encryptedIdealOrder = value))
+                } else {
+                    categoryData
+                }
+            }
+        )
 
     private fun startVariantRaceData(): EventRaceData {
         val race = EventRace(

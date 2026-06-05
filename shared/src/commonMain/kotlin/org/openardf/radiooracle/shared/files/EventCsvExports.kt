@@ -12,20 +12,25 @@ import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** Shared semicolon-delimited CSV export builders for portable Event Files. */
 object EventCsvExports {
-    fun categories(raceData: EventRaceData): String =
+    fun categories(raceData: EventRaceData, includeEncryptedIdealOrder: Boolean = false): String =
         raceData.categories
             .sortedWith(compareBy({ it.category.order }, { it.category.name }))
             .joinRows { categoryData ->
                 val controlPoints = categoryData.controlPoints
-                    .sortedBy { it.order }
+                    .sortedBy { it.siCode }
                     .map {
                         ControlPointRules.formatControlPoints(
                             listOf(ControlPointDefinition(it.siCode, it.type, it.order))
                         )
                     }
                     .joinToString(EventCsvFormat.CONTROL_POINT_DELIMITER.toString())
-                "${EventCsvRows.categoryRow(categoryData.category)}${EventCsvFormat.DELIMITER}" +
+                val publicFields = "${EventCsvRows.categoryRow(categoryData.category)}${EventCsvFormat.DELIMITER}" +
                         "${categoryData.controlPoints.size}${EventCsvFormat.DELIMITER}$controlPoints"
+                if (includeEncryptedIdealOrder) {
+                    "$publicFields${EventCsvFormat.DELIMITER}${categoryData.category.encryptedIdealOrder ?: ""}"
+                } else {
+                    publicFields
+                }
             }
 
     fun competitors(raceData: EventRaceData): String =

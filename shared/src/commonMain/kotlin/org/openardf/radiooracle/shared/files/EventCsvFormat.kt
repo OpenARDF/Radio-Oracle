@@ -20,6 +20,7 @@ object EventCsvFormat {
         const val ANDROID_IMPORT_CONTROL_POINTS = 9
         const val EXPORTED_CONTROL_COUNT = 9
         const val EXPORTED_CONTROL_POINTS = 10
+        const val ENCRYPTED_IDEAL_ORDER = 11
 
         fun controlPointsFrom(fields: List<String>): String {
             val exportedControlPoints = fields[EXPORTED_CONTROL_POINTS].trim()

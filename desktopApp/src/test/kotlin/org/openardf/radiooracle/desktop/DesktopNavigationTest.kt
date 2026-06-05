@@ -250,9 +250,10 @@ class DesktopNavigationTest {
         val competitorItems = setupItems.first { it.label == "Competitors" }.children
 
         assertEquals(
-            listOf("Categories", "Import Categories CSV...", "Export Categories CSV..."),
+            listOf("Protected Course Order", "Import Categories CSV...", "Export Categories CSV..."),
             categoryItems.map { it.label }
         )
+        assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Protected Course Order" }.section)
         assertEquals(
             listOf("Competitors", "Import Competitors CSV...", "Export Competitors CSV..."),
             competitorItems.map { it.label }
