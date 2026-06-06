@@ -537,6 +537,81 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun updatesCompetitorBibNumberAndCallSign() {
+        val original = projectFile(
+            competitors = listOf(competitorData("comp-1", "Alice", "Runner"))
+        )
+
+        val updated = EventProjectEditor.updateCompetitorClubBibCallSign(
+            projectFile = original,
+            competitorId = "comp-1",
+            club = " OK Test ",
+            bibNumber = " B101 ",
+            callSign = " K0ARDF "
+        )
+
+        val competitor = updated.raceData.competitorData.single().competitorCategory.competitor
+        assertEquals("OK Test", competitor.club)
+        assertEquals("B101", competitor.bibNumber)
+        assertEquals("K0ARDF", competitor.callSign)
+        assertEquals("", competitor.index)
+    }
+
+    @Test
+    fun rejectsDuplicateCompetitorBibNumber() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner"),
+                competitorData("comp-2", "Bob", "Runner", startNumber = 2)
+            )
+        )
+        val withFirstBib = EventProjectEditor.updateCompetitorClubBibCallSign(
+            projectFile = original,
+            competitorId = "comp-1",
+            club = "",
+            bibNumber = "B101",
+            callSign = ""
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCompetitorClubBibCallSign(
+                projectFile = withFirstBib,
+                competitorId = "comp-2",
+                club = "",
+                bibNumber = "B101",
+                callSign = ""
+            )
+        }
+    }
+
+    @Test
+    fun rejectsDuplicateCompetitorCallSign() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner"),
+                competitorData("comp-2", "Bob", "Runner", startNumber = 2)
+            )
+        )
+        val withFirstCallSign = EventProjectEditor.updateCompetitorClubBibCallSign(
+            projectFile = original,
+            competitorId = "comp-1",
+            club = "",
+            bibNumber = "",
+            callSign = "K0ARDF"
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCompetitorClubBibCallSign(
+                projectFile = withFirstCallSign,
+                competitorId = "comp-2",
+                club = "",
+                bibNumber = "",
+                callSign = "k0ardf"
+            )
+        }
+    }
+
+    @Test
     fun rejectsUnknownCompetitorClubAndIndexUpdate() {
         assertFailsWith<IllegalArgumentException> {
             EventProjectEditor.updateCompetitorClubIndex(projectFile(), "missing", "OK Test", "A101")
@@ -974,7 +1049,11 @@ class EventProjectEditorTest {
                 competitorData("comp-1", "Alice", "Runner", startNumber = 1, siNumber = 1111).let { data ->
                     data.copy(
                         competitorCategory = data.competitorCategory.copy(
-                            competitor = data.competitorCategory.competitor.copy(index = "OK001")
+                            competitor = data.competitorCategory.competitor.copy(
+                                index = "OK001",
+                                bibNumber = "B101",
+                                callSign = "K0ARDF"
+                            )
                         )
                     )
                 }
@@ -1001,6 +1080,30 @@ class EventProjectEditorTest {
             EventProjectEditor.importCompetitorRows(
                 projectFile = original,
                 rows = listOf(competitorImportRow(startNumber = 2, siNumber = 2222, index = "OK001")),
+                competitorIdFactory = { "comp-2" },
+                categoryIdFactory = { "cat-1" }
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.importCompetitorRows(
+                projectFile = original,
+                rows = listOf(competitorImportRow(startNumber = 2, siNumber = 2222, index = "OK002", bibNumber = "B101")),
+                competitorIdFactory = { "comp-2" },
+                categoryIdFactory = { "cat-1" }
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.importCompetitorRows(
+                projectFile = original,
+                rows = listOf(
+                    competitorImportRow(
+                        startNumber = 2,
+                        siNumber = 2222,
+                        index = "OK002",
+                        bibNumber = "B102",
+                        callSign = "k0ardf"
+                    )
+                ),
                 competitorIdFactory = { "comp-2" },
                 categoryIdFactory = { "cat-1" }
             )
@@ -2341,7 +2444,9 @@ class EventProjectEditorTest {
         club: String = "OK Test",
         index: String = "T001",
         startTimeText: String? = null,
-        siRent: Boolean = false
+        siRent: Boolean = false,
+        bibNumber: String = index,
+        callSign: String = ""
     ): CompetitorCsvImportRow =
         CompetitorCsvImportRow(
             siNumber = siNumber,
@@ -2354,7 +2459,9 @@ class EventProjectEditorTest {
             club = club,
             index = index,
             startTimeText = startTimeText,
-            siRent = siRent
+            siRent = siRent,
+            bibNumber = bibNumber,
+            callSign = callSign
         )
 
     private fun readout(

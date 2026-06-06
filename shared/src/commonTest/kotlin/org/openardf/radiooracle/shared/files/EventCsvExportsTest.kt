@@ -76,8 +76,8 @@ class EventCsvExportsTest {
     fun exportsPortableCompetitorRows() {
         assertEquals(
             """
-            si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent;preferred_start_group
-            123456;7;Test;Runner;M21;0;1985;OK Test;OK001;10:00;0;
+            si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent;preferred_start_group;bib_number;call_sign
+            123456;7;Test;Runner;M21;0;1985;OK Test;OK001;10:00;0;;OK001;
             """.trimIndent() + "\n",
             EventCsvExports.competitors(raceData())
         )
@@ -122,6 +122,8 @@ class EventCsvExportsTest {
         assertEquals("M21", row.categoryName)
         assertEquals("OK Test", row.club)
         assertEquals("OK001", row.index)
+        assertEquals("OK001", row.bibNumber)
+        assertEquals("", row.callSign)
         assertEquals("10:00", row.startTimeText)
     }
 

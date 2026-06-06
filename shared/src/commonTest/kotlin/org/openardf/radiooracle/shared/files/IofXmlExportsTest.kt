@@ -44,7 +44,7 @@ class IofXmlExportsTest {
         assertTrue(xml.contains("<Given>Alice</Given>"))
         assertTrue(xml.contains("<Organisation>"))
         assertTrue(xml.contains("<Name>OK &amp; Test</Name>"))
-        assertTrue(xml.contains("<BibNumber>7</BibNumber>"))
+        assertTrue(xml.contains("<BibNumber>OK001</BibNumber>"))
         assertTrue(xml.contains("<StartTime>2026-06-01T10:10:00</StartTime>"))
         assertTrue(xml.contains("<ControlCard>123456</ControlCard>"))
     }

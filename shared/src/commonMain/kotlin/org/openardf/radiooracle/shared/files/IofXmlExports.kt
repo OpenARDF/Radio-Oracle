@@ -87,7 +87,9 @@ object IofXmlExports {
         append("    <PersonStart>\n")
         appendPersonAndOrganisation(competitor, indent = "      ")
         append("      <Start>\n")
-        appendTextElement("BibNumber", competitor.startNumber.toString(), indent = "        ")
+        competitor.bibNumber.takeIf { it.isNotBlank() }?.let { bibNumber ->
+            appendTextElement("BibNumber", bibNumber, indent = "        ")
+        }
         appendTextElement(
             "StartTime",
             raceStart.plusSeconds(competitor.drawnStartTimeSeconds ?: 0L).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),

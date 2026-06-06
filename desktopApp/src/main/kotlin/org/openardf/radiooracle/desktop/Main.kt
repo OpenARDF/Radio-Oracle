@@ -208,7 +208,8 @@ private val CompetitorTableColumns = listOf(
     FixedTableColumn("First", 120.dp),
     FixedTableColumn("Last", 136.dp),
     FixedTableColumn("Club", 210.dp),
-    FixedTableColumn("Index", 116.dp),
+    FixedTableColumn("Bib no.", 96.dp),
+    FixedTableColumn("Call sign", 116.dp),
     FixedTableColumn("Birth", 72.dp),
     FixedTableColumn("Category", 136.dp),
     FixedTableColumn("Start no.", 86.dp),
@@ -220,10 +221,11 @@ private val CompetitorTableColumnHints = mapOf(
     "First" to "Competitor first or given name.",
     "Last" to "Competitor last or family name.",
     "Club" to "Club, society, school, or team used for reports and start-list fairness checks.",
-    "Index" to "Optional external registration index kept for imported data and exports.",
+    "Bib no." to "Persistent bib number worn by the competitor across one or more events in a competition.",
+    "Call sign" to "Optional radio call sign or on-air identifier for this competitor.",
     "Birth" to "Optional birth year.",
     "Category" to "Competition category assigned to this competitor.",
-    "Start no." to "Competitor start number or bib number.",
+    "Start no." to "Event-specific start number used by this Event File and its start list.",
     "Start time" to "Drawn start time in minutes and seconds from the event start, such as 012:00.",
     "SI no." to "SPORTident card number assigned to this competitor."
 )
@@ -1758,10 +1760,17 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
-            onUpdateCompetitorClubIndex = { competitorId, club, index ->
+            onUpdateCompetitorClubIdentity = { competitorId, club, bibNumber, callSign ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.updateCompetitorClubIndex(currentProject, competitorId, club, index)
+                        EventProjectEditor.updateCompetitorClubBibCallSign(
+                            projectFile = currentProject,
+                            competitorId = competitorId,
+                            club = club,
+                            bibNumber = bibNumber,
+                            callSign = callSign,
+                            legacyIndex = bibNumber
+                        )
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
@@ -1848,7 +1857,7 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Balanced draw failed: ${error.message ?: error::class.simpleName}"
                 }
             },
-            onAddCompetitor = { firstName, lastName, club, index, birthYear, categoryId, startNumber, siNumber ->
+            onAddCompetitor = { firstName, lastName, club, bibNumber, callSign, birthYear, categoryId, startNumber, siNumber ->
                 val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         val competitorId = UUID.randomUUID().toString()
@@ -1860,14 +1869,16 @@ fun main(args: Array<String>) = application {
                             startNumber = startNumber,
                             siNumber = siNumber
                         )
-                        val withInfo = EventProjectEditor.updateCompetitorClubIndex(
-                            added,
-                            competitorId,
-                            club,
-                            index
+                        val withCallSign = EventProjectEditor.updateCompetitorClubBibCallSign(
+                            projectFile = added,
+                            competitorId = competitorId,
+                            club = club,
+                            bibNumber = bibNumber,
+                            callSign = callSign,
+                            legacyIndex = bibNumber
                         )
                         val withBirthYear = EventProjectEditor.updateCompetitorBirthYear(
-                            withInfo,
+                            withCallSign,
                             competitorId,
                             birthYear
                         )
@@ -2413,13 +2424,13 @@ private fun RadioOManagerDesktopApp(
     onRemoveCategory: (String, Boolean) -> Unit = { _, _ -> },
     onRenameCompetitor: (String, String, String) -> Unit = { _, _, _ -> },
     onUpdateCompetitorNumbers: (String, String, String) -> Unit = { _, _, _ -> },
-    onUpdateCompetitorClubIndex: (String, String, String) -> Unit = { _, _, _ -> },
+    onUpdateCompetitorClubIdentity: (String, String, String, String) -> Unit = { _, _, _, _ -> },
     onUpdateCompetitorBirthYear: (String, String) -> Unit = { _, _ -> },
     onUpdateCompetitorStartTime: (String, String) -> Unit = { _, _ -> },
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit = { _, _ -> },
     onDrawStartList: (String, StartDrawOptions) -> Unit = { _, _ -> },
     onDrawBalancedStartList: (String, StartDrawOptions) -> Unit = { _, _ -> },
-    onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean = { _, _, _, _, _, _, _, _ -> false },
+    onAddCompetitor: (String, String, String, String, String, String, String?, String, String) -> Boolean = { _, _, _, _, _, _, _, _, _ -> false },
     onAssignCompetitorCategory: (String, String?) -> Unit = { _, _ -> },
     onRemoveCompetitor: (String, Boolean) -> Unit = { _, _ -> },
     onRemoveReadout: (String) -> Unit = {},
@@ -2559,7 +2570,7 @@ private fun RadioOManagerDesktopApp(
                                 onRemoveCategory = onRemoveCategory,
                                 onRenameCompetitor = onRenameCompetitor,
                                 onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
-                                onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
+                                onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
                                 onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
                                 onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
                                 onUpdateStartDrawSettings = onUpdateStartDrawSettings,
@@ -2827,13 +2838,13 @@ private fun SectionWorkspace(
     onRemoveCategory: (String, Boolean) -> Unit,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
-    onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
+    onUpdateCompetitorClubIdentity: (String, String, String, String) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit,
     onDrawStartList: (String, StartDrawOptions) -> Unit,
     onDrawBalancedStartList: (String, StartDrawOptions) -> Unit,
-    onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean,
+    onAddCompetitor: (String, String, String, String, String, String, String?, String, String) -> Boolean,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit,
     onRemoveReadout: (String) -> Unit,
@@ -2934,7 +2945,7 @@ private fun SectionWorkspace(
                 categories = EventCategoryDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
                 onRenameCompetitor = onRenameCompetitor,
                 onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
-                onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
+                onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
                 onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
                 onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
                 onAddCompetitor = onAddCompetitor,
@@ -3989,10 +4000,10 @@ private fun CompetitorDetailsPanel(
     categories: List<EventCategoryDetails>,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
-    onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
+    onUpdateCompetitorClubIdentity: (String, String, String, String) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
-    onAddCompetitor: (String, String, String, String, String, String?, String, String) -> Boolean,
+    onAddCompetitor: (String, String, String, String, String, String, String?, String, String) -> Boolean,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit
 ) {
@@ -4003,7 +4014,8 @@ private fun CompetitorDetailsPanel(
     var firstNameDraft by remember { mutableStateOf("") }
     var lastNameDraft by remember { mutableStateOf("") }
     var clubDraft by remember { mutableStateOf("") }
-    var indexDraft by remember { mutableStateOf("") }
+    var bibNumberDraft by remember { mutableStateOf("") }
+    var callSignDraft by remember { mutableStateOf("") }
     var birthYearDraft by remember { mutableStateOf("") }
     var selectedCategoryId by remember { mutableStateOf<String?>(null) }
     var startNumberDraft by remember(nextStartNumber) { mutableStateOf(nextStartNumber) }
@@ -4024,7 +4036,8 @@ private fun CompetitorDetailsPanel(
                         firstNameDraft,
                         lastNameDraft,
                         clubDraft,
-                        indexDraft,
+                        bibNumberDraft,
+                        callSignDraft,
                         birthYearDraft,
                         selectedCategoryId,
                         startNumberDraft,
@@ -4034,7 +4047,8 @@ private fun CompetitorDetailsPanel(
                         firstNameDraft = ""
                         lastNameDraft = ""
                         clubDraft = ""
-                        indexDraft = ""
+                        bibNumberDraft = ""
+                        callSignDraft = ""
                         birthYearDraft = ""
                         selectedCategoryId = null
                         startNumberDraft = nextCompetitorStartNumber(competitors)
@@ -4059,8 +4073,10 @@ private fun CompetitorDetailsPanel(
                         onLastNameChange = { lastNameDraft = it },
                         clubDraft = clubDraft,
                         onClubChange = { clubDraft = it },
-                        indexDraft = indexDraft,
-                        onIndexChange = { indexDraft = it },
+                        bibNumberDraft = bibNumberDraft,
+                        onBibNumberChange = { bibNumberDraft = it },
+                        callSignDraft = callSignDraft,
+                        onCallSignChange = { callSignDraft = it },
                         birthYearDraft = birthYearDraft,
                         onBirthYearChange = { birthYearDraft = it },
                         selectedCategoryId = selectedCategoryId,
@@ -4102,7 +4118,7 @@ private fun CompetitorDetailsPanel(
                                 categories = categories,
                                 onRenameCompetitor = onRenameCompetitor,
                                 onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
-                                onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
+                                onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
                                 onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
                                 onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
                                 onAssignCompetitorCategory = onAssignCompetitorCategory
@@ -4125,8 +4141,10 @@ private fun CompetitorAddRow(
     onLastNameChange: (String) -> Unit,
     clubDraft: String,
     onClubChange: (String) -> Unit,
-    indexDraft: String,
-    onIndexChange: (String) -> Unit,
+    bibNumberDraft: String,
+    onBibNumberChange: (String) -> Unit,
+    callSignDraft: String,
+    onCallSignChange: (String) -> Unit,
     birthYearDraft: String,
     onBirthYearChange: (String) -> Unit,
     selectedCategoryId: String?,
@@ -4163,16 +4181,23 @@ private fun CompetitorAddRow(
             label = { Text("Club") }
         )
         TextField(
-            value = indexDraft,
-            onValueChange = onIndexChange,
+            value = bibNumberDraft,
+            onValueChange = onBibNumberChange,
             modifier = Modifier.width(CompetitorTableColumns[3].width),
             singleLine = true,
-            label = { Text("Index") }
+            label = { Text("Bib") }
+        )
+        TextField(
+            value = callSignDraft,
+            onValueChange = onCallSignChange,
+            modifier = Modifier.width(CompetitorTableColumns[4].width),
+            singleLine = true,
+            label = { Text("Call") }
         )
         TextField(
             value = birthYearDraft,
             onValueChange = onBirthYearChange,
-            modifier = Modifier.width(CompetitorTableColumns[4].width),
+            modifier = Modifier.width(CompetitorTableColumns[5].width),
             singleLine = true,
             label = { Text("Birth") }
         )
@@ -4180,20 +4205,20 @@ private fun CompetitorAddRow(
             selectedCategoryId = selectedCategoryId,
             categories = categories,
             onCategorySelected = onCategorySelected,
-            modifier = Modifier.width(CompetitorTableColumns[5].width)
+            modifier = Modifier.width(CompetitorTableColumns[6].width)
         )
         TextField(
             value = startNumberDraft,
             onValueChange = onStartNumberChange,
-            modifier = Modifier.width(CompetitorTableColumns[6].width),
+            modifier = Modifier.width(CompetitorTableColumns[7].width),
             singleLine = true,
             label = { Text("Start") }
         )
-        Spacer(modifier = Modifier.width(CompetitorTableColumns[7].width))
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[8].width))
         TextField(
             value = siNumberDraft,
             onValueChange = onSiNumberChange,
-            modifier = Modifier.width(CompetitorTableColumns[8].width),
+            modifier = Modifier.width(CompetitorTableColumns[9].width),
             singleLine = true,
             label = { Text("SI") }
         )
@@ -4207,7 +4232,7 @@ private fun CompetitorDetailRow(
     categories: List<EventCategoryDetails>,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
-    onUpdateCompetitorClubIndex: (String, String, String) -> Unit,
+    onUpdateCompetitorClubIdentity: (String, String, String, String) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onAssignCompetitorCategory: (String, String?) -> Unit
@@ -4215,7 +4240,8 @@ private fun CompetitorDetailRow(
     var firstNameDraft by remember(competitor.id, competitor.firstName) { mutableStateOf(competitor.firstName) }
     var lastNameDraft by remember(competitor.id, competitor.lastName) { mutableStateOf(competitor.lastName) }
     var clubDraft by remember(competitor.id, competitor.club) { mutableStateOf(competitor.club) }
-    var indexDraft by remember(competitor.id, competitor.index) { mutableStateOf(competitor.index) }
+    var bibNumberDraft by remember(competitor.id, competitor.bibNumber) { mutableStateOf(competitor.bibNumber) }
+    var callSignDraft by remember(competitor.id, competitor.callSign) { mutableStateOf(competitor.callSign) }
     var birthYearDraft by remember(competitor.id, competitor.birthYearText) {
         mutableStateOf(competitor.birthYearText)
     }
@@ -4240,8 +4266,12 @@ private fun CompetitorDetailRow(
                 onUpdateCompetitorNumbers(competitor.id, startNumberDraft, siNumberDraft)
             }
         }
-        if (clubDraft != competitor.club || indexDraft != competitor.index) {
-            onUpdateCompetitorClubIndex(competitor.id, clubDraft, indexDraft)
+        if (
+            clubDraft != competitor.club ||
+            bibNumberDraft != competitor.bibNumber ||
+            callSignDraft != competitor.callSign
+        ) {
+            onUpdateCompetitorClubIdentity(competitor.id, clubDraft, bibNumberDraft, callSignDraft)
         }
         if (birthYearDraft != competitor.birthYearText) {
             if (birthYearDraft.isBlank() || birthYearDraft.trim().toIntOrNull() != null) {
@@ -4310,8 +4340,8 @@ private fun CompetitorDetailRow(
             label = { Text("Club") }
         )
         TextField(
-            value = indexDraft,
-            onValueChange = { indexDraft = it },
+            value = bibNumberDraft,
+            onValueChange = { bibNumberDraft = it },
             modifier = Modifier
                 .width(CompetitorTableColumns[3].width)
                 .onFocusChanged { focusState ->
@@ -4320,13 +4350,26 @@ private fun CompetitorDetailRow(
                     }
                 },
             singleLine = true,
-            label = { Text("Index") }
+            label = { Text("Bib") }
+        )
+        TextField(
+            value = callSignDraft,
+            onValueChange = { callSignDraft = it },
+            modifier = Modifier
+                .width(CompetitorTableColumns[4].width)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused) {
+                        applyPendingDrafts()
+                    }
+                },
+            singleLine = true,
+            label = { Text("Call") }
         )
         TextField(
             value = birthYearDraft,
             onValueChange = { birthYearDraft = it },
             modifier = Modifier
-                .width(CompetitorTableColumns[4].width)
+                .width(CompetitorTableColumns[5].width)
                 .onFocusChanged { focusState ->
                     if (!focusState.isFocused) {
                         applyPendingDrafts()
@@ -4342,13 +4385,13 @@ private fun CompetitorDetailRow(
                 selectedCategoryId = it
                 onAssignCompetitorCategory(competitor.id, it)
             },
-            modifier = Modifier.width(CompetitorTableColumns[5].width)
+            modifier = Modifier.width(CompetitorTableColumns[6].width)
         )
         TextField(
             value = startNumberDraft,
             onValueChange = { startNumberDraft = it },
             modifier = Modifier
-                .width(CompetitorTableColumns[6].width)
+                .width(CompetitorTableColumns[7].width)
                 .onFocusChanged { focusState ->
                     if (!focusState.isFocused) {
                         applyPendingDrafts()
@@ -4361,7 +4404,7 @@ private fun CompetitorDetailRow(
             value = startTimeDraft,
             onValueChange = { startTimeDraft = it },
             modifier = Modifier
-                .width(CompetitorTableColumns[7].width)
+                .width(CompetitorTableColumns[8].width)
                 .onFocusChanged { focusState ->
                     if (!focusState.isFocused) {
                         applyPendingDrafts()
@@ -4374,7 +4417,7 @@ private fun CompetitorDetailRow(
             value = siNumberDraft,
             onValueChange = { siNumberDraft = it },
             modifier = Modifier
-                .width(CompetitorTableColumns[8].width)
+                .width(CompetitorTableColumns[9].width)
                 .onFocusChanged { focusState ->
                     if (!focusState.isFocused) {
                         applyPendingDrafts()

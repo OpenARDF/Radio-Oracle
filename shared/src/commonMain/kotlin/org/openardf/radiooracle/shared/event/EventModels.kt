@@ -140,7 +140,9 @@ data class EventCompetitor(
     val siRent: Boolean,
     val startNumber: Int,
     val drawnStartTimeSeconds: Long?,
-    val preferredStartGroup: Int? = null
+    val preferredStartGroup: Int? = null,
+    val bibNumber: String = index,
+    val callSign: String = ""
 ) {
     init {
         require(preferredStartGroup == null || preferredStartGroup in 1..3) {

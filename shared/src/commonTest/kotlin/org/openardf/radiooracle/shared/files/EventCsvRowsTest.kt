@@ -47,7 +47,10 @@ class EventCsvRowsTest {
             preferredStartGroup = 2
         )
 
-        assertEquals("123456;42;Pavel;Kolsky;M21;0;1980;OK;OK001;;0;2", EventCsvRows.competitorRow(competitor, "M21"))
+        assertEquals(
+            "123456;42;Pavel;Kolsky;M21;0;1980;OK;OK001;;0;2;OK001;",
+            EventCsvRows.competitorRow(competitor, "M21")
+        )
     }
 
     @Test
@@ -70,7 +73,7 @@ class EventCsvRowsTest {
 
         val row = EventCsvRows.competitorRow(competitor, "")
 
-        assertEquals(";42;\"Pa\"\"vel\";Kolsky;;0;;\"OK; East\";OK001;10:00;1;", row)
+        assertEquals(";42;\"Pa\"\"vel\";Kolsky;;0;;\"OK; East\";OK001;10:00;1;;OK001;", row)
         val parsed = EventCsvImports.parseAndroidCompetitorRows(row)
         assertEquals(emptyList(), parsed.invalidLines)
         assertEquals("Pa\"vel", parsed.rows.single().firstName)

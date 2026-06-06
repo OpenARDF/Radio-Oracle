@@ -30,7 +30,9 @@ data class CompetitorCsvImportRow(
     val index: String,
     val startTimeText: String?,
     val siRent: Boolean,
-    val preferredStartGroup: Int? = null
+    val preferredStartGroup: Int? = null,
+    val bibNumber: String = index,
+    val callSign: String = ""
 )
 
 enum class CompetitorCsvImportProfile {
@@ -252,6 +254,9 @@ object EventCsvImports {
             birthYear = fields.optionalTrimmedInt(EventCsvFormat.Competitor.BIRTH_YEAR),
             club = fields.optionalTrimmed(EventCsvFormat.Competitor.CLUB),
             index = fields.optionalTrimmed(EventCsvFormat.Competitor.INDEX),
+            bibNumber = fields.optionalTrimmed(EventCsvFormat.Competitor.BIB_NUMBER)
+                .ifBlank { fields.optionalTrimmed(EventCsvFormat.Competitor.INDEX) },
+            callSign = fields.optionalTrimmed(EventCsvFormat.Competitor.CALL_SIGN),
             startTimeText = fields.optionalTrimmed(EventCsvFormat.Competitor.START_TIME).takeIf { it.isNotEmpty() },
             siRent = fields.optionalTrimmedInt(EventCsvFormat.Competitor.SI_RENT) == 1,
             preferredStartGroup = preferredStartGroup
@@ -284,6 +289,8 @@ object EventCsvImports {
             birthYear = null,
             club = "",
             index = fields[EventCsvFormat.ArdfEventRegistration.INDEX].trim(),
+            bibNumber = fields[EventCsvFormat.ArdfEventRegistration.INDEX].trim(),
+            callSign = "",
             startTimeText = null,
             siRent = false
         )

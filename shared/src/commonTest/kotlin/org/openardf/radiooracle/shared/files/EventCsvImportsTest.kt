@@ -114,8 +114,26 @@ class EventCsvImportsTest {
         assertEquals(1980, row.birthYear)
         assertEquals("OK Lokomotiva", row.club)
         assertEquals("OK001", row.index)
+        assertEquals("OK001", row.bibNumber)
+        assertEquals("", row.callSign)
         assertEquals("10:00", row.startTimeText)
         assertTrue(row.siRent)
+    }
+
+    @Test
+    fun parsesExplicitBibNumberAndCallSignCompetitorColumns() {
+        val result = EventCsvImports.parseAndroidCompetitorRows(
+            """
+            si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent;preferred_start_group;bib_number;call_sign
+            123456;42;Pavel;Kolsky;M21;0;1980;OK Lokomotiva;REG001;10:00;1;2;B042;KOL
+            """.trimIndent()
+        )
+
+        assertEquals(emptyList(), result.invalidLines)
+        val row = result.rows.single()
+        assertEquals("REG001", row.index)
+        assertEquals("B042", row.bibNumber)
+        assertEquals("KOL", row.callSign)
     }
 
     @Test

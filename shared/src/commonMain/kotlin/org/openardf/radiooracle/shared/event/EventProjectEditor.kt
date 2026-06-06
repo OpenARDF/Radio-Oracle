@@ -601,13 +601,49 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with one competitor's club and index changed. */
+    /** Returns a copy of the Event File with one competitor's club and legacy index changed. */
     fun updateCompetitorClubIndex(
         projectFile: EventProjectFile,
         competitorId: String,
         club: String,
         index: String
+    ): EventProjectFile =
+        updateCompetitorClubBibCallSign(
+            projectFile = projectFile,
+            competitorId = competitorId,
+            club = club,
+            bibNumber = index,
+            callSign = "",
+            legacyIndex = index
+        )
+
+    /** Returns a copy of the Event File with one competitor's team and visible identity fields changed. */
+    fun updateCompetitorClubBibCallSign(
+        projectFile: EventProjectFile,
+        competitorId: String,
+        club: String,
+        bibNumber: String,
+        callSign: String,
+        legacyIndex: String? = null
     ): EventProjectFile {
+        val trimmedBibNumber = bibNumber.trim()
+        val trimmedCallSign = callSign.trim()
+        require(
+            trimmedBibNumber.isBlank() || projectFile.raceData.competitorData.none { data ->
+                val competitor = data.competitorCategory.competitor
+                competitor.id != competitorId && competitor.bibNumber == trimmedBibNumber
+            }
+        ) {
+            "Bib number must be unique."
+        }
+        require(
+            trimmedCallSign.isBlank() || projectFile.raceData.competitorData.none { data ->
+                val competitor = data.competitorCategory.competitor
+                competitor.id != competitorId && competitor.callSign.equals(trimmedCallSign, ignoreCase = true)
+            }
+        ) {
+            "Call sign must be unique."
+        }
         var foundCompetitor = false
         val competitorData = projectFile.raceData.competitorData.map { data ->
             val competitorCategory = data.competitorCategory
@@ -618,7 +654,9 @@ object EventProjectEditor {
                     competitorCategory = competitorCategory.copy(
                         competitor = competitor.copy(
                             club = club.trim(),
-                            index = index.trim()
+                            index = legacyIndex?.trim() ?: competitor.index,
+                            bibNumber = trimmedBibNumber,
+                            callSign = trimmedCallSign
                         )
                     )
                 )
@@ -1198,6 +1236,21 @@ object EventProjectEditor {
             ) {
                 "Registration index must be unique."
             }
+            require(
+                row.bibNumber.isBlank() || competitors.noneIndexed { index, data ->
+                    index != existingPosition && data.competitorCategory.competitor.bibNumber == row.bibNumber
+                }
+            ) {
+                "Bib number must be unique."
+            }
+            require(
+                row.callSign.isBlank() || competitors.noneIndexed { index, data ->
+                    index != existingPosition &&
+                        data.competitorCategory.competitor.callSign.equals(row.callSign, ignoreCase = true)
+                }
+            ) {
+                "Call sign must be unique."
+            }
 
             if (existingPosition >= 0) {
                 val existingData = competitors[existingPosition]
@@ -1208,6 +1261,8 @@ object EventProjectEditor {
                     lastName = row.lastName,
                     club = row.club,
                     index = row.index,
+                    bibNumber = row.bibNumber,
+                    callSign = row.callSign,
                     isMan = row.isMan,
                     birthYear = row.birthYear,
                     siNumber = row.siNumber ?: existingCompetitor.siNumber,
@@ -1235,6 +1290,8 @@ object EventProjectEditor {
                 lastName = row.lastName,
                 club = row.club,
                 index = row.index,
+                bibNumber = row.bibNumber,
+                callSign = row.callSign,
                 isMan = row.isMan,
                 birthYear = row.birthYear,
                 siNumber = row.siNumber,

@@ -32,7 +32,7 @@ object EventCsvFormat {
     }
 
     object Competitor {
-        const val COLUMN_COUNT = 12
+        const val COLUMN_COUNT = 14
         const val REQUIRED_IMPORT_COLUMNS = 6
         const val SI_NUMBER = 0
         const val START_NUMBER = 1
@@ -46,6 +46,8 @@ object EventCsvFormat {
         const val START_TIME = 9
         const val SI_RENT = 10
         const val PREFERRED_START_GROUP = 11
+        const val BIB_NUMBER = 12
+        const val CALL_SIGN = 13
 
         val HEADER = listOf(
             "si_number",
@@ -59,13 +61,19 @@ object EventCsvFormat {
             "index",
             "start_time",
             "si_rent",
-            "preferred_start_group"
+            "preferred_start_group",
+            "bib_number",
+            "call_sign"
         )
+        val LEGACY_HEADER = HEADER.take(PREFERRED_START_GROUP + 1)
         val HEADER_ROW = HEADER.joinToString(DELIMITER.toString())
 
         fun isHeader(fields: List<String>): Boolean =
             fields.map { it.trim().lowercase() }.let { normalized ->
-                normalized == HEADER || normalized == HEADER.dropLast(1)
+                normalized == HEADER ||
+                    normalized == HEADER.dropLast(1) ||
+                    normalized == LEGACY_HEADER ||
+                    normalized == LEGACY_HEADER.dropLast(1)
             }
     }
 

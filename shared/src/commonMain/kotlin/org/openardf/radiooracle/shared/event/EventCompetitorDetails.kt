@@ -10,6 +10,8 @@ data class EventCompetitorDetails(
     val fullName: String,
     val club: String,
     val index: String,
+    val bibNumber: String,
+    val callSign: String,
     val birthYearText: String,
     val categoryId: String?,
     val categoryName: String,
@@ -34,6 +36,8 @@ data class EventCompetitorDetails(
                         fullName = competitor.fullName(),
                         club = competitor.club,
                         index = competitor.index,
+                        bibNumber = competitor.bibNumber,
+                        callSign = competitor.callSign,
                         birthYearText = competitor.birthYear?.toString() ?: "",
                         categoryId = competitor.categoryId,
                         categoryName = competitorCategory.category?.name
