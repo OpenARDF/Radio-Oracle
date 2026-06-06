@@ -70,6 +70,7 @@ data class ProtectedCourseInfo(
     val lengthMeters: Int? = null,
     val climbMeters: Int? = null,
     val sourceName: String = "",
+    val sourceSha256: String = "",
     val sampledPointCount: Int = 0,
     val route: List<ProtectedCourseRoutePoint> = emptyList(),
     val controlPoints: List<ProtectedCourseControlPoint> = emptyList(),

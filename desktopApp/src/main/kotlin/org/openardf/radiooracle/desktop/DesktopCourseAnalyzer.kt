@@ -29,6 +29,7 @@ data class DesktopCourseAnalysisSummary(
     val climbMeters: Int?,
     val effectiveLengthMeters: Int?,
     val estimatedIdealSeconds: Int?,
+    val hasMissingElevationData: Boolean,
     val elevationProfile: List<DesktopCourseElevationProfilePoint>,
     val waitRows: List<DesktopCourseWaitRow>,
     val waitRenumbering: DesktopCourseWaitRenumbering?,
@@ -104,17 +105,24 @@ object DesktopCourseAnalyzer {
         if (route.size < 2) {
             missing += "Protected route geometry with start and finish points is missing."
         }
-        if (route.any { it.elevationMeters == null }) {
+        val hasMissingRouteElevations = route.any { it.elevationMeters == null }
+        if (hasMissingRouteElevations) {
             missing += "Route elevation samples are missing or incomplete."
         }
+        var hasMissingCourseObjectElevations = false
         protectedCourseInfo?.let { courseInfo ->
             when {
-                courseInfo.courseObjects.isEmpty() ->
+                courseInfo.courseObjects.isEmpty() -> {
+                    hasMissingCourseObjectElevations = true
                     missing += "Course object points are missing for start, finish, controls, beacon, or spectator."
-                courseInfo.courseObjects.any { it.elevationMeters == null } ->
+                }
+                courseInfo.courseObjects.any { it.elevationMeters == null } -> {
+                    hasMissingCourseObjectElevations = true
                     missing += "Course object elevations are missing or incomplete."
+                }
             }
         }
+        val hasMissingElevationData = route.size >= 2 && (hasMissingRouteElevations || hasMissingCourseObjectElevations)
 
         val controlsWithPoints = assignedControls.map { control ->
             ControlAnalysisPoint(
@@ -242,6 +250,7 @@ object DesktopCourseAnalyzer {
             climbMeters = protectedCourseInfo?.climbMeters,
             effectiveLengthMeters = protectedCourseInfo?.effectiveLengthMeters(),
             estimatedIdealSeconds = estimatedIdealSeconds,
+            hasMissingElevationData = hasMissingElevationData,
             elevationProfile = elevationProfile,
             waitRows = waitRows,
             waitRenumbering = waitRenumbering,

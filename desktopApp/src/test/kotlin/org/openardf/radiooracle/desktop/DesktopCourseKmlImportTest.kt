@@ -41,6 +41,8 @@ class DesktopCourseKmlImportTest {
         assertEquals(listOf("cat-m21"), summary.matchedCategoryIds)
         assertEquals(listOf("M21"), summary.matchedCategoryNames)
         assertEquals(2, summary.matchedControlPointCount)
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals(0, summary.duplicateCategoryCount)
         assertTrue(summary.routeElevationPointCount > 0)
         assertEquals(0, category.lengthMeters)
         assertEquals(0, category.climbMeters)
@@ -57,6 +59,8 @@ class DesktopCourseKmlImportTest {
         assertTrue(protectedCourseInfo.lengthMeters!! > 100)
         assertTrue(protectedCourseInfo.climbMeters!! >= 12)
         assertEquals(kmlPath.fileName.toString(), protectedCourseInfo.sourceName)
+        assertEquals(summary.sourceSha256, protectedCourseInfo.sourceSha256)
+        assertEquals(64, protectedCourseInfo.sourceSha256.length)
         assertTrue(protectedCourseInfo.route.isNotEmpty())
         assertEquals(listOf("Start", "1", "2", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
         assertTrue(protectedCourseInfo.courseObjects.all { it.elevationMeters != null })
@@ -109,6 +113,110 @@ class DesktopCourseKmlImportTest {
         assertTrue(protectedCourseInfo.route.all { it.elevationMeters == null })
         assertTrue(protectedCourseInfo.courseObjects.all { it.elevationMeters == null })
         assertEquals(null, protectedCourseInfo.climbMeters)
+    }
+
+    @Test
+    fun skipsReloadingIdenticalImportedFileButReportsMissingElevations() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKml())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+        val (imported, firstSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key"
+        )
+        var unexpectedElevationRequestCount = 0
+
+        val (duplicateProject, duplicateSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = imported,
+            password = "course-key",
+            elevationProvider = {
+                unexpectedElevationRequestCount++
+                999.0
+            }
+        )
+
+        assertEquals(imported, duplicateProject)
+        assertEquals(firstSummary.sourceSha256, duplicateSummary.sourceSha256)
+        assertEquals(1, duplicateSummary.matchedCategoryCount)
+        assertEquals(0, duplicateSummary.importedCategoryCount)
+        assertEquals(1, duplicateSummary.duplicateCategoryCount)
+        assertTrue(duplicateSummary.isDuplicateOnly)
+        assertTrue(duplicateSummary.hasDuplicateMissingElevations)
+        assertTrue(duplicateSummary.duplicateMissingElevationPointCount > 0)
+        assertEquals(0, unexpectedElevationRequestCount)
+    }
+
+    @Test
+    fun reportsFullyDownloadedIdenticalFileAsDuplicateWithNoMissingWork() = runBlocking {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKml())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+        val (imported, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key"
+        )
+        val (elevated, _) = DesktopCourseKmlImporter.fetchProtectedCourseElevations(
+            projectFile = imported,
+            categoryIds = summary.matchedCategoryIds,
+            password = "course-key",
+            elevationProvider = { 100.0 }
+        )
+
+        val (duplicateProject, duplicateSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = elevated,
+            password = "course-key"
+        )
+
+        assertEquals(elevated, duplicateProject)
+        assertTrue(duplicateSummary.isDuplicateOnly)
+        assertEquals(0, duplicateSummary.importedCategoryCount)
+        assertEquals(1, duplicateSummary.duplicateCategoryCount)
+        assertEquals(0, duplicateSummary.duplicateMissingElevationPointCount)
+        assertEquals(false, duplicateSummary.hasDuplicateMissingElevations)
+    }
+
+    @Test
+    fun treatsSameNamedFileWithDifferentHashAsNewImport() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKml())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+        val (imported, firstSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key"
+        )
+        Files.writeString(kmlPath, sampleKml().replace("-94.9990,39.0000,0", "-94.9995,39.0000,0"))
+
+        val (updated, secondSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = imported,
+            password = "course-key"
+        )
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            updated.raceData.categories.single().category.encryptedCourseInfo!!,
+            "course-key"
+        )
+
+        assertTrue(firstSummary.sourceSha256 != secondSummary.sourceSha256)
+        assertEquals(1, secondSummary.importedCategoryCount)
+        assertEquals(0, secondSummary.duplicateCategoryCount)
+        assertEquals(secondSummary.sourceSha256, protectedCourseInfo.sourceSha256)
     }
 
     @Test

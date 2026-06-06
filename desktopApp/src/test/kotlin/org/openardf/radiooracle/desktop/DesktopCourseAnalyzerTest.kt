@@ -60,6 +60,7 @@ class DesktopCourseAnalyzerTest {
         assertEquals(4_000, summary.routeLengthMeters)
         assertEquals(100, summary.climbMeters)
         assertEquals(5_000, summary.effectiveLengthMeters)
+        assertEquals(false, summary.hasMissingElevationData)
         assertNotNull(summary.estimatedIdealSeconds)
         assertEquals(5, summary.elevationProfile.size)
         assertEquals(0, summary.elevationProfile.first().distanceMeters)
@@ -126,6 +127,7 @@ class DesktopCourseAnalyzerTest {
         )
 
         assertTrue(summary.missingElements.any { it.contains("Route elevation samples") })
+        assertEquals(true, summary.hasMissingElevationData)
         assertEquals(null, summary.estimatedIdealSeconds)
         assertEquals(emptyList<DesktopCourseElevationProfilePoint>(), summary.elevationProfile)
     }

@@ -1064,8 +1064,15 @@ fun main(args: Array<String>) = application {
             if (fetchElevations) {
                 startCourseKmlKmzElevationFetch(review)
             } else {
-                projectStatusText =
-                    "Imported protected controls/route data for ${review.summary.matchedCategoryCount} categories. Unsaved changes."
+                projectStatusText = if (review.summary.isDuplicateOnly) {
+                    "Duplicate controls/route KML/KMZ request: identical file already imported. No route data reloaded."
+                } else {
+                    val duplicateText = review.summary.duplicateCategoryCount
+                        .takeIf { it > 0 }
+                        ?.let { " $it duplicate categories skipped." }
+                        .orEmpty()
+                    "Imported protected controls/route data for ${review.summary.importedCategoryCount} categories.$duplicateText Unsaved changes."
+                }
             }
         }
 
@@ -1088,13 +1095,23 @@ fun main(args: Array<String>) = application {
                         }
                     }
                     result.onSuccess { (updatedProject, summary) ->
-                        pendingCourseKmlKmzImportReview = PendingCourseKmlKmzImportReview(
-                            sourceName = path.fileName.toString(),
-                            updatedProject = updatedProject,
-                            summary = summary,
-                            password = password
-                        )
-                        projectStatusText = "Review imported controls/route data before applying it."
+                        if (summary.isDuplicateOnly && !summary.hasDuplicateMissingElevations) {
+                            pendingCourseKmlKmzImportReview = null
+                            projectStatusText =
+                                "Duplicate controls/route KML/KMZ request: identical file already imported and all elevations are available."
+                        } else {
+                            pendingCourseKmlKmzImportReview = PendingCourseKmlKmzImportReview(
+                                sourceName = path.fileName.toString(),
+                                updatedProject = updatedProject,
+                                summary = summary,
+                                password = password
+                            )
+                            projectStatusText = if (summary.isDuplicateOnly) {
+                                "Identical controls/route data already imported. Review missing elevation retrieval option."
+                            } else {
+                                "Review imported controls/route data before applying it."
+                            }
+                        }
                     }.onFailure { error ->
                         projectStatusText = "Controls/route KML/KMZ import failed: ${error.message ?: error::class.simpleName}"
                     }
@@ -2399,17 +2416,39 @@ private fun CourseKmlKmzImportReviewDialog(
     val categoriesText = summary.matchedCategoryNames
         .ifEmpty { listOf("None") }
         .joinToString()
-    var fetchElevations by remember(review.sourceName) { mutableStateOf(false) }
+    var fetchElevations by remember(review.sourceName, summary.sourceSha256, summary.isDuplicateOnly) {
+        mutableStateOf(summary.isDuplicateOnly && summary.hasDuplicateMissingElevations)
+    }
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Review controls/route import") },
+        title = {
+            Text(
+                if (summary.isDuplicateOnly) {
+                    "Duplicate controls/route import"
+                } else {
+                    "Review controls/route import"
+                }
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("File: ${review.sourceName}")
                 Text("Matched categories: ${summary.matchedCategoryCount} of ${summary.routeCount} route placemarks")
                 Text("Categories: $categoriesText")
+                if (summary.importedCategoryCount > 0) {
+                    Text("Categories to update: ${summary.importedCategoryCount}")
+                }
+                if (summary.duplicateCategoryCount > 0) {
+                    Text("Duplicate categories already imported: ${summary.duplicateCategoryCount}")
+                }
                 Text("Matched controls: ${summary.matchedControlPointCount} of ${summary.controlPointCount} point placemarks")
-                Text("Course elevations: not retrieved")
+                Text(
+                    if (summary.duplicateMissingElevationPointCount > 0) {
+                        "Missing duplicate-file elevations: ${summary.duplicateMissingElevationPointCount} course points"
+                    } else {
+                        "Course elevations: not retrieved"
+                    }
+                )
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -2418,10 +2457,20 @@ private fun CourseKmlKmzImportReviewDialog(
                         checked = fetchElevations,
                         onCheckedChange = { fetchElevations = it }
                     )
-                    Text("Retrieve missing course elevations after keeping imported data")
+                    Text(
+                        if (summary.isDuplicateOnly) {
+                            "Retrieve missing course elevations"
+                        } else {
+                            "Retrieve missing course elevations after keeping imported data"
+                        }
+                    )
                 }
                 Text(
-                    text = "Keep imported data to update protected route facts and protected ideal order. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged.",
+                    text = if (summary.isDuplicateOnly) {
+                        "This file has the same SHA-256 hash as protected route data already stored in the Event File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Event File unchanged."
+                    } else {
+                        "Keep imported data to update protected route facts and protected ideal order. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
+                    },
                     fontSize = 13.sp,
                     color = Color.DarkGray
                 )
@@ -2429,7 +2478,13 @@ private fun CourseKmlKmzImportReviewDialog(
         },
         confirmButton = {
             Button(onClick = { onKeep(fetchElevations) }) {
-                Text("Keep Imported Data")
+                Text(
+                    if (summary.isDuplicateOnly) {
+                        "Continue"
+                    } else {
+                        "Keep Imported Data"
+                    }
+                )
             }
         },
         dismissButton = {
@@ -2713,6 +2768,11 @@ private data class PendingCourseKmlKmzImportReview(
     val updatedProject: EventProjectFile,
     val summary: DesktopCourseKmlImportSummary,
     val password: String
+)
+
+private data class CourseAnalysisMissingDataPrompt(
+    val categoryId: String,
+    val summary: DesktopCourseAnalysisSummary
 )
 
 private data class CourseKmlKmzElevationProgressUiState(
@@ -5084,16 +5144,22 @@ private fun CourseAnalysisPanel(
         return
     }
 
-    val categories = projectFile.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
+    val categories = projectFile.raceData.categories
+        .filter { categoryData ->
+            protectedCourseInfoByCategoryId[categoryData.category.id]?.route.orEmpty().size >= 2
+        }
+        .sortedWith(EventCategorySort.byDisplayName)
     var selectedCategoryId by remember(projectFile.raceData.race.id, categories.map { it.category.id }) {
         mutableStateOf(categories.firstOrNull()?.category?.id)
     }
     val effectiveSelectedCategoryId = selectedCategoryId
         ?.takeIf { selectedId -> categories.any { it.category.id == selectedId } }
         ?: categories.firstOrNull()?.category?.id
-    var analysisResult by remember(projectFile.raceData.race.id) { mutableStateOf<DesktopCourseAnalysisSummary?>(null) }
-    var pendingMissingDataResult by remember(projectFile.raceData.race.id) {
+    var analysisResult by remember(projectFile.raceData.race.id, protectedCourseInfoByCategoryId) {
         mutableStateOf<DesktopCourseAnalysisSummary?>(null)
+    }
+    var pendingMissingDataResult by remember(projectFile.raceData.race.id, protectedCourseInfoByCategoryId) {
+        mutableStateOf<CourseAnalysisMissingDataPrompt?>(null)
     }
 
     fun analyzeSelectedCourse(): DesktopCourseAnalysisSummary? {
@@ -5112,7 +5178,7 @@ private fun CourseAnalysisPanel(
     ) {
         if (categories.isEmpty()) {
             Text(
-                text = "Add a category before running course analysis.",
+                text = "Import protected controls/route KML/KMZ data for a category before running course analysis.",
                 color = DesktopPalette.Black,
                 fontSize = 14.sp
             )
@@ -5134,28 +5200,27 @@ private fun CourseAnalysisPanel(
             )
             Button(
                 onClick = {
+                    val categoryId = effectiveSelectedCategoryId ?: return@Button
                     analyzeSelectedCourse()?.let { summary ->
                         if (summary.missingElements.isEmpty()) {
                             analysisResult = summary
                         } else {
-                            pendingMissingDataResult = summary
+                            pendingMissingDataResult = CourseAnalysisMissingDataPrompt(
+                                categoryId = categoryId,
+                                summary = summary
+                            )
                         }
                     }
                 }
             ) {
                 ButtonLabel("Analyze")
             }
-            Button(
-                onClick = { effectiveSelectedCategoryId?.let(onRetrieveMissingElevations) },
-                enabled = effectiveSelectedCategoryId != null
-            ) {
-                ButtonLabel("Retrieve Missing Elevations")
-            }
         }
         CourseAnalysisResultView(analysisResult)
     }
 
-    pendingMissingDataResult?.let { summary ->
+    pendingMissingDataResult?.let { prompt ->
+        val summary = prompt.summary
         AlertDialog(
             onDismissRequest = { pendingMissingDataResult = null },
             title = { Text("Course analysis data is incomplete") },
@@ -5186,8 +5251,20 @@ private fun CourseAnalysisPanel(
                 }
             },
             dismissButton = {
-                Button(onClick = { pendingMissingDataResult = null }) {
-                    ButtonLabel("Cancel")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (summary.hasMissingElevationData) {
+                        Button(
+                            onClick = {
+                                pendingMissingDataResult = null
+                                onRetrieveMissingElevations(prompt.categoryId)
+                            }
+                        ) {
+                            ButtonLabel("Retrieve Elevations")
+                        }
+                    }
+                    Button(onClick = { pendingMissingDataResult = null }) {
+                        ButtonLabel("Cancel")
+                    }
                 }
             }
         )

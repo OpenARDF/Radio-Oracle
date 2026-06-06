@@ -25,6 +25,7 @@ import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
 import java.time.Duration
 import java.util.zip.ZipInputStream
 import javax.xml.XMLConstants
@@ -43,8 +44,18 @@ data class DesktopCourseKmlImportSummary(
     val matchedControlPointCount: Int,
     val matchedCategoryIds: List<String>,
     val matchedCategoryNames: List<String>,
-    val routeElevationPointCount: Int
-)
+    val routeElevationPointCount: Int,
+    val importedCategoryCount: Int,
+    val duplicateCategoryCount: Int,
+    val duplicateMissingElevationPointCount: Int,
+    val sourceSha256: String
+) {
+    val isDuplicateOnly: Boolean
+        get() = matchedCategoryCount > 0 && importedCategoryCount == 0 && duplicateCategoryCount == matchedCategoryCount
+
+    val hasDuplicateMissingElevations: Boolean
+        get() = duplicateMissingElevationPointCount > 0
+}
 
 data class DesktopRouteElevationProgress(
     val completedPointCount: Int,
@@ -71,12 +82,16 @@ object DesktopCourseKmlImporter {
         password: String,
         elevationProvider: (CourseGeoPoint) -> Double? = { null }
     ): Pair<EventProjectFile, DesktopCourseKmlImportSummary> {
+        val sourceSha256 = fileSha256(path)
         val courseData = parse(path)
         val controls = matchedControls(courseData.controls, projectFile.raceData.controls)
         val controlsByLabel = controls.associateBy { it.label.normalizedCourseName() }
         val categories = projectFile.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
         var updatedProject = projectFile
         var matchedCategoryCount = 0
+        var importedCategoryCount = 0
+        var duplicateCategoryCount = 0
+        var duplicateMissingElevationPointCount = 0
         var routeElevationPointCount = 0
         val matchedCategoryIds = mutableListOf<String>()
         val matchedCategoryNames = mutableListOf<String>()
@@ -85,6 +100,18 @@ object DesktopCourseKmlImporter {
             val categoryData = categories.firstOrNull { categoryData ->
                 categoryData.category.name.normalizedCourseName() == route.name.normalizedCourseName()
             } ?: return@forEach
+            matchedCategoryCount++
+            matchedCategoryIds += categoryData.category.id
+            matchedCategoryNames += categoryData.category.name
+
+            val existingCourseInfo = categoryData.category.encryptedCourseInfo
+                ?.takeIf { it.isNotBlank() }
+                ?.let { DesktopProtectedCourseOrder.decryptCourseInfo(it, password) }
+            if (existingCourseInfo?.sourceSha256 == sourceSha256) {
+                duplicateCategoryCount++
+                duplicateMissingElevationPointCount += missingElevationCount(existingCourseInfo)
+                return@forEach
+            }
             val routeGeometry = route.points.map { it.copy(elevationMeters = null) }
             val sampledRoute = sampledRoute(routeGeometry, ROUTE_SAMPLE_METERS).map { point ->
                 val elevation = elevationProvider(point)
@@ -114,6 +141,7 @@ object DesktopCourseKmlImporter {
                 lengthMeters = routeLengthMeters(sampledRoute).roundToInt(),
                 climbMeters = climbMetersOrNull(sampledRoute),
                 sourceName = path.fileName.toString(),
+                sourceSha256 = sourceSha256,
                 sampledPointCount = sampledRoute.size,
                 route = sampledRoute.map { point ->
                     ProtectedCourseRoutePoint(
@@ -139,9 +167,7 @@ object DesktopCourseKmlImporter {
                 categoryData.category.id,
                 encryptedIdealOrder
             )
-            matchedCategoryCount++
-            matchedCategoryIds += categoryData.category.id
-            matchedCategoryNames += categoryData.category.name
+            importedCategoryCount++
         }
 
         require(matchedCategoryCount > 0) {
@@ -155,7 +181,11 @@ object DesktopCourseKmlImporter {
             matchedControlPointCount = controls.size,
             matchedCategoryIds = matchedCategoryIds,
             matchedCategoryNames = matchedCategoryNames,
-            routeElevationPointCount = routeElevationPointCount
+            routeElevationPointCount = routeElevationPointCount,
+            importedCategoryCount = importedCategoryCount,
+            duplicateCategoryCount = duplicateCategoryCount,
+            duplicateMissingElevationPointCount = duplicateMissingElevationPointCount,
+            sourceSha256 = sourceSha256
         )
     }
 
@@ -540,6 +570,10 @@ object DesktopCourseKmlImporter {
         }
     }
 
+    private fun missingElevationCount(courseInfo: ProtectedCourseInfo): Int =
+        routeWithMissingElevationSamples(courseInfo).count { it.elevationMeters == null } +
+            courseObjectsForCourseInfo(courseInfo).count { it.elevationMeters == null }
+
     private fun routeLengthMeters(points: List<CourseGeoPoint>): Double =
         points.zipWithNext().sumOf { (start, end) -> start.distanceMetersTo(end) }
 
@@ -580,6 +614,21 @@ object DesktopCourseKmlImporter {
 
     private fun Double.url(): String =
         URLEncoder.encode(toString(), StandardCharsets.UTF_8)
+
+    private fun fileSha256(path: Path): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        Files.newInputStream(path).use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) {
+                    break
+                }
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+    }
 
     private fun CourseGeoPoint.locationKey(): Pair<Int, Int> =
         (latitude * 10_000_000).roundToInt() to (longitude * 10_000_000).roundToInt()
