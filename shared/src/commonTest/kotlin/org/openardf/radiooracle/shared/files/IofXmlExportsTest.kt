@@ -61,6 +61,18 @@ class IofXmlExportsTest {
     }
 
     @Test
+    fun explicitProtectedStartListExportDoesNotFallBackToPublicCourseStats() {
+        val xml = IofXmlExports.startList(
+            raceData(),
+            protectedCourseInfoByCategoryId = emptyMap()
+        )
+
+        assertFalse(xml.contains("<Length>5200</Length>"))
+        assertFalse(xml.contains("<Climb>120</Climb>"))
+        assertFalse(xml.contains("<Course>"))
+    }
+
+    @Test
     fun exportsIofResultListUsingAndroidStructure() {
         val xml = IofXmlExports.resultList(raceData(includeSecondCategory = true, includeReadout = true), creator = "Radio-Oracle 1.0")
 

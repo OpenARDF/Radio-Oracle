@@ -391,6 +391,7 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "Define Controls",
+                "Course Analysis",
                 "Import Controls CSV...",
                 "Import Controls/Route KML/KMZ...",
                 "Export Controls CSV..."
@@ -402,6 +403,7 @@ class DesktopNavigationTest {
             categoryItems.map { it.label }
         )
         assertEquals(DesktopSection.Controls, controlItems.first { it.label == "Define Controls" }.section)
+        assertEquals(DesktopSection.CourseAnalysis, controlItems.first { it.label == "Course Analysis" }.section)
         assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Protected Course Order" }.section)
         assertEquals(
             listOf("Competitors", "Import Competitors CSV...", "Import EventReg Website...", "Export Competitors CSV..."),

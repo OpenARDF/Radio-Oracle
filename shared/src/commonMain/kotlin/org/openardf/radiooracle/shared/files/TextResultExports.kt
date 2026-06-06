@@ -6,6 +6,8 @@ import org.openardf.radiooracle.shared.event.EventAliasPunch
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
@@ -13,7 +15,11 @@ import org.openardf.radiooracle.shared.time.DurationFormatter
 object TextResultExports {
     private const val RULE = "--------------------------------------------------------------------------------------------------------------------------------------------------"
 
-    fun results(raceData: EventRaceData, appVersion: String = "Desktop"): String {
+    fun results(
+        raceData: EventRaceData,
+        appVersion: String = "Desktop",
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+    ): String {
         val placedByCategory = raceData.competitorData
             .groupBy { it.competitorCategory.category?.id ?: it.competitorCategory.competitor.categoryId }
             .mapValues { (_, categoryCompetitors) -> EventResultPlacement.sortByPlace(categoryCompetitors) }
@@ -28,11 +34,11 @@ object TextResultExports {
             appendLine()
             appendLine("Place\tName\tIndex\tRun time\tPoints\tControls")
             appendLine(RULE)
-            appendCategoryRows(raceData, placedByCategory, includeSplits = false)
+            appendCategoryRows(raceData, placedByCategory, includeSplits = false, protectedCourseInfoByCategoryId)
             appendLine(RULE)
             appendLine("Splits")
             appendLine(RULE)
-            appendCategoryRows(raceData, placedByCategory, includeSplits = true)
+            appendCategoryRows(raceData, placedByCategory, includeSplits = true, protectedCourseInfoByCategoryId)
             appendLine("===========================================================================")
             appendLine("Generated with Radio-Oracle $appVersion")
         }
@@ -41,12 +47,19 @@ object TextResultExports {
     private fun StringBuilder.appendCategoryRows(
         raceData: EventRaceData,
         placedByCategory: Map<String?, List<EventCompetitorData>>,
-        includeSplits: Boolean
+        includeSplits: Boolean,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>?
     ) {
         raceData.categories
             .sortedWith(compareBy({ it.category.order }, { it.category.name }))
             .forEach { categoryData ->
-                appendCategoryRows(categoryData, placedByCategory[categoryData.category.id] ?: emptyList(), raceData, includeSplits)
+                appendCategoryRows(
+                    categoryData,
+                    placedByCategory[categoryData.category.id] ?: emptyList(),
+                    raceData,
+                    includeSplits,
+                    protectedCourseInfoByCategoryId
+                )
             }
     }
 
@@ -54,13 +67,23 @@ object TextResultExports {
         categoryData: EventCategoryData,
         competitors: List<EventCompetitorData>,
         raceData: EventRaceData,
-        includeSplits: Boolean
+        includeSplits: Boolean,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>?
     ) {
         val resultCompetitors = competitors.filter { it.readoutData != null }
         if (resultCompetitors.isEmpty()) return
         val controlLabelsByCode = FinalResultJsonExports.controlLabelsByCode(raceData)
+        val protectedCourseInfo = protectedCourseInfoByCategoryId?.get(categoryData.category.id)
 
-        appendLine("Category ${categoryData.category.name}\tLimit: ${categoryData.category.effectiveTimeLimitSeconds(raceData.race) / 60}\tLength: ${categoryData.category.lengthMeters / 1000.0} km\tControls: ${categoryData.category.controlPointsString}")
+        append("Category ${categoryData.category.name}\tLimit: ${categoryData.category.effectiveTimeLimitSeconds(raceData.race) / 60}")
+        if (protectedCourseInfoByCategoryId == null) {
+            append("\tLength: ${categoryData.category.lengthMeters / 1000.0} km")
+        } else {
+            protectedCourseInfo?.effectiveLengthMeters()?.let { effectiveLength ->
+                append("\tEffective length: ${effectiveLength / 1000.0} km")
+            }
+        }
+        appendLine("\tControls: ${categoryData.category.controlPointsString}")
         appendLine(RULE)
         resultCompetitors.forEach { competitorData ->
             appendCompetitorRow(competitorData, includeSplits, controlLabelsByCode)

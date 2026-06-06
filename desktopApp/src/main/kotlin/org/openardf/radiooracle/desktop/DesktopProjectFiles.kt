@@ -2,6 +2,7 @@ package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectFileJson
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.files.ArdfJsonExports
 import org.openardf.radiooracle.shared.files.EventCsvExports
 import org.openardf.radiooracle.shared.files.FinalResultJsonExports
@@ -71,7 +72,7 @@ object DesktopProjectFiles : ProjectFileStore {
     }
 
     fun exportArdfJson(path: Path, projectFile: EventProjectFile) {
-        writeText(path, ArdfJsonExports.event(projectFile.raceData.race.name, projectFile.raceData))
+        writeText(path, ArdfJsonExports.event(projectFile.raceData.race.name, projectFile.raceData, emptyMap()))
     }
 
     fun exportAndroidRaceBackupJson(path: Path, projectFile: EventProjectFile) {
@@ -82,24 +83,36 @@ object DesktopProjectFiles : ProjectFileStore {
         writeText(path, LiveResultJsonExports.results(projectFile.raceData))
     }
 
-    fun exportFinalResultsJson(path: Path, projectFile: EventProjectFile) {
-        writeText(path, FinalResultJsonExports.results(projectFile.raceData))
+    fun exportFinalResultsJson(
+        path: Path,
+        projectFile: EventProjectFile,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+    ) {
+        writeText(path, FinalResultJsonExports.results(projectFile.raceData, protectedCourseInfoByCategoryId))
     }
 
     fun exportIofStartListXml(path: Path, projectFile: EventProjectFile) {
-        writeText(path, IofXmlExports.startList(projectFile.raceData))
+        writeText(path, IofXmlExports.startList(projectFile.raceData, protectedCourseInfoByCategoryId = emptyMap()))
     }
 
     fun exportIofResultListXml(path: Path, projectFile: EventProjectFile) {
         writeText(path, IofXmlExports.resultList(projectFile.raceData))
     }
 
-    fun exportResultsHtml(path: Path, projectFile: EventProjectFile) {
-        writeText(path, HtmlResultExports.results(projectFile.raceData))
+    fun exportResultsHtml(
+        path: Path,
+        projectFile: EventProjectFile,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+    ) {
+        writeText(path, HtmlResultExports.results(projectFile.raceData, protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId))
     }
 
-    fun exportResultsText(path: Path, projectFile: EventProjectFile) {
-        writeText(path, TextResultExports.results(projectFile.raceData))
+    fun exportResultsText(
+        path: Path,
+        projectFile: EventProjectFile,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+    ) {
+        writeText(path, TextResultExports.results(projectFile.raceData, protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId))
     }
 
     private fun writeText(path: Path, text: String) {

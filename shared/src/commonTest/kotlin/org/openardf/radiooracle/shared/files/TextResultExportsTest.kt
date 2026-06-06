@@ -18,6 +18,7 @@ import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -55,6 +56,24 @@ class TextResultExportsTest {
         )
 
         assertTrue(text.contains("1.\tRUNNER Alice\tIDX\t00:45:00\t2\tF1 32"))
+    }
+
+    @Test
+    fun protectedResultExportUsesEffectiveLengthWithoutPublicLengthFallback() {
+        val lockedText = TextResultExports.results(
+            raceData(),
+            protectedCourseInfoByCategoryId = emptyMap()
+        )
+        val unlockedText = TextResultExports.results(
+            raceData(),
+            protectedCourseInfoByCategoryId = mapOf(
+                "category" to ProtectedCourseInfo(lengthMeters = 5_000, climbMeters = 120)
+            )
+        )
+
+        assertFalse(lockedText.contains("Length: 5.0 km"))
+        assertFalse(lockedText.contains("Effective length"))
+        assertTrue(unlockedText.contains("Effective length: 6.2 km"))
     }
 
     private fun raceData(

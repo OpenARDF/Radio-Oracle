@@ -71,7 +71,9 @@ data class ProtectedCourseInfo(
     val climbMeters: Int? = null,
     val sourceName: String = "",
     val sampledPointCount: Int = 0,
-    val route: List<ProtectedCourseRoutePoint> = emptyList()
+    val route: List<ProtectedCourseRoutePoint> = emptyList(),
+    val controlPoints: List<ProtectedCourseControlPoint> = emptyList(),
+    val courseObjects: List<ProtectedCourseObjectPoint> = emptyList()
 )
 
 @Serializable
@@ -80,6 +82,41 @@ data class ProtectedCourseRoutePoint(
     val longitude: Double,
     val elevationMeters: Double? = null
 )
+
+@Serializable
+data class ProtectedCourseControlPoint(
+    val controlId: String,
+    val label: String,
+    val latitude: Double,
+    val longitude: Double,
+    val type: ControlPointType = ControlPointType.CONTROL,
+    val elevationMeters: Double? = null
+)
+
+@Serializable
+data class ProtectedCourseObjectPoint(
+    val id: String,
+    val label: String,
+    val type: ProtectedCourseObjectType,
+    val latitude: Double,
+    val longitude: Double,
+    val elevationMeters: Double? = null
+)
+
+@Serializable
+enum class ProtectedCourseObjectType {
+    START,
+    FINISH,
+    CONTROL,
+    BEACON,
+    SPECTATOR
+}
+
+fun ProtectedCourseInfo.effectiveLengthMeters(): Int? {
+    val length = lengthMeters ?: return null
+    val climb = climbMeters ?: return null
+    return length + 10 * climb
+}
 
 /** Portable control-point definition for a category course. */
 @Serializable

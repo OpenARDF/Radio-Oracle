@@ -200,6 +200,12 @@ object DesktopNavigation {
                     workflow,
                     listOf(
                         item("setup.controls.define", "Define Controls", workflow, DesktopSection.Controls),
+                        item(
+                            "setup.controls.course-analysis",
+                            "Course Analysis",
+                            workflow,
+                            DesktopSection.CourseAnalysis
+                        ),
                         action(
                             "setup.controls.import",
                             "Import Controls CSV...",

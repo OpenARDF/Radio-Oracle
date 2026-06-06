@@ -6,12 +6,18 @@ import org.openardf.radiooracle.shared.event.EventAliasPunch
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** Shared printable HTML exports for desktop and non-Android result workflows. */
 object HtmlResultExports {
-    fun results(raceData: EventRaceData, appVersion: String = "Desktop"): String {
+    fun results(
+        raceData: EventRaceData,
+        appVersion: String = "Desktop",
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+    ): String {
         val placedByCategory = raceData.competitorData
             .groupBy { it.competitorCategory.category?.id ?: it.competitorCategory.competitor.categoryId }
             .mapValues { (_, categoryCompetitors) -> EventResultPlacement.sortByPlace(categoryCompetitors) }
@@ -41,7 +47,12 @@ object HtmlResultExports {
             raceData.categories
                 .sortedWith(compareBy({ it.category.order }, { it.category.name }))
                 .forEach { categoryData ->
-                    appendCategoryResults(categoryData, placedByCategory[categoryData.category.id] ?: emptyList(), raceData)
+                    appendCategoryResults(
+                        categoryData,
+                        placedByCategory[categoryData.category.id] ?: emptyList(),
+                        raceData,
+                        protectedCourseInfoByCategoryId
+                    )
                 }
             append("<div class=\"generated\">Generated with Radio-Oracle ")
             appendHtml(appVersion)
@@ -53,15 +64,24 @@ object HtmlResultExports {
     private fun StringBuilder.appendCategoryResults(
         categoryData: EventCategoryData,
         competitors: List<EventCompetitorData>,
-        raceData: EventRaceData
+        raceData: EventRaceData,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>?
     ) {
         val resultCompetitors = competitors.filter { it.readoutData != null }
         if (resultCompetitors.isEmpty()) return
         val controlLabelsByCode = FinalResultJsonExports.controlLabelsByCode(raceData)
+        val effectiveLength = protectedCourseInfoByCategoryId
+            ?.get(categoryData.category.id)
+            ?.effectiveLengthMeters()
 
         append("<h2>")
         appendHtml(categoryData.category.name)
         append("</h2>")
+        if (effectiveLength != null) {
+            append("<p class=\"meta\">Effective length: ")
+            appendHtml("${effectiveLength / 1000.0} km")
+            append("</p>")
+        }
         append("<table><thead><tr>")
         listOf("Place", "Name", "Club", "Index", "Points", "Run time", "Splits").forEach { heading ->
             append("<th>")

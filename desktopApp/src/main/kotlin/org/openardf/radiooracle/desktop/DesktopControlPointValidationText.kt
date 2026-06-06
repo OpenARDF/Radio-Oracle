@@ -39,6 +39,6 @@ object DesktopControlPointValidationText {
                 "Assigned Controls cannot include the same control more than once."
 
             ControlPointValidationError.SPRINT_SPECIAL_REUSES_CONTROL ->
-                "Control point with SI code [${siCode ?: "unknown"}] used as a separator / beacon and as a control."
+                "Control point with SI code [${siCode ?: "unknown"}] used as a spectator / beacon and as a control."
         }
 }

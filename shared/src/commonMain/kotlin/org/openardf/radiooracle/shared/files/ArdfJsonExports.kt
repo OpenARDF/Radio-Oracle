@@ -20,6 +20,8 @@ import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** Standards-facing ARDF JSON export helpers. */
@@ -35,17 +37,27 @@ object ArdfJsonExports {
     }
 
     /** Exports a full ARDF JSON event document containing the current Radio-Oracle race. */
-    fun event(projectName: String, raceData: EventRaceData): String =
-        json.encodeToString(eventDocument(projectName, raceData))
+    fun event(
+        projectName: String,
+        raceData: EventRaceData,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+    ): String =
+        json.encodeToString(eventDocument(projectName, raceData, protectedCourseInfoByCategoryId))
 
-    fun eventDocument(projectName: String, raceData: EventRaceData): ArdfEventDocument =
+    fun eventDocument(
+        projectName: String,
+        raceData: EventRaceData,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+    ): ArdfEventDocument =
         ArdfEventDocument(
             formatVersion = FORMAT_VERSION,
             eventName = projectName,
-            races = listOf(raceData.toArdfRace())
+            races = listOf(raceData.toArdfRace(protectedCourseInfoByCategoryId))
         )
 
-    private fun EventRaceData.toArdfRace(): ArdfRace {
+    private fun EventRaceData.toArdfRace(
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>?
+    ): ArdfRace {
         val controlsById = controls.associateBy { it.id }
         return ArdfRace(
             raceName = race.name,
@@ -57,7 +69,7 @@ object ArdfJsonExports {
             raceApiKey = race.apiKey.takeIf { it.isNotBlank() },
             categories = categories
                 .sortedWith(compareBy({ it.category.order }, { it.category.name }))
-                .map { it.toArdfCategory(race, controlsById) },
+                .map { it.toArdfCategory(race, controlsById, protectedCourseInfoByCategoryId) },
             aliases = FinalResultJsonExports.androidAliases(this)
                 .map { it.toArdfAlias() },
             competitors = competitorData
@@ -70,14 +82,24 @@ object ArdfJsonExports {
 
     private fun EventCategoryData.toArdfCategory(
         race: org.openardf.radiooracle.shared.event.EventRace,
-        controlsById: Map<String, EventControl>
-    ): ArdfCategory =
-        ArdfCategory(
+        controlsById: Map<String, EventControl>,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>?
+    ): ArdfCategory {
+        val protectedCourseInfo = protectedCourseInfoByCategoryId?.get(category.id)
+        return ArdfCategory(
             categoryName = category.name,
             categoryGender = category.isMan,
             categoryMaxAge = category.maxAge ?: EventCsvFormat.Category.OPEN_MAX_AGE,
-            categoryLength = category.lengthMeters / METERS_PER_KILOMETER,
-            categoryClimb = category.climbMeters,
+            categoryLength = if (protectedCourseInfoByCategoryId == null) {
+                category.lengthMeters / METERS_PER_KILOMETER
+            } else {
+                (protectedCourseInfo?.effectiveLengthMeters() ?: 0) / METERS_PER_KILOMETER
+            },
+            categoryClimb = if (protectedCourseInfoByCategoryId == null) {
+                category.climbMeters
+            } else {
+                protectedCourseInfo?.climbMeters ?: 0
+            },
             categoryControlPoints = controlPoints
                 .sortedBy { it.order }
                 .map { it.toArdfControlPoint(controlsById) },
@@ -86,6 +108,7 @@ object ArdfJsonExports {
             categoryTimeLimit = category.timeLimitSeconds?.takeIf { category.differentProperties }?.toMinutes(),
             categoryBand = category.raceBand?.takeIf { category.differentProperties }?.toArdfCategoryBand()
         )
+    }
 
     private fun EventControlPoint.toArdfControlPoint(controlsById: Map<String, EventControl>): ArdfControlPoint {
         val control = controlsById[controlId]

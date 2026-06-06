@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.HorizontalScrollbar
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.TooltipArea
@@ -30,6 +31,7 @@ import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Checkbox
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
@@ -47,6 +49,7 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -59,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -127,6 +131,9 @@ import java.time.LocalDateTime
 import java.time.YearMonth
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 private data class FixedTableColumn(val title: String, val width: Dp)
 
@@ -331,6 +338,9 @@ fun main(args: Array<String>) = application {
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var isCourseKmlKmzUnlockDialogVisible by remember { mutableStateOf(false) }
+        var pendingCourseKmlKmzImportReview by remember { mutableStateOf<PendingCourseKmlKmzImportReview?>(null) }
+        var courseKmlKmzElevationProgress by remember { mutableStateOf<CourseKmlKmzElevationProgressUiState?>(null) }
+        var courseKmlKmzElevationJob by remember { mutableStateOf<Job?>(null) }
         var eventRegImportUrl by remember { mutableStateOf(DesktopEventRegImportPreferences.lastRegistrationUrl()) }
         var isImportingEventRegWebsite by remember { mutableStateOf(false) }
         var isImportingEventRegCompetitorCsvs by remember { mutableStateOf(false) }
@@ -956,6 +966,109 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun syncProtectedCourseState(updatedProject: EventProjectFile, password: String) {
+            protectedIdealOrderByCategoryId = updatedProject.raceData.categories.associate { categoryData ->
+                val encryptedValue = categoryData.category.encryptedIdealOrder
+                categoryData.category.id to if (encryptedValue.isNullOrBlank()) {
+                    ""
+                } else {
+                    DesktopProtectedCourseOrder.decrypt(encryptedValue, password)
+                }
+            }
+            protectedCourseInfoByCategoryId = updatedProject.raceData.categories.mapNotNull { categoryData ->
+                categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
+                    categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
+                }
+            }.toMap()
+            hasUnsavedChanges = projectSession.hasUnsavedChanges
+        }
+
+        fun startProtectedCourseElevationFetch(sourceName: String, categoryIds: List<String>, password: String) {
+            val currentProject = projectSession.currentProject ?: return
+            if (courseKmlKmzElevationJob?.isActive == true) {
+                return
+            }
+            projectStatusText = "Retrieving protected course elevations..."
+            courseKmlKmzElevationProgress = CourseKmlKmzElevationProgressUiState(
+                sourceName = sourceName,
+                categoryName = "",
+                completedPointCount = 0,
+                totalPointCount = 1
+            )
+            courseKmlKmzElevationJob = appCoroutineScope.launch {
+                val result = runCatching {
+                    DesktopCourseKmlImporter.fetchProtectedCourseElevations(
+                        projectFile = currentProject,
+                        categoryIds = categoryIds,
+                        password = password,
+                        onProgress = { progress ->
+                            courseKmlKmzElevationProgress = CourseKmlKmzElevationProgressUiState(
+                                sourceName = sourceName,
+                                categoryName = progress.categoryName,
+                                completedPointCount = progress.completedPointCount,
+                                totalPointCount = progress.totalPointCount
+                            )
+                        }
+                    )
+                }
+                result.onSuccess { (updatedProject, elevationResult) ->
+                    projectFile = projectSession.updateCurrentProject { updatedProject }
+                    syncProtectedCourseState(updatedProject, password)
+                    projectStatusText =
+                        "Retrieved ${elevationResult.elevatedPointCount} protected course elevations for ${elevationResult.categoryCount} categories. Unsaved changes."
+                }.onFailure { error ->
+                    projectStatusText = if (error is CancellationException) {
+                        "Course elevation retrieval canceled. Imported route data kept without fetched elevations."
+                    } else {
+                        "Course elevation retrieval failed: ${error.message ?: error::class.simpleName}"
+                    }
+                }
+                courseKmlKmzElevationProgress = null
+                courseKmlKmzElevationJob = null
+            }
+        }
+
+        fun startCourseKmlKmzElevationFetch(review: PendingCourseKmlKmzImportReview) {
+            startProtectedCourseElevationFetch(
+                sourceName = review.sourceName,
+                categoryIds = review.summary.matchedCategoryIds,
+                password = review.password
+            )
+        }
+
+        fun startCourseAnalysisElevationFetch(categoryId: String) {
+            val password = protectedCoursePassword ?: run {
+                projectStatusText = "Unlock protected course order before retrieving course elevations."
+                return
+            }
+            val categoryName = projectSession.currentProject
+                ?.raceData
+                ?.categories
+                ?.firstOrNull { it.category.id == categoryId }
+                ?.category
+                ?.name
+                ?: "Course Analysis"
+            startProtectedCourseElevationFetch(
+                sourceName = "Course Analysis",
+                categoryIds = listOf(categoryId),
+                password = password
+            )
+            projectStatusText = "Retrieving protected course elevations for $categoryName..."
+        }
+
+        fun applyCourseKmlKmzImport(review: PendingCourseKmlKmzImportReview, fetchElevations: Boolean) {
+            val updatedProject = review.updatedProject
+            projectFile = projectSession.updateCurrentProject { updatedProject }
+            syncProtectedCourseState(updatedProject, review.password)
+            pendingCourseKmlKmzImportReview = null
+            if (fetchElevations) {
+                startCourseKmlKmzElevationFetch(review)
+            } else {
+                projectStatusText =
+                    "Imported protected controls/route data for ${review.summary.matchedCategoryCount} categories. Unsaved changes."
+            }
+        }
+
         fun chooseImportCourseKmlKmzUnlocked(password: String) {
             val currentProject = projectSession.currentProject ?: return
             if (isImportingCourseKmlKmz) {
@@ -975,23 +1088,13 @@ fun main(args: Array<String>) = application {
                         }
                     }
                     result.onSuccess { (updatedProject, summary) ->
-                        projectFile = projectSession.updateCurrentProject { updatedProject }
-                        protectedIdealOrderByCategoryId = updatedProject.raceData.categories.associate { categoryData ->
-                            val encryptedValue = categoryData.category.encryptedIdealOrder
-                            categoryData.category.id to if (encryptedValue.isNullOrBlank()) {
-                                ""
-                            } else {
-                                DesktopProtectedCourseOrder.decrypt(encryptedValue, password)
-                            }
-                        }
-                        protectedCourseInfoByCategoryId = updatedProject.raceData.categories.mapNotNull { categoryData ->
-                            categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
-                                categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
-                            }
-                        }.toMap()
-                        hasUnsavedChanges = projectSession.hasUnsavedChanges
-                        projectStatusText =
-                            "Imported protected controls/route data for ${summary.matchedCategoryCount} categories; sampled ${summary.sampledElevationCount} USGS elevation points."
+                        pendingCourseKmlKmzImportReview = PendingCourseKmlKmzImportReview(
+                            sourceName = path.fileName.toString(),
+                            updatedProject = updatedProject,
+                            summary = summary,
+                            password = password
+                        )
+                        projectStatusText = "Review imported controls/route data before applying it."
                     }.onFailure { error ->
                         projectStatusText = "Controls/route KML/KMZ import failed: ${error.message ?: error::class.simpleName}"
                     }
@@ -1066,7 +1169,11 @@ fun main(args: Array<String>) = application {
             val currentProject = projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportFinalResultsJson()?.let { path ->
                 runCatching {
-                    DesktopProjectFiles.exportFinalResultsJson(path, currentProject)
+                    DesktopProjectFiles.exportFinalResultsJson(
+                        path,
+                        currentProject,
+                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap()
+                    )
                     syncProjectState()
                     projectStatusText = "Exported ${path.fileName}"
                 }.onFailure { error ->
@@ -1105,7 +1212,11 @@ fun main(args: Array<String>) = application {
             val currentProject = projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportHtml("Export Results HTML")?.let { path ->
                 runCatching {
-                    DesktopProjectFiles.exportResultsHtml(path, currentProject)
+                    DesktopProjectFiles.exportResultsHtml(
+                        path,
+                        currentProject,
+                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap()
+                    )
                     syncProjectState()
                     projectStatusText = "Exported ${path.fileName}"
                 }.onFailure { error ->
@@ -1118,7 +1229,11 @@ fun main(args: Array<String>) = application {
             val currentProject = projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportTxt("Export Results TXT")?.let { path ->
                 runCatching {
-                    DesktopProjectFiles.exportResultsText(path, currentProject)
+                    DesktopProjectFiles.exportResultsText(
+                        path,
+                        currentProject,
+                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap()
+                    )
                     syncProjectState()
                     projectStatusText = "Exported ${path.fileName}"
                 }.onFailure { error ->
@@ -1612,6 +1727,25 @@ fun main(args: Array<String>) = application {
                 onCancel = { isCourseKmlKmzUnlockDialogVisible = false }
             )
         }
+        pendingCourseKmlKmzImportReview?.let { review ->
+            CourseKmlKmzImportReviewDialog(
+                review = review,
+                onKeep = { fetchElevations -> applyCourseKmlKmzImport(review, fetchElevations) },
+                onCancel = {
+                    pendingCourseKmlKmzImportReview = null
+                    projectStatusText = "Controls/route KML/KMZ import canceled. No changes applied."
+                }
+            )
+        }
+        courseKmlKmzElevationProgress?.let { progress ->
+            CourseKmlKmzElevationProgressDialog(
+                progress = progress,
+                onCancel = {
+                    courseKmlKmzElevationProgress = progress.copy(cancelRequested = true)
+                    courseKmlKmzElevationJob?.cancel()
+                }
+            )
+        }
         pendingCompetitorsCsvImportPath?.let { importPath ->
             CompetitorCsvImportOptionsDialog(
                 fileName = importPath.fileName.toString(),
@@ -1642,6 +1776,8 @@ fun main(args: Array<String>) = application {
             onNavAction = ::handleNavAction,
             isProtectedCourseOrderUnlocked = protectedCoursePassword != null,
             protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+            onRetrieveMissingCourseElevations = ::startCourseAnalysisElevationFetch,
             onUnlockProtectedCourseOrder = ::unlockProtectedCourseOrder,
             onUpdateProtectedIdealOrder = ::updateProtectedIdealOrder,
             onUpdateProtectedCoursePassword = ::updateProtectedCoursePassword,
@@ -1989,7 +2125,13 @@ fun main(args: Array<String>) = application {
                     val currentProject = requireNotNull(projectSession.currentProject) {
                         "Open or create an Event File before previewing finish tickets."
                     }
-                    FinishTicketRenderer.render(currentProject.raceData, resultId, useAliases = areAliasesEnabled)
+                    FinishTicketRenderer.render(
+                        currentProject.raceData,
+                        resultId,
+                        useAliases = areAliasesEnabled,
+                        protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
+                            .takeIf { protectedCoursePassword != null }
+                    )
                 }.getOrElse { error ->
                     "Ticket preview failed: ${error.message ?: error::class.simpleName}"
                 }
@@ -2006,7 +2148,9 @@ fun main(args: Array<String>) = application {
                                 val markedUpTicketText = FinishTicketRenderer.render(
                                     currentProject.raceData,
                                     resultId,
-                                    useAliases = areAliasesEnabled
+                                    useAliases = areAliasesEnabled,
+                                    protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
+                                        .takeIf { protectedCoursePassword != null }
                                 )
                                 val printerName = DesktopTicketPrinterSelector.selectPrinterName(ticketPrinter.listPrinters())
                                 ticketPrinter.printFinishTicket(markedUpTicketText, printerName)
@@ -2246,6 +2390,102 @@ private fun CourseKmlKmzUnlockDialog(
 }
 
 @Composable
+private fun CourseKmlKmzImportReviewDialog(
+    review: PendingCourseKmlKmzImportReview,
+    onKeep: (fetchElevations: Boolean) -> Unit,
+    onCancel: () -> Unit
+) {
+    val summary = review.summary
+    val categoriesText = summary.matchedCategoryNames
+        .ifEmpty { listOf("None") }
+        .joinToString()
+    var fetchElevations by remember(review.sourceName) { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Review controls/route import") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("File: ${review.sourceName}")
+                Text("Matched categories: ${summary.matchedCategoryCount} of ${summary.routeCount} route placemarks")
+                Text("Categories: $categoriesText")
+                Text("Matched controls: ${summary.matchedControlPointCount} of ${summary.controlPointCount} point placemarks")
+                Text("Course elevations: not retrieved")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Checkbox(
+                        checked = fetchElevations,
+                        onCheckedChange = { fetchElevations = it }
+                    )
+                    Text("Retrieve missing course elevations after keeping imported data")
+                }
+                Text(
+                    text = "Keep imported data to update protected route facts and protected ideal order. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged.",
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onKeep(fetchElevations) }) {
+                Text("Keep Imported Data")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun CourseKmlKmzElevationProgressDialog(
+    progress: CourseKmlKmzElevationProgressUiState,
+    onCancel: () -> Unit
+) {
+    val total = progress.totalPointCount.coerceAtLeast(1)
+    val completed = progress.completedPointCount.coerceIn(0, total)
+    val fraction = completed.toFloat() / total.toFloat()
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Retrieving course elevations") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("File: ${progress.sourceName}")
+                if (progress.categoryName.isNotBlank()) {
+                    Text("Category: ${progress.categoryName}")
+                }
+                LinearProgressIndicator(
+                    progress = fraction,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("$completed of $total course points")
+                Text(
+                    text = if (progress.cancelRequested) {
+                        "Canceling after the current elevation request finishes..."
+                    } else {
+                        "Samples are fetched along route legs at the elevation data resolution."
+                    },
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            Button(
+                onClick = onCancel,
+                enabled = !progress.cancelRequested
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
 private fun UnsavedSubmenuChangesDialog(
     onSave: () -> Unit,
     onDontSave: () -> Unit,
@@ -2468,6 +2708,21 @@ private sealed interface DesktopPendingNavigation {
     data class Item(val itemId: String) : DesktopPendingNavigation
 }
 
+private data class PendingCourseKmlKmzImportReview(
+    val sourceName: String,
+    val updatedProject: EventProjectFile,
+    val summary: DesktopCourseKmlImportSummary,
+    val password: String
+)
+
+private data class CourseKmlKmzElevationProgressUiState(
+    val sourceName: String,
+    val categoryName: String,
+    val completedPointCount: Int,
+    val totalPointCount: Int,
+    val cancelRequested: Boolean = false
+)
+
 /**
  * Builds the launchable desktop app shell.
  *
@@ -2533,6 +2788,8 @@ private fun RadioOManagerDesktopApp(
     onStopLocalResultServer: () -> Unit = {},
     isProtectedCourseOrderUnlocked: Boolean = false,
     protectedIdealOrderByCategoryId: Map<String, String> = emptyMap(),
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
+    onRetrieveMissingCourseElevations: (String) -> Unit = {},
     onUnlockProtectedCourseOrder: (String) -> Boolean = { false },
     onUpdateProtectedIdealOrder: (String, String) -> Unit = { _, _ -> },
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean = { _, _, _ -> false },
@@ -2618,7 +2875,7 @@ private fun RadioOManagerDesktopApp(
 
         Surface(modifier = Modifier.fillMaxSize(), color = DesktopPalette.White) {
             Column(modifier = Modifier.fillMaxSize()) {
-                AppTopBar()
+                AppTopBar(projectFile)
                 Row(modifier = Modifier.weight(1f)) {
                     NavigationRail(
                         navState = navState,
@@ -2691,6 +2948,8 @@ private fun RadioOManagerDesktopApp(
                                 onStopLocalResultServer = onStopLocalResultServer,
                                 isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
                                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+                                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                                onRetrieveMissingCourseElevations = onRetrieveMissingCourseElevations,
                                 onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
                                 onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
                                 onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword
@@ -2709,7 +2968,9 @@ private fun RadioOManagerDesktopApp(
                     projectStatusText = projectStatusText,
                     hasUnsavedChanges = hasUnsavedChanges,
                     siReaderState = siReaderState,
-                    isEventFileOpen = projectFile != null
+                    isEventFileOpen = projectFile != null,
+                    isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
+                    onLockProtectedCourseOrder = onLockProtectedCourseOrder
                 )
             }
         }
@@ -2749,7 +3010,7 @@ private fun RadioOManagerDesktopApp(
 
 /** Renders the Android-style app bar used at the top of the desktop window. */
 @Composable
-private fun AppTopBar() {
+private fun AppTopBar(projectFile: EventProjectFile?) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -2759,19 +3020,28 @@ private fun AppTopBar() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "Radio-Ōracle",
+            text = "Radio-Oracle",
             color = DesktopPalette.White,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.width(16.dp))
         Text(
-            text = "Desktop event-admin preview",
+            text = desktopTopBarEventText(projectFile),
+            modifier = Modifier.weight(1f),
             color = DesktopPalette.White,
-            fontSize = 14.sp
+            fontSize = 14.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
+
+internal fun desktopTopBarEventText(projectFile: EventProjectFile?): String =
+    projectFile?.raceData?.race?.name
+        ?.takeIf { it.isNotBlank() }
+        ?.let { "Event:$it" }
+        ?: "No event file loaded"
 
 @Composable
 private fun saveEventButtonColors() =
@@ -2960,6 +3230,8 @@ private fun SectionWorkspace(
     onStopLocalResultServer: () -> Unit,
     isProtectedCourseOrderUnlocked: Boolean,
     protectedIdealOrderByCategoryId: Map<String, String>,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    onRetrieveMissingCourseElevations: (String) -> Unit,
     onUnlockProtectedCourseOrder: (String) -> Boolean,
     onUpdateProtectedIdealOrder: (String, String) -> Unit,
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean
@@ -3041,6 +3313,16 @@ private fun SectionWorkspace(
                 onUpdateControl = onUpdateControl,
                 onAddControl = onAddControl,
                 onRemoveControl = onRemoveControl
+            )
+        }
+        if (section == DesktopSection.CourseAnalysis && projectFile != null) {
+            CourseAnalysisPanel(
+                projectFile = projectFile,
+                isUnlocked = isProtectedCourseOrderUnlocked,
+                protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                onRetrieveMissingElevations = onRetrieveMissingCourseElevations,
+                onUnlock = onUnlockProtectedCourseOrder
             )
         }
         if (section == DesktopSection.ControlsRouteKmlImport && projectFile != null) {
@@ -4715,8 +4997,8 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             KmlImportInstruction("Use KML Placemark elements. Each imported Placemark must have a nonblank name.")
             KmlImportInstruction("Control points are Point placemarks. Their names must match existing Event File controls.")
-            KmlImportInstruction("Control point names may use an SI code, internal token, control label, or public label.")
-            KmlImportInstruction("Normal control tokens are SI codes such as 31 or 32. Beacon tokens are 31B. Separator tokens are 31S.")
+            KmlImportInstruction("Control point names may use an SI code, control label, or public label.")
+            KmlImportInstruction("Use visible labels such as 31, M, Beacon, S, or Spectator; do not add type suffixes to SI codes.")
             KmlImportInstruction("Routes are LineString placemarks with at least two coordinates.")
             KmlImportInstruction("Each route LineString name must match an Event File category name, such as M21.")
             KmlImportInstruction("Matching ignores case, trims leading/trailing spaces, and collapses repeated whitespace.")
@@ -4764,6 +5046,434 @@ private fun KmlImportInstruction(text: String) {
         fontSize = 14.sp
     )
 }
+
+@Composable
+private fun CourseAnalysisPanel(
+    projectFile: EventProjectFile,
+    isUnlocked: Boolean,
+    protectedIdealOrderByCategoryId: Map<String, String>,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    onRetrieveMissingElevations: (String) -> Unit,
+    onUnlock: (String) -> Boolean
+) {
+    var passwordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
+    if (!isUnlocked) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = passwordDraft,
+                onValueChange = { passwordDraft = it },
+                label = { Text("Password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.width(260.dp)
+            )
+            Button(
+                onClick = {
+                    if (onUnlock(passwordDraft)) {
+                        passwordDraft = ""
+                    }
+                },
+                enabled = passwordDraft.isNotBlank()
+            ) {
+                ButtonLabel("Unlock")
+            }
+        }
+        return
+    }
+
+    val categories = projectFile.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
+    var selectedCategoryId by remember(projectFile.raceData.race.id, categories.map { it.category.id }) {
+        mutableStateOf(categories.firstOrNull()?.category?.id)
+    }
+    val effectiveSelectedCategoryId = selectedCategoryId
+        ?.takeIf { selectedId -> categories.any { it.category.id == selectedId } }
+        ?: categories.firstOrNull()?.category?.id
+    var analysisResult by remember(projectFile.raceData.race.id) { mutableStateOf<DesktopCourseAnalysisSummary?>(null) }
+    var pendingMissingDataResult by remember(projectFile.raceData.race.id) {
+        mutableStateOf<DesktopCourseAnalysisSummary?>(null)
+    }
+
+    fun analyzeSelectedCourse(): DesktopCourseAnalysisSummary? {
+        val categoryId = effectiveSelectedCategoryId ?: return null
+        return DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = categoryId,
+            protectedCourseInfo = protectedCourseInfoByCategoryId[categoryId],
+            protectedIdealOrderText = protectedIdealOrderByCategoryId[categoryId]
+        )
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        if (categories.isEmpty()) {
+            Text(
+                text = "Add a category before running course analysis.",
+                color = DesktopPalette.Black,
+                fontSize = 14.sp
+            )
+            return@Column
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CourseAnalysisCategoryPicker(
+                selectedCategoryId = effectiveSelectedCategoryId,
+                categories = categories.map { it.category.id to it.category.name },
+                onCategorySelected = {
+                    selectedCategoryId = it
+                    analysisResult = null
+                    pendingMissingDataResult = null
+                },
+                modifier = Modifier.width(280.dp)
+            )
+            Button(
+                onClick = {
+                    analyzeSelectedCourse()?.let { summary ->
+                        if (summary.missingElements.isEmpty()) {
+                            analysisResult = summary
+                        } else {
+                            pendingMissingDataResult = summary
+                        }
+                    }
+                }
+            ) {
+                ButtonLabel("Analyze")
+            }
+            Button(
+                onClick = { effectiveSelectedCategoryId?.let(onRetrieveMissingElevations) },
+                enabled = effectiveSelectedCategoryId != null
+            ) {
+                ButtonLabel("Retrieve Missing Elevations")
+            }
+        }
+        CourseAnalysisResultView(analysisResult)
+    }
+
+    pendingMissingDataResult?.let { summary ->
+        AlertDialog(
+            onDismissRequest = { pendingMissingDataResult = null },
+            title = { Text("Course analysis data is incomplete") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "The analyzer can continue, but the result may be partial.",
+                        color = DesktopPalette.Black,
+                        fontSize = 14.sp
+                    )
+                    summary.missingElements.forEach { missing ->
+                        Text(
+                            text = "- $missing",
+                            color = DesktopPalette.Black,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        analysisResult = summary
+                        pendingMissingDataResult = null
+                    }
+                ) {
+                    ButtonLabel("Proceed")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { pendingMissingDataResult = null }) {
+                    ButtonLabel("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun CourseAnalysisCategoryPicker(
+    selectedCategoryId: String?,
+    categories: List<Pair<String, String>>,
+    onCategorySelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedCategoryName = categories.firstOrNull { it.first == selectedCategoryId }?.second ?: "Select category"
+
+    Box(modifier = modifier) {
+        Button(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(selectedCategoryName)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            categories.forEach { (categoryId, categoryName) ->
+                DropdownMenuItem(
+                    onClick = {
+                        expanded = false
+                        onCategorySelected(categoryId)
+                    }
+                ) {
+                    Text(categoryName)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CourseAnalysisResultView(result: DesktopCourseAnalysisSummary?) {
+    if (result == null) {
+        Text(
+            text = "Select a category and run analysis.",
+            color = DesktopPalette.Black,
+            fontSize = 14.sp
+        )
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = result.categoryName,
+            color = DesktopPalette.Black,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        CourseAnalysisDetailRows(result)
+        CourseAnalysisElevationProfile(result.elevationProfile)
+        CourseAnalysisMetricRows(result.metrics)
+        CourseAnalysisWaitRows(result.waitRows)
+        CourseAnalysisWaitRenumbering(result.waitRenumbering)
+        if (result.missingElements.isNotEmpty()) {
+            Text(
+                text = "Partial analysis: ${result.missingElements.joinToString(" ")}",
+                color = DesktopPalette.Error,
+                fontSize = 13.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        CourseAnalysisRow("Routes compared", result.calculatedRouteCount.toString())
+        CourseAnalysisRow("Calculated ideal route", result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
+        CourseAnalysisRow("Provided ideal route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
+        CourseAnalysisRow(
+            "Order comparison",
+            when (result.idealOrderMatches) {
+                true -> "Agrees"
+                false -> "Differs"
+                null -> "Unknown"
+            }
+        )
+        CourseAnalysisRow("Calculated straight-line length", metersText(result.calculatedStraightLineMeters))
+        CourseAnalysisRow("Provided straight-line length", metersText(result.providedStraightLineMeters))
+        CourseAnalysisRow("Route length", metersText(result.routeLengthMeters))
+        CourseAnalysisRow("Climb", metersText(result.climbMeters))
+        CourseAnalysisRow("Effective length", metersText(result.effectiveLengthMeters))
+        CourseAnalysisRow("Estimated ideal time", secondsText(result.estimatedIdealSeconds))
+    }
+}
+
+@Composable
+private fun CourseAnalysisElevationProfile(profile: List<DesktopCourseElevationProfilePoint>) {
+    if (profile.isEmpty()) {
+        return
+    }
+    val minElevation = profile.minOf { it.elevationMeters }
+    val maxElevation = profile.maxOf { it.elevationMeters }
+    val totalDistanceMeters = profile.lastOrNull()?.distanceMeters ?: 0
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "Elevation profile",
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "0.0 km to ${oneDecimalText(totalDistanceMeters / 1000.0)} km, " +
+                "${minElevation.roundToInt()} m to ${maxElevation.roundToInt()} m",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        Canvas(
+            modifier = Modifier
+                .width(620.dp)
+                .height(180.dp)
+                .border(1.dp, DesktopPalette.LightGrey)
+                .padding(8.dp)
+        ) {
+            val leftPadding = 36f
+            val rightPadding = 10f
+            val topPadding = 12f
+            val bottomPadding = 24f
+            val chartWidth = size.width - leftPadding - rightPadding
+            val chartHeight = size.height - topPadding - bottomPadding
+            if (chartWidth <= 0f || chartHeight <= 0f) {
+                return@Canvas
+            }
+            val elevationRange = max(1.0, maxElevation - minElevation)
+            val distanceRange = max(1.0, totalDistanceMeters.toDouble())
+            fun xFor(distanceMeters: Int): Float =
+                leftPadding + (distanceMeters / distanceRange).toFloat() * chartWidth
+            fun yFor(elevationMeters: Double): Float =
+                topPadding + ((maxElevation - elevationMeters) / elevationRange).toFloat() * chartHeight
+
+            repeat(4) { index ->
+                val fraction = index / 3f
+                val y = topPadding + fraction * chartHeight
+                drawLine(
+                    color = DesktopPalette.LightGrey,
+                    start = Offset(leftPadding, y),
+                    end = Offset(leftPadding + chartWidth, y),
+                    strokeWidth = 1f
+                )
+            }
+            drawLine(
+                color = DesktopPalette.Disconnected,
+                start = Offset(leftPadding, topPadding),
+                end = Offset(leftPadding, topPadding + chartHeight),
+                strokeWidth = 1.5f
+            )
+            drawLine(
+                color = DesktopPalette.Disconnected,
+                start = Offset(leftPadding, topPadding + chartHeight),
+                end = Offset(leftPadding + chartWidth, topPadding + chartHeight),
+                strokeWidth = 1.5f
+            )
+            profile.zipWithNext().forEach { (start, end) ->
+                drawLine(
+                    color = DesktopPalette.Primary,
+                    start = Offset(xFor(start.distanceMeters), yFor(start.elevationMeters)),
+                    end = Offset(xFor(end.distanceMeters), yFor(end.elevationMeters)),
+                    strokeWidth = 3f
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CourseAnalysisMetricRows(metrics: List<DesktopCourseGoodnessMetric>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "Goodness metrics",
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        metrics.forEach { metric ->
+            CourseAnalysisRow(
+                label = metric.label,
+                value = metric.value,
+                valueColor = when (metric.status) {
+                    DesktopCourseMetricStatus.Good -> DesktopPalette.Connected
+                    DesktopCourseMetricStatus.Warning -> DesktopPalette.Error
+                    DesktopCourseMetricStatus.Unknown -> DesktopPalette.Disconnected
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CourseAnalysisWaitRows(waitRows: List<DesktopCourseWaitRow>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "Ideal-route wait times",
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        if (waitRows.isEmpty()) {
+            Text(
+                text = "No wait-time rows available.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+            return@Column
+        }
+        waitRows.forEach { row ->
+            CourseAnalysisRow(
+                label = row.controlLabel,
+                value = "arrival ${secondsText(row.arrivalSeconds)}, wait ${secondsText(row.waitSeconds)}"
+            )
+        }
+    }
+}
+
+@Composable
+private fun CourseAnalysisWaitRenumbering(renumbering: DesktopCourseWaitRenumbering?) {
+    if (renumbering == null) {
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "Wait-time renumbering check",
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        CourseAnalysisRow(
+            label = "Current / best wait",
+            value = "${secondsText(renumbering.currentTotalWaitSeconds)} / ${secondsText(renumbering.bestTotalWaitSeconds)}",
+            valueColor = if (renumbering.improvesWait) DesktopPalette.Error else DesktopPalette.Connected
+        )
+        Text(
+            text = if (renumbering.improvesWait) {
+                "Renumbering the fox transmit slots can reduce ideal-route wait time."
+            } else {
+                "Current fox numbering is already best for ideal-route wait time."
+            },
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        if (renumbering.improvesWait) {
+            renumbering.assignments.forEach { assignment ->
+                CourseAnalysisRow(
+                    label = assignment.controlLabel,
+                    value = "${assignment.currentSlotLabel} -> ${assignment.suggestedSlotLabel}"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CourseAnalysisRow(label: String, value: String, valueColor: Color = DesktopPalette.Black) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            modifier = Modifier.width(236.dp),
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = value,
+            color = valueColor,
+            fontSize = 13.sp
+        )
+    }
+}
+
+private fun metersText(value: Int?): String =
+    value?.let { "${oneDecimalText(it / 1000.0)} km" } ?: "Unknown"
+
+private fun secondsText(value: Int?): String =
+    value?.let { DurationFormatter.secondsToFormattedString(it.toLong(), useMinutes = false) } ?: "Unknown"
+
+private fun oneDecimalText(value: Double): String =
+    (value * 10.0).roundToInt().let { "${it / 10}.${abs(it % 10)}" }
 
 @Composable
 private fun ControlAddRow(
@@ -6366,7 +7076,7 @@ private fun DetailValue(
 
 /** Displays a compact label/value pair for read-only desktop event details. */
 @Composable
-private fun DetailRow(label: String, value: String) {
+private fun DetailRow(label: String, value: String, valueColor: Color = DesktopPalette.Black) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
@@ -6377,7 +7087,7 @@ private fun DetailRow(label: String, value: String) {
         )
         Text(
             text = value,
-            color = DesktopPalette.Black,
+            color = valueColor,
             fontSize = 13.sp
         )
     }
@@ -6456,6 +7166,8 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
             ?: requiresEventFile("working with the start list")
         DesktopSection.Controls -> projectFile?.let { "${it.raceData.controls.size} controls loaded." }
             ?: requiresEventFile("editing controls")
+        DesktopSection.CourseAnalysis ->
+            "Analyze protected route order, effective length, climb, estimated ideal time, and Classic wait slots."
         DesktopSection.ControlsRouteKmlImport ->
             "KML/KMZ files must include named control Point placemarks and category route LineString placemarks."
         DesktopSection.Readouts -> summary?.let { "${it.readoutCount} SI-card readouts loaded." }
@@ -6500,7 +7212,9 @@ private fun StatusStrip(
     projectStatusText: String,
     hasUnsavedChanges: Boolean,
     siReaderState: DesktopSiReaderUiState,
-    isEventFileOpen: Boolean
+    isEventFileOpen: Boolean,
+    isProtectedCourseOrderUnlocked: Boolean,
+    onLockProtectedCourseOrder: () -> Unit
 ) {
     val effectiveSeverity = if (siReaderState.severity == DesktopSiReaderSeverity.CONNECTED && !isEventFileOpen) {
         DesktopSiReaderSeverity.WARNING
@@ -6537,8 +7251,26 @@ private fun StatusStrip(
     ) {
         Text(
             text = "${siReaderState.statusText} - $projectStatusText${if (hasUnsavedChanges) " *" else ""}",
+            modifier = Modifier.weight(1f),
             color = textColor,
-            fontSize = 13.sp
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
+        if (isProtectedCourseOrderUnlocked) {
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = "Unlocked",
+                modifier = Modifier
+                    .clickable(onClick = onLockProtectedCourseOrder)
+                    .border(1.dp, textColor)
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                color = textColor,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
     }
 }

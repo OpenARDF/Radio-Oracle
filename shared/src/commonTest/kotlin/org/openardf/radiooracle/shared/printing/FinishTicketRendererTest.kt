@@ -19,9 +19,11 @@ import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class FinishTicketRendererTest {
     @Test
@@ -77,6 +79,19 @@ class FinishTicketRendererTest {
         )
 
         assertEquals("[L]Runner Alice", text.lines()[2])
+    }
+
+    @Test
+    fun rendersProtectedEffectiveLengthWhenProvided() {
+        val text = FinishTicketRenderer.render(
+            raceData(),
+            resultId = "matched",
+            protectedCourseInfoByCategoryId = mapOf(
+                "category" to ProtectedCourseInfo(lengthMeters = 5_000, climbMeters = 120)
+            )
+        )
+
+        assertTrue(text.contains("[R]Effective length: 6.2 km"))
     }
 
     @Test

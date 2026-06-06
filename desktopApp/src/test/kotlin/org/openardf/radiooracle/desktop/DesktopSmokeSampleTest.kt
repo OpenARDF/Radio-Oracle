@@ -305,7 +305,7 @@ class DesktopSmokeSampleTest {
 
         assertTrue(exported.contains("\"format_version\": 1"))
         assertTrue(exported.contains("\"race_type\": \"CLASSIC\""))
-        assertTrue(exported.contains("\"category_length\": 5.0"))
+        assertTrue(exported.contains("\"category_length\": 0.0"))
         assertTrue(exported.contains("\"unmatched_results\""))
     }
 

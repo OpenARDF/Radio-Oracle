@@ -27,6 +27,7 @@ import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -99,6 +100,25 @@ class FinalResultJsonExportsTest {
         assertEquals(2, document.competitors.size)
         assertNull(document.competitors[0].result)
         assertNull(document.competitors[1].result)
+    }
+
+    @Test
+    fun explicitProtectedCourseExportDoesNotFallBackToPublicCategoryLength() {
+        val lockedCategory = FinalResultJsonExports.resultDocument(
+            raceData(),
+            protectedCourseInfoByCategoryId = emptyMap()
+        ).categories.single()
+        val unlockedCategory = FinalResultJsonExports.resultDocument(
+            raceData(),
+            protectedCourseInfoByCategoryId = mapOf(
+                "category" to ProtectedCourseInfo(lengthMeters = 4_500, climbMeters = 180)
+            )
+        ).categories.single()
+
+        assertEquals(0, lockedCategory.categoryLength)
+        assertEquals(0, lockedCategory.categoryClimb)
+        assertEquals(6_300, unlockedCategory.categoryLength)
+        assertEquals(180, unlockedCategory.categoryClimb)
     }
 
     @Test

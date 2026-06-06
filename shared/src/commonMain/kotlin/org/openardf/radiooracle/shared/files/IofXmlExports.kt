@@ -6,6 +6,8 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.results.IofResultStatus
 import java.time.LocalDateTime
@@ -15,7 +17,11 @@ import java.time.format.DateTimeFormatter
 object IofXmlExports {
     private const val IOF_NAMESPACE = "http://www.orienteering.org/datastandard/3.0"
 
-    fun startList(raceData: EventRaceData, creator: String = "Radio-Oracle Desktop"): String {
+    fun startList(
+        raceData: EventRaceData,
+        creator: String = "Radio-Oracle Desktop",
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+    ): String {
         val raceStart = parseRaceStart(raceData.race.startDateTimeIso)
         return buildString {
             append("""<?xml version="1.0" encoding="UTF-8"?>""")
@@ -26,7 +32,12 @@ object IofXmlExports {
             raceData.categories
                 .sortedWith(compareBy({ it.category.order }, { it.category.name }))
                 .forEach { categoryData ->
-                    appendClassStart(categoryData, raceData.competitorsFor(categoryData), raceStart)
+                    appendClassStart(
+                        categoryData,
+                        raceData.competitorsFor(categoryData),
+                        raceStart,
+                        protectedCourseInfoByCategoryId
+                    )
                 }
             append("</StartList>\n")
         }
@@ -65,16 +76,28 @@ object IofXmlExports {
     private fun StringBuilder.appendClassStart(
         categoryData: EventCategoryData,
         competitors: List<EventCompetitor>,
-        raceStart: LocalDateTime
+        raceStart: LocalDateTime,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>?
     ) {
+        val protectedCourseInfo = protectedCourseInfoByCategoryId?.get(categoryData.category.id)
+        val protectedEffectiveLength = protectedCourseInfo?.effectiveLengthMeters()
         append("  <ClassStart>\n")
         append("    <Class>\n")
         appendTextElement("Name", categoryData.category.name, indent = "      ")
         append("    </Class>\n")
-        append("    <Course>\n")
-        appendTextElement("Length", categoryData.category.lengthMeters.toString(), indent = "      ")
-        appendTextElement("Climb", categoryData.category.climbMeters.toString(), indent = "      ")
-        append("    </Course>\n")
+        if (protectedCourseInfoByCategoryId == null || protectedEffectiveLength != null) {
+            append("    <Course>\n")
+            if (protectedCourseInfoByCategoryId == null) {
+                appendTextElement("Length", categoryData.category.lengthMeters.toString(), indent = "      ")
+                appendTextElement("Climb", categoryData.category.climbMeters.toString(), indent = "      ")
+            } else {
+                appendTextElement("Length", protectedEffectiveLength.toString(), indent = "      ")
+                protectedCourseInfo?.climbMeters?.let { climb ->
+                    appendTextElement("Climb", climb.toString(), indent = "      ")
+                }
+            }
+            append("    </Course>\n")
+        }
         competitors
             .sortedWith(compareBy({ it.drawnStartTimeSeconds ?: 0L }, { it.startNumber }, { it.fullName() }))
             .forEach { competitor ->

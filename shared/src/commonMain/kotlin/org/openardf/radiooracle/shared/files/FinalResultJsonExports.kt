@@ -19,6 +19,8 @@ import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** Android-shaped final-result JSON export containing categories, aliases, and competitors. */
@@ -30,27 +32,45 @@ object FinalResultJsonExports {
         explicitNulls = false
     }
 
-    fun results(raceData: EventRaceData): String =
-        json.encodeToString(resultDocument(raceData))
+    fun results(
+        raceData: EventRaceData,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+    ): String =
+        json.encodeToString(resultDocument(raceData, protectedCourseInfoByCategoryId))
 
-    fun resultDocument(raceData: EventRaceData): FinalResultsJson {
+    fun resultDocument(
+        raceData: EventRaceData,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+    ): FinalResultsJson {
         val controlsById = raceData.controls.associateBy { it.id }
         return FinalResultsJson(
             categories = raceData.categories
-                .map { it.toFinalCategory(controlsById) },
+                .map { it.toFinalCategory(controlsById, protectedCourseInfoByCategoryId) },
             aliases = androidAliases(raceData),
             competitors = raceData.competitorData
                 .map { it.toFinalCompetitor(raceData) }
         )
     }
 
-    private fun EventCategoryData.toFinalCategory(controlsById: Map<String, EventControl>): FinalCategoryJson =
-        FinalCategoryJson(
+    private fun EventCategoryData.toFinalCategory(
+        controlsById: Map<String, EventControl>,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>?
+    ): FinalCategoryJson {
+        val protectedCourseInfo = protectedCourseInfoByCategoryId?.get(category.id)
+        return FinalCategoryJson(
             categoryName = category.name,
             categoryGender = category.isMan,
             categoryMaxAge = category.maxAge,
-            categoryLength = category.lengthMeters,
-            categoryClimb = category.climbMeters,
+            categoryLength = if (protectedCourseInfoByCategoryId == null) {
+                category.lengthMeters
+            } else {
+                protectedCourseInfo?.effectiveLengthMeters() ?: 0
+            },
+            categoryClimb = if (protectedCourseInfoByCategoryId == null) {
+                category.climbMeters
+            } else {
+                protectedCourseInfo?.climbMeters ?: 0
+            },
             categoryControlPoints = controlPoints
                 .sortedBy { it.order }
                 .map { it.toFinalControlPoint(controlsById) },
@@ -61,6 +81,7 @@ object FinalResultJsonExports {
                 ?: "",
             categoryBand = category.raceBand
         )
+    }
 
     private fun EventControlPoint.toFinalControlPoint(controlsById: Map<String, EventControl>): FinalControlPointJson {
         val control = controlsById[controlId]

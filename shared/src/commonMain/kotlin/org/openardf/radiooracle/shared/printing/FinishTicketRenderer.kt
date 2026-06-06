@@ -8,6 +8,8 @@ import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
@@ -18,7 +20,8 @@ object FinishTicketRenderer {
         resultId: String,
         charactersPerLine: Int = DEFAULT_CHARACTERS_PER_LINE,
         useMinuteTimeFormat: Boolean = false,
-        useAliases: Boolean = true
+        useAliases: Boolean = true,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
     ): String {
         val readoutContext = raceData.findReadoutContext(resultId)
             ?: error("No readout found for result $resultId.")
@@ -30,6 +33,12 @@ object FinishTicketRenderer {
         val categoryName = competitor?.category?.name ?: "?"
         val siAndIndex = "SI: ${result.siNumber ?: "?"} ${competitor?.competitor?.index?.ifBlank { "?" } ?: "?"}"
         val controls = "${result.points} Controls"
+        val protectedCourseInfo = competitor?.category?.id?.let { categoryId ->
+            protectedCourseInfoByCategoryId?.get(categoryId)
+        }
+        val effectiveLengthText = protectedCourseInfo?.effectiveLengthMeters()?.let { effectiveLength ->
+            "Effective length: ${effectiveLength / 1000.0} km"
+        }
         val runTime = "Run time: " +
             DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinuteTimeFormat) +
             " ${result.resultStatus.toDisplayLabel()}"
@@ -50,6 +59,7 @@ object FinishTicketRenderer {
             )
             append("\n\n")
             append("[R]<b>$runTime</b>\n")
+            effectiveLengthText?.let { append("[R]$it\n") }
             append("[R]$controls\n")
         }
     }

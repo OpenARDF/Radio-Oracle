@@ -27,7 +27,7 @@ class DesktopControlPointValidationTextTest {
             )
         )
         assertEquals(
-            "Control point with SI code [40] used as a separator / beacon and as a control.",
+            "Control point with SI code [40] used as a spectator / beacon and as a control.",
             DesktopControlPointValidationText.messageFor(
                 ControlPointValidationException(
                     ControlPointValidationError.SPRINT_SPECIAL_REUSES_CONTROL,
