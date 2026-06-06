@@ -545,7 +545,7 @@ object DesktopNavigation {
             ),
             action(
                 "setup.event-file.open",
-                "Load...",
+                "Load File...",
                 workflow,
                 DesktopNavAction.OpenEventFile,
                 requiresEventFile = false

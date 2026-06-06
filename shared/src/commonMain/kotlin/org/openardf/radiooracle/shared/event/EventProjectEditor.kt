@@ -246,7 +246,7 @@ object EventProjectEditor {
 
         val matchedControlsByOrder = mutableMapOf<Int, EventControl>()
         val controlsByEntryToken = projectFile.raceData.controls.entryTokenMap()
-        val definitions = ControlPointRules.parseControlPoints(
+        val definitions = ControlPointRules.parseAssignedControlPoints(
             input = controlPointsText.trim(),
             raceType = categoryData.category.effectiveRaceType(projectFile.raceData.race)
         ) { token, order ->
@@ -282,9 +282,6 @@ object EventProjectEditor {
                     category = data.category.copy(controlPointsString = formattedControlPoints),
                     controlPoints = controlPoints,
                     publicControlIds = controlPoints
-                        .sortedWith(compareBy<EventControlPoint>({
-                            controls.firstOrNull { control -> control.id == it.controlId }?.publicDisplayName ?: ""
-                        }, { it.siCode }))
                         .map { it.controlId }
                 )
             } else {
@@ -1055,7 +1052,7 @@ object EventProjectEditor {
                 controlPointsString = "",
                 encryptedIdealOrder = row.encryptedIdealOrder
             )
-            val definitions = ControlPointRules.parseControlPoints(
+            val definitions = ControlPointRules.parseAssignedControlPoints(
                 input = row.controlPointsText,
                 raceType = category.effectiveRaceType(projectFile.raceData.race)
             )
@@ -1076,7 +1073,6 @@ object EventProjectEditor {
                 controlPoints = controlPoints,
                 competitors = emptyList(),
                 publicControlIds = controlPoints
-                    .sortedBy { it.siCode }
                     .map { it.controlId }
             )
         }
@@ -2820,9 +2816,6 @@ object EventProjectEditor {
 
     private fun EventCompetitor.historyKey(): String =
         siNumber?.let { "si:$it" } ?: "start:$startNumber"
-
-    private val EventControl.publicDisplayName: String
-        get() = publicLabel?.takeIf { it.isNotBlank() } ?: label
 
     private fun seededRank(seed: String, value: String): Long {
         // FNV-1a followed by MurmurHash3-style finalization. Kotlin/Native/JVM

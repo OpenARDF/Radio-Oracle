@@ -60,6 +60,7 @@ import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -77,6 +78,8 @@ import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventCompetitorDetails
 import org.openardf.radiooracle.shared.event.EventControlDetails
+import org.openardf.radiooracle.shared.event.EventAssignedControlWarning
+import org.openardf.radiooracle.shared.event.EventAssignedControlWarnings
 import org.openardf.radiooracle.shared.event.EventInForestDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutSeverity
@@ -285,6 +288,8 @@ fun main(args: Array<String>) = application {
         var hasUnsavedChanges by remember { mutableStateOf(projectSession.hasUnsavedChanges) }
         var newEventDraftProject by remember { mutableStateOf<EventProjectFile?>(null) }
         var pendingDirtyProjectAction by remember { mutableStateOf<PendingDirtyProjectAction?>(null) }
+        var pendingAssignedControlsWarning by remember { mutableStateOf<EventAssignedControlWarning?>(null) }
+        var assignedControlsWarningJob by remember { mutableStateOf<Job?>(null) }
         var isNationalStartListDefaultsDialogVisible by remember { mutableStateOf(false) }
         var siReaderState by remember { mutableStateOf(DesktopSiReaderUiState.disconnected()) }
         var pendingSiModeWarning by remember { mutableStateOf<DesktopSiReaderUiState?>(null) }
@@ -372,6 +377,26 @@ fun main(args: Array<String>) = application {
         fun canSaveEventFile(): Boolean =
             projectFile != null && (projectSession.currentPath == null || hasProtectedUnsavedChanges())
 
+        fun clearAssignedControlsWarning() {
+            assignedControlsWarningJob?.cancel()
+            assignedControlsWarningJob = null
+            pendingAssignedControlsWarning = null
+        }
+
+        fun scheduleAssignedControlsWarning(warning: EventAssignedControlWarning?) {
+            assignedControlsWarningJob?.cancel()
+            assignedControlsWarningJob = null
+            if (warning == null) {
+                pendingAssignedControlsWarning = null
+                return
+            }
+            assignedControlsWarningJob = appCoroutineScope.launch {
+                delay(700L)
+                pendingAssignedControlsWarning = warning
+                assignedControlsWarningJob = null
+            }
+        }
+
         fun lockProtectedCourseOrder() {
             val wasUnlocked = protectedCoursePassword != null
             protectedCoursePassword = null
@@ -412,6 +437,7 @@ fun main(args: Array<String>) = application {
 
         fun openProject(path: Path) {
             runCatching {
+                clearAssignedControlsWarning()
                 lockProtectedCourseOrder()
                 projectFile = projectSession.open(path)
                 newEventDraftProject = null
@@ -426,6 +452,7 @@ fun main(args: Array<String>) = application {
 
         fun closeProject(discardUnsavedChanges: Boolean = false) {
             runCatching {
+                clearAssignedControlsWarning()
                 lockProtectedCourseOrder()
                 projectSession.closeProject(discardUnsavedChanges)
                 newEventDraftProject = null
@@ -439,6 +466,7 @@ fun main(args: Array<String>) = application {
         }
 
         fun createNewProject() {
+            clearAssignedControlsWarning()
             lockProtectedCourseOrder()
             val project = EventProjectFactory.createEmptyProject(
                 raceId = UUID.randomUUID().toString(),
@@ -1454,7 +1482,7 @@ fun main(args: Array<String>) = application {
         MenuBar {
             Menu("File") {
                 Item("New Event File", onClick = ::requestNewEventFile)
-                Item("Load...", onClick = ::chooseOpenEventFile)
+                Item("Load File...", onClick = ::chooseOpenEventFile)
                 Item("Import EventReg Website...", onClick = ::showEventRegImportDialog)
                 Item(
                     "Save Event",
@@ -1482,6 +1510,12 @@ fun main(args: Array<String>) = application {
                 title = warning.warningTitle ?: "SI station mode warning",
                 message = warning.warningMessage ?: warning.statusText,
                 onDismiss = { pendingSiModeWarning = null }
+            )
+        }
+        pendingAssignedControlsWarning?.let { warning ->
+            AssignedControlsWarningDialog(
+                warning = warning,
+                onDismiss = { pendingAssignedControlsWarning = null }
             )
         }
         if (isNationalStartListDefaultsDialogVisible) {
@@ -1623,7 +1657,7 @@ fun main(args: Array<String>) = application {
             },
             onUpdateCategoryControlPoints = { categoryId, controlPointsText ->
                 runCatching {
-                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                    val updatedProject = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.updateCategoryControlPoints(
                             currentProject,
                             categoryId,
@@ -1632,9 +1666,14 @@ fun main(args: Array<String>) = application {
                             UUID.randomUUID().toString()
                         }
                     }
+                    projectFile = updatedProject
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
+                    scheduleAssignedControlsWarning(
+                        EventAssignedControlWarnings.forCategory(updatedProject.raceData, categoryId)
+                    )
                 }.onFailure { error ->
+                    clearAssignedControlsWarning()
                     projectStatusText = "Edit failed: ${categoryControlPointErrorText(error)}"
                 }
             },
@@ -2124,6 +2163,39 @@ private fun UnsavedSubmenuChangesDialog(
                 Button(onClick = onCancel) {
                     Text("Cancel")
                 }
+            }
+        }
+    )
+}
+
+@Composable
+private fun AssignedControlsWarningDialog(
+    warning: EventAssignedControlWarning,
+    onDismiss: () -> Unit
+) {
+    val missingLines = buildList {
+        if (warning.missingBeaconLabels.isNotEmpty()) {
+            add("Beacon: ${warning.missingBeaconLabels.joinToString(", ")}")
+        }
+        if (warning.missingSpectatorLabels.isNotEmpty()) {
+            add("Spectator: ${warning.missingSpectatorLabels.joinToString(", ")}")
+        }
+    }.joinToString("\n")
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Assigned Controls warning") },
+        text = {
+            Text(
+                "Category ${warning.categoryName} is missing required control assignments:\n" +
+                    "$missingLines\n\n" +
+                    "Every category should include each defined beacon. " +
+                    "Sprint categories should also include each defined spectator."
+            )
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("OK")
             }
         }
     )

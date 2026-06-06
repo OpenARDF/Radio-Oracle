@@ -20,7 +20,7 @@ class EventCategoryDetailsTest {
         assertEquals("Sprint", rows[0].raceTypeLabel)
         assertEquals("2m", rows[0].raceBandLabel)
         assertEquals("60:00", rows[0].timeLimitText)
-        assertEquals("32 Foxhole", rows[0].controlPointsText)
+        assertEquals("Foxhole 32", rows[0].controlPointsText)
 
         assertEquals("M21", rows[1].id)
         assertEquals("M21", rows[1].name)
@@ -58,6 +58,75 @@ class EventCategoryDetailsTest {
         val rows = EventCategoryDetails.from(raceData(defaultRaceType = RaceType.ORIENTEERING))
 
         assertEquals("31 32", rows.first { it.name == "M21" }.controlPointsText)
+    }
+
+    @Test
+    fun formatsAssignedPublicLabelsSoTheyCanBeParsedAfterReopening() {
+        val controls = listOf(
+            EventControl("control-f1", "race", "F1", 31, ControlPointType.CONTROL, publicLabel = "Fox 1"),
+            EventControl("control-f2", "race", "F2", 32, ControlPointType.CONTROL, publicLabel = "Fox 2"),
+            EventControl("control-m", "race", "M", 99, ControlPointType.BEACON, publicLabel = "Beacon")
+        )
+        val categoryData = categoryData(
+            name = "M21",
+            order = 1,
+            differentProperties = false,
+            raceType = null,
+            raceBand = null,
+            timeLimitSeconds = null
+        ).copy(
+            controlPoints = listOf(
+                EventControlPoint("cp-1", "M21", 32, ControlPointType.CONTROL, 1, "control-f2"),
+                EventControlPoint("cp-2", "M21", 99, ControlPointType.BEACON, 2, "control-m"),
+                EventControlPoint("cp-3", "M21", 31, ControlPointType.CONTROL, 3, "control-f1")
+            ),
+            publicControlIds = listOf("control-f2", "control-m", "control-f1")
+        )
+        val raceData = raceData().copy(categories = listOf(categoryData), controls = controls)
+
+        val displayedText = EventCategoryDetails.from(raceData).single().controlPointsText
+        val reparsed = EventProjectEditor.updateCategoryControlPoints(
+            EventProjectFile(raceData = raceData),
+            "M21",
+            displayedText
+        ) { index -> "new-cp-$index" }
+
+        assertEquals("'Fox 1' 'Fox 2' Beacon", displayedText)
+        assertEquals(listOf("control-f1", "control-f2", "control-m"), reparsed.raceData.categories.single().controlPoints.map { it.controlId })
+    }
+
+    @Test
+    fun formatsSprintAssignedControlsWithSpectatorBetweenSlowAndFastFoxes() {
+        val controls = listOf(
+            EventControl("control-slow-1", "race", "1", 31, ControlPointType.CONTROL, publicLabel = "Slow 1"),
+            EventControl("control-slow-2", "race", "2", 32, ControlPointType.CONTROL, publicLabel = "Slow 2"),
+            EventControl("control-fast-1", "race", "F1", 41, ControlPointType.CONTROL, publicLabel = "Fast 1"),
+            EventControl("control-fast-2", "race", "F2", 42, ControlPointType.CONTROL, publicLabel = "Fast 2"),
+            EventControl("control-s", "race", "S", 46, ControlPointType.SEPARATOR, publicLabel = "Spectator"),
+            EventControl("control-m", "race", "M", 99, ControlPointType.BEACON, publicLabel = "Beacon")
+        )
+        val categoryData = categoryData(
+            name = "M21",
+            order = 1,
+            differentProperties = true,
+            raceType = RaceType.SPRINT,
+            raceBand = null,
+            timeLimitSeconds = null
+        ).copy(
+            controlPoints = listOf(
+                EventControlPoint("cp-1", "M21", 42, ControlPointType.CONTROL, 1, "control-fast-2"),
+                EventControlPoint("cp-2", "M21", 31, ControlPointType.CONTROL, 2, "control-slow-1"),
+                EventControlPoint("cp-3", "M21", 99, ControlPointType.BEACON, 3, "control-m"),
+                EventControlPoint("cp-4", "M21", 46, ControlPointType.SEPARATOR, 4, "control-s"),
+                EventControlPoint("cp-5", "M21", 41, ControlPointType.CONTROL, 5, "control-fast-1"),
+                EventControlPoint("cp-6", "M21", 32, ControlPointType.CONTROL, 6, "control-slow-2")
+            )
+        )
+        val raceData = raceData(defaultRaceType = RaceType.SPRINT).copy(categories = listOf(categoryData), controls = controls)
+
+        val displayedText = EventCategoryDetails.from(raceData).single().controlPointsText
+
+        assertEquals("'Slow 1' 'Slow 2' Spectator 'Fast 1' 'Fast 2' Beacon", displayedText)
     }
 
     private fun raceData(defaultRaceType: RaceType = RaceType.CLASSIC): EventRaceData =

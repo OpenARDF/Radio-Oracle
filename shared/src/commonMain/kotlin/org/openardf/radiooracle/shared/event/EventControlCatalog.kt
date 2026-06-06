@@ -75,9 +75,10 @@ object EventControlCatalog {
                 }
             }
             val publicControlIds = categoryData.publicControlIds.ifEmpty {
-                controlPoints
-                    .sortedWith(compareBy<EventControlPoint>({ controlById(controls, it.controlId)?.publicName ?: "" }, { it.siCode }))
-                    .map { it.controlId }
+                orderedAssignedControlPoints(
+                    controlPoints,
+                    categoryData.category.effectiveRaceType(raceData.race)
+                ).map { it.controlId }
             }
             categoryData.copy(controlPoints = controlPoints, publicControlIds = publicControlIds)
         }
@@ -151,6 +152,26 @@ object EventControlCatalog {
 
     private fun defaultLabel(controlPoint: EventControlPoint): String =
         defaultLabel(controlPoint.siCode, controlPoint.type)
+
+    private fun orderedAssignedControlPoints(
+        controlPoints: List<EventControlPoint>,
+        raceType: org.openardf.radiooracle.shared.domain.RaceType
+    ): List<EventControlPoint> =
+        if (raceType == org.openardf.radiooracle.shared.domain.RaceType.ORIENTEERING) {
+            controlPoints.sortedBy { it.order }
+        } else {
+            controlPoints.sortedWith(
+                compareBy<EventControlPoint> {
+                    org.openardf.radiooracle.shared.course.ControlPointRules.assignedControlSortGroup(
+                        it.siCode,
+                        it.type,
+                        raceType
+                    )
+                }
+                    .thenBy { it.siCode }
+                    .thenBy { it.order }
+            )
+        }
 
     fun defaultLabel(siCode: Int, type: ControlPointType): String {
         val suffix = when (type) {

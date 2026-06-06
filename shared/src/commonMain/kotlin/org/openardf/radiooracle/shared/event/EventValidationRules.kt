@@ -51,7 +51,7 @@ object EventValidationRules {
             raceData.categories.forEach { data ->
                 try {
                     val definitions = if (data.controlPoints.isEmpty() && data.category.controlPointsString.isNotBlank()) {
-                        ControlPointRules.parseControlPoints(
+                        ControlPointRules.parseAssignedControlPoints(
                             data.category.controlPointsString.trim(),
                             data.category.effectiveRaceType(raceData.race)
                         )
@@ -72,7 +72,7 @@ object EventValidationRules {
                             )
                         }
                     }
-                    ControlPointRules.parseControlPoints(
+                    ControlPointRules.parseAssignedControlPoints(
                         ControlPointRules.formatControlPoints(definitions),
                         data.category.effectiveRaceType(raceData.race)
                     )

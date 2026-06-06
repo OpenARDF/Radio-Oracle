@@ -37,6 +37,39 @@ class ControlPointRulesTest {
     }
 
     @Test
+    fun normalizesAssignedClassicControlsWithoutImplyingRouteOrder() {
+        val controlPoints = ControlPointRules.parseAssignedControlPoints("36B 33 31", RaceType.CLASSIC)
+
+        assertEquals(
+            listOf(
+                ControlPointDefinition(31, ControlPointType.CONTROL, 3),
+                ControlPointDefinition(33, ControlPointType.CONTROL, 2),
+                ControlPointDefinition(36, ControlPointType.BEACON, 1)
+            ),
+            controlPoints
+        )
+        assertEquals("31 33 36B", ControlPointRules.formatControlPoints(controlPoints))
+    }
+
+    @Test
+    fun normalizesAssignedSprintControlsWithSpectatorBetweenSlowAndFastFoxes() {
+        val controlPoints = ControlPointRules.parseAssignedControlPoints("99B 42 31 46! 41 32", RaceType.SPRINT)
+
+        assertEquals(
+            listOf(
+                ControlPointDefinition(31, ControlPointType.CONTROL, 3),
+                ControlPointDefinition(32, ControlPointType.CONTROL, 6),
+                ControlPointDefinition(46, ControlPointType.SEPARATOR, 4),
+                ControlPointDefinition(41, ControlPointType.CONTROL, 5),
+                ControlPointDefinition(42, ControlPointType.CONTROL, 2),
+                ControlPointDefinition(99, ControlPointType.BEACON, 1)
+            ),
+            controlPoints
+        )
+        assertEquals("31 32 46! 41 42 99B", ControlPointRules.formatControlPoints(controlPoints))
+    }
+
+    @Test
     fun tokenizesQuotedControlLabels() {
         assertEquals(
             listOf("Fox 1", "32", "Fox 3"),
@@ -137,5 +170,17 @@ class ControlPointRulesTest {
             "F1 32 ",
             ControlPointRules.formatIncludedDisplayTokensWithTrailingSpaces(tokens, useAlias = true)
         )
+    }
+
+    @Test
+    fun formatsEditableDisplayTokensWithQuotesForLabelsContainingSeparators() {
+        val tokens = listOf(
+            ControlPointDisplayToken(siCode = 31, aliasName = "Fox 1"),
+            ControlPointDisplayToken(siCode = 32, aliasName = "Fox, 2"),
+            ControlPointDisplayToken(siCode = 99, aliasName = "Beacon")
+        )
+
+        assertEquals("'Fox 1' 'Fox, 2' Beacon", ControlPointRules.formatEditableDisplayTokens(tokens, useAlias = true))
+        assertEquals("31 32 99", ControlPointRules.formatEditableDisplayTokens(tokens, useAlias = false))
     }
 }

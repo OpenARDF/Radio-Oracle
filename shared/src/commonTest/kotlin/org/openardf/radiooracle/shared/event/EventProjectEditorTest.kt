@@ -258,7 +258,7 @@ class EventProjectEditorTest {
         val categoryData = updated.raceData.categories.single()
         assertEquals(listOf("control-f1", "control-m"), categoryData.controlPoints.map { it.controlId })
         assertEquals(listOf(41, 99), categoryData.controlPoints.map { it.siCode })
-        assertEquals(listOf("control-m", "control-f1"), categoryData.publicControlIds)
+        assertEquals(listOf("control-f1", "control-m"), categoryData.publicControlIds)
     }
 
     @Test
@@ -283,6 +283,36 @@ class EventProjectEditorTest {
         val categoryData = updated.raceData.categories.single()
         assertEquals(listOf("control-m"), categoryData.controlPoints.map { it.controlId })
         assertEquals(listOf(ControlPointType.BEACON), categoryData.controlPoints.map { it.type })
+    }
+
+    @Test
+    fun updatesSprintAssignedControlsInNeutralDisplayOrder() {
+        val controls = listOf(
+            EventControl("control-slow-1", "race", "1", 31, ControlPointType.CONTROL, publicLabel = "Slow 1"),
+            EventControl("control-slow-2", "race", "2", 32, ControlPointType.CONTROL, publicLabel = "Slow 2"),
+            EventControl("control-fast-1", "race", "F1", 41, ControlPointType.CONTROL, publicLabel = "Fast 1"),
+            EventControl("control-fast-2", "race", "F2", 42, ControlPointType.CONTROL, publicLabel = "Fast 2"),
+            EventControl("control-s", "race", "S", 46, ControlPointType.SEPARATOR, publicLabel = "Spectator"),
+            EventControl("control-m", "race", "M", 99, ControlPointType.BEACON, publicLabel = "Beacon")
+        )
+        val original = projectFile(
+            raceType = RaceType.SPRINT,
+            categories = listOf(categoryData("cat-1", "M21")),
+            controls = controls
+        )
+
+        val updated = EventProjectEditor.updateCategoryControlPoints(
+            original,
+            "cat-1",
+            "Beacon, Fast 2, Slow 1, Spectator, Fast 1, Slow 2"
+        ) { index -> "control-$index" }
+
+        val categoryData = updated.raceData.categories.single()
+        assertEquals(
+            listOf("control-slow-1", "control-slow-2", "control-s", "control-fast-1", "control-fast-2", "control-m"),
+            categoryData.controlPoints.map { it.controlId }
+        )
+        assertEquals("31 32 46! 41 42 99B", categoryData.category.controlPointsString)
     }
 
     @Test

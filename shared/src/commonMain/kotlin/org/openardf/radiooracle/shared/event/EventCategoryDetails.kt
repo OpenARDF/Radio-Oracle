@@ -47,25 +47,33 @@ data class EventCategoryDetails(
         ): String {
             val aliasesByCode = raceData.aliases.associateBy { it.siCode }
             val controlsById = raceData.controls.associateBy { it.id }
-            val publicControlPoints = if (publicControlIds.isNotEmpty()) {
-                publicControlIds.mapNotNull { controlId ->
-                    val control = controlsById[controlId] ?: return@mapNotNull null
+            val publicControlPoints = if (controlPoints.isNotEmpty()) {
+                controlPoints
+            } else if (publicControlIds.isNotEmpty()) {
+                publicControlIds.mapIndexedNotNull { index, controlId ->
+                    val control = controlsById[controlId] ?: return@mapIndexedNotNull null
                     EventControlPoint(
                         id = "public-$controlId",
                         categoryId = category.id,
                         controlId = control.id,
                         siCode = control.siCode,
                         type = control.type,
-                        order = 0
+                        order = index + 1
                     )
                 }
             } else {
-                controlPoints
+                emptyList()
             }
-            val sortedControlPoints = if (useAliases && raceType != RaceType.ORIENTEERING) {
-                publicControlPoints.sortedWith(compareBy({ controlsById[it.controlId]?.publicLabel ?: aliasesByCode[it.siCode]?.name ?: controlsById[it.controlId]?.label ?: it.siCode.toString() }, { it.siCode }))
+            val sortedControlPoints = if (raceType == RaceType.ORIENTEERING) {
+                publicControlPoints.sortedBy { it.order }
             } else {
-                publicControlPoints.sortedBy { it.siCode }
+                publicControlPoints.sortedWith(
+                    compareBy<EventControlPoint> {
+                        ControlPointRules.assignedControlSortGroup(it.siCode, it.type, raceType)
+                    }
+                        .thenBy { it.siCode }
+                        .thenBy { it.order }
+                )
             }
             if (!useAliases || raceType == RaceType.ORIENTEERING) {
                 return ControlPointRules.formatControlPoints(
@@ -74,7 +82,7 @@ data class EventCategoryDetails(
                     }
                 )
             }
-            return ControlPointRules.formatDisplayTokens(
+            return ControlPointRules.formatEditableDisplayTokens(
                 sortedControlPoints.map { controlPoint ->
                     ControlPointDisplayToken(
                         siCode = controlPoint.siCode,

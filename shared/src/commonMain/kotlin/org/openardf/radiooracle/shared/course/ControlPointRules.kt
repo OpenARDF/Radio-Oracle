@@ -28,6 +28,66 @@ object ControlPointRules {
         return controlPoints
     }
 
+    /**
+     * Parses category Assigned Controls as a neutral set rather than an ideal route.
+     *
+     * Radio-orienteering assigned controls are normalized before validation so the
+     * stored/displayed list does not imply a preferred visiting order: foxes sort
+     * numerically, beacons sort last, and sprint spectators sort between slow and
+     * fast fox groups.
+     */
+    fun parseAssignedControlPoints(
+        input: String,
+        raceType: RaceType,
+        tokenResolver: (String, Int) -> ControlPointDefinition? = { _, _ -> null }
+    ): List<ControlPointDefinition> {
+        if (input.isEmpty()) {
+            return emptyList()
+        }
+
+        val controlPoints = tokenizeControlPoints(input).mapIndexed { index, token ->
+            val order = index + 1
+            tokenResolver(token, order) ?: parseControlPoint(order, token)
+        }
+        val normalizedControlPoints = normalizeAssignedControlPoints(controlPoints, raceType)
+
+        validateControlSequence(normalizedControlPoints, raceType)
+        return normalizedControlPoints
+    }
+
+    /** Returns Assigned Controls in neutral display order without changing the original definitions. */
+    fun normalizeAssignedControlPoints(
+        controlPoints: List<ControlPointDefinition>,
+        raceType: RaceType
+    ): List<ControlPointDefinition> =
+        if (raceType == RaceType.ORIENTEERING) {
+            controlPoints.sortedBy { it.order }
+        } else {
+            controlPoints.sortedWith(
+                compareBy<ControlPointDefinition> { assignedControlSortGroup(it.siCode, it.type, raceType) }
+                    .thenBy { it.siCode }
+                    .thenBy { it.order }
+            )
+        }
+
+    /** Sort group used by Assigned Controls displays and Event File public-control ordering. */
+    fun assignedControlSortGroup(siCode: Int, type: ControlPointType, raceType: RaceType): Int =
+        when (raceType) {
+            RaceType.SPRINT -> when (type) {
+                ControlPointType.CONTROL -> if (isSprintFastFox(siCode)) 2 else 0
+                ControlPointType.SEPARATOR -> 1
+                ControlPointType.BEACON -> 3
+            }
+            RaceType.CLASSIC,
+            RaceType.SHORT,
+            RaceType.FOXORING -> when (type) {
+                ControlPointType.CONTROL -> 0
+                ControlPointType.SEPARATOR -> 1
+                ControlPointType.BEACON -> 2
+            }
+            RaceType.ORIENTEERING -> 0
+        }
+
     /** Splits category course input on separators, preserving quoted labels that contain spaces. */
     fun tokenizeControlPoints(input: String): List<String> {
         val tokens = mutableListOf<String>()
@@ -94,6 +154,29 @@ object ControlPointRules {
         return builder.toString()
     }
 
+    /** Formats display tokens for text fields that must be parseable when edited again. */
+    fun formatEditableDisplayTokens(tokens: List<ControlPointDisplayToken>, useAlias: Boolean): String {
+        val builder = StringBuilder()
+
+        for ((index, token) in tokens.withIndex()) {
+            if (token.include) {
+                builder.append(
+                    if (useAlias && token.aliasName != null) {
+                        quoteTokenIfNeeded(token.aliasName)
+                    } else {
+                        token.siCode.toString()
+                    }
+                )
+            }
+
+            if (index < tokens.size - 1) {
+                builder.append(" ")
+            }
+        }
+
+        return builder.toString()
+    }
+
     /** Formats only included display tokens with a trailing space after each included token. */
     fun formatIncludedDisplayTokensWithTrailingSpaces(
         tokens: List<ControlPointDisplayToken>,
@@ -116,6 +199,22 @@ object ControlPointRules {
 
         return builder.toString()
     }
+
+    private fun quoteTokenIfNeeded(token: String): String {
+        val trimmedToken = token.trim()
+        val needsQuoting = trimmedToken.any { it.isWhitespace() || it == ',' || it == ';' }
+        if (!needsQuoting) {
+            return trimmedToken
+        }
+        return when {
+            '\'' !in trimmedToken -> "'$trimmedToken'"
+            '"' !in trimmedToken -> "\"$trimmedToken\""
+            else -> trimmedToken
+        }
+    }
+
+    private fun isSprintFastFox(siCode: Int): Boolean =
+        siCode >= 40
 
     private fun parseControlPoint(order: Int, token: String): ControlPointDefinition {
         val controlPointType =
