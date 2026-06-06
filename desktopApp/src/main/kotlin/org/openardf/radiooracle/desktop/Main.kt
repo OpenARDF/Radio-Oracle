@@ -121,32 +121,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 private data class FixedTableColumn(val title: String, val width: Dp)
 
-private data class ControlDraft(
-    val siCodeText: String,
-    val type: ControlPointType,
-    val mandatory: Boolean,
-    val publicLabel: String,
-    val notes: String
-) {
-    fun isChangedFrom(control: EventControlDetails): Boolean =
-        siCodeText != control.siCodeText ||
-            type != control.type ||
-            mandatory != control.mandatory ||
-            publicLabel != control.publicLabel ||
-            notes != control.notes
-
-    companion object {
-        fun from(control: EventControlDetails): ControlDraft =
-            ControlDraft(
-                siCodeText = control.siCodeText,
-                type = control.type,
-                mandatory = control.mandatory,
-                publicLabel = control.publicLabel,
-                notes = control.notes
-            )
-    }
-}
-
 private val TableColumnGap = 12.dp
 private val ActionRailWidth = 104.dp
 private val FixedGridRowHeight = 56.dp
@@ -210,7 +184,7 @@ private val CategoryTableColumnHints = mapOf(
     "Type" to "Race type used by this category. It normally follows the Event File setting unless category-specific properties are imported.",
     "Band" to "Frequency band used by this category. It normally follows the Event File setting unless category-specific properties are imported.",
     "Limit (min.)" to "Time limit for this category in minutes. It normally follows the Event File setting unless category-specific properties are imported.",
-    "Controls" to "Ordered controls for this category. Separate entries with spaces, commas, or semicolons. Use SI codes, defined control labels, or Public label values; suffix numeric SI codes with B for beacon or ! for spectator/separator where applicable."
+    "Controls" to "Ordered controls for this category. Separate entries with spaces, commas, or semicolons. Use SI codes, defined control labels, or Public label values. Put labels containing spaces in single or double quotes, such as 'Fox 1'."
 )
 
 private val CompetitorTableColumns = listOf(
@@ -1476,7 +1450,7 @@ fun main(args: Array<String>) = application {
         MenuBar {
             Menu("File") {
                 Item("New Event File", onClick = ::requestNewEventFile)
-                Item("Open...", onClick = ::chooseOpenEventFile)
+                Item("Load...", onClick = ::chooseOpenEventFile)
                 Item("Import EventReg Website...", onClick = ::showEventRegImportDialog)
                 Item(
                     "Save Event",
@@ -4417,62 +4391,27 @@ private fun ControlDetailsPanel(
     var mandatoryDraft by remember { mutableStateOf(false) }
     var publicLabelDraft by remember { mutableStateOf("") }
     var notesDraft by remember { mutableStateOf("") }
-    var controlDrafts by remember(controls) {
-        mutableStateOf(controls.associate { control -> control.id to ControlDraft.from(control) })
-    }
-    val changedControlDrafts = controls.mapNotNull { control ->
-        controlDrafts[control.id]
-            ?.takeIf { draft -> draft.isChangedFrom(control) }
-            ?.let { draft -> control to draft }
-    }
-
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
             verticalAlignment = Alignment.Top
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = {
-                        val didAdd = onAddControl("", siCodeDraft, typeDraft, mandatoryDraft, publicLabelDraft, notesDraft)
-                        if (didAdd) {
-                            siCodeDraft = ""
-                            typeDraft = ControlPointType.CONTROL
-                            mandatoryDraft = false
-                            publicLabelDraft = ""
-                            notesDraft = ""
-                        }
-                    },
-                    modifier = fixedActionRailModifier(),
-                    enabled = siCodeDraft.isNotBlank()
-                ) {
-                    ButtonLabel("Add")
-                }
-                Button(
-                    onClick = {
-                        changedControlDrafts.forEach { (control, draft) ->
-                            val nextLabel = if (draft.siCodeText != control.siCodeText || draft.type != control.type) {
-                                ""
-                            } else {
-                                control.label
-                            }
-                            onUpdateControl(
-                                control.id,
-                                nextLabel,
-                                draft.siCodeText,
-                                draft.type,
-                                draft.mandatory,
-                                draft.publicLabel,
-                                draft.notes
-                            )
-                        }
-                    },
-                    modifier = fixedActionRailModifier(),
-                    enabled = changedControlDrafts.isNotEmpty()
-                ) {
-                    ButtonLabel("Apply")
-                }
+            Button(
+                onClick = {
+                    val didAdd = onAddControl("", siCodeDraft, typeDraft, mandatoryDraft, publicLabelDraft, notesDraft)
+                    if (didAdd) {
+                        siCodeDraft = ""
+                        typeDraft = ControlPointType.CONTROL
+                        mandatoryDraft = false
+                        publicLabelDraft = ""
+                        notesDraft = ""
+                    }
+                },
+                modifier = fixedActionRailModifier(),
+                enabled = siCodeDraft.isNotBlank()
+            ) {
+                ButtonLabel("Add")
             }
             Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
                 Column(
@@ -4515,12 +4454,9 @@ private fun ControlDetailsPanel(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     controls.forEach { control ->
-                        val draft = controlDrafts[control.id] ?: ControlDraft.from(control)
                         ControlDetailRow(
-                            draft = draft,
-                            onDraftChange = { nextDraft ->
-                                controlDrafts = controlDrafts + (control.id to nextDraft)
-                            }
+                            control = control,
+                            onUpdateControl = onUpdateControl
                         )
                     }
                 }
@@ -4585,42 +4521,60 @@ private fun ControlAddRow(
 
 @Composable
 private fun ControlDetailRow(
-    draft: ControlDraft,
-    onDraftChange: (ControlDraft) -> Unit
+    control: EventControlDetails,
+    onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit
 ) {
+    fun updateControl(
+        siCodeText: String = control.siCodeText,
+        type: ControlPointType = control.type,
+        mandatory: Boolean = control.mandatory,
+        publicLabel: String = control.publicLabel,
+        notes: String = control.notes
+    ) {
+        if (siCodeText.trim().toIntOrNull() == null) {
+            return
+        }
+        val nextLabel = if (siCodeText != control.siCodeText || type != control.type) {
+            ""
+        } else {
+            control.label
+        }
+        onUpdateControl(control.id, nextLabel, siCodeText, type, mandatory, publicLabel, notes)
+    }
+
     Row(
         modifier = Modifier.width(fixedTableWidth(ControlTableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
-            value = draft.siCodeText,
-            onValueChange = { onDraftChange(draft.copy(siCodeText = it)) },
+            value = control.siCodeText,
+            onValueChange = { updateControl(siCodeText = it) },
             modifier = Modifier.width(ControlTableColumns[0].width),
             singleLine = true,
             label = { Text("SI code") }
         )
         ControlTypeDropdown(
-            type = draft.type,
-            onTypeChange = { onDraftChange(draft.copy(type = it)) },
+            type = control.type,
+            onTypeChange = { updateControl(type = it) },
             modifier = Modifier.width(ControlTableColumns[1].width)
         )
         Row(
             modifier = Modifier.width(ControlTableColumns[2].width),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Checkbox(checked = draft.mandatory, onCheckedChange = { onDraftChange(draft.copy(mandatory = it)) })
+            Checkbox(checked = control.mandatory, onCheckedChange = { updateControl(mandatory = it) })
         }
         TextField(
-            value = draft.publicLabel,
-            onValueChange = { onDraftChange(draft.copy(publicLabel = it)) },
+            value = control.publicLabel,
+            onValueChange = { updateControl(publicLabel = it) },
             modifier = Modifier.width(ControlTableColumns[3].width),
             singleLine = true,
             label = { Text("Public label") }
         )
         TextField(
-            value = draft.notes,
-            onValueChange = { onDraftChange(draft.copy(notes = it)) },
+            value = control.notes,
+            onValueChange = { updateControl(notes = it) },
             modifier = Modifier.width(ControlTableColumns[4].width),
             singleLine = true,
             label = { Text("Notes") }

@@ -298,11 +298,13 @@ object EventProjectEditor {
     private fun List<EventControl>.entryTokenMap(): Map<String, EventControl> =
         flatMap { control ->
             listOfNotNull(
+                control.siCode.toString() to control,
                 control.label.takeIf { it.isNotBlank() }?.let { it to control },
                 control.publicLabel?.trim()?.takeIf { it.isNotBlank() }?.let { it to control }
             )
         }
             .groupBy({ it.first }, { it.second })
+            .mapValues { (_, controls) -> controls.distinctBy { it.id } }
             .filterValues { controls -> controls.size == 1 }
             .mapValues { (_, controls) -> controls.single() }
 

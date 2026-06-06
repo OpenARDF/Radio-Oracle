@@ -37,6 +37,14 @@ class ControlPointRulesTest {
     }
 
     @Test
+    fun tokenizesQuotedControlLabels() {
+        assertEquals(
+            listOf("Fox 1", "32", "Fox 3"),
+            ControlPointRules.tokenizeControlPoints("'Fox 1', 32; \"Fox 3\"")
+        )
+    }
+
+    @Test
     fun rejectsUnknownSpecifiersAndOutOfRangeCodes() {
         assertEquals(
             ControlPointValidationError.UNKNOWN_SPECIFIER,

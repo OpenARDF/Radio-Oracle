@@ -258,7 +258,7 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "New Event File",
-                "Open...",
+                "Load...",
                 "Import Android Event File...",
                 "Import EventReg Website...",
                 "Export Android Event File...",
@@ -348,7 +348,7 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "New Event File",
-                "Open...",
+                "Load...",
                 "Import Android Event File...",
                 "Import EventReg Website...",
                 "Export Android Event File...",

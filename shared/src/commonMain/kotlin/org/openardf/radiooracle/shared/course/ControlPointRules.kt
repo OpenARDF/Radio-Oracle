@@ -28,13 +28,34 @@ object ControlPointRules {
         return controlPoints
     }
 
-    /** Splits category course input on any supported user-facing separator. */
-    fun tokenizeControlPoints(input: String): List<String> =
-        input.trim()
-            .takeIf { it.isNotEmpty() }
-            ?.split(Regex("[,;\\s]+"))
-            ?.filter { it.isNotEmpty() }
-            ?: emptyList()
+    /** Splits category course input on separators, preserving quoted labels that contain spaces. */
+    fun tokenizeControlPoints(input: String): List<String> {
+        val tokens = mutableListOf<String>()
+        val current = StringBuilder()
+        var quote: Char? = null
+
+        fun flushToken() {
+            current.toString().trim().takeIf { it.isNotEmpty() }?.let(tokens::add)
+            current.clear()
+        }
+
+        input.forEach { char ->
+            when {
+                quote != null -> {
+                    if (char == quote) {
+                        quote = null
+                    } else {
+                        current.append(char)
+                    }
+                }
+                char == '"' || char == '\'' -> quote = char
+                char.isWhitespace() || char == ',' || char == ';' -> flushToken()
+                else -> current.append(char)
+            }
+        }
+        flushToken()
+        return tokens
+    }
 
     /** Formats parsed control definitions back into the compact user-facing course string. */
     fun formatControlPoints(controlPoints: List<ControlPointDefinition>): String {
