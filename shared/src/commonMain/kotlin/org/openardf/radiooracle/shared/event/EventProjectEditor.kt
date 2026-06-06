@@ -282,7 +282,9 @@ object EventProjectEditor {
                     category = data.category.copy(controlPointsString = formattedControlPoints),
                     controlPoints = controlPoints,
                     publicControlIds = controlPoints
-                        .sortedWith(compareBy<EventControlPoint>({ controls.firstOrNull { control -> control.id == it.controlId }?.label ?: "" }, { it.siCode }))
+                        .sortedWith(compareBy<EventControlPoint>({
+                            controls.firstOrNull { control -> control.id == it.controlId }?.publicDisplayName ?: ""
+                        }, { it.siCode }))
                         .map { it.controlId }
                 )
             } else {
@@ -2818,6 +2820,9 @@ object EventProjectEditor {
 
     private fun EventCompetitor.historyKey(): String =
         siNumber?.let { "si:$it" } ?: "start:$startNumber"
+
+    private val EventControl.publicDisplayName: String
+        get() = publicLabel?.takeIf { it.isNotBlank() } ?: label
 
     private fun seededRank(seed: String, value: String): Long {
         // FNV-1a followed by MurmurHash3-style finalization. Kotlin/Native/JVM

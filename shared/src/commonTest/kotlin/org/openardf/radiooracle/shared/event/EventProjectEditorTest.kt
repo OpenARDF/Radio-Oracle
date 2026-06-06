@@ -230,7 +230,7 @@ class EventProjectEditorTest {
 
     @Test
     fun updatesCategoryControlPointsUsingDefinedControlLabels() {
-        val control = EventControl(
+        val fox = EventControl(
             id = "control-f1",
             raceId = "race",
             label = "F1",
@@ -238,19 +238,27 @@ class EventProjectEditorTest {
             type = ControlPointType.CONTROL,
             publicLabel = "Fox 1"
         )
+        val beacon = EventControl(
+            id = "control-m",
+            raceId = "race",
+            label = "M",
+            siCode = 99,
+            type = ControlPointType.BEACON,
+            publicLabel = "Beacon"
+        )
         val original = projectFile(
             categories = listOf(categoryData("cat-1", "M21")),
-            controls = listOf(control)
+            controls = listOf(fox, beacon)
         )
 
-        val updated = EventProjectEditor.updateCategoryControlPoints(original, "cat-1", "'Fox 1'") { index ->
+        val updated = EventProjectEditor.updateCategoryControlPoints(original, "cat-1", "Fox 1, Beacon") { index ->
             "control-$index"
         }
 
         val categoryData = updated.raceData.categories.single()
-        assertEquals(listOf("control-f1"), categoryData.controlPoints.map { it.controlId })
-        assertEquals(listOf(41), categoryData.controlPoints.map { it.siCode })
-        assertEquals(listOf("control-f1"), categoryData.publicControlIds)
+        assertEquals(listOf("control-f1", "control-m"), categoryData.controlPoints.map { it.controlId })
+        assertEquals(listOf(41, 99), categoryData.controlPoints.map { it.siCode })
+        assertEquals(listOf("control-m", "control-f1"), categoryData.publicControlIds)
     }
 
     @Test

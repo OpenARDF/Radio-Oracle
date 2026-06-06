@@ -43,8 +43,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -175,7 +177,7 @@ private val CategoryTableColumns = listOf(
     FixedTableColumn("Type", 96.dp),
     FixedTableColumn("Band", 104.dp),
     FixedTableColumn("Limit (min.)", 104.dp),
-    FixedTableColumn("Controls", 220.dp)
+    FixedTableColumn("Assigned Controls", 320.dp)
 )
 
 private val CategoryTableColumnHints = mapOf(
@@ -185,7 +187,7 @@ private val CategoryTableColumnHints = mapOf(
     "Type" to "Race type used by this category. It normally follows the Event File setting unless category-specific properties are imported.",
     "Band" to "Frequency band used by this category. It normally follows the Event File setting unless category-specific properties are imported.",
     "Limit (min.)" to "Time limit for this category in minutes. It normally follows the Event File setting unless category-specific properties are imported.",
-    "Controls" to "Ordered controls for this category. Separate entries with spaces, commas, or semicolons. Use SI codes, defined control labels, or Public label values. Put labels containing spaces in single or double quotes, such as 'Fox 1'."
+    "Assigned Controls" to "Ordered controls for this category. Separate entries with spaces, commas, or semicolons. Use the picker to insert Public labels. Manual entries may use SI codes, defined control labels, or Public label values; put labels containing spaces in single or double quotes, such as 'Fox 1'."
 )
 
 private val CompetitorTableColumns = listOf(
@@ -366,6 +368,9 @@ fun main(args: Array<String>) = application {
 
         fun hasProtectedUnsavedChanges(): Boolean =
             hasUnsavedChanges && !isDefaultUnsavedNewEventFileDraft()
+
+        fun canSaveEventFile(): Boolean =
+            projectFile != null && (projectSession.currentPath == null || hasProtectedUnsavedChanges())
 
         fun lockProtectedCourseOrder() {
             val wasUnlocked = protectedCoursePassword != null
@@ -1359,7 +1364,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportEventRegCompetitorsCsv -> projectFile != null
                 DesktopNavAction.ShowDebugLogHelp,
                 DesktopNavAction.ShowAbout -> true
-                DesktopNavAction.SaveEventFile -> projectFile != null
+                DesktopNavAction.SaveEventFile -> canSaveEventFile()
                 DesktopNavAction.StopContinuousSiReadout -> isContinuousSiReadoutActive
                 DesktopNavAction.StartLocalResultDisplay -> projectFile != null && localResultServerUrl == null
                 DesktopNavAction.StopLocalResultDisplay -> localResultServerUrl != null
@@ -1453,7 +1458,7 @@ fun main(args: Array<String>) = application {
                 Item("Import EventReg Website...", onClick = ::showEventRegImportDialog)
                 Item(
                     "Save Event",
-                    enabled = projectFile != null && (projectSession.currentPath == null || hasProtectedUnsavedChanges()),
+                    enabled = canSaveEventFile(),
                     onClick = {
                         saveCurrentProject()
                     }
@@ -2592,7 +2597,9 @@ private fun AppTopBar() {
 private fun saveEventButtonColors() =
     ButtonDefaults.buttonColors(
         backgroundColor = DesktopPalette.Connected,
-        contentColor = DesktopPalette.Black
+        contentColor = DesktopPalette.Black,
+        disabledBackgroundColor = DesktopPalette.LightGrey,
+        disabledContentColor = DesktopPalette.Disconnected
     )
 
 /** Shows workflow-specific navigation with optional submenu replacement. */
@@ -2815,6 +2822,7 @@ private fun SectionWorkspace(
         if (section == DesktopSection.Categories && projectFile != null) {
             CategoryDetailsPanel(
                 categories = EventCategoryDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
+                controls = EventControlDetails.from(projectFile.raceData),
                 onRenameCategory = onRenameCategory,
                 onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
                 onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
@@ -3903,6 +3911,7 @@ private fun CompetitorDetailsPanel(
 ) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(CompetitorTableColumns)
+    val orderedCompetitors = rememberEditableRowOrder(competitors) { it.id }
     val nextStartNumber = remember(competitors) { nextCompetitorStartNumber(competitors) }
     var firstNameDraft by remember { mutableStateOf("") }
     var lastNameDraft by remember { mutableStateOf("") }
@@ -3988,8 +3997,10 @@ private fun CompetitorDetailsPanel(
             verticalAlignment = Alignment.Top
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                competitors.forEach { competitor ->
-                    CompetitorDeleteButton(competitor, onRemoveCompetitor)
+                orderedCompetitors.forEach { competitor ->
+                    key(competitor.id) {
+                        CompetitorDeleteButton(competitor, onRemoveCompetitor)
+                    }
                 }
             }
             Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
@@ -3997,17 +4008,19 @@ private fun CompetitorDetailsPanel(
                     modifier = Modifier.width(tableWidth),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    competitors.forEach { competitor ->
-                        CompetitorDetailRow(
-                            competitor = competitor,
-                            categories = categories,
-                            onRenameCompetitor = onRenameCompetitor,
-                            onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
-                            onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
-                            onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
-                            onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
-                            onAssignCompetitorCategory = onAssignCompetitorCategory
-                        )
+                    orderedCompetitors.forEach { competitor ->
+                        key(competitor.id) {
+                            CompetitorDetailRow(
+                                competitor = competitor,
+                                categories = categories,
+                                onRenameCompetitor = onRenameCompetitor,
+                                onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
+                                onUpdateCompetitorClubIndex = onUpdateCompetitorClubIndex,
+                                onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
+                                onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
+                                onAssignCompetitorCategory = onAssignCompetitorCategory
+                            )
+                        }
                     }
                 }
             }
@@ -4172,57 +4185,66 @@ private fun CompetitorDetailRow(
     ) {
         TextField(
             value = firstNameDraft,
-            onValueChange = {
-                firstNameDraft = it
-                if (it.isNotBlank() && lastNameDraft.isNotBlank()) {
-                    onRenameCompetitor(competitor.id, it, lastNameDraft)
-                }
-            },
-            modifier = Modifier.width(CompetitorTableColumns[0].width),
+            onValueChange = { firstNameDraft = it },
+            modifier = Modifier
+                .width(CompetitorTableColumns[0].width)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused) {
+                        applyPendingDrafts()
+                    }
+                },
             singleLine = true,
             label = { Text("First") }
         )
         TextField(
             value = lastNameDraft,
-            onValueChange = {
-                lastNameDraft = it
-                if (firstNameDraft.isNotBlank() && it.isNotBlank()) {
-                    onRenameCompetitor(competitor.id, firstNameDraft, it)
-                }
-            },
-            modifier = Modifier.width(CompetitorTableColumns[1].width),
+            onValueChange = { lastNameDraft = it },
+            modifier = Modifier
+                .width(CompetitorTableColumns[1].width)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused) {
+                        applyPendingDrafts()
+                    }
+                },
             singleLine = true,
             label = { Text("Last") }
         )
         TextField(
             value = clubDraft,
-            onValueChange = {
-                clubDraft = it
-                onUpdateCompetitorClubIndex(competitor.id, it, indexDraft)
-            },
-            modifier = Modifier.width(CompetitorTableColumns[2].width),
+            onValueChange = { clubDraft = it },
+            modifier = Modifier
+                .width(CompetitorTableColumns[2].width)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused) {
+                        applyPendingDrafts()
+                    }
+                },
             singleLine = true,
             label = { Text("Club") }
         )
         TextField(
             value = indexDraft,
-            onValueChange = {
-                indexDraft = it
-                onUpdateCompetitorClubIndex(competitor.id, clubDraft, it)
-            },
-            modifier = Modifier.width(CompetitorTableColumns[3].width),
+            onValueChange = { indexDraft = it },
+            modifier = Modifier
+                .width(CompetitorTableColumns[3].width)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused) {
+                        applyPendingDrafts()
+                    }
+                },
             singleLine = true,
             label = { Text("Index") }
         )
         TextField(
             value = birthYearDraft,
-            onValueChange = {
-                birthYearDraft = it
-                if (it.isBlank() || it.trim().toIntOrNull() != null) {
-                    onUpdateCompetitorBirthYear(competitor.id, it)
-                }
-            },
-            modifier = Modifier.width(CompetitorTableColumns[4].width),
+            onValueChange = { birthYearDraft = it },
+            modifier = Modifier
+                .width(CompetitorTableColumns[4].width)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused) {
+                        applyPendingDrafts()
+                    }
+                },
             singleLine = true,
             label = { Text("Birth") }
         )
@@ -4237,48 +4259,40 @@ private fun CompetitorDetailRow(
         )
         TextField(
             value = startNumberDraft,
-            onValueChange = {
-                startNumberDraft = it
-                if (it.trim().toIntOrNull() != null &&
-                    (siNumberDraft.isBlank() || siNumberDraft.trim().toIntOrNull() != null)
-                ) {
-                    onUpdateCompetitorNumbers(competitor.id, it, siNumberDraft)
-                }
-            },
-            modifier = Modifier.width(CompetitorTableColumns[6].width),
+            onValueChange = { startNumberDraft = it },
+            modifier = Modifier
+                .width(CompetitorTableColumns[6].width)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused) {
+                        applyPendingDrafts()
+                    }
+                },
             singleLine = true,
             label = { Text("Start") }
         )
         TextField(
             value = startTimeDraft,
-            onValueChange = {
-                startTimeDraft = it
-                runCatching {
-                    if (it.isBlank()) {
-                        true
-                    } else {
-                        DurationFormatter.minuteStringToSeconds(it)
-                        true
+            onValueChange = { startTimeDraft = it },
+            modifier = Modifier
+                .width(CompetitorTableColumns[7].width)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused) {
+                        applyPendingDrafts()
                     }
-                }.onSuccess {
-                    onUpdateCompetitorStartTime(competitor.id, startTimeDraft)
-                }
-            },
-            modifier = Modifier.width(CompetitorTableColumns[7].width),
+                },
             singleLine = true,
             label = { Text("mmm:ss") }
         )
         TextField(
             value = siNumberDraft,
-            onValueChange = {
-                siNumberDraft = it
-                if (startNumberDraft.trim().toIntOrNull() != null &&
-                    (it.isBlank() || it.trim().toIntOrNull() != null)
-                ) {
-                    onUpdateCompetitorNumbers(competitor.id, startNumberDraft, it)
-                }
-            },
-            modifier = Modifier.width(CompetitorTableColumns[8].width),
+            onValueChange = { siNumberDraft = it },
+            modifier = Modifier
+                .width(CompetitorTableColumns[8].width)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused) {
+                        applyPendingDrafts()
+                    }
+                },
             singleLine = true,
             label = { Text("SI") }
         )
@@ -4387,6 +4401,7 @@ private fun ControlDetailsPanel(
 ) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(ControlTableColumns)
+    val orderedControls = rememberEditableRowOrder(controls) { it.id }
     var siCodeDraft by remember { mutableStateOf("") }
     var typeDraft by remember { mutableStateOf(ControlPointType.CONTROL) }
     var publicLabelDraft by remember { mutableStateOf("") }
@@ -4442,8 +4457,10 @@ private fun ControlDetailsPanel(
             verticalAlignment = Alignment.Top
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                controls.forEach { control ->
-                    ControlDeleteButton(control, onRemoveControl)
+                orderedControls.forEach { control ->
+                    key(control.id) {
+                        ControlDeleteButton(control, onRemoveControl)
+                    }
                 }
             }
             Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
@@ -4451,12 +4468,14 @@ private fun ControlDetailsPanel(
                     modifier = Modifier.width(tableWidth),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    controls.forEach { control ->
-                        ControlDetailRow(
-                            control = control,
-                            raceType = raceType,
-                            onUpdateControl = onUpdateControl
-                        )
+                    orderedControls.forEach { control ->
+                        key(control.id) {
+                            ControlDetailRow(
+                                control = control,
+                                raceType = raceType,
+                                onUpdateControl = onUpdateControl
+                            )
+                        }
                     }
                 }
             }
@@ -4486,7 +4505,7 @@ private fun ControlAddRow(
             onValueChange = onSiCodeChange,
             modifier = Modifier.width(ControlTableColumns[0].width),
             singleLine = true,
-            label = { Text("New SI code") }
+            label = { Text("SI code") }
         )
         ControlTypeDropdown(
             type = typeDraft,
@@ -4518,6 +4537,15 @@ private fun ControlDetailRow(
     raceType: RaceType,
     onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit
 ) {
+    var siCodeDraft by remember(control.id) { mutableStateOf(control.siCodeText) }
+    var isSiCodeFocused by remember(control.id) { mutableStateOf(false) }
+
+    LaunchedEffect(control.siCodeText, isSiCodeFocused) {
+        if (!isSiCodeFocused) {
+            siCodeDraft = control.siCodeText
+        }
+    }
+
     fun updateControl(
         siCodeText: String = control.siCodeText,
         type: ControlPointType = control.type,
@@ -4536,15 +4564,35 @@ private fun ControlDetailRow(
         onUpdateControl(control.id, nextLabel, siCodeText, type, scored, publicLabel, notes)
     }
 
+    fun commitSiCodeDraft() {
+        val normalizedDraft = siCodeDraft.trim()
+        if (normalizedDraft == control.siCodeText) {
+            return
+        }
+        if (normalizedDraft.toIntOrNull() == null) {
+            siCodeDraft = control.siCodeText
+            return
+        }
+        updateControl(siCodeText = normalizedDraft)
+    }
+
     Row(
         modifier = Modifier.width(fixedTableWidth(ControlTableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
-            value = control.siCodeText,
-            onValueChange = { updateControl(siCodeText = it) },
-            modifier = Modifier.width(ControlTableColumns[0].width),
+            value = siCodeDraft,
+            onValueChange = { siCodeDraft = it },
+            modifier = Modifier
+                .width(ControlTableColumns[0].width)
+                .onFocusChanged { focusState ->
+                    val wasFocused = isSiCodeFocused
+                    isSiCodeFocused = focusState.isFocused
+                    if (wasFocused && !focusState.isFocused) {
+                        commitSiCodeDraft()
+                    }
+                },
             singleLine = true,
             label = { Text("SI code") }
         )
@@ -4656,6 +4704,7 @@ private fun controlRoleLabel(type: ControlPointType, raceType: RaceType): String
 @Composable
 private fun CategoryDetailsPanel(
     categories: List<EventCategoryDetails>,
+    controls: List<EventControlDetails>,
     onRenameCategory: (String, String) -> Unit,
     onUpdateCategoryControlPoints: (String, String) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
@@ -4664,6 +4713,7 @@ private fun CategoryDetailsPanel(
 ) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(CategoryTableColumns)
+    val orderedCategories = rememberEditableRowOrder(categories) { it.id }
     var categoryNameDraft by remember { mutableStateOf("") }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -4707,8 +4757,10 @@ private fun CategoryDetailsPanel(
             verticalAlignment = Alignment.Top
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                categories.forEach { category ->
-                    CategoryDeleteButton(category, onRemoveCategory)
+                orderedCategories.forEach { category ->
+                    key(category.id) {
+                        CategoryDeleteButton(category, onRemoveCategory)
+                    }
                 }
             }
             Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
@@ -4716,13 +4768,16 @@ private fun CategoryDetailsPanel(
                     modifier = Modifier.width(tableWidth),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    categories.forEach { category ->
-                        CategoryDetailRow(
-                            category,
-                            onRenameCategory,
-                            onUpdateCategoryControlPoints,
-                            onUpdateCategoryPhysicalStats
-                        )
+                    orderedCategories.forEach { category ->
+                        key(category.id) {
+                            CategoryDetailRow(
+                                category = category,
+                                controls = controls,
+                                onRenameCategory = onRenameCategory,
+                                onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
+                                onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats
+                            )
+                        }
                     }
                 }
             }
@@ -4931,6 +4986,7 @@ private fun CategoryAddRow(
 @Composable
 private fun CategoryDetailRow(
     category: EventCategoryDetails,
+    controls: List<EventControlDetails>,
     onRenameCategory: (String, String) -> Unit,
     onUpdateCategoryControlPoints: (String, String) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit
@@ -4945,6 +5001,11 @@ private fun CategoryDetailRow(
     var controlPointsDraft by remember(category.id, category.controlPointsText) {
         mutableStateOf(category.controlPointsText)
     }
+    fun applyCategoryNameDraft() {
+        if (categoryNameDraft != category.name && categoryNameDraft.isNotBlank()) {
+            onRenameCategory(category.id, categoryNameDraft)
+        }
+    }
     fun applyPhysicalStats(nextLength: String = lengthMetersDraft, nextClimb: String = climbMetersDraft) {
         if (
             nextLength.trim().toIntOrNull() != null &&
@@ -4954,6 +5015,10 @@ private fun CategoryDetailRow(
             onUpdateCategoryPhysicalStats(category.id, nextLength, nextClimb)
         }
     }
+    val applyLatestCategoryNameDraft by rememberUpdatedState(::applyCategoryNameDraft)
+    DisposableEffect(category.id) {
+        onDispose { applyLatestCategoryNameDraft() }
+    }
     Row(
         modifier = Modifier.width(fixedTableWidth(CategoryTableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
@@ -4961,13 +5026,14 @@ private fun CategoryDetailRow(
     ) {
         TextField(
             value = categoryNameDraft,
-            onValueChange = {
-                categoryNameDraft = it
-                if (it.isNotBlank()) {
-                    onRenameCategory(category.id, it)
-                }
-            },
-            modifier = Modifier.width(CategoryTableColumns[0].width),
+            onValueChange = { categoryNameDraft = it },
+            modifier = Modifier
+                .width(CategoryTableColumns[0].width)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused) {
+                        applyCategoryNameDraft()
+                    }
+                },
             singleLine = true,
             label = { Text("Category") }
         )
@@ -5009,16 +5075,69 @@ private fun CategoryDetailRow(
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
-        TextField(
-            value = controlPointsDraft,
-            onValueChange = {
+        AssignedControlsEditor(
+            controlPointsDraft = controlPointsDraft,
+            controls = controls,
+            onControlPointsChange = {
                 controlPointsDraft = it
                 onUpdateCategoryControlPoints(category.id, it)
             },
-            modifier = Modifier.width(CategoryTableColumns[6].width),
-            singleLine = true,
-            label = { Text("Controls") }
+            modifier = Modifier.width(CategoryTableColumns[6].width)
         )
+    }
+}
+
+@Composable
+private fun AssignedControlsEditor(
+    controlPointsDraft: String,
+    controls: List<EventControlDetails>,
+    onControlPointsChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val publicLabelControls = remember(controls) {
+        controls
+            .filter { isPickerSafePublicLabel(it.publicDisplayLabel()) }
+            .groupBy { it.publicDisplayLabel() }
+            .filterValues { controlsForLabel -> controlsForLabel.size == 1 }
+            .values
+            .map { controlsForLabel -> controlsForLabel.single() }
+            .sortedWith(compareBy<EventControlDetails> { it.publicDisplayLabel().lowercase() }.thenBy { it.siCode })
+    }
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextField(
+            value = controlPointsDraft,
+            onValueChange = onControlPointsChange,
+            modifier = Modifier.width(232.dp),
+            singleLine = true,
+            label = { Text("Assigned") }
+        )
+        Box(modifier = Modifier.width(76.dp)) {
+            Button(
+                onClick = { expanded = true },
+                enabled = publicLabelControls.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                ButtonLabel("Pick")
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                publicLabelControls.forEach { control ->
+                    DropdownMenuItem(
+                        onClick = {
+                            expanded = false
+                            onControlPointsChange(appendPublicControlLabel(controlPointsDraft, control.publicDisplayLabel()))
+                        }
+                    ) {
+                        Text(control.publicDisplayLabel())
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -5581,6 +5700,54 @@ private fun FixedTableText(text: String, width: Dp, color: Color = DesktopPalett
         softWrap = false,
         overflow = TextOverflow.Ellipsis
     )
+}
+
+private fun appendPublicControlLabel(controlPointsText: String, publicLabel: String): String {
+    val token = pickerControlToken(publicLabel)
+    val existingText = controlPointsText.trim()
+    return if (existingText.isEmpty()) token else "$existingText $token"
+}
+
+private fun EventControlDetails.publicDisplayLabel(): String =
+    publicLabel.trim().ifEmpty { label }
+
+private fun pickerControlToken(publicLabel: String): String {
+    val label = publicLabel.trim()
+    val needsQuoting = label.any { it.isWhitespace() || it == ',' || it == ';' }
+    return if (needsQuoting) "'$label'" else label
+}
+
+private fun isPickerSafePublicLabel(publicLabel: String): Boolean {
+    val label = publicLabel.trim()
+    return label.isNotEmpty() && '\'' !in label && '"' !in label
+}
+
+/**
+ * Keeps editable detail-table rows in the same on-screen order while a menu is open.
+ *
+ * Several setup tables are initially sorted by values the user is allowed to edit,
+ * such as SI code, start number, competitor name, or category name. If the table
+ * renders directly from the freshly sorted model after every commit, a valid edit
+ * can move the row out from under the user and make adjacent fields appear to
+ * change unexpectedly. This helper preserves the current row-id order for the
+ * active editing session, removes deleted rows, and appends newly added rows in
+ * the order supplied by the model.
+ */
+@Composable
+private fun <T> rememberEditableRowOrder(items: List<T>, itemId: (T) -> String): List<T> {
+    var rowOrder by remember { mutableStateOf<List<String>>(emptyList()) }
+    val incomingIds = items.map(itemId)
+
+    LaunchedEffect(incomingIds) {
+        rowOrder = rowOrder.filter { it in incomingIds } +
+            incomingIds.filterNot { it in rowOrder }
+    }
+
+    val activeOrder = rowOrder.ifEmpty { incomingIds }
+    val itemsById = items.associateBy(itemId)
+    val activeIdSet = activeOrder.toSet()
+    return activeOrder.mapNotNull { itemsById[it] } +
+        items.filter { itemId(it) !in activeIdSet }
 }
 
 private fun EventStartListRuleSeverity.toStartListColor(): Color =

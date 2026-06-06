@@ -33,6 +33,7 @@ object ControlPointRules {
         val tokens = mutableListOf<String>()
         val current = StringBuilder()
         var quote: Char? = null
+        val hasExplicitDelimiter = input.any { it == ',' || it == ';' }
 
         fun flushToken() {
             current.toString().trim().takeIf { it.isNotEmpty() }?.let(tokens::add)
@@ -49,7 +50,8 @@ object ControlPointRules {
                     }
                 }
                 char == '"' || char == '\'' -> quote = char
-                char.isWhitespace() || char == ',' || char == ';' -> flushToken()
+                char == ',' || char == ';' -> flushToken()
+                char.isWhitespace() && !hasExplicitDelimiter -> flushToken()
                 else -> current.append(char)
             }
         }

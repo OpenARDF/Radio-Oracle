@@ -45,6 +45,14 @@ class ControlPointRulesTest {
     }
 
     @Test
+    fun tokenizesUnquotedControlLabelsWhenCommasOrSemicolonsAreUsed() {
+        assertEquals(
+            listOf("Fox 1", "Fox 2", "Beacon"),
+            ControlPointRules.tokenizeControlPoints("Fox 1, Fox 2; Beacon")
+        )
+    }
+
+    @Test
     fun rejectsUnknownSpecifiersAndOutOfRangeCodes() {
         assertEquals(
             ControlPointValidationError.UNKNOWN_SPECIFIER,
