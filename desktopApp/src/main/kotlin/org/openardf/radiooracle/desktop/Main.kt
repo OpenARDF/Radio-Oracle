@@ -1656,13 +1656,8 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${genericEditErrorText(error)}"
                 }
             },
-            onUpdateCategoryControlPoints = { categoryId, controlPointsText ->
+            onUpdateCategoryControlPoints = { categoryId, controlPointsText, shouldCheckRequiredControls ->
                 runCatching {
-                    val previousPublicControlIds = projectSession.currentProject
-                        ?.raceData
-                        ?.categories
-                        ?.firstOrNull { it.category.id == categoryId }
-                        ?.publicControlIds
                     val updatedProject = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.updateCategoryControlPoints(
                             currentProject,
@@ -1675,12 +1670,7 @@ fun main(args: Array<String>) = application {
                     projectFile = updatedProject
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
-                    val updatedPublicControlIds = updatedProject
-                        .raceData
-                        .categories
-                        .firstOrNull { it.category.id == categoryId }
-                        ?.publicControlIds
-                    if (updatedPublicControlIds != previousPublicControlIds) {
+                    if (shouldCheckRequiredControls) {
                         scheduleAssignedControlsWarning(
                             EventAssignedControlWarnings.forCategory(updatedProject.raceData, categoryId)
                         )
@@ -2401,7 +2391,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateRaceStartDateTime: (String) -> Unit = {},
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit = { _, _, _, _ -> },
     onRenameCategory: (String, String) -> Unit = { _, _ -> },
-    onUpdateCategoryControlPoints: (String, String) -> Unit = { _, _ -> },
+    onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit = { _, _, _ -> },
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit = { _, _, _ -> },
     onAddCategory: (String) -> Boolean = { false },
     onRemoveCategory: (String, Boolean) -> Unit = { _, _ -> },
@@ -2817,7 +2807,7 @@ private fun SectionWorkspace(
     onUpdateRaceStartDateTime: (String) -> Unit,
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
     onRenameCategory: (String, String) -> Unit,
-    onUpdateCategoryControlPoints: (String, String) -> Unit,
+    onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
     onAddCategory: (String) -> Boolean,
     onRemoveCategory: (String, Boolean) -> Unit,
@@ -4791,7 +4781,7 @@ private fun CategoryDetailsPanel(
     categories: List<EventCategoryDetails>,
     controls: List<EventControlDetails>,
     onRenameCategory: (String, String) -> Unit,
-    onUpdateCategoryControlPoints: (String, String) -> Unit,
+    onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
     onAddCategory: (String) -> Boolean,
     onRemoveCategory: (String, Boolean) -> Unit
@@ -5073,7 +5063,7 @@ private fun CategoryDetailRow(
     category: EventCategoryDetails,
     controls: List<EventControlDetails>,
     onRenameCategory: (String, String) -> Unit,
-    onUpdateCategoryControlPoints: (String, String) -> Unit,
+    onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit
 ) {
     var categoryNameDraft by remember(category.id, category.name) { mutableStateOf(category.name) }
@@ -5163,9 +5153,12 @@ private fun CategoryDetailRow(
         AssignedControlsEditor(
             controlPointsDraft = controlPointsDraft,
             controls = controls,
-            onControlPointsChange = {
+            onControlPointsDraftChange = {
                 controlPointsDraft = it
-                onUpdateCategoryControlPoints(category.id, it)
+            },
+            onControlPointsCommit = { text, shouldCheckRequiredControls ->
+                controlPointsDraft = text
+                onUpdateCategoryControlPoints(category.id, text, shouldCheckRequiredControls)
             },
             modifier = Modifier.width(CategoryTableColumns[6].width)
         )
@@ -5176,10 +5169,13 @@ private fun CategoryDetailRow(
 private fun AssignedControlsEditor(
     controlPointsDraft: String,
     controls: List<EventControlDetails>,
-    onControlPointsChange: (String) -> Unit,
+    onControlPointsDraftChange: (String) -> Unit,
+    onControlPointsCommit: (String, Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var hasPendingTextEdit by remember { mutableStateOf(false) }
+    var pendingPickerText by remember { mutableStateOf<String?>(null) }
     val publicLabelControls = remember(controls) {
         controls
             .filter { isPickerSafePublicLabel(it.publicDisplayLabel()) }
@@ -5203,8 +5199,18 @@ private fun AssignedControlsEditor(
     ) {
         TextField(
             value = controlPointsDraft,
-            onValueChange = onControlPointsChange,
-            modifier = Modifier.width(232.dp),
+            onValueChange = {
+                hasPendingTextEdit = true
+                onControlPointsDraftChange(it)
+            },
+            modifier = Modifier
+                .width(232.dp)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused && hasPendingTextEdit) {
+                        hasPendingTextEdit = false
+                        onControlPointsCommit(controlPointsDraft, true)
+                    }
+                },
             singleLine = true,
             label = { Text("Assigned") }
         )
@@ -5216,13 +5222,29 @@ private fun AssignedControlsEditor(
             ) {
                 ButtonLabel("Pick")
             }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = {
+                    expanded = false
+                    pendingPickerText?.let { text ->
+                        pendingPickerText = null
+                        onControlPointsCommit(text, true)
+                    }
+                }
+            ) {
                 availablePublicLabelControls.forEach { control ->
                     val publicLabel = control.publicDisplayLabel()
                     DropdownMenuItem(
                         onClick = {
-                            expanded = false
-                            onControlPointsChange(appendPublicControlLabel(controlPointsDraft, publicLabel))
+                            val nextText = appendPublicControlLabel(controlPointsDraft, publicLabel)
+                            pendingPickerText = nextText
+                            onControlPointsDraftChange(nextText)
+                            onControlPointsCommit(nextText, false)
+                            if (availablePublicLabelControls.size <= 1) {
+                                expanded = false
+                                pendingPickerText = null
+                                onControlPointsCommit(nextText, true)
+                            }
                         }
                     ) {
                         Text(publicLabel)
