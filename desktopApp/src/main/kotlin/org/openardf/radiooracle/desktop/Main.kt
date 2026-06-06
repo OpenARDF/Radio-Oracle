@@ -196,6 +196,14 @@ private val CategoryTableColumnHints = mapOf(
     "Assigned Controls" to "Ordered controls for this category. Separate entries with spaces, commas, or semicolons. Use the picker to insert Public labels. Manual entries may use SI codes, defined control labels, or Public label values; put labels containing spaces in single or double quotes, such as 'Fox 1'."
 )
 
+private val ProtectedCourseOrderTableColumns = listOf(
+    FixedTableColumn("Category", 120.dp),
+    FixedTableColumn("Protected ideal order", 360.dp)
+)
+private val ProtectedIdealOrderPickerWidth = 76.dp
+private val ProtectedIdealOrderTextFieldWidth =
+    ProtectedCourseOrderTableColumns[1].width - ProtectedIdealOrderPickerWidth - TableColumnGap
+
 private val CompetitorTableColumns = listOf(
     FixedTableColumn("First", 120.dp),
     FixedTableColumn("Last", 136.dp),
@@ -1602,7 +1610,6 @@ fun main(args: Array<String>) = application {
             onNavAction = ::handleNavAction,
             isProtectedCourseOrderUnlocked = protectedCoursePassword != null,
             protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
-            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
             onUnlockProtectedCourseOrder = ::unlockProtectedCourseOrder,
             onUpdateProtectedIdealOrder = ::updateProtectedIdealOrder,
             onUpdateProtectedCoursePassword = ::updateProtectedCoursePassword,
@@ -2436,7 +2443,6 @@ private fun RadioOManagerDesktopApp(
     onStopLocalResultServer: () -> Unit = {},
     isProtectedCourseOrderUnlocked: Boolean = false,
     protectedIdealOrderByCategoryId: Map<String, String> = emptyMap(),
-    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
     onUnlockProtectedCourseOrder: (String) -> Boolean = { false },
     onUpdateProtectedIdealOrder: (String, String) -> Unit = { _, _ -> },
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean = { _, _, _ -> false },
@@ -2594,7 +2600,6 @@ private fun RadioOManagerDesktopApp(
                                 onStopLocalResultServer = onStopLocalResultServer,
                                 isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
                                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
-                                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                                 onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
                                 onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
                                 onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword
@@ -2863,7 +2868,6 @@ private fun SectionWorkspace(
     onStopLocalResultServer: () -> Unit,
     isProtectedCourseOrderUnlocked: Boolean,
     protectedIdealOrderByCategoryId: Map<String, String>,
-    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onUnlockProtectedCourseOrder: (String) -> Boolean,
     onUpdateProtectedIdealOrder: (String, String) -> Unit,
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean
@@ -2919,7 +2923,6 @@ private fun SectionWorkspace(
                 projectFile = projectFile,
                 isUnlocked = isProtectedCourseOrderUnlocked,
                 idealOrderByCategoryId = protectedIdealOrderByCategoryId,
-                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                 onUnlock = onUnlockProtectedCourseOrder,
                 onUpdateIdealOrder = onUpdateProtectedIdealOrder,
                 onUpdatePassword = onUpdateProtectedCoursePassword
@@ -4874,7 +4877,6 @@ private fun ProtectedCourseOrderPanel(
     projectFile: EventProjectFile,
     isUnlocked: Boolean,
     idealOrderByCategoryId: Map<String, String>,
-    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onUnlock: (String) -> Boolean,
     onUpdateIdealOrder: (String, String) -> Unit,
     onUpdatePassword: (String, String, String) -> Boolean
@@ -4920,11 +4922,14 @@ private fun ProtectedCourseOrderPanel(
             }
         )
     }
-    val changedDrafts = idealOrderDrafts.filter { (categoryId, draft) ->
-        draft.trim() != idealOrderByCategoryId[categoryId].orEmpty()
-    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Change protected course password",
+            color = DesktopPalette.Black,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+        )
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -4968,28 +4973,23 @@ private fun ProtectedCourseOrderPanel(
                 ButtonLabel("Update Password")
             }
         }
-        Button(
-            onClick = {
-                changedDrafts.forEach { (categoryId, idealOrderText) ->
-                    onUpdateIdealOrder(categoryId, idealOrderText)
-                }
-            },
-            enabled = changedDrafts.isNotEmpty()
-        ) {
-            ButtonLabel("Save")
-        }
-        DetailHeaderRow(listOf("Category", "Protected ideal order", "Length", "Climb", "Route"))
+        Box(
+            modifier = Modifier
+                .width(fixedTableWidth(ProtectedCourseOrderTableColumns))
+                .height(1.dp)
+                .background(DesktopPalette.LightGrey)
+        )
+        FixedDetailHeaderRow(ProtectedCourseOrderTableColumns)
         categories.forEach { categoryData ->
             val categoryId = categoryData.category.id
-            val courseInfo = protectedCourseInfoByCategoryId[categoryId]
             val assignedIdealOrderControls = assignedProtectedIdealOrderControls(projectFile, categoryId)
             ProtectedCourseOrderRow(
                 categoryName = categoryData.category.name,
                 idealOrderDraft = idealOrderDrafts[categoryId].orEmpty(),
                 assignedControls = assignedIdealOrderControls,
-                protectedCourseInfo = courseInfo,
                 onIdealOrderChange = { idealOrderText ->
                     idealOrderDrafts = idealOrderDrafts + (categoryId to idealOrderText)
+                    onUpdateIdealOrder(categoryId, idealOrderText)
                 }
             )
         }
@@ -5001,16 +5001,16 @@ private fun ProtectedCourseOrderRow(
     categoryName: String,
     idealOrderDraft: String,
     assignedControls: List<EventControl>,
-    protectedCourseInfo: ProtectedCourseInfo?,
     onIdealOrderChange: (String) -> Unit
 ) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.width(fixedTableWidth(ProtectedCourseOrderTableColumns)),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = categoryName,
-            modifier = Modifier.width(160.dp),
+            modifier = Modifier.width(ProtectedCourseOrderTableColumns[0].width),
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -5018,25 +5018,7 @@ private fun ProtectedCourseOrderRow(
             idealOrderDraft = idealOrderDraft,
             assignedControls = assignedControls,
             onIdealOrderChange = onIdealOrderChange,
-            modifier = Modifier.width(360.dp)
-        )
-        Text(
-            text = protectedCourseInfo?.lengthMeters?.let { "$it m" } ?: "",
-            modifier = Modifier.width(96.dp),
-            color = DesktopPalette.Black,
-            fontSize = 13.sp
-        )
-        Text(
-            text = protectedCourseInfo?.climbMeters?.let { "$it m" } ?: "",
-            modifier = Modifier.width(96.dp),
-            color = DesktopPalette.Black,
-            fontSize = 13.sp
-        )
-        Text(
-            text = protectedCourseInfo?.let { "${it.sampledPointCount} pts" } ?: "",
-            modifier = Modifier.width(120.dp),
-            color = DesktopPalette.Black,
-            fontSize = 13.sp
+            modifier = Modifier.width(ProtectedCourseOrderTableColumns[1].width)
         )
     }
 }
@@ -5075,11 +5057,11 @@ private fun ProtectedIdealOrderEditor(
             value = idealOrderDraft,
             onValueChange = onIdealOrderChange,
             enabled = assignedControls.isNotEmpty(),
-            modifier = Modifier.width(276.dp),
+            modifier = Modifier.width(ProtectedIdealOrderTextFieldWidth),
             singleLine = true,
             label = { Text("Ideal order") }
         )
-        Box(modifier = Modifier.width(76.dp)) {
+        Box(modifier = Modifier.width(ProtectedIdealOrderPickerWidth)) {
             Button(
                 onClick = { expanded = true },
                 enabled = availablePickerControls.isNotEmpty(),
