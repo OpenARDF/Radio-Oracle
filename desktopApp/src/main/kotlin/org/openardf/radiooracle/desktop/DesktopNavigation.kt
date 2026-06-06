@@ -206,11 +206,11 @@ object DesktopNavigation {
                             workflow,
                             DesktopNavAction.ImportControlsCsv
                         ),
-                        action(
+                        item(
                             "setup.controls.import-course-kml",
-                            "Import Course KML/KMZ...",
+                            "Import Controls/Route KML/KMZ...",
                             workflow,
-                            DesktopNavAction.ImportCourseKmlKmz
+                            DesktopSection.ControlsRouteKmlImport
                         ),
                         action(
                             "setup.controls.export",

@@ -51,6 +51,7 @@ enum class DesktopSection(val label: String) {
     Competitors("Competitors"),
     StartList("Start List"),
     Controls("Controls"),
+    ControlsRouteKmlImport("Import Controls/Route KML/KMZ"),
     Readouts("Readouts"),
     InForest("In Forest"),
     Results("Results"),

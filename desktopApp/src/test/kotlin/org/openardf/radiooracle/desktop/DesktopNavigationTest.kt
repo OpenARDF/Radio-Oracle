@@ -389,7 +389,12 @@ class DesktopNavigationTest {
         val competitorItems = setupItems.first { it.label == "Competitors" }.children
 
         assertEquals(
-            listOf("Define Controls", "Import Controls CSV...", "Import Course KML/KMZ...", "Export Controls CSV..."),
+            listOf(
+                "Define Controls",
+                "Import Controls CSV...",
+                "Import Controls/Route KML/KMZ...",
+                "Export Controls CSV..."
+            ),
             controlItems.map { it.label }
         )
         assertEquals(
@@ -403,7 +408,11 @@ class DesktopNavigationTest {
             competitorItems.map { it.label }
         )
         assertEquals(DesktopNavAction.ImportControlsCsv, controlItems.first { it.label == "Import Controls CSV..." }.action)
-        assertEquals(DesktopNavAction.ImportCourseKmlKmz, controlItems.first { it.label == "Import Course KML/KMZ..." }.action)
+        assertEquals(
+            DesktopSection.ControlsRouteKmlImport,
+            controlItems.first { it.label == "Import Controls/Route KML/KMZ..." }.section
+        )
+        assertEquals(null, controlItems.first { it.label == "Import Controls/Route KML/KMZ..." }.action)
         assertEquals(DesktopNavAction.ExportControlsCsv, controlItems.first { it.label == "Export Controls CSV..." }.action)
         assertEquals(DesktopNavAction.ImportCategoriesCsv, categoryItems.first { it.label == "Import Categories CSV..." }.action)
         assertEquals(DesktopNavAction.ExportCategoriesCsv, categoryItems.first { it.label == "Export Categories CSV..." }.action)

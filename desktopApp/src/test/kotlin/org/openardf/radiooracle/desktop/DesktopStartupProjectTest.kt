@@ -27,12 +27,14 @@ class DesktopStartupProjectTest {
         val path = Path.of("sample.rom.json")
         val projectFile = projectFile("Startup Race")
         val session = DesktopProjectSession(StartupProjectFileStore(mapOf(path to projectFile)))
+        var rememberedPath: Path? = null
 
-        val status = openStartupProject(session, path)
+        val status = openStartupProject(session, path) { rememberedPath = it }
 
         assertEquals("Opened sample.rom.json", status)
         assertEquals(projectFile, session.currentProject)
         assertEquals(path, session.currentPath)
+        assertEquals(path, rememberedPath)
     }
 
     @Test
@@ -45,6 +47,23 @@ class DesktopStartupProjectTest {
         assertEquals("Open failed: Missing Event File", status)
         assertNull(session.currentProject)
         assertNull(session.currentPath)
+    }
+
+    @Test
+    fun startupPathUsesCommandLinePathBeforeRememberedPath() {
+        val commandLinePath = Path.of("from-args.rom.json")
+        val rememberedPath = Path.of("remembered.rom.json")
+        val store = StartupLastEventFileStore(rememberedPath)
+
+        assertEquals(commandLinePath, startupProjectPath(commandLinePath, store))
+    }
+
+    @Test
+    fun startupPathFallsBackToRememberedPath() {
+        val rememberedPath = Path.of("remembered.rom.json")
+        val store = StartupLastEventFileStore(rememberedPath)
+
+        assertEquals(rememberedPath, startupProjectPath(null, store))
     }
 
     private fun projectFile(name: String): EventProjectFile =
@@ -66,6 +85,14 @@ class DesktopStartupProjectTest {
                 unmatchedReadoutData = emptyList()
             )
         )
+}
+
+private class StartupLastEventFileStore(
+    private val rememberedPath: Path?
+) : DesktopLastEventFileStore {
+    override fun lastEventFile(): Path? = rememberedPath
+
+    override fun rememberEventFile(path: Path) = Unit
 }
 
 private class StartupProjectFileStore(

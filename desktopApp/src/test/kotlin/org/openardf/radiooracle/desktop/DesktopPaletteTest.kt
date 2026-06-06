@@ -16,6 +16,7 @@ class DesktopPaletteTest {
                 "Competitors",
                 "Start List",
                 "Controls",
+                "Import Controls/Route KML/KMZ",
                 "Readouts",
                 "In Forest",
                 "Results",

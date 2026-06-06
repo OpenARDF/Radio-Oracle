@@ -288,14 +288,18 @@ private val ControlTableColumnHints = mapOf(
 fun main(args: Array<String>) = application {
     lateinit var requestWindowClose: () -> Unit
     Window(onCloseRequest = { requestWindowClose() }, title = DesktopBuildInfo.windowTitle) {
-        val startupPath = remember(args.toList()) { args.firstOrNull()?.let(Path::of) }
+        val startupPath = remember(args.toList()) {
+            startupProjectPath(args.firstOrNull()?.let(Path::of))
+        }
         val projectSession = remember { DesktopProjectSession(DesktopProjectFiles) }
         val localResultServer = remember {
             DesktopLocalResultServer(projectSupplier = { projectSession.currentProject })
         }
         val ticketPrinter = remember { DesktopTicketPrinter() }
         val appCoroutineScope = rememberCoroutineScope()
-        val startupStatus = remember(startupPath) { openStartupProject(projectSession, startupPath) }
+        val startupStatus = remember(startupPath) {
+            openStartupProject(projectSession, startupPath, DesktopLastEventFilePreferences::rememberEventFile)
+        }
         var projectFile by remember { mutableStateOf(projectSession.currentProject) }
         var projectStatusText by remember { mutableStateOf(startupStatus) }
         var hasUnsavedChanges by remember { mutableStateOf(projectSession.hasUnsavedChanges) }
@@ -326,6 +330,7 @@ fun main(args: Array<String>) = application {
         var protectedCourseInfoByCategoryId by remember { mutableStateOf<Map<String, ProtectedCourseInfo>>(emptyMap()) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
+        var isCourseKmlKmzUnlockDialogVisible by remember { mutableStateOf(false) }
         var eventRegImportUrl by remember { mutableStateOf(DesktopEventRegImportPreferences.lastRegistrationUrl()) }
         var isImportingEventRegWebsite by remember { mutableStateOf(false) }
         var isImportingEventRegCompetitorCsvs by remember { mutableStateOf(false) }
@@ -455,6 +460,7 @@ fun main(args: Array<String>) = application {
                 projectFile = projectSession.open(path)
                 newEventDraftProject = null
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
+                DesktopLastEventFilePreferences.rememberEventFile(path)
                 projectStatusText = "Opened ${path.fileName}"
                 DesktopDebugLog.info("EventFile", "Opened ${path.fileName}")
             }.onFailure { error ->
@@ -769,6 +775,7 @@ fun main(args: Array<String>) = application {
                     projectSession.saveAs(path)
                     newEventDraftProject = null
                     syncProjectState()
+                    DesktopLastEventFilePreferences.rememberEventFile(path)
                     projectStatusText = "Saved ${path.fileName}"
                     DesktopDebugLog.info("EventFile", "Saved ${path.fileName}")
                 }.onFailure { error ->
@@ -780,6 +787,7 @@ fun main(args: Array<String>) = application {
                 projectSession.save()
                 newEventDraftProject = null
                 syncProjectState()
+                projectSession.currentPath?.let(DesktopLastEventFilePreferences::rememberEventFile)
                 projectStatusText = "Saved ${projectSession.currentPath?.fileName ?: "Event File"}"
                 DesktopDebugLog.info("EventFile", "Saved ${projectSession.currentPath?.fileName ?: "Event File"}")
             }.onFailure { error ->
@@ -948,18 +956,14 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun chooseImportCourseKmlKmz() {
+        fun chooseImportCourseKmlKmzUnlocked(password: String) {
             val currentProject = projectSession.currentProject ?: return
-            val password = protectedCoursePassword ?: run {
-                projectStatusText = "Unlock protected course order before importing KML/KMZ course data."
-                return
-            }
             if (isImportingCourseKmlKmz) {
                 return
             }
             DesktopFileDialogs.chooseImportKmlKmz()?.let { path ->
                 isImportingCourseKmlKmz = true
-                projectStatusText = "Importing protected course KML/KMZ..."
+                projectStatusText = "Importing protected controls/route KML/KMZ..."
                 appCoroutineScope.launch {
                     val result = runCatching {
                         withContext(Dispatchers.IO) {
@@ -987,13 +991,23 @@ fun main(args: Array<String>) = application {
                         }.toMap()
                         hasUnsavedChanges = projectSession.hasUnsavedChanges
                         projectStatusText =
-                            "Imported protected course data for ${summary.matchedCategoryCount} categories; sampled ${summary.sampledElevationCount} USGS elevation points."
+                            "Imported protected controls/route data for ${summary.matchedCategoryCount} categories; sampled ${summary.sampledElevationCount} USGS elevation points."
                     }.onFailure { error ->
-                        projectStatusText = "Course KML/KMZ import failed: ${error.message ?: error::class.simpleName}"
+                        projectStatusText = "Controls/route KML/KMZ import failed: ${error.message ?: error::class.simpleName}"
                     }
                     isImportingCourseKmlKmz = false
                 }
             }
+        }
+
+        fun chooseImportCourseKmlKmz() {
+            val password = protectedCoursePassword
+            if (password == null) {
+                projectStatusText = "Unlock protected course order before importing KML/KMZ controls/route data."
+                isCourseKmlKmzUnlockDialogVisible = true
+                return
+            }
+            chooseImportCourseKmlKmzUnlocked(password)
         }
 
         fun importAndroidRaceBackupJson(path: Path) {
@@ -1360,6 +1374,7 @@ fun main(args: Array<String>) = application {
                     projectSession.saveAs(path)
                     projectFile = projectSession.currentProject
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    DesktopLastEventFilePreferences.rememberEventFile(path)
                     projectStatusText = "Saved ${path.fileName}"
                     DesktopDebugLog.info("EventFile", "Saved As ${path.fileName}")
                 }.onFailure { error ->
@@ -1580,6 +1595,21 @@ fun main(args: Array<String>) = application {
                         isEventRegCompetitorCsvImportDialogVisible = false
                     }
                 }
+            )
+        }
+        if (isCourseKmlKmzUnlockDialogVisible) {
+            CourseKmlKmzUnlockDialog(
+                onUnlock = { password ->
+                    if (unlockProtectedCourseOrder(password)) {
+                        val unlockedPassword = password.trim()
+                        isCourseKmlKmzUnlockDialogVisible = false
+                        chooseImportCourseKmlKmzUnlocked(unlockedPassword)
+                        true
+                    } else {
+                        false
+                    }
+                },
+                onCancel = { isCourseKmlKmzUnlockDialogVisible = false }
             )
         }
         pendingCompetitorsCsvImportPath?.let { importPath ->
@@ -2060,6 +2090,7 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
+            onImportControlsRouteKmlKmz = ::chooseImportCourseKmlKmz,
             onSendRobisLiveResults = { sendRobisLiveResults() },
             onSetBackgroundLiveResultSendingEnabled = { enabled ->
                 isBackgroundLiveResultSendingEnabled = enabled
@@ -2162,6 +2193,53 @@ private fun UnsavedNewEventFileDialog(
                 Button(onClick = onCancel) {
                     Text("Cancel")
                 }
+            }
+        }
+    )
+}
+
+@Composable
+private fun CourseKmlKmzUnlockDialog(
+    onUnlock: (String) -> Boolean,
+    onCancel: () -> Unit
+) {
+    var passwordDraft by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Unlock protected course order") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextField(
+                    value = passwordDraft,
+                    onValueChange = { passwordDraft = it },
+                    label = { Text("Password") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "KML/KMZ controls/route data is stored in protected course fields.",
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (onUnlock(passwordDraft)) {
+                        passwordDraft = ""
+                    }
+                },
+                enabled = passwordDraft.isNotBlank()
+            ) {
+                Text("Unlock and Import")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                Text("Cancel")
             }
         }
     )
@@ -2445,6 +2523,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit = { _, _, _, _, _, _, _ -> },
     onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean = { _, _, _, _, _, _ -> false },
     onRemoveControl: (String) -> Unit = {},
+    onImportControlsRouteKmlKmz: () -> Unit = {},
     onSendRobisLiveResults: () -> Unit = {},
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit = {},
     onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit = {},
@@ -2594,6 +2673,7 @@ private fun RadioOManagerDesktopApp(
                                 onUpdateControl = onUpdateControl,
                                 onAddControl = onAddControl,
                                 onRemoveControl = onRemoveControl,
+                                onImportControlsRouteKmlKmz = onImportControlsRouteKmlKmz,
                                 isSendingLiveResults = isSendingLiveResults,
                                 isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
                                 readoutDuplicatePolicy = readoutDuplicatePolicy,
@@ -2862,6 +2942,7 @@ private fun SectionWorkspace(
     onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit,
     onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean,
     onRemoveControl: (String) -> Unit,
+    onImportControlsRouteKmlKmz: () -> Unit,
     isSendingLiveResults: Boolean,
     isBackgroundLiveResultSendingEnabled: Boolean,
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
@@ -2961,6 +3042,9 @@ private fun SectionWorkspace(
                 onAddControl = onAddControl,
                 onRemoveControl = onRemoveControl
             )
+        }
+        if (section == DesktopSection.ControlsRouteKmlImport && projectFile != null) {
+            ControlsRouteKmlImportPanel(onSelectFile = onImportControlsRouteKmlKmz)
         }
         if (section == DesktopSection.StartList && projectFile != null) {
             StartListDetailsPanel(
@@ -4611,6 +4695,74 @@ private fun ControlDetailsPanel(
             }
         }
     }
+}
+
+@Composable
+private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Button(onClick = onSelectFile) {
+            ButtonLabel("Select File...")
+        }
+        Text(
+            text = "KML/KMZ file requirements",
+            color = DesktopPalette.Black,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            KmlImportInstruction("Use KML Placemark elements. Each imported Placemark must have a nonblank name.")
+            KmlImportInstruction("Control points are Point placemarks. Their names must match existing Event File controls.")
+            KmlImportInstruction("Control point names may use an SI code, internal token, control label, or public label.")
+            KmlImportInstruction("Normal control tokens are SI codes such as 31 or 32. Beacon tokens are 31B. Separator tokens are 31S.")
+            KmlImportInstruction("Routes are LineString placemarks with at least two coordinates.")
+            KmlImportInstruction("Each route LineString name must match an Event File category name, such as M21.")
+            KmlImportInstruction("Matching ignores case, trims leading/trailing spaces, and collapses repeated whitespace.")
+            KmlImportInstruction("Coordinates are read as longitude,latitude,elevation. Elevation may be omitted.")
+            KmlImportInstruction("Controls more than 50 meters from a matched category route are not included in protected ideal order.")
+            KmlImportInstruction("For KMZ files, the first .kml document in the archive is read.")
+        }
+        Text(
+            text = "Minimal example",
+            color = DesktopPalette.Black,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = """
+                <Placemark>
+                  <name>31</name>
+                  <Point>
+                    <coordinates>-95.0000,39.0000,0</coordinates>
+                  </Point>
+                </Placemark>
+
+                <Placemark>
+                  <name>M21</name>
+                  <LineString>
+                    <coordinates>
+                      -95.0000,39.0000,0
+                      -94.9990,39.0000,0
+                      -94.9980,39.0000,0
+                    </coordinates>
+                  </LineString>
+                </Placemark>
+            """.trimIndent(),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+    }
+}
+
+@Composable
+private fun KmlImportInstruction(text: String) {
+    Text(
+        text = "- $text",
+        color = DesktopPalette.Black,
+        fontSize = 14.sp
+    )
 }
 
 @Composable
@@ -6304,6 +6456,8 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
             ?: requiresEventFile("working with the start list")
         DesktopSection.Controls -> projectFile?.let { "${it.raceData.controls.size} controls loaded." }
             ?: requiresEventFile("editing controls")
+        DesktopSection.ControlsRouteKmlImport ->
+            "KML/KMZ files must include named control Point placemarks and category route LineString placemarks."
         DesktopSection.Readouts -> summary?.let { "${it.readoutCount} SI-card readouts loaded." }
             ?: requiresEventFile("working with SI-card readouts")
         DesktopSection.InForest -> summary?.let { "Started competitors without readouts." }

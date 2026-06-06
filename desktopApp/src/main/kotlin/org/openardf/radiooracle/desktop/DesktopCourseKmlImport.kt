@@ -157,7 +157,7 @@ object DesktopCourseKmlImporter {
             "KML/KMZ file did not contain named control point placemarks."
         }
         require(routes.isNotEmpty()) {
-            "KML/KMZ file did not contain named preferred-route LineString placemarks."
+            "KML/KMZ file did not contain named category route LineString placemarks."
         }
         return DesktopCourseKmlData(controls = controls, routes = routes)
     }
