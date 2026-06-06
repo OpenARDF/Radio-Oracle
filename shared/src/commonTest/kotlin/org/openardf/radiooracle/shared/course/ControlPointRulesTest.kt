@@ -70,6 +70,28 @@ class ControlPointRulesTest {
     }
 
     @Test
+    fun rejectsDuplicateAssignedControlsBeforeRouteValidation() {
+        assertEquals(
+            ControlPointValidationError.ASSIGNED_DUPLICATE,
+            assertFailsWith<ControlPointValidationException> {
+                ControlPointRules.parseAssignedControlPoints("31 31", RaceType.CLASSIC)
+            }.error
+        )
+        assertEquals(
+            ControlPointValidationError.ASSIGNED_DUPLICATE,
+            assertFailsWith<ControlPointValidationException> {
+                ControlPointRules.parseAssignedControlPoints("46! 31 46!", RaceType.SPRINT)
+            }.error
+        )
+        assertEquals(
+            ControlPointValidationError.ASSIGNED_DUPLICATE,
+            assertFailsWith<ControlPointValidationException> {
+                ControlPointRules.parseAssignedControlPoints("99B 31 99B", RaceType.FOXORING)
+            }.error
+        )
+    }
+
+    @Test
     fun tokenizesQuotedControlLabels() {
         assertEquals(
             listOf("Fox 1", "32", "Fox 3"),
@@ -136,8 +158,12 @@ class ControlPointRulesTest {
             }.error
         )
 
-        val multiLap = ControlPointRules.parseControlPoints("31 32 40! 31 32 36B", RaceType.SPRINT)
-        assertEquals("31 32 40! 31 32 36B", ControlPointRules.formatControlPoints(multiLap))
+        assertEquals(
+            ControlPointValidationError.SPRINT_DUPLICATE,
+            assertFailsWith<ControlPointValidationException> {
+                ControlPointRules.parseControlPoints("31 32 40! 31 32 36B", RaceType.SPRINT)
+            }.error
+        )
     }
 
     @Test

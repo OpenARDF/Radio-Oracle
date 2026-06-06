@@ -73,6 +73,7 @@ import org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardBlockDownload
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentReadoutService
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
 import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
+import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCategorySort
@@ -1657,6 +1658,11 @@ fun main(args: Array<String>) = application {
             },
             onUpdateCategoryControlPoints = { categoryId, controlPointsText ->
                 runCatching {
+                    val previousPublicControlIds = projectSession.currentProject
+                        ?.raceData
+                        ?.categories
+                        ?.firstOrNull { it.category.id == categoryId }
+                        ?.publicControlIds
                     val updatedProject = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.updateCategoryControlPoints(
                             currentProject,
@@ -1669,9 +1675,16 @@ fun main(args: Array<String>) = application {
                     projectFile = updatedProject
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
-                    scheduleAssignedControlsWarning(
-                        EventAssignedControlWarnings.forCategory(updatedProject.raceData, categoryId)
-                    )
+                    val updatedPublicControlIds = updatedProject
+                        .raceData
+                        .categories
+                        .firstOrNull { it.category.id == categoryId }
+                        ?.publicControlIds
+                    if (updatedPublicControlIds != previousPublicControlIds) {
+                        scheduleAssignedControlsWarning(
+                            EventAssignedControlWarnings.forCategory(updatedProject.raceData, categoryId)
+                        )
+                    }
                 }.onFailure { error ->
                     clearAssignedControlsWarning()
                     projectStatusText = "Edit failed: ${categoryControlPointErrorText(error)}"
@@ -5176,6 +5189,12 @@ private fun AssignedControlsEditor(
             .map { controlsForLabel -> controlsForLabel.single() }
             .sortedWith(compareBy<EventControlDetails> { it.publicDisplayLabel().lowercase() }.thenBy { it.siCode })
     }
+    val selectedPublicLabels = remember(controlPointsDraft, controls) {
+        selectedPublicControlLabels(controlPointsDraft, controls)
+    }
+    val availablePublicLabelControls = remember(publicLabelControls, selectedPublicLabels) {
+        publicLabelControls.filter { control -> control.publicDisplayLabel() !in selectedPublicLabels }
+    }
 
     Row(
         modifier = modifier,
@@ -5192,20 +5211,21 @@ private fun AssignedControlsEditor(
         Box(modifier = Modifier.width(76.dp)) {
             Button(
                 onClick = { expanded = true },
-                enabled = publicLabelControls.isNotEmpty(),
+                enabled = availablePublicLabelControls.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 ButtonLabel("Pick")
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                publicLabelControls.forEach { control ->
+                availablePublicLabelControls.forEach { control ->
+                    val publicLabel = control.publicDisplayLabel()
                     DropdownMenuItem(
                         onClick = {
                             expanded = false
-                            onControlPointsChange(appendPublicControlLabel(controlPointsDraft, control.publicDisplayLabel()))
+                            onControlPointsChange(appendPublicControlLabel(controlPointsDraft, publicLabel))
                         }
                     ) {
-                        Text(control.publicDisplayLabel())
+                        Text(publicLabel)
                     }
                 }
             }
@@ -5778,6 +5798,20 @@ private fun appendPublicControlLabel(controlPointsText: String, publicLabel: Str
     val token = pickerControlToken(publicLabel)
     val existingText = controlPointsText.trim()
     return if (existingText.isEmpty()) token else "$existingText $token"
+}
+
+private fun selectedPublicControlLabels(
+    controlPointsText: String,
+    controls: List<EventControlDetails>
+): Set<String> {
+    val uniqueControlsByPublicLabel = controls
+        .filter { isPickerSafePublicLabel(it.publicDisplayLabel()) }
+        .groupBy { it.publicDisplayLabel() }
+        .filterValues { controlsForLabel -> controlsForLabel.size == 1 }
+        .mapValues { (_, controlsForLabel) -> controlsForLabel.single() }
+    return ControlPointRules.tokenizeControlPoints(controlPointsText)
+        .mapNotNull { token -> uniqueControlsByPublicLabel[token.trim()]?.publicDisplayLabel() }
+        .toSet()
 }
 
 private fun EventControlDetails.publicDisplayLabel(): String =

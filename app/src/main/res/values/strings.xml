@@ -136,7 +136,8 @@
     <string name="control_point_classic_duplicate"> Duplicate control points are not allowed in a classic race.</string>
     <string name="control_point_non_last_beacon"> Beacon must be the last control point.</string>
     <string name="control_point_classic_spectator_not_allowed"> Spectator control points are not allowed on a classic race.</string>
-    <string name="control_point_sprint_duplicate"> Duplicate controls are not allowed in a single lap of a sprint race.</string>
+    <string name="control_point_sprint_duplicate"> Duplicate controls are not allowed in a sprint race.</string>
+    <string name="control_point_assigned_duplicate"> Assigned Controls cannot include the same control more than once.</string>
     <string name="control_point_sprint_two_usages">" Control point with SI code [%1$d] used as a separator / beacon and as a control."</string>
 
     <!--Category presets-->

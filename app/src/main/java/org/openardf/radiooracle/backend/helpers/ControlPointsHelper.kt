@@ -105,6 +105,9 @@ object ControlPointsHelper {
             ControlPointValidationError.SPRINT_DUPLICATE ->
                 context.getString(R.string.control_point_sprint_duplicate)
 
+            ControlPointValidationError.ASSIGNED_DUPLICATE ->
+                context.getString(R.string.control_point_assigned_duplicate)
+
             ControlPointValidationError.SPRINT_SPECIAL_REUSES_CONTROL ->
                 context.getString(R.string.control_point_sprint_two_usages, siCode)
         }

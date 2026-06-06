@@ -298,31 +298,6 @@ class ControlPointsParsingUnitTest {
             ), result.map { cp -> cp.type }.toList()
         )
 
-        cpString = "31 32 33 34 36! 31 32 99B"  //Duplicate controls separated
-        result = ControlPointsHelper.getControlPointsFromString(
-            cpString,
-            categoryId,
-            RaceType.SPRINT,
-            appContext
-        )
-        assertEquals(
-            listOf(31, 32, 33, 34, 36, 31, 32, 99),
-            result.map { cp -> cp.siCode }.toList()
-        )
-        assertEquals((1..8).toList(), result.map { cp -> cp.order }.toList())
-        assertEquals(
-            listOf(
-                ControlPointType.CONTROL,
-                ControlPointType.CONTROL,
-                ControlPointType.CONTROL,
-                ControlPointType.CONTROL,
-                ControlPointType.SEPARATOR,
-                ControlPointType.CONTROL,
-                ControlPointType.CONTROL,
-                ControlPointType.BEACON
-            ), result.map { cp -> cp.type }.toList()
-        )
-
         cpString = "31 36! 42 36!"  //Same separators are fine
         result = ControlPointsHelper.getControlPointsFromString(
             cpString,
@@ -375,6 +350,16 @@ class ControlPointsParsingUnitTest {
     @Test
     fun testSprintInvalidParsing() {
         var cpString = "45B 45B"    //Two beacons
+        System.err.println(assertThrows(java.lang.IllegalArgumentException::class.java) {
+            ControlPointsHelper.getControlPointsFromString(
+                cpString,
+                categoryId,
+                RaceType.SPRINT,
+                appContext
+            )
+        }.message)
+
+        cpString = "31 32 33 34 36! 31 32 99B"  //Duplicate controls separated
         System.err.println(assertThrows(java.lang.IllegalArgumentException::class.java) {
             ControlPointsHelper.getControlPointsFromString(
                 cpString,

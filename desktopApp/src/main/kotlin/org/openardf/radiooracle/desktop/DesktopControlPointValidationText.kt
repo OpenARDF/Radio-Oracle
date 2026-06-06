@@ -33,7 +33,10 @@ object DesktopControlPointValidationText {
                 "Spectator control points are not allowed in a classic race."
 
             ControlPointValidationError.SPRINT_DUPLICATE ->
-                "Duplicate controls are not allowed in a single lap of a sprint race."
+                "Duplicate controls are not allowed in a sprint race."
+
+            ControlPointValidationError.ASSIGNED_DUPLICATE ->
+                "Assigned Controls cannot include the same control more than once."
 
             ControlPointValidationError.SPRINT_SPECIAL_REUSES_CONTROL ->
                 "Control point with SI code [${siCode ?: "unknown"}] used as a separator / beacon and as a control."

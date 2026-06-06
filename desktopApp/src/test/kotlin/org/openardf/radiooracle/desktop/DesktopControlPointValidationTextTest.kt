@@ -35,5 +35,11 @@ class DesktopControlPointValidationTextTest {
                 )
             )
         )
+        assertEquals(
+            "Assigned Controls cannot include the same control more than once.",
+            DesktopControlPointValidationText.messageFor(
+                ControlPointValidationException(ControlPointValidationError.ASSIGNED_DUPLICATE, siCode = 31)
+            )
+        )
     }
 }

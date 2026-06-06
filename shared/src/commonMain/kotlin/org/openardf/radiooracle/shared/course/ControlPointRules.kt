@@ -49,6 +49,7 @@ object ControlPointRules {
             val order = index + 1
             tokenResolver(token, order) ?: parseControlPoint(order, token)
         }
+        validateAssignedControlSet(controlPoints)
         val normalizedControlPoints = normalizeAssignedControlPoints(controlPoints, raceType)
 
         validateControlSequence(normalizedControlPoints, raceType)
@@ -256,6 +257,19 @@ object ControlPointRules {
         }
     }
 
+    private fun validateAssignedControlSet(controlPoints: List<ControlPointDefinition>) {
+        val previousControls = HashSet<Pair<Int, ControlPointType>>()
+        for (controlPoint in controlPoints) {
+            val key = controlPoint.siCode to controlPoint.type
+            if (!previousControls.add(key)) {
+                throw ControlPointValidationException(
+                    ControlPointValidationError.ASSIGNED_DUPLICATE,
+                    siCode = controlPoint.siCode
+                )
+            }
+        }
+    }
+
     private fun validateOrienteeringControlSequence(controlPoints: List<ControlPointDefinition>) {
         for (i in 1..<controlPoints.size) {
             val controlPoint = controlPoints[i]
@@ -320,6 +334,9 @@ object ControlPointRules {
 
             when (controlPoint.type) {
                 ControlPointType.CONTROL -> {
+                    if (previousCodesGlobal.contains(siCode)) {
+                        throw ControlPointValidationException(ControlPointValidationError.SPRINT_DUPLICATE)
+                    }
                     previousCodesInLap.add(siCode)
                     previousCodesGlobal.add(siCode)
                 }
@@ -368,5 +385,6 @@ enum class ControlPointValidationError {
     NON_LAST_BEACON,
     CLASSIC_SPECTATOR_NOT_ALLOWED,
     SPRINT_DUPLICATE,
+    ASSIGNED_DUPLICATE,
     SPRINT_SPECIAL_REUSES_CONTROL
 }

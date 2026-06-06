@@ -79,9 +79,9 @@ class EventValidationRulesTest {
             listOf(
                 EventValidationIssue.InvalidCategoryControlPoints(
                     categoryName = "M21",
-                    error = org.openardf.radiooracle.shared.course.ControlPointValidationError.CLASSIC_DUPLICATE,
+                    error = org.openardf.radiooracle.shared.course.ControlPointValidationError.ASSIGNED_DUPLICATE,
                     token = null,
-                    siCode = null
+                    siCode = 31
                 )
             ),
             issues

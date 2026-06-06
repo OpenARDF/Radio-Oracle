@@ -77,7 +77,8 @@
     <string name="control_point_classic_duplicate">Na klasické trati nemohou být duplikované kontroly.</string>
     <string name="control_point_non_last_beacon">Maják musí být poslední kontrola.</string>
     <string name="control_point_classic_spectator_not_allowed">Na klasice nemůže být divácká kontrola.</string>
-    <string name="control_point_sprint_duplicate">Stejná kontrola nemůže být v jednom kole sprintu dvakrát.</string>
+    <string name="control_point_sprint_duplicate">Duplicate controls are not allowed in a sprint race.</string>
+    <string name="control_point_assigned_duplicate">Assigned Controls cannot include the same control more than once.</string>
     <string name="control_point_sprint_two_usages">" Kontrola s kódem [%1$d] je použita jako divácká / maják a kontrola zároveň."</string>
     <string name="category_preset_czech">České</string>
     <string name="category_preset_international">Mezinárodní</string>

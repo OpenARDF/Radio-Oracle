@@ -82,7 +82,7 @@ class DesktopProjectDiagnosticsTest {
         assertTrue(
             diagnostics.validationIssues.any {
                 it.contains("Invalid control points for M21") &&
-                        it.contains("Duplicate control points")
+                        it.contains("Assigned Controls cannot include the same control more than once")
             }
         )
     }
