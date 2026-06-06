@@ -18,7 +18,7 @@ class EventProjectFileTest {
     fun defaultsToCurrentSchemaAndAppName() {
         val projectFile = EventProjectFile(raceData = raceData())
 
-        assertEquals(2, projectFile.schemaVersion)
+        assertEquals(3, projectFile.schemaVersion)
         assertEquals("Radio-Oracle", projectFile.appName)
         assertTrue(projectFile.isSupportedSchema())
     }
@@ -36,7 +36,7 @@ class EventProjectFileTest {
         val encoded = EventProjectFileJson.encode(original)
         val decoded = EventProjectFileJson.decode(encoded)
 
-        assertTrue(encoded.contains("\"schemaVersion\": 2"))
+        assertTrue(encoded.contains("\"schemaVersion\": 3"))
         assertTrue(encoded.contains("\"appName\": \"Radio-Oracle\""))
         assertEquals(original, decoded)
     }
@@ -44,7 +44,7 @@ class EventProjectFileTest {
     @Test
     fun refusesProjectFilesWithUnsupportedSchemaVersions() {
         val encoded = EventProjectFileJson.encode(EventProjectFile(raceData = raceData()))
-            .replace("\"schemaVersion\": 2", "\"schemaVersion\": 3")
+            .replace("\"schemaVersion\": 3", "\"schemaVersion\": 4")
 
         assertFailsWith<IllegalArgumentException> {
             EventProjectFileJson.decode(encoded)
@@ -72,6 +72,33 @@ class EventProjectFileTest {
         assertEquals(listOf("FOX 1"), decoded.raceData.controls.map { it.label })
         assertEquals(listOf(31), decoded.raceData.controls.map { it.siCode })
         assertEquals(listOf(ControlPointType.CONTROL), decoded.raceData.controls.map { it.type })
+    }
+
+    @Test
+    fun migratesLegacyMandatoryControlsToUnscoredControls() {
+        val projectFile = EventProjectFile(
+            raceData = raceData().copy(
+                controls = listOf(
+                    EventControl(
+                        id = "control-31",
+                        raceId = "race",
+                        label = "FOX 1",
+                        siCode = 31,
+                        type = ControlPointType.CONTROL,
+                        scored = true,
+                        mandatory = true
+                    )
+                )
+            )
+        )
+        val legacyEncoded = EventProjectFileJson.encode(projectFile)
+            .replace("\"schemaVersion\": 3", "\"schemaVersion\": 2")
+            .replace(Regex("""\s+"scored": true,\n"""), "")
+
+        val decoded = EventProjectFileJson.decode(legacyEncoded)
+
+        assertFalse(decoded.raceData.controls.single().scored)
+        assertFalse(decoded.raceData.controls.single().mandatory)
     }
 
     private fun raceData(): EventRaceData =

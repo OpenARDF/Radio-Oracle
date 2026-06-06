@@ -93,7 +93,7 @@ class EventCsvExportsTest {
                     label = "31",
                     siCode = 31,
                     type = ControlPointType.CONTROL,
-                    mandatory = true,
+                    scored = true,
                     publicLabel = "F1",
                     notes = "first fox"
                 )
@@ -102,8 +102,8 @@ class EventCsvExportsTest {
 
         assertEquals(
             """
-            si_code;role;mandatory;public_label;notes
-            31;Control;1;F1;first fox
+            si_code;role;fox;public_label;notes
+            31;Fox;1;F1;first fox
             """.trimIndent() + "\n",
             EventCsvExports.controls(raceData)
         )

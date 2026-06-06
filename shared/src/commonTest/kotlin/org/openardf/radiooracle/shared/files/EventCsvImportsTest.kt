@@ -51,8 +51,8 @@ class EventCsvImportsTest {
     fun parsesControlRows() {
         val result = EventCsvImports.parseControlRows(
             """
-            si_code;role;mandatory;public_label;notes
-            31;Control;1;F1;first fox
+            si_code;role;fox;public_label;notes
+            31;Fox;1;F1;first fox
             99;Beacon;false;M;finish beacon
             """.trimIndent()
         )
@@ -61,10 +61,23 @@ class EventCsvImportsTest {
         assertEquals(2, result.rows.size)
         assertEquals(31, result.rows[0].siCode)
         assertEquals(org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL, result.rows[0].type)
-        assertTrue(result.rows[0].mandatory)
+        assertTrue(result.rows[0].scored)
         assertEquals("F1", result.rows[0].publicLabel)
         assertEquals(org.openardf.radiooracle.shared.domain.ControlPointType.BEACON, result.rows[1].type)
-        assertFalse(result.rows[1].mandatory)
+        assertFalse(result.rows[1].scored)
+    }
+
+    @Test
+    fun parsesLegacyMandatoryControlRowsAsUnscored() {
+        val result = EventCsvImports.parseControlRows(
+            """
+            si_code;role;mandatory;public_label;notes
+            31;Control;1;F1;required pass
+            """.trimIndent()
+        )
+
+        assertEquals(emptyList(), result.invalidLines)
+        assertFalse(result.rows.single().scored)
     }
 
     @Test

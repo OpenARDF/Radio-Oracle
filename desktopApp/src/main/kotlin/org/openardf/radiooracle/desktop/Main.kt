@@ -96,6 +96,7 @@ import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
 import org.openardf.radiooracle.shared.event.StartDrawStartGroupMode
+import org.openardf.radiooracle.shared.event.defaultScored
 import org.openardf.radiooracle.shared.event.defaultTimeLimitMinutes
 import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
 import org.openardf.radiooracle.shared.event.toDisplayLabel
@@ -253,7 +254,6 @@ private val InForestTableColumns = listOf(
 private val ControlTableColumns = listOf(
     FixedTableColumn("SI code", 112.dp),
     FixedTableColumn("Role", 120.dp),
-    FixedTableColumn("Mandatory", 104.dp),
     FixedTableColumn("Public label", 160.dp),
     FixedTableColumn("Notes", 220.dp),
     FixedTableColumn("", 104.dp)
@@ -261,8 +261,7 @@ private val ControlTableColumns = listOf(
 
 private val ControlTableColumnHints = mapOf(
     "SI code" to "Physical SPORTident control code recorded by the station. Category control lists can refer to this code, the generated control label, or the Public label.",
-    "Role" to "How this station is interpreted, such as control, start, finish, or beacon role.",
-    "Mandatory" to "Requires this control for every applicable course when evaluating results.",
+    "Role" to "How this station is interpreted for scoring. Radio-o Fox controls score 1 point; Beacon and Spectator are mandatory zero-point punches.",
     "Public label" to "Optional public-facing name used on tickets, readout displays, course lists, and exported results. Short labels can also be typed in category Controls fields.",
     "Notes" to "Private organizer notes for this logical control."
 )
@@ -1943,10 +1942,10 @@ fun main(args: Array<String>) = application {
                 }
                 result.isSuccess
             },
-            onUpdateControl = { controlId, label, siCode, type, mandatory, publicLabel, notes ->
+            onUpdateControl = { controlId, label, siCode, type, scored, publicLabel, notes ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.updateControl(currentProject, controlId, label, siCode, type, mandatory, publicLabel, notes)
+                        EventProjectEditor.updateControl(currentProject, controlId, label, siCode, type, scored, publicLabel, notes)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
@@ -1954,7 +1953,7 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
-            onAddControl = { label, siCode, type, mandatory, publicLabel, notes ->
+            onAddControl = { label, siCode, type, scored, publicLabel, notes ->
                 val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.addControl(
@@ -1963,7 +1962,7 @@ fun main(args: Array<String>) = application {
                             label,
                             siCode,
                             type,
-                            mandatory,
+                            scored,
                             publicLabel,
                             notes
                         )
@@ -2851,6 +2850,7 @@ private fun SectionWorkspace(
         if (section == DesktopSection.Controls && projectFile != null) {
             ControlDetailsPanel(
                 controls = EventControlDetails.from(projectFile.raceData),
+                raceType = projectFile.raceData.race.raceType,
                 onUpdateControl = onUpdateControl,
                 onAddControl = onAddControl,
                 onRemoveControl = onRemoveControl
@@ -4380,6 +4380,7 @@ private fun CategoryPicker(
 @Composable
 private fun ControlDetailsPanel(
     controls: List<EventControlDetails>,
+    raceType: RaceType,
     onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit,
     onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean,
     onRemoveControl: (String) -> Unit
@@ -4388,7 +4389,6 @@ private fun ControlDetailsPanel(
     val tableWidth = fixedTableWidth(ControlTableColumns)
     var siCodeDraft by remember { mutableStateOf("") }
     var typeDraft by remember { mutableStateOf(ControlPointType.CONTROL) }
-    var mandatoryDraft by remember { mutableStateOf(false) }
     var publicLabelDraft by remember { mutableStateOf("") }
     var notesDraft by remember { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -4399,11 +4399,10 @@ private fun ControlDetailsPanel(
         ) {
             Button(
                 onClick = {
-                    val didAdd = onAddControl("", siCodeDraft, typeDraft, mandatoryDraft, publicLabelDraft, notesDraft)
+                    val didAdd = onAddControl("", siCodeDraft, typeDraft, typeDraft.defaultScored(), publicLabelDraft, notesDraft)
                     if (didAdd) {
                         siCodeDraft = ""
                         typeDraft = ControlPointType.CONTROL
-                        mandatoryDraft = false
                         publicLabelDraft = ""
                         notesDraft = ""
                     }
@@ -4422,9 +4421,8 @@ private fun ControlDetailsPanel(
                         siCodeDraft = siCodeDraft,
                         onSiCodeChange = { siCodeDraft = it },
                         typeDraft = typeDraft,
+                        raceType = raceType,
                         onTypeChange = { typeDraft = it },
-                        mandatoryDraft = mandatoryDraft,
-                        onMandatoryChange = { mandatoryDraft = it },
                         publicLabelDraft = publicLabelDraft,
                         onPublicLabelChange = { publicLabelDraft = it },
                         notesDraft = notesDraft,
@@ -4456,6 +4454,7 @@ private fun ControlDetailsPanel(
                     controls.forEach { control ->
                         ControlDetailRow(
                             control = control,
+                            raceType = raceType,
                             onUpdateControl = onUpdateControl
                         )
                     }
@@ -4470,9 +4469,8 @@ private fun ControlAddRow(
     siCodeDraft: String,
     onSiCodeChange: (String) -> Unit,
     typeDraft: ControlPointType,
+    raceType: RaceType,
     onTypeChange: (ControlPointType) -> Unit,
-    mandatoryDraft: Boolean,
-    onMandatoryChange: (Boolean) -> Unit,
     publicLabelDraft: String,
     onPublicLabelChange: (String) -> Unit,
     notesDraft: String,
@@ -4492,42 +4490,38 @@ private fun ControlAddRow(
         )
         ControlTypeDropdown(
             type = typeDraft,
+            raceType = raceType,
             onTypeChange = onTypeChange,
             modifier = Modifier.width(ControlTableColumns[1].width)
         )
-        Row(
-            modifier = Modifier.width(ControlTableColumns[2].width),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(checked = mandatoryDraft, onCheckedChange = onMandatoryChange)
-        }
         TextField(
             value = publicLabelDraft,
             onValueChange = onPublicLabelChange,
-            modifier = Modifier.width(ControlTableColumns[3].width),
+            modifier = Modifier.width(ControlTableColumns[2].width),
             singleLine = true,
             label = { Text("Public label") }
         )
         TextField(
             value = notesDraft,
             onValueChange = onNotesChange,
-            modifier = Modifier.width(ControlTableColumns[4].width),
+            modifier = Modifier.width(ControlTableColumns[3].width),
             singleLine = true,
             label = { Text("Notes") }
         )
-        Spacer(modifier = Modifier.width(ControlTableColumns[5].width))
+        Spacer(modifier = Modifier.width(ControlTableColumns[4].width))
     }
 }
 
 @Composable
 private fun ControlDetailRow(
     control: EventControlDetails,
+    raceType: RaceType,
     onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit
 ) {
     fun updateControl(
         siCodeText: String = control.siCodeText,
         type: ControlPointType = control.type,
-        mandatory: Boolean = control.mandatory,
+        scored: Boolean = control.scored,
         publicLabel: String = control.publicLabel,
         notes: String = control.notes
     ) {
@@ -4539,7 +4533,7 @@ private fun ControlDetailRow(
         } else {
             control.label
         }
-        onUpdateControl(control.id, nextLabel, siCodeText, type, mandatory, publicLabel, notes)
+        onUpdateControl(control.id, nextLabel, siCodeText, type, scored, publicLabel, notes)
     }
 
     Row(
@@ -4556,30 +4550,25 @@ private fun ControlDetailRow(
         )
         ControlTypeDropdown(
             type = control.type,
-            onTypeChange = { updateControl(type = it) },
+            raceType = raceType,
+            onTypeChange = { updateControl(type = it, scored = it.defaultScored()) },
             modifier = Modifier.width(ControlTableColumns[1].width)
         )
-        Row(
-            modifier = Modifier.width(ControlTableColumns[2].width),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(checked = control.mandatory, onCheckedChange = { updateControl(mandatory = it) })
-        }
         TextField(
             value = control.publicLabel,
             onValueChange = { updateControl(publicLabel = it) },
-            modifier = Modifier.width(ControlTableColumns[3].width),
+            modifier = Modifier.width(ControlTableColumns[2].width),
             singleLine = true,
             label = { Text("Public label") }
         )
         TextField(
             value = control.notes,
             onValueChange = { updateControl(notes = it) },
-            modifier = Modifier.width(ControlTableColumns[4].width),
+            modifier = Modifier.width(ControlTableColumns[3].width),
             singleLine = true,
             label = { Text("Notes") }
         )
-        Spacer(modifier = Modifier.width(ControlTableColumns[5].width))
+        Spacer(modifier = Modifier.width(ControlTableColumns[4].width))
     }
 }
 
@@ -4625,28 +4614,43 @@ private fun ControlDeleteButton(
 @Composable
 private fun ControlTypeDropdown(
     type: ControlPointType,
+    raceType: RaceType,
     onTypeChange: (ControlPointType) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
         Button(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-            ButtonLabel(EventControlDetails.typeLabel(type))
+            ButtonLabel(controlRoleLabel(type, raceType))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            ControlPointType.entries.forEach { option ->
+            controlRoleOptions(raceType).forEach { option ->
                 DropdownMenuItem(
                     onClick = {
                         expanded = false
                         onTypeChange(option)
                     }
                 ) {
-                    Text(EventControlDetails.typeLabel(option))
+                    Text(controlRoleLabel(option, raceType))
                 }
             }
         }
     }
 }
+
+private fun controlRoleOptions(raceType: RaceType): List<ControlPointType> =
+    when (raceType) {
+        RaceType.SPRINT -> listOf(ControlPointType.CONTROL, ControlPointType.SEPARATOR, ControlPointType.BEACON)
+        RaceType.CLASSIC, RaceType.SHORT, RaceType.FOXORING -> listOf(ControlPointType.CONTROL, ControlPointType.BEACON)
+        RaceType.ORIENTEERING -> listOf(ControlPointType.CONTROL)
+    }
+
+private fun controlRoleLabel(type: ControlPointType, raceType: RaceType): String =
+    when {
+        raceType == RaceType.ORIENTEERING && type == ControlPointType.CONTROL -> "Control"
+        type == ControlPointType.CONTROL -> "Fox"
+        else -> EventControlDetails.typeLabel(type)
+    }
 
 /** Shows editable category names with read-only effective race settings. */
 @Composable

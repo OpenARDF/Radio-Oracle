@@ -9,7 +9,16 @@ import org.openardf.radiooracle.shared.domain.SIRecordType
 /** Control definition reduced to the fields needed by the course evaluator. */
 data class EvaluationControlPoint(
     val siCode: Int,
-    val type: ControlPointType
+    val type: ControlPointType,
+    /**
+     * True for an elective radio-o fox worth one point when punched.
+     *
+     * False for a required zero-point radio-o control, such as a Beacon or
+     * Spectator control. This flag is intentionally ignored for orienteering,
+     * where every course control is required and scoring follows ordered-course
+     * completion rules.
+     */
+    val scored: Boolean = type == ControlPointType.CONTROL
 )
 
 /** Punch definition reduced to the fields needed by the course evaluator. */
@@ -45,7 +54,7 @@ object CourseEvaluator {
         controlPoints: List<EvaluationControlPoint>
     ): CourseEvaluation {
         val loop = evaluateLoop(punches, controlPoints)
-        return CourseEvaluation(loop.points, statusForPointRace(loop.points), loop.statuses)
+        return CourseEvaluation(loop.points, statusForRadioO(controlPoints, loop.missingRequiredControl), loop.statuses)
     }
 
     private fun evaluateSprint(
@@ -57,6 +66,7 @@ object CourseEvaluator {
             .filter { it.value.type == ControlPointType.SEPARATOR }
             .map { it.value.siCode to it.index }
 
+        var missingRequiredControl = false
         val points = if (separators.isNotEmpty()) {
             var total = 0
             var prevPunchSep = 0
@@ -65,37 +75,43 @@ object CourseEvaluator {
 
             for ((punchIndex, punch) in punches.withIndex()) {
                 if (separatorIndex < separators.size && punch.siCode == separators[separatorIndex].first) {
-                    total += evaluateLoopInto(
+                    val loop = evaluateLoopInto(
                         punches,
                         controlPoints,
                         statuses,
                         punchRange = prevPunchSep..<punchIndex,
                         controlRange = prevControlSep..<separators[separatorIndex].second
                     )
+                    total += loop.points
+                    missingRequiredControl = missingRequiredControl || loop.missingRequiredControl
                     prevPunchSep = punchIndex
                     prevControlSep = separators[separatorIndex].second
                     separatorIndex++
                 }
             }
 
-            total + evaluateLoopInto(
+            val finalLoop = evaluateLoopInto(
                 punches,
                 controlPoints,
                 statuses,
                 punchRange = prevPunchSep..<punches.size,
                 controlRange = prevControlSep..<controlPoints.size
             )
+            missingRequiredControl = missingRequiredControl || finalLoop.missingRequiredControl
+            total + finalLoop.points
         } else {
-            evaluateLoopInto(
+            val loop = evaluateLoopInto(
                 punches,
                 controlPoints,
                 statuses,
                 punchRange = punches.indices,
                 controlRange = controlPoints.indices
             )
+            missingRequiredControl = loop.missingRequiredControl
+            loop.points
         }
 
-        return CourseEvaluation(points, statusForPointRace(points), statuses)
+        return CourseEvaluation(points, statusForRadioO(controlPoints, missingRequiredControl), statuses)
     }
 
     private fun evaluateOrienteering(
@@ -132,8 +148,7 @@ object CourseEvaluator {
         controlPoints: List<EvaluationControlPoint>
     ): LoopEvaluation {
         val statuses = MutableList(punches.size) { PunchStatus.UNKNOWN }
-        val points = evaluateLoopInto(punches, controlPoints, statuses, punches.indices, controlPoints.indices)
-        return LoopEvaluation(points, statuses)
+        return evaluateLoopInto(punches, controlPoints, statuses, punches.indices, controlPoints.indices)
     }
 
     private fun evaluateLoopInto(
@@ -142,11 +157,18 @@ object CourseEvaluator {
         statuses: MutableList<PunchStatus>,
         punchRange: IntRange,
         controlRange: IntRange
-    ): Int {
+    ): LoopEvaluation {
         val loopControls = controlRange.map { controlPoints[it] }
-        val codes = loopControls.map { it.siCode }.toSet()
-        val taken = mutableSetOf<Int>()
+        val controlsByCode = loopControls.groupBy { it.siCode }
+        val takenScored = mutableSetOf<Int>()
+        val fulfilledRequired = mutableSetOf<Int>()
         var points = 0
+        /*
+         * Radio-o beacons keep their role-specific "last punch in the loop"
+         * constraint whether or not an organizer manually marks one as scored.
+         * Normally Beacon is not scored, but retaining the role rule makes a
+         * mistimed beacon visibly invalid instead of silently accepting it.
+         */
         val beacon = if (loopControls.isNotEmpty() && loopControls.last().type == ControlPointType.BEACON) {
             loopControls.last().siCode
         } else {
@@ -155,33 +177,58 @@ object CourseEvaluator {
 
         for (punchIndex in punchRange) {
             val punch = punches[punchIndex]
-            if (punch.type == SIRecordType.CONTROL && codes.contains(punch.siCode)) {
-                if (!taken.contains(punch.siCode) && punch.siCode != beacon) {
-                    statuses[punchIndex] = PunchStatus.VALID
-                    points++
-                    taken.add(punch.siCode)
-                } else if (punch.siCode == beacon) {
+            val matchingControl = controlsByCode[punch.siCode]?.firstOrNull()
+            if (punch.type == SIRecordType.CONTROL && matchingControl != null) {
+                if (punch.siCode == beacon) {
                     if (punchIndex == punchRange.last) {
                         statuses[punchIndex] = PunchStatus.VALID
-                        points++
+                        if (matchingControl.scored && takenScored.add(punch.siCode)) {
+                            points++
+                        }
+                        if (!matchingControl.scored) {
+                            fulfilledRequired.add(punch.siCode)
+                        }
                     } else {
                         statuses[punchIndex] = PunchStatus.INVALID
                     }
+                } else if (matchingControl.scored) {
+                    if (takenScored.add(punch.siCode)) {
+                        statuses[punchIndex] = PunchStatus.VALID
+                        points++
+                    } else {
+                        statuses[punchIndex] = PunchStatus.DUPLICATE
+                    }
                 } else {
-                    statuses[punchIndex] = PunchStatus.DUPLICATE
+                    if (fulfilledRequired.add(punch.siCode)) {
+                        statuses[punchIndex] = PunchStatus.VALID
+                    } else {
+                        statuses[punchIndex] = PunchStatus.DUPLICATE
+                    }
                 }
             } else {
                 statuses[punchIndex] = PunchStatus.UNKNOWN
             }
         }
-        return points
+        return LoopEvaluation(
+            points = points,
+            statuses = statuses,
+            missingRequiredControl = loopControls.any { !it.scored && !fulfilledRequired.contains(it.siCode) }
+        )
     }
 
-    private fun statusForPointRace(points: Int): ResultStatus =
-        if (points > 1) ResultStatus.OK else ResultStatus.NO_RANKING
+    private fun statusForRadioO(
+        controlPoints: List<EvaluationControlPoint>,
+        missingRequiredControl: Boolean
+    ): ResultStatus =
+        when {
+            controlPoints.isEmpty() -> ResultStatus.NO_RANKING
+            missingRequiredControl -> ResultStatus.DID_NOT_FINISH
+            else -> ResultStatus.OK
+        }
 
     private data class LoopEvaluation(
         val points: Int,
-        val statuses: List<PunchStatus>
+        val statuses: List<PunchStatus>,
+        val missingRequiredControl: Boolean
     )
 }

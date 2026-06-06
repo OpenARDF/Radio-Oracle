@@ -106,7 +106,7 @@ class DesktopSmokeSampleTest {
                     "F1",
                     "31",
                     ControlPointType.CONTROL,
-                    false,
+                    true,
                     "",
                     "Edited control"
                 ),
@@ -178,7 +178,7 @@ class DesktopSmokeSampleTest {
             label = "F6",
             siCode = "46",
             type = ControlPointType.CONTROL,
-            mandatory = true,
+            scored = true,
             publicLabel = "6",
             notes = "Fast course control"
         )
@@ -188,7 +188,7 @@ class DesktopSmokeSampleTest {
             label = "F6A",
             siCode = "47",
             type = ControlPointType.SEPARATOR,
-            mandatory = false,
+            scored = false,
             publicLabel = "",
             notes = "Spectator pass"
         )
@@ -197,7 +197,7 @@ class DesktopSmokeSampleTest {
         assertEquals("F6A", control.label)
         assertEquals(47, control.siCode)
         assertEquals(ControlPointType.SEPARATOR, control.type)
-        assertEquals(false, control.mandatory)
+        assertEquals(false, control.scored)
         assertEquals(null, control.publicLabel)
         assertEquals("Spectator pass", control.notes)
 
@@ -267,7 +267,7 @@ class DesktopSmokeSampleTest {
 
         assertEquals(2, Files.readAllLines(categories).size)
         assertEquals(3, Files.readAllLines(competitors).size)
-        assertTrue(Files.readString(controls).startsWith("si_code;role;mandatory;public_label;notes"))
+        assertTrue(Files.readString(controls).startsWith("si_code;role;fox;public_label;notes"))
         assertEquals(2, Files.readAllLines(starts).size)
         assertEquals(2, Files.readAllLines(startsByCategory).size)
         assertEquals(2, Files.readAllLines(startsByMinute).size)

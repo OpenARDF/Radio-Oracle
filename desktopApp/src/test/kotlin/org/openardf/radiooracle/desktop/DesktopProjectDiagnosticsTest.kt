@@ -39,7 +39,7 @@ class DesktopProjectDiagnosticsTest {
         val diagnostics = DesktopProjectDiagnostics.from(projectFile())
 
         assertEquals("Event File open", diagnostics.projectState)
-        assertEquals("Radio-Oracle schema 2", diagnostics.schemaText)
+        assertEquals("Radio-Oracle schema 3", diagnostics.schemaText)
         assertEquals("race", diagnostics.raceId)
         assertEquals("Diagnostics Race", diagnostics.raceName)
         assertEquals("2026-06-01T10:00", diagnostics.startDateTimeIso)

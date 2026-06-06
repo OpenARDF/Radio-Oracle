@@ -5,6 +5,7 @@ import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventControlDetails
+import org.openardf.radiooracle.shared.event.defaultScored
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 
 data class CsvImportError(
@@ -60,7 +61,7 @@ data class CategoryCsvImportRow(
 data class ControlCsvImportRow(
     val siCode: Int,
     val type: ControlPointType,
-    val mandatory: Boolean,
+    val scored: Boolean,
     val publicLabel: String,
     val notes: String
 )
@@ -161,6 +162,7 @@ object EventCsvImports {
     fun parseControlRows(csvText: String): CsvImportResult<ControlCsvImportRow> {
         val rows = mutableListOf<ControlCsvImportRow>()
         val invalidLines = mutableListOf<CsvImportError>()
+        var usesLegacyMandatoryColumn = false
 
         csvText.lineSequence().forEachIndexed { lineIndex, line ->
             if (line.isBlank()) return@forEachIndexed
@@ -168,9 +170,10 @@ object EventCsvImports {
             try {
                 val fields = parseSemicolonRow(line)
                 if (lineIndex == 0 && EventCsvFormat.Control.isHeader(fields)) {
+                    usesLegacyMandatoryColumn = EventCsvFormat.Control.isLegacyHeader(fields)
                     return@forEachIndexed
                 }
-                rows += parseControlRow(fields, lineIndex)
+                rows += parseControlRow(fields, lineIndex, usesLegacyMandatoryColumn)
             } catch (error: IllegalArgumentException) {
                 invalidLines += CsvImportError(lineIndex, error.message ?: "Invalid control row")
             }
@@ -304,7 +307,11 @@ object EventCsvImports {
         )
     }
 
-    private fun parseControlRow(fields: List<String>, lineIndex: Int): ControlCsvImportRow {
+    private fun parseControlRow(
+        fields: List<String>,
+        lineIndex: Int,
+        usesLegacyMandatoryColumn: Boolean
+    ): ControlCsvImportRow {
         require(fields.size >= EventCsvFormat.Control.COLUMN_COUNT) {
             "Expected at least ${EventCsvFormat.Control.COLUMN_COUNT} columns at line: $lineIndex"
         }
@@ -313,16 +320,24 @@ object EventCsvImports {
         require(SportIdentCodes.isSICodeValid(siCode)) {
             "Control SI code is outside the supported range at line: $lineIndex"
         }
+        val type = parseControlType(fields[EventCsvFormat.Control.ROLE].trim())
+        val flag = fields[EventCsvFormat.Control.FOX].trim()
+        val scored = if (usesLegacyMandatoryColumn) {
+            if (parseBooleanFlag(flag)) false else type.defaultScored()
+        } else {
+            flag.takeIf { it.isNotEmpty() }?.let(::parseBooleanFlag) ?: type.defaultScored()
+        }
         return ControlCsvImportRow(
             siCode = siCode,
-            type = parseControlType(fields[EventCsvFormat.Control.ROLE].trim()),
-            mandatory = fields[EventCsvFormat.Control.MANDATORY].trim().let {
-                it == "1" || it.equals("true", ignoreCase = true) || it.equals("yes", ignoreCase = true)
-            },
+            type = type,
+            scored = scored,
             publicLabel = fields[EventCsvFormat.Control.PUBLIC_LABEL].trim(),
             notes = fields[EventCsvFormat.Control.NOTES].trim()
         )
     }
+
+    private fun parseBooleanFlag(value: String): Boolean =
+        value == "1" || value.equals("true", ignoreCase = true) || value.equals("yes", ignoreCase = true)
 
     private fun parseRaceType(value: String): RaceType =
         RaceType.entries.firstOrNull { it.name == value || it.toDisplayLabel() == value }
@@ -330,8 +345,13 @@ object EventCsvImports {
 
     private fun parseControlType(value: String): ControlPointType =
         ControlPointType.entries.firstOrNull {
-            it.name == value || EventControlDetails.typeLabel(it) == value
-        } ?: throw IllegalArgumentException("Unknown control role: $value")
+            it.name.equals(value, ignoreCase = true)
+        } ?: when (value.trim().lowercase()) {
+            "fox", "control" -> ControlPointType.CONTROL
+            "spectator", "separator" -> ControlPointType.SEPARATOR
+            "beacon" -> ControlPointType.BEACON
+            else -> throw IllegalArgumentException("Unknown control role: $value")
+        }
 
     private fun parseRaceBand(value: String): RaceBand =
         RaceBand.entries.firstOrNull { it.name == value || it.toDisplayLabel() == value }

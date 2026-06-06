@@ -10,7 +10,7 @@ data class EventControlDetails(
     val siCodeText: String,
     val type: ControlPointType,
     val typeLabel: String,
-    val mandatory: Boolean,
+    val scored: Boolean,
     val publicLabel: String,
     val notes: String
 ) {
@@ -26,7 +26,7 @@ data class EventControlDetails(
                         siCodeText = control.siCode.toString(),
                         type = control.type,
                         typeLabel = control.type.controlLabel(),
-                        mandatory = control.mandatory,
+                        scored = control.scored,
                         publicLabel = control.publicLabel.orEmpty(),
                         notes = control.notes.orEmpty()
                     )
@@ -35,12 +35,17 @@ data class EventControlDetails(
         fun typeLabel(type: ControlPointType): String = type.controlLabel()
 
         fun typeFromLabel(label: String): ControlPointType =
-            ControlPointType.entries.firstOrNull { it.controlLabel() == label }
+            when (label.trim().lowercase()) {
+                "fox", "control" -> ControlPointType.CONTROL
+                "spectator", "separator" -> ControlPointType.SEPARATOR
+                "beacon" -> ControlPointType.BEACON
+                else -> ControlPointType.entries.firstOrNull { it.name.equals(label, ignoreCase = true) }
+            }
                 ?: ControlPointType.CONTROL
 
         private fun ControlPointType.controlLabel(): String =
             when (this) {
-                ControlPointType.CONTROL -> "Control"
+                ControlPointType.CONTROL -> "Fox"
                 ControlPointType.SEPARATOR -> "Spectator"
                 ControlPointType.BEACON -> "Beacon"
             }

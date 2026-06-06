@@ -89,6 +89,27 @@ object EventControlCatalog {
         )
     }
 
+    /**
+     * Converts pre-scored-control Event Files from the old, unenforced
+     * "mandatory" checkbox into the new radio-o scoring model.
+     *
+     * Legacy mandatory=true is preserved as "not scored" because that was the
+     * user-facing intent of the old label. Other controls use the role default:
+     * ordinary controls are foxes, while Beacon and Spectator are mandatory
+     * zero-point controls.
+     */
+    fun migrateLegacyControlScoring(projectFile: EventProjectFile): EventProjectFile =
+        projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                controls = projectFile.raceData.controls.map { control ->
+                    control.copy(
+                        scored = if (control.mandatory) false else control.type.defaultScored(),
+                        mandatory = false
+                    )
+                }
+            )
+        )
+
     fun controlForDefinition(
         raceId: String,
         definition: org.openardf.radiooracle.shared.course.ControlPointDefinition,
@@ -101,7 +122,8 @@ object EventControlCatalog {
             raceId = raceId,
             label = label,
             siCode = definition.siCode,
-            type = definition.type
+            type = definition.type,
+            scored = definition.type.defaultScored()
         )
     }
 

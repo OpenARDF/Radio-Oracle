@@ -47,18 +47,28 @@ object EventProjectFileJson {
             ?.toString()
             ?.contains("publicControlIds") == true
         val needsControlBackfill = !hasControlsField || !hasPublicControlIdsField || !text.contains("\"controlId\"")
+        val needsControlScoringMigration = !text.contains("\"scored\"")
         val projectFile = json.decodeFromString<EventProjectFile>(text)
         require(projectFile.isSupportedSchema()) {
             "Unsupported Radio-Oracle Event File schema version: ${projectFile.schemaVersion}"
         }
-        return if (needsControlBackfill) EventControlCatalog.backfillControls(projectFile) else projectFile
+        val backfilledProjectFile = if (needsControlBackfill) {
+            EventControlCatalog.backfillControls(projectFile)
+        } else {
+            projectFile
+        }
+        return if (needsControlScoringMigration) {
+            EventControlCatalog.migrateLegacyControlScoring(backfilledProjectFile)
+        } else {
+            backfilledProjectFile
+        }
     }
 }
 
 /** Schema metadata for portable Radio-Oracle Event Files. */
 object EventProjectFileFormat {
     const val APP_NAME = "Radio-Oracle"
-    const val CURRENT_SCHEMA_VERSION = 2
+    const val CURRENT_SCHEMA_VERSION = 3
 
     /** Returns true when the supplied schema version is within the supported range. */
     fun isSupportedSchema(schemaVersion: Int): Boolean =

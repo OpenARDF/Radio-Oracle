@@ -102,12 +102,18 @@ data class EventControl(
     val label: String,
     val siCode: Int,
     val type: ControlPointType,
+    val scored: Boolean = type.defaultScored(),
+    @Deprecated("Use scored; legacy mandatory had inverted and previously unenforced semantics.")
     val mandatory: Boolean = false,
     val publicLabel: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
     val notes: String? = null
 )
+
+/** Default radio-o scoring role for a logical control. */
+fun ControlPointType.defaultScored(): Boolean =
+    this == ControlPointType.CONTROL
 
 /** Portable display alias for a SportIdent control code. */
 @Serializable

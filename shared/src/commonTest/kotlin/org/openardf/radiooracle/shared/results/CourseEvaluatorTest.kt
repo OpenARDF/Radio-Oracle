@@ -21,7 +21,7 @@ class CourseEvaluatorTest {
             )
         )
 
-        assertEquals(3, evaluation.points)
+        assertEquals(2, evaluation.points)
         assertEquals(ResultStatus.OK, evaluation.resultStatus)
         assertEquals(
             listOf(
@@ -50,7 +50,7 @@ class CourseEvaluatorTest {
             )
         )
 
-        assertEquals(6, evaluation.points)
+        assertEquals(4, evaluation.points)
         assertEquals(ResultStatus.OK, evaluation.resultStatus)
         assertEquals(
             listOf(
@@ -63,6 +63,43 @@ class CourseEvaluatorTest {
             ),
             evaluation.punchStatuses
         )
+    }
+
+    @Test
+    fun missingRadioOMandatoryZeroPointControlIsDnf() {
+        val evaluation = CourseEvaluator.evaluate(
+            RaceType.CLASSIC,
+            punches = punches(31, 32),
+            controlPoints = controls(
+                31 to ControlPointType.CONTROL,
+                32 to ControlPointType.CONTROL,
+                36 to ControlPointType.BEACON
+            )
+        )
+
+        assertEquals(2, evaluation.points)
+        assertEquals(ResultStatus.DID_NOT_FINISH, evaluation.resultStatus)
+        assertEquals(
+            listOf(PunchStatus.VALID, PunchStatus.VALID),
+            evaluation.punchStatuses
+        )
+    }
+
+    @Test
+    fun missingSprintSpectatorIsDnfAndDoesNotAddPoints() {
+        val evaluation = CourseEvaluator.evaluate(
+            RaceType.SPRINT,
+            punches = punches(31, 32, 36),
+            controlPoints = controls(
+                31 to ControlPointType.CONTROL,
+                32 to ControlPointType.CONTROL,
+                40 to ControlPointType.SEPARATOR,
+                36 to ControlPointType.BEACON
+            )
+        )
+
+        assertEquals(2, evaluation.points)
+        assertEquals(ResultStatus.DID_NOT_FINISH, evaluation.resultStatus)
     }
 
     @Test

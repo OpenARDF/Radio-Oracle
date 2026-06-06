@@ -404,7 +404,7 @@ object EventProjectEditor {
         label: String,
         siCode: String,
         type: org.openardf.radiooracle.shared.domain.ControlPointType,
-        mandatory: Boolean,
+        scored: Boolean,
         publicLabel: String,
         notes: String
     ): EventProjectFile {
@@ -419,7 +419,7 @@ object EventProjectEditor {
             label = label,
             siCode = siCode,
             type = type,
-            mandatory = mandatory,
+            scored = scored,
             publicLabel = publicLabel,
             notes = notes
         )
@@ -439,7 +439,7 @@ object EventProjectEditor {
         label: String,
         siCode: String,
         type: org.openardf.radiooracle.shared.domain.ControlPointType,
-        mandatory: Boolean = false,
+        scored: Boolean = type.defaultScored(),
         publicLabel: String = "",
         notes: String = ""
     ): EventProjectFile {
@@ -456,7 +456,7 @@ object EventProjectEditor {
             label = label,
             siCode = siCode,
             type = type,
-            mandatory = mandatory,
+            scored = scored,
             publicLabel = publicLabel,
             notes = notes
         )
@@ -484,7 +484,7 @@ object EventProjectEditor {
                     label = "",
                     siCode = row.siCode.toString(),
                     type = row.type,
-                    mandatory = row.mandatory,
+                    scored = row.scored,
                     publicLabel = row.publicLabel,
                     notes = row.notes
                 )
@@ -495,7 +495,7 @@ object EventProjectEditor {
                     label = existingControl.label,
                     siCode = row.siCode.toString(),
                     type = row.type,
-                    mandatory = row.mandatory,
+                    scored = row.scored,
                     publicLabel = row.publicLabel,
                     notes = row.notes
                 )
@@ -1700,7 +1700,7 @@ object EventProjectEditor {
             CourseEvaluator.evaluate(
                 raceType = data.category.effectiveRaceType(projectFile.raceData.race),
                 punches = controlCodeValues.map { EvaluationPunch(it, SIRecordType.CONTROL) },
-                controlPoints = data.controlPoints.map { EvaluationControlPoint(it.siCode, it.type) }
+                controlPoints = projectFile.raceData.evaluationControlPoints(data)
             )
         }
         val effectiveStatus = if (resultStatus == ResultStatus.OK && evaluation != null) {
@@ -1812,7 +1812,7 @@ object EventProjectEditor {
             CourseEvaluator.evaluate(
                 raceType = data.category.effectiveRaceType(projectFile.raceData.race),
                 punches = controlPunches.map { EvaluationPunch(it.siCode, SIRecordType.CONTROL) },
-                controlPoints = data.controlPoints.map { EvaluationControlPoint(it.siCode, it.type) }
+                controlPoints = workingProjectFile.raceData.evaluationControlPoints(data)
             )
         }
         val startSeconds = readout.startTime?.getSeconds()
@@ -2031,7 +2031,7 @@ object EventProjectEditor {
         label: String,
         siCode: String,
         type: org.openardf.radiooracle.shared.domain.ControlPointType,
-        mandatory: Boolean,
+        scored: Boolean,
         publicLabel: String,
         notes: String
     ): EventControl {
@@ -2056,10 +2056,23 @@ object EventProjectEditor {
             label = trimmedLabel,
             siCode = code,
             type = type,
-            mandatory = mandatory,
+            scored = scored,
+            mandatory = false,
             publicLabel = trimmedPublicLabel.takeIf { it.isNotEmpty() },
             notes = trimmedNotes.takeIf { it.isNotEmpty() }
         )
+    }
+
+    private fun EventRaceData.evaluationControlPoints(categoryData: EventCategoryData): List<EvaluationControlPoint> {
+        val controlsById = controls.associateBy { it.id }
+        return categoryData.controlPoints.map { controlPoint ->
+            val control = controlsById[controlPoint.controlId]
+            EvaluationControlPoint(
+                siCode = control?.siCode ?: controlPoint.siCode,
+                type = control?.type ?: controlPoint.type,
+                scored = control?.scored ?: controlPoint.type.defaultScored()
+            )
+        }
     }
 
     private fun EventRaceData.containsReadout(resultId: String): Boolean =

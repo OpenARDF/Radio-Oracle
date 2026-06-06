@@ -335,8 +335,8 @@ class EventProjectEditorTest {
         val updated = EventProjectEditor.importControlRows(
             original,
             rows = listOf(
-                ControlCsvImportRow(31, ControlPointType.CONTROL, mandatory = true, publicLabel = "F1", notes = "first"),
-                ControlCsvImportRow(99, ControlPointType.BEACON, mandatory = false, publicLabel = "M", notes = "beacon")
+                ControlCsvImportRow(31, ControlPointType.CONTROL, scored = true, publicLabel = "F1", notes = "first"),
+                ControlCsvImportRow(99, ControlPointType.BEACON, scored = false, publicLabel = "M", notes = "beacon")
             ),
             controlIdFactory = { "new-control" }
         )
@@ -363,7 +363,7 @@ class EventProjectEditorTest {
             label = "",
             siCode = "99",
             type = ControlPointType.BEACON,
-            mandatory = true,
+            scored = false,
             publicLabel = "Finish beacon",
             notes = "Updated from UI"
         )

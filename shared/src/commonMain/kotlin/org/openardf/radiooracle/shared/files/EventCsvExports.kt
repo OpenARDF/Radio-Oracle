@@ -62,7 +62,7 @@ object EventCsvExports {
                 listOf(
                     control.siCode,
                     EventControlDetails.typeLabel(control.type),
-                    if (control.mandatory) 1 else 0,
+                    if (control.scored) 1 else 0,
                     control.publicLabel ?: "",
                     control.notes ?: ""
                 ).joinToString(EventCsvFormat.DELIMITER.toString()) { it.toString().csvField() }
