@@ -232,6 +232,26 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun dirtySubmenuGuardBlocksBackingOutOfProtectedCourseOrder() {
+        val categoriesState = DesktopNavigation.selectItem(
+            DesktopNavState(),
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Categories" }
+        ).state
+        val protectedCourseOrderState = DesktopNavigation.selectItem(
+            categoriesState,
+            DesktopNavigation.currentItems(categoriesState).first { it.label == "Protected Course Order" }
+        ).state
+
+        assertTrue(
+            DesktopNavigation.shouldGuardDirtySubmenuExit(
+                currentState = protectedCourseOrderState,
+                nextState = protectedCourseOrderState.back(),
+                hasUnsavedChanges = true
+            )
+        )
+    }
+
+    @Test
     fun preservesSelectedMenuItemWhenMultipleItemsShareASection() {
         val finishTickets = DesktopNavigation.rootItems(DesktopWorkflow.RaceOps)
             .first { it.label == "Finish Tickets" }

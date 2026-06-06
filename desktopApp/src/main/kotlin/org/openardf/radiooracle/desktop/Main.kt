@@ -6310,17 +6310,25 @@ private fun StatusStrip(
     } else {
         siReaderState.severity
     }
-    val backgroundColor = when (effectiveSeverity) {
-        DesktopSiReaderSeverity.DISCONNECTED -> DesktopPalette.Disconnected
-        DesktopSiReaderSeverity.CONNECTED -> DesktopPalette.Connected
-        DesktopSiReaderSeverity.WARNING -> DesktopPalette.Warning
-        DesktopSiReaderSeverity.ERROR -> DesktopPalette.Error
+    val backgroundColor = if (hasUnsavedChanges) {
+        DesktopPalette.Warning
+    } else {
+        when (effectiveSeverity) {
+            DesktopSiReaderSeverity.DISCONNECTED -> DesktopPalette.Disconnected
+            DesktopSiReaderSeverity.CONNECTED -> DesktopPalette.Connected
+            DesktopSiReaderSeverity.WARNING -> DesktopPalette.Warning
+            DesktopSiReaderSeverity.ERROR -> DesktopPalette.Error
+        }
     }
-    val textColor = when (effectiveSeverity) {
-        DesktopSiReaderSeverity.WARNING,
-        DesktopSiReaderSeverity.CONNECTED -> DesktopPalette.Black
-        DesktopSiReaderSeverity.DISCONNECTED,
-        DesktopSiReaderSeverity.ERROR -> DesktopPalette.White
+    val textColor = if (hasUnsavedChanges) {
+        DesktopPalette.Black
+    } else {
+        when (effectiveSeverity) {
+            DesktopSiReaderSeverity.WARNING,
+            DesktopSiReaderSeverity.CONNECTED -> DesktopPalette.Black
+            DesktopSiReaderSeverity.DISCONNECTED,
+            DesktopSiReaderSeverity.ERROR -> DesktopPalette.White
+        }
     }
     Row(
         modifier = Modifier

@@ -474,10 +474,12 @@ object DesktopNavigation {
         hasUnsavedChanges: Boolean
     ): Boolean =
         hasUnsavedChanges &&
+            currentState != nextState &&
             currentState.submenuStack.isNotEmpty() &&
             (
                 currentState.workflow != nextState.workflow ||
-                    nextState.submenuStack.size < currentState.submenuStack.size
+                    nextState.submenuStack.size < currentState.submenuStack.size ||
+                    currentState.selectedItemId != currentState.submenuStack.last()
             )
 
     fun isLeavingNewEventFilePage(currentState: DesktopNavState, nextState: DesktopNavState): Boolean =
