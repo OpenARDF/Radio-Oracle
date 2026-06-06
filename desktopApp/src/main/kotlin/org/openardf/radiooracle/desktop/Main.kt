@@ -78,6 +78,8 @@ import org.openardf.radiooracle.shared.course.ControlPointValidationException
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventCompetitorDetails
+import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventControlDetails
 import org.openardf.radiooracle.shared.event.EventAssignedControlWarning
 import org.openardf.radiooracle.shared.event.EventAssignedControlWarnings
@@ -851,16 +853,23 @@ fun main(args: Array<String>) = application {
                 return
             }
             runCatching {
-                projectFile?.raceData?.controls?.let { controls ->
-                    ProtectedIdealOrderRules.validate(idealOrderText, controls)
+                val currentProject = projectFile
+                    ?: throw IllegalStateException("Load an Event File before editing protected course order.")
+                val trimmedIdealOrder = idealOrderText.trim()
+                if (trimmedIdealOrder.isNotEmpty()) {
+                    val assignedControls = assignedProtectedIdealOrderControls(currentProject, categoryId)
+                    require(assignedControls.isNotEmpty()) {
+                        "Assign controls to this category before editing protected course order."
+                    }
+                    ProtectedIdealOrderRules.validateAssignedToCategory(trimmedIdealOrder, assignedControls)
                 }
-                val encryptedIdealOrder = idealOrderText.trim().takeIf { it.isNotEmpty() }?.let {
+                val encryptedIdealOrder = trimmedIdealOrder.takeIf { it.isNotEmpty() }?.let {
                     DesktopProtectedCourseOrder.encrypt(it, password)
                 }
                 projectFile = projectSession.updateCurrentProject { currentProject ->
                     EventProjectEditor.updateCategoryEncryptedIdealOrder(currentProject, categoryId, encryptedIdealOrder)
                 }
-                protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId + (categoryId to idealOrderText.trim())
+                protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId + (categoryId to trimmedIdealOrder)
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
                 projectStatusText = "Unsaved changes."
             }.onFailure { error ->
@@ -4973,9 +4982,11 @@ private fun ProtectedCourseOrderPanel(
         categories.forEach { categoryData ->
             val categoryId = categoryData.category.id
             val courseInfo = protectedCourseInfoByCategoryId[categoryId]
+            val assignedIdealOrderControls = assignedProtectedIdealOrderControls(projectFile, categoryId)
             ProtectedCourseOrderRow(
                 categoryName = categoryData.category.name,
                 idealOrderDraft = idealOrderDrafts[categoryId].orEmpty(),
+                assignedControls = assignedIdealOrderControls,
                 protectedCourseInfo = courseInfo,
                 onIdealOrderChange = { idealOrderText ->
                     idealOrderDrafts = idealOrderDrafts + (categoryId to idealOrderText)
@@ -4989,6 +5000,7 @@ private fun ProtectedCourseOrderPanel(
 private fun ProtectedCourseOrderRow(
     categoryName: String,
     idealOrderDraft: String,
+    assignedControls: List<EventControl>,
     protectedCourseInfo: ProtectedCourseInfo?,
     onIdealOrderChange: (String) -> Unit
 ) {
@@ -5002,12 +5014,11 @@ private fun ProtectedCourseOrderRow(
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
-        TextField(
-            value = idealOrderDraft,
-            onValueChange = onIdealOrderChange,
-            modifier = Modifier.width(360.dp),
-            singleLine = true,
-            label = { Text("Ideal order") }
+        ProtectedIdealOrderEditor(
+            idealOrderDraft = idealOrderDraft,
+            assignedControls = assignedControls,
+            onIdealOrderChange = onIdealOrderChange,
+            modifier = Modifier.width(360.dp)
         )
         Text(
             text = protectedCourseInfo?.lengthMeters?.let { "$it m" } ?: "",
@@ -5027,6 +5038,74 @@ private fun ProtectedCourseOrderRow(
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
+    }
+}
+
+@Composable
+private fun ProtectedIdealOrderEditor(
+    idealOrderDraft: String,
+    assignedControls: List<EventControl>,
+    onIdealOrderChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val pickerControls = remember(assignedControls) {
+        assignedControls
+            .filter { it.type == ControlPointType.CONTROL || it.type == ControlPointType.BEACON }
+            .filter { isPickerSafePublicLabel(it.publicDisplayLabel()) }
+            .groupBy { it.publicDisplayLabel() }
+            .filterValues { controlsForLabel -> controlsForLabel.size == 1 }
+            .values
+            .map { controlsForLabel -> controlsForLabel.single() }
+            .sortedWith(compareBy<EventControl> { it.siCode }.thenBy { it.type.name }.thenBy { it.publicDisplayLabel() })
+    }
+    val selectedControlIds = remember(idealOrderDraft, assignedControls) {
+        selectedProtectedIdealOrderControlIds(idealOrderDraft, assignedControls)
+    }
+    val availablePickerControls = remember(pickerControls, selectedControlIds) {
+        pickerControls.filter { control -> control.id !in selectedControlIds }
+    }
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextField(
+            value = idealOrderDraft,
+            onValueChange = onIdealOrderChange,
+            enabled = assignedControls.isNotEmpty(),
+            modifier = Modifier.width(276.dp),
+            singleLine = true,
+            label = { Text("Ideal order") }
+        )
+        Box(modifier = Modifier.width(76.dp)) {
+            Button(
+                onClick = { expanded = true },
+                enabled = availablePickerControls.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                ButtonLabel("Pick")
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                availablePickerControls.forEach { control ->
+                    val publicLabel = control.publicDisplayLabel()
+                    DropdownMenuItem(
+                        onClick = {
+                            onIdealOrderChange(appendPublicControlLabel(idealOrderDraft, publicLabel))
+                            if (availablePickerControls.size <= 1) {
+                                expanded = false
+                            }
+                        }
+                    ) {
+                        Text(publicLabel)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -5836,8 +5915,19 @@ private fun selectedPublicControlLabels(
         .toSet()
 }
 
+private fun selectedProtectedIdealOrderControlIds(
+    idealOrderText: String,
+    controls: List<EventControl>
+): Set<String> =
+    runCatching {
+        ProtectedIdealOrderRules.resolveControlIds(idealOrderText, controls).toSet()
+    }.getOrDefault(emptySet())
+
 private fun EventControlDetails.publicDisplayLabel(): String =
     publicLabel.trim().ifEmpty { label }
+
+private fun EventControl.publicDisplayLabel(): String =
+    publicLabel?.trim()?.takeIf { it.isNotEmpty() } ?: label
 
 private fun pickerControlToken(publicLabel: String): String {
     val label = publicLabel.trim()
@@ -5848,6 +5938,45 @@ private fun pickerControlToken(publicLabel: String): String {
 private fun isPickerSafePublicLabel(publicLabel: String): Boolean {
     val label = publicLabel.trim()
     return label.isNotEmpty() && '\'' !in label && '"' !in label
+}
+
+@Suppress("DEPRECATION")
+private fun assignedProtectedIdealOrderControls(
+    projectFile: EventProjectFile,
+    categoryId: String
+): List<EventControl> {
+    val categoryData = projectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
+        ?: return emptyList()
+    val controlsById = projectFile.raceData.controls.associateBy { it.id }
+    val categoryControlPoints = if (categoryData.controlPoints.isNotEmpty()) {
+        categoryData.controlPoints
+    } else {
+        categoryData.publicControlIds.mapIndexedNotNull { index, controlId ->
+            val control = controlsById[controlId] ?: return@mapIndexedNotNull null
+            org.openardf.radiooracle.shared.event.EventControlPoint(
+                id = "public-$controlId",
+                categoryId = categoryId,
+                siCode = control.siCode,
+                type = control.type,
+                order = index + 1,
+                controlId = control.id
+            )
+        }
+    }
+    return categoryControlPoints
+        .map { controlPoint ->
+            controlsById[controlPoint.controlId]
+                ?: EventControlCatalog.controlForDefinition(
+                    projectFile.raceData.race.id,
+                    org.openardf.radiooracle.shared.course.ControlPointDefinition(
+                        siCode = controlPoint.siCode,
+                        type = controlPoint.type,
+                        order = controlPoint.order
+                    )
+                )
+        }
+        .filter { it.type == ControlPointType.CONTROL || it.type == ControlPointType.BEACON }
+        .distinctBy { it.id }
 }
 
 /**
