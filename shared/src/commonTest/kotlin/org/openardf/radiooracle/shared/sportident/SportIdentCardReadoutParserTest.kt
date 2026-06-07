@@ -57,6 +57,26 @@ class SportIdentCardReadoutParserTest {
     }
 
     @Test
+    fun parsesSi6IdentityFromFirstBlockOnly() {
+        val data = ByteArray(SportIdentProtocol.SI_CARD_BLOCK_SIZE) { 0xEE.toByte() }
+        val cardNumber = 2_005_010
+        data[10] = ((cardNumber ushr 24) and 0xff).toByte()
+        data[11] = ((cardNumber ushr 16) and 0xff).toByte()
+        data[12] = ((cardNumber ushr 8) and 0xff).toByte()
+        data[13] = (cardNumber and 0xff).toByte()
+        writeAscii(data, 0x30, "Runner")
+        writeAscii(data, 0x44, "Alice")
+
+        val readout = assertNotNull(SportIdentCardReadoutParser.parseSi6Identity(data, fallbackSiNumber = 999))
+
+        assertEquals(cardNumber, readout.siNumber)
+        assertEquals(6, readout.series)
+        assertEquals(emptyList(), readout.punches)
+        assertEquals("Alice", readout.cardHolder?.firstName)
+        assertEquals("Runner", readout.cardHolder?.lastName)
+    }
+
+    @Test
     fun parsesSi8CardReadout() {
         val data = ByteArray(2 * SportIdentProtocol.SI_CARD_BLOCK_SIZE) { 0xEE.toByte() }
         val cardNumber = 2_005_010
@@ -84,6 +104,26 @@ class SportIdentCardReadoutParserTest {
         assertEquals("Runner", readout.cardHolder?.lastName)
         assertEquals("OK Test", readout.cardHolder?.club)
         assertEquals("Runner Alice", readout.cardHolder?.displayName)
+    }
+
+    @Test
+    fun parsesSi8IdentityFromFirstBlockOnly() {
+        val data = ByteArray(SportIdentProtocol.SI_CARD_BLOCK_SIZE) { 0xEE.toByte() }
+        val cardNumber = 2_005_010
+        data[24] = 2
+        data[25] = ((cardNumber ushr 16) and 0xff).toByte()
+        data[26] = ((cardNumber ushr 8) and 0xff).toByte()
+        data[27] = (cardNumber and 0xff).toByte()
+        writeAscii(data, 0x20, "Alice;Runner;OK Test;")
+
+        val readout = assertNotNull(SportIdentCardReadoutParser.parseSi8Or9OrSiacIdentity(data, fallbackSiNumber = 999))
+
+        assertEquals(cardNumber, readout.siNumber)
+        assertEquals(2, readout.series)
+        assertEquals(emptyList(), readout.punches)
+        assertEquals("Alice", readout.cardHolder?.firstName)
+        assertEquals("Runner", readout.cardHolder?.lastName)
+        assertEquals("OK Test", readout.cardHolder?.club)
     }
 
     @Test

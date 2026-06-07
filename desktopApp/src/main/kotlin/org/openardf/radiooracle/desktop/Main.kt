@@ -728,7 +728,7 @@ fun main(args: Array<String>) = application {
             return try {
                 val download = withContext(Dispatchers.IO) {
                     siPortMutex.withLock {
-                        downloadDesktopSportIdentCardReadout()
+                        DesktopSportIdentReadoutService().readIdentityOne()
                     }
                 }
                 val cardHolder = download.readout.cardHolder
