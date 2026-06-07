@@ -17,6 +17,8 @@ class DesktopPaletteTest {
                 "Start List",
                 "Controls",
                 "Course Analysis",
+                "Elevation Cache",
+                "Import/Export",
                 "Import Controls/Route KML/KMZ",
                 "Readouts",
                 "In Forest",

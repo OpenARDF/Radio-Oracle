@@ -37,6 +37,41 @@ class ProtectedIdealOrderRulesTest {
     }
 
     @Test
+    fun resolvesSlotEquivalentPublicLabelsToAssignedControls() {
+        val controls = listOf(
+            EventControl("control-fox-1", "race", "F1", 101, ControlPointType.CONTROL, publicLabel = "Fox 1"),
+            EventControl("control-fox-2", "race", "fox-2", 102, ControlPointType.CONTROL, publicLabel = "Fox2"),
+            EventControl("control-beacon", "race", "M", 99, ControlPointType.BEACON, publicLabel = "Beacon")
+        )
+
+        assertEquals(
+            listOf("control-fox-1", "control-fox-2", "control-beacon"),
+            ProtectedIdealOrderRules.resolveControlIds("31 32 Beacon", controls)
+        )
+        assertEquals(
+            listOf("control-sprint-1"),
+            ProtectedIdealOrderRules.resolveControlIds(
+                "S1",
+                listOf(EventControl("control-sprint-1", "race", "S1", 201, ControlPointType.CONTROL, publicLabel = "Sprint 1"))
+            )
+        )
+    }
+
+    @Test
+    fun storedLabelsTakePrecedenceOverConflictingPublicLabels() {
+        val controls = listOf(
+            EventControl("control-a", "race", "31", 31, ControlPointType.CONTROL, publicLabel = "33"),
+            EventControl("control-b", "race", "32", 32, ControlPointType.CONTROL, publicLabel = "32"),
+            EventControl("control-c", "race", "33", 33, ControlPointType.CONTROL, publicLabel = "31")
+        )
+
+        assertEquals(
+            listOf("control-a", "control-b", "control-c"),
+            ProtectedIdealOrderRules.resolveControlIds("31 32 33", controls)
+        )
+    }
+
+    @Test
     fun assignedCategoryValidationAllowsOnlyAssignedControls() {
         val assignedControls = listOf(
             EventControl("control-31", "race", "F1", 31, ControlPointType.CONTROL, publicLabel = "Fox 1"),

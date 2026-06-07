@@ -37,8 +37,8 @@ class DesktopCourseAnalyzerTest {
 
         assertEquals(emptyList<String>(), summary.missingElements)
         assertEquals(120, summary.calculatedRouteCount)
-        assertEquals(listOf("31", "32", "33", "34", "35", "Beacon"), summary.calculatedIdealOrder)
-        assertEquals(listOf("35", "34", "33", "32", "31", "Beacon"), summary.providedIdealOrder)
+        assertEquals(listOf("S", "31", "32", "33", "34", "35", "B"), summary.calculatedIdealOrder)
+        assertEquals(listOf("S", "35", "34", "33", "32", "31", "B"), summary.providedIdealOrder)
         assertFalse(summary.idealOrderMatches!!)
         assertTrue(summary.calculatedStraightLineMeters!! < summary.providedStraightLineMeters!!)
     }
@@ -60,13 +60,55 @@ class DesktopCourseAnalyzerTest {
         assertEquals(4_000, summary.routeLengthMeters)
         assertEquals(100, summary.climbMeters)
         assertEquals(5_000, summary.effectiveLengthMeters)
+        assertNotNull(summary.providedRouteSection)
+        assertNotNull(summary.calculatedRouteSection)
+        assertEquals("Section 1: Provided route analysis", summary.providedRouteSection?.title)
+        assertEquals("Section 2: Calculated ideal route", summary.calculatedRouteSection?.title)
+        assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("effective length"))
+        assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("does not guarantee 3 m source terrain data"))
+        assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("does not currently know map passability"))
+        assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("foxes and any spectator"))
+        assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("USGS 3DEP source DEM resolution varies"))
+        assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("true on-foot route and wait timing differ"))
+        assertEquals(2, summary.profileComparison.size)
+        assertEquals(2, summary.routeMaps.size)
         assertEquals(false, summary.hasMissingElevationData)
         assertNotNull(summary.estimatedIdealSeconds)
         assertEquals(5, summary.elevationProfile.size)
         assertEquals(0, summary.elevationProfile.first().distanceMeters)
         assertEquals(100.0, summary.elevationProfile.first().elevationMeters, 0.001)
+        assertEquals(listOf("S -> 31", "31 -> 32", "32 -> 33", "33 -> B", "B -> F"), summary.providedLegRows.map { "${it.fromLabel} -> ${it.toLabel}" })
+        assertEquals(listOf("S -> 31", "31 -> 32", "32 -> 33", "33 -> B", "B -> F"), summary.calculatedLegRows.map { "${it.fromLabel} -> ${it.toLabel}" })
+        assertTrue(summary.providedLegRows.all { it.lengthMeters != null && it.splitSeconds != null && it.cumulativeSeconds != null })
+        assertEquals(summary.estimatedIdealSeconds, summary.providedLegRows.last().cumulativeSeconds)
         assertEquals(listOf("31", "32", "33"), summary.waitRows.map { it.controlLabel })
         assertTrue(summary.metrics.any { it.label == "Effective length" && it.value == "5.0 km" })
+        assertTrue(
+            "Metrics were ${summary.metrics}",
+            summary.metrics.any { it.label == "Classic shortest-route climb limit" && it.status == DesktopCourseMetricStatus.Good }
+        )
+    }
+
+    @Test
+    fun flagsClassicShortestRouteClimbOverSixPercent() {
+        val projectFile = projectFile(foxCount = 3)
+        val protectedInfo = protectedInfo(foxCount = 3).copy(
+            controlPoints = protectedInfo(foxCount = 3).controlPoints.mapIndexed { index, control ->
+                control.copy(elevationMeters = 100.0 + index * 100.0)
+            }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "31 32 33 Beacon"
+        )
+
+        assertTrue(
+            "Metrics were ${summary.metrics}",
+            summary.metrics.any { it.label == "Classic shortest-route climb limit" && it.status == DesktopCourseMetricStatus.Warning }
+        )
     }
 
     @Test
@@ -85,8 +127,10 @@ class DesktopCourseAnalyzerTest {
         )
 
         val renumbering = requireNotNull(summary.waitRenumbering)
+        val sectionRenumbering = requireNotNull(summary.providedRouteSection?.waitRenumbering)
         assertTrue(renumbering.improvesWait)
         assertTrue(renumbering.currentTotalWaitSeconds > renumbering.bestTotalWaitSeconds)
+        assertEquals(renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds, sectionRenumbering.currentTotalWaitSeconds - sectionRenumbering.bestTotalWaitSeconds)
         assertEquals(listOf("33", "32", "31"), renumbering.assignments.map { it.controlLabel })
         assertEquals(listOf("33", "32", "31"), renumbering.assignments.map { it.currentSlotLabel })
         assertTrue(renumbering.assignments.map { it.suggestedSlotLabel } != renumbering.assignments.map { it.currentSlotLabel })
@@ -105,7 +149,8 @@ class DesktopCourseAnalyzerTest {
 
         assertTrue(summary.missingElements.any { it.contains("Protected route data") })
         assertTrue(summary.missingElements.any { it.contains("Protected route geometry") })
-        assertTrue(summary.missingElements.any { it.contains("Protected ideal order") })
+        assertEquals(null, summary.providedRouteSection)
+        assertEquals(null, summary.calculatedRouteSection)
         assertEquals(0, summary.calculatedRouteCount)
         assertEquals(null, summary.estimatedIdealSeconds)
     }
@@ -128,17 +173,138 @@ class DesktopCourseAnalyzerTest {
 
         assertTrue(summary.missingElements.any { it.contains("Route elevation samples") })
         assertEquals(true, summary.hasMissingElevationData)
-        assertEquals(null, summary.estimatedIdealSeconds)
+        assertNotNull(summary.estimatedIdealSeconds)
+        assertEquals("Horizontal route length", summary.providedRouteSection?.comparisonLengthLabel)
         assertEquals(emptyList<DesktopCourseElevationProfilePoint>(), summary.elevationProfile)
     }
 
-    private fun projectFile(foxCount: Int, publicLabels: List<String>? = null): EventProjectFile {
+    @Test
+    fun reportsMissingProtectedControlElevations() {
+        val projectFile = projectFile(foxCount = 3)
+        val protectedInfo = protectedInfo(foxCount = 3).copy(
+            controlPoints = protectedInfo(foxCount = 3).controlPoints.map {
+                it.copy(elevationMeters = null)
+            }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "31 32 33 Beacon"
+        )
+
+        assertTrue(summary.missingElements.any { it.contains("Protected control point elevations") })
+        assertEquals(true, summary.hasMissingElevationData)
+    }
+
+    @Test
+    fun missingControlLocationsDoNotRequestElevationRetrieval() {
+        val projectFile = projectFile(foxCount = 3)
+        val protectedInfo = protectedInfo(foxCount = 3).copy(
+            controlPoints = emptyList(),
+            courseObjects = emptyList()
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "31 32 33 Beacon"
+        )
+
+        assertTrue(summary.missingElements.any { it.contains("Course object points are missing") })
+        assertTrue(summary.missingElements.any { it.contains("Location latitude/longitude is missing") })
+        assertEquals(false, summary.hasMissingElevationData)
+    }
+
+    @Test
+    fun resolvesProtectedCoordinatesByVisibleLabelWhenStoredControlIdsDiffer() {
+        val projectFile = projectFile(
+            foxCount = 3,
+            publicLabels = listOf("Fox 1", "Fox 2", "Fox 3")
+        )
+        val protectedInfo = protectedInfo(foxCount = 3).copy(
+            controlPoints = protectedInfo(foxCount = 3).controlPoints.mapIndexed { index, control ->
+                if (control.type == ControlPointType.BEACON) {
+                    control.copy(controlId = "stale-beacon")
+                } else {
+                    control.copy(
+                        controlId = "stale-${index + 1}",
+                        label = (index + 1).toString()
+                    )
+                }
+            },
+            courseObjects = protectedInfo(foxCount = 3).courseObjects.mapIndexed { index, courseObject ->
+                when (courseObject.type) {
+                    ProtectedCourseObjectType.CONTROL -> courseObject.copy(
+                        id = "stale-object-$index",
+                        label = index.toString()
+                    )
+                    ProtectedCourseObjectType.BEACON -> courseObject.copy(id = "stale-beacon")
+                    else -> courseObject
+                }
+            }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "31 32 33 Beacon"
+        )
+
+        assertTrue(summary.missingElements.none { it.contains("Location latitude/longitude is missing") })
+        assertEquals(listOf("Fox 1", "Fox 2", "Fox 3"), summary.waitRows.map { it.controlLabel })
+    }
+
+    @Test
+    fun resolvesProtectedCoordinatesBySlotEquivalentAndUniqueBeaconWhenStoredControlIdsDiffer() {
+        val projectFile = projectFile(
+            foxCount = 3,
+            publicLabels = listOf("Fox 1", "Fox 2", "Fox 3"),
+            siCodes = listOf(101, 102, 103)
+        )
+        val protectedInfo = protectedInfo(foxCount = 3).copy(
+            controlPoints = protectedInfo(foxCount = 3).controlPoints.map { control ->
+                if (control.type == ControlPointType.BEACON) {
+                    control.copy(controlId = "stale-beacon", label = "M")
+                } else {
+                    control.copy(controlId = "stale-${control.label}")
+                }
+            },
+            courseObjects = protectedInfo(foxCount = 3).courseObjects.map { courseObject ->
+                when (courseObject.type) {
+                    ProtectedCourseObjectType.CONTROL -> courseObject.copy(id = "stale-object-${courseObject.label}")
+                    ProtectedCourseObjectType.BEACON -> courseObject.copy(id = "stale-beacon", label = "M")
+                    else -> courseObject
+                }
+            }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "31 32 33 Beacon"
+        )
+
+        assertTrue(summary.missingElements.none { it.contains("Location latitude/longitude is missing") })
+        assertEquals(listOf("Fox 1", "Fox 2", "Fox 3"), summary.waitRows.map { it.controlLabel })
+    }
+
+    private fun projectFile(
+        foxCount: Int,
+        publicLabels: List<String>? = null,
+        siCodes: List<Int>? = null
+    ): EventProjectFile {
         val controls = (1..foxCount).map { number ->
+            val siCode = siCodes?.getOrNull(number - 1) ?: (30 + number)
             EventControl(
                 id = "control-$number",
                 raceId = RACE_ID,
                 label = (30 + number).toString(),
-                siCode = 30 + number,
+                siCode = siCode,
                 type = ControlPointType.CONTROL,
                 publicLabel = publicLabels?.getOrNull(number - 1) ?: (30 + number).toString()
             )

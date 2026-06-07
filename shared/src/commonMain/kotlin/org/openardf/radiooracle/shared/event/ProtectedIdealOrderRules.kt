@@ -70,14 +70,28 @@ object ProtectedIdealOrderRules {
             "Protected ideal order control was not found: $it"
         }
     ): List<EventControl> {
-        val controlsByLabel = controls.flatMap { control ->
-            listOfNotNull(control.label to control, control.publicLabel?.takeIf { it.isNotBlank() }?.let { it to control })
-        }.toMap()
+        val controlsByStoredLabel = controls.associateBy { it.label }
+        val controlsByPublicLabel = controls
+            .mapNotNull { control -> control.publicLabel?.takeIf { it.isNotBlank() }?.let { it to control } }
+            .groupBy { it.first }
+            .mapNotNull { (label, matches) ->
+                matches.map { it.second.id }.distinct().singleOrNull()?.let { label to matches.first().second }
+            }
+            .toMap()
+        val controlsByEquivalentToken = controls
+            .flatMap { control -> control.idealOrderEquivalentTokens().map { token -> token to control } }
+            .groupBy { it.first }
+            .mapNotNull { (token, matches) ->
+                matches.map { it.second.id }.distinct().singleOrNull()?.let { token to matches.first().second }
+            }
+            .toMap()
         return ControlPointRules.tokenizeControlPoints(idealOrderText)
             .map { token ->
                 token.resolveControl(
                     controls = controls,
-                    controlsByLabel = controlsByLabel,
+                    controlsByStoredLabel = controlsByStoredLabel,
+                    controlsByPublicLabel = controlsByPublicLabel,
+                    controlsByEquivalentToken = controlsByEquivalentToken,
                     allowUncatalogedNumericControls = allowUncatalogedNumericControls,
                     missingControlMessage = missingControlMessage
                 )
@@ -86,16 +100,21 @@ object ProtectedIdealOrderRules {
 
     private fun String.resolveControl(
         controls: List<EventControl>,
-        controlsByLabel: Map<String, EventControl>,
+        controlsByStoredLabel: Map<String, EventControl>,
+        controlsByPublicLabel: Map<String, EventControl>,
+        controlsByEquivalentToken: Map<String, EventControl>,
         allowUncatalogedNumericControls: Boolean,
         missingControlMessage: (String) -> String
     ): EventControl {
+        controlsByStoredLabel[this]?.let { return it }
         if (matches(numericToken)) {
             val controlCode = toIntOrNull()
             require(controlCode != null && controlCode > 0) {
                 "Protected ideal order control code must be numeric and positive: $this"
             }
             controls.firstOrNull { it.siCode == controlCode }?.let { return it }
+            controlsByPublicLabel[this]?.let { return it }
+            expandedIdealOrderTokens().firstNotNullOfOrNull { controlsByEquivalentToken[it] }?.let { return it }
             if (allowUncatalogedNumericControls && controlCode <= SportIdentCodes.SI_MAX_CODE) {
                 return EventControl(
                     id = EventControlCatalog.stableId(this, controlCode, ControlPointType.CONTROL),
@@ -106,8 +125,58 @@ object ProtectedIdealOrderRules {
                 )
             }
         }
-        return controlsByLabel[this]
-            ?: throw IllegalArgumentException(missingControlMessage(this))
+        controlsByPublicLabel[this]?.let { return it }
+        expandedIdealOrderTokens().firstNotNullOfOrNull { controlsByEquivalentToken[it] }?.let { return it }
+        throw IllegalArgumentException(missingControlMessage(this))
+    }
+
+    private fun EventControl.idealOrderEquivalentTokens(): List<String> =
+        buildList {
+            add(label)
+            publicLabel?.takeIf { it.isNotBlank() }?.let(::add)
+            add(siCode.toString())
+            publicLabel
+                ?.filter(Char::isDigit)
+                ?.takeIf { it.isNotBlank() }
+                ?.let(::add)
+            label
+                .filter(Char::isDigit)
+                .takeIf { it.isNotBlank() }
+                ?.let(::add)
+        }
+            .flatMap { it.expandedIdealOrderTokens() }
+            .distinct()
+
+    private fun String.expandedIdealOrderTokens(): List<String> {
+        val normalized = normalizedIdealOrderToken() ?: return emptyList()
+        val digits = normalized.filter(Char::isDigit).takeIf { it.isNotBlank() }
+        return buildList {
+            add(normalized)
+            digits?.toIntOrNull()?.let { number ->
+                add(number.toString())
+                when (number) {
+                    in 1..5 -> {
+                        add((30 + number).toString())
+                        add((40 + number).toString())
+                    }
+                    in 31..35 -> add((number - 30).toString())
+                    in 41..45 -> add((number - 40).toString())
+                }
+            }
+        }
+            .mapNotNull { it.normalizedIdealOrderToken() }
+            .distinct()
+    }
+
+    private fun String.normalizedIdealOrderToken(): String? {
+        val trimmed = trim()
+            .removeSurrounding("'")
+            .removeSurrounding("\"")
+            .trim()
+        return trimmed
+            .takeIf { it.isNotBlank() }
+            ?.lowercase()
+            ?.replace(Regex("\\s+"), " ")
     }
 
     private fun String.resolveControlCode(aliasesByName: Map<String, EventAlias>): Int {

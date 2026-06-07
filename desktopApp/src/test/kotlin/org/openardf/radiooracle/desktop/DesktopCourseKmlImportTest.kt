@@ -153,6 +153,61 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun reprocessesIdenticalImportedFileWhenStoredProtectedLocationsAreIncomplete() = runBlocking {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKml())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+        val password = "course-key"
+        val (imported, firstSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = password
+        )
+        val (elevated, _) = DesktopCourseKmlImporter.fetchProtectedCourseElevations(
+            projectFile = imported,
+            categoryIds = firstSummary.matchedCategoryIds,
+            password = password,
+            elevationProvider = { 100.0 }
+        )
+        val elevatedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            elevated.raceData.categories.single().category.encryptedCourseInfo!!,
+            password
+        )
+        val legacyCourseInfo = elevatedCourseInfo.copy(
+            controlPoints = emptyList(),
+            courseObjects = emptyList()
+        )
+        val legacyProject = EventProjectEditor.updateCategoryEncryptedCourseInfo(
+            elevated,
+            "cat-m21",
+            DesktopProtectedCourseOrder.encryptCourseInfo(legacyCourseInfo, password)
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = legacyProject,
+            password = password
+        )
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            updated.raceData.categories.single().category.encryptedCourseInfo!!,
+            password
+        )
+
+        assertEquals(firstSummary.sourceSha256, summary.sourceSha256)
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals(0, summary.duplicateCategoryCount)
+        assertEquals(false, summary.isDuplicateOnly)
+        assertEquals(2, protectedCourseInfo.controlPoints.size)
+        assertEquals(listOf("Start", "1", "2", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
+        assertEquals(elevatedCourseInfo.route.size, protectedCourseInfo.route.size)
+        assertTrue(protectedCourseInfo.route.all { it.elevationMeters == 100.0 })
+    }
+
+    @Test
     fun reportsFullyDownloadedIdenticalFileAsDuplicateWithNoMissingWork() = runBlocking {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())
@@ -261,7 +316,8 @@ class DesktopCourseKmlImportTest {
         )
         assertEquals(1, elevationResult.categoryCount)
         assertTrue(elevationResult.sampledPointCount > importedCourseInfo.sampledPointCount)
-        assertEquals(elevationResult.sampledPointCount, elevationResult.elevatedPointCount)
+        assertTrue(elevationResult.elevatedPointCount < elevationResult.sampledPointCount)
+        assertEquals(elevationResult.sampledPointCount, elevationResult.resolvedPointCount)
         assertTrue(protectedCourseInfo.route.all { it.elevationMeters != null })
         assertTrue(protectedCourseInfo.controlPoints.all { it.elevationMeters != null })
         assertEquals(listOf("Start", "1", "2", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
@@ -269,10 +325,103 @@ class DesktopCourseKmlImportTest {
         assertTrue(protectedCourseInfo.climbMeters!! >= 12)
         assertEquals(
             protectedCourseInfo.route.size + protectedCourseInfo.courseObjects.size,
-            elevationResult.sampledPointCount
+            elevationResult.elevatedPointCount
         )
         assertEquals(0, progressUpdates.first().completedPointCount)
         assertEquals(elevationResult.sampledPointCount, progressUpdates.last().completedPointCount)
+    }
+
+    @Test
+    fun fetchesMissingProtectedControlElevationsWhenRouteAndObjectsAlreadyHaveElevations() = runBlocking {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKml())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+        val (imported, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { 100.0 }
+        )
+        val importedCategory = imported.raceData.categories.single().category
+        val importedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            importedCategory.encryptedCourseInfo!!,
+            "course-key"
+        )
+        val missingControlCourseInfo = importedCourseInfo.copy(
+            controlPoints = importedCourseInfo.controlPoints.map { it.copy(elevationMeters = null) }
+        )
+        val projectWithMissingControlElevations = EventProjectEditor.updateCategoryEncryptedCourseInfo(
+            imported,
+            "cat-m21",
+            DesktopProtectedCourseOrder.encryptCourseInfo(missingControlCourseInfo, "course-key")
+        )
+        var requestCount = 0
+
+        val (updated, elevationResult) = DesktopCourseKmlImporter.fetchProtectedCourseElevations(
+            projectFile = projectWithMissingControlElevations,
+            categoryIds = summary.matchedCategoryIds,
+            password = "course-key",
+            elevationProvider = {
+                requestCount++
+                123.0
+            }
+        )
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            updated.raceData.categories.single().category.encryptedCourseInfo!!,
+            "course-key"
+        )
+
+        assertEquals(missingControlCourseInfo.controlPoints.size, elevationResult.sampledPointCount)
+        assertEquals(0, elevationResult.elevatedPointCount)
+        assertEquals(missingControlCourseInfo.controlPoints.size, elevationResult.resolvedPointCount)
+        assertEquals(0, requestCount)
+        assertTrue(protectedCourseInfo.route.all { it.elevationMeters == 100.0 })
+        assertTrue(protectedCourseInfo.courseObjects.all { it.elevationMeters == 100.0 })
+        assertTrue(protectedCourseInfo.controlPoints.all { it.elevationMeters == 100.0 })
+    }
+
+    @Test
+    fun fetchProtectedCourseElevationsUsesLocalCacheBeforeNetwork() = runBlocking {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKml())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+        val (imported, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key"
+        )
+        var networkRequestCount = 0
+
+        val (updated, elevationResult) = DesktopCourseKmlImporter.fetchProtectedCourseElevations(
+            projectFile = imported,
+            categoryIds = summary.matchedCategoryIds,
+            password = "course-key",
+            elevationProvider = {
+                networkRequestCount++
+                999.0
+            },
+            localElevationProvider = { 123.0 }
+        )
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            updated.raceData.categories.single().category.encryptedCourseInfo!!,
+            "course-key"
+        )
+
+        assertEquals(0, networkRequestCount)
+        assertTrue(elevationResult.cachedPointCount > 0)
+        assertEquals(elevationResult.sampledPointCount, elevationResult.resolvedPointCount)
+        assertEquals(0, elevationResult.elevatedPointCount)
+        assertTrue(protectedCourseInfo.route.all { it.elevationMeters == 123.0 })
+        assertTrue(protectedCourseInfo.courseObjects.all { it.elevationMeters == 123.0 })
+        assertTrue(protectedCourseInfo.controlPoints.all { it.elevationMeters == 123.0 })
     }
 
     @Test

@@ -392,9 +392,8 @@ class DesktopNavigationTest {
             listOf(
                 "Define Controls",
                 "Course Analysis",
-                "Import Controls CSV...",
-                "Import Controls/Route KML/KMZ...",
-                "Export Controls CSV..."
+                "Elevation Cache",
+                "Import/Export"
             ),
             controlItems.map { it.label }
         )
@@ -404,18 +403,13 @@ class DesktopNavigationTest {
         )
         assertEquals(DesktopSection.Controls, controlItems.first { it.label == "Define Controls" }.section)
         assertEquals(DesktopSection.CourseAnalysis, controlItems.first { it.label == "Course Analysis" }.section)
+        assertEquals(DesktopSection.ElevationCache, controlItems.first { it.label == "Elevation Cache" }.section)
+        assertEquals(DesktopSection.ControlsImportExport, controlItems.first { it.label == "Import/Export" }.section)
         assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Protected Course Order" }.section)
         assertEquals(
             listOf("Competitors", "Import Competitors CSV...", "Import EventReg Website...", "Export Competitors CSV..."),
             competitorItems.map { it.label }
         )
-        assertEquals(DesktopNavAction.ImportControlsCsv, controlItems.first { it.label == "Import Controls CSV..." }.action)
-        assertEquals(
-            DesktopSection.ControlsRouteKmlImport,
-            controlItems.first { it.label == "Import Controls/Route KML/KMZ..." }.section
-        )
-        assertEquals(null, controlItems.first { it.label == "Import Controls/Route KML/KMZ..." }.action)
-        assertEquals(DesktopNavAction.ExportControlsCsv, controlItems.first { it.label == "Export Controls CSV..." }.action)
         assertEquals(DesktopNavAction.ImportCategoriesCsv, categoryItems.first { it.label == "Import Categories CSV..." }.action)
         assertEquals(DesktopNavAction.ExportCategoriesCsv, categoryItems.first { it.label == "Export Categories CSV..." }.action)
         assertEquals(DesktopNavAction.ImportCompetitorsCsv, competitorItems.first { it.label == "Import Competitors CSV..." }.action)

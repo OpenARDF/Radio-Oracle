@@ -341,6 +341,9 @@ fun main(args: Array<String>) = application {
         var pendingCourseKmlKmzImportReview by remember { mutableStateOf<PendingCourseKmlKmzImportReview?>(null) }
         var courseKmlKmzElevationProgress by remember { mutableStateOf<CourseKmlKmzElevationProgressUiState?>(null) }
         var courseKmlKmzElevationJob by remember { mutableStateOf<Job?>(null) }
+        var venueElevationCacheProgress by remember { mutableStateOf<VenueElevationCacheProgressUiState?>(null) }
+        var venueElevationCacheJob by remember { mutableStateOf<Job?>(null) }
+        var venueElevationCacheRefreshToken by remember { mutableStateOf(0) }
         var eventRegImportUrl by remember { mutableStateOf(DesktopEventRegImportPreferences.lastRegistrationUrl()) }
         var isImportingEventRegWebsite by remember { mutableStateOf(false) }
         var isImportingEventRegCompetitorCsvs by remember { mutableStateOf(false) }
@@ -1014,8 +1017,14 @@ fun main(args: Array<String>) = application {
                 result.onSuccess { (updatedProject, elevationResult) ->
                     projectFile = projectSession.updateCurrentProject { updatedProject }
                     syncProtectedCourseState(updatedProject, password)
-                    projectStatusText =
-                        "Retrieved ${elevationResult.elevatedPointCount} protected course elevations for ${elevationResult.categoryCount} categories. Unsaved changes."
+                    projectStatusText = when {
+                        elevationResult.resolvedPointCount > 0 ->
+                            "Resolved ${elevationResult.resolvedPointCount} protected course elevations for ${elevationResult.categoryCount} categories (${elevationResult.cachedPointCount} cached, ${elevationResult.elevatedPointCount} downloaded). Unsaved changes."
+                        elevationResult.sampledPointCount == 0 ->
+                            "No missing protected course elevations found for ${elevationResult.categoryCount} categories."
+                        else ->
+                            "Protected course elevation retrieval completed, but no elevation values were returned for ${elevationResult.sampledPointCount} requested points."
+                    }
                 }.onFailure { error ->
                     projectStatusText = if (error is CancellationException) {
                         "Course elevation retrieval canceled. Imported route data kept without fetched elevations."
@@ -1054,6 +1063,54 @@ fun main(args: Array<String>) = application {
                 password = password
             )
             projectStatusText = "Retrieving protected course elevations for $categoryName..."
+        }
+
+        fun startVenueElevationCacheDownload(
+            venueName: String,
+            boundingBox: DesktopVenueElevationBoundingBox,
+            resolutionMeters: Double,
+            bufferMeters: Double
+        ) {
+            if (venueElevationCacheJob?.isActive == true) {
+                return
+            }
+            val cleanVenueName = venueName.trim().ifBlank { "Venue" }
+            projectStatusText = "Downloading elevation cache for $cleanVenueName..."
+            venueElevationCacheProgress = VenueElevationCacheProgressUiState(
+                venueName = cleanVenueName,
+                completedPointCount = 0,
+                totalPointCount = 1
+            )
+            venueElevationCacheJob = appCoroutineScope.launch {
+                val result = runCatching {
+                    DesktopVenueElevationCache.download(
+                        venueName = cleanVenueName,
+                        boundingBox = boundingBox,
+                        resolutionMeters = resolutionMeters,
+                        bufferMeters = bufferMeters,
+                        onProgress = { progress ->
+                            venueElevationCacheProgress = VenueElevationCacheProgressUiState(
+                                venueName = progress.venueName,
+                                completedPointCount = progress.completedPointCount,
+                                totalPointCount = progress.totalPointCount
+                            )
+                        }
+                    )
+                }
+                result.onSuccess { summary ->
+                    venueElevationCacheRefreshToken++
+                    projectStatusText =
+                        "Downloaded elevation cache for ${summary.venueName}: ${summary.resolvedPointCount}/${summary.pointCount} points at ${summary.resolutionMeters.roundToInt()} m."
+                }.onFailure { error ->
+                    projectStatusText = if (error is CancellationException) {
+                        "Elevation cache download canceled."
+                    } else {
+                        "Elevation cache download failed: ${error.message ?: error::class.simpleName}"
+                    }
+                }
+                venueElevationCacheProgress = null
+                venueElevationCacheJob = null
+            }
         }
 
         fun applyCourseKmlKmzImport(review: PendingCourseKmlKmzImportReview, fetchElevations: Boolean) {
@@ -1763,6 +1820,15 @@ fun main(args: Array<String>) = application {
                 }
             )
         }
+        venueElevationCacheProgress?.let { progress ->
+            VenueElevationCacheProgressDialog(
+                progress = progress,
+                onCancel = {
+                    venueElevationCacheProgress = progress.copy(cancelRequested = true)
+                    venueElevationCacheJob?.cancel()
+                }
+            )
+        }
         pendingCompetitorsCsvImportPath?.let { importPath ->
             CompetitorCsvImportOptionsDialog(
                 fileName = importPath.fileName.toString(),
@@ -1795,6 +1861,8 @@ fun main(args: Array<String>) = application {
             protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
             onRetrieveMissingCourseElevations = ::startCourseAnalysisElevationFetch,
+            onDownloadVenueElevationCache = ::startVenueElevationCacheDownload,
+            elevationCacheRefreshToken = venueElevationCacheRefreshToken,
             onUnlockProtectedCourseOrder = ::unlockProtectedCourseOrder,
             onUpdateProtectedIdealOrder = ::updateProtectedIdealOrder,
             onUpdateProtectedCoursePassword = ::updateProtectedCoursePassword,
@@ -2541,6 +2609,48 @@ private fun CourseKmlKmzElevationProgressDialog(
 }
 
 @Composable
+private fun VenueElevationCacheProgressDialog(
+    progress: VenueElevationCacheProgressUiState,
+    onCancel: () -> Unit
+) {
+    val total = progress.totalPointCount.coerceAtLeast(1)
+    val completed = progress.completedPointCount.coerceIn(0, total)
+    val fraction = completed.toFloat() / total.toFloat()
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Downloading elevation cache") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Venue: ${progress.venueName}")
+                LinearProgressIndicator(
+                    progress = fraction,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("$completed of $total elevation grid points")
+                Text(
+                    text = if (progress.cancelRequested) {
+                        "Canceling after the current elevation request finishes..."
+                    } else {
+                        "The downloaded grid will be reused for route and control elevations inside its bounding box."
+                    },
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            Button(
+                onClick = onCancel,
+                enabled = !progress.cancelRequested
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
 private fun UnsavedSubmenuChangesDialog(
     onSave: () -> Unit,
     onDontSave: () -> Unit,
@@ -2783,6 +2893,13 @@ private data class CourseKmlKmzElevationProgressUiState(
     val cancelRequested: Boolean = false
 )
 
+private data class VenueElevationCacheProgressUiState(
+    val venueName: String,
+    val completedPointCount: Int,
+    val totalPointCount: Int,
+    val cancelRequested: Boolean = false
+)
+
 /**
  * Builds the launchable desktop app shell.
  *
@@ -2850,6 +2967,8 @@ private fun RadioOManagerDesktopApp(
     protectedIdealOrderByCategoryId: Map<String, String> = emptyMap(),
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
     onRetrieveMissingCourseElevations: (String) -> Unit = {},
+    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double) -> Unit = { _, _, _, _ -> },
+    elevationCacheRefreshToken: Int = 0,
     onUnlockProtectedCourseOrder: (String) -> Boolean = { false },
     onUpdateProtectedIdealOrder: (String, String) -> Unit = { _, _ -> },
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean = { _, _, _ -> false },
@@ -3010,9 +3129,13 @@ private fun RadioOManagerDesktopApp(
                                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                                 onRetrieveMissingCourseElevations = onRetrieveMissingCourseElevations,
+                                onDownloadVenueElevationCache = onDownloadVenueElevationCache,
+                                elevationCacheRefreshToken = elevationCacheRefreshToken,
                                 onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
                                 onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
-                                onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword
+                                onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword,
+                                isNavActionEnabled = isNavActionEnabled,
+                                onNavAction = onNavAction
                             )
                         }
                         WorkflowBar(
@@ -3292,9 +3415,13 @@ private fun SectionWorkspace(
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onRetrieveMissingCourseElevations: (String) -> Unit,
+    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double) -> Unit,
+    elevationCacheRefreshToken: Int,
     onUnlockProtectedCourseOrder: (String) -> Boolean,
     onUpdateProtectedIdealOrder: (String, String) -> Unit,
-    onUpdateProtectedCoursePassword: (String, String, String) -> Boolean
+    onUpdateProtectedCoursePassword: (String, String, String) -> Boolean,
+    isNavActionEnabled: (DesktopNavAction) -> Boolean,
+    onNavAction: (DesktopNavAction) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -3383,6 +3510,21 @@ private fun SectionWorkspace(
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                 onRetrieveMissingElevations = onRetrieveMissingCourseElevations,
                 onUnlock = onUnlockProtectedCourseOrder
+            )
+        }
+        if (section == DesktopSection.ElevationCache && projectFile != null) {
+            VenueElevationCachePanel(
+                projectFile = projectFile,
+                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                refreshToken = elevationCacheRefreshToken,
+                onDownloadCache = onDownloadVenueElevationCache
+            )
+        }
+        if (section == DesktopSection.ControlsImportExport && projectFile != null) {
+            ControlsImportExportPanel(
+                isActionEnabled = isNavActionEnabled,
+                onAction = onNavAction,
+                onImportControlsRouteKmlKmz = onImportControlsRouteKmlKmz
             )
         }
         if (section == DesktopSection.ControlsRouteKmlImport && projectFile != null) {
@@ -5040,6 +5182,34 @@ private fun ControlDetailsPanel(
 }
 
 @Composable
+private fun ControlsImportExportPanel(
+    isActionEnabled: (DesktopNavAction) -> Boolean,
+    onAction: (DesktopNavAction) -> Unit,
+    onImportControlsRouteKmlKmz: () -> Unit
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(
+                onClick = { onAction(DesktopNavAction.ImportControlsCsv) },
+                enabled = isActionEnabled(DesktopNavAction.ImportControlsCsv)
+            ) {
+                ButtonLabel("Import Controls CSV...")
+            }
+            Button(
+                onClick = { onAction(DesktopNavAction.ExportControlsCsv) },
+                enabled = isActionEnabled(DesktopNavAction.ExportControlsCsv)
+            ) {
+                ButtonLabel("Export Controls CSV...")
+            }
+        }
+        ControlsRouteKmlImportPanel(onSelectFile = onImportControlsRouteKmlKmz)
+    }
+}
+
+@Composable
 private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
     Column(
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -5095,6 +5265,147 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
+    }
+}
+
+@Composable
+private fun VenueElevationCachePanel(
+    projectFile: EventProjectFile,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    refreshToken: Int,
+    onDownloadCache: (String, DesktopVenueElevationBoundingBox, Double, Double) -> Unit
+) {
+    val importedBounds = remember(protectedCourseInfoByCategoryId) {
+        protectedCourseInfoByCategoryId.values.flatMap { it.courseGeoPoints() }.venueBoundingBoxOrNull()
+    }
+    val cacheListings = remember(refreshToken) { DesktopVenueElevationCache.listings() }
+    var venueNameDraft by remember(projectFile.raceData.race.name) {
+        mutableStateOf(projectFile.raceData.race.name.ifBlank { "Venue" })
+    }
+    var minLatitudeDraft by remember { mutableStateOf("") }
+    var maxLatitudeDraft by remember { mutableStateOf("") }
+    var minLongitudeDraft by remember { mutableStateOf("") }
+    var maxLongitudeDraft by remember { mutableStateOf("") }
+    var bufferMetersDraft by remember { mutableStateOf("500") }
+    var resolutionMetersDraft by remember { mutableStateOf("10") }
+
+    fun applyBoundingBox(bounds: DesktopVenueElevationBoundingBox) {
+        minLatitudeDraft = bounds.minLatitude.decimalText()
+        maxLatitudeDraft = bounds.maxLatitude.decimalText()
+        minLongitudeDraft = bounds.minLongitude.decimalText()
+        maxLongitudeDraft = bounds.maxLongitude.decimalText()
+    }
+
+    val parsedBoundingBox = remember(minLatitudeDraft, maxLatitudeDraft, minLongitudeDraft, maxLongitudeDraft) {
+        val minLatitude = minLatitudeDraft.toDoubleOrNull()
+        val maxLatitude = maxLatitudeDraft.toDoubleOrNull()
+        val minLongitude = minLongitudeDraft.toDoubleOrNull()
+        val maxLongitude = maxLongitudeDraft.toDoubleOrNull()
+        if (minLatitude == null || maxLatitude == null || minLongitude == null || maxLongitude == null) {
+            null
+        } else {
+            runCatching {
+                DesktopVenueElevationBoundingBox(
+                    minLatitude = minLatitude,
+                    maxLatitude = maxLatitude,
+                    minLongitude = minLongitude,
+                    maxLongitude = maxLongitude
+                )
+            }.getOrNull()
+        }
+    }
+    val resolutionMeters = resolutionMetersDraft.toDoubleOrNull()
+    val bufferMeters = bufferMetersDraft.toDoubleOrNull() ?: 0.0
+    val estimate = remember(parsedBoundingBox, resolutionMeters, bufferMeters) {
+        if (parsedBoundingBox != null && resolutionMeters != null && resolutionMeters > 0.0) {
+            runCatching {
+                DesktopVenueElevationCache.estimate(parsedBoundingBox, resolutionMeters, bufferMeters)
+            }.getOrNull()
+        } else {
+            null
+        }
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(
+                onClick = { importedBounds?.let(::applyBoundingBox) },
+                enabled = importedBounds != null
+            ) {
+                ButtonLabel("Use Imported Course Bounds")
+            }
+            Text(
+                text = importedBounds?.let { "Protected imported route/control data available." }
+                    ?: "Unlock protected course data to derive bounds from imported routes.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            LabeledTextField("Venue", venueNameDraft, { venueNameDraft = it }, Modifier.width(320.dp))
+            LabeledTextField("Resolution m", resolutionMetersDraft, { resolutionMetersDraft = it }, Modifier.width(120.dp))
+            LabeledTextField("Buffer m", bufferMetersDraft, { bufferMetersDraft = it }, Modifier.width(120.dp))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            LabeledTextField("Min lat", minLatitudeDraft, { minLatitudeDraft = it }, Modifier.width(150.dp))
+            LabeledTextField("Max lat", maxLatitudeDraft, { maxLatitudeDraft = it }, Modifier.width(150.dp))
+            LabeledTextField("Min lon", minLongitudeDraft, { minLongitudeDraft = it }, Modifier.width(150.dp))
+            LabeledTextField("Max lon", maxLongitudeDraft, { maxLongitudeDraft = it }, Modifier.width(150.dp))
+        }
+        estimate?.let {
+            Text(
+                text = "Estimated grid: ${it.columnCount} x ${it.rowCount} (${it.pointCount} points), raw ${bytesText(it.rawBytes)}. Expanded area ${oneDecimal(it.boundingBox.widthMeters() / 1000.0)} km x ${oneDecimal(it.boundingBox.heightMeters() / 1000.0)} km.",
+                color = DesktopPalette.Black,
+                fontSize = 14.sp
+            )
+        }
+        Button(
+            onClick = {
+                val bounds = parsedBoundingBox ?: return@Button
+                val resolution = resolutionMeters ?: return@Button
+                onDownloadCache(venueNameDraft, bounds, resolution, bufferMeters)
+            },
+            enabled = parsedBoundingBox != null && resolutionMeters != null && resolutionMeters > 0.0
+        ) {
+            ButtonLabel("Download Elevation Cache")
+        }
+        Text(
+            text = "Cache folder: ${DesktopVenueElevationCache.cacheDirectory()}",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        Text(
+            text = "Cached venues",
+            color = DesktopPalette.Black,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        if (cacheListings.isEmpty()) {
+            Text(
+                text = "No venue elevation caches found.",
+                color = DesktopPalette.Black,
+                fontSize = 14.sp
+            )
+        } else {
+            cacheListings.forEach { listing ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "${listing.venueName} - ${listing.sourceName} ${listing.resolutionMeters.roundToInt()} m - ${listing.resolvedPointCount}/${listing.rowCount * listing.columnCount} points",
+                        color = DesktopPalette.Black,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${listing.path.fileName}  ${listing.createdAtIso}",
+                        color = DesktopPalette.Black,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -5323,11 +5634,13 @@ private fun CourseAnalysisResultView(result: DesktopCourseAnalysisSummary?) {
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold
         )
-        CourseAnalysisDetailRows(result)
-        CourseAnalysisElevationProfile(result.elevationProfile)
-        CourseAnalysisMetricRows(result.metrics)
-        CourseAnalysisWaitRows(result.waitRows)
-        CourseAnalysisWaitRenumbering(result.waitRenumbering)
+        result.providedRouteSection?.let { section ->
+            CourseAnalysisSectionView(section, includeRenumbering = true)
+        }
+        result.calculatedRouteSection?.let { section ->
+            CourseAnalysisSectionView(section, includeRenumbering = false)
+        }
+        CourseAnalysisSummarySection(result)
         if (result.missingElements.isNotEmpty()) {
             Text(
                 text = "Partial analysis: ${result.missingElements.joinToString(" ")}",
@@ -5335,6 +5648,81 @@ private fun CourseAnalysisResultView(result: DesktopCourseAnalysisSummary?) {
                 fontSize = 13.sp
             )
         }
+    }
+}
+
+@Composable
+private fun CourseAnalysisSectionView(section: DesktopCourseAnalysisSection, includeRenumbering: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = section.title,
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = section.explanation,
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        CourseAnalysisRow("Route order", section.routeOrder.joinToString(" -> ").ifBlank { "Unknown" })
+        CourseAnalysisRow(section.comparisonLengthLabel, metersText(section.comparisonLengthMeters))
+        CourseAnalysisRow("Horizontal length", metersText(section.straightLineMeters))
+        CourseAnalysisRow("Route length", metersText(section.routeLengthMeters))
+        CourseAnalysisRow("Climb", metersText(section.climbMeters))
+        CourseAnalysisRow("Effective length", metersText(section.effectiveLengthMeters))
+        CourseAnalysisRow("Estimated ideal time", secondsText(section.estimatedIdealSeconds))
+        CourseAnalysisLegRows("Leg analysis", section.legRows)
+        if (includeRenumbering) {
+            CourseAnalysisProvidedRouteWaitAnalysis(section.waitRows, section.waitRenumbering)
+        } else {
+            CourseAnalysisWaitRows("Optimized wait times", section.waitRows)
+        }
+    }
+}
+
+@Composable
+private fun CourseAnalysisProvidedRouteWaitAnalysis(
+    waitRows: List<DesktopCourseWaitRow>,
+    renumbering: DesktopCourseWaitRenumbering?
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "Provided-route wait-time analysis",
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "This subsection estimates Classic fox arrival phases on the provided route and checks whether assigning different fox numbers to the same locations could reduce waiting. Because map passability is not modeled, barriers and slow terrain can shift real arrival times and change wait-time outcomes.",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        CourseAnalysisWaitRows("Current wait times", waitRows)
+        if (renumbering != null) {
+            CourseAnalysisWaitRenumbering(renumbering)
+        }
+    }
+}
+
+@Composable
+private fun CourseAnalysisSummarySection(result: DesktopCourseAnalysisSummary) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Section 3: Summary",
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = result.summaryExplanation,
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        CourseAnalysisDetailRows(result)
+        CourseAnalysisMetricRows(result.metrics)
+        CourseAnalysisProfileComparison(result.profileComparison)
+        CourseAnalysisRouteMaps(result.routeMaps)
     }
 }
 
@@ -5354,7 +5742,7 @@ private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
         )
         CourseAnalysisRow("Calculated straight-line length", metersText(result.calculatedStraightLineMeters))
         CourseAnalysisRow("Provided straight-line length", metersText(result.providedStraightLineMeters))
-        CourseAnalysisRow("Route length", metersText(result.routeLengthMeters))
+        CourseAnalysisRow("Provided route length", metersText(result.routeLengthMeters))
         CourseAnalysisRow("Climb", metersText(result.climbMeters))
         CourseAnalysisRow("Effective length", metersText(result.effectiveLengthMeters))
         CourseAnalysisRow("Estimated ideal time", secondsText(result.estimatedIdealSeconds))
@@ -5362,7 +5750,62 @@ private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
 }
 
 @Composable
-private fun CourseAnalysisElevationProfile(profile: List<DesktopCourseElevationProfilePoint>) {
+private fun CourseAnalysisLegRows(title: String, legs: List<DesktopCourseLegRow>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title,
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        if (legs.isEmpty()) {
+            Text(
+                text = "No leg rows available.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+            return@Column
+        }
+        legs.forEach { leg ->
+            CourseAnalysisRow(
+                label = "${leg.fromLabel} -> ${leg.toLabel}",
+                value = "${metersText(leg.lengthMeters)}  split ${secondsText(leg.splitSeconds)}  cumulative ${secondsText(leg.cumulativeSeconds)}"
+            )
+        }
+    }
+}
+
+@Composable
+private fun CourseAnalysisProfileComparison(profiles: List<DesktopCourseElevationProfileSummary>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "Elevation profiles (cache grid; source resolution varies)",
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        if (profiles.isEmpty() || profiles.all { it.profile.isEmpty() }) {
+            Text(
+                text = "No elevation profiles available because local elevation data is incomplete.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+            return@Column
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            profiles.forEach { profile ->
+                CourseAnalysisElevationProfile(profile.title, profile.profile, Modifier.width(300.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CourseAnalysisElevationProfile(
+    title: String,
+    profile: List<DesktopCourseElevationProfilePoint>,
+    modifier: Modifier = Modifier.width(620.dp)
+) {
     if (profile.isEmpty()) {
         return
     }
@@ -5371,7 +5814,7 @@ private fun CourseAnalysisElevationProfile(profile: List<DesktopCourseElevationP
     val totalDistanceMeters = profile.lastOrNull()?.distanceMeters ?: 0
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            text = "Elevation profile",
+            text = title,
             color = DesktopPalette.Black,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold
@@ -5384,7 +5827,7 @@ private fun CourseAnalysisElevationProfile(profile: List<DesktopCourseElevationP
         )
         Canvas(
             modifier = Modifier
-                .width(620.dp)
+                .then(modifier)
                 .height(180.dp)
                 .border(1.dp, DesktopPalette.LightGrey)
                 .padding(8.dp)
@@ -5440,6 +5883,97 @@ private fun CourseAnalysisElevationProfile(profile: List<DesktopCourseElevationP
 }
 
 @Composable
+private fun CourseAnalysisRouteMaps(routeMaps: List<DesktopCourseRouteMap>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "2D route depictions",
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        if (routeMaps.isEmpty()) {
+            Text(
+                text = "No route depictions available.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+            return@Column
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            routeMaps.forEach { routeMap ->
+                CourseAnalysisRouteMap(routeMap)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CourseAnalysisRouteMap(routeMap: DesktopCourseRouteMap) {
+    val mapWidth = 300.dp
+    val mapHeight = 190.dp
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = routeMap.title,
+            color = DesktopPalette.Black,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Box(
+            modifier = Modifier
+                .width(mapWidth)
+                .height(mapHeight)
+                .border(1.dp, DesktopPalette.LightGrey)
+                .padding(8.dp)
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val byLabel = routeMap.points.associateBy { it.label }
+                fun x(point: DesktopCourseRouteMapPoint): Float =
+                    (point.xFraction.coerceIn(0.0, 1.0) * size.width).toFloat()
+                fun y(point: DesktopCourseRouteMapPoint): Float =
+                    (point.yFraction.coerceIn(0.0, 1.0) * size.height).toFloat()
+                routeMap.routeLabels.zipWithNext().forEach { (fromLabel, toLabel) ->
+                    val from = byLabel[fromLabel] ?: return@forEach
+                    val to = byLabel[toLabel] ?: return@forEach
+                    drawLine(
+                        color = DesktopPalette.Primary,
+                        start = Offset(x(from), y(from)),
+                        end = Offset(x(to), y(to)),
+                        strokeWidth = 2f
+                    )
+                }
+                routeMap.points.forEach { point ->
+                    drawCircle(
+                        color = routeMapPointColor(point.type),
+                        radius = 5f,
+                        center = Offset(x(point), y(point))
+                    )
+                }
+            }
+            routeMap.points.forEach { point ->
+                Text(
+                    text = point.label,
+                    color = DesktopPalette.Black,
+                    fontSize = 11.sp,
+                    modifier = Modifier.offset(
+                        x = (point.xFraction.coerceIn(0.0, 1.0) * 250.0 + 8.0).dp,
+                        y = (point.yFraction.coerceIn(0.0, 1.0) * 150.0 + 8.0).dp
+                    )
+                )
+            }
+        }
+    }
+}
+
+private fun routeMapPointColor(type: DesktopCourseRouteMapPointType): Color =
+    when (type) {
+        DesktopCourseRouteMapPointType.Start -> DesktopPalette.Connected
+        DesktopCourseRouteMapPointType.Finish -> DesktopPalette.Error
+        DesktopCourseRouteMapPointType.Control -> DesktopPalette.Primary
+        DesktopCourseRouteMapPointType.Beacon -> DesktopPalette.Warning
+        DesktopCourseRouteMapPointType.Spectator -> DesktopPalette.Disconnected
+    }
+
+@Composable
 private fun CourseAnalysisMetricRows(metrics: List<DesktopCourseGoodnessMetric>) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
@@ -5463,10 +5997,10 @@ private fun CourseAnalysisMetricRows(metrics: List<DesktopCourseGoodnessMetric>)
 }
 
 @Composable
-private fun CourseAnalysisWaitRows(waitRows: List<DesktopCourseWaitRow>) {
+private fun CourseAnalysisWaitRows(title: String, waitRows: List<DesktopCourseWaitRow>) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            text = "Ideal-route wait times",
+            text = title,
             color = DesktopPalette.Black,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold
@@ -5482,7 +6016,11 @@ private fun CourseAnalysisWaitRows(waitRows: List<DesktopCourseWaitRow>) {
         waitRows.forEach { row ->
             CourseAnalysisRow(
                 label = row.controlLabel,
-                value = "arrival ${secondsText(row.arrivalSeconds)}, wait ${secondsText(row.waitSeconds)}"
+                value = listOfNotNull(
+                    "arrival ${secondsText(row.arrivalSeconds)}",
+                    row.slotLabel?.let { "fox $it" },
+                    "wait ${secondsText(row.waitSeconds)}"
+                ).joinToString(", ")
             )
         }
     }
@@ -5505,9 +6043,14 @@ private fun CourseAnalysisWaitRenumbering(renumbering: DesktopCourseWaitRenumber
             value = "${secondsText(renumbering.currentTotalWaitSeconds)} / ${secondsText(renumbering.bestTotalWaitSeconds)}",
             valueColor = if (renumbering.improvesWait) DesktopPalette.Error else DesktopPalette.Connected
         )
+        CourseAnalysisRow(
+            label = "Likely improvement",
+            value = secondsText((renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds).coerceAtLeast(0)),
+            valueColor = if (renumbering.improvesWait) DesktopPalette.Connected else DesktopPalette.Disconnected
+        )
         Text(
             text = if (renumbering.improvesWait) {
-                "Renumbering the fox transmit slots can reduce ideal-route wait time."
+                "Renumbering the fox transmit slots is likely to reduce wait time by ${secondsText(renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)} on this provided route."
             } else {
                 "Current fox numbering is already best for ideal-route wait time."
             },
@@ -7223,6 +7766,57 @@ private fun WorkflowHomePanel(workflow: DesktopWorkflow, projectFile: EventProje
     }
 }
 
+@Composable
+private fun LabeledTextField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
+        Text(
+            text = label,
+            color = DesktopPalette.Black,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
+        TextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+private fun ProtectedCourseInfo.courseGeoPoints(): List<CourseGeoPoint> =
+    route.map { CourseGeoPoint(it.latitude, it.longitude) } +
+        controlPoints.map { CourseGeoPoint(it.latitude, it.longitude) } +
+        courseObjects.map { CourseGeoPoint(it.latitude, it.longitude) }
+
+private fun List<CourseGeoPoint>.venueBoundingBoxOrNull(): DesktopVenueElevationBoundingBox? =
+    takeIf { it.isNotEmpty() }?.let { points ->
+        DesktopVenueElevationBoundingBox(
+            minLatitude = points.minOf { it.latitude },
+            maxLatitude = points.maxOf { it.latitude },
+            minLongitude = points.minOf { it.longitude },
+            maxLongitude = points.maxOf { it.longitude }
+        )
+    }
+
+private fun Double.decimalText(): String =
+    "%.${6}f".format(this)
+
+private fun bytesText(bytes: Long): String =
+    when {
+        bytes >= 1024L * 1024L -> "${oneDecimal(bytes.toDouble() / (1024.0 * 1024.0))} MiB"
+        bytes >= 1024L -> "${oneDecimal(bytes.toDouble() / 1024.0)} KiB"
+        else -> "$bytes B"
+    }
+
+private fun oneDecimal(value: Double): String =
+    (value * 10.0).roundToInt().let { "${it / 10}.${abs(it % 10)}" }
+
 /** Provides section-specific content summaries without introducing editing behavior. */
 private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFile?): String {
     val summary = projectFile?.let(EventProjectSummary::from)
@@ -7245,6 +7839,10 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
             ?: requiresEventFile("editing controls")
         DesktopSection.CourseAnalysis ->
             "Analyze protected route order, effective length, climb, estimated ideal time, and Classic wait slots."
+        DesktopSection.ElevationCache ->
+            "Download venue elevation grids that can be reused for protected route and control elevation sampling."
+        DesktopSection.ControlsImportExport ->
+            "Import and export control definitions and protected controls/route KML/KMZ files."
         DesktopSection.ControlsRouteKmlImport ->
             "KML/KMZ files must include named control Point placemarks and category route LineString placemarks."
         DesktopSection.Readouts -> summary?.let { "${it.readoutCount} SI-card readouts loaded." }

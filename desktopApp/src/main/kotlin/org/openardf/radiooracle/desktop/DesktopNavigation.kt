@@ -206,23 +206,17 @@ object DesktopNavigation {
                             workflow,
                             DesktopSection.CourseAnalysis
                         ),
-                        action(
-                            "setup.controls.import",
-                            "Import Controls CSV...",
+                        item(
+                            "setup.controls.elevation-cache",
+                            "Elevation Cache",
                             workflow,
-                            DesktopNavAction.ImportControlsCsv
+                            DesktopSection.ElevationCache
                         ),
                         item(
-                            "setup.controls.import-course-kml",
-                            "Import Controls/Route KML/KMZ...",
+                            "setup.controls.import-export",
+                            "Import/Export",
                             workflow,
-                            DesktopSection.ControlsRouteKmlImport
-                        ),
-                        action(
-                            "setup.controls.export",
-                            "Export Controls CSV...",
-                            workflow,
-                            DesktopNavAction.ExportControlsCsv
+                            DesktopSection.ControlsImportExport
                         )
                     ),
                     DesktopSection.Controls

@@ -66,7 +66,9 @@ data class DesktopRouteElevationProgress(
 data class DesktopRouteElevationResult(
     val categoryCount: Int,
     val sampledPointCount: Int,
-    val elevatedPointCount: Int
+    val elevatedPointCount: Int,
+    val resolvedPointCount: Int = elevatedPointCount,
+    val cachedPointCount: Int = 0
 )
 
 object DesktopCourseKmlImporter {
@@ -80,10 +82,14 @@ object DesktopCourseKmlImporter {
         path: Path,
         projectFile: EventProjectFile,
         password: String,
-        elevationProvider: (CourseGeoPoint) -> Double? = { null }
+        elevationProvider: (CourseGeoPoint) -> Double? = { point -> DesktopVenueElevationCache.elevationMeters(point) }
     ): Pair<EventProjectFile, DesktopCourseKmlImportSummary> {
         val sourceSha256 = fileSha256(path)
         val courseData = parse(path)
+        DesktopDebugLog.info(
+            "CourseKml",
+            "Import parsed ${path.fileName}: hash=${sourceSha256.shortHash()} pointPlacemarks=${courseData.controls.size} routePlacemarks=${courseData.routes.size}"
+        )
         val controls = matchedControls(courseData.controls, projectFile.raceData.controls)
         val controlsByLabel = controls.associateBy { it.label.normalizedCourseName() }
         val categories = projectFile.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
@@ -107,22 +113,49 @@ object DesktopCourseKmlImporter {
             val existingCourseInfo = categoryData.category.encryptedCourseInfo
                 ?.takeIf { it.isNotBlank() }
                 ?.let { DesktopProtectedCourseOrder.decryptCourseInfo(it, password) }
-            if (existingCourseInfo?.sourceSha256 == sourceSha256) {
+            val sameSourceCourseInfo = existingCourseInfo?.takeIf { it.sourceSha256 == sourceSha256 }
+            if (sameSourceCourseInfo != null && sameSourceCourseInfo.hasImportedLocationRecords()) {
+                val missingElevationCount = missingElevationCount(sameSourceCourseInfo)
+                DesktopDebugLog.info(
+                    "CourseKml",
+                    "Import duplicate skipped for category=${categoryData.category.name}: hash=${sourceSha256.shortHash()} missingElevationPoints=$missingElevationCount"
+                )
                 duplicateCategoryCount++
-                duplicateMissingElevationPointCount += missingElevationCount(existingCourseInfo)
+                duplicateMissingElevationPointCount += missingElevationCount
                 return@forEach
             }
+            if (sameSourceCourseInfo != null) {
+                DesktopDebugLog.info(
+                    "CourseKml",
+                    "Import duplicate hash will be reprocessed for category=${categoryData.category.name}: " +
+                        "hash=${sourceSha256.shortHash()} existingRoutePoints=${sameSourceCourseInfo.route.size} " +
+                        "existingRouteElevations=${sameSourceCourseInfo.route.count { it.elevationMeters != null }} " +
+                        "existingControlPoints=${sameSourceCourseInfo.controlPoints.size} " +
+                        "existingCourseObjects=${sameSourceCourseInfo.courseObjects.size}"
+                )
+            }
             val routeGeometry = route.points.map { it.copy(elevationMeters = null) }
-            val sampledRoute = sampledRoute(routeGeometry, ROUTE_SAMPLE_METERS).map { point ->
+            val importedSampledRoute = sampledRoute(routeGeometry, ROUTE_SAMPLE_METERS).map { point ->
                 val elevation = elevationProvider(point)
                 if (elevation != null) {
                     routeElevationPointCount++
                 }
                 point.copy(elevationMeters = elevation)
             }
+            val sampledRoute = sameSourceCourseInfo
+                ?.route
+                ?.takeIf { points -> points.isNotEmpty() && points.any { it.elevationMeters != null } }
+                ?.map { point ->
+                    CourseGeoPoint(
+                        latitude = point.latitude,
+                        longitude = point.longitude,
+                        elevationMeters = point.elevationMeters
+                    )
+                }
+                ?: importedSampledRoute
             val idealOrder = idealOrderForRoute(sampledRoute, controlsByLabel.values.toList())
             val controlPoints = controls.map { control ->
-                val elevation = elevationProvider(control.point)
+                val elevation = sameSourceCourseInfo?.elevationFor(control) ?: elevationProvider(control.point)
                 ProtectedCourseControlPoint(
                     controlId = control.controlId,
                     label = control.label,
@@ -133,6 +166,10 @@ object DesktopCourseKmlImporter {
                 )
             }
             val courseObjects = courseObjectsForRoute(sampledRoute, controlPoints)
+            DesktopDebugLog.info(
+                "CourseKml",
+                "Import matched category=${categoryData.category.name}: route=${route.name} sampledRoutePoints=${sampledRoute.size} idealOrder='${idealOrder.ifBlank { "none" }}' controls=${controlPoints.size} courseObjects=${courseObjects.size} routeElevations=${sampledRoute.count { it.elevationMeters != null }} controlElevations=${controlPoints.count { it.elevationMeters != null }}"
+            )
             // Route-derived course facts are competition-sensitive. Store them only in the
             // encrypted category payload; do not copy them into public length, climb, or
             // category-control fields that exports and result pages can read without a key.
@@ -174,7 +211,7 @@ object DesktopCourseKmlImporter {
             "No KML/KMZ route names matched Event File category names."
         }
 
-        return updatedProject to DesktopCourseKmlImportSummary(
+        val summary = DesktopCourseKmlImportSummary(
             matchedCategoryCount = matchedCategoryCount,
             routeCount = courseData.routes.size,
             controlPointCount = courseData.controls.size,
@@ -187,6 +224,11 @@ object DesktopCourseKmlImporter {
             duplicateMissingElevationPointCount = duplicateMissingElevationPointCount,
             sourceSha256 = sourceSha256
         )
+        DesktopDebugLog.info(
+            "CourseKml",
+            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
+        )
+        return updatedProject to summary
     }
 
     suspend fun fetchProtectedCourseElevations(
@@ -195,6 +237,9 @@ object DesktopCourseKmlImporter {
         password: String,
         elevationProvider: suspend (CourseGeoPoint) -> Double? = { point ->
             withContext(Dispatchers.IO) { usgsElevationMeters(point) }
+        },
+        localElevationProvider: (CourseGeoPoint) -> Double? = { point ->
+            DesktopVenueElevationCache.elevationMeters(point)
         },
         onProgress: (DesktopRouteElevationProgress) -> Unit = {}
     ): Pair<EventProjectFile, DesktopRouteElevationResult> {
@@ -222,10 +267,34 @@ object DesktopCourseKmlImporter {
             "No imported route geometry is available for elevation retrieval."
         }
         val totalPointCount = categories.sumOf { it.missingElevationCount() }
+        categories.forEach { target ->
+            DesktopDebugLog.info(
+                "CourseElevation",
+                "Fetch plan category=${target.categoryName}: routeMissing=${target.missingRouteElevationCount()} courseObjectMissing=${target.missingCourseObjectElevationCount()} protectedControlMissing=${target.missingProtectedControlElevationCount()} totalRequested=${target.missingElevationCount()}"
+            )
+        }
+        DesktopDebugLog.info(
+            "CourseElevation",
+            "Fetch started categories=${categories.size} totalRequested=$totalPointCount"
+        )
+        if (totalPointCount == 0) {
+            DesktopDebugLog.warn(
+                "CourseElevation",
+                "Fetch requested with no missing route, course-object, or protected-control elevation points."
+            )
+        }
 
         var completedPointCount = 0
         var elevatedPointCount = 0
+        var resolvedPointCount = 0
+        var cachedPointCount = 0
         var updatedProject = projectFile
+
+        suspend fun resolveElevation(point: CourseGeoPoint): Pair<Double?, Boolean> {
+            localElevationProvider(point)?.let { return it to true }
+            return elevationProvider(point) to false
+        }
+
         onProgress(
             DesktopRouteElevationProgress(
                 completedPointCount = 0,
@@ -240,10 +309,15 @@ object DesktopCourseKmlImporter {
                     return@map point
                 }
                 kotlin.coroutines.coroutineContext.ensureActive()
-                val elevation = elevationProvider(point)
+                val (elevation, fromCache) = resolveElevation(point)
                 completedPointCount++
                 if (elevation != null) {
-                    elevatedPointCount++
+                    resolvedPointCount++
+                    if (fromCache) {
+                        cachedPointCount++
+                    } else {
+                        elevatedPointCount++
+                    }
                 }
                 onProgress(
                     DesktopRouteElevationProgress(
@@ -259,7 +333,7 @@ object DesktopCourseKmlImporter {
                     return@map courseObject
                 }
                 kotlin.coroutines.coroutineContext.ensureActive()
-                val elevation = elevationProvider(
+                val resolved = resolveElevation(
                     CourseGeoPoint(
                         latitude = courseObject.latitude,
                         longitude = courseObject.longitude,
@@ -267,8 +341,13 @@ object DesktopCourseKmlImporter {
                     )
                 )
                 completedPointCount++
-                if (elevation != null) {
-                    elevatedPointCount++
+                if (resolved.first != null) {
+                    resolvedPointCount++
+                    if (resolved.second) {
+                        cachedPointCount++
+                    } else {
+                        elevatedPointCount++
+                    }
                 }
                 onProgress(
                     DesktopRouteElevationProgress(
@@ -277,11 +356,72 @@ object DesktopCourseKmlImporter {
                         categoryName = target.categoryName
                     )
                 )
-                courseObject.copy(elevationMeters = elevation)
+                courseObject.copy(elevationMeters = resolved.first)
+            }
+            val routeFetched = elevatedRoute.count { point ->
+                target.sampledRoute.any { original ->
+                    original.elevationMeters == null &&
+                        original.latitude == point.latitude &&
+                        original.longitude == point.longitude
+                } && point.elevationMeters != null
+            }
+            val courseObjectFetched = elevatedCourseObjects.count { courseObject ->
+                target.courseObjects.any { original ->
+                    original.id == courseObject.id && original.elevationMeters == null
+                } && courseObject.elevationMeters != null
             }
             val objectElevationByControlId = elevatedCourseObjects
                 .filter { it.type == ProtectedCourseObjectType.CONTROL || it.type == ProtectedCourseObjectType.BEACON || it.type == ProtectedCourseObjectType.SPECTATOR }
                 .associateBy { it.id }
+            val elevatedControlPoints = target.courseInfo.controlPoints.map { control ->
+                objectElevationByControlId[control.controlId]?.elevationMeters?.let { objectElevation ->
+                    if (control.elevationMeters == null) {
+                        completedPointCount++
+                        resolvedPointCount++
+                        onProgress(
+                            DesktopRouteElevationProgress(
+                                completedPointCount = completedPointCount,
+                                totalPointCount = totalPointCount,
+                                categoryName = target.categoryName
+                            )
+                        )
+                    }
+                    return@map control.copy(elevationMeters = objectElevation)
+                }
+                if (control.elevationMeters != null) {
+                    return@map control
+                }
+                kotlin.coroutines.coroutineContext.ensureActive()
+                val (elevation, fromCache) = resolveElevation(
+                    CourseGeoPoint(
+                        latitude = control.latitude,
+                        longitude = control.longitude,
+                        elevationMeters = null
+                    )
+                )
+                completedPointCount++
+                if (elevation != null) {
+                    resolvedPointCount++
+                    if (fromCache) {
+                        cachedPointCount++
+                    } else {
+                        elevatedPointCount++
+                    }
+                }
+                onProgress(
+                    DesktopRouteElevationProgress(
+                        completedPointCount = completedPointCount,
+                        totalPointCount = totalPointCount,
+                        categoryName = target.categoryName
+                    )
+                )
+                control.copy(elevationMeters = elevation)
+            }
+            val controlFetched = elevatedControlPoints.count { control ->
+                target.courseInfo.controlPoints.any { original ->
+                    original.controlId == control.controlId && original.elevationMeters == null
+                } && control.elevationMeters != null
+            }
             val updatedCourseInfo = target.courseInfo.copy(
                 lengthMeters = routeLengthMeters(elevatedRoute).roundToInt(),
                 climbMeters = climbMetersOrNull(elevatedRoute),
@@ -293,11 +433,7 @@ object DesktopCourseKmlImporter {
                         elevationMeters = point.elevationMeters
                     )
                 },
-                controlPoints = target.courseInfo.controlPoints.map { control ->
-                    objectElevationByControlId[control.controlId]?.let { objectPoint ->
-                        control.copy(elevationMeters = objectPoint.elevationMeters)
-                    } ?: control
-                },
+                controlPoints = elevatedControlPoints,
                 courseObjects = elevatedCourseObjects
             )
             updatedProject = EventProjectEditor.updateCategoryEncryptedCourseInfo(
@@ -305,13 +441,26 @@ object DesktopCourseKmlImporter {
                 target.categoryId,
                 DesktopProtectedCourseOrder.encryptCourseInfo(updatedCourseInfo, password)
             )
+            DesktopDebugLog.info(
+                "CourseElevation",
+                "Fetch category complete category=${target.categoryName}: routeFetched=$routeFetched courseObjectFetched=$courseObjectFetched protectedControlFetched=$controlFetched remainingRouteMissing=${elevatedRoute.count { it.elevationMeters == null }} remainingCourseObjectMissing=${elevatedCourseObjects.count { it.elevationMeters == null }} remainingProtectedControlMissing=${updatedCourseInfo.controlPoints.count { it.elevationMeters == null }}"
+            )
         }
 
-        return updatedProject to DesktopRouteElevationResult(
+        val result = DesktopRouteElevationResult(
             categoryCount = categories.size,
             sampledPointCount = totalPointCount,
-            elevatedPointCount = elevatedPointCount
+            elevatedPointCount = elevatedPointCount,
+            resolvedPointCount = resolvedPointCount,
+            cachedPointCount = cachedPointCount
         )
+        val logMessage = "Fetch summary categories=${result.categoryCount} requested=${result.sampledPointCount} downloaded=${result.elevatedPointCount} cached=${result.cachedPointCount} resolved=${result.resolvedPointCount}"
+        if (result.resolvedPointCount == 0) {
+            DesktopDebugLog.warn("CourseElevation", logMessage)
+        } else {
+            DesktopDebugLog.info("CourseElevation", logMessage)
+        }
+        return updatedProject to result
     }
 
     fun parse(path: Path): DesktopCourseKmlData {
@@ -574,6 +723,26 @@ object DesktopCourseKmlImporter {
         routeWithMissingElevationSamples(courseInfo).count { it.elevationMeters == null } +
             courseObjectsForCourseInfo(courseInfo).count { it.elevationMeters == null }
 
+    private fun ProtectedCourseInfo.hasImportedLocationRecords(): Boolean =
+        controlPoints.isNotEmpty() && courseObjects.isNotEmpty()
+
+    private fun ProtectedCourseInfo.elevationFor(control: CourseMatchedControl): Double? {
+        controlPoints.firstOrNull { it.controlId == control.controlId }?.elevationMeters?.let { return it }
+        controlPoints.firstOrNull { it.label.normalizedCourseName() == control.label.normalizedCourseName() }
+            ?.elevationMeters
+            ?.let { return it }
+        val controlLocationKey = control.point.locationKey()
+        controlPoints.firstOrNull {
+            CourseGeoPoint(it.latitude, it.longitude).locationKey() == controlLocationKey
+        }?.elevationMeters?.let { return it }
+        courseObjects.firstOrNull {
+            it.id == control.controlId || it.label.normalizedCourseName() == control.label.normalizedCourseName()
+        }?.elevationMeters?.let { return it }
+        return courseObjects.firstOrNull {
+            CourseGeoPoint(it.latitude, it.longitude).locationKey() == controlLocationKey
+        }?.elevationMeters
+    }
+
     private fun routeLengthMeters(points: List<CourseGeoPoint>): Double =
         points.zipWithNext().sumOf { (start, end) -> start.distanceMetersTo(end) }
 
@@ -720,9 +889,21 @@ private data class CategoryRouteElevationTarget(
     val courseObjects: List<ProtectedCourseObjectPoint>
 ) {
     fun missingElevationCount(): Int =
-        sampledRoute.count { it.elevationMeters == null } +
-            courseObjects.count { it.elevationMeters == null }
+        missingRouteElevationCount() + missingCourseObjectElevationCount() + missingProtectedControlElevationCount()
+
+    fun missingRouteElevationCount(): Int =
+        sampledRoute.count { it.elevationMeters == null }
+
+    fun missingCourseObjectElevationCount(): Int =
+        courseObjects.count { it.elevationMeters == null }
+
+    fun missingProtectedControlElevationCount(): Int =
+        courseInfo.controlPoints.count { it.elevationMeters == null }
+
 }
+
+private fun String.shortHash(): String =
+    take(12)
 
 private fun EventControl.idealOrderToken(): String {
     val label = publicLabel?.trim()?.takeIf { it.isNotEmpty() } ?: label
