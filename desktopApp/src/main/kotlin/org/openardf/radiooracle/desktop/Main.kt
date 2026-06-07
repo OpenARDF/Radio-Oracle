@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
@@ -5472,6 +5473,7 @@ private fun CourseAnalysisPanel(
     var pendingMissingDataResult by remember(projectFile.raceData.race.id, protectedCourseInfoByCategoryId) {
         mutableStateOf<CourseAnalysisMissingDataPrompt?>(null)
     }
+    var exportStatusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
 
     fun analyzeSelectedCourse(): DesktopCourseAnalysisSummary? {
         val categoryId = effectiveSelectedCategoryId ?: return null
@@ -5479,7 +5481,8 @@ private fun CourseAnalysisPanel(
             projectFile = projectFile,
             categoryId = categoryId,
             protectedCourseInfo = protectedCourseInfoByCategoryId[categoryId],
-            protectedIdealOrderText = protectedIdealOrderByCategoryId[categoryId]
+            protectedIdealOrderText = protectedIdealOrderByCategoryId[categoryId],
+            elevationLookup = DesktopVenueElevationCache::elevationMeters
         )
     }
 
@@ -5506,6 +5509,7 @@ private fun CourseAnalysisPanel(
                     selectedCategoryId = it
                     analysisResult = null
                     pendingMissingDataResult = null
+                    exportStatusText = null
                 },
                 modifier = Modifier.width(280.dp)
             )
@@ -5526,6 +5530,37 @@ private fun CourseAnalysisPanel(
             ) {
                 ButtonLabel("Analyze")
             }
+            Button(
+                onClick = {
+                    val summary = analysisResult ?: return@Button
+                    DesktopFileDialogs.chooseExportCourseAnalysisPdf(
+                        eventName = projectFile.raceData.race.name,
+                        categoryName = summary.categoryName
+                    )?.let { path ->
+                        runCatching {
+                            val exportPaths = DesktopCourseAnalysisExports.exportPdfAndKml(path, summary)
+                            exportStatusText = "Exported ${exportPaths.pdfPath.fileName} and ${exportPaths.kmlPath.fileName}"
+                            DesktopDebugLog.info(
+                                "CourseAnalysis",
+                                "Exported analysis PDF ${exportPaths.pdfPath.fileName} and KML ${exportPaths.kmlPath.fileName}"
+                            )
+                        }.onFailure { error ->
+                            exportStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                            DesktopDebugLog.error("CourseAnalysis", "Analysis export failed: ${error.message ?: error::class.simpleName}")
+                        }
+                    }
+                },
+                enabled = analysisResult != null
+            ) {
+                ButtonLabel("Export PDF...")
+            }
+        }
+        exportStatusText?.let { statusText ->
+            Text(
+                text = statusText,
+                color = if (statusText.startsWith("Export failed")) DesktopPalette.Error else DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
         }
         CourseAnalysisResultView(analysisResult)
     }
@@ -5627,26 +5662,28 @@ private fun CourseAnalysisResultView(result: DesktopCourseAnalysisSummary?) {
         )
         return
     }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = result.categoryName,
-            color = DesktopPalette.Black,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
-        )
-        result.providedRouteSection?.let { section ->
-            CourseAnalysisSectionView(section, includeRenumbering = true)
-        }
-        result.calculatedRouteSection?.let { section ->
-            CourseAnalysisSectionView(section, includeRenumbering = false)
-        }
-        CourseAnalysisSummarySection(result)
-        if (result.missingElements.isNotEmpty()) {
+    SelectionContainer {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
-                text = "Partial analysis: ${result.missingElements.joinToString(" ")}",
-                color = DesktopPalette.Error,
-                fontSize = 13.sp
+                text = result.categoryName,
+                color = DesktopPalette.Black,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
             )
+            result.providedRouteSection?.let { section ->
+                CourseAnalysisSectionView(section, includeRenumbering = true)
+            }
+            result.calculatedRouteSection?.let { section ->
+                CourseAnalysisSectionView(section, includeRenumbering = false)
+            }
+            CourseAnalysisSummarySection(result)
+            if (result.missingElements.isNotEmpty()) {
+                Text(
+                    text = "Partial analysis: ${result.missingElements.joinToString(" ")}",
+                    color = DesktopPalette.Error,
+                    fontSize = 13.sp
+                )
+            }
         }
     }
 }
@@ -5810,7 +5847,7 @@ private fun CourseAnalysisProfileComparison(profiles: List<DesktopCourseElevatio
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             profiles.forEach { profile ->
-                CourseAnalysisElevationProfile(profile.title, profile.profile, Modifier.width(300.dp))
+                CourseAnalysisElevationProfile(profile.title, profile.profile, profile.markers, Modifier.width(300.dp))
             }
         }
     }
@@ -5820,6 +5857,7 @@ private fun CourseAnalysisProfileComparison(profiles: List<DesktopCourseElevatio
 private fun CourseAnalysisElevationProfile(
     title: String,
     profile: List<DesktopCourseElevationProfilePoint>,
+    markers: List<DesktopCourseElevationProfileMarker>,
     modifier: Modifier = Modifier.width(620.dp)
 ) {
     if (profile.isEmpty()) {
@@ -5894,6 +5932,24 @@ private fun CourseAnalysisElevationProfile(
                     strokeWidth = 3f
                 )
             }
+            markers.forEach { marker ->
+                drawCircle(
+                    color = DesktopPalette.Warning,
+                    radius = 4.5f,
+                    center = Offset(xFor(marker.distanceMeters), yFor(marker.elevationMeters))
+                )
+            }
+        }
+        val markerText = markers.takeIf { it.isNotEmpty() }
+            ?.joinToString("  ") { "${it.label} ${twoDecimalText(it.distanceMeters / 1000.0)} km" }
+        markerText?.let {
+            Text(
+                text = it,
+                color = DesktopPalette.Black,
+                fontSize = 11.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

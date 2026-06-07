@@ -14,6 +14,7 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -24,6 +25,7 @@ data class DesktopCourseAnalysisSummary(
     val summaryExplanation: String,
     val profileComparison: List<DesktopCourseElevationProfileSummary>,
     val routeMaps: List<DesktopCourseRouteMap>,
+    val kmlFolders: List<DesktopCourseKmlExportFolder>,
     val missingElements: List<String>,
     val calculatedRouteCount: Int,
     val calculatedIdealOrder: List<String>,
@@ -64,10 +66,17 @@ data class DesktopCourseAnalysisSection(
 
 data class DesktopCourseElevationProfileSummary(
     val title: String,
-    val profile: List<DesktopCourseElevationProfilePoint>
+    val profile: List<DesktopCourseElevationProfilePoint>,
+    val markers: List<DesktopCourseElevationProfileMarker> = emptyList()
 )
 
 data class DesktopCourseElevationProfilePoint(
+    val distanceMeters: Int,
+    val elevationMeters: Double
+)
+
+data class DesktopCourseElevationProfileMarker(
+    val label: String,
     val distanceMeters: Int,
     val elevationMeters: Double
 )
@@ -83,6 +92,19 @@ data class DesktopCourseRouteMapPoint(
     val xFraction: Double,
     val yFraction: Double,
     val type: DesktopCourseRouteMapPointType
+)
+
+data class DesktopCourseKmlExportFolder(
+    val title: String,
+    val routeName: String,
+    val routePoints: List<CourseGeoPoint>,
+    val foxes: List<DesktopCourseKmlExportPoint>
+)
+
+data class DesktopCourseKmlExportPoint(
+    val label: String,
+    val originalLabel: String?,
+    val point: CourseGeoPoint
 )
 
 enum class DesktopCourseRouteMapPointType {
@@ -169,6 +191,7 @@ object DesktopCourseAnalyzer {
     private const val SPRINT_FLAT_SPEED_MPS = 4.2
     private const val FOXORING_FLAT_SPEED_MPS = 3.4
     private const val MAX_PERMUTATION_CONTROLS = 8
+    private const val CALCULATED_ROUTE_SAMPLE_METERS = 25.0
     private const val ELEVATION_CACHE_RESOLUTION_NOTE =
         "Elevation Cache resolution is the local sample-grid spacing; USGS 3DEP source DEM resolution varies, so a 3 m cache does not guarantee 3 m source terrain data everywhere."
     private const val MAP_KNOWLEDGE_LIMITATION_NOTE =
@@ -182,7 +205,8 @@ object DesktopCourseAnalyzer {
         projectFile: EventProjectFile,
         categoryId: String,
         protectedCourseInfo: ProtectedCourseInfo?,
-        protectedIdealOrderText: String?
+        protectedIdealOrderText: String?,
+        elevationLookup: (CourseGeoPoint) -> Double? = { null }
     ): DesktopCourseAnalysisSummary {
         val categoryData = projectFile.raceData.categories.first { it.category.id == categoryId }
         val category = categoryData.category
@@ -267,7 +291,7 @@ object DesktopCourseAnalyzer {
             foxes.isNotEmpty() &&
             calculatedRoutePermutationPoints.size <= MAX_PERMUTATION_CONTROLS
         ) {
-            shortestPermutation(start, finish, calculatedRoutePermutationPoints, beacon)
+            shortestPermutation(start, finish, calculatedRoutePermutationPoints, beacon, elevationLookup)
         } else {
             if (calculatedRoutePermutationPoints.size > MAX_PERMUTATION_CONTROLS) {
                 missing += "Too many course controls for exhaustive route calculation: ${calculatedRoutePermutationPoints.size}."
@@ -363,7 +387,8 @@ object DesktopCourseAnalyzer {
                         controls = routeCandidate.controls,
                         finish = finish,
                         raceType = raceType,
-                        slotOverrides = slotOverrides
+                        slotOverrides = slotOverrides,
+                        elevationLookup = elevationLookup
                     )
                 }
             }
@@ -379,7 +404,8 @@ object DesktopCourseAnalyzer {
                 controls = routeCandidate.controls,
                 finish = finish,
                 raceType = raceType,
-                slotOverrides = calculatedSlotOverrides
+                slotOverrides = calculatedSlotOverrides,
+                elevationLookup = elevationLookup
             )
         } ?: RouteTimingAnalysis.Empty
         val calculatedLegRows = calculatedTiming.legRows
@@ -389,7 +415,8 @@ object DesktopCourseAnalyzer {
                 start = start,
                 finish = finish,
                 calculatedRoute = routeCandidate,
-                timing = calculatedTiming
+                timing = calculatedTiming,
+                elevationLookup = elevationLookup
             )
         }
         val calculatedSection = calculatedRoute?.let { routeCandidate ->
@@ -456,19 +483,74 @@ object DesktopCourseAnalyzer {
             routeLengthMeters = protectedCourseInfo?.lengthMeters,
             climbMeters = protectedCourseInfo?.climbMeters,
             calculatedRouteLengthMeters = calculatedRoute?.distanceMeters?.roundToInt(),
-            calculatedRouteClimbMeters = calculatedRouteClimbMeters(start, calculatedRoute?.controls.orEmpty(), finish),
+            calculatedRouteClimbMeters = calculatedRouteClimbMeters(
+                start = start,
+                controls = calculatedRoute?.controls.orEmpty(),
+                finish = finish,
+                elevationLookup = elevationLookup
+            ),
             effectiveLengthMeters = protectedCourseInfo?.effectiveLengthMeters(),
             estimatedIdealSeconds = estimatedIdealSeconds,
             waitRows = waitRows,
             idealOrderMatches = idealOrderMatches
         )
         val profileComparison = buildList {
-            providedSection?.let { add(DesktopCourseElevationProfileSummary("Provided route", it.elevationProfile)) }
-            calculatedSection?.let { add(DesktopCourseElevationProfileSummary("Calculated route", it.elevationProfile)) }
+            providedSection?.let {
+                add(
+                    DesktopCourseElevationProfileSummary(
+                        title = "Provided route",
+                        profile = it.elevationProfile,
+                        markers = providedElevationMarkers(route, providedControls, controlsWithPoints)
+                    )
+                )
+            }
+            calculatedSection?.let {
+                add(
+                    DesktopCourseElevationProfileSummary(
+                        title = "Calculated route",
+                        profile = it.elevationProfile,
+                        markers = calculatedElevationMarkers(
+                            start = start,
+                            controls = calculatedRoute?.controls.orEmpty(),
+                            finish = finish,
+                            elevationLookup = elevationLookup
+                        )
+                    )
+                )
+            }
         }
         val routeMaps = buildList {
             providedSection?.routeMap?.let(::add)
             calculatedSection?.routeMap?.let(::add)
+        }
+        val kmlFolders = buildList {
+            if (providedSection != null) {
+                add(
+                    DesktopCourseKmlExportFolder(
+                        title = "Provided foxes and route",
+                        routeName = "Provided route",
+                        routePoints = route,
+                        foxes = providedKmlFoxes(providedControls, controlsWithPoints)
+                    )
+                )
+            }
+            calculatedRoute?.let { routeCandidate ->
+                if (calculatedSection != null && start != null && finish != null) {
+                    add(
+                        DesktopCourseKmlExportFolder(
+                            title = "Calculated foxes and route",
+                            routeName = "Calculated route",
+                            routePoints = sampledCalculatedRoutePoints(
+                                start = start,
+                                controls = routeCandidate.controls,
+                                finish = finish,
+                                elevationLookup = elevationLookup
+                            ),
+                            foxes = calculatedKmlFoxes(routeCandidate.controls, calculatedWaitRenumbering)
+                        )
+                    )
+                }
+            }
         }
 
         return DesktopCourseAnalysisSummary(
@@ -478,6 +560,7 @@ object DesktopCourseAnalyzer {
             summaryExplanation = summaryExplanation(providedSection, calculatedSection),
             profileComparison = profileComparison,
             routeMaps = routeMaps,
+            kmlFolders = kmlFolders,
             missingElements = missing.distinct(),
             calculatedRouteCount = calculatedRoute?.routeCount ?: 0,
             calculatedIdealOrder = calculatedRouteLabels(calculatedRoute?.controls.orEmpty()),
@@ -578,12 +661,18 @@ object DesktopCourseAnalyzer {
         start: CourseGeoPoint?,
         finish: CourseGeoPoint?,
         calculatedRoute: CalculatedRoute,
-        timing: RouteTimingAnalysis
+        timing: RouteTimingAnalysis,
+        elevationLookup: (CourseGeoPoint) -> Double?
     ): RouteAnalysis? {
         if (start == null || finish == null) {
             return null
         }
-        val points = listOf(start) + calculatedRoute.controls.mapNotNull { it.point } + finish
+        val points = sampledCalculatedRoutePoints(
+            start = start,
+            controls = calculatedRoute.controls,
+            finish = finish,
+            elevationLookup = elevationLookup
+        )
         if (points.size < 2) {
             return null
         }
@@ -620,9 +709,9 @@ object DesktopCourseAnalyzer {
     ): String {
         val measurement = analysis?.measurementLabel?.lowercase() ?: "the available distance metric"
         val elevationText = if (analysis?.effectiveLengthMeters != null) {
-            "Complete Elevation Cache samples were available for the calculated points, so effective length was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
+            "Complete Elevation Cache samples were available along the calculated straight-line legs, so effective length was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
         } else {
-            "Elevation data was incomplete for the calculated points, so straight-line horizontal distance was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
+            "Elevation data was incomplete along the calculated straight-line legs, so straight-line horizontal distance was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
         }
         val assignmentText = assignmentDifferenceText(providedAssignments, calculatedAssignments)
         return "This section calculates an independent ideal route by comparing $routeCount possible orders of the foxes and any spectator point, with the beacon last before the finish. " +
@@ -662,18 +751,27 @@ object DesktopCourseAnalyzer {
         start: CourseGeoPoint,
         finish: CourseGeoPoint,
         controlsToPermute: List<ControlAnalysisPoint>,
-        beacon: ControlAnalysisPoint?
+        beacon: ControlAnalysisPoint?,
+        elevationLookup: (CourseGeoPoint) -> Double?
     ): CalculatedRoute {
         var bestControls = emptyList<ControlAnalysisPoint>()
         var bestComparisonLength = Double.POSITIVE_INFINITY
         var bestHorizontalDistance = Double.POSITIVE_INFINITY
         var routeCount = 0
+        val legSampleCache = mutableMapOf<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>()
         controlsToPermute.permutations().forEach { permutation ->
             routeCount++
             val controls = if (beacon != null) permutation + beacon else permutation
             val points = listOf(start) + controls.mapNotNull { it.point } + finish
             val horizontalDistance = points.straightLineMeters()
-            val comparisonLength = effectiveLengthMetersOrNull(points) ?: horizontalDistance
+            val sampledPoints = sampledCalculatedRoutePoints(
+                start = start,
+                controls = controls,
+                finish = finish,
+                elevationLookup = elevationLookup,
+                legSampleCache = legSampleCache
+            )
+            val comparisonLength = effectiveLengthMetersOrNull(sampledPoints) ?: horizontalDistance
             if (comparisonLength < bestComparisonLength) {
                 bestComparisonLength = comparisonLength
                 bestHorizontalDistance = horizontalDistance
@@ -764,7 +862,8 @@ object DesktopCourseAnalyzer {
         controls: List<ControlAnalysisPoint>,
         finish: CourseGeoPoint?,
         raceType: RaceType,
-        slotOverrides: Map<String, RenumberingSlot> = emptyMap()
+        slotOverrides: Map<String, RenumberingSlot> = emptyMap(),
+        elevationLookup: (CourseGeoPoint) -> Double? = { null }
     ): RouteTimingAnalysis {
         if (start == null) {
             return RouteTimingAnalysis.Empty
@@ -786,8 +885,9 @@ object DesktopCourseAnalyzer {
         val arrivalSecondsByControlId = mutableMapOf<String, Int>()
         var cumulativeSeconds: Double? = 0.0
         stops.zipWithNext().forEach { (from, to) ->
-            val lengthMeters = from.point.distanceMetersTo(to.point).roundToInt()
-            val movementSeconds = segmentSeconds(from.point, to.point, raceType)
+            val legPoints = sampledLegPoints(from.point, to.point, elevationLookup)
+            val lengthMeters = legPoints.straightLineMeters().roundToInt()
+            val movementSeconds = estimatedIdealSecondsDouble(legPoints, raceType) ?: 0.0
             val startSeconds = cumulativeSeconds
             val arrivalSeconds = if (startSeconds != null) {
                 startSeconds + movementSeconds
@@ -832,16 +932,18 @@ object DesktopCourseAnalyzer {
     private fun calculatedRouteClimbMeters(
         start: CourseGeoPoint?,
         controls: List<ControlAnalysisPoint>,
-        finish: CourseGeoPoint?
+        finish: CourseGeoPoint?,
+        elevationLookup: (CourseGeoPoint) -> Double?
     ): Int? {
-        if (start == null) {
+        if (start == null || finish == null) {
             return null
         }
-        val points = buildList {
-            add(start)
-            controls.mapNotNull { it.point }.forEach(::add)
-            finish?.let(::add)
-        }
+        val points = sampledCalculatedRoutePoints(
+            start = start,
+            controls = controls,
+            finish = finish,
+            elevationLookup = elevationLookup
+        )
         if (points.size < 2 || points.any { it.elevationMeters == null }) {
             return null
         }
@@ -849,6 +951,58 @@ object DesktopCourseAnalyzer {
             .sumOf { (from, to) -> max(0.0, requireNotNull(to.elevationMeters) - requireNotNull(from.elevationMeters)) }
             .roundToInt()
     }
+
+    /**
+     * The calculated route has no imported track geometry, so the analyzer samples each straight
+     * leg at a fixed spacing and applies the local Elevation Data cache to those samples. Endpoint
+     * elevation interpolation is retained as a fallback when cache data is absent.
+     */
+    private fun sampledCalculatedRoutePoints(
+        start: CourseGeoPoint,
+        controls: List<ControlAnalysisPoint>,
+        finish: CourseGeoPoint,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        legSampleCache: MutableMap<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>? = null
+    ): List<CourseGeoPoint> {
+        val stops = buildList {
+            add(start)
+            controls.mapNotNull { it.point }.forEach(::add)
+            add(finish)
+        }
+        if (stops.size < 2) {
+            return stops.map { it.withCachedElevation(elevationLookup) }
+        }
+        val sampled = mutableListOf<CourseGeoPoint>()
+        stops.zipWithNext().forEach { (from, to) ->
+            val legPoints = legSampleCache?.getOrPut(from to to) {
+                sampledLegPoints(from, to, elevationLookup)
+            } ?: sampledLegPoints(from, to, elevationLookup)
+            if (sampled.isEmpty()) {
+                sampled += legPoints
+            } else {
+                sampled += legPoints.drop(1)
+            }
+        }
+        return sampled
+    }
+
+    private fun sampledLegPoints(
+        start: CourseGeoPoint,
+        end: CourseGeoPoint,
+        elevationLookup: (CourseGeoPoint) -> Double?
+    ): List<CourseGeoPoint> {
+        val intervals = max(
+            1,
+            ceil(start.distanceMetersTo(end) / CALCULATED_ROUTE_SAMPLE_METERS).toInt()
+        )
+        return (0..intervals).map { index ->
+            start.interpolate(end, index.toDouble() / intervals.toDouble())
+                .withCachedElevation(elevationLookup)
+        }
+    }
+
+    private fun CourseGeoPoint.withCachedElevation(elevationLookup: (CourseGeoPoint) -> Double?): CourseGeoPoint =
+        copy(elevationMeters = elevationLookup(this) ?: elevationMeters)
 
     private fun calculatedRouteLabels(controls: List<ControlAnalysisPoint>): List<String> =
         listOf("S") + controls.map { it.control.analysisRouteLabel() }
@@ -878,6 +1032,105 @@ object DesktopCourseAnalyzer {
                 elevationMeters = requireNotNull(point.elevationMeters)
             )
         }
+    }
+
+    private fun providedElevationMarkers(
+        route: List<CourseGeoPoint>,
+        controls: List<EventControl>,
+        controlsWithPoints: List<ControlAnalysisPoint>
+    ): List<DesktopCourseElevationProfileMarker> {
+        val profile = elevationProfile(route)
+        if (profile.isEmpty()) {
+            return emptyList()
+        }
+        return controls
+            .filter { it.type == ControlPointType.CONTROL }
+            .mapNotNull { control ->
+                val point = controlsWithPoints.firstOrNull { it.control.id == control.id }?.point ?: return@mapNotNull null
+                val nearestIndex = route.indices.minByOrNull { route[it].distanceMetersTo(point) } ?: return@mapNotNull null
+                val profilePoint = profile.getOrNull(nearestIndex) ?: return@mapNotNull null
+                DesktopCourseElevationProfileMarker(
+                    label = control.analysisRouteLabel(),
+                    distanceMeters = profilePoint.distanceMeters,
+                    elevationMeters = profilePoint.elevationMeters
+                )
+            }
+    }
+
+    private fun calculatedElevationMarkers(
+        start: CourseGeoPoint?,
+        controls: List<ControlAnalysisPoint>,
+        finish: CourseGeoPoint?,
+        elevationLookup: (CourseGeoPoint) -> Double?
+    ): List<DesktopCourseElevationProfileMarker> {
+        if (start == null || finish == null) {
+            return emptyList()
+        }
+        val stops = buildList {
+            add(StraightLineStop("S", start, null))
+            controls.mapNotNull { controlPoint ->
+                controlPoint.point?.let { point ->
+                    StraightLineStop(controlPoint.control.analysisRouteLabel(), point, controlPoint.control)
+                }
+            }.forEach(::add)
+            add(StraightLineStop("F", finish, null))
+        }
+        if (stops.size < 2) {
+            return emptyList()
+        }
+        val markers = mutableListOf<DesktopCourseElevationProfileMarker>()
+        var distanceMeters = 0.0
+        stops.zipWithNext().forEach { (from, to) ->
+            val legPoints = sampledLegPoints(from.point, to.point, elevationLookup)
+            distanceMeters += legPoints.straightLineMeters()
+            val markerPoint = legPoints.lastOrNull()
+            if (to.control?.type == ControlPointType.CONTROL && markerPoint?.elevationMeters != null) {
+                markers += DesktopCourseElevationProfileMarker(
+                    label = to.label,
+                    distanceMeters = distanceMeters.roundToInt(),
+                    elevationMeters = requireNotNull(markerPoint.elevationMeters)
+                )
+            }
+        }
+        return markers
+    }
+
+    private fun providedKmlFoxes(
+        controls: List<EventControl>,
+        controlsWithPoints: List<ControlAnalysisPoint>
+    ): List<DesktopCourseKmlExportPoint> =
+        controls
+            .filter { it.type == ControlPointType.CONTROL }
+            .mapNotNull { control ->
+                val point = controlsWithPoints.firstOrNull { it.control.id == control.id }?.point ?: return@mapNotNull null
+                DesktopCourseKmlExportPoint(
+                    label = control.analysisRouteLabel(),
+                    originalLabel = null,
+                    point = point
+                )
+            }
+
+    private fun calculatedKmlFoxes(
+        controls: List<ControlAnalysisPoint>,
+        renumbering: DesktopCourseWaitRenumbering?
+    ): List<DesktopCourseKmlExportPoint> {
+        val assignmentsByControlLabel = renumbering
+            ?.assignments
+            .orEmpty()
+            .associateBy { it.controlLabel }
+        return controls
+            .filter { it.control.type == ControlPointType.CONTROL }
+            .mapNotNull { controlPoint ->
+                val point = controlPoint.point ?: return@mapNotNull null
+                val originalLabel = controlPoint.control.analysisRouteLabel()
+                val suggestedLabel = assignmentsByControlLabel[controlPoint.control.publicDisplayLabel()]?.suggestedSlotLabel
+                    ?.takeIf { it.isNotBlank() }
+                DesktopCourseKmlExportPoint(
+                    label = suggestedLabel ?: originalLabel,
+                    originalLabel = originalLabel.takeIf { suggestedLabel != null && suggestedLabel != originalLabel },
+                    point = point
+                )
+            }
     }
 
     private fun climbMetersOrNull(route: List<CourseGeoPoint>): Double? {

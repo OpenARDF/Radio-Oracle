@@ -19,6 +19,7 @@ object DesktopProjectFilePaths {
     const val IOF_XML_EXTENSION = ".iof.xml"
     const val CSV_EXTENSION = ".csv"
     const val HTML_EXTENSION = ".html"
+    const val PDF_EXTENSION = ".pdf"
     const val TXT_EXTENSION = ".txt"
 
     /** Returns a path with the standard Radio-Oracle desktop Event File extension. */
@@ -52,6 +53,14 @@ object DesktopProjectFilePaths {
             ?.takeUnless { it == "Event File" }
         val stem = listOfNotNull(defaultFileStem(eventName), sanitizedSuffix).joinToString(" ")
         return withCsvExtension(Path.of(stem)).fileName.toString()
+    }
+
+    fun defaultPdfFileName(eventName: String, suffix: String? = null): String {
+        val sanitizedSuffix = suffix
+            ?.let(::defaultFileStem)
+            ?.takeUnless { it == "Event File" }
+        val stem = listOfNotNull(defaultFileStem(eventName), sanitizedSuffix).joinToString(" ")
+        return withPdfExtension(Path.of(stem)).fileName.toString()
     }
 
     fun isProjectFileName(fileName: String): Boolean =
@@ -104,6 +113,13 @@ object DesktopProjectFilePaths {
             path
         } else {
             path.resolveSibling("${path.fileName}$HTML_EXTENSION")
+        }
+
+    fun withPdfExtension(path: Path): Path =
+        if (path.fileName.toString().endsWith(PDF_EXTENSION)) {
+            path
+        } else {
+            path.resolveSibling("${path.fileName}$PDF_EXTENSION")
         }
 
     fun withTxtExtension(path: Path): Path =
@@ -216,6 +232,18 @@ object DesktopFileDialogs {
     fun chooseExportHtml(title: String): Path? =
         chooseFile(title, FileDialog.SAVE, DesktopProjectFilePaths.HTML_EXTENSION)
             ?.let(DesktopProjectFilePaths::withHtmlExtension)
+            ?.let(::confirmOverwrite)
+
+    fun chooseExportCourseAnalysisPdf(eventName: String? = null, categoryName: String? = null): Path? =
+        chooseFile(
+            title = "Export Course Analysis PDF",
+            mode = FileDialog.SAVE,
+            extension = DesktopProjectFilePaths.PDF_EXTENSION,
+            defaultFileName = eventName?.let {
+                DesktopProjectFilePaths.defaultPdfFileName(it, listOfNotNull(categoryName, "course analysis").joinToString(" "))
+            }
+        )
+            ?.let(DesktopProjectFilePaths::withPdfExtension)
             ?.let(::confirmOverwrite)
 
     fun chooseExportTxt(title: String): Path? =

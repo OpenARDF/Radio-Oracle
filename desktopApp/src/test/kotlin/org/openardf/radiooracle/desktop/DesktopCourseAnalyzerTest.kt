@@ -21,6 +21,7 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
+import java.nio.file.Files
 import kotlin.math.roundToInt
 
 class DesktopCourseAnalyzerTest {
@@ -75,6 +76,8 @@ class DesktopCourseAnalyzerTest {
         assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("true on-foot route and wait timing differ"))
         assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("movement time uses effective length for each leg"))
         assertEquals(2, summary.profileComparison.size)
+        assertEquals(listOf("31", "32", "33"), summary.profileComparison.first { it.title == "Provided route" }.markers.map { it.label })
+        assertEquals(listOf("31", "32", "33"), summary.profileComparison.first { it.title == "Calculated route" }.markers.map { it.label })
         assertEquals(2, summary.routeMaps.size)
         assertEquals(false, summary.hasMissingElevationData)
         assertNotNull(summary.estimatedIdealSeconds)
@@ -113,6 +116,29 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun calculatedRouteSamplesElevationCacheBetweenCoursePoints() {
+        val projectFile = projectFile(foxCount = 3)
+        val protectedInfo = protectedInfo(foxCount = 3)
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "31 32 33 Beacon",
+            elevationLookup = { point ->
+                val progress = ((point.longitude + 95.0) / 0.04).coerceIn(0.0, 1.0)
+                100.0 + progress * 40.0 + if (progress in 0.20..0.30) 80.0 else 0.0
+            }
+        )
+
+        val calculatedProfile = summary.profileComparison.first { it.title == "Calculated route" }
+        assertTrue(calculatedProfile.profile.size > protectedInfo.route.size)
+        assertTrue(calculatedProfile.profile.any { it.elevationMeters > 170.0 })
+        assertEquals(listOf("31", "32", "33"), calculatedProfile.markers.map { it.label })
+        assertTrue(calculatedProfile.markers.all { it.distanceMeters > 0 && it.elevationMeters > 0.0 })
+    }
+
+    @Test
     fun flagsClassicShortestRouteClimbOverSixPercent() {
         val projectFile = projectFile(foxCount = 3)
         val protectedInfo = protectedInfo(foxCount = 3).copy(
@@ -132,6 +158,39 @@ class DesktopCourseAnalyzerTest {
             "Metrics were ${summary.metrics}",
             summary.metrics.any { it.label == "Classic shortest-route climb limit" && it.status == DesktopCourseMetricStatus.Warning }
         )
+    }
+
+    @Test
+    fun exportsCourseAnalysisReportTextAndPdf() {
+        val projectFile = projectFile(foxCount = 3)
+        val protectedInfo = protectedInfo(foxCount = 3)
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "31 32 33 Beacon"
+        )
+        val reportText = DesktopCourseAnalysisExports.reportText(summary)
+
+        assertTrue(reportText.contains("Course Analyzer"))
+        assertTrue(reportText.contains("Section 2: Calculated ideal route"))
+        assertTrue(reportText.contains("Movement time:"))
+        assertTrue(reportText.contains("(waits "))
+
+        val pdfPath = Files.createTempFile("course-analysis", ".pdf")
+        val exportPaths = DesktopCourseAnalysisExports.exportPdfAndKml(pdfPath, summary)
+        val pdfBytes = Files.readAllBytes(pdfPath)
+        assertTrue(String(pdfBytes.take(8).toByteArray()).startsWith("%PDF-1.4"))
+        assertTrue(String(pdfBytes).contains("Course Analyzer"))
+        assertEquals(pdfPath, exportPaths.pdfPath)
+        assertEquals(pdfPath.resolveSibling("${pdfPath.fileName.toString().removeSuffix(".pdf")}.kml"), exportPaths.kmlPath)
+
+        val kmlText = Files.readString(exportPaths.kmlPath)
+        assertTrue(kmlText.contains("<name>Provided foxes and route</name>"))
+        assertTrue(kmlText.contains("<name>Calculated foxes and route</name>"))
+        assertTrue(kmlText.contains("<LineString>"))
+        assertTrue(kmlText.contains("<Point>"))
+        assertTrue(kmlText.contains("<name>31</name>"))
     }
 
     @Test
