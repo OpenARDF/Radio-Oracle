@@ -42,6 +42,7 @@ class DesktopCourseKmlImportTest {
         assertEquals(listOf("M21"), summary.matchedCategoryNames)
         assertEquals(2, summary.matchedControlPointCount)
         assertEquals(1, summary.importedCategoryCount)
+        assertEquals(2, summary.changedControlLocationCount)
         assertEquals(0, summary.duplicateCategoryCount)
         assertTrue(summary.routeElevationPointCount > 0)
         assertEquals(0, category.lengthMeters)
@@ -150,6 +151,82 @@ class DesktopCourseKmlImportTest {
         assertTrue(duplicateSummary.hasDuplicateMissingElevations)
         assertTrue(duplicateSummary.duplicateMissingElevationPointCount > 0)
         assertEquals(0, unexpectedElevationRequestCount)
+    }
+
+    @Test
+    fun controlsOnlyKmlUpdatesChangedStoredControlLocations() {
+        val routeKmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(routeKmlPath, sampleKml())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+        val (imported, _) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = routeKmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { 100.0 }
+        )
+        val controlsOnlyPath = Files.createTempFile("radio-oracle-controls", ".kml")
+        Files.writeString(controlsOnlyPath, controlsOnlyKml(longitude31 = -95.0100, longitude32 = -94.9980))
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = controlsOnlyPath,
+            projectFile = imported,
+            password = "course-key",
+            elevationProvider = { 222.0 }
+        )
+
+        assertEquals(0, summary.routeCount)
+        assertEquals(2, summary.matchedControlPointCount)
+        assertEquals(1, summary.changedControlLocationCount)
+        assertEquals(1, summary.controlLocationAffectedCategoryCount)
+        assertEquals(0, summary.importedCategoryCount)
+        val publicControl = updated.raceData.controls.single { it.siCode == 31 }
+        assertEquals(39.0, requireNotNull(publicControl.latitude), 0.000001)
+        assertEquals(-95.0100, requireNotNull(publicControl.longitude), 0.000001)
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            updated.raceData.categories.single().category.encryptedCourseInfo!!,
+            "course-key"
+        )
+        val protectedControl = protectedCourseInfo.controlPoints.single { it.longitude == -95.0100 }
+        assertEquals(-95.0100, protectedControl.longitude, 0.000001)
+        assertEquals(222.0, requireNotNull(protectedControl.elevationMeters), 0.001)
+        assertTrue(protectedCourseInfo.route.isEmpty())
+        assertEquals(null, protectedCourseInfo.lengthMeters)
+        assertEquals(null, protectedCourseInfo.climbMeters)
+    }
+
+    @Test
+    fun controlsOnlyKmlIgnoresUnchangedStoredControlLocations() {
+        val routeKmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(routeKmlPath, sampleKml())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+        val (imported, _) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = routeKmlPath,
+            projectFile = project,
+            password = "course-key"
+        )
+        val controlsOnlyPath = Files.createTempFile("radio-oracle-controls", ".kml")
+        Files.writeString(controlsOnlyPath, controlsOnlyKml(longitude31 = -95.0000, longitude32 = -94.9980))
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = controlsOnlyPath,
+            projectFile = imported,
+            password = "course-key",
+            elevationProvider = { error("Unchanged point placemarks should not fetch elevation") }
+        )
+
+        assertEquals(imported, updated)
+        assertEquals(0, summary.routeCount)
+        assertEquals(2, summary.matchedControlPointCount)
+        assertEquals(0, summary.changedControlLocationCount)
+        assertTrue(summary.isControlLocationNoOp)
     }
 
     @Test
@@ -557,6 +634,23 @@ class DesktopCourseKmlImportTest {
                   -94.9980,39.0000,0
                 </coordinates>
               </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun controlsOnlyKml(longitude31: Double, longitude32: Double): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>$longitude31,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>$longitude32,39.0000,0</coordinates></Point>
             </Placemark>
           </Document>
         </kml>

@@ -49,6 +49,10 @@ The Course Analyzer export button writes the PDF report and a companion KML file
 
 The `Use Calculated` button applies the calculated ideal route to the open Event File. It replaces the selected category's protected ideal order, re-encrypts the protected course data with that ideal order, and updates the affected fox public labels to the calculated numbering scheme. The change is saved in memory as an unsaved Event File change; save the Event File to persist it to disk.
 
+The password-locked protected course screen also includes an `Update Location` tool for control coordinate corrections. It updates the selected control's public latitude/longitude fields and every unlocked protected course payload that references that control, including protected control points and matching course objects. Because changing a control location makes any previously stored imported route geometry and route-derived length/climb values suspect, affected protected course payloads have stored route geometry, route length, climb, and route sample count cleared. Run Course Analyzer again after the location update to calculate the new ideal route, ideal time, fox numbering, route length, and related comparisons.
+
+KML/KMZ point placemarks can also update stored control locations during protected controls/route import. The importer matches point placemark names to existing controls by SI code, control label, or public label, compares their latitude/longitude against stored public and protected coordinates, and applies only changed locations. Controls CSV import does not contain latitude/longitude fields, so it cannot update stored control locations.
+
 ## Algorithm Limits
 
 The calculated route search is exhaustive and currently limited to eight permuted course points. This keeps the desktop UI responsive while covering normal Classic and Sprint category sizes. If a category exceeds that limit, the analyzer reports that the route calculation is too large rather than silently using a heuristic.

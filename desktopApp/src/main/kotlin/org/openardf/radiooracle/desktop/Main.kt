@@ -937,6 +937,38 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun updateProtectedControlLocation(controlId: String, latitudeText: String, longitudeText: String): String {
+            val password = protectedCoursePassword ?: run {
+                projectStatusText = "Unlock protected course order before updating control locations."
+                return projectStatusText
+            }
+            return runCatching {
+                val currentProject = projectFile
+                    ?: throw IllegalStateException("Load an Event File before updating control locations.")
+                val result = DesktopProtectedControlLocationUpdater.applyControlLocation(
+                    projectFile = currentProject,
+                    courseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                    controlId = controlId,
+                    latitudeText = latitudeText,
+                    longitudeText = longitudeText,
+                    password = password,
+                    elevationLookup = DesktopVenueElevationCache::elevationMeters
+                )
+                projectFile = projectSession.updateCurrentProject { result.projectFile }
+                protectedCourseInfoByCategoryId = result.courseInfoByCategoryId
+                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                projectStatusText = if (result.affectedCategoryCount > 0) {
+                    "Updated ${result.controlLabel} location in ${result.affectedCategoryCount} protected course(s). Stored route geometry invalidated. Unsaved changes."
+                } else {
+                    "Updated ${result.controlLabel} location. No protected courses referenced it. Unsaved changes."
+                }
+                projectStatusText
+            }.getOrElse { error ->
+                projectStatusText = "Control location update failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText
+            }
+        }
+
         fun updateProtectedCoursePassword(oldPassword: String, newPassword: String, confirmPassword: String): Boolean {
             val currentProject = projectSession.currentProject ?: return false
             val currentPassword = protectedCoursePassword ?: run {
@@ -1157,7 +1189,15 @@ fun main(args: Array<String>) = application {
                         .takeIf { it > 0 }
                         ?.let { " $it duplicate categories skipped." }
                         .orEmpty()
-                    "Imported protected controls/route data for ${review.summary.importedCategoryCount} categories.$duplicateText Unsaved changes."
+                    val locationText = review.summary.changedControlLocationCount
+                        .takeIf { it > 0 }
+                        ?.let { " Updated $it control locations." }
+                        .orEmpty()
+                    if (review.summary.importedCategoryCount == 0 && review.summary.changedControlLocationCount > 0) {
+                        "Updated ${review.summary.changedControlLocationCount} stored control locations.$duplicateText Unsaved changes."
+                    } else {
+                        "Imported protected controls/route data for ${review.summary.importedCategoryCount} categories.$locationText$duplicateText Unsaved changes."
+                    }
                 }
             }
         }
@@ -1181,7 +1221,11 @@ fun main(args: Array<String>) = application {
                         }
                     }
                     result.onSuccess { (updatedProject, summary) ->
-                        if (summary.isDuplicateOnly && !summary.hasDuplicateMissingElevations) {
+                        if (summary.isControlLocationNoOp) {
+                            pendingCourseKmlKmzImportReview = null
+                            projectStatusText =
+                                "KML/KMZ import found ${summary.matchedControlPointCount} matching controls, but no stored control locations changed."
+                        } else if (summary.isDuplicateOnly && !summary.hasDuplicateMissingElevations) {
                             pendingCourseKmlKmzImportReview = null
                             projectStatusText =
                                 "Duplicate controls/route KML/KMZ request: identical file already imported and all elevations are available."
@@ -1895,6 +1939,7 @@ fun main(args: Array<String>) = application {
             onUnlockProtectedCourseOrder = ::unlockProtectedCourseOrder,
             onUpdateProtectedIdealOrder = ::updateProtectedIdealOrder,
             onUseCalculatedCourseAnalysisRoute = ::useCalculatedCourseAnalysisRoute,
+            onUpdateProtectedControlLocation = ::updateProtectedControlLocation,
             onUpdateProtectedCoursePassword = ::updateProtectedCoursePassword,
             onLockProtectedCourseOrder = ::lockProtectedCourseOrder,
             onRenameRace = { name ->
@@ -2514,8 +2559,9 @@ private fun CourseKmlKmzImportReviewDialog(
     val categoriesText = summary.matchedCategoryNames
         .ifEmpty { listOf("None") }
         .joinToString()
+    val canFetchElevations = summary.matchedCategoryIds.isNotEmpty()
     var fetchElevations by remember(review.sourceName, summary.sourceSha256, summary.isDuplicateOnly) {
-        mutableStateOf(summary.isDuplicateOnly && summary.hasDuplicateMissingElevations)
+        mutableStateOf(canFetchElevations && summary.isDuplicateOnly && summary.hasDuplicateMissingElevations)
     }
     AlertDialog(
         onDismissRequest = onCancel,
@@ -2540,34 +2586,42 @@ private fun CourseKmlKmzImportReviewDialog(
                     Text("Duplicate categories already imported: ${summary.duplicateCategoryCount}")
                 }
                 Text("Matched controls: ${summary.matchedControlPointCount} of ${summary.controlPointCount} point placemarks")
-                Text(
-                    if (summary.duplicateMissingElevationPointCount > 0) {
-                        "Missing duplicate-file elevations: ${summary.duplicateMissingElevationPointCount} course points"
-                    } else {
-                        "Course elevations: not retrieved"
-                    }
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Checkbox(
-                        checked = fetchElevations,
-                        onCheckedChange = { fetchElevations = it }
-                    )
+                if (summary.changedControlLocationCount > 0) {
+                    Text("Control locations to update: ${summary.changedControlLocationCount}")
+                    Text("Protected courses affected by location changes: ${summary.controlLocationAffectedCategoryCount}")
+                }
+                if (canFetchElevations) {
                     Text(
-                        if (summary.isDuplicateOnly) {
-                            "Retrieve missing course elevations"
+                        if (summary.duplicateMissingElevationPointCount > 0) {
+                            "Missing duplicate-file elevations: ${summary.duplicateMissingElevationPointCount} course points"
                         } else {
-                            "Retrieve missing course elevations after keeping imported data"
+                            "Course elevations: not retrieved"
                         }
                     )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Checkbox(
+                            checked = fetchElevations,
+                            onCheckedChange = { fetchElevations = it }
+                        )
+                        Text(
+                            if (summary.isDuplicateOnly) {
+                                "Retrieve missing course elevations"
+                            } else {
+                                "Retrieve missing course elevations after keeping imported data"
+                            }
+                        )
+                    }
                 }
                 Text(
                     text = if (summary.isDuplicateOnly) {
                         "This file has the same SHA-256 hash as protected route data already stored in the Event File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Event File unchanged."
+                    } else if (summary.importedCategoryCount == 0 && summary.changedControlLocationCount > 0) {
+                        "Keep imported data to update stored control locations. Affected protected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Cancel leaves the Event File unchanged."
                     } else {
-                        "Keep imported data to update protected route facts and protected ideal order. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
+                        "Keep imported data to update protected route facts, protected ideal order, and any changed stored control locations. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
                     },
                     fontSize = 13.sp,
                     color = Color.DarkGray
@@ -2930,6 +2984,14 @@ private data class VenueElevationCacheProgressUiState(
     val cancelRequested: Boolean = false
 )
 
+private data class ProtectedControlLocationSummary(
+    val controlId: String,
+    val label: String,
+    val latitude: Double?,
+    val longitude: Double?,
+    val affectedCategoryCount: Int
+)
+
 /**
  * Builds the launchable desktop app shell.
  *
@@ -3002,6 +3064,7 @@ private fun RadioOManagerDesktopApp(
     onUnlockProtectedCourseOrder: (String) -> Boolean = { false },
     onUpdateProtectedIdealOrder: (String, String) -> Unit = { _, _ -> },
     onUseCalculatedCourseAnalysisRoute: (DesktopCourseCalculatedRouteApplication) -> String = { "" },
+    onUpdateProtectedControlLocation: (String, String, String) -> String = { _, _, _ -> "" },
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean = { _, _, _ -> false },
     onLockProtectedCourseOrder: () -> Unit = {},
     isNavActionEnabled: (DesktopNavAction) -> Boolean = { false },
@@ -3165,6 +3228,7 @@ private fun RadioOManagerDesktopApp(
                                 onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
                                 onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
                                 onUseCalculatedCourseAnalysisRoute = onUseCalculatedCourseAnalysisRoute,
+                                onUpdateProtectedControlLocation = onUpdateProtectedControlLocation,
                                 onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword,
                                 isNavActionEnabled = isNavActionEnabled,
                                 onNavAction = onNavAction
@@ -3452,6 +3516,7 @@ private fun SectionWorkspace(
     onUnlockProtectedCourseOrder: (String) -> Boolean,
     onUpdateProtectedIdealOrder: (String, String) -> Unit,
     onUseCalculatedCourseAnalysisRoute: (DesktopCourseCalculatedRouteApplication) -> String,
+    onUpdateProtectedControlLocation: (String, String, String) -> String,
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
     onNavAction: (DesktopNavAction) -> Unit
@@ -3507,8 +3572,10 @@ private fun SectionWorkspace(
                 projectFile = projectFile,
                 isUnlocked = isProtectedCourseOrderUnlocked,
                 idealOrderByCategoryId = protectedIdealOrderByCategoryId,
+                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                 onUnlock = onUnlockProtectedCourseOrder,
                 onUpdateIdealOrder = onUpdateProtectedIdealOrder,
+                onUpdateControlLocation = onUpdateProtectedControlLocation,
                 onUpdatePassword = onUpdateProtectedCoursePassword
             )
         }
@@ -5250,8 +5317,13 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
         modifier = Modifier.fillMaxWidth()
     ) {
         Button(onClick = onSelectFile) {
-            ButtonLabel("Select File...")
+            ButtonLabel("Import Controls KML/KMZ...")
         }
+        Text(
+            text = "Controls CSV files update control identity fields only: SI code, role, scoring, public label, and notes. They do not contain latitude/longitude columns and cannot update stored control locations. Use KML/KMZ point placemarks for control coordinate updates.",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
         Text(
             text = "KML/KMZ file requirements",
             color = DesktopPalette.Black,
@@ -5262,8 +5334,9 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
             KmlImportInstruction("Use KML Placemark elements. Each imported Placemark must have a nonblank name.")
             KmlImportInstruction("Control points are Point placemarks. Their names must match existing Event File controls.")
             KmlImportInstruction("Control point names may use an SI code, control label, or public label.")
+            KmlImportInstruction("Matched point placemarks update stored control locations when their latitude/longitude differs from stored data.")
             KmlImportInstruction("Use visible labels such as 31, M, Beacon, S, or Spectator; do not add type suffixes to SI codes.")
-            KmlImportInstruction("Routes are LineString placemarks with at least two coordinates.")
+            KmlImportInstruction("Routes are LineString placemarks with at least two coordinates. A KML/KMZ with point placemarks only can still update changed control locations.")
             KmlImportInstruction("Each route LineString name must match an Event File category name, such as M21.")
             KmlImportInstruction("Matching ignores case, trims leading/trailing spaces, and collapses repeated whitespace.")
             KmlImportInstruction("Coordinates are read as longitude,latitude,elevation. Elevation may be omitted.")
@@ -6548,14 +6621,17 @@ private fun ProtectedCourseOrderPanel(
     projectFile: EventProjectFile,
     isUnlocked: Boolean,
     idealOrderByCategoryId: Map<String, String>,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onUnlock: (String) -> Boolean,
     onUpdateIdealOrder: (String, String) -> Unit,
+    onUpdateControlLocation: (String, String, String) -> String,
     onUpdatePassword: (String, String, String) -> Boolean
 ) {
     var passwordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
     var oldPasswordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
     var newPasswordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
     var confirmPasswordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
+    var locationStatusText by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf<String?>(null) }
 
     if (!isUnlocked) {
         Row(
@@ -6644,6 +6720,13 @@ private fun ProtectedCourseOrderPanel(
                 ButtonLabel("Update Password")
             }
         }
+        ProtectedControlLocationUpdatePanel(
+            projectFile = projectFile,
+            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+            statusText = locationStatusText,
+            onStatusTextChange = { locationStatusText = it },
+            onUpdateControlLocation = onUpdateControlLocation
+        )
         Box(
             modifier = Modifier
                 .width(fixedTableWidth(ProtectedCourseOrderTableColumns))
@@ -6663,6 +6746,131 @@ private fun ProtectedCourseOrderPanel(
                     onUpdateIdealOrder(categoryId, idealOrderText)
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun ProtectedControlLocationUpdatePanel(
+    projectFile: EventProjectFile,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    statusText: String?,
+    onStatusTextChange: (String?) -> Unit,
+    onUpdateControlLocation: (String, String, String) -> String
+) {
+    val summaries = remember(projectFile.raceData.controls, protectedCourseInfoByCategoryId) {
+        protectedControlLocationSummaries(projectFile, protectedCourseInfoByCategoryId)
+    }
+    var selectedControlId by remember(projectFile.raceData.race.id, summaries.map { it.controlId }) {
+        mutableStateOf(summaries.firstOrNull()?.controlId)
+    }
+    val selectedSummary = summaries.firstOrNull { it.controlId == selectedControlId }
+    var latitudeDraft by remember(projectFile.raceData.race.id, selectedControlId, selectedSummary?.latitude) {
+        mutableStateOf(selectedSummary?.latitude?.decimalText().orEmpty())
+    }
+    var longitudeDraft by remember(projectFile.raceData.race.id, selectedControlId, selectedSummary?.longitude) {
+        mutableStateOf(selectedSummary?.longitude?.decimalText().orEmpty())
+    }
+    val parsedLatitude = latitudeDraft.trim().toDoubleOrNull()
+    val parsedLongitude = longitudeDraft.trim().toDoubleOrNull()
+    val canApply = selectedControlId != null &&
+        parsedLatitude != null &&
+        parsedLatitude in -90.0..90.0 &&
+        parsedLongitude != null &&
+        parsedLongitude in -180.0..180.0
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Update control location",
+            color = DesktopPalette.Black,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ProtectedControlLocationPicker(
+                selectedControlId = selectedControlId,
+                summaries = summaries,
+                onControlSelected = { controlId ->
+                    selectedControlId = controlId
+                    onStatusTextChange(null)
+                },
+                modifier = Modifier.width(260.dp)
+            )
+            TextField(
+                value = latitudeDraft,
+                onValueChange = { latitudeDraft = it },
+                label = { Text("Latitude") },
+                singleLine = true,
+                modifier = Modifier.width(150.dp)
+            )
+            TextField(
+                value = longitudeDraft,
+                onValueChange = { longitudeDraft = it },
+                label = { Text("Longitude") },
+                singleLine = true,
+                modifier = Modifier.width(150.dp)
+            )
+            Button(
+                onClick = {
+                    val controlId = selectedControlId ?: return@Button
+                    onStatusTextChange(onUpdateControlLocation(controlId, latitudeDraft, longitudeDraft))
+                },
+                enabled = canApply
+            ) {
+                ButtonLabel("Update Location")
+            }
+        }
+        selectedSummary?.let { summary ->
+            Text(
+                text = "Protected courses using this control: ${summary.affectedCategoryCount}",
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
+        statusText?.let { text ->
+            Text(
+                text = text,
+                color = if (text.startsWith("Control location update failed")) DesktopPalette.Error else DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProtectedControlLocationPicker(
+    selectedControlId: String?,
+    summaries: List<ProtectedControlLocationSummary>,
+    onControlSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = summaries.firstOrNull { it.controlId == selectedControlId }?.label ?: "Select control"
+    Box(modifier = modifier) {
+        Button(
+            onClick = { expanded = true },
+            enabled = summaries.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(selectedLabel)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            summaries.forEach { summary ->
+                DropdownMenuItem(
+                    onClick = {
+                        expanded = false
+                        onControlSelected(summary.controlId)
+                    }
+                ) {
+                    Text(summary.label)
+                }
+            }
         }
     }
 }
@@ -7575,6 +7783,33 @@ private fun selectedProtectedIdealOrderControlIds(
     runCatching {
         ProtectedIdealOrderRules.resolveControlIds(idealOrderText, controls).toSet()
     }.getOrDefault(emptySet())
+
+private fun protectedControlLocationSummaries(
+    projectFile: EventProjectFile,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+): List<ProtectedControlLocationSummary> {
+    val protectedControlPointsById = protectedCourseInfoByCategoryId.values
+        .flatMap { it.controlPoints }
+        .groupBy { it.controlId }
+    val affectedCategoryCounts = projectFile.raceData.controls.associate { control ->
+        control.id to protectedCourseInfoByCategoryId.values.count { courseInfo ->
+            courseInfo.controlPoints.any { it.controlId == control.id } ||
+                courseInfo.courseObjects.any { it.id == control.id }
+        }
+    }
+    return projectFile.raceData.controls
+        .sortedWith(compareBy<EventControl> { it.siCode }.thenBy { it.publicDisplayLabel() })
+        .map { control ->
+            val protectedPoint = protectedControlPointsById[control.id]?.firstOrNull()
+            ProtectedControlLocationSummary(
+                controlId = control.id,
+                label = control.publicDisplayLabel().ifBlank { control.siCode.toString() },
+                latitude = protectedPoint?.latitude ?: control.latitude,
+                longitude = protectedPoint?.longitude ?: control.longitude,
+                affectedCategoryCount = affectedCategoryCounts[control.id] ?: 0
+            )
+        }
+}
 
 private fun EventControlDetails.publicDisplayLabel(): String =
     publicLabel.trim().ifEmpty { label }

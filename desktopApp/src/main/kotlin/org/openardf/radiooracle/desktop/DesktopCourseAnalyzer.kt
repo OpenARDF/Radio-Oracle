@@ -295,8 +295,12 @@ object DesktopCourseAnalyzer {
             missing += "Location latitude/longitude is missing for control ${it.control.publicDisplayLabel()}."
         }
 
-        val start = route.firstOrNull()
-        val finish = route.lastOrNull()
+        val start = route.firstOrNull() ?: protectedCourseInfo?.courseObjects
+            ?.firstOrNull { it.type == ProtectedCourseObjectType.START }
+            ?.toGeoPoint()
+        val finish = route.lastOrNull() ?: protectedCourseInfo?.courseObjects
+            ?.firstOrNull { it.type == ProtectedCourseObjectType.FINISH }
+            ?.toGeoPoint()
         val foxes = controlsWithPoints
             .filter { it.control.type == ControlPointType.CONTROL && it.point != null }
         val spectator = controlsWithPoints

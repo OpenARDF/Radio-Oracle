@@ -332,6 +332,52 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun updatesProtectedControlLocationAndInvalidatesStoredRouteGeometry() {
+        val projectFile = projectFile(foxCount = 3)
+        val protectedInfo = protectedInfo(foxCount = 3)
+
+        val result = DesktopProtectedControlLocationUpdater.applyControlLocation(
+            projectFile = projectFile,
+            courseInfoByCategoryId = mapOf(CATEGORY_ID to protectedInfo),
+            controlId = "control-2",
+            latitudeText = "39.123456",
+            longitudeText = "-95.654321",
+            password = "test-password",
+            elevationLookup = { 222.0 }
+        )
+
+        val updatedControl = result.projectFile.raceData.controls.single { it.id == "control-2" }
+        assertEquals(39.123456, requireNotNull(updatedControl.latitude), 0.000001)
+        assertEquals(-95.654321, requireNotNull(updatedControl.longitude), 0.000001)
+        assertEquals(listOf("M21"), result.affectedCategoryNames)
+        val updatedCategory = result.projectFile.raceData.categories.single { it.category.id == CATEGORY_ID }.category
+        val decryptedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updatedCategory.encryptedCourseInfo),
+            "test-password"
+        )
+        val updatedProtectedControl = decryptedCourseInfo.controlPoints.single { it.controlId == "control-2" }
+        assertEquals(39.123456, updatedProtectedControl.latitude, 0.000001)
+        assertEquals(-95.654321, updatedProtectedControl.longitude, 0.000001)
+        assertEquals(222.0, requireNotNull(updatedProtectedControl.elevationMeters), 0.001)
+        val updatedCourseObject = decryptedCourseInfo.courseObjects.single { it.id == "control-2" }
+        assertEquals(39.123456, updatedCourseObject.latitude, 0.000001)
+        assertEquals(-95.654321, updatedCourseObject.longitude, 0.000001)
+        assertEquals(null, decryptedCourseInfo.lengthMeters)
+        assertEquals(null, decryptedCourseInfo.climbMeters)
+        assertEquals(0, decryptedCourseInfo.sampledPointCount)
+        assertEquals(emptyList<ProtectedCourseRoutePoint>(), decryptedCourseInfo.route)
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = result.projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = decryptedCourseInfo,
+            protectedIdealOrderText = decryptedCourseInfo.idealOrder
+        )
+        assertEquals(null, summary.providedRouteSection)
+        assertNotNull(summary.calculatedRouteSection)
+    }
+
+    @Test
     fun reportsMissingProtectedDataBeforePartialAnalysis() {
         val projectFile = projectFile(foxCount = 3)
 

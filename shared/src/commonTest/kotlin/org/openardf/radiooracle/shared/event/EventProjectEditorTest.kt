@@ -414,6 +414,38 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun preservesControlCoordinatesWhenUpdatingVisibleFields() {
+        val original = projectFile(
+            controls = listOf(
+                EventControl(
+                    id = "control-31",
+                    raceId = "race",
+                    label = "31",
+                    siCode = 31,
+                    type = ControlPointType.CONTROL,
+                    latitude = 39.123456,
+                    longitude = -95.654321
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.updateControl(
+            original,
+            controlId = "control-31",
+            label = "Fox 1",
+            siCode = "31",
+            type = ControlPointType.CONTROL,
+            scored = true,
+            publicLabel = "31",
+            notes = "moved"
+        )
+
+        val control = updated.raceData.controls.single()
+        assertEquals(39.123456, requireNotNull(control.latitude), 0.000001)
+        assertEquals(-95.654321, requireNotNull(control.longitude), 0.000001)
+    }
+
+    @Test
     fun updatesCategoryPhysicalStats() {
         val original = projectFile(categories = listOf(categoryData("cat-1", "M21")))
 

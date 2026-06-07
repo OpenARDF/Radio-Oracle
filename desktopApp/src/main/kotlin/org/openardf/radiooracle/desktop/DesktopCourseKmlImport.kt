@@ -46,15 +46,27 @@ data class DesktopCourseKmlImportSummary(
     val matchedCategoryNames: List<String>,
     val routeElevationPointCount: Int,
     val importedCategoryCount: Int,
+    val changedControlLocationCount: Int,
+    val controlLocationAffectedCategoryCount: Int,
     val duplicateCategoryCount: Int,
     val duplicateMissingElevationPointCount: Int,
     val sourceSha256: String
 ) {
     val isDuplicateOnly: Boolean
-        get() = matchedCategoryCount > 0 && importedCategoryCount == 0 && duplicateCategoryCount == matchedCategoryCount
+        get() = matchedCategoryCount > 0 &&
+            importedCategoryCount == 0 &&
+            changedControlLocationCount == 0 &&
+            duplicateCategoryCount == matchedCategoryCount
 
     val hasDuplicateMissingElevations: Boolean
         get() = duplicateMissingElevationPointCount > 0
+
+    val isControlLocationNoOp: Boolean
+        get() = matchedCategoryCount == 0 &&
+            importedCategoryCount == 0 &&
+            duplicateCategoryCount == 0 &&
+            changedControlLocationCount == 0 &&
+            matchedControlPointCount > 0
 }
 
 data class DesktopRouteElevationProgress(
@@ -93,7 +105,30 @@ object DesktopCourseKmlImporter {
         val controls = matchedControls(courseData.controls, projectFile.raceData.controls)
         val controlsByLabel = controls.associateBy { it.label.normalizedCourseName() }
         val categories = projectFile.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
+        val courseInfoByCategoryId = projectFile.raceData.categories.mapNotNull { categoryData ->
+            categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
+                categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
+            }
+        }.toMap()
+        val controlLocationUpdates = controlLocationUpdates(
+            matchedControls = controls,
+            projectFile = projectFile,
+            courseInfoByCategoryId = courseInfoByCategoryId
+        )
+        val locationUpdateResult = controlLocationUpdates.takeIf { it.isNotEmpty() }?.let { updates ->
+            DesktopProtectedControlLocationUpdater.applyControlLocations(
+                projectFile = projectFile,
+                courseInfoByCategoryId = courseInfoByCategoryId,
+                updates = updates,
+                password = password,
+                elevationLookup = elevationProvider,
+                invalidateAllReferencedProtectedCourses = false
+            )
+        }
         var updatedProject = projectFile
+        locationUpdateResult?.let { result ->
+            updatedProject = result.projectFile
+        }
         var matchedCategoryCount = 0
         var importedCategoryCount = 0
         var duplicateCategoryCount = 0
@@ -207,8 +242,8 @@ object DesktopCourseKmlImporter {
             importedCategoryCount++
         }
 
-        require(matchedCategoryCount > 0) {
-            "No KML/KMZ route names matched Event File category names."
+        require(matchedCategoryCount > 0 || controls.isNotEmpty()) {
+            "No KML/KMZ route names matched Event File category names, and no point placemarks matched existing controls."
         }
 
         val summary = DesktopCourseKmlImportSummary(
@@ -220,13 +255,15 @@ object DesktopCourseKmlImporter {
             matchedCategoryNames = matchedCategoryNames,
             routeElevationPointCount = routeElevationPointCount,
             importedCategoryCount = importedCategoryCount,
+            changedControlLocationCount = controlLocationUpdates.size,
+            controlLocationAffectedCategoryCount = locationUpdateResult?.affectedCategoryCount ?: 0,
             duplicateCategoryCount = duplicateCategoryCount,
             duplicateMissingElevationPointCount = duplicateMissingElevationPointCount,
             sourceSha256 = sourceSha256
         )
         DesktopDebugLog.info(
             "CourseKml",
-            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
+            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} changedControlLocations=${summary.changedControlLocationCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
         )
         return updatedProject to summary
     }
@@ -504,9 +541,6 @@ object DesktopCourseKmlImporter {
         require(controls.isNotEmpty()) {
             "KML/KMZ file did not contain named control point placemarks."
         }
-        require(routes.isNotEmpty()) {
-            "KML/KMZ file did not contain named category route LineString placemarks."
-        }
         return DesktopCourseKmlData(controls = controls, routes = routes)
     }
 
@@ -571,6 +605,49 @@ object DesktopCourseKmlImporter {
             }
         }
     }
+
+    private fun controlLocationUpdates(
+        matchedControls: List<CourseMatchedControl>,
+        projectFile: EventProjectFile,
+        courseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+    ): List<DesktopProtectedControlLocationUpdate> {
+        val eventControlsById = projectFile.raceData.controls.associateBy { it.id }
+        return matchedControls
+            .distinctBy { it.controlId }
+            .mapNotNull { matchedControl ->
+                val eventControl = eventControlsById[matchedControl.controlId] ?: return@mapNotNull null
+                val eventLatitude = eventControl.latitude
+                val eventLongitude = eventControl.longitude
+                val publicLocationDiffers = eventLatitude == null ||
+                    eventLongitude == null ||
+                    !sameCoordinate(eventLatitude, matchedControl.point.latitude) ||
+                    !sameCoordinate(eventLongitude, matchedControl.point.longitude)
+                val protectedLocationDiffers = courseInfoByCategoryId.values.any { courseInfo ->
+                    courseInfo.controlPoints.any { controlPoint ->
+                        controlPoint.controlId == matchedControl.controlId &&
+                            (!sameCoordinate(controlPoint.latitude, matchedControl.point.latitude) ||
+                                !sameCoordinate(controlPoint.longitude, matchedControl.point.longitude))
+                    } ||
+                        courseInfo.courseObjects.any { courseObject ->
+                            courseObject.id == matchedControl.controlId &&
+                                (!sameCoordinate(courseObject.latitude, matchedControl.point.latitude) ||
+                                    !sameCoordinate(courseObject.longitude, matchedControl.point.longitude))
+                        }
+                }
+                if (publicLocationDiffers || protectedLocationDiffers) {
+                    DesktopProtectedControlLocationUpdate(
+                        controlId = matchedControl.controlId,
+                        latitude = matchedControl.point.latitude,
+                        longitude = matchedControl.point.longitude
+                    )
+                } else {
+                    null
+                }
+            }
+    }
+
+    private fun sameCoordinate(first: Double, second: Double): Boolean =
+        kotlin.math.abs(first - second) < 0.0000001
 
     private fun idealOrderForRoute(route: List<CourseGeoPoint>, controls: List<CourseMatchedControl>): String =
         controls
