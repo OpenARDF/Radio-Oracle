@@ -347,8 +347,8 @@ class DesktopCourseAnalyzerTest {
         )
 
         val updatedControl = result.projectFile.raceData.controls.single { it.id == "control-2" }
-        assertEquals(39.123456, requireNotNull(updatedControl.latitude), 0.000001)
-        assertEquals(-95.654321, requireNotNull(updatedControl.longitude), 0.000001)
+        assertEquals(null, updatedControl.latitude)
+        assertEquals(null, updatedControl.longitude)
         assertEquals(listOf("M21"), result.affectedCategoryNames)
         val updatedCategory = result.projectFile.raceData.categories.single { it.category.id == CATEGORY_ID }.category
         val decryptedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(

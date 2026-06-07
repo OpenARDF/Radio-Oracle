@@ -70,9 +70,8 @@ object DesktopProtectedControlLocationUpdater {
             elevationLookup(CourseGeoPoint(latitude = update.latitude, longitude = update.longitude))
         }
         val updatedControls = projectFile.raceData.controls.map { eventControl ->
-            val update = updatesByControlId[eventControl.id]
-            if (update != null) {
-                eventControl.copy(latitude = update.latitude, longitude = update.longitude)
+            if (eventControl.latitude != null || eventControl.longitude != null) {
+                eventControl.copy(latitude = null, longitude = null)
             } else {
                 eventControl
             }

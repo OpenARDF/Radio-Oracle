@@ -42,7 +42,7 @@ class DesktopCourseKmlImportTest {
         assertEquals(listOf("M21"), summary.matchedCategoryNames)
         assertEquals(2, summary.matchedControlPointCount)
         assertEquals(1, summary.importedCategoryCount)
-        assertEquals(2, summary.changedControlLocationCount)
+        assertEquals(0, summary.changedControlLocationCount)
         assertEquals(0, summary.duplicateCategoryCount)
         assertTrue(summary.routeElevationPointCount > 0)
         assertEquals(0, category.lengthMeters)
@@ -65,6 +65,7 @@ class DesktopCourseKmlImportTest {
         assertTrue(protectedCourseInfo.route.isNotEmpty())
         assertEquals(listOf("Start", "1", "2", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
         assertTrue(protectedCourseInfo.courseObjects.all { it.elevationMeters != null })
+        assertTrue(updated.raceData.controls.all { it.latitude == null && it.longitude == null })
     }
 
     @Test
@@ -184,8 +185,8 @@ class DesktopCourseKmlImportTest {
         assertEquals(1, summary.controlLocationAffectedCategoryCount)
         assertEquals(0, summary.importedCategoryCount)
         val publicControl = updated.raceData.controls.single { it.siCode == 31 }
-        assertEquals(39.0, requireNotNull(publicControl.latitude), 0.000001)
-        assertEquals(-95.0100, requireNotNull(publicControl.longitude), 0.000001)
+        assertEquals(null, publicControl.latitude)
+        assertEquals(null, publicControl.longitude)
         val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
             updated.raceData.categories.single().category.encryptedCourseInfo!!,
             "course-key"

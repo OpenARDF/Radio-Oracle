@@ -112,7 +112,6 @@ object DesktopCourseKmlImporter {
         }.toMap()
         val controlLocationUpdates = controlLocationUpdates(
             matchedControls = controls,
-            projectFile = projectFile,
             courseInfoByCategoryId = courseInfoByCategoryId
         )
         val locationUpdateResult = controlLocationUpdates.takeIf { it.isNotEmpty() }?.let { updates ->
@@ -608,20 +607,11 @@ object DesktopCourseKmlImporter {
 
     private fun controlLocationUpdates(
         matchedControls: List<CourseMatchedControl>,
-        projectFile: EventProjectFile,
         courseInfoByCategoryId: Map<String, ProtectedCourseInfo>
     ): List<DesktopProtectedControlLocationUpdate> {
-        val eventControlsById = projectFile.raceData.controls.associateBy { it.id }
         return matchedControls
             .distinctBy { it.controlId }
             .mapNotNull { matchedControl ->
-                val eventControl = eventControlsById[matchedControl.controlId] ?: return@mapNotNull null
-                val eventLatitude = eventControl.latitude
-                val eventLongitude = eventControl.longitude
-                val publicLocationDiffers = eventLatitude == null ||
-                    eventLongitude == null ||
-                    !sameCoordinate(eventLatitude, matchedControl.point.latitude) ||
-                    !sameCoordinate(eventLongitude, matchedControl.point.longitude)
                 val protectedLocationDiffers = courseInfoByCategoryId.values.any { courseInfo ->
                     courseInfo.controlPoints.any { controlPoint ->
                         controlPoint.controlId == matchedControl.controlId &&
@@ -634,7 +624,7 @@ object DesktopCourseKmlImporter {
                                     !sameCoordinate(courseObject.longitude, matchedControl.point.longitude))
                         }
                 }
-                if (publicLocationDiffers || protectedLocationDiffers) {
+                if (protectedLocationDiffers) {
                     DesktopProtectedControlLocationUpdate(
                         controlId = matchedControl.controlId,
                         latitude = matchedControl.point.latitude,

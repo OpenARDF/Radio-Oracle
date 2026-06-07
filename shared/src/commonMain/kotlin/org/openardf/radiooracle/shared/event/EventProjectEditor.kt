@@ -411,7 +411,6 @@ object EventProjectEditor {
         require(controlPosition >= 0) {
             "Control was not found: $controlId"
         }
-        val existingControl = projectFile.raceData.controls[controlPosition]
         val updatedControl = validatedControl(
             projectFile = projectFile,
             existingControlPosition = controlPosition,
@@ -422,9 +421,6 @@ object EventProjectEditor {
             scored = scored,
             publicLabel = publicLabel,
             notes = notes
-        ).copy(
-            latitude = existingControl.latitude,
-            longitude = existingControl.longitude
         )
         return projectFile.copy(
             raceData = projectFile.raceData.copy(

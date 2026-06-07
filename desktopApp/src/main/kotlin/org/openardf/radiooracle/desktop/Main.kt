@@ -1194,7 +1194,7 @@ fun main(args: Array<String>) = application {
                         ?.let { " Updated $it control locations." }
                         .orEmpty()
                     if (review.summary.importedCategoryCount == 0 && review.summary.changedControlLocationCount > 0) {
-                        "Updated ${review.summary.changedControlLocationCount} stored control locations.$duplicateText Unsaved changes."
+                        "Updated ${review.summary.changedControlLocationCount} protected control locations.$duplicateText Unsaved changes."
                     } else {
                         "Imported protected controls/route data for ${review.summary.importedCategoryCount} categories.$locationText$duplicateText Unsaved changes."
                     }
@@ -1224,7 +1224,7 @@ fun main(args: Array<String>) = application {
                         if (summary.isControlLocationNoOp) {
                             pendingCourseKmlKmzImportReview = null
                             projectStatusText =
-                                "KML/KMZ import found ${summary.matchedControlPointCount} matching controls, but no stored control locations changed."
+                                "KML/KMZ import found ${summary.matchedControlPointCount} matching controls, but no protected control locations changed."
                         } else if (summary.isDuplicateOnly && !summary.hasDuplicateMissingElevations) {
                             pendingCourseKmlKmzImportReview = null
                             projectStatusText =
@@ -2619,9 +2619,9 @@ private fun CourseKmlKmzImportReviewDialog(
                     text = if (summary.isDuplicateOnly) {
                         "This file has the same SHA-256 hash as protected route data already stored in the Event File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Event File unchanged."
                     } else if (summary.importedCategoryCount == 0 && summary.changedControlLocationCount > 0) {
-                        "Keep imported data to update stored control locations. Affected protected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Cancel leaves the Event File unchanged."
+                        "Keep imported data to update protected control locations. Affected protected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Cancel leaves the Event File unchanged."
                     } else {
-                        "Keep imported data to update protected route facts, protected ideal order, and any changed stored control locations. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
+                        "Keep imported data to update protected route facts, protected ideal order, and any changed protected control locations. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
                     },
                     fontSize = 13.sp,
                     color = Color.DarkGray
@@ -5320,7 +5320,7 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
             ButtonLabel("Import Controls KML/KMZ...")
         }
         Text(
-            text = "Controls CSV files update control identity fields only: SI code, role, scoring, public label, and notes. They do not contain latitude/longitude columns and cannot update stored control locations. Use KML/KMZ point placemarks for control coordinate updates.",
+            text = "Controls CSV files update control identity fields only: SI code, role, scoring, public label, and notes. They do not contain latitude/longitude columns and cannot update protected control locations. Control coordinates remain password-protected and are not written to public control fields.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -5334,9 +5334,9 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
             KmlImportInstruction("Use KML Placemark elements. Each imported Placemark must have a nonblank name.")
             KmlImportInstruction("Control points are Point placemarks. Their names must match existing Event File controls.")
             KmlImportInstruction("Control point names may use an SI code, control label, or public label.")
-            KmlImportInstruction("Matched point placemarks update stored control locations when their latitude/longitude differs from stored data.")
+            KmlImportInstruction("Matched point placemarks update protected control locations when their latitude/longitude differs from encrypted protected data.")
             KmlImportInstruction("Use visible labels such as 31, M, Beacon, S, or Spectator; do not add type suffixes to SI codes.")
-            KmlImportInstruction("Routes are LineString placemarks with at least two coordinates. A KML/KMZ with point placemarks only can still update changed control locations.")
+            KmlImportInstruction("Routes are LineString placemarks with at least two coordinates. A KML/KMZ with point placemarks only can still update changed protected control locations.")
             KmlImportInstruction("Each route LineString name must match an Event File category name, such as M21.")
             KmlImportInstruction("Matching ignores case, trims leading/trailing spaces, and collapses repeated whitespace.")
             KmlImportInstruction("Coordinates are read as longitude,latitude,elevation. Elevation may be omitted.")
@@ -7804,8 +7804,8 @@ private fun protectedControlLocationSummaries(
             ProtectedControlLocationSummary(
                 controlId = control.id,
                 label = control.publicDisplayLabel().ifBlank { control.siCode.toString() },
-                latitude = protectedPoint?.latitude ?: control.latitude,
-                longitude = protectedPoint?.longitude ?: control.longitude,
+                latitude = protectedPoint?.latitude,
+                longitude = protectedPoint?.longitude,
                 affectedCategoryCount = affectedCategoryCounts[control.id] ?: 0
             )
         }

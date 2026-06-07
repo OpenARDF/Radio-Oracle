@@ -28,7 +28,7 @@ object EventProjectFileJson {
 
     /** Encodes an Event File using the stable, shared desktop-beta JSON format. */
     fun encode(projectFile: EventProjectFile): String =
-        json.encodeToString(projectFile)
+        json.encodeToString(clearPublicControlLocations(projectFile))
 
     /**
      * Decodes an Event File and rejects schema versions this build does not support.
@@ -57,11 +57,25 @@ object EventProjectFileJson {
         } else {
             projectFile
         }
-        return if (needsControlScoringMigration) {
+        val migratedProjectFile = if (needsControlScoringMigration) {
             EventControlCatalog.migrateLegacyControlScoring(backfilledProjectFile)
         } else {
             backfilledProjectFile
         }
+        return clearPublicControlLocations(migratedProjectFile)
+    }
+
+    private fun clearPublicControlLocations(projectFile: EventProjectFile): EventProjectFile {
+        if (projectFile.raceData.controls.none { it.latitude != null || it.longitude != null }) {
+            return projectFile
+        }
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                controls = projectFile.raceData.controls.map { control ->
+                    control.copy(latitude = null, longitude = null)
+                }
+            )
+        )
     }
 }
 

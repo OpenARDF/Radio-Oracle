@@ -60,6 +60,37 @@ class EventProjectFileTest {
     }
 
     @Test
+    fun clearsPublicControlCoordinatesWhenEncodingAndDecoding() {
+        val projectFile = EventProjectFile(
+            raceData = raceData().copy(
+                controls = listOf(
+                    EventControl(
+                        id = "control-31",
+                        raceId = "race",
+                        label = "FOX 1",
+                        siCode = 31,
+                        type = ControlPointType.CONTROL,
+                        latitude = 39.123456,
+                        longitude = -95.654321
+                    )
+                )
+            )
+        )
+
+        val encoded = EventProjectFileJson.encode(projectFile)
+        val decoded = EventProjectFileJson.decode(
+            encoded
+                .replace("\"latitude\": null", "\"latitude\": 39.123456")
+                .replace("\"longitude\": null", "\"longitude\": -95.654321")
+        )
+
+        assertFalse(encoded.contains("39.123456"))
+        assertFalse(encoded.contains("-95.654321"))
+        assertEquals(null, decoded.raceData.controls.single().latitude)
+        assertEquals(null, decoded.raceData.controls.single().longitude)
+    }
+
+    @Test
     fun backfillsControlsWhenOlderProjectFileOmitsControlCatalog() {
         val encoded = EventProjectFileJson.encode(EventProjectFile(raceData = raceData()))
             .replace(

@@ -414,7 +414,7 @@ class EventProjectEditorTest {
     }
 
     @Test
-    fun preservesControlCoordinatesWhenUpdatingVisibleFields() {
+    fun clearsPublicControlCoordinatesWhenUpdatingVisibleFields() {
         val original = projectFile(
             controls = listOf(
                 EventControl(
@@ -441,8 +441,8 @@ class EventProjectEditorTest {
         )
 
         val control = updated.raceData.controls.single()
-        assertEquals(39.123456, requireNotNull(control.latitude), 0.000001)
-        assertEquals(-95.654321, requireNotNull(control.longitude), 0.000001)
+        assertEquals(null, control.latitude)
+        assertEquals(null, control.longitude)
     }
 
     @Test

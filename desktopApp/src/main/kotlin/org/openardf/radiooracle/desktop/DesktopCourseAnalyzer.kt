@@ -273,9 +273,6 @@ object DesktopCourseAnalyzer {
                 control = control,
                 point = protectedControlPointsById[control.id]?.toGeoPoint()
                     ?: protectedPointForControl(control, protectedCoordinateLookup)
-                    ?: control.latitude?.let { latitude ->
-                        control.longitude?.let { longitude -> CourseGeoPoint(latitude, longitude) }
-                    }
             )
         }
         val missingCoordinateControls = controlsWithPoints.filter { it.point == null }
