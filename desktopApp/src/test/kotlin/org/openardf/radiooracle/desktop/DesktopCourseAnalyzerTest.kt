@@ -296,7 +296,7 @@ class DesktopCourseAnalyzerTest {
     fun appliesCalculatedRouteAndNumberingToSavedCourseData() {
         val projectFile = projectFile(
             foxCount = 3,
-            publicLabels = listOf("33", "32", "31")
+            publicLabels = listOf("Fox 3", "Fox 2", "Fox 1")
         )
         val protectedInfo = protectedInfo(foxCount = 3)
         val summary = DesktopCourseAnalyzer.analyze(
@@ -317,6 +317,11 @@ class DesktopCourseAnalyzerTest {
         val updatedCategory = updatedProject.raceData.categories.single { it.category.id == CATEGORY_ID }.category
         assertEquals(application.idealOrderText, DesktopProtectedCourseOrder.decrypt(requireNotNull(updatedCategory.encryptedIdealOrder), "test-password"))
         val decryptedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(requireNotNull(updatedCategory.encryptedCourseInfo), "test-password")
+        assertTrue(application.idealOrderText.contains("'Fox "))
+        assertEquals(
+            application.foxAssignments.map { it.calculatedLabel } + "Beacon",
+            org.openardf.radiooracle.shared.course.ControlPointRules.tokenizeControlPoints(application.idealOrderText)
+        )
         assertEquals(application.idealOrderText, decryptedCourseInfo.idealOrder)
         assertEquals(application.routeLengthMeters, decryptedCourseInfo.lengthMeters)
         assertEquals(application.climbMeters, decryptedCourseInfo.climbMeters)
@@ -329,6 +334,14 @@ class DesktopCourseAnalyzerTest {
         application.foxAssignments.forEach { assignment ->
             assertEquals(assignment.calculatedLabel, publicLabelsByControlId[assignment.controlId])
         }
+
+        val updatedSummary = DesktopCourseAnalyzer.analyze(
+            projectFile = updatedProject,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = decryptedCourseInfo,
+            protectedIdealOrderText = DesktopProtectedCourseOrder.decrypt(requireNotNull(updatedCategory.encryptedIdealOrder), "test-password")
+        )
+        assertTrue(updatedSummary.missingElements.none { it.contains("Protected ideal order") })
     }
 
     @Test

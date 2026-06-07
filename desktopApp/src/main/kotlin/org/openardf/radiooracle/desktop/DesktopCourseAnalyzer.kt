@@ -1228,12 +1228,12 @@ object DesktopCourseAnalyzer {
         routeLengthMeters: Int?,
         climbMeters: Int?
     ): DesktopCourseCalculatedRouteApplication {
-        val controlLabels = controls.map { controlPoint ->
-            labelOverrides[controlPoint.control.id] ?: controlPoint.control.analysisRouteLabel()
+        val idealOrderTokens = controls.map { controlPoint ->
+            controlPoint.control.idealOrderToken(labelOverrides[controlPoint.control.id])
         }
         return DesktopCourseCalculatedRouteApplication(
             categoryId = categoryId,
-            idealOrderText = controlLabels.joinToString(" "),
+            idealOrderText = idealOrderTokens.joinToString(" "),
             routePoints = routePoints,
             routeLengthMeters = routeLengthMeters,
             climbMeters = climbMeters,
@@ -1599,6 +1599,22 @@ object DesktopCourseAnalyzer {
             ControlPointType.SEPARATOR -> publicDisplayLabel().takeIf { it.isNotBlank() } ?: "Spectator"
             else -> publicDisplayLabel()
         }
+
+    private fun EventControl.idealOrderToken(labelOverride: String?): String =
+        quoteIdealOrderToken(labelOverride?.takeIf { it.isNotBlank() } ?: publicDisplayLabel())
+
+    private fun quoteIdealOrderToken(token: String): String {
+        val trimmedToken = token.trim()
+        val needsQuoting = trimmedToken.any { it.isWhitespace() || it == ',' || it == ';' }
+        if (!needsQuoting) {
+            return trimmedToken
+        }
+        return when {
+            '\'' !in trimmedToken -> "'$trimmedToken'"
+            '"' !in trimmedToken -> "\"$trimmedToken\""
+            else -> trimmedToken
+        }
+    }
 
     private fun EventControl.routeMapType(): DesktopCourseRouteMapPointType =
         when (type) {
