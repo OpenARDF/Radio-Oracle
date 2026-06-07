@@ -150,7 +150,7 @@ class DesktopSportIdentCardBlockReader(
         }
         val readout = when (inserted.cardType) {
             SportIdentProtocol.SI_CARD5 -> readSi5ReadoutOnOpenPort(port)
-            SportIdentProtocol.SI_CARD6 -> SportIdentCardReadoutParser.parseSi6(combineBlocksForAndroidParser(blocks))
+            SportIdentProtocol.SI_CARD6 -> SportIdentCardReadoutParser.parseSi6(combineSi6BlocksForAndroidParser(blocks))
             SportIdentProtocol.SI_CARD8_9_SIAC -> SportIdentCardReadoutParser.parseSi8Or9OrSiac(
                 combineBlocksForAndroidParser(blocks)
             )
@@ -205,18 +205,28 @@ class DesktopSportIdentCardBlockReader(
     }
 
     private fun readSi6BlocksOnOpenPort(port: DesktopSerialPort): List<SportIdentCardBlock> =
-        SI6_BLOCK_READ_ORDER.map { blockNumber ->
-            readCardBlockOnOpenPort(
-                port = port,
-                blockNumber = blockNumber,
-                command = SportIdentProtocol.GET_SI_CARD6,
-                parser = SportIdentCardBlockParser::si6Block
-            )
+        buildList {
+            val stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_FRAME_BYTES)
+            for (blockNumber in SI6_BLOCK_READ_ORDER) {
+                val block = readCardBlockOnOpenPort(
+                    port = port,
+                    stream = stream,
+                    blockNumber = blockNumber,
+                    command = SportIdentProtocol.GET_SI_CARD6,
+                    parser = SportIdentCardBlockParser::si6Block
+                )
+                add(block)
+                if (blockNumber != 0 && block.data.endsWithEmptyPunch()) {
+                    break
+                }
+            }
         }
 
     private fun readSi8Or9OrSiacBlocksOnOpenPort(port: DesktopSerialPort): List<SportIdentCardBlock> {
+        val stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_FRAME_BYTES)
         val firstBlock = readCardBlockOnOpenPort(
             port = port,
+            stream = stream,
             blockNumber = 0,
             command = SportIdentProtocol.GET_SI_CARD8_9_SIAC,
             parser = SportIdentCardBlockParser::si8Or9OrSiacBlock
@@ -225,6 +235,7 @@ class DesktopSportIdentCardBlockReader(
             (4..7).map {
                 readCardBlockOnOpenPort(
                     port = port,
+                    stream = stream,
                     blockNumber = it,
                     command = SportIdentProtocol.GET_SI_CARD8_9_SIAC,
                     parser = SportIdentCardBlockParser::si8Or9OrSiacBlock
@@ -234,6 +245,7 @@ class DesktopSportIdentCardBlockReader(
             listOf(
                 readCardBlockOnOpenPort(
                     port = port,
+                    stream = stream,
                     blockNumber = 1,
                     command = SportIdentProtocol.GET_SI_CARD8_9_SIAC,
                     parser = SportIdentCardBlockParser::si8Or9OrSiacBlock
@@ -245,6 +257,21 @@ class DesktopSportIdentCardBlockReader(
 
     private fun readCardBlockOnOpenPort(
         port: DesktopSerialPort,
+        blockNumber: Int,
+        command: Byte,
+        parser: (Int, org.openardf.radiooracle.shared.sportident.SportIdentFrame) -> SportIdentCardBlock?
+    ): SportIdentCardBlock =
+        readCardBlockOnOpenPort(
+            port = port,
+            stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_FRAME_BYTES),
+            blockNumber = blockNumber,
+            command = command,
+            parser = parser
+        )
+
+    private fun readCardBlockOnOpenPort(
+        port: DesktopSerialPort,
+        stream: DesktopSportIdentFrameStream,
         blockNumber: Int,
         command: Byte,
         parser: (Int, org.openardf.radiooracle.shared.sportident.SportIdentFrame) -> SportIdentCardBlock?
@@ -261,7 +288,6 @@ class DesktopSportIdentCardBlockReader(
 
         val deadline = System.currentTimeMillis() + readTimeoutMs
         var lastUnexpectedShape: String? = null
-        val stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_FRAME_BYTES)
         while (System.currentTimeMillis() < deadline) {
             val frame = stream.nextFrame(deadline, requireValidCrc = false) ?: break
             val event = SportIdentCardEventParser.fromFrame(frame)
@@ -332,6 +358,16 @@ private fun ByteArray.cardNumber(): Int =
         -1
     }
 
+private fun ByteArray.endsWithEmptyPunch(): Boolean {
+    if (size < 4) {
+        return false
+    }
+    return this[size - 4] == SI_CARD_EMPTY_BYTE &&
+        this[size - 3] == SI_CARD_EMPTY_BYTE &&
+        this[size - 2] == SI_CARD_EMPTY_BYTE &&
+        this[size - 1] == SI_CARD_EMPTY_BYTE
+}
+
 private fun combineBlocksForAndroidParser(blocks: List<SportIdentCardBlock>): ByteArray =
     ByteArray(blocks.size * SportIdentProtocol.SI_CARD_BLOCK_SIZE).also { combined ->
         blocks.forEachIndexed { index, block ->
@@ -341,3 +377,22 @@ private fun combineBlocksForAndroidParser(blocks: List<SportIdentCardBlock>): By
             )
         }
     }
+
+private fun combineSi6BlocksForAndroidParser(blocks: List<SportIdentCardBlock>): ByteArray {
+    val blockByNumber = blocks.associateBy { it.blockNumber }
+    return ByteArray(blocks.size * SportIdentProtocol.SI_CARD_BLOCK_SIZE) { SI_CARD_EMPTY_BYTE }.also { combined ->
+        blockByNumber[0]?.data?.copyInto(
+            destination = combined,
+            destinationOffset = 0
+        )
+        SI6_PUNCH_BLOCK_READ_ORDER.forEachIndexed { index, blockNumber ->
+            blockByNumber[blockNumber]?.data?.copyInto(
+                destination = combined,
+                destinationOffset = (index + 1) * SportIdentProtocol.SI_CARD_BLOCK_SIZE
+            )
+        }
+    }
+}
+
+private val SI_CARD_EMPTY_BYTE = 0xEE.toByte()
+private val SI6_PUNCH_BLOCK_READ_ORDER = listOf(6, 7, 2, 3, 4, 5)

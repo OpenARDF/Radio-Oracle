@@ -29,7 +29,7 @@ private class JSerialCommDesktopSerialPort(
         port.setComPortParameters(baudRate, 8, SerialPort.ONE_STOP_BIT, SerialPort.NO_PARITY)
         port.setFlowControl(SerialPort.FLOW_CONTROL_DISABLED)
         port.setComPortTimeouts(
-            SerialPort.TIMEOUT_READ_BLOCKING or SerialPort.TIMEOUT_WRITE_BLOCKING,
+            SerialPort.TIMEOUT_READ_SEMI_BLOCKING or SerialPort.TIMEOUT_WRITE_BLOCKING,
             readTimeoutMs,
             writeTimeoutMs
         )
