@@ -65,9 +65,9 @@ object DesktopCourseAnalysisExports {
         appendLegRows(section.legRows)
         if (includeRenumbering) {
             appendLine()
-            appendLine("Provided-route wait-time analysis")
+            appendLine("Stored-route wait-time analysis")
             appendWrapped(
-                "This subsection estimates Classic fox arrival phases on the provided route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure."
+                "This subsection estimates Classic fox arrival phases on the stored route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure."
             )
             appendWaitRows("Current wait times", section.waitRows)
             section.waitRenumbering?.let { appendWaitRenumbering(it) }
@@ -81,7 +81,7 @@ object DesktopCourseAnalysisExports {
         appendWrapped(result.summaryExplanation)
         appendLine("Routes compared: ${result.calculatedRouteCount}")
         appendLine("Calculated ideal route (calculated fox numbering): ${result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
-        appendLine("Provided ideal route: ${result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
+        appendLine("Stored ideal route: ${result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
         appendLine(
             "Order comparison: " + when (result.idealOrderMatches) {
                 true -> "Agrees"
@@ -90,8 +90,8 @@ object DesktopCourseAnalysisExports {
             }
         )
         appendLine("Calculated straight-line length: ${kilometersText(result.calculatedStraightLineMeters)}")
-        appendLine("Provided straight-line length: ${kilometersText(result.providedStraightLineMeters)}")
-        appendLine("Provided route length: ${kilometersText(result.routeLengthMeters)}")
+        appendLine("Stored straight-line length: ${kilometersText(result.providedStraightLineMeters)}")
+        appendLine("Stored route length: ${kilometersText(result.routeLengthMeters)}")
         appendLine("Climb: ${climbText(result.climbMeters)}")
         appendLine("Effective length: ${kilometersText(result.effectiveLengthMeters)}")
         appendLine("Estimated ideal time: ${secondsText(result.estimatedIdealSeconds)}")
@@ -145,12 +145,12 @@ object DesktopCourseAnalysisExports {
             appendLine("""<kml xmlns="http://www.opengis.net/kml/2.2">""")
             appendLine("  <Document>")
             appendLine("    <name>${xmlText("Course Analyzer - ${result.categoryName}")}</name>")
-            appendLine("    <Style id=\"providedRouteStyle\"><LineStyle><color>ff0057b8</color><width>4</width></LineStyle></Style>")
+            appendLine("    <Style id=\"storedRouteStyle\"><LineStyle><color>ff0057b8</color><width>4</width></LineStyle></Style>")
             appendLine("    <Style id=\"calculatedRouteStyle\"><LineStyle><color>ff00a676</color><width>4</width></LineStyle></Style>")
             appendLine("    <Style id=\"foxStyle\"><IconStyle><scale>1.1</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle></Style>")
             result.kmlFolders.forEach { folder ->
-                val routeStyleId = if (folder.title.startsWith("Provided")) {
-                    "providedRouteStyle"
+                val routeStyleId = if (folder.title.startsWith("Stored")) {
+                    "storedRouteStyle"
                 } else {
                     "calculatedRouteStyle"
                 }

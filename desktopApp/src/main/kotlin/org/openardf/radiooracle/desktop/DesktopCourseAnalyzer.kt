@@ -26,6 +26,7 @@ data class DesktopCourseAnalysisSummary(
     val profileComparison: List<DesktopCourseElevationProfileSummary>,
     val routeMaps: List<DesktopCourseRouteMap>,
     val kmlFolders: List<DesktopCourseKmlExportFolder>,
+    val calculatedRouteApplication: DesktopCourseCalculatedRouteApplication?,
     val missingElements: List<String>,
     val calculatedRouteCount: Int,
     val calculatedIdealOrder: List<String>,
@@ -108,6 +109,21 @@ data class DesktopCourseKmlExportPoint(
     val label: String,
     val originalLabel: String?,
     val point: CourseGeoPoint
+)
+
+data class DesktopCourseCalculatedRouteApplication(
+    val categoryId: String,
+    val idealOrderText: String,
+    val routePoints: List<CourseGeoPoint>,
+    val routeLengthMeters: Int?,
+    val climbMeters: Int?,
+    val foxAssignments: List<DesktopCourseCalculatedFoxAssignment>
+)
+
+data class DesktopCourseCalculatedFoxAssignment(
+    val controlId: String,
+    val originalLabel: String,
+    val calculatedLabel: String
 )
 
 enum class DesktopCourseRouteMapPointType {
@@ -440,7 +456,7 @@ object DesktopCourseAnalyzer {
                     calculatedAssignments = optimizedAssignments
                 ),
                 routeOrder = calculatedRouteLabels(routeCandidate.controls),
-                routeOrderLabel = "Route order (provided fox numbering)",
+                routeOrderLabel = "Route order (stored fox numbering)",
                 secondaryRouteOrder = calculatedRouteLabels(routeCandidate.controls, calculatedLabelOverrides),
                 secondaryRouteOrderLabel = "Route order (calculated fox numbering)",
                 comparisonLengthMeters = calculatedRouteAnalysis?.comparisonLengthMeters?.roundToInt(),
@@ -465,7 +481,7 @@ object DesktopCourseAnalyzer {
         }
         val providedSection = providedRouteAnalysis?.let { analysis ->
             DesktopCourseAnalysisSection(
-                title = "Section 1: Provided route analysis",
+                title = "Section 1: Stored route analysis",
                 explanation = providedSectionExplanation(analysis),
                 routeOrder = eventControlRouteLabels(providedControls),
                 comparisonLengthMeters = analysis.comparisonLengthMeters.roundToInt(),
@@ -480,7 +496,7 @@ object DesktopCourseAnalyzer {
                 waitRenumbering = waitRenumbering,
                 elevationProfile = analysis.elevationProfile,
                 routeMap = routeMap(
-                    title = "Provided route",
+                    title = "Stored route",
                     start = start,
                     finish = finish,
                     controls = providedControls.mapNotNull { control ->
@@ -509,7 +525,7 @@ object DesktopCourseAnalyzer {
             providedSection?.let {
                 add(
                     DesktopCourseElevationProfileSummary(
-                        title = "Provided route",
+                        title = "Stored route",
                         profile = it.elevationProfile,
                         markers = providedElevationMarkers(route, providedControls, controlsWithPoints)
                     )
@@ -539,8 +555,8 @@ object DesktopCourseAnalyzer {
             if (providedSection != null) {
                 add(
                     DesktopCourseKmlExportFolder(
-                        title = "Provided foxes and route",
-                        routeName = "Provided route",
+                        title = "Stored foxes and route",
+                        routeName = "Stored route",
                         routePoints = route,
                         foxes = providedKmlFoxes(providedControls, controlsWithPoints)
                     )
@@ -564,6 +580,25 @@ object DesktopCourseAnalyzer {
                 }
             }
         }
+        val calculatedRouteApplication = calculatedRoute?.let { routeCandidate ->
+            calculatedRouteApplication(
+                categoryId = categoryId,
+                controls = routeCandidate.controls,
+                labelOverrides = calculatedLabelOverrides,
+                routePoints = if (start != null && finish != null) {
+                    sampledCalculatedRoutePoints(
+                        start = start,
+                        controls = routeCandidate.controls,
+                        finish = finish,
+                        elevationLookup = elevationLookup
+                    )
+                } else {
+                    emptyList()
+                },
+                routeLengthMeters = calculatedRouteAnalysis?.routeLengthMeters?.roundToInt(),
+                climbMeters = calculatedRouteAnalysis?.climbMeters?.roundToInt()
+            )
+        }
 
         return DesktopCourseAnalysisSummary(
             categoryName = category.name,
@@ -573,6 +608,7 @@ object DesktopCourseAnalyzer {
             profileComparison = profileComparison,
             routeMaps = routeMaps,
             kmlFolders = kmlFolders,
+            calculatedRouteApplication = calculatedRouteApplication,
             missingElements = missing.distinct(),
             calculatedRouteCount = calculatedRoute?.routeCount ?: 0,
             calculatedIdealOrder = calculatedRouteLabels(calculatedRoute?.controls.orEmpty(), calculatedLabelOverrides),
@@ -634,7 +670,7 @@ object DesktopCourseAnalyzer {
     }
 
     /**
-     * Section 1 analyzes the organizer-provided route. The imported route geometry is used for
+     * Section 1 analyzes the stored route. The imported route geometry is used for
      * actual length, climb, profile, and split estimates; if every route sample has elevation, the
      * comparison metric becomes effective length, defined by the referenced course-design guide as
      * length plus ten times total climb. If elevations are incomplete, the analyzer still runs and
@@ -742,7 +778,7 @@ object DesktopCourseAnalyzer {
             providedByControl[calculated.controlLabel]?.suggestedSlotLabel != calculated.suggestedSlotLabel
         }
         return if (differences.isEmpty()) {
-            "The optimized fox assignments match the provided-route assignment check."
+            "The optimized fox assignments match the stored-route assignment check."
         } else {
             "Compared with Section 1, the calculated route changes optimized assignments for " +
                 differences.joinToString { "${it.controlLabel} -> ${it.suggestedSlotLabel}" } + "."
@@ -754,9 +790,9 @@ object DesktopCourseAnalyzer {
         calculatedSection: DesktopCourseAnalysisSection?
     ): String =
         if (providedSection != null && calculatedSection != null) {
-            "This summary compares the provided route with the independently calculated candidate, including their primary distance metric, route order, estimated time, wait-time optimization, elevation profiles, and 2D point depictions."
+            "This summary compares the stored route with the independently calculated candidate, including their primary distance metric, route order, estimated time, wait-time optimization, elevation profiles, and 2D point depictions."
         } else {
-            "This summary reports the independently calculated route candidate because no provided ideal route was available for Section 1."
+            "This summary reports the independently calculated route candidate because no stored ideal route was available for Section 1."
         }
 
     private fun shortestPermutation(
@@ -1183,6 +1219,35 @@ object DesktopCourseAnalyzer {
         }.toMap()
     }
 
+    private fun calculatedRouteApplication(
+        categoryId: String,
+        controls: List<ControlAnalysisPoint>,
+        labelOverrides: Map<String, String>,
+        routePoints: List<CourseGeoPoint>,
+        routeLengthMeters: Int?,
+        climbMeters: Int?
+    ): DesktopCourseCalculatedRouteApplication {
+        val controlLabels = controls.map { controlPoint ->
+            labelOverrides[controlPoint.control.id] ?: controlPoint.control.analysisRouteLabel()
+        }
+        return DesktopCourseCalculatedRouteApplication(
+            categoryId = categoryId,
+            idealOrderText = controlLabels.joinToString(" "),
+            routePoints = routePoints,
+            routeLengthMeters = routeLengthMeters,
+            climbMeters = climbMeters,
+            foxAssignments = controls
+                .filter { it.control.type == ControlPointType.CONTROL }
+                .map { controlPoint ->
+                    DesktopCourseCalculatedFoxAssignment(
+                        controlId = controlPoint.control.id,
+                        originalLabel = controlPoint.control.analysisRouteLabel(),
+                        calculatedLabel = labelOverrides[controlPoint.control.id] ?: controlPoint.control.analysisRouteLabel()
+                    )
+                }
+        )
+    }
+
     private fun climbMetersOrNull(route: List<CourseGeoPoint>): Double? {
         if (route.size < 2 || route.any { it.elevationMeters == null }) {
             return null
@@ -1410,7 +1475,7 @@ object DesktopCourseAnalyzer {
         return buildList {
             add(
                 DesktopCourseGoodnessMetric(
-                    "Calculated route agrees with provided ideal order",
+                    "Calculated route agrees with stored ideal order",
                     idealOrderMatches?.let { if (it) "Yes" else "No" } ?: "Unknown",
                     when (idealOrderMatches) {
                         true -> DesktopCourseMetricStatus.Good

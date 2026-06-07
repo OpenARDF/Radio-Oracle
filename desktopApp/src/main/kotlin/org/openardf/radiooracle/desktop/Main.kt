@@ -909,6 +909,34 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun useCalculatedCourseAnalysisRoute(application: DesktopCourseCalculatedRouteApplication): String {
+            val password = protectedCoursePassword ?: run {
+                projectStatusText = "Unlock protected course order before applying calculated route."
+                return projectStatusText
+            }
+            return runCatching {
+                val currentProject = projectFile
+                    ?: throw IllegalStateException("Load an Event File before applying calculated route.")
+                val currentCourseInfo = protectedCourseInfoByCategoryId[application.categoryId]
+                    ?: throw IllegalStateException("Protected course data is missing for the selected category.")
+                val (updatedProject, updatedCourseInfo) = DesktopCourseAnalysisApplier.applyCalculatedRoute(
+                    projectFile = currentProject,
+                    courseInfo = currentCourseInfo,
+                    application = application,
+                    password = password
+                )
+                projectFile = projectSession.updateCurrentProject { updatedProject }
+                protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId + (application.categoryId to application.idealOrderText)
+                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId + (application.categoryId to updatedCourseInfo)
+                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                projectStatusText = "Applied calculated route and fox numbering. Unsaved changes."
+                projectStatusText
+            }.getOrElse { error ->
+                projectStatusText = "Apply calculated route failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText
+            }
+        }
+
         fun updateProtectedCoursePassword(oldPassword: String, newPassword: String, confirmPassword: String): Boolean {
             val currentProject = projectSession.currentProject ?: return false
             val currentPassword = protectedCoursePassword ?: run {
@@ -1866,6 +1894,7 @@ fun main(args: Array<String>) = application {
             elevationCacheRefreshToken = venueElevationCacheRefreshToken,
             onUnlockProtectedCourseOrder = ::unlockProtectedCourseOrder,
             onUpdateProtectedIdealOrder = ::updateProtectedIdealOrder,
+            onUseCalculatedCourseAnalysisRoute = ::useCalculatedCourseAnalysisRoute,
             onUpdateProtectedCoursePassword = ::updateProtectedCoursePassword,
             onLockProtectedCourseOrder = ::lockProtectedCourseOrder,
             onRenameRace = { name ->
@@ -2972,6 +3001,7 @@ private fun RadioOManagerDesktopApp(
     elevationCacheRefreshToken: Int = 0,
     onUnlockProtectedCourseOrder: (String) -> Boolean = { false },
     onUpdateProtectedIdealOrder: (String, String) -> Unit = { _, _ -> },
+    onUseCalculatedCourseAnalysisRoute: (DesktopCourseCalculatedRouteApplication) -> String = { "" },
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean = { _, _, _ -> false },
     onLockProtectedCourseOrder: () -> Unit = {},
     isNavActionEnabled: (DesktopNavAction) -> Boolean = { false },
@@ -3134,6 +3164,7 @@ private fun RadioOManagerDesktopApp(
                                 elevationCacheRefreshToken = elevationCacheRefreshToken,
                                 onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
                                 onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
+                                onUseCalculatedCourseAnalysisRoute = onUseCalculatedCourseAnalysisRoute,
                                 onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword,
                                 isNavActionEnabled = isNavActionEnabled,
                                 onNavAction = onNavAction
@@ -3420,6 +3451,7 @@ private fun SectionWorkspace(
     elevationCacheRefreshToken: Int,
     onUnlockProtectedCourseOrder: (String) -> Boolean,
     onUpdateProtectedIdealOrder: (String, String) -> Unit,
+    onUseCalculatedCourseAnalysisRoute: (DesktopCourseCalculatedRouteApplication) -> String,
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
     onNavAction: (DesktopNavAction) -> Unit
@@ -3510,7 +3542,8 @@ private fun SectionWorkspace(
                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                 onRetrieveMissingElevations = onRetrieveMissingCourseElevations,
-                onUnlock = onUnlockProtectedCourseOrder
+                onUnlock = onUnlockProtectedCourseOrder,
+                onUseCalculatedRoute = onUseCalculatedCourseAnalysisRoute
             )
         }
         if (section == DesktopSection.ElevationCache && projectFile != null) {
@@ -5426,7 +5459,8 @@ private fun CourseAnalysisPanel(
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onRetrieveMissingElevations: (String) -> Unit,
-    onUnlock: (String) -> Boolean
+    onUnlock: (String) -> Boolean,
+    onUseCalculatedRoute: (DesktopCourseCalculatedRouteApplication) -> String
 ) {
     var passwordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
     if (!isUnlocked) {
@@ -5474,6 +5508,7 @@ private fun CourseAnalysisPanel(
         mutableStateOf<CourseAnalysisMissingDataPrompt?>(null)
     }
     var exportStatusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
+    var applyStatusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
 
     fun analyzeSelectedCourse(): DesktopCourseAnalysisSummary? {
         val categoryId = effectiveSelectedCategoryId ?: return null
@@ -5510,12 +5545,15 @@ private fun CourseAnalysisPanel(
                     analysisResult = null
                     pendingMissingDataResult = null
                     exportStatusText = null
+                    applyStatusText = null
                 },
                 modifier = Modifier.width(280.dp)
             )
             Button(
                 onClick = {
                     val categoryId = effectiveSelectedCategoryId ?: return@Button
+                    exportStatusText = null
+                    applyStatusText = null
                     analyzeSelectedCourse()?.let { summary ->
                         if (summary.missingElements.isEmpty()) {
                             analysisResult = summary
@@ -5554,6 +5592,23 @@ private fun CourseAnalysisPanel(
             ) {
                 ButtonLabel("Export PDF...")
             }
+            Button(
+                onClick = {
+                    val application = analysisResult?.calculatedRouteApplication ?: return@Button
+                    applyStatusText = onUseCalculatedRoute(application)
+                    analysisResult = null
+                },
+                enabled = analysisResult?.calculatedRouteApplication != null
+            ) {
+                ButtonLabel("Use Calculated")
+            }
+        }
+        applyStatusText?.let { statusText ->
+            Text(
+                text = statusText,
+                color = if (statusText.startsWith("Apply calculated route failed")) DesktopPalette.Error else DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
         }
         exportStatusText?.let { statusText ->
             Text(
@@ -5743,13 +5798,13 @@ private fun CourseAnalysisProvidedRouteWaitAnalysis(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            text = "Provided-route wait-time analysis",
+            text = "Stored-route wait-time analysis",
             color = DesktopPalette.Black,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "This subsection estimates Classic fox arrival phases on the provided route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. It uses the same elite baseline speed and effective-length movement estimates as the route analysis. Because map passability, fatigue, and category age/gender speed differences are not modeled, barriers, slow terrain, and competitor profile can shift real arrival times and change wait-time outcomes.",
+            text = "This subsection estimates Classic fox arrival phases on the stored route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. It uses the same elite baseline speed and effective-length movement estimates as the route analysis. Because map passability, fatigue, and category age/gender speed differences are not modeled, barriers, slow terrain, and competitor profile can shift real arrival times and change wait-time outcomes.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -5786,7 +5841,7 @@ private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         CourseAnalysisRow("Routes compared", result.calculatedRouteCount.toString())
         CourseAnalysisRow("Calculated ideal route (calculated fox numbering)", result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
-        CourseAnalysisRow("Provided ideal route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
+        CourseAnalysisRow("Stored ideal route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
         CourseAnalysisRow(
             "Order comparison",
             when (result.idealOrderMatches) {
@@ -5796,8 +5851,8 @@ private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
             }
         )
         CourseAnalysisRow("Calculated straight-line length", kilometersText(result.calculatedStraightLineMeters))
-        CourseAnalysisRow("Provided straight-line length", kilometersText(result.providedStraightLineMeters))
-        CourseAnalysisRow("Provided route length", kilometersText(result.routeLengthMeters))
+        CourseAnalysisRow("Stored straight-line length", kilometersText(result.providedStraightLineMeters))
+        CourseAnalysisRow("Stored route length", kilometersText(result.routeLengthMeters))
         CourseAnalysisRow("Climb", climbText(result.climbMeters))
         CourseAnalysisRow("Effective length", kilometersText(result.effectiveLengthMeters))
         CourseAnalysisRow("Estimated ideal time", secondsText(result.estimatedIdealSeconds))
@@ -6125,7 +6180,7 @@ private fun CourseAnalysisWaitRenumbering(renumbering: DesktopCourseWaitRenumber
         )
         Text(
             text = if (renumbering.improvesWait) {
-                "Renumbering the fox transmit slots is likely to reduce wait time by ${secondsText(renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)} on this provided route."
+                "Renumbering the fox transmit slots is likely to reduce wait time by ${secondsText(renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)} on this stored route."
             } else {
                 "Current fox numbering is already best for ideal-route wait time."
             },

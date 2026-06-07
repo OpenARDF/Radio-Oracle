@@ -66,7 +66,7 @@ class DesktopCourseAnalyzerTest {
         assertEquals(5_000, summary.effectiveLengthMeters)
         assertNotNull(summary.providedRouteSection)
         assertNotNull(summary.calculatedRouteSection)
-        assertEquals("Section 1: Provided route analysis", summary.providedRouteSection?.title)
+        assertEquals("Section 1: Stored route analysis", summary.providedRouteSection?.title)
         assertEquals("Section 2: Calculated ideal route", summary.calculatedRouteSection?.title)
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("effective length"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("does not guarantee 3 m source terrain data"))
@@ -78,7 +78,7 @@ class DesktopCourseAnalyzerTest {
         assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("true on-foot route and wait timing differ"))
         assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("movement time uses effective length for each leg"))
         assertEquals(2, summary.profileComparison.size)
-        assertEquals(listOf("31", "32", "33"), summary.profileComparison.first { it.title == "Provided route" }.markers.map { it.label })
+        assertEquals(listOf("31", "32", "33"), summary.profileComparison.first { it.title == "Stored route" }.markers.map { it.label })
         val calculatedRouteOrder = requireNotNull(summary.calculatedRouteSection).secondaryRouteOrder
         val calculatedFoxLabels = calculatedRouteOrder.drop(1).dropLast(1)
         assertEquals(calculatedFoxLabels, summary.profileComparison.first { it.title == "Calculated route (calculated fox numbering)" }.markers.map { it.label })
@@ -197,7 +197,7 @@ class DesktopCourseAnalyzerTest {
 
         assertTrue(reportText.contains("Course Analyzer"))
         assertTrue(reportText.contains("Section 2: Calculated ideal route"))
-        assertTrue(reportText.contains("Route order (provided fox numbering):"))
+        assertTrue(reportText.contains("Route order (stored fox numbering):"))
         assertTrue(reportText.contains("Route order (calculated fox numbering):"))
         assertTrue(reportText.contains("Calculated ideal route (calculated fox numbering):"))
         assertTrue(reportText.contains("Movement time:"))
@@ -222,7 +222,7 @@ class DesktopCourseAnalyzerTest {
         assertPdfInfoCanRead(multiPagePdfPath)
 
         val kmlText = Files.readString(exportPaths.kmlPath)
-        assertTrue(kmlText.contains("<name>Provided foxes and route</name>"))
+        assertTrue(kmlText.contains("<name>Stored foxes and route</name>"))
         assertTrue(kmlText.contains("<name>Calculated foxes and route</name>"))
         assertTrue(kmlText.contains("<LineString>"))
         assertTrue(kmlText.contains("<Point>"))
@@ -272,7 +272,7 @@ class DesktopCourseAnalyzerTest {
         val section = requireNotNull(summary.calculatedRouteSection)
         val renumbering = requireNotNull(section.waitRenumbering)
         val calculatedOrder = listOf("S") + renumbering.assignments.map { it.suggestedSlotLabel } + "B"
-        assertEquals("Route order (provided fox numbering)", section.routeOrderLabel)
+        assertEquals("Route order (stored fox numbering)", section.routeOrderLabel)
         assertEquals(listOf("S", "33", "32", "31", "B"), section.routeOrder)
         assertEquals("Route order (calculated fox numbering)", section.secondaryRouteOrderLabel)
         assertEquals(calculatedOrder, section.secondaryRouteOrder)
@@ -290,6 +290,45 @@ class DesktopCourseAnalyzerTest {
             calculatedOrder + "F",
             requireNotNull(section.routeMap).routeLabels
         )
+    }
+
+    @Test
+    fun appliesCalculatedRouteAndNumberingToSavedCourseData() {
+        val projectFile = projectFile(
+            foxCount = 3,
+            publicLabels = listOf("33", "32", "31")
+        )
+        val protectedInfo = protectedInfo(foxCount = 3)
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "31 32 33 Beacon"
+        )
+        val application = requireNotNull(summary.calculatedRouteApplication)
+
+        val (updatedProject, updatedCourseInfo) = DesktopCourseAnalysisApplier.applyCalculatedRoute(
+            projectFile = projectFile,
+            courseInfo = protectedInfo,
+            application = application,
+            password = "test-password"
+        )
+
+        val updatedCategory = updatedProject.raceData.categories.single { it.category.id == CATEGORY_ID }.category
+        assertEquals(application.idealOrderText, DesktopProtectedCourseOrder.decrypt(requireNotNull(updatedCategory.encryptedIdealOrder), "test-password"))
+        val decryptedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(requireNotNull(updatedCategory.encryptedCourseInfo), "test-password")
+        assertEquals(application.idealOrderText, decryptedCourseInfo.idealOrder)
+        assertEquals(application.routeLengthMeters, decryptedCourseInfo.lengthMeters)
+        assertEquals(application.climbMeters, decryptedCourseInfo.climbMeters)
+        assertEquals("Course Analyzer calculated route", decryptedCourseInfo.sourceName)
+        assertEquals(application.routePoints.size, decryptedCourseInfo.sampledPointCount)
+        assertEquals(application.routePoints.map { it.latitude to it.longitude }, decryptedCourseInfo.route.map { it.latitude to it.longitude })
+        assertEquals(application.idealOrderText, updatedCourseInfo.idealOrder)
+        assertEquals(application.routePoints.size, updatedCourseInfo.route.size)
+        val publicLabelsByControlId = updatedProject.raceData.controls.associate { it.id to it.publicLabel }
+        application.foxAssignments.forEach { assignment ->
+            assertEquals(assignment.calculatedLabel, publicLabelsByControlId[assignment.controlId])
+        }
     }
 
     @Test
