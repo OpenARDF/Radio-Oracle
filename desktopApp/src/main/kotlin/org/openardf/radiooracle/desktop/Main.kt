@@ -5666,11 +5666,11 @@ private fun CourseAnalysisSectionView(section: DesktopCourseAnalysisSection, inc
             fontSize = 13.sp
         )
         CourseAnalysisRow("Route order", section.routeOrder.joinToString(" -> ").ifBlank { "Unknown" })
-        CourseAnalysisRow(section.comparisonLengthLabel, metersText(section.comparisonLengthMeters))
-        CourseAnalysisRow("Horizontal length", metersText(section.straightLineMeters))
-        CourseAnalysisRow("Route length", metersText(section.routeLengthMeters))
-        CourseAnalysisRow("Climb", metersText(section.climbMeters))
-        CourseAnalysisRow("Effective length", metersText(section.effectiveLengthMeters))
+        CourseAnalysisRow(section.comparisonLengthLabel, kilometersText(section.comparisonLengthMeters))
+        CourseAnalysisRow("Horizontal length", kilometersText(section.straightLineMeters))
+        CourseAnalysisRow("Route length", kilometersText(section.routeLengthMeters))
+        CourseAnalysisRow("Climb", climbText(section.climbMeters))
+        CourseAnalysisRow("Effective length", kilometersText(section.effectiveLengthMeters))
         CourseAnalysisRow("Estimated ideal time", secondsText(section.estimatedIdealSeconds))
         CourseAnalysisLegRows("Leg analysis", section.legRows)
         if (includeRenumbering) {
@@ -5694,7 +5694,7 @@ private fun CourseAnalysisProvidedRouteWaitAnalysis(
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "This subsection estimates Classic fox arrival phases on the provided route and checks whether assigning different fox numbers to the same locations could reduce waiting. It uses the same elite baseline speed and gradient-adjusted leg estimates as the route analysis. Because map passability, fatigue, and category age/gender speed differences are not modeled, barriers, slow terrain, and competitor profile can shift real arrival times and change wait-time outcomes.",
+            text = "This subsection estimates Classic fox arrival phases on the provided route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. It uses the same elite baseline speed and gradient-adjusted leg estimates as the route analysis. Because map passability, fatigue, and category age/gender speed differences are not modeled, barriers, slow terrain, and competitor profile can shift real arrival times and change wait-time outcomes.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -5740,11 +5740,11 @@ private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
                 null -> "Unknown"
             }
         )
-        CourseAnalysisRow("Calculated straight-line length", metersText(result.calculatedStraightLineMeters))
-        CourseAnalysisRow("Provided straight-line length", metersText(result.providedStraightLineMeters))
-        CourseAnalysisRow("Provided route length", metersText(result.routeLengthMeters))
-        CourseAnalysisRow("Climb", metersText(result.climbMeters))
-        CourseAnalysisRow("Effective length", metersText(result.effectiveLengthMeters))
+        CourseAnalysisRow("Calculated straight-line length", kilometersText(result.calculatedStraightLineMeters))
+        CourseAnalysisRow("Provided straight-line length", kilometersText(result.providedStraightLineMeters))
+        CourseAnalysisRow("Provided route length", kilometersText(result.routeLengthMeters))
+        CourseAnalysisRow("Climb", climbText(result.climbMeters))
+        CourseAnalysisRow("Effective length", kilometersText(result.effectiveLengthMeters))
         CourseAnalysisRow("Estimated ideal time", secondsText(result.estimatedIdealSeconds))
     }
 }
@@ -5769,7 +5769,7 @@ private fun CourseAnalysisLegRows(title: String, legs: List<DesktopCourseLegRow>
         legs.forEach { leg ->
             CourseAnalysisRow(
                 label = "${leg.fromLabel} -> ${leg.toLabel}",
-                value = "${metersText(leg.lengthMeters)}  split ${secondsText(leg.splitSeconds)}  cumulative ${secondsText(leg.cumulativeSeconds)}"
+                value = "${kilometersText(leg.lengthMeters)}  split ${secondsText(leg.splitSeconds)}  cumulative ${secondsText(leg.cumulativeSeconds)}"
             )
         }
     }
@@ -5820,7 +5820,7 @@ private fun CourseAnalysisElevationProfile(
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "0.0 km to ${oneDecimalText(totalDistanceMeters / 1000.0)} km, " +
+            text = "0.00 km to ${twoDecimalText(totalDistanceMeters / 1000.0)} km, " +
                 "${minElevation.roundToInt()} m to ${maxElevation.roundToInt()} m",
             color = DesktopPalette.Black,
             fontSize = 13.sp
@@ -6086,14 +6086,17 @@ private fun CourseAnalysisRow(label: String, value: String, valueColor: Color = 
     }
 }
 
-private fun metersText(value: Int?): String =
-    value?.let { "${oneDecimalText(it / 1000.0)} km" } ?: "Unknown"
+private fun kilometersText(value: Int?): String =
+    value?.let { "${twoDecimalText(it / 1000.0)} km" } ?: "Unknown"
+
+private fun climbText(value: Int?): String =
+    value?.let { "$it m" } ?: "Unknown"
 
 private fun secondsText(value: Int?): String =
     value?.let { DurationFormatter.secondsToFormattedString(it.toLong(), useMinutes = false) } ?: "Unknown"
 
-private fun oneDecimalText(value: Double): String =
-    (value * 10.0).roundToInt().let { "${it / 10}.${abs(it % 10)}" }
+private fun twoDecimalText(value: Double): String =
+    (value * 100.0).roundToInt().let { "${it / 100}.${(abs(it % 100)).toString().padStart(2, '0')}" }
 
 @Composable
 private fun ControlAddRow(

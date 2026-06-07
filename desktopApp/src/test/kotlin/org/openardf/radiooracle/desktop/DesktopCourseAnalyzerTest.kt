@@ -85,7 +85,13 @@ class DesktopCourseAnalyzerTest {
         assertTrue(summary.providedLegRows.all { it.lengthMeters != null && it.splitSeconds != null && it.cumulativeSeconds != null })
         assertEquals(summary.estimatedIdealSeconds, summary.providedLegRows.last().cumulativeSeconds)
         assertEquals(listOf("31", "32", "33"), summary.waitRows.map { it.controlLabel })
-        assertTrue(summary.metrics.any { it.label == "Effective length" && it.value == "5.0 km" })
+        summary.providedLegRows.take(3).zip(summary.waitRows).forEach { (leg, wait) ->
+            assertEquals(wait.arrivalSeconds + wait.waitSeconds + 30, leg.cumulativeSeconds)
+        }
+        summary.calculatedLegRows.take(3).zip(requireNotNull(summary.calculatedRouteSection).waitRows).forEach { (leg, wait) ->
+            assertEquals(wait.arrivalSeconds + wait.waitSeconds + 30, leg.cumulativeSeconds)
+        }
+        assertTrue(summary.metrics.any { it.label == "Effective length" && it.value == "5.00 km" })
         assertTrue(
             "Metrics were ${summary.metrics}",
             summary.metrics.any { it.label == "Classic shortest-route climb limit" && it.status == DesktopCourseMetricStatus.Good }

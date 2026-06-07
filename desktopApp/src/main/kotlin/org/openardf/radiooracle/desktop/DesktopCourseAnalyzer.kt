@@ -95,6 +95,7 @@ enum class DesktopCourseRouteMapPointType {
 }
 
 data class DesktopCourseWaitRow(
+    val controlId: String?,
     val controlLabel: String,
     val arrivalSeconds: Int,
     val waitSeconds: Int,
@@ -139,8 +140,10 @@ enum class DesktopCourseMetricStatus {
  *
  * The analyzer intentionally separates the course-setter-supplied route from the independently
  * calculated candidate. Both use the same measurement policy: effective length when complete
- * elevation data is available, otherwise horizontal distance. Classic-style wait-time checks use
- * ideal arrival estimates to identify whether a different fox numbering can reduce waiting.
+ * elevation data is available, otherwise horizontal distance. Classic-style wait-time checks replay
+ * the timed route to identify whether a different fox numbering can reduce waiting. A Classic fox
+ * stop is modeled as arrival near the fox, wait until transmission if needed, then a fixed
+ * 30-second find-and-punch allowance before departure to the next leg.
  *
  * Elevation Cache resolution is local sample-grid spacing, not a guarantee of source DEM
  * resolution. USGS 3DEP is a multi-resolution source; a dense cache may still sample coarser
@@ -157,6 +160,7 @@ enum class DesktopCourseMetricStatus {
 object DesktopCourseAnalyzer {
     private const val CLASSIC_TRANSMIT_CYCLE_SECONDS = 300
     private const val CLASSIC_TRANSMIT_SLOT_SECONDS = 60
+    private const val CLASSIC_CONTROL_FIND_PUNCH_SECONDS = 30
     private const val CLASSIC_TARGET_SECONDS = 60 * 60
     private const val SPRINT_TARGET_SECONDS = 15 * 60
     private const val FOXORING_TARGET_SECONDS = 45 * 60
@@ -170,6 +174,8 @@ object DesktopCourseAnalyzer {
         "The analyzer does not currently know map passability, so out-of-bounds areas, dense vegetation, water, uncrossable features, and other impediments can make the true on-foot route and wait timing differ from this estimate."
     private const val SPEED_MODEL_NOTE =
         "Estimated times use an elite-competitor baseline by race format: 3.6 m/s for Classic-style courses, 4.2 m/s for Sprint, and 3.4 m/s for Foxoring. Each leg is adjusted for elevation gradient: uphill legs are slowed more than downhill legs, the penalty is clamped, fatigue is not modeled, and the current model is not yet adjusted by category age or gender."
+    private const val CLASSIC_WAIT_TIMING_NOTE =
+        "For Classic-style fox controls, timing assumes the competitor waits if the fox is off the air, then spends 30 seconds finding and punching before departing for the next leg; that delay affects later arrival phases."
 
     fun analyze(
         projectFile: EventProjectFile,
@@ -304,101 +310,86 @@ object DesktopCourseAnalyzer {
             .takeIf { it.size >= 2 }
             ?.straightLineMeters()
             ?.roundToInt()
-        val providedLegRows = routeGeometryLegRows(
+        val providedTiming = routeGeometryTiming(
             route = route,
             controls = providedControls,
             controlsWithPoints = controlsWithPoints,
             raceType = raceType
         )
-        val calculatedLegRows = calculatedRoute?.let { route ->
-            straightLineLegRows(
-                start = start,
-                controls = route.controls,
-                finish = finish,
-                raceType = raceType
-            )
-        }.orEmpty()
-
-        val cumulativeArrivalSeconds = routeArrivalSeconds(
-            route = route,
-            orderedControls = providedControls,
-            controlsWithPoints = controlsWithPoints,
-            raceType = raceType
-        )
-        val waitRows = if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
-            providedControls
-                .filter { it.type == ControlPointType.CONTROL }
-                .mapNotNull { control ->
-                    val arrival = cumulativeArrivalSeconds[control.id] ?: return@mapNotNull null
-                    if (classicSlotIndex(control) == null) {
-                        missing += "Transmit slot could not be determined for control ${control.publicDisplayLabel()}."
-                    }
-                    DesktopCourseWaitRow(
-                        controlLabel = control.publicDisplayLabel(),
-                        arrivalSeconds = arrival,
-                        waitSeconds = waitSecondsForClassicControl(control, arrival),
-                        slotLabel = classicSlotLabel(control)
-                    )
-                }
-        } else {
-            emptyList()
-        }
+        val providedLegRows = providedTiming.legRows
+        val waitRows = providedTiming.waitRows
         if (waitRows.isEmpty() && providedControls.any { it.type == ControlPointType.CONTROL } && raceType != RaceType.CLASSIC && raceType != RaceType.SHORT) {
             missing += "Transmit-slot wait analysis is currently implemented for Classic-style five-minute cycles only."
         }
+        if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
+            providedControls
+                .filter { it.type == ControlPointType.CONTROL && classicSlotIndex(it) == null }
+                .forEach { control ->
+                    missing += "Transmit slot could not be determined for control ${control.publicDisplayLabel()}."
+                }
+        }
         val waitRenumbering = if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
-            waitRenumbering(providedControls, cumulativeArrivalSeconds)
+            waitRenumbering(providedControls) { slotOverrides ->
+                routeGeometryTiming(
+                    route = route,
+                    controls = providedControls,
+                    controlsWithPoints = controlsWithPoints,
+                    raceType = raceType,
+                    slotOverrides = slotOverrides
+                )
+            }
         } else {
             null
         }
 
-        val estimatedIdealSeconds = estimatedIdealSeconds(route, raceType)
+        val estimatedIdealSeconds = providedTiming.totalSeconds?.roundToInt()
         val elevationProfile = elevationProfile(route)
         val providedRouteAnalysis = if (providedControls.isNotEmpty() && route.size >= 2) {
             providedRouteAnalysis(
                 route = route,
                 providedRoutePoints = providedRoutePoints,
                 protectedCourseInfo = protectedCourseInfo,
-                raceType = raceType
+                timing = providedTiming
             )
         } else {
             null
         }
+        val calculatedWaitRenumbering = if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
+            calculatedRoute?.let { routeCandidate ->
+                waitRenumbering(routeCandidate.controls.map { it.control }) { slotOverrides ->
+                    straightLineTiming(
+                        start = start,
+                        controls = routeCandidate.controls,
+                        finish = finish,
+                        raceType = raceType,
+                        slotOverrides = slotOverrides
+                    )
+                }
+            }
+        } else {
+            null
+        }
+        val calculatedSlotOverrides = calculatedRoute
+            ?.let { routeCandidate -> slotOverridesFromAssignments(routeCandidate.controls.map { it.control }, calculatedWaitRenumbering) }
+            .orEmpty()
+        val calculatedTiming = calculatedRoute?.let { routeCandidate ->
+            straightLineTiming(
+                start = start,
+                controls = routeCandidate.controls,
+                finish = finish,
+                raceType = raceType,
+                slotOverrides = calculatedSlotOverrides
+            )
+        } ?: RouteTimingAnalysis.Empty
+        val calculatedLegRows = calculatedTiming.legRows
+        val calculatedWaitRows = calculatedTiming.waitRows
         val calculatedRouteAnalysis = calculatedRoute?.let { routeCandidate ->
             calculatedRouteAnalysis(
                 start = start,
                 finish = finish,
                 calculatedRoute = routeCandidate,
-                raceType = raceType
+                timing = calculatedTiming
             )
-        }
-        val calculatedWaitRenumbering = if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
-            calculatedRouteAnalysis?.arrivalSecondsByControlId?.let { arrivals ->
-                waitRenumbering(calculatedRoute?.controls.orEmpty().map { it.control }, arrivals)
-            }
-        } else {
-            null
-        }
-        val calculatedWaitRows = if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
-            calculatedRoute?.controls.orEmpty()
-                .filter { it.control.type == ControlPointType.CONTROL }
-                .mapNotNull { controlPoint ->
-                    val arrival = calculatedRouteAnalysis?.arrivalSecondsByControlId?.get(controlPoint.control.id)
-                        ?: return@mapNotNull null
-                    val assignment = calculatedWaitRenumbering
-                        ?.assignments
-                        ?.firstOrNull { it.controlLabel == controlPoint.control.publicDisplayLabel() }
-                    val slotLabel = assignment?.suggestedSlotLabel ?: classicSlotLabel(controlPoint.control)
-                    val slotIndex = slotLabel?.let(::classicSlotIndexForLabel) ?: classicSlotIndex(controlPoint.control)
-                    DesktopCourseWaitRow(
-                        controlLabel = controlPoint.control.publicDisplayLabel(),
-                        arrivalSeconds = arrival,
-                        waitSeconds = slotIndex?.let { waitSecondsForClassicSlot(it, arrival) } ?: 0,
-                        slotLabel = slotLabel
-                    )
-                }
-        } else {
-            emptyList()
         }
         val calculatedSection = calculatedRoute?.let { routeCandidate ->
             val optimizedAssignments = calculatedWaitRenumbering
@@ -557,7 +548,7 @@ object DesktopCourseAnalyzer {
         route: List<CourseGeoPoint>,
         providedRoutePoints: List<CourseGeoPoint>,
         protectedCourseInfo: ProtectedCourseInfo?,
-        raceType: RaceType
+        timing: RouteTimingAnalysis
     ): RouteAnalysis {
         val routeLengthMeters = protectedCourseInfo?.lengthMeters?.toDouble() ?: route.straightLineMeters()
         val climbMeters = protectedCourseInfo?.climbMeters?.toDouble() ?: climbMetersOrNull(route)
@@ -570,9 +561,9 @@ object DesktopCourseAnalyzer {
             straightLineMeters = providedRoutePoints.takeIf { it.size >= 2 }?.straightLineMeters(),
             climbMeters = climbMeters,
             effectiveLengthMeters = effectiveLengthMeters,
-            estimatedSeconds = requireNotNull(estimatedIdealSecondsDouble(route, raceType)),
+            estimatedSeconds = requireNotNull(timing.totalSeconds),
             elevationProfile = elevationProfile(route),
-            arrivalSecondsByControlId = emptyMap()
+            arrivalSecondsByControlId = timing.arrivalSecondsByControlId
         )
     }
 
@@ -586,7 +577,7 @@ object DesktopCourseAnalyzer {
         start: CourseGeoPoint?,
         finish: CourseGeoPoint?,
         calculatedRoute: CalculatedRoute,
-        raceType: RaceType
+        timing: RouteTimingAnalysis
     ): RouteAnalysis? {
         if (start == null || finish == null) {
             return null
@@ -598,7 +589,6 @@ object DesktopCourseAnalyzer {
         val routeLengthMeters = points.straightLineMeters()
         val climbMeters = climbMetersOrNull(points)
         val effectiveLengthMeters = climbMeters?.let { routeLengthMeters + 10.0 * it }
-        val legRows = straightLineLegRows(start, calculatedRoute.controls, finish, raceType)
         return RouteAnalysis(
             comparisonLengthMeters = effectiveLengthMeters ?: routeLengthMeters,
             measurementLabel = if (effectiveLengthMeters != null) "Effective length" else "Horizontal straight-line distance",
@@ -606,23 +596,19 @@ object DesktopCourseAnalyzer {
             straightLineMeters = routeLengthMeters,
             climbMeters = climbMeters,
             effectiveLengthMeters = effectiveLengthMeters,
-            estimatedSeconds = requireNotNull(estimatedIdealSecondsDouble(points, raceType)),
+            estimatedSeconds = requireNotNull(timing.totalSeconds),
             elevationProfile = elevationProfile(points),
-            arrivalSecondsByControlId = calculatedRoute.controls
-                .mapIndexedNotNull { index, controlPoint ->
-                    controlPoint.control.id to (legRows.getOrNull(index)?.cumulativeSeconds ?: return@mapIndexedNotNull null)
-                }
-                .toMap()
+            arrivalSecondsByControlId = timing.arrivalSecondsByControlId
         )
     }
 
     private fun providedSectionExplanation(analysis: RouteAnalysis): String =
-        "This section analyzes the route supplied for the category. Leg lengths and estimated splits are taken from the imported route geometry. " +
+        "This section analyzes the route supplied for the category. Leg lengths are taken from the imported route geometry, and estimated splits combine movement time with any Classic fox wait and find/punch time. " +
             "The primary comparison value is ${analysis.measurementLabel.lowercase()}; " +
             if (analysis.effectiveLengthMeters != null) {
-                "the Elevation Cache data is complete, so effective length is calculated as route length plus ten times total climb. $SPEED_MODEL_NOTE $ELEVATION_CACHE_RESOLUTION_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE"
+                "the Elevation Cache data is complete, so effective length is calculated as route length plus ten times total climb. $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE $ELEVATION_CACHE_RESOLUTION_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE"
             } else {
-                "local elevation data is incomplete, so horizontal route length is used instead of effective length. $SPEED_MODEL_NOTE $ELEVATION_CACHE_RESOLUTION_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE"
+                "local elevation data is incomplete, so horizontal route length is used instead of effective length. $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE $ELEVATION_CACHE_RESOLUTION_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE"
             }
 
     private fun calculatedSectionExplanation(
@@ -639,7 +625,7 @@ object DesktopCourseAnalyzer {
         }
         val assignmentText = assignmentDifferenceText(providedAssignments, calculatedAssignments)
         return "This section calculates an independent ideal route by comparing $routeCount possible orders of the foxes and any spectator point, with the beacon last before the finish. " +
-            "The shortest candidate by $measurement is selected. $elevationText $SPEED_MODEL_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE $assignmentText"
+            "The shortest candidate by $measurement is selected. $elevationText $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE $assignmentText"
     }
 
     private fun assignmentDifferenceText(
@@ -696,104 +682,146 @@ object DesktopCourseAnalyzer {
         return CalculatedRoute(bestControls, bestHorizontalDistance, routeCount)
     }
 
-    private fun routeArrivalSeconds(
-        route: List<CourseGeoPoint>,
-        orderedControls: List<EventControl>,
-        controlsWithPoints: List<ControlAnalysisPoint>,
-        raceType: RaceType
-    ): Map<String, Int> {
-        if (route.size < 2) {
-            return emptyMap()
-        }
-        val cumulativeSeconds = mutableListOf(0.0)
-        route.zipWithNext().forEach { (start, end) ->
-            cumulativeSeconds += cumulativeSeconds.last() + segmentSeconds(start, end, raceType)
-        }
-        return orderedControls.mapNotNull { control ->
-            val point = controlsWithPoints.firstOrNull { it.control.id == control.id }?.point ?: return@mapNotNull null
-            val nearestIndex = route.indices.minByOrNull { route[it].distanceMetersTo(point) } ?: return@mapNotNull null
-            control.id to cumulativeSeconds[nearestIndex].roundToInt()
-        }.toMap()
-    }
-
-    private fun routeGeometryLegRows(
+    private fun routeGeometryTiming(
         route: List<CourseGeoPoint>,
         controls: List<EventControl>,
         controlsWithPoints: List<ControlAnalysisPoint>,
-        raceType: RaceType
-    ): List<DesktopCourseLegRow> {
+        raceType: RaceType,
+        slotOverrides: Map<String, RenumberingSlot> = emptyMap()
+    ): RouteTimingAnalysis {
         if (route.size < 2) {
-            return emptyList()
+            return RouteTimingAnalysis.Empty
         }
         val stops = buildList {
-            add(RouteStop("S", route.first(), 0))
+            add(RouteStop("S", route.first(), 0, null))
             controls.mapNotNull { control ->
                 val point = controlsWithPoints.firstOrNull { it.control.id == control.id }?.point ?: return@mapNotNull null
                 val nearestIndex = route.indices.minByOrNull { route[it].distanceMetersTo(point) } ?: return@mapNotNull null
-                RouteStop(control.analysisRouteLabel(), point, nearestIndex)
+                RouteStop(control.analysisRouteLabel(), point, nearestIndex, control)
             }
                 .forEach(::add)
-            add(RouteStop("F", route.last(), route.lastIndex))
+            add(RouteStop("F", route.last(), route.lastIndex, null))
         }.sortedBy { it.routeIndex }
         if (stops.size < 2) {
-            return emptyList()
+            return RouteTimingAnalysis.Empty
         }
-        var cumulativeSeconds = 0.0
-        return stops.zipWithNext().map { (from, to) ->
+        val legRows = mutableListOf<DesktopCourseLegRow>()
+        val waitRows = mutableListOf<DesktopCourseWaitRow>()
+        val arrivalSecondsByControlId = mutableMapOf<String, Int>()
+        var cumulativeSeconds: Double? = 0.0
+        stops.zipWithNext().forEach { (from, to) ->
             val segment = route.subList(from.routeIndex, to.routeIndex + 1)
             val lengthMeters = segment.straightLineMeters().roundToInt()
-            val splitSeconds = if (from.routeIndex == to.routeIndex) {
+            val movementSeconds = if (from.routeIndex == to.routeIndex) {
                 0.0
             } else {
                 estimatedIdealSecondsDouble(segment, raceType)
             }
-            if (splitSeconds != null) {
-                cumulativeSeconds += splitSeconds
+            val startSeconds = cumulativeSeconds
+            val arrivalSeconds = if (startSeconds != null && movementSeconds != null) {
+                startSeconds + movementSeconds
+            } else {
+                null
             }
-            DesktopCourseLegRow(
+            val service = to.control?.let { control ->
+                controlServiceTiming(control, arrivalSeconds, raceType, slotOverrides[control.id])
+            } ?: ControlServiceTiming.None
+            if (arrivalSeconds != null && to.control != null) {
+                arrivalSecondsByControlId[to.control.id] = arrivalSeconds.roundToInt()
+            }
+            service.waitRow?.let(waitRows::add)
+            cumulativeSeconds = if (arrivalSeconds != null && service.totalSeconds != null) {
+                arrivalSeconds + service.totalSeconds
+            } else {
+                null
+            }
+            val splitSeconds = if (movementSeconds != null && service.totalSeconds != null) {
+                movementSeconds + service.totalSeconds
+            } else {
+                null
+            }
+            legRows += DesktopCourseLegRow(
                 fromLabel = from.label,
                 toLabel = to.label,
                 lengthMeters = lengthMeters,
                 splitSeconds = splitSeconds?.roundToInt(),
-                cumulativeSeconds = splitSeconds?.let { cumulativeSeconds.roundToInt() }
+                cumulativeSeconds = cumulativeSeconds?.roundToInt()
             )
         }
+        return RouteTimingAnalysis(
+            legRows = legRows,
+            waitRows = waitRows,
+            arrivalSecondsByControlId = arrivalSecondsByControlId,
+            totalSeconds = cumulativeSeconds
+        )
     }
 
-    private fun straightLineLegRows(
+    private fun straightLineTiming(
         start: CourseGeoPoint?,
         controls: List<ControlAnalysisPoint>,
         finish: CourseGeoPoint?,
-        raceType: RaceType
-    ): List<DesktopCourseLegRow> {
+        raceType: RaceType,
+        slotOverrides: Map<String, RenumberingSlot> = emptyMap()
+    ): RouteTimingAnalysis {
         if (start == null) {
-            return emptyList()
+            return RouteTimingAnalysis.Empty
         }
         val stops = buildList {
-            add("S" to start)
+            add(StraightLineStop("S", start, null))
             controls.mapNotNull { controlPoint ->
-                controlPoint.point?.let { point -> controlPoint.control.analysisRouteLabel() to point }
+                controlPoint.point?.let { point ->
+                    StraightLineStop(controlPoint.control.analysisRouteLabel(), point, controlPoint.control)
+                }
             }.forEach(::add)
-            finish?.let { add("F" to it) }
+            finish?.let { add(StraightLineStop("F", it, null)) }
         }
         if (stops.size < 2) {
-            return emptyList()
+            return RouteTimingAnalysis.Empty
         }
-        var cumulativeSeconds = 0.0
-        return stops.zipWithNext().map { (from, to) ->
-            val lengthMeters = from.second.distanceMetersTo(to.second).roundToInt()
-            val splitSeconds = segmentSeconds(from.second, to.second, raceType)
-            if (splitSeconds != null) {
-                cumulativeSeconds += splitSeconds
+        val legRows = mutableListOf<DesktopCourseLegRow>()
+        val waitRows = mutableListOf<DesktopCourseWaitRow>()
+        val arrivalSecondsByControlId = mutableMapOf<String, Int>()
+        var cumulativeSeconds: Double? = 0.0
+        stops.zipWithNext().forEach { (from, to) ->
+            val lengthMeters = from.point.distanceMetersTo(to.point).roundToInt()
+            val movementSeconds = segmentSeconds(from.point, to.point, raceType)
+            val startSeconds = cumulativeSeconds
+            val arrivalSeconds = if (startSeconds != null) {
+                startSeconds + movementSeconds
+            } else {
+                null
             }
-            DesktopCourseLegRow(
-                fromLabel = from.first,
-                toLabel = to.first,
+            val service = to.control?.let { control ->
+                controlServiceTiming(control, arrivalSeconds, raceType, slotOverrides[control.id])
+            } ?: ControlServiceTiming.None
+            if (arrivalSeconds != null && to.control != null) {
+                arrivalSecondsByControlId[to.control.id] = arrivalSeconds.roundToInt()
+            }
+            service.waitRow?.let(waitRows::add)
+            cumulativeSeconds = if (arrivalSeconds != null && service.totalSeconds != null) {
+                arrivalSeconds + service.totalSeconds
+            } else {
+                null
+            }
+            val splitSeconds = if (service.totalSeconds != null) {
+                movementSeconds + service.totalSeconds
+            } else {
+                null
+            }
+            legRows += DesktopCourseLegRow(
+                fromLabel = from.label,
+                toLabel = to.label,
                 lengthMeters = lengthMeters,
                 splitSeconds = splitSeconds?.roundToInt(),
-                cumulativeSeconds = splitSeconds?.let { cumulativeSeconds.roundToInt() }
+                cumulativeSeconds = cumulativeSeconds?.roundToInt()
             )
         }
+        return RouteTimingAnalysis(
+            legRows = legRows,
+            waitRows = waitRows,
+            arrivalSecondsByControlId = arrivalSecondsByControlId,
+            totalSeconds = cumulativeSeconds
+        )
     }
 
     private fun calculatedRouteClimbMeters(
@@ -822,10 +850,6 @@ object DesktopCourseAnalyzer {
 
     private fun eventControlRouteLabels(controls: List<EventControl>): List<String> =
         listOf("S") + controls.map { it.analysisRouteLabel() }
-
-    private fun estimatedIdealSeconds(route: List<CourseGeoPoint>, raceType: RaceType): Int? {
-        return estimatedIdealSecondsDouble(route, raceType)?.roundToInt()
-    }
 
     private fun estimatedIdealSecondsDouble(route: List<CourseGeoPoint>, raceType: RaceType): Double? {
         if (route.size < 2) {
@@ -917,10 +941,33 @@ object DesktopCourseAnalyzer {
         return horizontal / (flatSpeed / penalty)
     }
 
-    private fun waitSecondsForClassicControl(control: EventControl, arrivalSeconds: Int): Int {
-        val slotIndex = classicSlotIndex(control) ?: return 0
-        return waitSecondsForClassicSlot(slotIndex, arrivalSeconds)
+    private fun controlServiceTiming(
+        control: EventControl,
+        arrivalSeconds: Double?,
+        raceType: RaceType,
+        slotOverride: RenumberingSlot?
+    ): ControlServiceTiming {
+        if (!isClassicStyle(raceType) || control.type != ControlPointType.CONTROL || arrivalSeconds == null) {
+            return ControlServiceTiming.None
+        }
+        val slotIndex = slotOverride?.slotIndex ?: classicSlotIndex(control) ?: return ControlServiceTiming.Unknown
+        val slotLabel = slotOverride?.slotLabel ?: classicSlotLabel(control)
+        val roundedArrival = arrivalSeconds.roundToInt()
+        val waitSeconds = waitSecondsForClassicSlot(slotIndex, roundedArrival)
+        return ControlServiceTiming(
+            totalSeconds = waitSeconds + CLASSIC_CONTROL_FIND_PUNCH_SECONDS.toDouble(),
+            waitRow = DesktopCourseWaitRow(
+                controlId = control.id,
+                controlLabel = control.publicDisplayLabel(),
+                arrivalSeconds = roundedArrival,
+                waitSeconds = waitSeconds,
+                slotLabel = slotLabel
+            )
+        )
     }
+
+    private fun isClassicStyle(raceType: RaceType): Boolean =
+        raceType == RaceType.CLASSIC || raceType == RaceType.SHORT
 
     private fun waitSecondsForClassicSlot(slotIndex: Int, arrivalSeconds: Int): Int {
         val slotStart = slotIndex * CLASSIC_TRANSMIT_SLOT_SECONDS
@@ -967,26 +1014,24 @@ object DesktopCourseAnalyzer {
 
     private fun waitRenumbering(
         providedControls: List<EventControl>,
-        cumulativeArrivalSeconds: Map<String, Int>
+        timingForSlots: (Map<String, RenumberingSlot>) -> RouteTimingAnalysis
     ): DesktopCourseWaitRenumbering? {
         val foxes = providedControls
             .filter { it.type == ControlPointType.CONTROL }
             .mapNotNull { control ->
-                val arrival = cumulativeArrivalSeconds[control.id] ?: return@mapNotNull null
                 val slotIndex = classicSlotIndex(control) ?: return@mapNotNull null
-                RenumberingFox(control, arrival, slotIndex, classicSlotLabel(control) ?: control.publicDisplayLabel())
+                RenumberingFox(control, slotIndex, classicSlotLabel(control) ?: control.publicDisplayLabel())
             }
         if (foxes.size < 2 || foxes.size > MAX_PERMUTATION_CONTROLS) {
             return null
         }
-        val currentTotal = foxes.sumOf { waitSecondsForClassicSlot(it.currentSlotIndex, it.arrivalSeconds) }
+        val currentTotal = timingForSlots(emptyMap()).waitTotalFor(foxes)
         var bestTotal = Int.MAX_VALUE
         var bestSlots = emptyList<RenumberingSlot>()
         val currentSlots = foxes.map { RenumberingSlot(it.currentSlotIndex, it.currentSlotLabel) }
         currentSlots.permutations().forEach { candidateSlots ->
-            val total = foxes.zip(candidateSlots).sumOf { (fox, slot) ->
-                waitSecondsForClassicSlot(slot.slotIndex, fox.arrivalSeconds)
-            }
+            val slotOverrides = foxes.zip(candidateSlots).associate { (fox, slot) -> fox.control.id to slot }
+            val total = timingForSlots(slotOverrides).waitTotalFor(foxes)
             if (total < bestTotal) {
                 bestTotal = total
                 bestSlots = candidateSlots
@@ -1007,6 +1052,25 @@ object DesktopCourseAnalyzer {
                 )
             }
         )
+    }
+
+    private fun slotOverridesFromAssignments(
+        controls: List<EventControl>,
+        renumbering: DesktopCourseWaitRenumbering?
+    ): Map<String, RenumberingSlot> {
+        val assignmentByLabel = renumbering?.assignments.orEmpty().associateBy { it.controlLabel }
+        return controls.mapNotNull { control ->
+            val assignment = assignmentByLabel[control.publicDisplayLabel()] ?: return@mapNotNull null
+            val slotIndex = classicSlotIndexForLabel(assignment.suggestedSlotLabel) ?: return@mapNotNull null
+            control.id to RenumberingSlot(slotIndex, assignment.suggestedSlotLabel)
+        }.toMap()
+    }
+
+    private fun RouteTimingAnalysis.waitTotalFor(foxes: List<RenumberingFox>): Int {
+        val foxIds = foxes.map { it.control.id }.toSet()
+        return waitRows
+            .filter { it.controlId in foxIds }
+            .sumOf { it.waitSeconds }
     }
 
     private fun goodnessMetrics(
@@ -1070,7 +1134,7 @@ object DesktopCourseAnalyzer {
                         "Classic shortest-route climb limit",
                         calculatedClimbPercent?.let {
                             val lengthKm = requireNotNull(calculatedRouteLengthMeters).toDouble() / 1000.0
-                            "${requireNotNull(calculatedRouteClimbMeters)} m / ${oneDecimal(lengthKm)} km = ${oneDecimal(it)}% (limit 6.0%)"
+                            "${requireNotNull(calculatedRouteClimbMeters)} m / ${twoDecimals(lengthKm)} km = ${oneDecimal(it)}% (limit 6.0%)"
                         } ?: "Unknown",
                         when {
                             calculatedClimbPercent == null -> DesktopCourseMetricStatus.Unknown
@@ -1083,7 +1147,7 @@ object DesktopCourseAnalyzer {
             add(
                 DesktopCourseGoodnessMetric(
                     "Effective length",
-                    effectiveLengthMeters?.let { "${oneDecimal(it / 1000.0)} km" } ?: "Unknown",
+                    effectiveLengthMeters?.let { "${twoDecimals(it / 1000.0)} km" } ?: "Unknown",
                     if (effectiveLengthMeters == null) DesktopCourseMetricStatus.Unknown else DesktopCourseMetricStatus.Good
                 )
             )
@@ -1284,6 +1348,9 @@ object DesktopCourseAnalyzer {
 
     private fun oneDecimal(value: Double): String =
         (value * 10.0).roundToInt().let { "${it / 10}.${abs(it % 10)}" }
+
+    private fun twoDecimals(value: Double): String =
+        (value * 100.0).roundToInt().let { "${it / 100}.${(abs(it % 100)).toString().padStart(2, '0')}" }
 }
 
 private data class ProtectedCoordinateLookup(
@@ -1306,8 +1373,41 @@ private data class ControlAnalysisPoint(
 private data class RouteStop(
     val label: String,
     val point: CourseGeoPoint,
-    val routeIndex: Int
+    val routeIndex: Int,
+    val control: EventControl?
 )
+
+private data class StraightLineStop(
+    val label: String,
+    val point: CourseGeoPoint,
+    val control: EventControl?
+)
+
+private data class RouteTimingAnalysis(
+    val legRows: List<DesktopCourseLegRow>,
+    val waitRows: List<DesktopCourseWaitRow>,
+    val arrivalSecondsByControlId: Map<String, Int>,
+    val totalSeconds: Double?
+) {
+    companion object {
+        val Empty = RouteTimingAnalysis(
+            legRows = emptyList(),
+            waitRows = emptyList(),
+            arrivalSecondsByControlId = emptyMap(),
+            totalSeconds = null
+        )
+    }
+}
+
+private data class ControlServiceTiming(
+    val totalSeconds: Double?,
+    val waitRow: DesktopCourseWaitRow?
+) {
+    companion object {
+        val None = ControlServiceTiming(0.0, null)
+        val Unknown = ControlServiceTiming(null, null)
+    }
+}
 
 private data class RouteAnalysis(
     val comparisonLengthMeters: Double,
@@ -1335,7 +1435,6 @@ private data class CalculatedRoute(
 
 private data class RenumberingFox(
     val control: EventControl,
-    val arrivalSeconds: Int,
     val currentSlotIndex: Int,
     val currentSlotLabel: String
 )
