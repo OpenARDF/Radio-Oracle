@@ -80,6 +80,30 @@ class DesktopSportIdentStationProbeTest {
     }
 
     @Test
+    fun readsStationInfoReplySplitAcrossSerialReads() {
+        val systemInfo = systemInfoReply(
+            serialNumber = 554896,
+            extendedMode = true,
+            stationModeCode = 0x28
+        )
+        val port = FakeDesktopSerialPort(
+            replyChunksByCommand = mapOf(
+                SportIdentProtocol.PROBE_COMMAND to listOf(probeReply()),
+                SportIdentProtocol.GET_SYSTEM_INFO to listOf(
+                    systemInfo.copyOfRange(0, 5),
+                    systemInfo.copyOfRange(5, systemInfo.size)
+                )
+            )
+        )
+
+        val connection = DesktopSportIdentStationProbe().connect(port)
+
+        assertEquals(554896, connection.stationInfo.serialNumber)
+        assertEquals("SI MASTER + 0x20 flag", connection.stationInfo.stationModeLabel)
+        assertFalse(port.isOpen)
+    }
+
+    @Test
     fun describesSportIdentPortWithUsbIdentity() {
         val info = DesktopSerialPortInfo(
             systemPortPath = "/dev/cu.SLAB_USBtoUART",
@@ -99,7 +123,8 @@ class DesktopSportIdentStationProbeTest {
     private class FakeDesktopSerialPort(
         private val openSucceeds: Boolean = true,
         private val repliesByBaud: Map<Int, ByteArray> = emptyMap(),
-        private val repliesByCommand: Map<Byte, ByteArray> = emptyMap()
+        private val repliesByCommand: Map<Byte, ByteArray> = emptyMap(),
+        private val replyChunksByCommand: Map<Byte, List<ByteArray>> = emptyMap()
     ) : DesktopSerialPort {
         override val info = DesktopSerialPortInfo(
             systemPortPath = "/dev/cu.fake",
@@ -117,6 +142,7 @@ class DesktopSportIdentStationProbeTest {
         val writeRequests = mutableListOf<ByteArray>()
         private var currentBaudRate: Int = 0
         private var lastCommand: Byte? = null
+        private val commandReadIndexes = mutableMapOf<Byte, Int>()
 
         override fun configure(baudRate: Int, readTimeoutMs: Int, writeTimeoutMs: Int) {
             currentBaudRate = baudRate
@@ -139,10 +165,19 @@ class DesktopSportIdentStationProbeTest {
             return bytes.size
         }
 
-        override fun read(maxBytes: Int): ByteArray =
-            lastCommand?.let { repliesByCommand[it] }
-                ?: repliesByBaud[currentBaudRate]
-                ?: byteArrayOf()
+        override fun read(maxBytes: Int): ByteArray {
+            val command = lastCommand
+            if (command != null) {
+                val chunks = replyChunksByCommand[command]
+                if (chunks != null) {
+                    val index = commandReadIndexes.getOrDefault(command, 0)
+                    commandReadIndexes[command] = index + 1
+                    return chunks.getOrNull(index) ?: byteArrayOf()
+                }
+                repliesByCommand[command]?.let { return it }
+            }
+            return repliesByBaud[currentBaudRate] ?: byteArrayOf()
+        }
     }
 
     private fun probeReply(marker: Byte = 0x01): ByteArray =

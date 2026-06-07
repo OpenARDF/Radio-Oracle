@@ -1,6 +1,5 @@
 package org.openardf.radiooracle.desktop.usb
 
-import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfoParser
@@ -123,11 +122,15 @@ class DesktopSportIdentStationProbe(
             return null
         }
 
-        val rawReply = port.read(MAX_REPLY_BYTES)
-        return SportIdentFrameParser.firstFrame(
-            rawReply,
-            commandFilter = command
-        )
+        val deadline = System.currentTimeMillis() + readTimeoutMs
+        val stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_REPLY_BYTES)
+        while (System.currentTimeMillis() < deadline) {
+            val frame = stream.nextFrame(deadline) ?: return null
+            if (frame.command == command) {
+                return frame
+            }
+        }
+        return null
     }
 
     private companion object {
