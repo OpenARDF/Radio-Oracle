@@ -8,22 +8,12 @@ class DesktopSportIdentReadoutService(
     },
     private val readCard: (DesktopSerialPort) -> DesktopSportIdentCardBlockDownload = {
         DesktopSportIdentCardBlockReader().readFirstSupportedCardAfterInsertOnOpenPort(it)
-    },
-    private val readCardIdentity: (DesktopSerialPort) -> DesktopSportIdentCardIdentityDownload = {
-        DesktopSportIdentCardBlockReader().readFirstSupportedCardIdentityAfterInsertOnOpenPort(it)
     }
 ) {
     fun downloadOne(): DesktopSportIdentCardBlockDownload {
         val port = firstSportIdentPort()
         return withOpenDownloadStation(port) {
             readCard(port)
-        }
-    }
-
-    fun readIdentityOne(): DesktopSportIdentCardIdentityDownload {
-        val port = firstSportIdentPort()
-        return withOpenDownloadStation(port) {
-            readCardIdentity(port)
         }
     }
 

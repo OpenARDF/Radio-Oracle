@@ -2,7 +2,6 @@ package org.openardf.radiooracle.desktop.usb
 
 import org.openardf.radiooracle.shared.sportident.SportIdentCardEvent
 import org.openardf.radiooracle.shared.sportident.SportIdentCardEventParser
-import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
 
 fun main(args: Array<String>) {
     val requestedPort = args.firstOrNull() ?: System.getenv("RADIO_ORACLE_SI_PORT")
@@ -74,14 +73,17 @@ class DesktopSportIdentCardEventMonitor(
     }
 
     fun waitForOneEventOnOpenPort(port: DesktopSerialPort, deadlineMillis: Long): SportIdentCardEvent? {
-        while (System.currentTimeMillis() < deadlineMillis) {
-            val raw = port.read(MAX_FRAME_BYTES)
-            if (raw.isEmpty()) {
-                continue
-            }
+        val stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_FRAME_BYTES)
+        return waitForOneEventOnOpenPort(stream, deadlineMillis)
+    }
 
-            val frame = SportIdentFrameParser.firstFrame(raw, requireValidCrc = true)
-            val event = frame?.let(SportIdentCardEventParser::fromFrame)
+    private fun waitForOneEventOnOpenPort(
+        stream: DesktopSportIdentFrameStream,
+        deadlineMillis: Long
+    ): SportIdentCardEvent? {
+        while (System.currentTimeMillis() < deadlineMillis) {
+            val frame = stream.nextFrame(deadlineMillis, requireValidCrc = false) ?: return null
+            val event = SportIdentCardEventParser.fromFrame(frame)
             if (event != null) {
                 return event
             }
@@ -93,8 +95,9 @@ class DesktopSportIdentCardEventMonitor(
         port: DesktopSerialPort,
         deadlineMillis: Long
     ): SportIdentCardEvent.Inserted? {
+        val stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_FRAME_BYTES)
         while (System.currentTimeMillis() < deadlineMillis) {
-            when (val event = waitForOneEventOnOpenPort(port, deadlineMillis)) {
+            when (val event = waitForOneEventOnOpenPort(stream, deadlineMillis)) {
                 is SportIdentCardEvent.Inserted -> return event
                 is SportIdentCardEvent.Removed -> continue
                 null -> return null

@@ -722,13 +722,13 @@ fun main(args: Array<String>) = application {
                 "Another SI card read is already active."
             }
             isReadingCompetitorSiCard = true
-            siDownloadStatusText = "Waiting for SI card for competitor entry."
+            siDownloadStatusText = "Waiting for SI card for competitor entry. Keep the card seated until the read finishes."
             projectStatusText = "Waiting for SI card..."
             DesktopDebugLog.info("SI", "Competitor SI-card read started")
             return try {
                 val download = withContext(Dispatchers.IO) {
                     siPortMutex.withLock {
-                        DesktopSportIdentReadoutService().readIdentityOne()
+                        downloadDesktopSportIdentCardReadout()
                     }
                 }
                 val cardHolder = download.readout.cardHolder

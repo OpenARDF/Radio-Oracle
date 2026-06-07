@@ -93,29 +93,6 @@ object SportIdentCardReadoutParser {
         )
     }
 
-    fun parseSi6Identity(data: ByteArray, fallbackSiNumber: Int): SportIdentCardReadout? {
-        if (data.size < SportIdentProtocol.SI_CARD_BLOCK_SIZE) {
-            return null
-        }
-        val siNumber = if (data.size > 13) {
-            (data[10].toUnsignedInt() shl 24) +
-                (data[11].toUnsignedInt() shl 16) +
-                (data[12].toUnsignedInt() shl 8) +
-                data[13].toUnsignedInt()
-        } else {
-            fallbackSiNumber
-        }
-        return SportIdentCardReadout(
-            siNumber = siNumber.takeIf { it > 0 } ?: fallbackSiNumber,
-            series = SI_CARD6_SERIES,
-            checkTime = null,
-            startTime = null,
-            finishTime = null,
-            punches = emptyList(),
-            cardHolder = parseFixedCardHolder(data)
-        )
-    }
-
     fun parseSi8Or9OrSiac(data: ByteArray): SportIdentCardReadout? {
         if (data.size < SportIdentProtocol.SI_CARD_BLOCK_SIZE) {
             return null
@@ -159,29 +136,6 @@ object SportIdentCardReadoutParser {
             startTime = parsePunch(data.copyOfRange(12, 16))?.siTime,
             finishTime = parsePunch(data.copyOfRange(16, 20))?.siTime,
             punches = punches,
-            cardHolder = parseSemicolonCardHolder(data, series)
-        )
-    }
-
-    fun parseSi8Or9OrSiacIdentity(data: ByteArray, fallbackSiNumber: Int): SportIdentCardReadout? {
-        if (data.size < SportIdentProtocol.SI_CARD_BLOCK_SIZE) {
-            return null
-        }
-        val series = data[24].toUnsignedInt() and SI_CARD10_11_SIAC_SERIES
-        val siNumber = if (data.size > 27) {
-            (data[25].toUnsignedInt() shl 16) +
-                (data[26].toUnsignedInt() shl 8) +
-                data[27].toUnsignedInt()
-        } else {
-            fallbackSiNumber
-        }
-        return SportIdentCardReadout(
-            siNumber = siNumber.takeIf { it > 0 } ?: fallbackSiNumber,
-            series = series,
-            checkTime = null,
-            startTime = null,
-            finishTime = null,
-            punches = emptyList(),
             cardHolder = parseSemicolonCardHolder(data, series)
         )
     }
