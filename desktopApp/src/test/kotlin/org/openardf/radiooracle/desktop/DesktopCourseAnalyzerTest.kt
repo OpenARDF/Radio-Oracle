@@ -22,6 +22,7 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
 import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.math.roundToInt
 
 class DesktopCourseAnalyzerTest {
@@ -139,6 +140,24 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun omitsClassicWaitAndFindPunchAllowanceForSprintAndFoxoring() {
+        listOf(RaceType.SPRINT, RaceType.FOXORING).forEach { raceType ->
+            val summary = DesktopCourseAnalyzer.analyze(
+                projectFile = projectFile(foxCount = 3, raceType = raceType),
+                categoryId = CATEGORY_ID,
+                protectedCourseInfo = protectedInfo(foxCount = 3),
+                protectedIdealOrderText = "31 32 33 Beacon"
+            )
+
+            assertEquals("raceType=$raceType", emptyList<DesktopCourseWaitRow>(), summary.waitRows)
+            assertEquals("raceType=$raceType", emptyList<DesktopCourseWaitRow>(), summary.providedRouteSection?.waitRows)
+            assertEquals("raceType=$raceType", emptyList<DesktopCourseWaitRow>(), summary.calculatedRouteSection?.waitRows)
+            assertTrue("raceType=$raceType", summary.providedLegRows.all { it.waitSeconds == null && it.findPunchSeconds == null })
+            assertTrue("raceType=$raceType", summary.calculatedLegRows.all { it.waitSeconds == null && it.findPunchSeconds == null })
+        }
+    }
+
+    @Test
     fun flagsClassicShortestRouteClimbOverSixPercent() {
         val projectFile = projectFile(foxCount = 3)
         val protectedInfo = protectedInfo(foxCount = 3).copy(
@@ -182,8 +201,16 @@ class DesktopCourseAnalyzerTest {
         val pdfBytes = Files.readAllBytes(pdfPath)
         assertTrue(String(pdfBytes.take(8).toByteArray()).startsWith("%PDF-1.4"))
         assertTrue(String(pdfBytes).contains("Course Analyzer"))
+        assertPdfInfoCanRead(pdfPath)
         assertEquals(pdfPath, exportPaths.pdfPath)
         assertEquals(pdfPath.resolveSibling("${pdfPath.fileName.toString().removeSuffix(".pdf")}.kml"), exportPaths.kmlPath)
+
+        val multiPagePdfPath = Files.createTempFile("course-analysis-multipage", ".pdf")
+        DesktopCourseAnalysisExports.exportPdf(
+            multiPagePdfPath,
+            summary.copy(missingElements = (1..120).map { "PDF validation filler line $it." })
+        )
+        assertPdfInfoCanRead(multiPagePdfPath)
 
         val kmlText = Files.readString(exportPaths.kmlPath)
         assertTrue(kmlText.contains("<name>Provided foxes and route</name>"))
@@ -378,7 +405,8 @@ class DesktopCourseAnalyzerTest {
     private fun projectFile(
         foxCount: Int,
         publicLabels: List<String>? = null,
-        siCodes: List<Int>? = null
+        siCodes: List<Int>? = null,
+        raceType: RaceType = RaceType.CLASSIC
     ): EventProjectFile {
         val controls = (1..foxCount).map { number ->
             val siCode = siCodes?.getOrNull(number - 1) ?: (30 + number)
@@ -430,7 +458,7 @@ class DesktopCourseAnalyzerTest {
                     name = "Test Event",
                     apiKey = "",
                     startDateTimeIso = "2026-06-06T09:00:00",
-                    raceType = RaceType.CLASSIC,
+                    raceType = raceType,
                     raceLevel = RaceLevel.PRACTICE,
                     raceBand = RaceBand.M80,
                     timeLimitSeconds = 7_200
@@ -516,6 +544,20 @@ class DesktopCourseAnalyzerTest {
             controlPoints = controls,
             courseObjects = courseObjects
         )
+    }
+
+    private fun assertPdfInfoCanRead(path: Path) {
+        val process = try {
+            ProcessBuilder("pdfinfo", path.toString())
+                .redirectErrorStream(true)
+                .start()
+        } catch (_: Exception) {
+            return
+        }
+        val output = process.inputStream.bufferedReader().readText()
+        val exitCode = process.waitFor()
+        assertEquals(output, 0, exitCode)
+        assertTrue(output, output.contains("Pages:"))
     }
 
     private companion object {

@@ -295,7 +295,7 @@ object DesktopCourseAnalysisExports {
         val pages = wrappedLines.chunked(52).ifEmpty { listOf(listOf("")) }
         val objects = mutableListOf<String>()
         objects += "<< /Type /Catalog /Pages 2 0 R >>"
-        objects += "<< /Type /Pages /Kids ${pages.indices.joinToString(prefix = "[", postfix = "]") { "${4 + it * 2} 0 R" }} /Count ${pages.size} >>"
+        objects += "<< /Type /Pages /Kids ${pages.indices.joinToString(separator = " ", prefix = "[", postfix = "]") { "${4 + it * 2} 0 R" }} /Count ${pages.size} >>"
         objects += "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
         pages.forEachIndexed { index, pageLines ->
             val pageObjectId = 4 + index * 2
