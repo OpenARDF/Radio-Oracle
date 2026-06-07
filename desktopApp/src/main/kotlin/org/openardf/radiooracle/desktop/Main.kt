@@ -615,6 +615,30 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun insertTestSportIdentDownloads() {
+            val currentProject = projectSession.currentProject
+            if (currentProject == null) {
+                projectStatusText = "Open or create an Event File before inserting test SI downloads."
+                return
+            }
+            runCatching {
+                val result = DesktopTestSportIdentDownloads.insert(currentProject)
+                if (result.insertedCount > 0) {
+                    projectFile = projectSession.updateCurrentProject { result.projectFile }
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText =
+                        "Inserted ${result.insertedCount} test SI-card download${if (result.insertedCount == 1) "" else "s"}."
+                } else {
+                    projectStatusText =
+                        "No test SI downloads inserted; all eligible competitors already have readouts or lack SI numbers."
+                }
+                DesktopDebugLog.info("SI", "Inserted ${result.insertedCount} test SI-card downloads")
+            }.onFailure { error ->
+                projectStatusText = "Test SI download insert failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("SI", projectStatusText)
+            }
+        }
+
         fun startContinuousSportIdentReadout() {
             if (isDownloadingSiReadout || isContinuousSiReadoutActive || isReadingCompetitorSiCard) {
                 return
@@ -1760,6 +1784,84 @@ fun main(args: Array<String>) = application {
                 else -> projectFile != null
             }
 
+        fun disabledNavActionReason(action: DesktopNavAction): String? {
+            if (isNavActionEnabled(action)) {
+                return null
+            }
+            return when (action) {
+                DesktopNavAction.SaveEventFile ->
+                    if (projectFile == null) {
+                        "Open or create an Event File before saving."
+                    } else {
+                        "There are no Event File changes to save."
+                    }
+                DesktopNavAction.SaveEventFileAs,
+                DesktopNavAction.CloseEventFile,
+                DesktopNavAction.ImportEventRegCompetitorsCsv,
+                DesktopNavAction.ImportCategoriesCsv,
+                DesktopNavAction.ImportCourseKmlKmz,
+                DesktopNavAction.ImportControlsCsv,
+                DesktopNavAction.ImportCompetitorsCsv,
+                DesktopNavAction.ImportStartsCsv,
+                DesktopNavAction.ExportEventFileCopy,
+                DesktopNavAction.ExportCategoriesCsv,
+                DesktopNavAction.ExportControlsCsv,
+                DesktopNavAction.ExportCompetitorsCsv,
+                DesktopNavAction.ExportStartsCsv,
+                DesktopNavAction.ExportStartsByCategoryCsv,
+                DesktopNavAction.ExportStartsByMinuteCsv,
+                DesktopNavAction.ExportRobisStartListCsv,
+                DesktopNavAction.ExportReadoutsCsv,
+                DesktopNavAction.ExportResultsCsv,
+                DesktopNavAction.ExportArdfEventResultsCsv,
+                DesktopNavAction.ExportResultsText,
+                DesktopNavAction.ExportResultsHtml,
+                DesktopNavAction.ExportArdfJson,
+                DesktopNavAction.ExportAndroidRaceBackupJson,
+                DesktopNavAction.ExportLiveResultsJson,
+                DesktopNavAction.ExportFinalResultsJson,
+                DesktopNavAction.ExportIofStartListXml,
+                DesktopNavAction.ExportIofResultListXml ->
+                    "Open or create an Event File first."
+                DesktopNavAction.DownloadSiCard ->
+                    when {
+                        projectFile == null -> "Open or create an Event File before downloading SI cards."
+                        isDownloadingSiReadout -> "An SI card download is already in progress."
+                        isContinuousSiReadoutActive -> "Stop continuous SI readout before downloading one card."
+                        else -> "SI card download is not available right now."
+                    }
+                DesktopNavAction.StartContinuousSiReadout ->
+                    when {
+                        projectFile == null -> "Open or create an Event File before starting continuous SI readout."
+                        isDownloadingSiReadout -> "Wait for the current SI card download to finish."
+                        isContinuousSiReadoutActive -> "Continuous SI readout is already running."
+                        else -> "Continuous SI readout is not available right now."
+                    }
+                DesktopNavAction.StopContinuousSiReadout ->
+                    "Continuous SI readout is not running."
+                DesktopNavAction.StartLocalResultDisplay ->
+                    if (projectFile == null) {
+                        "Open or create an Event File before starting the local result display."
+                    } else {
+                        "The local result display is already running."
+                    }
+                DesktopNavAction.StopLocalResultDisplay ->
+                    "The local result display is not running."
+                DesktopNavAction.SendRobis ->
+                    if (projectFile == null) {
+                        "Open or create an Event File before sending ROBIS results."
+                    } else {
+                        "ROBIS results are already being sent."
+                    }
+                DesktopNavAction.NewEventFile,
+                DesktopNavAction.OpenEventFile,
+                DesktopNavAction.ImportAndroidRaceBackup,
+                DesktopNavAction.ImportEventRegWebsite,
+                DesktopNavAction.ShowDebugLogHelp,
+                DesktopNavAction.ShowAbout -> null
+            }
+        }
+
         fun handleNavAction(action: DesktopNavAction) {
             when (action) {
                 DesktopNavAction.NewEventFile -> requestNewEventFile()
@@ -1990,6 +2092,8 @@ fun main(args: Array<String>) = application {
             printerDiagnostics = printerDiagnostics,
             raceClockTick = raceClockTick,
             isNavActionEnabled = ::isNavActionEnabled,
+            disabledNavActionReason = ::disabledNavActionReason,
+            onInsertTestSportIdentDownloads = ::insertTestSportIdentDownloads,
             onNavAction = ::handleNavAction,
             isProtectedCourseOrderUnlocked = protectedCoursePassword != null,
             protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
@@ -3143,6 +3247,8 @@ private fun RadioOManagerDesktopApp(
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean = { _, _, _ -> false },
     onLockProtectedCourseOrder: () -> Unit = {},
     isNavActionEnabled: (DesktopNavAction) -> Boolean = { false },
+    disabledNavActionReason: (DesktopNavAction) -> String? = { null },
+    onInsertTestSportIdentDownloads: () -> Unit = {},
     onNavAction: (DesktopNavAction) -> Unit = {},
     hasDefaultUnsavedNewEventFileDraft: Boolean = false,
     hasEditedUnsavedNewEventFileDraft: Boolean = false,
@@ -3229,6 +3335,7 @@ private fun RadioOManagerDesktopApp(
                         navState = navState,
                         navigationReadiness = navigationReadiness,
                         isNavActionEnabled = isNavActionEnabled,
+                        disabledNavActionReason = disabledNavActionReason,
                         onBack = { requestNavigation(DesktopPendingNavigation.Back) },
                         onSaveEvent = { onNavAction(DesktopNavAction.SaveEventFile) },
                         onItemSelected = { item ->
@@ -3310,6 +3417,7 @@ private fun RadioOManagerDesktopApp(
                                 onUpdateProtectedControlLocation = onUpdateProtectedControlLocation,
                                 onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword,
                                 isNavActionEnabled = isNavActionEnabled,
+                                onInsertTestSportIdentDownloads = onInsertTestSportIdentDownloads,
                                 onNavAction = onNavAction
                             )
                         }
@@ -3325,6 +3433,7 @@ private fun RadioOManagerDesktopApp(
                 StatusStrip(
                     projectStatusText = projectStatusText,
                     hasUnsavedChanges = hasUnsavedChanges,
+                    navigationDisabledSummary = DesktopNavigation.primaryDisabledSummary(navigationReadiness),
                     siReaderState = siReaderState,
                     isEventFileOpen = projectFile != null,
                     isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
@@ -3416,6 +3525,7 @@ private fun NavigationRail(
     navState: DesktopNavState,
     navigationReadiness: DesktopNavigationReadiness,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
+    disabledNavActionReason: (DesktopNavAction) -> String?,
     onBack: () -> Unit,
     onSaveEvent: () -> Unit,
     onItemSelected: (DesktopNavItem) -> Unit
@@ -3433,34 +3543,41 @@ private fun NavigationRail(
     ) {
         items.forEach { item ->
             val isSelected = item.id == navState.selectedItemId && item.children.isEmpty()
-            val isEnabled = DesktopNavigation.isItemEnabled(item, navigationReadiness) &&
-                (item.action?.let(isNavActionEnabled) ?: true)
-            Button(
-                onClick = { onItemSelected(item) },
-                enabled = isEnabled,
-                modifier = Modifier.fillMaxWidth(),
-                colors = if (item.action == DesktopNavAction.SaveEventFile) {
-                    saveEventButtonColors()
-                } else {
-                    ButtonDefaults.buttonColors()
+            val isNavigationEnabled = DesktopNavigation.isItemEnabled(item, navigationReadiness)
+            val actionEnabled = item.action?.let(isNavActionEnabled) ?: true
+            val isEnabled = isNavigationEnabled && actionEnabled
+            val disabledReason = DesktopNavigation.disabledItemReason(item, navigationReadiness)
+                ?: item.action?.let(disabledNavActionReason)
+            DisabledReasonTooltip(disabledReason) {
+                Button(
+                    onClick = { onItemSelected(item) },
+                    enabled = isEnabled,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = if (item.action == DesktopNavAction.SaveEventFile) {
+                        saveEventButtonColors()
+                    } else {
+                        ButtonDefaults.buttonColors()
+                    }
+                ) {
+                    Text(
+                        text = if (item.children.isEmpty()) item.label else "${item.label} >",
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    )
                 }
-            ) {
-                Text(
-                    text = if (item.children.isEmpty()) item.label else "${item.label} >",
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                )
             }
         }
         if (navState.submenuStack.isNotEmpty()) {
             Spacer(modifier = Modifier.weight(1f))
             if (!hasMenuSaveEvent) {
-                Button(
-                    onClick = onSaveEvent,
-                    enabled = isNavActionEnabled(DesktopNavAction.SaveEventFile),
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = saveEventButtonColors()
-                ) {
-                    Text("Save Event")
+                DisabledReasonTooltip(disabledNavActionReason(DesktopNavAction.SaveEventFile)) {
+                    Button(
+                        onClick = onSaveEvent,
+                        enabled = isNavActionEnabled(DesktopNavAction.SaveEventFile),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = saveEventButtonColors()
+                    ) {
+                        Text("Save Event")
+                    }
                 }
             }
             Button(
@@ -3496,33 +3613,64 @@ private fun WorkflowBar(
         DesktopWorkflow.bottomBarEntries.forEach { workflow ->
             val isSelected = workflow == selectedWorkflow
             val isEnabled = DesktopNavigation.isWorkflowEnabled(workflow, navigationReadiness)
-            Button(
-                onClick = { onWorkflowSelected(workflow) },
-                enabled = isEnabled,
-                modifier = Modifier
-                    .weight(1f)
-                    .border(
-                        width = if (isSelected) 2.dp else 1.dp,
-                        color = if (isSelected) DesktopPalette.Black else DesktopPalette.LightGrey
-                    ),
-                colors = if (isSelected) {
-                    ButtonDefaults.buttonColors(
-                        backgroundColor = DesktopPalette.PrimaryVariant,
-                        contentColor = DesktopPalette.White
-                    )
-                } else {
-                    ButtonDefaults.buttonColors(
-                        backgroundColor = DesktopPalette.White,
-                        contentColor = DesktopPalette.Black
+            Box(modifier = Modifier.weight(1f)) {
+                DisabledReasonTooltip(DesktopNavigation.disabledWorkflowReason(workflow, navigationReadiness)) {
+                    Button(
+                        onClick = { onWorkflowSelected(workflow) },
+                        enabled = isEnabled,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(
+                                width = if (isSelected) 2.dp else 1.dp,
+                                color = if (isSelected) DesktopPalette.Black else DesktopPalette.LightGrey
+                            ),
+                        colors = if (isSelected) {
+                            ButtonDefaults.buttonColors(
+                                backgroundColor = DesktopPalette.PrimaryVariant,
+                                contentColor = DesktopPalette.White
+                            )
+                        } else {
+                            ButtonDefaults.buttonColors(
+                                backgroundColor = DesktopPalette.White,
+                                contentColor = DesktopPalette.Black
+                            )
+                        }
+                    ) {
+                        Text(
+                            text = workflow.shortLabel,
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+private fun DisabledReasonTooltip(reason: String?, content: @Composable () -> Unit) {
+    if (reason == null) {
+        content()
+    } else {
+        TooltipArea(
+            tooltip = {
+                Surface(
+                    color = DesktopPalette.PrimaryVariant,
+                    contentColor = DesktopPalette.White,
+                    elevation = 4.dp
+                ) {
+                    Text(
+                        text = reason,
+                        modifier = Modifier.width(280.dp).padding(8.dp),
+                        fontSize = 12.sp
                     )
                 }
-            ) {
-                Text(
-                    text = workflow.shortLabel,
-                    fontSize = 13.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                )
-            }
+            },
+            delayMillis = 350
+        ) {
+            content()
         }
     }
 }
@@ -3602,6 +3750,7 @@ private fun SectionWorkspace(
     onUpdateProtectedControlLocation: (String, String, String) -> String,
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
+    onInsertTestSportIdentDownloads: () -> Unit,
     onNavAction: (DesktopNavAction) -> Unit
 ) {
     Column(
@@ -3764,23 +3913,45 @@ private fun SectionWorkspace(
                 onUpdateReadoutStatus = onUpdateReadoutStatus
             )
         }
-        if (section == DesktopSection.Settings) {
-            SettingsDetailsPanel(
+        if (section == DesktopSection.EventDiagnostics) {
+            EventDiagnosticsPanel(
+                diagnostics = DesktopProjectDiagnostics.from(projectFile),
+                onInsertTestSportIdentDownloads = onInsertTestSportIdentDownloads
+            )
+        }
+        if (section == DesktopSection.SiReadoutSettings) {
+            SiReadoutSettingsPanel(
+                readoutDuplicatePolicy = readoutDuplicatePolicy,
+                isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
+                onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
+                onSetReadoutAlertSoundEnabled = onSetReadoutAlertSoundEnabled,
+                onInsertTestSportIdentDownloads = onInsertTestSportIdentDownloads,
+                isEventFileOpen = projectFile != null
+            )
+        }
+        if (section == DesktopSection.LiveResultSettings) {
+            LiveResultSettingsPanel(
                 diagnostics = DesktopProjectDiagnostics.from(projectFile),
                 isSendingLiveResults = isSendingLiveResults,
                 isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
-                readoutDuplicatePolicy = readoutDuplicatePolicy,
-                isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
-                areAliasesEnabled = areAliasesEnabled,
                 localResultServerUrl = localResultServerUrl,
-                printerDiagnostics = printerDiagnostics,
                 onSendRobisLiveResults = onSendRobisLiveResults,
                 onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
-                onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
-                onSetReadoutAlertSoundEnabled = onSetReadoutAlertSoundEnabled,
-                onSetAliasesEnabled = onSetAliasesEnabled,
                 onStartLocalResultServer = onStartLocalResultServer,
                 onStopLocalResultServer = onStopLocalResultServer
+            )
+        }
+        if (section == DesktopSection.DisplaySettings) {
+            DisplaySettingsPanel(
+                areAliasesEnabled = areAliasesEnabled,
+                onSetAliasesEnabled = onSetAliasesEnabled,
+                isEventFileOpen = projectFile != null
+            )
+        }
+        if (section == DesktopSection.Settings) {
+            AppSettingsPanel(
+                diagnostics = DesktopProjectDiagnostics.from(projectFile),
+                printerDiagnostics = printerDiagnostics
             )
         }
         Box(
@@ -3801,24 +3972,11 @@ private fun SectionWorkspace(
     }
 }
 
-/** Shows read-only Event File diagnostics and the desktop-beta scope boundary. */
+/** Shows read-only Event File diagnostics and desktop test tools. */
 @Composable
-private fun SettingsDetailsPanel(
+private fun EventDiagnosticsPanel(
     diagnostics: DesktopProjectDiagnostics,
-    isSendingLiveResults: Boolean,
-    isBackgroundLiveResultSendingEnabled: Boolean,
-    readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
-    isReadoutAlertSoundEnabled: Boolean,
-    areAliasesEnabled: Boolean,
-    localResultServerUrl: String?,
-    printerDiagnostics: DesktopPrinterDiagnostics,
-    onSendRobisLiveResults: () -> Unit,
-    onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
-    onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit,
-    onSetReadoutAlertSoundEnabled: (Boolean) -> Unit,
-    onSetAliasesEnabled: (Boolean) -> Unit,
-    onStartLocalResultServer: () -> Unit,
-    onStopLocalResultServer: () -> Unit
+    onInsertTestSportIdentDownloads: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DetailRow("Event File", diagnostics.projectState)
@@ -3841,11 +3999,44 @@ private fun SettingsDetailsPanel(
             )
         )
         DetailRow("Validation", diagnostics.validationState)
+        Button(
+            onClick = onInsertTestSportIdentDownloads,
+            enabled = diagnostics.projectState == "Event File open"
+        ) {
+            ButtonLabel("Insert Test SI Downloads")
+        }
+        diagnostics.validationIssues.forEach { issue ->
+            Text(
+                text = issue,
+                color = DesktopPalette.Error,
+                fontSize = 13.sp
+            )
+        }
+    }
+}
+
+/** Shows SI-card readout behavior settings used by Race Ops. */
+@Composable
+private fun SiReadoutSettingsPanel(
+    readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
+    isReadoutAlertSoundEnabled: Boolean,
+    onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit,
+    onSetReadoutAlertSoundEnabled: (Boolean) -> Unit,
+    onInsertTestSportIdentDownloads: () -> Unit,
+    isEventFileOpen: Boolean
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DetailRow("Duplicate SI cards", readoutDuplicatePolicy.toDisplayLabel())
         ReadoutDuplicatePolicyPicker(
             selectedPolicy = readoutDuplicatePolicy,
             onPolicySelected = onSetReadoutDuplicatePolicy
         )
+        Button(
+            onClick = onInsertTestSportIdentDownloads,
+            enabled = isEventFileOpen
+        ) {
+            ButtonLabel("Insert Test SI Downloads")
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(
                 checked = isReadoutAlertSoundEnabled,
@@ -3857,23 +4048,22 @@ private fun SettingsDetailsPanel(
                 fontSize = 13.sp
             )
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(
-                checked = areAliasesEnabled,
-                onCheckedChange = onSetAliasesEnabled,
-                enabled = diagnostics.projectState == "Event File open"
-            )
-            Text(
-                text = "Use control labels",
-                color = DesktopPalette.Black,
-                fontSize = 13.sp
-            )
-        }
-        DetailRow("Printer", printerDiagnostics.readinessText)
-        DetailRow(
-            "Detected printers",
-            printerDiagnostics.detectedPrinterNames.joinToString().ifBlank { "None" }
-        )
+    }
+}
+
+/** Shows live result display and ROBIS result-sending settings. */
+@Composable
+private fun LiveResultSettingsPanel(
+    diagnostics: DesktopProjectDiagnostics,
+    isSendingLiveResults: Boolean,
+    isBackgroundLiveResultSendingEnabled: Boolean,
+    localResultServerUrl: String?,
+    onSendRobisLiveResults: () -> Unit,
+    onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
+    onStartLocalResultServer: () -> Unit,
+    onStopLocalResultServer: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DetailRow("Local result display", localResultServerUrl ?: "Stopped")
         Row(horizontalArrangement = Arrangement.spacedBy(TableColumnGap)) {
             Button(
@@ -3908,13 +4098,44 @@ private fun SettingsDetailsPanel(
         ) {
             ButtonLabel(if (isSendingLiveResults) "Sending" else "Send ROBIS")
         }
-        diagnostics.validationIssues.forEach { issue ->
+    }
+}
+
+/** Shows display choices that affect readout and result presentation. */
+@Composable
+private fun DisplaySettingsPanel(
+    areAliasesEnabled: Boolean,
+    onSetAliasesEnabled: (Boolean) -> Unit,
+    isEventFileOpen: Boolean
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = areAliasesEnabled,
+                onCheckedChange = onSetAliasesEnabled,
+                enabled = isEventFileOpen
+            )
             Text(
-                text = issue,
-                color = DesktopPalette.Error,
+                text = "Use control labels",
+                color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
         }
+    }
+}
+
+/** Shows application-level status and desktop-beta scope. */
+@Composable
+private fun AppSettingsPanel(
+    diagnostics: DesktopProjectDiagnostics,
+    printerDiagnostics: DesktopPrinterDiagnostics
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        DetailRow("Printer", printerDiagnostics.readinessText)
+        DetailRow(
+            "Detected printers",
+            printerDiagnostics.detectedPrinterNames.joinToString().ifBlank { "None" }
+        )
         Text(
             text = "Desktop beta scope",
             color = DesktopPalette.Disconnected,
@@ -8390,11 +8611,19 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
             "KML/KMZ files must include named control Point placemarks and category route LineString placemarks."
         DesktopSection.Readouts -> summary?.let { "${it.readoutCount} SI-card readouts loaded." }
             ?: requiresEventFile("working with SI-card readouts")
+        DesktopSection.SiReadoutSettings ->
+            "Configure SI-card readout behavior used by Race Ops."
         DesktopSection.InForest -> summary?.let { "Started competitors without readouts." }
             ?: requiresEventFile("reviewing competitors in the forest")
         DesktopSection.Results -> summary?.let { "${it.resultCount} results loaded." }
             ?: requiresEventFile("viewing results")
-        DesktopSection.Settings -> "Event File diagnostics and desktop beta scope."
+        DesktopSection.LiveResultSettings ->
+            "Configure local result display and ROBIS live result sending."
+        DesktopSection.DisplaySettings ->
+            "Configure display preferences used by readouts and results."
+        DesktopSection.EventDiagnostics ->
+            "Review Event File diagnostics and insert generated readout data for testing."
+        DesktopSection.Settings -> "Application settings, hardware status, and desktop beta scope."
     }
 }
 
@@ -8429,6 +8658,7 @@ private fun StartDrawStartGroupMode.toDisplayLabel(): String =
 private fun StatusStrip(
     projectStatusText: String,
     hasUnsavedChanges: Boolean,
+    navigationDisabledSummary: String?,
     siReaderState: DesktopSiReaderUiState,
     isEventFileOpen: Boolean,
     isProtectedCourseOrderUnlocked: Boolean,
@@ -8459,6 +8689,18 @@ private fun StatusStrip(
             DesktopSiReaderSeverity.ERROR -> DesktopPalette.White
         }
     }
+    val statusText = buildString {
+        append(siReaderState.statusText)
+        append(" - ")
+        append(projectStatusText)
+        if (hasUnsavedChanges) {
+            append(" *")
+        }
+        if (!navigationDisabledSummary.isNullOrBlank()) {
+            append(" - ")
+            append(navigationDisabledSummary)
+        }
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -8468,7 +8710,7 @@ private fun StatusStrip(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "${siReaderState.statusText} - $projectStatusText${if (hasUnsavedChanges) " *" else ""}",
+            text = statusText,
             modifier = Modifier.weight(1f),
             color = textColor,
             fontSize = 13.sp,

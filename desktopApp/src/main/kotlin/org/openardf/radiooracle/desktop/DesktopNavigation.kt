@@ -69,7 +69,10 @@ data class DesktopNavigationReadiness(
     val hasCompetitors: Boolean = false,
     val hasAssignedCompetitors: Boolean = false,
     val hasStartList: Boolean = false,
-    val hasRaceOpsData: Boolean = false
+    val hasRaceOpsData: Boolean = false,
+    val competitorCount: Int = 0,
+    val unassignedCompetitorCount: Int = 0,
+    val unscheduledCompetitorCount: Int = 0
 ) {
     val isSetupComplete: Boolean
         get() = hasEventFile &&
@@ -84,10 +87,12 @@ data class DesktopNavigationReadiness(
             val categoryIds = raceData.categories.map { it.category.id }.toSet()
             val competitors = raceData.competitorData.map { it.competitorCategory.competitor }
             val hasCompetitors = competitors.isNotEmpty()
+            val unassignedCompetitorCount = competitors.count { competitor ->
+                competitor.categoryId == null || !categoryIds.contains(competitor.categoryId)
+            }
+            val unscheduledCompetitorCount = competitors.count { it.drawnStartTimeSeconds == null }
             val hasAssignedCompetitors = hasCompetitors &&
-                competitors.all { competitor ->
-                    competitor.categoryId != null && categoryIds.contains(competitor.categoryId)
-                }
+                unassignedCompetitorCount == 0
 
             return DesktopNavigationReadiness(
                 hasEventFile = true,
@@ -95,9 +100,12 @@ data class DesktopNavigationReadiness(
                 hasCategories = raceData.categories.isNotEmpty(),
                 hasCompetitors = hasCompetitors,
                 hasAssignedCompetitors = hasAssignedCompetitors,
-                hasStartList = hasCompetitors && competitors.all { it.drawnStartTimeSeconds != null },
+                hasStartList = hasCompetitors && unscheduledCompetitorCount == 0,
                 hasRaceOpsData = raceData.competitorData.any { it.readoutData != null } ||
-                    raceData.unmatchedReadoutData.isNotEmpty()
+                    raceData.unmatchedReadoutData.isNotEmpty(),
+                competitorCount = competitors.size,
+                unassignedCompetitorCount = unassignedCompetitorCount,
+                unscheduledCompetitorCount = unscheduledCompetitorCount
             )
         }
     }
@@ -326,7 +334,14 @@ object DesktopNavigation {
                     listOf(
                         action("race.download-si", "Download SI Card", workflow, DesktopNavAction.DownloadSiCard),
                         action("race.start-continuous", "Start Continuous SI", workflow, DesktopNavAction.StartContinuousSiReadout),
-                        action("race.stop-continuous", "Stop Continuous SI", workflow, DesktopNavAction.StopContinuousSiReadout)
+                        action("race.stop-continuous", "Stop Continuous SI", workflow, DesktopNavAction.StopContinuousSiReadout),
+                        item(
+                            "race.si-settings",
+                            "SI Readout Settings",
+                            workflow,
+                            DesktopSection.SiReadoutSettings,
+                            requiresEventFile = false
+                        )
                     )
                 ),
                 item("race.in-forest", "In Forest", workflow, DesktopSection.InForest),
@@ -344,7 +359,13 @@ object DesktopNavigation {
                         action("results.start-display", "Start Display", workflow, DesktopNavAction.StartLocalResultDisplay),
                         action("results.stop-display", "Stop Display", workflow, DesktopNavAction.StopLocalResultDisplay),
                         action("results.send-robis", "Send ROBIS", workflow, DesktopNavAction.SendRobis),
-                        item("results.live-settings", "Live Result Settings", workflow, DesktopSection.Settings, requiresEventFile = false)
+                        item(
+                            "results.live-settings",
+                            "Live Result Settings",
+                            workflow,
+                            DesktopSection.LiveResultSettings,
+                            requiresEventFile = false
+                        )
                     )
                 ),
                 group(
@@ -458,6 +479,104 @@ object DesktopNavigation {
             else -> true
         }
     }
+
+    fun disabledWorkflowReason(workflow: DesktopWorkflow, readiness: DesktopNavigationReadiness): String? {
+        if (isWorkflowEnabled(workflow, readiness)) {
+            return null
+        }
+        return when (workflow) {
+            DesktopWorkflow.RaceOps ->
+                setupIncompleteReason(readiness, "Race Ops")
+            DesktopWorkflow.ResultsExport ->
+                if (!readiness.hasRaceOpsData) {
+                    "Results need at least one SI-card readout or unmatched readout."
+                } else {
+                    null
+                }
+            DesktopWorkflow.Setup,
+            DesktopWorkflow.SettingsHelp -> null
+        }
+    }
+
+    fun disabledItemReason(item: DesktopNavItem, readiness: DesktopNavigationReadiness): String? {
+        if (isItemEnabled(item, readiness)) {
+            return null
+        }
+        if (item.requiresEventFile && !readiness.hasEventFile) {
+            return "Open or create an Event File first."
+        }
+        return when {
+            item.id.startsWith("setup.categories") ->
+                "Enter controls before working with categories."
+            item.id.startsWith("setup.competitors") ->
+                setupCompetitorsReason(readiness)
+            item.id.startsWith("setup.start-list") ->
+                startListReason(readiness)
+            item.workflow == DesktopWorkflow.RaceOps ->
+                setupIncompleteReason(readiness, "Race Ops")
+            item.workflow == DesktopWorkflow.ResultsExport ->
+                "Results need at least one SI-card readout or unmatched readout."
+            else -> null
+        }
+    }
+
+    fun primaryDisabledSummary(readiness: DesktopNavigationReadiness): String? =
+        disabledWorkflowReason(DesktopWorkflow.RaceOps, readiness)
+            ?: disabledWorkflowReason(DesktopWorkflow.ResultsExport, readiness)
+
+    private fun setupIncompleteReason(
+        readiness: DesktopNavigationReadiness,
+        target: String
+    ): String =
+        "$target disabled: ${setupRequirementReason(readiness)}"
+
+    private fun setupRequirementReason(readiness: DesktopNavigationReadiness): String =
+        when {
+            !readiness.hasEventFile -> "open or create an Event File first."
+            !readiness.hasControls -> "enter controls first."
+            !readiness.hasCategories -> "enter categories first."
+            !readiness.hasCompetitors -> "enter competitors first."
+            !readiness.hasAssignedCompetitors -> {
+                val count = readiness.unassignedCompetitorCount
+                if (count > 0) {
+                    "$count competitor${if (count == 1) " is" else "s are"} not assigned to a category."
+                } else {
+                    "assign every competitor to a category."
+                }
+            }
+            !readiness.hasStartList -> {
+                val count = readiness.unscheduledCompetitorCount
+                if (count > 0) {
+                    "generate a Start List; $count competitor${if (count == 1) " has" else "s have"} no drawn start time."
+                } else {
+                    "generate a Start List first."
+                }
+            }
+            else -> "complete setup first."
+        }
+
+    private fun setupCompetitorsReason(readiness: DesktopNavigationReadiness): String =
+        when {
+            !readiness.hasControls -> "Enter controls before adding competitors."
+            !readiness.hasCategories -> "Enter categories before adding competitors."
+            else -> "Competitors are not available yet."
+        }
+
+    private fun startListReason(readiness: DesktopNavigationReadiness): String =
+        when {
+            !readiness.hasControls -> "Enter controls before drawing a Start List."
+            !readiness.hasCategories -> "Enter categories before drawing a Start List."
+            !readiness.hasCompetitors -> "Enter competitors before drawing a Start List."
+            !readiness.hasAssignedCompetitors -> {
+                val count = readiness.unassignedCompetitorCount
+                if (count > 0) {
+                    "Assign $count competitor${if (count == 1) "" else "s"} to categories before drawing a Start List."
+                } else {
+                    "Assign every competitor to a category before drawing a Start List."
+                }
+            }
+            else -> "Start List is not available yet."
+        }
 
     fun shouldGuardUnsavedNewEventDraft(
         currentState: DesktopNavState,
@@ -575,11 +694,49 @@ object DesktopNavigation {
                 DesktopNavAction.ExportAndroidRaceBackupJson,
                 section = DesktopSection.EventFile
             ),
-            item(
-                "setup.event-file.diagnostics",
+            group(
+                "setup.event-file.settings",
                 "Settings",
                 workflow,
-                DesktopSection.Settings
+                listOf(
+                    item(
+                        "setup.event-file.diagnostics",
+                        "Event Diagnostics",
+                        workflow,
+                        DesktopSection.EventDiagnostics,
+                        requiresEventFile = false
+                    ),
+                    item(
+                        "setup.event-file.si-settings",
+                        "SI Readout Settings",
+                        workflow,
+                        DesktopSection.SiReadoutSettings,
+                        requiresEventFile = false
+                    ),
+                    item(
+                        "setup.event-file.live-settings",
+                        "Live Result Settings",
+                        workflow,
+                        DesktopSection.LiveResultSettings,
+                        requiresEventFile = false
+                    ),
+                    item(
+                        "setup.event-file.display-settings",
+                        "Display Settings",
+                        workflow,
+                        DesktopSection.DisplaySettings,
+                        requiresEventFile = false
+                    ),
+                    item(
+                        "setup.event-file.app-settings",
+                        "App Settings",
+                        workflow,
+                        DesktopSection.Settings,
+                        requiresEventFile = false
+                    )
+                ),
+                DesktopSection.Settings,
+                requiresEventFile = false
             ),
             action("setup.event-file.save", "Save Event", workflow, DesktopNavAction.SaveEventFile)
         )

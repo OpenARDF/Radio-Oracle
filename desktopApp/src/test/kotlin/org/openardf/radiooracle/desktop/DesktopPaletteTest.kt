@@ -21,8 +21,12 @@ class DesktopPaletteTest {
                 "Import/Export",
                 "Import Controls/Route KML/KMZ",
                 "Readouts",
+                "SI Readout Settings",
                 "In Forest",
                 "Results",
+                "Live Result Settings",
+                "Display Settings",
+                "Event Diagnostics",
                 "Settings"
             ),
             DesktopSection.entries.map { it.label }

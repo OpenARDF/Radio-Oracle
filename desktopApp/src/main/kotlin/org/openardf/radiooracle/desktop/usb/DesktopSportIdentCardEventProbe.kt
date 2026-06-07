@@ -106,6 +106,25 @@ class DesktopSportIdentCardEventMonitor(
         return null
     }
 
+    fun waitForRemoveEventOnOpenPort(
+        port: DesktopSerialPort,
+        siNumber: Int?,
+        deadlineMillis: Long
+    ): SportIdentCardEvent.Removed? {
+        val stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_FRAME_BYTES)
+        while (System.currentTimeMillis() < deadlineMillis) {
+            when (val event = waitForOneEventOnOpenPort(stream, deadlineMillis)) {
+                is SportIdentCardEvent.Removed ->
+                    if (siNumber == null || event.siNumber == siNumber) {
+                        return event
+                    }
+                is SportIdentCardEvent.Inserted -> continue
+                null -> return null
+            }
+        }
+        return null
+    }
+
     companion object {
         val defaultMaxWaitMs: Long =
             System.getenv("RADIO_ORACLE_SI_CARD_EVENT_TIMEOUT_MS")?.toLongOrNull() ?: 60_000

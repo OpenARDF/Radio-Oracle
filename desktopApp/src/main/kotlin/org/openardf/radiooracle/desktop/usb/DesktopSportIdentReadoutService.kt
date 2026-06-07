@@ -8,6 +8,13 @@ class DesktopSportIdentReadoutService(
     },
     private val readCard: (DesktopSerialPort) -> DesktopSportIdentCardBlockDownload = {
         DesktopSportIdentCardBlockReader().readFirstSupportedCardAfterInsertOnOpenPort(it)
+    },
+    private val waitAfterSuccessfulCard: (DesktopSerialPort, DesktopSportIdentCardBlockDownload) -> Unit = { port, download ->
+        DesktopSportIdentCardEventMonitor().waitForRemoveEventOnOpenPort(
+            port = port,
+            siNumber = download.readout.siNumber,
+            deadlineMillis = System.currentTimeMillis() + postReadGuardMs
+        )
     }
 ) {
     fun downloadOne(): DesktopSportIdentCardBlockDownload {
@@ -39,6 +46,7 @@ class DesktopSportIdentReadoutService(
                     throw error ?: IllegalStateException("SPORTident card download failed.")
                 }
                 onDownload(download)
+                waitAfterSuccessfulCard(port, download)
                 cardsRead += 1
             }
         }
@@ -69,3 +77,6 @@ class DesktopSportIdentReadoutService(
 
 private fun isNoCardInsertTimeout(error: Throwable): Boolean =
     (error.message ?: "").contains("No SPORTident card insert event")
+
+private val postReadGuardMs: Long =
+    System.getenv("RADIO_ORACLE_SI_POST_READ_GUARD_MS")?.toLongOrNull() ?: 2_500L

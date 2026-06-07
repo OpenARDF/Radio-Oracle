@@ -56,7 +56,11 @@ enum class DesktopSection(val label: String) {
     ControlsImportExport("Import/Export"),
     ControlsRouteKmlImport("Import Controls/Route KML/KMZ"),
     Readouts("Readouts"),
+    SiReadoutSettings("SI Readout Settings"),
     InForest("In Forest"),
     Results("Results"),
+    LiveResultSettings("Live Result Settings"),
+    DisplaySettings("Display Settings"),
+    EventDiagnostics("Event Diagnostics"),
     Settings("Settings")
 }

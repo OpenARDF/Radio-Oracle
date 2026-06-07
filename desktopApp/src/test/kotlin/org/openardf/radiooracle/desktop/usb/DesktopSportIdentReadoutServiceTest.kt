@@ -133,6 +133,41 @@ class DesktopSportIdentReadoutServiceTest {
         assertTrue(port.closed)
     }
 
+    @Test
+    fun downloadUntilTimeoutWaitsAfterSuccessfulCardsBeforeNextRead() {
+        val port = FakePort()
+        val waitSis = mutableListOf<Int>()
+        var readAttempts = 0
+        val service = DesktopSportIdentReadoutService(
+            portProvider = FakePortProvider(listOf(port)),
+            connectStation = {
+                it.open(0)
+                connection(modeCode = 8)
+            },
+            readCard = {
+                readAttempts += 1
+                if (readAttempts == 1) {
+                    download(siNumber = 2450672)
+                } else {
+                    error("No SPORTident card insert event received before timeout.")
+                }
+            },
+            waitAfterSuccessfulCard = { _, download ->
+                waitSis.add(download.readout.siNumber)
+            }
+        )
+
+        val count = service.downloadUntilTimeout(
+            maxCards = 2,
+            onDownload = {}
+        )
+
+        assertEquals(1, count)
+        assertEquals(listOf(2450672), waitSis)
+        assertEquals(2, readAttempts)
+        assertFalse(port.isOpen)
+    }
+
     private class FakePortProvider(private val ports: List<DesktopSerialPort>) : DesktopSerialPortProvider {
         override fun listPorts(): List<DesktopSerialPort> = ports
         override fun getPort(systemPortPath: String): DesktopSerialPort =

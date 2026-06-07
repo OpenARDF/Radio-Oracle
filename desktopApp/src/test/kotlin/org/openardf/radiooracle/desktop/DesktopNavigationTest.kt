@@ -42,6 +42,21 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun featureSettingsUseSpecificSections() {
+        val raceSiSettings = DesktopNavigation.rootItems(DesktopWorkflow.RaceOps)
+            .first { it.label == "SI Readout" }
+            .children
+            .first { it.label == "SI Readout Settings" }
+        val resultsLiveSettings = DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport)
+            .first { it.label == "Live Results" }
+            .children
+            .first { it.label == "Live Result Settings" }
+
+        assertEquals(DesktopSection.SiReadoutSettings, raceSiSettings.section)
+        assertEquals(DesktopSection.LiveResultSettings, resultsLiveSettings.section)
+    }
+
+    @Test
     fun buildsBreadcrumbForSectionAndSubmenuSelection() {
         val state = DesktopNavState()
             .enter(DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Start List" })
@@ -275,6 +290,7 @@ class DesktopNavigationTest {
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.ImportEventRegWebsite }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFile }.requiresEventFile)
+        assertFalse(eventFileActions.first { it.label == "Settings" }.requiresEventFile)
         assertEquals(
             listOf(
                 "New Event File",
@@ -286,6 +302,16 @@ class DesktopNavigationTest {
                 "Save Event"
             ),
             eventFileActions.map { it.label }
+        )
+        assertEquals(
+            listOf(
+                "Event Diagnostics",
+                "SI Readout Settings",
+                "Live Result Settings",
+                "Display Settings",
+                "App Settings"
+            ),
+            eventFileActions.first { it.label == "Settings" }.children.map { it.label }
         )
     }
 
@@ -360,6 +386,69 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun disabledRaceOpsReasonIdentifiesMissingDrawnStartTimes() {
+        val readiness = DesktopNavigationReadiness(
+            hasEventFile = true,
+            hasControls = true,
+            hasCategories = true,
+            hasCompetitors = true,
+            hasAssignedCompetitors = true,
+            hasStartList = false,
+            competitorCount = 16,
+            unscheduledCompetitorCount = 7
+        )
+
+        assertEquals(
+            "Race Ops disabled: generate a Start List; 7 competitors have no drawn start time.",
+            DesktopNavigation.disabledWorkflowReason(DesktopWorkflow.RaceOps, readiness)
+        )
+        assertEquals(
+            "Race Ops disabled: generate a Start List; 7 competitors have no drawn start time.",
+            DesktopNavigation.primaryDisabledSummary(readiness)
+        )
+    }
+
+    @Test
+    fun disabledStartListReasonIdentifiesUnassignedCompetitors() {
+        val startList = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Start List" }
+        val readiness = DesktopNavigationReadiness(
+            hasEventFile = true,
+            hasControls = true,
+            hasCategories = true,
+            hasCompetitors = true,
+            hasAssignedCompetitors = false,
+            unassignedCompetitorCount = 2
+        )
+
+        assertEquals(
+            "Assign 2 competitors to categories before drawing a Start List.",
+            DesktopNavigation.disabledItemReason(startList, readiness)
+        )
+    }
+
+    @Test
+    fun disabledResultsReasonIdentifiesMissingRaceOpsData() {
+        val setupComplete = DesktopNavigationReadiness(
+            hasEventFile = true,
+            hasControls = true,
+            hasCategories = true,
+            hasCompetitors = true,
+            hasAssignedCompetitors = true,
+            hasStartList = true,
+            hasRaceOpsData = false
+        )
+
+        assertEquals(
+            "Results need at least one SI-card readout or unmatched readout.",
+            DesktopNavigation.disabledWorkflowReason(DesktopWorkflow.ResultsExport, setupComplete)
+        )
+        assertEquals(
+            "Results need at least one SI-card readout or unmatched readout.",
+            DesktopNavigation.primaryDisabledSummary(setupComplete)
+        )
+    }
+
+    @Test
     fun eventFileMenuOwnsDiagnostics() {
         val eventFileItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
             .first { it.label == "Event File" }
@@ -377,7 +466,14 @@ class DesktopNavigationTest {
             ),
             eventFileItems.map { it.label }
         )
-        assertTrue(eventFileItems.first { it.label == "Settings" }.requiresEventFile)
+        assertFalse(eventFileItems.first { it.label == "Settings" }.requiresEventFile)
+        assertEquals(
+            DesktopSection.LiveResultSettings,
+            eventFileItems.first { it.label == "Settings" }
+                .children
+                .first { it.label == "Live Result Settings" }
+                .section
+        )
         assertFalse(DesktopNavigation.rootItems(DesktopWorkflow.Setup).any { it.label == "Utils" })
     }
 
