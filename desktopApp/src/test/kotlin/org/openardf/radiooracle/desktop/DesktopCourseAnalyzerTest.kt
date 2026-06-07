@@ -21,6 +21,7 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
+import kotlin.math.roundToInt
 
 class DesktopCourseAnalyzerTest {
     @Test
@@ -67,12 +68,12 @@ class DesktopCourseAnalyzerTest {
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("effective length"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("does not guarantee 3 m source terrain data"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("does not currently know map passability"))
-        assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("3.6 m/s for Classic-style courses"))
+        assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("4:38 min/km for Classic-style courses (3.6 m/s)"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("not yet adjusted by category age or gender"))
         assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("foxes and any spectator"))
         assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("USGS 3DEP source DEM resolution varies"))
         assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("true on-foot route and wait timing differ"))
-        assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("fatigue is not modeled"))
+        assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("movement time uses effective length for each leg"))
         assertEquals(2, summary.profileComparison.size)
         assertEquals(2, summary.routeMaps.size)
         assertEquals(false, summary.hasMissingElevationData)
@@ -87,10 +88,23 @@ class DesktopCourseAnalyzerTest {
         assertEquals(listOf("31", "32", "33"), summary.waitRows.map { it.controlLabel })
         summary.providedLegRows.take(3).zip(summary.waitRows).forEach { (leg, wait) ->
             assertEquals(wait.arrivalSeconds + wait.waitSeconds + 30, leg.cumulativeSeconds)
+            assertEquals(wait.waitSeconds, leg.waitSeconds)
+            assertEquals(30, leg.findPunchSeconds)
         }
         summary.calculatedLegRows.take(3).zip(requireNotNull(summary.calculatedRouteSection).waitRows).forEach { (leg, wait) ->
             assertEquals(wait.arrivalSeconds + wait.waitSeconds + 30, leg.cumulativeSeconds)
+            assertEquals(wait.waitSeconds, leg.waitSeconds)
+            assertEquals(30, leg.findPunchSeconds)
         }
+        assertEquals(
+            ((requireNotNull(summary.calculatedLegRows.first().lengthMeters) + 100.0) / 3.6).roundToInt(),
+            requireNotNull(summary.calculatedRouteSection).waitRows.first().arrivalSeconds
+        )
+        assertEquals(listOf(null, null), summary.providedLegRows.takeLast(2).map { it.waitSeconds })
+        assertEquals(listOf(null, null), summary.providedLegRows.takeLast(2).map { it.findPunchSeconds })
+        assertEquals(summary.calculatedRouteSection?.estimatedIdealSeconds, summary.calculatedLegRows.last().cumulativeSeconds)
+        assertEquals(listOf(null, null), summary.calculatedLegRows.takeLast(2).map { it.waitSeconds })
+        assertEquals(listOf(null, null), summary.calculatedLegRows.takeLast(2).map { it.findPunchSeconds })
         assertTrue(summary.metrics.any { it.label == "Effective length" && it.value == "5.00 km" })
         assertTrue(
             "Metrics were ${summary.metrics}",

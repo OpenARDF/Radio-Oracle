@@ -13,7 +13,6 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
-import org.openardf.radiooracle.shared.time.DurationFormatter
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -107,7 +106,9 @@ data class DesktopCourseLegRow(
     val toLabel: String,
     val lengthMeters: Int?,
     val splitSeconds: Int?,
-    val cumulativeSeconds: Int?
+    val cumulativeSeconds: Int?,
+    val waitSeconds: Int? = null,
+    val findPunchSeconds: Int? = null
 )
 
 data class DesktopCourseWaitRenumbering(
@@ -153,9 +154,9 @@ enum class DesktopCourseMetricStatus {
  * lakes, uncrossable watercourses, fences, cliffs, and other navigation barriers are not modeled,
  * so route order and wait-time estimates remain advisory.
  *
- * Estimated times use an elite-competitor baseline speed by race format and apply a per-leg
- * gradient adjustment. The current implementation does not yet tune that baseline by category
- * age or gender and does not model fatigue across the course.
+ * Estimated times use an elite-competitor baseline pace by race format and convert each leg to
+ * effective length when elevation is available. The current implementation does not yet tune that
+ * baseline by category age or gender and does not model fatigue across the course.
  */
 object DesktopCourseAnalyzer {
     private const val CLASSIC_TRANSMIT_CYCLE_SECONDS = 300
@@ -173,7 +174,7 @@ object DesktopCourseAnalyzer {
     private const val MAP_KNOWLEDGE_LIMITATION_NOTE =
         "The analyzer does not currently know map passability, so out-of-bounds areas, dense vegetation, water, uncrossable features, and other impediments can make the true on-foot route and wait timing differ from this estimate."
     private const val SPEED_MODEL_NOTE =
-        "Estimated times use an elite-competitor baseline by race format: 3.6 m/s for Classic-style courses, 4.2 m/s for Sprint, and 3.4 m/s for Foxoring. Each leg is adjusted for elevation gradient: uphill legs are slowed more than downhill legs, the penalty is clamped, fatigue is not modeled, and the current model is not yet adjusted by category age or gender."
+        "Estimated times use an elite-competitor baseline pace by race format: 4:38 min/km for Classic-style courses (3.6 m/s), 3:58 min/km for Sprint (4.2 m/s), and 4:54 min/km for Foxoring (3.4 m/s). When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not modeled, and the current model is not yet adjusted by category age or gender."
     private const val CLASSIC_WAIT_TIMING_NOTE =
         "For Classic-style fox controls, timing assumes the competitor waits if the fox is off the air, then spends 30 seconds finding and punching before departing for the next leg; that delay affects later arrival phases."
 
@@ -625,7 +626,7 @@ object DesktopCourseAnalyzer {
         }
         val assignmentText = assignmentDifferenceText(providedAssignments, calculatedAssignments)
         return "This section calculates an independent ideal route by comparing $routeCount possible orders of the foxes and any spectator point, with the beacon last before the finish. " +
-            "The shortest candidate by $measurement is selected. $elevationText $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE $assignmentText"
+            "The shortest candidate by $measurement is selected. $elevationText $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE Large differences in estimated ideal time can come from fox wait-time optimization as well as route length; compare the movement, wait, and find/punch timing breakdown rows. $MAP_KNOWLEDGE_LIMITATION_NOTE $assignmentText"
     }
 
     private fun assignmentDifferenceText(
@@ -745,7 +746,9 @@ object DesktopCourseAnalyzer {
                 toLabel = to.label,
                 lengthMeters = lengthMeters,
                 splitSeconds = splitSeconds?.roundToInt(),
-                cumulativeSeconds = cumulativeSeconds?.roundToInt()
+                cumulativeSeconds = cumulativeSeconds?.roundToInt(),
+                waitSeconds = service.waitSeconds,
+                findPunchSeconds = service.findPunchSeconds
             )
         }
         return RouteTimingAnalysis(
@@ -813,7 +816,9 @@ object DesktopCourseAnalyzer {
                 toLabel = to.label,
                 lengthMeters = lengthMeters,
                 splitSeconds = splitSeconds?.roundToInt(),
-                cumulativeSeconds = cumulativeSeconds?.roundToInt()
+                cumulativeSeconds = cumulativeSeconds?.roundToInt(),
+                waitSeconds = service.waitSeconds,
+                findPunchSeconds = service.findPunchSeconds
             )
         }
         return RouteTimingAnalysis(
@@ -927,18 +932,18 @@ object DesktopCourseAnalyzer {
 
     private fun segmentSeconds(start: CourseGeoPoint, end: CourseGeoPoint, raceType: RaceType): Double {
         val horizontal = max(1.0, start.distanceMetersTo(end))
-        val gain = (end.elevationMeters ?: 0.0) - (start.elevationMeters ?: 0.0)
-        val slope = gain / horizontal
+        val climb = if (start.elevationMeters != null && end.elevationMeters != null) {
+            max(0.0, requireNotNull(end.elevationMeters) - requireNotNull(start.elevationMeters))
+        } else {
+            0.0
+        }
+        val movementMeters = horizontal + 10.0 * climb
         val flatSpeed = when (raceType) {
             RaceType.SPRINT -> SPRINT_FLAT_SPEED_MPS
             RaceType.FOXORING -> FOXORING_FLAT_SPEED_MPS
             else -> CLASSIC_FLAT_SPEED_MPS
         }
-        val penalty = when {
-            slope >= 0.0 -> 1.0 + 6.0 * slope
-            else -> 1.0 + 2.5 * abs(slope)
-        }.coerceIn(0.7, 3.0)
-        return horizontal / (flatSpeed / penalty)
+        return movementMeters / flatSpeed
     }
 
     private fun controlServiceTiming(
@@ -955,6 +960,8 @@ object DesktopCourseAnalyzer {
         val roundedArrival = arrivalSeconds.roundToInt()
         val waitSeconds = waitSecondsForClassicSlot(slotIndex, roundedArrival)
         return ControlServiceTiming(
+            waitSeconds = waitSeconds,
+            findPunchSeconds = CLASSIC_CONTROL_FIND_PUNCH_SECONDS,
             totalSeconds = waitSeconds + CLASSIC_CONTROL_FIND_PUNCH_SECONDS.toDouble(),
             waitRow = DesktopCourseWaitRow(
                 controlId = control.id,
@@ -1155,7 +1162,7 @@ object DesktopCourseAnalyzer {
             add(
                 DesktopCourseGoodnessMetric(
                     "Total ideal-route wait time",
-                    if (waitRows.isEmpty()) "Unknown" else DurationFormatter.secondsToFormattedString(totalWait.toLong(), useMinutes = false),
+                    if (waitRows.isEmpty()) "Unknown" else compactDurationText(totalWait),
                     when {
                         waitRows.isEmpty() -> DesktopCourseMetricStatus.Unknown
                         totalWait == 0 -> DesktopCourseMetricStatus.Good
@@ -1167,8 +1174,7 @@ object DesktopCourseAnalyzer {
                 DesktopCourseGoodnessMetric(
                     "Challenge vs target winning time",
                     estimatedIdealSeconds?.let {
-                        "${DurationFormatter.secondsToFormattedString(it.toLong(), useMinutes = false)} / " +
-                            DurationFormatter.secondsToFormattedString(targetSeconds.toLong(), useMinutes = false)
+                        "${compactDurationText(it)} / ${compactDurationText(targetSeconds)}"
                     } ?: "Unknown",
                     if (estimatedIdealSeconds == null) {
                         DesktopCourseMetricStatus.Unknown
@@ -1351,6 +1357,19 @@ object DesktopCourseAnalyzer {
 
     private fun twoDecimals(value: Double): String =
         (value * 100.0).roundToInt().let { "${it / 100}.${(abs(it % 100)).toString().padStart(2, '0')}" }
+
+    private fun compactDurationText(value: Int): String {
+        val sign = if (value < 0) "-" else ""
+        val absoluteSeconds = abs(value)
+        val hours = absoluteSeconds / 3600
+        val minutes = (absoluteSeconds % 3600) / 60
+        val seconds = absoluteSeconds % 60
+        return if (hours == 0) {
+            "$sign$minutes:${seconds.toString().padStart(2, '0')}"
+        } else {
+            "$sign$hours:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
+        }
+    }
 }
 
 private data class ProtectedCoordinateLookup(
@@ -1400,12 +1419,14 @@ private data class RouteTimingAnalysis(
 }
 
 private data class ControlServiceTiming(
+    val waitSeconds: Int?,
+    val findPunchSeconds: Int?,
     val totalSeconds: Double?,
     val waitRow: DesktopCourseWaitRow?
 ) {
     companion object {
-        val None = ControlServiceTiming(0.0, null)
-        val Unknown = ControlServiceTiming(null, null)
+        val None = ControlServiceTiming(null, null, 0.0, null)
+        val Unknown = ControlServiceTiming(null, null, null, null)
     }
 }
 

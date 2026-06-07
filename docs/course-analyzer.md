@@ -11,7 +11,7 @@ The Course Analyzer evaluates protected radio-orienteering course data after con
 - Climb: positive elevation gain along the route.
 - Effective length: route length plus ten times climb. For example, 5.00 km with 100 m of climb is 6.00 km effective length.
 
-The analyzer report displays length values in kilometers to hundredths (`x.xx km`). Climb is displayed in meters with no decimal places.
+The analyzer report displays length values in kilometers to hundredths (`x.xx km`). Climb is displayed in meters with no decimal places. Analyzer time values omit a zero hours field, so `00:58:50` is displayed as `58:50`.
 
 ## Elevation Handling
 
@@ -27,19 +27,19 @@ Relevant USGS references:
 
 ## Speed Model
 
-Estimated times use an elite-competitor baseline speed by race format: 3.6 m/s for Classic-style courses, 4.2 m/s for Sprint, and 3.4 m/s for Foxoring. The intent is to approximate an elite competitor on a clean runnable line, but the current implementation is not yet calibrated by category age or gender.
+Estimated times use an elite-competitor baseline pace by race format: 4:38 min/km for Classic-style courses (3.6 m/s), 3:58 min/km for Sprint (4.2 m/s), and 4:54 min/km for Foxoring (3.4 m/s). The intent is to approximate an elite competitor on a clean runnable line, but the current implementation is not yet calibrated by category age or gender.
 
-Each leg is adjusted for elevation gradient. Uphill legs are slowed more than downhill legs, and the gradient penalty is clamped so extreme slopes do not produce unbounded speeds or penalties. The current model does not include accumulated fatigue across the course.
+When elevation is available, movement time is based on effective length for each leg: horizontal length plus ten times positive climb. This same effective-length movement model is used for the provided route in Section 1 and for the calculated point-to-point route in Section 2. If elevation is incomplete, movement time falls back to horizontal distance. The current model does not include accumulated fatigue across the course.
 
 For Classic-style fox controls, the timing model distinguishes arrival near the fox from departure after punching. If the competitor arrives while the fox is off the air, the analyzer assumes the competitor waits until that fox begins transmitting. It then adds a fixed 30 seconds to find and punch the fox before the competitor starts the next leg. If the competitor arrives while the fox is already transmitting, the same 30-second find-and-punch allowance is added from the arrival time.
 
 ## Report Sections
 
-Section 1 appears only when a provided ideal route is available. It analyzes the supplied route order, imported route geometry, leg lengths, estimated splits, climb, effective length when available, and Classic wait times. Classic leg splits and cumulative times include any fox wait plus the 30-second find-and-punch allowance before the competitor departs for the next leg.
+Section 1 appears only when a provided ideal route is available. It analyzes the supplied route order, imported route geometry, leg lengths, estimated splits, climb, effective length when available, and Classic wait times. Classic leg splits and cumulative times include any fox wait plus the 30-second find-and-punch allowance before the competitor departs for the next leg. Timing breakdown rows separate movement time, fox wait time, and find/punch allowance. Leg rows show the wait at the destination fox in parentheses after the cumulative time.
 
 Section 1 also includes a separate wait-time analysis for Classic-style courses. It estimates arrival phase at each fox on the provided route and checks whether renumbering fox transmit slots could reduce total waiting. Candidate renumberings are evaluated by replaying the full route timing, so a wait at one fox changes the estimated arrival phase at later foxes. The report shows current wait, best wait, and the likely improvement. These wait estimates depend on the route and speed model; because map passability, fatigue, and category age/gender speed differences are not modeled, barriers, slow terrain, and competitor profile can shift real arrival times.
 
-Section 2 always attempts to calculate an independent ideal route when enough course points are available. The analyzer exhaustively permutes assigned fox locations and any spectator point, keeps the beacon last before the finish, then selects the shortest candidate by effective length when elevations are complete or by horizontal distance otherwise. For Classic-style courses, fox assignments are optimized for the calculated route to minimize wait time using the same wait-and-departure timing model.
+Section 2 always attempts to calculate an independent ideal route when enough course points are available. The analyzer exhaustively permutes assigned fox locations and any spectator point, keeps the beacon last before the finish, then selects the shortest candidate by effective length when elevations are complete or by horizontal distance otherwise. For Classic-style courses, fox assignments are optimized for the calculated route to minimize wait time using the same wait-and-departure timing model. Because Section 2 can change fox assignments, a large ideal-time difference may come from reduced fox waiting rather than from route length alone; use the timing breakdown and wait rows to compare the cause.
 
 Section 3 summarizes the results. When both a provided route and calculated candidate exist, it compares their order, distance metrics, estimated time, wait behavior, elevation profiles, and compact 2D route depictions. When no provided route exists, it summarizes only the calculated candidate.
 

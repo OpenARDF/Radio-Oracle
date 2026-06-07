@@ -5672,6 +5672,7 @@ private fun CourseAnalysisSectionView(section: DesktopCourseAnalysisSection, inc
         CourseAnalysisRow("Climb", climbText(section.climbMeters))
         CourseAnalysisRow("Effective length", kilometersText(section.effectiveLengthMeters))
         CourseAnalysisRow("Estimated ideal time", secondsText(section.estimatedIdealSeconds))
+        CourseAnalysisTimingBreakdown(section.legRows, section.estimatedIdealSeconds)
         CourseAnalysisLegRows("Leg analysis", section.legRows)
         if (includeRenumbering) {
             CourseAnalysisProvidedRouteWaitAnalysis(section.waitRows, section.waitRenumbering)
@@ -5679,6 +5680,20 @@ private fun CourseAnalysisSectionView(section: DesktopCourseAnalysisSection, inc
             CourseAnalysisWaitRows("Optimized wait times", section.waitRows)
         }
     }
+}
+
+@Composable
+private fun CourseAnalysisTimingBreakdown(legs: List<DesktopCourseLegRow>, estimatedIdealSeconds: Int?) {
+    val totalSeconds = estimatedIdealSeconds ?: return
+    val waitSeconds = legs.sumOf { it.waitSeconds ?: 0 }
+    val findPunchSeconds = legs.sumOf { it.findPunchSeconds ?: 0 }
+    if (waitSeconds == 0 && findPunchSeconds == 0) {
+        return
+    }
+    val movementSeconds = (totalSeconds - waitSeconds - findPunchSeconds).coerceAtLeast(0)
+    CourseAnalysisRow("Movement time", secondsText(movementSeconds))
+    CourseAnalysisRow("Fox wait time", secondsText(waitSeconds))
+    CourseAnalysisRow("Find/punch allowance", secondsText(findPunchSeconds))
 }
 
 @Composable
@@ -5694,7 +5709,7 @@ private fun CourseAnalysisProvidedRouteWaitAnalysis(
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "This subsection estimates Classic fox arrival phases on the provided route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. It uses the same elite baseline speed and gradient-adjusted leg estimates as the route analysis. Because map passability, fatigue, and category age/gender speed differences are not modeled, barriers, slow terrain, and competitor profile can shift real arrival times and change wait-time outcomes.",
+            text = "This subsection estimates Classic fox arrival phases on the provided route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. It uses the same elite baseline speed and effective-length movement estimates as the route analysis. Because map passability, fatigue, and category age/gender speed differences are not modeled, barriers, slow terrain, and competitor profile can shift real arrival times and change wait-time outcomes.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -5767,9 +5782,10 @@ private fun CourseAnalysisLegRows(title: String, legs: List<DesktopCourseLegRow>
             return@Column
         }
         legs.forEach { leg ->
+            val waitText = leg.waitSeconds?.let { " (waits ${secondsText(it)})" }.orEmpty()
             CourseAnalysisRow(
                 label = "${leg.fromLabel} -> ${leg.toLabel}",
-                value = "${kilometersText(leg.lengthMeters)}  split ${secondsText(leg.splitSeconds)}  cumulative ${secondsText(leg.cumulativeSeconds)}"
+                value = "${kilometersText(leg.lengthMeters)}  split ${secondsText(leg.splitSeconds)}  cumulative ${secondsText(leg.cumulativeSeconds)}$waitText"
             )
         }
     }
@@ -6093,7 +6109,20 @@ private fun climbText(value: Int?): String =
     value?.let { "$it m" } ?: "Unknown"
 
 private fun secondsText(value: Int?): String =
-    value?.let { DurationFormatter.secondsToFormattedString(it.toLong(), useMinutes = false) } ?: "Unknown"
+    value?.let(::compactSecondsText) ?: "Unknown"
+
+private fun compactSecondsText(value: Int): String {
+    val sign = if (value < 0) "-" else ""
+    val absoluteSeconds = abs(value)
+    val hours = absoluteSeconds / 3600
+    val minutes = (absoluteSeconds % 3600) / 60
+    val seconds = absoluteSeconds % 60
+    return if (hours == 0) {
+        "$sign$minutes:${seconds.toString().padStart(2, '0')}"
+    } else {
+        "$sign$hours:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
+    }
+}
 
 private fun twoDecimalText(value: Double): String =
     (value * 100.0).roundToInt().let { "${it / 100}.${(abs(it % 100)).toString().padStart(2, '0')}" }
