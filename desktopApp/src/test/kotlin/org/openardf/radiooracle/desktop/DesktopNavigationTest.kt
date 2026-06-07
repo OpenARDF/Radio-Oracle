@@ -391,8 +391,8 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "Define Controls",
-                "Course Analysis",
-                "Elevation Cache",
+                "Course Analyzer",
+                "Elevation Data",
                 "Import/Export"
             ),
             controlItems.map { it.label }
@@ -402,8 +402,8 @@ class DesktopNavigationTest {
             categoryItems.map { it.label }
         )
         assertEquals(DesktopSection.Controls, controlItems.first { it.label == "Define Controls" }.section)
-        assertEquals(DesktopSection.CourseAnalysis, controlItems.first { it.label == "Course Analysis" }.section)
-        assertEquals(DesktopSection.ElevationCache, controlItems.first { it.label == "Elevation Cache" }.section)
+        assertEquals(DesktopSection.CourseAnalysis, controlItems.first { it.label == "Course Analyzer" }.section)
+        assertEquals(DesktopSection.ElevationCache, controlItems.first { it.label == "Elevation Data" }.section)
         assertEquals(DesktopSection.ControlsImportExport, controlItems.first { it.label == "Import/Export" }.section)
         assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Protected Course Order" }.section)
         assertEquals(

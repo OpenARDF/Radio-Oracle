@@ -202,13 +202,13 @@ object DesktopNavigation {
                         item("setup.controls.define", "Define Controls", workflow, DesktopSection.Controls),
                         item(
                             "setup.controls.course-analysis",
-                            "Course Analysis",
+                            "Course Analyzer",
                             workflow,
                             DesktopSection.CourseAnalysis
                         ),
                         item(
                             "setup.controls.elevation-cache",
-                            "Elevation Cache",
+                            "Elevation Data",
                             workflow,
                             DesktopSection.ElevationCache
                         ),

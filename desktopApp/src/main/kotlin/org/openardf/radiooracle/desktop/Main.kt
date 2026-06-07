@@ -5370,7 +5370,7 @@ private fun VenueElevationCachePanel(
             },
             enabled = parsedBoundingBox != null && resolutionMeters != null && resolutionMeters > 0.0
         ) {
-            ButtonLabel("Download Elevation Cache")
+            ButtonLabel("Download Elevation Data")
         }
         Text(
             text = "Cache folder: ${DesktopVenueElevationCache.cacheDirectory()}",
