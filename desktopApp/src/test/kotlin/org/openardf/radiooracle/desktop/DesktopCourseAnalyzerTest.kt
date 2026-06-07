@@ -40,7 +40,8 @@ class DesktopCourseAnalyzerTest {
 
         assertEquals(emptyList<String>(), summary.missingElements)
         assertEquals(120, summary.calculatedRouteCount)
-        assertEquals(listOf("S", "31", "32", "33", "34", "35", "B"), summary.calculatedIdealOrder)
+        assertEquals(listOf("S", "31", "32", "33", "34", "35", "B"), requireNotNull(summary.calculatedRouteSection).routeOrder)
+        assertEquals(summary.calculatedRouteSection?.secondaryRouteOrder, summary.calculatedIdealOrder)
         assertEquals(listOf("S", "35", "34", "33", "32", "31", "B"), summary.providedIdealOrder)
         assertFalse(summary.idealOrderMatches!!)
         assertTrue(summary.calculatedStraightLineMeters!! < summary.providedStraightLineMeters!!)
@@ -78,7 +79,9 @@ class DesktopCourseAnalyzerTest {
         assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("movement time uses effective length for each leg"))
         assertEquals(2, summary.profileComparison.size)
         assertEquals(listOf("31", "32", "33"), summary.profileComparison.first { it.title == "Provided route" }.markers.map { it.label })
-        assertEquals(listOf("31", "32", "33"), summary.profileComparison.first { it.title == "Calculated route" }.markers.map { it.label })
+        val calculatedRouteOrder = requireNotNull(summary.calculatedRouteSection).secondaryRouteOrder
+        val calculatedFoxLabels = calculatedRouteOrder.drop(1).dropLast(1)
+        assertEquals(calculatedFoxLabels, summary.profileComparison.first { it.title == "Calculated route (calculated fox numbering)" }.markers.map { it.label })
         assertEquals(2, summary.routeMaps.size)
         assertEquals(false, summary.hasMissingElevationData)
         assertNotNull(summary.estimatedIdealSeconds)
@@ -86,7 +89,7 @@ class DesktopCourseAnalyzerTest {
         assertEquals(0, summary.elevationProfile.first().distanceMeters)
         assertEquals(100.0, summary.elevationProfile.first().elevationMeters, 0.001)
         assertEquals(listOf("S -> 31", "31 -> 32", "32 -> 33", "33 -> B", "B -> F"), summary.providedLegRows.map { "${it.fromLabel} -> ${it.toLabel}" })
-        assertEquals(listOf("S -> 31", "31 -> 32", "32 -> 33", "33 -> B", "B -> F"), summary.calculatedLegRows.map { "${it.fromLabel} -> ${it.toLabel}" })
+        assertEquals(calculatedRouteOrder.zipWithNext().map { (from, to) -> "$from -> $to" } + "B -> F", summary.calculatedLegRows.map { "${it.fromLabel} -> ${it.toLabel}" })
         assertTrue(summary.providedLegRows.all { it.lengthMeters != null && it.splitSeconds != null && it.cumulativeSeconds != null })
         assertEquals(summary.estimatedIdealSeconds, summary.providedLegRows.last().cumulativeSeconds)
         assertEquals(listOf("31", "32", "33"), summary.waitRows.map { it.controlLabel })
@@ -132,10 +135,11 @@ class DesktopCourseAnalyzerTest {
             }
         )
 
-        val calculatedProfile = summary.profileComparison.first { it.title == "Calculated route" }
+        val calculatedProfile = summary.profileComparison.first { it.title == "Calculated route (calculated fox numbering)" }
         assertTrue(calculatedProfile.profile.size > protectedInfo.route.size)
         assertTrue(calculatedProfile.profile.any { it.elevationMeters > 170.0 })
-        assertEquals(listOf("31", "32", "33"), calculatedProfile.markers.map { it.label })
+        val calculatedFoxLabels = requireNotNull(summary.calculatedRouteSection).secondaryRouteOrder.drop(1).dropLast(1)
+        assertEquals(calculatedFoxLabels, calculatedProfile.markers.map { it.label })
         assertTrue(calculatedProfile.markers.all { it.distanceMeters > 0 && it.elevationMeters > 0.0 })
     }
 
@@ -193,6 +197,9 @@ class DesktopCourseAnalyzerTest {
 
         assertTrue(reportText.contains("Course Analyzer"))
         assertTrue(reportText.contains("Section 2: Calculated ideal route"))
+        assertTrue(reportText.contains("Route order (provided fox numbering):"))
+        assertTrue(reportText.contains("Route order (calculated fox numbering):"))
+        assertTrue(reportText.contains("Calculated ideal route (calculated fox numbering):"))
         assertTrue(reportText.contains("Movement time:"))
         assertTrue(reportText.contains("(waits "))
 
@@ -201,6 +208,8 @@ class DesktopCourseAnalyzerTest {
         val pdfBytes = Files.readAllBytes(pdfPath)
         assertTrue(String(pdfBytes.take(8).toByteArray()).startsWith("%PDF-1.4"))
         assertTrue(String(pdfBytes).contains("Course Analyzer"))
+        assertTrue(String(pdfBytes).contains("Elevation Profile Graphics"))
+        assertTrue(String(pdfBytes).contains("2D Route Depiction Graphics"))
         assertPdfInfoCanRead(pdfPath)
         assertEquals(pdfPath, exportPaths.pdfPath)
         assertEquals(pdfPath.resolveSibling("${pdfPath.fileName.toString().removeSuffix(".pdf")}.kml"), exportPaths.kmlPath)
@@ -243,6 +252,44 @@ class DesktopCourseAnalyzerTest {
         assertEquals(listOf("33", "32", "31"), renumbering.assignments.map { it.controlLabel })
         assertEquals(listOf("33", "32", "31"), renumbering.assignments.map { it.currentSlotLabel })
         assertTrue(renumbering.assignments.map { it.suggestedSlotLabel } != renumbering.assignments.map { it.currentSlotLabel })
+    }
+
+    @Test
+    fun calculatedSectionDisplaysOptimizedFoxNumberingAfterOriginalRouteOrder() {
+        val projectFile = projectFile(
+            foxCount = 3,
+            publicLabels = listOf("33", "32", "31")
+        )
+        val protectedInfo = protectedInfo(foxCount = 3)
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "31 32 33 Beacon"
+        )
+
+        val section = requireNotNull(summary.calculatedRouteSection)
+        val renumbering = requireNotNull(section.waitRenumbering)
+        val calculatedOrder = listOf("S") + renumbering.assignments.map { it.suggestedSlotLabel } + "B"
+        assertEquals("Route order (provided fox numbering)", section.routeOrderLabel)
+        assertEquals(listOf("S", "33", "32", "31", "B"), section.routeOrder)
+        assertEquals("Route order (calculated fox numbering)", section.secondaryRouteOrderLabel)
+        assertEquals(calculatedOrder, section.secondaryRouteOrder)
+        assertEquals(calculatedOrder, summary.calculatedIdealOrder)
+        assertEquals(
+            calculatedOrder.zipWithNext().map { (from, to) -> "$from -> $to" } + "B -> F",
+            summary.calculatedLegRows.map { "${it.fromLabel} -> ${it.toLabel}" }
+        )
+        assertEquals(renumbering.assignments.map { it.suggestedSlotLabel }, section.waitRows.map { it.controlLabel })
+        assertEquals(
+            renumbering.assignments.map { it.suggestedSlotLabel },
+            summary.profileComparison.first { it.title == "Calculated route (calculated fox numbering)" }.markers.map { it.label }
+        )
+        assertEquals(
+            calculatedOrder + "F",
+            requireNotNull(section.routeMap).routeLabels
+        )
     }
 
     @Test

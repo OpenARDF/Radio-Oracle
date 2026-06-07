@@ -5702,7 +5702,10 @@ private fun CourseAnalysisSectionView(section: DesktopCourseAnalysisSection, inc
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
-        CourseAnalysisRow("Route order", section.routeOrder.joinToString(" -> ").ifBlank { "Unknown" })
+        CourseAnalysisRow(section.routeOrderLabel, section.routeOrder.joinToString(" -> ").ifBlank { "Unknown" })
+        section.secondaryRouteOrderLabel?.let { label ->
+            CourseAnalysisRow(label, section.secondaryRouteOrder.joinToString(" -> ").ifBlank { "Unknown" })
+        }
         CourseAnalysisRow(section.comparisonLengthLabel, kilometersText(section.comparisonLengthMeters))
         CourseAnalysisRow("Horizontal length", kilometersText(section.straightLineMeters))
         CourseAnalysisRow("Route length", kilometersText(section.routeLengthMeters))
@@ -5782,7 +5785,7 @@ private fun CourseAnalysisSummarySection(result: DesktopCourseAnalysisSummary) {
 private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         CourseAnalysisRow("Routes compared", result.calculatedRouteCount.toString())
-        CourseAnalysisRow("Calculated ideal route", result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
+        CourseAnalysisRow("Calculated ideal route (calculated fox numbering)", result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
         CourseAnalysisRow("Provided ideal route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
         CourseAnalysisRow(
             "Order comparison",

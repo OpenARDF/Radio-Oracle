@@ -5,6 +5,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 /** Plain-text and PDF exports for the desktop Course Analyzer report. */
@@ -18,7 +19,7 @@ object DesktopCourseAnalysisExports {
 
     fun exportPdf(path: Path, result: DesktopCourseAnalysisSummary) {
         path.parent?.let { Files.createDirectories(it) }
-        Files.write(path, pdfBytes(reportText(result)))
+        Files.write(path, pdfBytes(result))
     }
 
     fun exportKml(path: Path, result: DesktopCourseAnalysisSummary) {
@@ -50,7 +51,10 @@ object DesktopCourseAnalysisExports {
     private fun StringBuilder.appendSection(section: DesktopCourseAnalysisSection, includeRenumbering: Boolean) {
         appendLine(section.title)
         appendWrapped(section.explanation)
-        appendLine("Route order: ${section.routeOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
+        appendLine("${section.routeOrderLabel}: ${section.routeOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
+        section.secondaryRouteOrderLabel?.let { label ->
+            appendLine("$label: ${section.secondaryRouteOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
+        }
         appendLine("${section.comparisonLengthLabel}: ${kilometersText(section.comparisonLengthMeters)}")
         appendLine("Horizontal length: ${kilometersText(section.straightLineMeters)}")
         appendLine("Route length: ${kilometersText(section.routeLengthMeters)}")
@@ -76,7 +80,7 @@ object DesktopCourseAnalysisExports {
         appendLine("Section 3: Summary")
         appendWrapped(result.summaryExplanation)
         appendLine("Routes compared: ${result.calculatedRouteCount}")
-        appendLine("Calculated ideal route: ${result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
+        appendLine("Calculated ideal route (calculated fox numbering): ${result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
         appendLine("Provided ideal route: ${result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
         appendLine(
             "Order comparison: " + when (result.idealOrderMatches) {
@@ -287,21 +291,23 @@ object DesktopCourseAnalysisExports {
         }.takeIf { it.isNotEmpty() }?.let { appendLine(it.toString()) }
     }
 
-    private fun pdfBytes(text: String): ByteArray {
-        val wrappedLines = text
+    private fun pdfBytes(result: DesktopCourseAnalysisSummary): ByteArray {
+        val wrappedLines = reportText(result)
             .lineSequence()
             .flatMap { line -> wrapPdfLine(line, 100).asSequence() }
             .toList()
-        val pages = wrappedLines.chunked(52).ifEmpty { listOf(listOf("")) }
+        val pageContents = wrappedLines
+            .chunked(52)
+            .ifEmpty { listOf(listOf("")) }
+            .map(::textPageContent) + graphicsPageContents(result)
         val objects = mutableListOf<String>()
         objects += "<< /Type /Catalog /Pages 2 0 R >>"
-        objects += "<< /Type /Pages /Kids ${pages.indices.joinToString(separator = " ", prefix = "[", postfix = "]") { "${4 + it * 2} 0 R" }} /Count ${pages.size} >>"
+        objects += "<< /Type /Pages /Kids ${pageContents.indices.joinToString(separator = " ", prefix = "[", postfix = "]") { "${4 + it * 2} 0 R" }} /Count ${pageContents.size} >>"
         objects += "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
-        pages.forEachIndexed { index, pageLines ->
+        pageContents.forEachIndexed { index, content ->
             val pageObjectId = 4 + index * 2
             val contentObjectId = pageObjectId + 1
             objects += "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents $contentObjectId 0 R >>"
-            val content = pageContent(pageLines)
             val length = content.toByteArray(StandardCharsets.ISO_8859_1).size
             objects += "<< /Length $length >>\nstream\n$content\nendstream"
         }
@@ -342,7 +348,7 @@ object DesktopCourseAnalysisExports {
         return lines
     }
 
-    private fun pageContent(lines: List<String>): String =
+    private fun textPageContent(lines: List<String>): String =
         buildString {
             appendLine("BT")
             appendLine("/F1 10 Tf")
@@ -356,6 +362,160 @@ object DesktopCourseAnalysisExports {
             }
             append("ET")
         }
+
+    private fun graphicsPageContents(result: DesktopCourseAnalysisSummary): List<String> =
+        buildList {
+            if (result.profileComparison.any { it.profile.isNotEmpty() }) {
+                add(elevationProfilesPageContent(result.profileComparison))
+            }
+            if (result.routeMaps.isNotEmpty()) {
+                add(routeMapsPageContent(result.routeMaps))
+            }
+        }
+
+    private fun elevationProfilesPageContent(profiles: List<DesktopCourseElevationProfileSummary>): String =
+        buildString {
+            appendText(54.0, 750.0, 16, "Elevation Profile Graphics")
+            profiles
+                .filter { it.profile.isNotEmpty() }
+                .take(3)
+                .forEachIndexed { index, profile ->
+                    val top = 690.0 - index * 205.0
+                    appendText(54.0, top + 18.0, 12, profile.title)
+                    appendElevationProfile(profile, 54.0, top - 150.0, 500.0, 145.0)
+                }
+        }
+
+    private fun StringBuilder.appendElevationProfile(
+        summary: DesktopCourseElevationProfileSummary,
+        left: Double,
+        bottom: Double,
+        width: Double,
+        height: Double
+    ) {
+        val profile = summary.profile
+        val minElevation = profile.minOf { it.elevationMeters }
+        val maxElevation = profile.maxOf { it.elevationMeters }
+        val totalDistance = max(1.0, profile.lastOrNull()?.distanceMeters?.toDouble() ?: 1.0)
+        val elevationRange = max(1.0, maxElevation - minElevation)
+        fun x(distanceMeters: Int): Double = left + distanceMeters / totalDistance * width
+        fun y(elevationMeters: Double): Double = bottom + (elevationMeters - minElevation) / elevationRange * height
+
+        appendLine("0.85 0.85 0.85 RG")
+        repeat(4) { index ->
+            val gridY = bottom + height * index / 3.0
+            appendLine("${pdfNumber(left)} ${pdfNumber(gridY)} m ${pdfNumber(left + width)} ${pdfNumber(gridY)} l S")
+        }
+        appendLine("0.25 0.25 0.25 RG")
+        appendLine("${pdfNumber(left)} ${pdfNumber(bottom)} ${pdfNumber(width)} ${pdfNumber(height)} re S")
+        appendLine("0.00 0.35 0.72 RG")
+        appendLine("2.4 w")
+        profile.zipWithNext().forEach { (start, end) ->
+            appendLine(
+                "${pdfNumber(x(start.distanceMeters))} ${pdfNumber(y(start.elevationMeters))} m " +
+                    "${pdfNumber(x(end.distanceMeters))} ${pdfNumber(y(end.elevationMeters))} l S"
+            )
+        }
+        appendLine("1.00 0.54 0.00 rg")
+        summary.markers.forEach { marker ->
+            appendLine("1.00 0.54 0.00 rg")
+            appendCircle(x(marker.distanceMeters), y(marker.elevationMeters), 3.8, fill = true)
+            appendText(x(marker.distanceMeters) + 5.0, y(marker.elevationMeters) + 4.0, 8, marker.label)
+        }
+        appendText(
+            left,
+            bottom - 16.0,
+            8,
+            "0.00 km to ${twoDecimalText(totalDistance / 1000.0)} km, ${minElevation.roundToInt()} m to ${maxElevation.roundToInt()} m"
+        )
+    }
+
+    private fun routeMapsPageContent(routeMaps: List<DesktopCourseRouteMap>): String =
+        buildString {
+            appendText(54.0, 750.0, 16, "2D Route Depiction Graphics")
+            routeMaps
+                .take(4)
+                .forEachIndexed { index, routeMap ->
+                    val column = index % 2
+                    val row = index / 2
+                    val left = 54.0 + column * 270.0
+                    val bottom = 405.0 - row * 255.0
+                    appendText(left, bottom + 205.0, 12, routeMap.title)
+                    appendRouteMap(routeMap, left, bottom, 225.0, 185.0)
+                }
+        }
+
+    private fun StringBuilder.appendRouteMap(
+        routeMap: DesktopCourseRouteMap,
+        left: Double,
+        bottom: Double,
+        width: Double,
+        height: Double
+    ) {
+        fun x(point: DesktopCourseRouteMapPoint): Double = left + point.xFraction.coerceIn(0.0, 1.0) * width
+        fun y(point: DesktopCourseRouteMapPoint): Double = bottom + (1.0 - point.yFraction.coerceIn(0.0, 1.0)) * height
+        appendLine("0.25 0.25 0.25 RG")
+        appendLine("${pdfNumber(left)} ${pdfNumber(bottom)} ${pdfNumber(width)} ${pdfNumber(height)} re S")
+        val byLabel = routeMap.points.associateBy { it.label }
+        appendLine("0.00 0.35 0.72 RG")
+        appendLine("2 w")
+        routeMap.routeLabels.zipWithNext().forEach { (fromLabel, toLabel) ->
+            val from = byLabel[fromLabel] ?: return@forEach
+            val to = byLabel[toLabel] ?: return@forEach
+            appendLine("${pdfNumber(x(from))} ${pdfNumber(y(from))} m ${pdfNumber(x(to))} ${pdfNumber(y(to))} l S")
+        }
+        routeMap.points.forEach { point ->
+            val (red, green, blue) = routeMapPointRgb(point.type)
+            appendLine("${pdfNumber(red)} ${pdfNumber(green)} ${pdfNumber(blue)} rg")
+            appendCircle(x(point), y(point), 4.0, fill = true)
+            appendText(x(point) + 5.0, y(point) + 5.0, 8, point.label)
+        }
+    }
+
+    private fun routeMapPointRgb(type: DesktopCourseRouteMapPointType): Triple<Double, Double, Double> =
+        when (type) {
+            DesktopCourseRouteMapPointType.Start -> Triple(0.06, 0.55, 0.22)
+            DesktopCourseRouteMapPointType.Finish -> Triple(0.78, 0.10, 0.10)
+            DesktopCourseRouteMapPointType.Control -> Triple(0.00, 0.35, 0.72)
+            DesktopCourseRouteMapPointType.Beacon -> Triple(1.00, 0.54, 0.00)
+            DesktopCourseRouteMapPointType.Spectator -> Triple(0.38, 0.38, 0.38)
+        }
+
+    private fun StringBuilder.appendCircle(centerX: Double, centerY: Double, radius: Double, fill: Boolean) {
+        val kappa = 0.5522847498
+        val control = radius * kappa
+        appendLine("${pdfNumber(centerX + radius)} ${pdfNumber(centerY)} m")
+        appendLine(
+            "${pdfNumber(centerX + radius)} ${pdfNumber(centerY + control)} " +
+                "${pdfNumber(centerX + control)} ${pdfNumber(centerY + radius)} " +
+                "${pdfNumber(centerX)} ${pdfNumber(centerY + radius)} c"
+        )
+        appendLine(
+            "${pdfNumber(centerX - control)} ${pdfNumber(centerY + radius)} " +
+                "${pdfNumber(centerX - radius)} ${pdfNumber(centerY + control)} " +
+                "${pdfNumber(centerX - radius)} ${pdfNumber(centerY)} c"
+        )
+        appendLine(
+            "${pdfNumber(centerX - radius)} ${pdfNumber(centerY - control)} " +
+                "${pdfNumber(centerX - control)} ${pdfNumber(centerY - radius)} " +
+                "${pdfNumber(centerX)} ${pdfNumber(centerY - radius)} c"
+        )
+        appendLine(
+            "${pdfNumber(centerX + control)} ${pdfNumber(centerY - radius)} " +
+                "${pdfNumber(centerX + radius)} ${pdfNumber(centerY - control)} " +
+                "${pdfNumber(centerX + radius)} ${pdfNumber(centerY)} c"
+        )
+        appendLine(if (fill) "f" else "S")
+    }
+
+    private fun StringBuilder.appendText(x: Double, y: Double, fontSize: Int, text: String) {
+        appendLine("BT")
+        appendLine("/F1 $fontSize Tf")
+        appendLine("0 0 0 rg")
+        appendLine("1 0 0 1 ${pdfNumber(x)} ${pdfNumber(y)} Tm")
+        appendLine("(${text.toPdfText()}) Tj")
+        appendLine("ET")
+    }
 
     private fun String.toPdfText(): String =
         map { character ->
@@ -376,6 +536,9 @@ object DesktopCourseAnalysisExports {
 
     private fun secondsText(value: Int?): String =
         value?.let(::compactSecondsText) ?: "Unknown"
+
+    private fun pdfNumber(value: Double): String =
+        String.format(Locale.US, "%.2f", value)
 
     private fun compactSecondsText(value: Int): String {
         val sign = if (value < 0) "-" else ""
