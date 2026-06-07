@@ -321,6 +321,7 @@ fun main(args: Array<String>) = application {
         var lastShownSiModeWarningKey by remember { mutableStateOf<String?>(null) }
         var isDownloadingSiReadout by remember { mutableStateOf(false) }
         var isContinuousSiReadoutActive by remember { mutableStateOf(false) }
+        var isReadingCompetitorSiCard by remember { mutableStateOf(false) }
         var continuousSiReadoutStopRequested by remember { mutableStateOf<AtomicBoolean?>(null) }
         var siDownloadStatusText by remember { mutableStateOf<String?>(null) }
         var isSendingLiveResults by remember { mutableStateOf(false) }
@@ -547,7 +548,7 @@ fun main(args: Array<String>) = application {
         }
 
         fun downloadSportIdentReadout() {
-            if (isDownloadingSiReadout || isContinuousSiReadoutActive) {
+            if (isDownloadingSiReadout || isContinuousSiReadoutActive || isReadingCompetitorSiCard) {
                 return
             }
             if (projectSession.currentProject == null) {
@@ -615,7 +616,7 @@ fun main(args: Array<String>) = application {
         }
 
         fun startContinuousSportIdentReadout() {
-            if (isDownloadingSiReadout || isContinuousSiReadoutActive) {
+            if (isDownloadingSiReadout || isContinuousSiReadoutActive || isReadingCompetitorSiCard) {
                 return
             }
             if (projectSession.currentProject == null) {
@@ -713,6 +714,41 @@ fun main(args: Array<String>) = application {
                 }
                 isContinuousSiReadoutActive = false
                 continuousSiReadoutStopRequested = null
+            }
+        }
+
+        suspend fun readCompetitorSiCardForAddRow(): DesktopCompetitorSiCardDraft {
+            check(!isDownloadingSiReadout && !isContinuousSiReadoutActive && !isReadingCompetitorSiCard) {
+                "Another SI card read is already active."
+            }
+            isReadingCompetitorSiCard = true
+            siDownloadStatusText = "Waiting for SI card for competitor entry."
+            projectStatusText = "Waiting for SI card..."
+            DesktopDebugLog.info("SI", "Competitor SI-card read started")
+            return try {
+                val download = withContext(Dispatchers.IO) {
+                    siPortMutex.withLock {
+                        downloadDesktopSportIdentCardReadout()
+                    }
+                }
+                val cardHolder = download.readout.cardHolder
+                val draft = DesktopCompetitorSiCardDraft(
+                    siNumber = download.readout.siNumber,
+                    firstName = cardHolder?.firstName,
+                    lastName = cardHolder?.lastName,
+                    club = cardHolder?.club
+                )
+                projectStatusText = "Read SI card ${download.readout.siNumber} for competitor entry."
+                siDownloadStatusText = null
+                DesktopDebugLog.info("SI", "Read SI card ${download.readout.siNumber} for competitor entry")
+                draft
+            } catch (error: Throwable) {
+                projectStatusText = "SI card read failed: ${error.message ?: error::class.simpleName}"
+                siDownloadStatusText = projectStatusText
+                DesktopDebugLog.error("SI", projectStatusText)
+                throw error
+            } finally {
+                isReadingCompetitorSiCard = false
             }
         }
 
@@ -1943,6 +1979,7 @@ fun main(args: Array<String>) = application {
             siReaderState = siReaderState,
             isDownloadingSiReadout = isDownloadingSiReadout,
             isContinuousSiReadoutActive = isContinuousSiReadoutActive,
+            isReadingCompetitorSiCard = isReadingCompetitorSiCard,
             siDownloadStatusText = siDownloadStatusText,
             isSendingLiveResults = isSendingLiveResults,
             isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
@@ -1964,6 +2001,7 @@ fun main(args: Array<String>) = application {
             onUpdateProtectedIdealOrder = ::updateProtectedIdealOrder,
             onUseCalculatedCourseAnalysisRoute = ::useCalculatedCourseAnalysisRoute,
             onApplyCourseAnalysisFoxRenumberingOnly = ::applyCourseAnalysisFoxRenumberingOnly,
+            onReadCompetitorSiCardForAddRow = ::readCompetitorSiCardForAddRow,
             onUpdateProtectedControlLocation = ::updateProtectedControlLocation,
             onUpdateProtectedCoursePassword = ::updateProtectedCoursePassword,
             onLockProtectedCourseOrder = ::lockProtectedCourseOrder,
@@ -3017,6 +3055,13 @@ private data class ProtectedControlLocationSummary(
     val affectedCategoryCount: Int
 )
 
+private data class DesktopCompetitorSiCardDraft(
+    val siNumber: Int,
+    val firstName: String? = null,
+    val lastName: String? = null,
+    val club: String? = null
+)
+
 /**
  * Builds the launchable desktop app shell.
  *
@@ -3032,6 +3077,7 @@ private fun RadioOManagerDesktopApp(
     siReaderState: DesktopSiReaderUiState = DesktopSiReaderUiState.disconnected(),
     isDownloadingSiReadout: Boolean = false,
     isContinuousSiReadoutActive: Boolean = false,
+    isReadingCompetitorSiCard: Boolean = false,
     siDownloadStatusText: String? = null,
     isSendingLiveResults: Boolean = false,
     isBackgroundLiveResultSendingEnabled: Boolean = false,
@@ -3090,6 +3136,9 @@ private fun RadioOManagerDesktopApp(
     onUpdateProtectedIdealOrder: (String, String) -> Unit = { _, _ -> },
     onUseCalculatedCourseAnalysisRoute: (DesktopCourseCalculatedRouteApplication) -> String = { "" },
     onApplyCourseAnalysisFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String = { "" },
+    onReadCompetitorSiCardForAddRow: suspend () -> DesktopCompetitorSiCardDraft = {
+        error("SI card reader is not configured.")
+    },
     onUpdateProtectedControlLocation: (String, String, String) -> String = { _, _, _ -> "" },
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean = { _, _, _ -> false },
     onLockProtectedCourseOrder: () -> Unit = {},
@@ -3195,6 +3244,7 @@ private fun RadioOManagerDesktopApp(
                                 breadcrumb = DesktopNavigation.breadcrumb(navState),
                                 projectFile = projectFile,
                                 projectStatusText = projectStatusText,
+                                siReaderState = siReaderState,
                                 onRenameRace = onRenameRace,
                                 onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
                                 onUpdateRaceSettings = onUpdateRaceSettings,
@@ -3224,6 +3274,7 @@ private fun RadioOManagerDesktopApp(
                                 onPrintFinishTicket = onPrintFinishTicket,
                                 isDownloadingSiReadout = isDownloadingSiReadout,
                                 isContinuousSiReadoutActive = isContinuousSiReadoutActive,
+                                isReadingCompetitorSiCard = isReadingCompetitorSiCard,
                                 siDownloadStatusText = siDownloadStatusText,
                                 onAddManualReadout = onAddManualReadout,
                                 onUpdateControl = onUpdateControl,
@@ -3255,6 +3306,7 @@ private fun RadioOManagerDesktopApp(
                                 onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
                                 onUseCalculatedCourseAnalysisRoute = onUseCalculatedCourseAnalysisRoute,
                                 onApplyCourseAnalysisFoxRenumberingOnly = onApplyCourseAnalysisFoxRenumberingOnly,
+                                onReadCompetitorSiCardForAddRow = onReadCompetitorSiCardForAddRow,
                                 onUpdateProtectedControlLocation = onUpdateProtectedControlLocation,
                                 onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword,
                                 isNavActionEnabled = isNavActionEnabled,
@@ -3484,6 +3536,7 @@ private fun SectionWorkspace(
     breadcrumb: String,
     projectFile: EventProjectFile?,
     projectStatusText: String,
+    siReaderState: DesktopSiReaderUiState,
     onRenameRace: (String) -> Unit,
     onUpdateRaceStartDateTime: (String) -> Unit,
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
@@ -3513,6 +3566,7 @@ private fun SectionWorkspace(
     onPrintFinishTicket: (String) -> Unit,
     isDownloadingSiReadout: Boolean,
     isContinuousSiReadoutActive: Boolean,
+    isReadingCompetitorSiCard: Boolean,
     siDownloadStatusText: String?,
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean,
     onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit,
@@ -3544,6 +3598,7 @@ private fun SectionWorkspace(
     onUpdateProtectedIdealOrder: (String, String) -> Unit,
     onUseCalculatedCourseAnalysisRoute: (DesktopCourseCalculatedRouteApplication) -> String,
     onApplyCourseAnalysisFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String,
+    onReadCompetitorSiCardForAddRow: suspend () -> DesktopCompetitorSiCardDraft,
     onUpdateProtectedControlLocation: (String, String, String) -> String,
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
@@ -3617,6 +3672,11 @@ private fun SectionWorkspace(
                 onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
                 onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
                 onAddCompetitor = onAddCompetitor,
+                isReadCompetitorSiCardEnabled = siReaderState.severity == DesktopSiReaderSeverity.CONNECTED &&
+                    !isDownloadingSiReadout &&
+                    !isContinuousSiReadoutActive &&
+                    !isReadingCompetitorSiCard,
+                onReadCompetitorSiCardForAddRow = onReadCompetitorSiCardForAddRow,
                 onAssignCompetitorCategory = onAssignCompetitorCategory,
                 onRemoveCompetitor = onRemoveCompetitor
             )
@@ -4702,9 +4762,12 @@ private fun CompetitorDetailsPanel(
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onAddCompetitor: (String, String, String, String, String, String, String?, String, String) -> Boolean,
+    isReadCompetitorSiCardEnabled: Boolean,
+    onReadCompetitorSiCardForAddRow: suspend () -> DesktopCompetitorSiCardDraft,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit
 ) {
+    val coroutineScope = rememberCoroutineScope()
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(CompetitorTableColumns)
     val orderedCompetitors = rememberEditableRowOrder(competitors) { it.id }
@@ -4718,11 +4781,58 @@ private fun CompetitorDetailsPanel(
     var selectedCategoryId by remember { mutableStateOf<String?>(null) }
     var startNumberDraft by remember(nextStartNumber) { mutableStateOf(nextStartNumber) }
     var siNumberDraft by remember { mutableStateOf("") }
+    var isReadingSiCardForAdd by remember { mutableStateOf(false) }
+    var readSiCardStatusText by remember { mutableStateOf<String?>(null) }
     val canAddCompetitor = firstNameDraft.isNotBlank() &&
             lastNameDraft.isNotBlank() &&
             startNumberDraft.isNotBlank()
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = {
+                    if (!isReadingSiCardForAdd) {
+                        isReadingSiCardForAdd = true
+                        readSiCardStatusText = "Waiting for SI card..."
+                        coroutineScope.launch {
+                            runCatching {
+                                onReadCompetitorSiCardForAddRow()
+                            }.onSuccess { draft ->
+                                siNumberDraft = draft.siNumber.toString()
+                                draft.firstName?.takeIf { it.isNotBlank() }?.let { firstNameDraft = it }
+                                draft.lastName?.takeIf { it.isNotBlank() }?.let { lastNameDraft = it }
+                                draft.club?.takeIf { it.isNotBlank() }?.let { clubDraft = it }
+                                val nameStatus = listOfNotNull(draft.firstName, draft.lastName)
+                                    .joinToString(" ")
+                                    .ifBlank { "no card-holder name" }
+                                readSiCardStatusText = "Read SI ${draft.siNumber}; $nameStatus. Review fields, then click Add."
+                            }.onFailure { error ->
+                                readSiCardStatusText = "SI card read failed: ${error.message ?: error::class.simpleName}"
+                            }
+                            isReadingSiCardForAdd = false
+                        }
+                    }
+                },
+                enabled = isReadCompetitorSiCardEnabled && !isReadingSiCardForAdd,
+                modifier = Modifier.width(180.dp)
+            ) {
+                ButtonLabel(if (isReadingSiCardForAdd) "Reading SI Card" else "Read From SI Card")
+            }
+            readSiCardStatusText?.let { statusText ->
+                Text(
+                    text = statusText,
+                    color = if (statusText.startsWith("SI card read failed")) {
+                        DesktopPalette.Error
+                    } else {
+                        DesktopPalette.Disconnected
+                    },
+                    fontSize = 13.sp
+                )
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),

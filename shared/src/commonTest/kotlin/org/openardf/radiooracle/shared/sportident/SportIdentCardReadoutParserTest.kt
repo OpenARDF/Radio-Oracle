@@ -68,7 +68,7 @@ class SportIdentCardReadoutParserTest {
         writePunch(data, 8, 31, 10 * 3600)
         writePunch(data, 12, 32, 10 * 60 + 30)
         writePunch(data, 16, 33, 11 * 3600)
-        writeAscii(data, 0x20, "Alice;Runner;")
+        writeAscii(data, 0x20, "Alice;Runner;OK Test;")
         writePunch(data, 34 * 4, 41, 12 * 60)
         writePunch(data, 34 * 4 + 4, 42, 20 * 60)
 
@@ -82,6 +82,7 @@ class SportIdentCardReadoutParserTest {
         assertEquals(listOf(41, 42), readout.punches.map { it.siCode })
         assertEquals("Alice", readout.cardHolder?.firstName)
         assertEquals("Runner", readout.cardHolder?.lastName)
+        assertEquals("OK Test", readout.cardHolder?.club)
         assertEquals("Runner Alice", readout.cardHolder?.displayName)
     }
 

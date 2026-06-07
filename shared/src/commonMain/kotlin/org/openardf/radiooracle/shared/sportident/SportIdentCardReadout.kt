@@ -17,7 +17,8 @@ data class SportIdentCardPunch(
 
 data class SportIdentCardHolder(
     val firstName: String?,
-    val lastName: String?
+    val lastName: String?,
+    val club: String? = null
 ) {
     val displayName: String?
         get() = listOfNotNull(lastName, firstName)
@@ -142,7 +143,7 @@ object SportIdentCardReadoutParser {
     fun parseFixedCardHolder(data: ByteArray): SportIdentCardHolder? {
         val lastName = parseSpaceTerminatedAscii(data, SI6_LAST_NAME_OFFSET, SI6_NAME_BYTES)
         val firstName = parseSpaceTerminatedAscii(data, SI6_FIRST_NAME_OFFSET, SI6_NAME_BYTES)
-        return SportIdentCardHolder(firstName, lastName).takeIf { it.displayName != null }
+        return SportIdentCardHolder(firstName, lastName).takeIf { it.displayName != null || !it.club.isNullOrBlank() }
     }
 
     fun parseSemicolonCardHolder(data: ByteArray, series: Int): SportIdentCardHolder? {
@@ -163,7 +164,8 @@ object SportIdentCardReadoutParser {
         val parts = text?.split(";") ?: return null
         val firstName = parts.getOrNull(0)?.ifBlank { null }
         val lastName = parts.getOrNull(1)?.ifBlank { null }
-        return SportIdentCardHolder(firstName, lastName).takeIf { it.displayName != null }
+        val club = parts.getOrNull(2)?.ifBlank { null }
+        return SportIdentCardHolder(firstName, lastName, club).takeIf { it.displayName != null || !it.club.isNullOrBlank() }
     }
 
     private fun si5Number(
