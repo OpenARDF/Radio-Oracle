@@ -21,6 +21,7 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
+import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.math.roundToInt
@@ -64,32 +65,33 @@ class DesktopCourseAnalyzerTest {
         assertEquals(4_000, summary.routeLengthMeters)
         assertEquals(100, summary.climbMeters)
         assertEquals(5_000, summary.effectiveLengthMeters)
+        assertEquals(null, summary.calculatedRouteApplication)
         assertNotNull(summary.providedRouteSection)
         assertNotNull(summary.calculatedRouteSection)
         assertEquals("Section 1: Stored route analysis", summary.providedRouteSection?.title)
         assertEquals("Section 2: Calculated ideal route", summary.calculatedRouteSection?.title)
+        assertEquals(true, summary.calculatedRouteSection?.summaryOnly)
+        assertEquals(
+            listOf("Calculated ideal route matches stored ideal route"),
+            summary.calculatedRouteSection?.routeOrder
+        )
+        assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("matches the stored ideal route"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("effective length"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("does not guarantee 3 m source terrain data"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("does not currently know map passability"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("4:38 min/km for Classic-style courses (3.6 m/s)"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("not yet adjusted by category age or gender"))
-        assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("foxes and any spectator"))
-        assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("USGS 3DEP source DEM resolution varies"))
-        assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("true on-foot route and wait timing differ"))
-        assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("movement time uses effective length for each leg"))
-        assertEquals(2, summary.profileComparison.size)
+        assertEquals(1, summary.profileComparison.size)
         assertEquals(listOf("31", "32", "33"), summary.profileComparison.first { it.title == "Stored route" }.markers.map { it.label })
-        val calculatedRouteOrder = requireNotNull(summary.calculatedRouteSection).secondaryRouteOrder
-        val calculatedFoxLabels = calculatedRouteOrder.drop(1).dropLast(1)
-        assertEquals(calculatedFoxLabels, summary.profileComparison.first { it.title == "Calculated route (calculated fox numbering)" }.markers.map { it.label })
-        assertEquals(2, summary.routeMaps.size)
+        assertEquals(1, summary.routeMaps.size)
+        assertEquals(listOf("Stored foxes and route"), summary.kmlFolders.map { it.title })
         assertEquals(false, summary.hasMissingElevationData)
         assertNotNull(summary.estimatedIdealSeconds)
         assertEquals(5, summary.elevationProfile.size)
         assertEquals(0, summary.elevationProfile.first().distanceMeters)
         assertEquals(100.0, summary.elevationProfile.first().elevationMeters, 0.001)
         assertEquals(listOf("S -> 31", "31 -> 32", "32 -> 33", "33 -> B", "B -> F"), summary.providedLegRows.map { "${it.fromLabel} -> ${it.toLabel}" })
-        assertEquals(calculatedRouteOrder.zipWithNext().map { (from, to) -> "$from -> $to" } + "B -> F", summary.calculatedLegRows.map { "${it.fromLabel} -> ${it.toLabel}" })
+        assertEquals(emptyList<DesktopCourseLegRow>(), summary.calculatedLegRows)
         assertTrue(summary.providedLegRows.all { it.lengthMeters != null && it.splitSeconds != null && it.cumulativeSeconds != null })
         assertEquals(summary.estimatedIdealSeconds, summary.providedLegRows.last().cumulativeSeconds)
         assertEquals(listOf("31", "32", "33"), summary.waitRows.map { it.controlLabel })
@@ -98,20 +100,9 @@ class DesktopCourseAnalyzerTest {
             assertEquals(wait.waitSeconds, leg.waitSeconds)
             assertEquals(30, leg.findPunchSeconds)
         }
-        summary.calculatedLegRows.take(3).zip(requireNotNull(summary.calculatedRouteSection).waitRows).forEach { (leg, wait) ->
-            assertEquals(wait.arrivalSeconds + wait.waitSeconds + 30, leg.cumulativeSeconds)
-            assertEquals(wait.waitSeconds, leg.waitSeconds)
-            assertEquals(30, leg.findPunchSeconds)
-        }
-        assertEquals(
-            ((requireNotNull(summary.calculatedLegRows.first().lengthMeters) + 100.0) / 3.6).roundToInt(),
-            requireNotNull(summary.calculatedRouteSection).waitRows.first().arrivalSeconds
-        )
+        assertEquals(emptyList<DesktopCourseWaitRow>(), requireNotNull(summary.calculatedRouteSection).waitRows)
         assertEquals(listOf(null, null), summary.providedLegRows.takeLast(2).map { it.waitSeconds })
         assertEquals(listOf(null, null), summary.providedLegRows.takeLast(2).map { it.findPunchSeconds })
-        assertEquals(summary.calculatedRouteSection?.estimatedIdealSeconds, summary.calculatedLegRows.last().cumulativeSeconds)
-        assertEquals(listOf(null, null), summary.calculatedLegRows.takeLast(2).map { it.waitSeconds })
-        assertEquals(listOf(null, null), summary.calculatedLegRows.takeLast(2).map { it.findPunchSeconds })
         assertTrue(summary.metrics.any { it.label == "Effective length" && it.value == "5.00 km" })
         assertTrue(
             "Metrics were ${summary.metrics}",
@@ -128,7 +119,7 @@ class DesktopCourseAnalyzerTest {
             projectFile = projectFile,
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo,
-            protectedIdealOrderText = "31 32 33 Beacon",
+            protectedIdealOrderText = "33 32 31 Beacon",
             elevationLookup = { point ->
                 val progress = ((point.longitude + 95.0) / 0.04).coerceIn(0.0, 1.0)
                 100.0 + progress * 40.0 + if (progress in 0.20..0.30) 80.0 else 0.0
@@ -174,7 +165,7 @@ class DesktopCourseAnalyzerTest {
             projectFile = projectFile,
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo,
-            protectedIdealOrderText = "31 32 33 Beacon"
+            protectedIdealOrderText = "33 32 31 Beacon"
         )
 
         assertTrue(
@@ -191,7 +182,7 @@ class DesktopCourseAnalyzerTest {
             projectFile = projectFile,
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo,
-            protectedIdealOrderText = "31 32 33 Beacon"
+            protectedIdealOrderText = "33 32 31 Beacon"
         )
         val reportText = DesktopCourseAnalysisExports.reportText(summary)
 
@@ -241,7 +232,7 @@ class DesktopCourseAnalyzerTest {
             projectFile = projectFile,
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo,
-            protectedIdealOrderText = "31 32 33 Beacon"
+            protectedIdealOrderText = "33 32 31 Beacon"
         )
 
         val renumbering = requireNotNull(summary.waitRenumbering)
@@ -249,8 +240,8 @@ class DesktopCourseAnalyzerTest {
         assertTrue(renumbering.improvesWait)
         assertTrue(renumbering.currentTotalWaitSeconds > renumbering.bestTotalWaitSeconds)
         assertEquals(renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds, sectionRenumbering.currentTotalWaitSeconds - sectionRenumbering.bestTotalWaitSeconds)
-        assertEquals(listOf("33", "32", "31"), renumbering.assignments.map { it.controlLabel })
-        assertEquals(listOf("33", "32", "31"), renumbering.assignments.map { it.currentSlotLabel })
+        assertEquals(listOf("31", "32", "33"), renumbering.assignments.map { it.controlLabel })
+        assertEquals(listOf("31", "32", "33"), renumbering.assignments.map { it.currentSlotLabel })
         assertTrue(renumbering.assignments.map { it.suggestedSlotLabel } != renumbering.assignments.map { it.currentSlotLabel })
     }
 
@@ -266,7 +257,7 @@ class DesktopCourseAnalyzerTest {
             projectFile = projectFile,
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo,
-            protectedIdealOrderText = "31 32 33 Beacon"
+            protectedIdealOrderText = "33 32 31 Beacon"
         )
 
         val section = requireNotNull(summary.calculatedRouteSection)
@@ -303,7 +294,7 @@ class DesktopCourseAnalyzerTest {
             projectFile = projectFile,
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo,
-            protectedIdealOrderText = "31 32 33 Beacon"
+            protectedIdealOrderText = "'Fox 1' 'Fox 2' 'Fox 3' Beacon"
         )
         val application = requireNotNull(summary.calculatedRouteApplication)
 
@@ -342,6 +333,91 @@ class DesktopCourseAnalyzerTest {
             protectedIdealOrderText = DesktopProtectedCourseOrder.decrypt(requireNotNull(updatedCategory.encryptedIdealOrder), "test-password")
         )
         assertTrue(updatedSummary.missingElements.none { it.contains("Protected ideal order") })
+    }
+
+    @Test
+    fun appliesFoxRenumberingOnlyAcrossProtectedCategoriesAndIdealOrders() {
+        val password = "test-password"
+        val projectFile = projectFile(
+            foxCount = 3,
+            publicLabels = listOf("33", "32", "31")
+        )
+        val protectedInfo = protectedInfo(foxCount = 3)
+        val storedIdealOrderText = "33 32 31 Beacon"
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = storedIdealOrderText
+        )
+        val renumbering = requireNotNull(summary.waitRenumbering)
+        val encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(protectedInfo, password)
+        val encryptedIdealOrder = DesktopProtectedCourseOrder.encrypt(storedIdealOrderText, password)
+        val primaryCategoryData = projectFile.raceData.categories.single().let { categoryData ->
+            categoryData.copy(
+                category = categoryData.category.copy(
+                    encryptedIdealOrder = encryptedIdealOrder,
+                    encryptedCourseInfo = encryptedCourseInfo
+                )
+            )
+        }
+        val secondCategoryId = "category-m40"
+        val secondCategoryData = primaryCategoryData.copy(
+            category = primaryCategoryData.category.copy(
+                id = secondCategoryId,
+                name = "M40"
+            ),
+            controlPoints = primaryCategoryData.controlPoints.map { controlPoint ->
+                controlPoint.copy(
+                    id = "${controlPoint.id}-m40",
+                    categoryId = secondCategoryId
+                )
+            }
+        )
+        val encryptedProject = projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                categories = listOf(primaryCategoryData, secondCategoryData)
+            )
+        )
+
+        val result = DesktopCourseAnalysisApplier.applyFoxRenumberingOnly(
+            projectFile = encryptedProject,
+            renumbering = renumbering,
+            password = password
+        )
+
+        val changedLabelsByControlId = renumbering.assignments
+            .filter { it.suggestedSlotLabel != it.currentSlotLabel }
+            .associate { it.controlId to it.suggestedSlotLabel }
+        assertEquals(changedLabelsByControlId.size, result.changedControlCount)
+        assertEquals(2, result.affectedCategoryCount)
+        val updatedPublicLabelsByControlId = result.projectFile.raceData.controls.associate { it.id to it.publicLabel }
+        changedLabelsByControlId.forEach { (controlId, expectedLabel) ->
+            assertEquals(expectedLabel, updatedPublicLabelsByControlId[controlId])
+        }
+
+        val originalResolvedControlIds = ProtectedIdealOrderRules.resolveControlIds(
+            storedIdealOrderText,
+            projectFile.raceData.controls
+        )
+        result.projectFile.raceData.categories.forEach { categoryData ->
+            val decryptedIdealOrder = DesktopProtectedCourseOrder.decrypt(
+                requireNotNull(categoryData.category.encryptedIdealOrder),
+                password
+            )
+            assertEquals(
+                originalResolvedControlIds,
+                ProtectedIdealOrderRules.resolveControlIds(decryptedIdealOrder, result.projectFile.raceData.controls)
+            )
+            val decryptedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+                requireNotNull(categoryData.category.encryptedCourseInfo),
+                password
+            )
+            changedLabelsByControlId.forEach { (controlId, expectedLabel) ->
+                assertEquals(expectedLabel, decryptedCourseInfo.controlPoints.single { it.controlId == controlId }.label)
+                assertEquals(expectedLabel, decryptedCourseInfo.courseObjects.single { it.id == controlId }.label)
+            }
+        }
     }
 
     @Test

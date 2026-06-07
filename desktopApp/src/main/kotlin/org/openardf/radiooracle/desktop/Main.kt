@@ -909,6 +909,23 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun syncProtectedCourseState(updatedProject: EventProjectFile, password: String) {
+            protectedIdealOrderByCategoryId = updatedProject.raceData.categories.associate { categoryData ->
+                val encryptedValue = categoryData.category.encryptedIdealOrder
+                categoryData.category.id to if (encryptedValue.isNullOrBlank()) {
+                    ""
+                } else {
+                    DesktopProtectedCourseOrder.decrypt(encryptedValue, password)
+                }
+            }
+            protectedCourseInfoByCategoryId = updatedProject.raceData.categories.mapNotNull { categoryData ->
+                categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
+                    categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
+                }
+            }.toMap()
+            hasUnsavedChanges = projectSession.hasUnsavedChanges
+        }
+
         fun useCalculatedCourseAnalysisRoute(application: DesktopCourseCalculatedRouteApplication): String {
             val password = protectedCoursePassword ?: run {
                 projectStatusText = "Unlock protected course order before applying calculated route."
@@ -933,6 +950,30 @@ fun main(args: Array<String>) = application {
                 projectStatusText
             }.getOrElse { error ->
                 projectStatusText = "Apply calculated route failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText
+            }
+        }
+
+        fun applyCourseAnalysisFoxRenumberingOnly(renumbering: DesktopCourseWaitRenumbering): String {
+            val password = protectedCoursePassword ?: run {
+                projectStatusText = "Unlock protected course order before applying fox renumbering."
+                return projectStatusText
+            }
+            return runCatching {
+                val currentProject = projectFile
+                    ?: throw IllegalStateException("Load an Event File before applying fox renumbering.")
+                val result = DesktopCourseAnalysisApplier.applyFoxRenumberingOnly(
+                    projectFile = currentProject,
+                    renumbering = renumbering,
+                    password = password
+                )
+                projectFile = projectSession.updateCurrentProject { result.projectFile }
+                syncProtectedCourseState(result.projectFile, password)
+                projectStatusText =
+                    "Applied fox renumbering to ${result.changedControlCount} controls across ${result.affectedCategoryCount} protected categories. Unsaved changes."
+                projectStatusText
+            }.getOrElse { error ->
+                projectStatusText = "Apply fox renumbering failed: ${error.message ?: error::class.simpleName}"
                 projectStatusText
             }
         }
@@ -1028,23 +1069,6 @@ fun main(args: Array<String>) = application {
                 projectStatusText = "Password update failed: ${error.message ?: error::class.simpleName}"
                 false
             }
-        }
-
-        fun syncProtectedCourseState(updatedProject: EventProjectFile, password: String) {
-            protectedIdealOrderByCategoryId = updatedProject.raceData.categories.associate { categoryData ->
-                val encryptedValue = categoryData.category.encryptedIdealOrder
-                categoryData.category.id to if (encryptedValue.isNullOrBlank()) {
-                    ""
-                } else {
-                    DesktopProtectedCourseOrder.decrypt(encryptedValue, password)
-                }
-            }
-            protectedCourseInfoByCategoryId = updatedProject.raceData.categories.mapNotNull { categoryData ->
-                categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
-                    categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
-                }
-            }.toMap()
-            hasUnsavedChanges = projectSession.hasUnsavedChanges
         }
 
         fun startProtectedCourseElevationFetch(sourceName: String, categoryIds: List<String>, password: String) {
@@ -1939,6 +1963,7 @@ fun main(args: Array<String>) = application {
             onUnlockProtectedCourseOrder = ::unlockProtectedCourseOrder,
             onUpdateProtectedIdealOrder = ::updateProtectedIdealOrder,
             onUseCalculatedCourseAnalysisRoute = ::useCalculatedCourseAnalysisRoute,
+            onApplyCourseAnalysisFoxRenumberingOnly = ::applyCourseAnalysisFoxRenumberingOnly,
             onUpdateProtectedControlLocation = ::updateProtectedControlLocation,
             onUpdateProtectedCoursePassword = ::updateProtectedCoursePassword,
             onLockProtectedCourseOrder = ::lockProtectedCourseOrder,
@@ -3064,6 +3089,7 @@ private fun RadioOManagerDesktopApp(
     onUnlockProtectedCourseOrder: (String) -> Boolean = { false },
     onUpdateProtectedIdealOrder: (String, String) -> Unit = { _, _ -> },
     onUseCalculatedCourseAnalysisRoute: (DesktopCourseCalculatedRouteApplication) -> String = { "" },
+    onApplyCourseAnalysisFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String = { "" },
     onUpdateProtectedControlLocation: (String, String, String) -> String = { _, _, _ -> "" },
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean = { _, _, _ -> false },
     onLockProtectedCourseOrder: () -> Unit = {},
@@ -3228,6 +3254,7 @@ private fun RadioOManagerDesktopApp(
                                 onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
                                 onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
                                 onUseCalculatedCourseAnalysisRoute = onUseCalculatedCourseAnalysisRoute,
+                                onApplyCourseAnalysisFoxRenumberingOnly = onApplyCourseAnalysisFoxRenumberingOnly,
                                 onUpdateProtectedControlLocation = onUpdateProtectedControlLocation,
                                 onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword,
                                 isNavActionEnabled = isNavActionEnabled,
@@ -3516,6 +3543,7 @@ private fun SectionWorkspace(
     onUnlockProtectedCourseOrder: (String) -> Boolean,
     onUpdateProtectedIdealOrder: (String, String) -> Unit,
     onUseCalculatedCourseAnalysisRoute: (DesktopCourseCalculatedRouteApplication) -> String,
+    onApplyCourseAnalysisFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String,
     onUpdateProtectedControlLocation: (String, String, String) -> String,
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
@@ -3610,7 +3638,8 @@ private fun SectionWorkspace(
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                 onRetrieveMissingElevations = onRetrieveMissingCourseElevations,
                 onUnlock = onUnlockProtectedCourseOrder,
-                onUseCalculatedRoute = onUseCalculatedCourseAnalysisRoute
+                onUseCalculatedRoute = onUseCalculatedCourseAnalysisRoute,
+                onApplyFoxRenumberingOnly = onApplyCourseAnalysisFoxRenumberingOnly
             )
         }
         if (section == DesktopSection.ElevationCache && projectFile != null) {
@@ -5533,7 +5562,8 @@ private fun CourseAnalysisPanel(
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onRetrieveMissingElevations: (String) -> Unit,
     onUnlock: (String) -> Boolean,
-    onUseCalculatedRoute: (DesktopCourseCalculatedRouteApplication) -> String
+    onUseCalculatedRoute: (DesktopCourseCalculatedRouteApplication) -> String,
+    onApplyFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String
 ) {
     var passwordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
     if (!isUnlocked) {
@@ -5663,8 +5693,13 @@ private fun CourseAnalysisPanel(
                 },
                 enabled = analysisResult != null
             ) {
-                ButtonLabel("Export PDF...")
+                ButtonLabel("Export Analysis...")
             }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Button(
                 onClick = {
                     val application = analysisResult?.calculatedRouteApplication ?: return@Button
@@ -5673,13 +5708,27 @@ private fun CourseAnalysisPanel(
                 },
                 enabled = analysisResult?.calculatedRouteApplication != null
             ) {
-                ButtonLabel("Use Calculated")
+                ButtonLabel("Apply Calculated Route")
+            }
+            Button(
+                onClick = {
+                    val renumbering = analysisResult?.waitRenumbering?.takeIf { it.improvesWait } ?: return@Button
+                    applyStatusText = onApplyFoxRenumberingOnly(renumbering)
+                    analysisResult = null
+                },
+                enabled = analysisResult?.waitRenumbering?.improvesWait == true
+            ) {
+                ButtonLabel("Apply Fox Renumbering Only")
             }
         }
         applyStatusText?.let { statusText ->
             Text(
                 text = statusText,
-                color = if (statusText.startsWith("Apply calculated route failed")) DesktopPalette.Error else DesktopPalette.Disconnected,
+                color = if (statusText.startsWith("Apply") && statusText.contains("failed")) {
+                    DesktopPalette.Error
+                } else {
+                    DesktopPalette.Disconnected
+                },
                 fontSize = 13.sp
             )
         }
@@ -5831,6 +5880,9 @@ private fun CourseAnalysisSectionView(section: DesktopCourseAnalysisSection, inc
             fontSize = 13.sp
         )
         CourseAnalysisRow(section.routeOrderLabel, section.routeOrder.joinToString(" -> ").ifBlank { "Unknown" })
+        if (section.summaryOnly) {
+            return@Column
+        }
         section.secondaryRouteOrderLabel?.let { label ->
             CourseAnalysisRow(label, section.secondaryRouteOrder.joinToString(" -> ").ifBlank { "Unknown" })
         }

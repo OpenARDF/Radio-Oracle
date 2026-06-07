@@ -52,6 +52,7 @@ data class DesktopCourseAnalysisSection(
     val explanation: String,
     val routeOrder: List<String>,
     val routeOrderLabel: String = "Route order",
+    val summaryOnly: Boolean = false,
     val secondaryRouteOrder: List<String> = emptyList(),
     val secondaryRouteOrderLabel: String? = null,
     val comparisonLengthMeters: Int?,
@@ -160,6 +161,7 @@ data class DesktopCourseWaitRenumbering(
 )
 
 data class DesktopCourseWaitRenumberingAssignment(
+    val controlId: String,
     val controlLabel: String,
     val currentSlotLabel: String,
     val suggestedSlotLabel: String
@@ -343,6 +345,7 @@ object DesktopCourseAnalyzer {
         val idealOrderMatches = calculatedRoute?.let {
             providedFoxIds.isNotEmpty() && providedFoxIds == calculatedFoxIds
         }
+        val calculatedRouteMatchesStored = idealOrderMatches == true
 
         val providedRoutePoints = buildList {
             start?.let(::add)
@@ -448,37 +451,59 @@ object DesktopCourseAnalyzer {
                 ?.takeIf { raceType == RaceType.CLASSIC || raceType == RaceType.SHORT }
                 ?.assignments
                 .orEmpty()
-            DesktopCourseAnalysisSection(
-                title = "Section 2: Calculated ideal route",
-                explanation = calculatedSectionExplanation(
-                    analysis = calculatedRouteAnalysis,
-                    routeCount = routeCandidate.routeCount,
-                    providedAssignments = waitRenumbering?.assignments.orEmpty(),
-                    calculatedAssignments = optimizedAssignments
-                ),
-                routeOrder = calculatedRouteLabels(routeCandidate.controls),
-                routeOrderLabel = "Route order (stored fox numbering)",
-                secondaryRouteOrder = calculatedRouteLabels(routeCandidate.controls, calculatedLabelOverrides),
-                secondaryRouteOrderLabel = "Route order (calculated fox numbering)",
-                comparisonLengthMeters = calculatedRouteAnalysis?.comparisonLengthMeters?.roundToInt(),
-                comparisonLengthLabel = calculatedRouteAnalysis?.measurementLabel ?: "Unknown",
-                straightLineMeters = routeCandidate.distanceMeters.roundToInt(),
-                routeLengthMeters = calculatedRouteAnalysis?.routeLengthMeters?.roundToInt(),
-                climbMeters = calculatedRouteAnalysis?.climbMeters?.roundToInt(),
-                effectiveLengthMeters = calculatedRouteAnalysis?.effectiveLengthMeters?.roundToInt(),
-                estimatedIdealSeconds = calculatedRouteAnalysis?.estimatedSeconds?.roundToInt(),
-                legRows = calculatedLegRows,
-                waitRows = calculatedWaitRows,
-                waitRenumbering = calculatedWaitRenumbering,
-                elevationProfile = calculatedRouteAnalysis?.elevationProfile.orEmpty(),
-                routeMap = routeMap(
-                    title = "Calculated route (calculated fox numbering)",
-                    start = start,
-                    finish = finish,
-                    controls = routeCandidate.controls,
-                    labelOverrides = calculatedLabelOverrides
+            if (calculatedRouteMatchesStored) {
+                DesktopCourseAnalysisSection(
+                    title = "Section 2: Calculated ideal route",
+                    explanation = "The analyzer calculated an ideal route from the start, finish, controls, beacon, and spectator if used. The calculated ideal route matches the stored ideal route, so no separate calculated-route leg, wait, elevation-profile, or map analysis is repeated in this section. Section 3 still summarizes the route comparison.",
+                    routeOrder = listOf("Calculated ideal route matches stored ideal route"),
+                    routeOrderLabel = "Result",
+                    summaryOnly = true,
+                    comparisonLengthMeters = null,
+                    comparisonLengthLabel = "Comparison length",
+                    straightLineMeters = null,
+                    routeLengthMeters = null,
+                    climbMeters = null,
+                    effectiveLengthMeters = null,
+                    estimatedIdealSeconds = null,
+                    legRows = emptyList(),
+                    waitRows = emptyList(),
+                    waitRenumbering = null,
+                    elevationProfile = emptyList(),
+                    routeMap = null
                 )
-            )
+            } else {
+                DesktopCourseAnalysisSection(
+                    title = "Section 2: Calculated ideal route",
+                    explanation = calculatedSectionExplanation(
+                        analysis = calculatedRouteAnalysis,
+                        routeCount = routeCandidate.routeCount,
+                        providedAssignments = waitRenumbering?.assignments.orEmpty(),
+                        calculatedAssignments = optimizedAssignments
+                    ),
+                    routeOrder = calculatedRouteLabels(routeCandidate.controls),
+                    routeOrderLabel = "Route order (stored fox numbering)",
+                    secondaryRouteOrder = calculatedRouteLabels(routeCandidate.controls, calculatedLabelOverrides),
+                    secondaryRouteOrderLabel = "Route order (calculated fox numbering)",
+                    comparisonLengthMeters = calculatedRouteAnalysis?.comparisonLengthMeters?.roundToInt(),
+                    comparisonLengthLabel = calculatedRouteAnalysis?.measurementLabel ?: "Unknown",
+                    straightLineMeters = routeCandidate.distanceMeters.roundToInt(),
+                    routeLengthMeters = calculatedRouteAnalysis?.routeLengthMeters?.roundToInt(),
+                    climbMeters = calculatedRouteAnalysis?.climbMeters?.roundToInt(),
+                    effectiveLengthMeters = calculatedRouteAnalysis?.effectiveLengthMeters?.roundToInt(),
+                    estimatedIdealSeconds = calculatedRouteAnalysis?.estimatedSeconds?.roundToInt(),
+                    legRows = calculatedLegRows,
+                    waitRows = calculatedWaitRows,
+                    waitRenumbering = calculatedWaitRenumbering,
+                    elevationProfile = calculatedRouteAnalysis?.elevationProfile.orEmpty(),
+                    routeMap = routeMap(
+                        title = "Calculated route (calculated fox numbering)",
+                        start = start,
+                        finish = finish,
+                        controls = routeCandidate.controls,
+                        labelOverrides = calculatedLabelOverrides
+                    )
+                )
+            }
         }
         val providedSection = providedRouteAnalysis?.let { analysis ->
             DesktopCourseAnalysisSection(
@@ -532,7 +557,7 @@ object DesktopCourseAnalyzer {
                     )
                 )
             }
-            calculatedSection?.let {
+            calculatedSection?.takeUnless { it.summaryOnly }?.let {
                 add(
                     DesktopCourseElevationProfileSummary(
                         title = "Calculated route (calculated fox numbering)",
@@ -563,7 +588,7 @@ object DesktopCourseAnalyzer {
                     )
                 )
             }
-            calculatedRoute?.let { routeCandidate ->
+            calculatedRoute?.takeUnless { calculatedRouteMatchesStored }?.let { routeCandidate ->
                 if (calculatedSection != null && start != null && finish != null) {
                     add(
                         DesktopCourseKmlExportFolder(
@@ -581,7 +606,7 @@ object DesktopCourseAnalyzer {
                 }
             }
         }
-        val calculatedRouteApplication = calculatedRoute?.let { routeCandidate ->
+        val calculatedRouteApplication = calculatedRoute?.takeUnless { calculatedRouteMatchesStored }?.let { routeCandidate ->
             calculatedRouteApplication(
                 categoryId = categoryId,
                 controls = routeCandidate.controls,
@@ -624,7 +649,7 @@ object DesktopCourseAnalyzer {
             hasMissingElevationData = hasMissingElevationData,
             elevationProfile = elevationProfile,
             providedLegRows = providedLegRows,
-            calculatedLegRows = calculatedLegRows,
+            calculatedLegRows = if (calculatedRouteMatchesStored) emptyList() else calculatedLegRows,
             waitRows = waitRows,
             waitRenumbering = waitRenumbering,
             metrics = metrics
@@ -1430,6 +1455,7 @@ object DesktopCourseAnalyzer {
             improvesWait = bestTotal < currentTotal,
             assignments = foxes.zip(bestSlots).map { (fox, slot) ->
                 DesktopCourseWaitRenumberingAssignment(
+                    controlId = fox.control.id,
                     controlLabel = fox.control.publicDisplayLabel(),
                     currentSlotLabel = fox.currentSlotLabel,
                     suggestedSlotLabel = slot.slotLabel

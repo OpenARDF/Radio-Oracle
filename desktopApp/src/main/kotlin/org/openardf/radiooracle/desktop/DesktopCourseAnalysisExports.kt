@@ -52,6 +52,9 @@ object DesktopCourseAnalysisExports {
         appendLine(section.title)
         appendWrapped(section.explanation)
         appendLine("${section.routeOrderLabel}: ${section.routeOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
+        if (section.summaryOnly) {
+            return
+        }
         section.secondaryRouteOrderLabel?.let { label ->
             appendLine("$label: ${section.secondaryRouteOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
         }
