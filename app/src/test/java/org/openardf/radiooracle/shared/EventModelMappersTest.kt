@@ -268,7 +268,7 @@ class EventModelMappersTest {
 
         assertEquals("KOLSKY Pavel", competitor.getFullName())
         assertEquals("KOLSKY Pavel (42)", competitor.getNameWithStartNumber())
-        assertEquals(";42;Pavel;Kolsky;M21;0;;OK;OK001;;0", competitor.toSimpleCsvString("M21"))
+        assertEquals(";42;Pavel;Kolsky;M21;0;;OK;OK001;;0;;OK001;", competitor.toSimpleCsvString("M21"))
         assertEquals(
             "42;Kolsky;Pavel;M21;;;OK001;;OK;",
             competitor.toStartCsvString("M21", LocalDateTime.of(2026, 5, 30, 10, 0))

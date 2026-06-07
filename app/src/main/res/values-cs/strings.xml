@@ -290,5 +290,7 @@
     <string name="prints_error">Chyba při tisku! %1$s</string>
     <string name="about_app_version">Verze %1$s</string>
     <string name="about_app_description">Radio-Oracle je open-source nástroj pro organizaci soutěží v radiovém orientačním běhu.</string>
+    <string name="about_app_credits_title">Autoři a licence</string>
+    <string name="about_app_credits">Udržuje OpenARDF. Odvozeno z projektu Radio-O-Manager s licencí MIT od Pavla Kolského, Vojtěcha Kopala a Jakuba Šroma. Používá open-source knihovny včetně SortableTableView, kotlin-csv, UsbSerial, ESCPOS-ThermalPrinter-Android, Moshi, OkHttp, Markwon, Firebase a AndroidX. Logo je původní grafika Radio-Oracle vygenerovaná pro tento projekt pomocí Codex.</string>
 
 </resources>
