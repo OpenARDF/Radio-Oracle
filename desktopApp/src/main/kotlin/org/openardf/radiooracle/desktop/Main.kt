@@ -5694,7 +5694,7 @@ private fun CourseAnalysisProvidedRouteWaitAnalysis(
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "This subsection estimates Classic fox arrival phases on the provided route and checks whether assigning different fox numbers to the same locations could reduce waiting. Because map passability is not modeled, barriers and slow terrain can shift real arrival times and change wait-time outcomes.",
+            text = "This subsection estimates Classic fox arrival phases on the provided route and checks whether assigning different fox numbers to the same locations could reduce waiting. It uses the same elite baseline speed and gradient-adjusted leg estimates as the route analysis. Because map passability, fatigue, and category age/gender speed differences are not modeled, barriers, slow terrain, and competitor profile can shift real arrival times and change wait-time outcomes.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )

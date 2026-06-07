@@ -23,11 +23,17 @@ Relevant USGS references:
 - USGS DEM resolution FAQ: https://www.usgs.gov/faqs/what-projection-horizontal-datum-vertical-datum-and-resolution-a-usgs-digital-elevation-model
 - USGS 3DEP dynamic elevation service: https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer
 
+## Speed Model
+
+Estimated times use an elite-competitor baseline speed by race format: 3.6 m/s for Classic-style courses, 4.2 m/s for Sprint, and 3.4 m/s for Foxoring. The intent is to approximate an elite competitor on a clean runnable line, but the current implementation is not yet calibrated by category age or gender.
+
+Each leg is adjusted for elevation gradient. Uphill legs are slowed more than downhill legs, and the gradient penalty is clamped so extreme slopes do not produce unbounded speeds or penalties. The current model does not include accumulated fatigue across the course.
+
 ## Report Sections
 
 Section 1 appears only when a provided ideal route is available. It analyzes the supplied route order, imported route geometry, leg lengths, estimated splits, climb, effective length when available, and Classic wait times.
 
-Section 1 also includes a separate wait-time analysis for Classic-style courses. It estimates arrival phase at each fox on the provided route and checks whether renumbering fox transmit slots could reduce total waiting. The report shows current wait, best wait, and the likely improvement. These wait estimates depend on the route and speed model; because map passability is not modeled, barriers and slow terrain can shift real arrival times.
+Section 1 also includes a separate wait-time analysis for Classic-style courses. It estimates arrival phase at each fox on the provided route and checks whether renumbering fox transmit slots could reduce total waiting. The report shows current wait, best wait, and the likely improvement. These wait estimates depend on the route and speed model; because map passability, fatigue, and category age/gender speed differences are not modeled, barriers, slow terrain, and competitor profile can shift real arrival times.
 
 Section 2 always attempts to calculate an independent ideal route when enough course points are available. The analyzer exhaustively permutes assigned fox locations and any spectator point, keeps the beacon last before the finish, then selects the shortest candidate by effective length when elevations are complete or by horizontal distance otherwise. For Classic-style courses, fox assignments are optimized for the calculated route to minimize wait time.
 

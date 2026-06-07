@@ -149,6 +149,10 @@ enum class DesktopCourseMetricStatus {
  * The analyzer does not currently import map passability. Out-of-bounds areas, dense vegetation,
  * lakes, uncrossable watercourses, fences, cliffs, and other navigation barriers are not modeled,
  * so route order and wait-time estimates remain advisory.
+ *
+ * Estimated times use an elite-competitor baseline speed by race format and apply a per-leg
+ * gradient adjustment. The current implementation does not yet tune that baseline by category
+ * age or gender and does not model fatigue across the course.
  */
 object DesktopCourseAnalyzer {
     private const val CLASSIC_TRANSMIT_CYCLE_SECONDS = 300
@@ -164,6 +168,8 @@ object DesktopCourseAnalyzer {
         "Elevation Cache resolution is the local sample-grid spacing; USGS 3DEP source DEM resolution varies, so a 3 m cache does not guarantee 3 m source terrain data everywhere."
     private const val MAP_KNOWLEDGE_LIMITATION_NOTE =
         "The analyzer does not currently know map passability, so out-of-bounds areas, dense vegetation, water, uncrossable features, and other impediments can make the true on-foot route and wait timing differ from this estimate."
+    private const val SPEED_MODEL_NOTE =
+        "Estimated times use an elite-competitor baseline by race format: 3.6 m/s for Classic-style courses, 4.2 m/s for Sprint, and 3.4 m/s for Foxoring. Each leg is adjusted for elevation gradient: uphill legs are slowed more than downhill legs, the penalty is clamped, fatigue is not modeled, and the current model is not yet adjusted by category age or gender."
 
     fun analyze(
         projectFile: EventProjectFile,
@@ -614,9 +620,9 @@ object DesktopCourseAnalyzer {
         "This section analyzes the route supplied for the category. Leg lengths and estimated splits are taken from the imported route geometry. " +
             "The primary comparison value is ${analysis.measurementLabel.lowercase()}; " +
             if (analysis.effectiveLengthMeters != null) {
-                "the Elevation Cache data is complete, so effective length is calculated as route length plus ten times total climb. $ELEVATION_CACHE_RESOLUTION_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE"
+                "the Elevation Cache data is complete, so effective length is calculated as route length plus ten times total climb. $SPEED_MODEL_NOTE $ELEVATION_CACHE_RESOLUTION_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE"
             } else {
-                "local elevation data is incomplete, so horizontal route length is used instead of effective length. $ELEVATION_CACHE_RESOLUTION_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE"
+                "local elevation data is incomplete, so horizontal route length is used instead of effective length. $SPEED_MODEL_NOTE $ELEVATION_CACHE_RESOLUTION_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE"
             }
 
     private fun calculatedSectionExplanation(
@@ -633,7 +639,7 @@ object DesktopCourseAnalyzer {
         }
         val assignmentText = assignmentDifferenceText(providedAssignments, calculatedAssignments)
         return "This section calculates an independent ideal route by comparing $routeCount possible orders of the foxes and any spectator point, with the beacon last before the finish. " +
-            "The shortest candidate by $measurement is selected. $elevationText $MAP_KNOWLEDGE_LIMITATION_NOTE $assignmentText"
+            "The shortest candidate by $measurement is selected. $elevationText $SPEED_MODEL_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE $assignmentText"
     }
 
     private fun assignmentDifferenceText(
