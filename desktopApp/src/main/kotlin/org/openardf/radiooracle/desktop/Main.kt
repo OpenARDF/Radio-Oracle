@@ -125,6 +125,7 @@ import org.openardf.radiooracle.shared.printing.FinishTicketRenderer
 import org.openardf.radiooracle.shared.results.EventResultSending
 import org.openardf.radiooracle.shared.time.DurationFormatter
 import org.jetbrains.skia.Image as SkiaImage
+import java.awt.Desktop
 import java.awt.Toolkit
 import java.nio.file.Files
 import java.nio.file.Path
@@ -1331,6 +1332,25 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun openVenueElevationCacheFolder() {
+            val directory = DesktopVenueElevationCache.cacheDirectory()
+            runCatching {
+                Files.createDirectories(directory)
+                if (!Desktop.isDesktopSupported()) {
+                    error("Opening folders is not supported on this system.")
+                }
+                val desktop = Desktop.getDesktop()
+                if (!desktop.isSupported(Desktop.Action.OPEN)) {
+                    error("Opening folders is not supported on this system.")
+                }
+                desktop.open(directory.toFile())
+            }.onSuccess {
+                projectStatusText = "Opened elevation cache folder: $directory"
+            }.onFailure { error ->
+                projectStatusText = "Could not open elevation cache folder: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
         fun applyCourseKmlKmzImport(review: PendingCourseKmlKmzImportReview, fetchElevations: Boolean) {
             val updatedProject = review.updatedProject
             projectFile = projectSession.updateCurrentProject { updatedProject }
@@ -2212,6 +2232,7 @@ fun main(args: Array<String>) = application {
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
             onRetrieveMissingCourseElevations = ::startCourseAnalysisElevationFetch,
             onDownloadVenueElevationCache = ::startVenueElevationCacheDownload,
+            onOpenVenueElevationCacheFolder = ::openVenueElevationCacheFolder,
             elevationCacheRefreshToken = venueElevationCacheRefreshToken,
             onUnlockProtectedCourseOrder = ::unlockProtectedCourseOrder,
             onUpdateProtectedIdealOrder = ::updateProtectedIdealOrder,
@@ -3373,6 +3394,7 @@ private fun RadioOManagerDesktopApp(
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
     onRetrieveMissingCourseElevations: (String) -> Unit = {},
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double) -> Unit = { _, _, _, _ -> },
+    onOpenVenueElevationCacheFolder: () -> Unit = {},
     elevationCacheRefreshToken: Int = 0,
     onUnlockProtectedCourseOrder: (String) -> Boolean = { false },
     onUpdateProtectedIdealOrder: (String, String) -> Unit = { _, _ -> },
@@ -3553,6 +3575,7 @@ private fun RadioOManagerDesktopApp(
                                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                                 onRetrieveMissingCourseElevations = onRetrieveMissingCourseElevations,
                                 onDownloadVenueElevationCache = onDownloadVenueElevationCache,
+                                onOpenVenueElevationCacheFolder = onOpenVenueElevationCacheFolder,
                                 elevationCacheRefreshToken = elevationCacheRefreshToken,
                                 onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
                                 onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
@@ -4031,6 +4054,7 @@ private fun SectionWorkspace(
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onRetrieveMissingCourseElevations: (String) -> Unit,
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double) -> Unit,
+    onOpenVenueElevationCacheFolder: () -> Unit,
     elevationCacheRefreshToken: Int,
     onUnlockProtectedCourseOrder: (String) -> Boolean,
     onUpdateProtectedIdealOrder: (String, String) -> Unit,
@@ -4149,7 +4173,8 @@ private fun SectionWorkspace(
                 projectFile = projectFile,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                 refreshToken = elevationCacheRefreshToken,
-                onDownloadCache = onDownloadVenueElevationCache
+                onDownloadCache = onDownloadVenueElevationCache,
+                onOpenCacheFolder = onOpenVenueElevationCacheFolder
             )
         }
         if (section == DesktopSection.ControlsImportExport && projectFile != null) {
@@ -6290,7 +6315,8 @@ private fun VenueElevationCachePanel(
     projectFile: EventProjectFile,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     refreshToken: Int,
-    onDownloadCache: (String, DesktopVenueElevationBoundingBox, Double, Double) -> Unit
+    onDownloadCache: (String, DesktopVenueElevationBoundingBox, Double, Double) -> Unit,
+    onOpenCacheFolder: () -> Unit
 ) {
     val importedBounds = remember(protectedCourseInfoByCategoryId) {
         protectedCourseInfoByCategoryId.values.flatMap { it.courseGeoPoints() }.venueBoundingBoxOrNull()
@@ -6394,12 +6420,19 @@ private fun VenueElevationCachePanel(
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
-        Text(
-            text = "Cached venues",
-            color = DesktopPalette.Black,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Cached venues",
+                color = DesktopPalette.Black,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (cacheListings.isNotEmpty()) {
+                Button(onClick = onOpenCacheFolder) {
+                    ButtonLabel("Open Folder")
+                }
+            }
+        }
         if (cacheListings.isEmpty()) {
             Text(
                 text = "No venue elevation caches found.",
