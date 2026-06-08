@@ -96,8 +96,11 @@ requireIncludes("GitHub release workflow", githubReleaseWorkflow, "tags:");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "- \"v*\"");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "node-version: \"24\"");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "RADIO_ORACLE_RELEASE_BUILD: \"1\"");
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "Use GitHub-safe jDeploy package identity");
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "const githubPackageName = \"radio-oracle\"");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "deploy_target: github");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "gh release upload");
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "radio-oracle-*.tgz");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "gh release edit");
 
 const releaseBuildEnv = { RADIO_ORACLE_RELEASE_BUILD: "1" };

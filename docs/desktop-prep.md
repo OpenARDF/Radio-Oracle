@@ -258,9 +258,16 @@ https://www.jdeploy.com/gh/OpenARDF/Radio-Oracle
 ```
 
 This page follows GitHub release installer assets created by
-`.github/workflows/jdeploy-github-release.yml`. The npm package remains useful
-for registry smoke testing and direct CLI-style installs, but the jDeploy
-GitHub page is the preferred user-facing desktop install path.
+`.github/workflows/jdeploy-github-release.yml`. That workflow rewrites the
+temporary GitHub-release jDeploy package identity to unscoped `radio-oracle`
+before publishing installer assets, because jDeploy's GitHub-release launcher
+downloads release tarballs by package name and scoped npm names contain a slash
+that cannot be used as a GitHub release asset path. The committed npm package
+identity remains `@openardf/radio-oracle`.
+
+The npm package remains useful for registry smoke testing and direct CLI-style
+installs, but the jDeploy GitHub page is the preferred user-facing desktop
+install path.
 
 For every jDeploy deployment, keep both paths active unless workflow
 maintenance becomes a practical burden. The GitHub-release jDeploy page is the
@@ -278,7 +285,7 @@ npm install
 npm run jdeploy:pack-preview
 npm run jdeploy:local-smoke
 npm run jdeploy:release-preflight
-npm run jdeploy:registry-smoke -- 1.0.1
+npm run jdeploy:registry-smoke -- <version>
 ```
 
 `npm run jdeploy:pack-preview` prepares the Gradle-side jDeploy bundle, runs
@@ -350,10 +357,12 @@ End-user desktop installers are published by
 `.github/workflows/jdeploy-github-release.yml`. The workflow runs when a `v*`
 tag is pushed, verifies that the tag exactly matches `package.json`, runs the
 desktop and Android regression gates, runs the jDeploy release preflight, and
-then asks jDeploy to attach GitHub release installer assets. It also uploads the
-canonical package tarball to the same GitHub release for auditability.
+then rewrites the temporary package metadata to the unscoped `radio-oracle`
+GitHub-release identity and asks jDeploy to attach GitHub release installer
+assets. It also uploads the GitHub jDeploy package tarball to the same GitHub
+release for auditability.
 
-For a release version `1.0.3`, the tag must be `v1.0.3`. After the workflow
+For a release version `1.0.4`, the tag must be `v1.0.4`. After the workflow
 finishes, users install from:
 
 ```text
@@ -363,7 +372,7 @@ https://www.jdeploy.com/gh/OpenARDF/Radio-Oracle
 Current local packaging evidence: the Gradle app-image checks,
 `npm run jdeploy:pack-preview`, `npm run jdeploy:release-preflight`,
 `npm run jdeploy:local-smoke`, and
-`npm run jdeploy:registry-smoke -- 1.0.3` pass on macOS with JDK 17 selected.
+`npm run jdeploy:registry-smoke -- 1.0.4` pass on macOS with JDK 17 selected.
 Windows packaged-app smoke reached the installed executable and loaded the
 sample Event File; the npm helper scripts are cross-platform, but final Windows
 confirmation is still tracked through `CODEX_MAILBOX.md`.
