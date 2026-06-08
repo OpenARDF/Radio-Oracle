@@ -80,7 +80,7 @@ data class EventResultDetails(
                 runTimeText = DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinutes = false),
                 punchCodesText = readoutData.punches
                     .filter { it.punch.punchType == SIRecordType.CONTROL }
-                    .joinToString(" ") { aliasPunch ->
+                    .joinToString(", ") { aliasPunch ->
                         if (raceType != RaceType.ORIENTEERING && useAliases) {
                             controlLabelsByCode[aliasPunch.punch.siCode]
                                 ?: aliasPunch.alias?.name

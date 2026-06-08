@@ -1339,6 +1339,7 @@ class EventProjectEditorTest {
         val shortCategory = category("cat-short", "M21")
         val longCategory = category("cat-long", "M40")
         val original = projectFile(
+            raceLevel = RaceLevel.REGIONAL,
             categories = listOf(
                 categoryData("cat-short", "M21", controlSiCodes = listOf(31)),
                 categoryData("cat-long", "M40", controlSiCodes = listOf(31, 33))
@@ -1401,6 +1402,7 @@ class EventProjectEditorTest {
         val shortCategory = category("cat-short", "M21")
         val longCategory = category("cat-long", "M40")
         val original = projectFile(
+            raceLevel = RaceLevel.REGIONAL,
             categories = listOf(
                 categoryData("cat-short", "M21", controlSiCodes = listOf(31)),
                 categoryData("cat-long", "M40", controlSiCodes = listOf(31, 33))
@@ -1435,6 +1437,56 @@ class EventProjectEditorTest {
         assertEquals(shortCategory, competitorData.competitorCategory.category)
         assertEquals(longCategory.id, readout.result.categoryId)
         assertEquals(2, readout.result.points)
+    }
+
+    @Test
+    fun editsPracticeReadoutTimesRelativeToCardStartPunch() {
+        val category = category("cat-1", "M21")
+        val baseReadout = readout("result-1", "comp-1", 1111).let { readoutData ->
+            readoutData.copy(
+                result = readoutData.result.copy(
+                    startTimeSeconds = 40_000,
+                    finishTimeSeconds = 41_000,
+                    runTimeSeconds = 1_000
+                )
+            )
+        }
+        val original = projectFile(
+            raceLevel = RaceLevel.PRACTICE,
+            categories = listOf(categoryData("cat-1", "M21", controlSiCodes = listOf(31))),
+            controls = listOf(
+                EventControl("control-31", "race", "F1", 31, ControlPointType.CONTROL, publicLabel = "Fox 1")
+            ),
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    siNumber = 1111,
+                    category = category,
+                    readoutData = baseReadout
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.updateReadoutEdit(
+            projectFile = original,
+            resultId = "result-1",
+            startSeconds = "00:00",
+            finishSeconds = "12:00",
+            controlPunchesText = "Fox 1 @ 04:00",
+            resultStatus = ResultStatus.OK,
+            categoryId = category.id,
+            updateCompetitorCategory = false,
+            punchIdFactory = { index, type -> "practice-$index-${type.name}" }
+        )
+
+        val readout = updated.raceData.competitorData.single().readoutData!!
+        assertEquals(40_000, readout.result.startTimeSeconds)
+        assertEquals(40_720, readout.result.finishTimeSeconds)
+        assertEquals(720, readout.result.runTimeSeconds)
+        assertEquals(listOf(40_000L, 40_240L, 40_720L), readout.punches.map { it.punch.siTimeSeconds })
+        assertEquals(listOf(0L, 240L, 480L), readout.punches.map { it.punch.splitSeconds })
     }
 
     @Test
@@ -2454,6 +2506,7 @@ class EventProjectEditorTest {
     private fun projectFile(
         name: String = "Original Race",
         raceType: RaceType = RaceType.CLASSIC,
+        raceLevel: RaceLevel = RaceLevel.PRACTICE,
         categories: List<EventCategoryData> = emptyList(),
         competitors: List<EventCompetitorData> = emptyList(),
         controls: List<EventControl> = emptyList(),
@@ -2468,7 +2521,7 @@ class EventProjectEditorTest {
                     apiKey = "",
                     startDateTimeIso = "2026-05-31T10:00",
                     raceType = raceType,
-                    raceLevel = RaceLevel.PRACTICE,
+                    raceLevel = raceLevel,
                     raceBand = RaceBand.M80,
                     timeLimitSeconds = 7_200
                 ),

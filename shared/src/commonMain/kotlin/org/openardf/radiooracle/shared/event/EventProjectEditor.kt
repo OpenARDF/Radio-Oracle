@@ -1628,14 +1628,24 @@ object EventProjectEditor {
         updateCompetitorCategory: Boolean,
         punchIdFactory: (Int, SIRecordType) -> String
     ): EventProjectFile {
+        val originalReadout = projectFile.raceData.competitorData
+            .mapNotNull { it.readoutData }
+            .plus(projectFile.raceData.unmatchedReadoutData)
+            .firstOrNull { it.result.id == resultId }
+            ?: throw IllegalArgumentException("Readout was not found: $resultId")
         val raceStartSeconds = raceStartSecondsOfDay(projectFile.raceData.race.startDateTimeIso)
+        val elapsedBaseSeconds = if (projectFile.raceData.race.raceLevel == RaceLevel.PRACTICE) {
+            originalReadout.result.startTimeSeconds
+        } else {
+            raceStartSeconds
+        }
         val startElapsedSeconds = parseOptionalElapsedSeconds(startSeconds, "Start time")
         val finishElapsedSeconds = parseOptionalElapsedSeconds(finishSeconds, "Finish time")
         require(startElapsedSeconds == null || finishElapsedSeconds == null || finishElapsedSeconds >= startElapsedSeconds) {
             "Finish time cannot be earlier than start time."
         }
-        val startSecondsValue = startElapsedSeconds?.toDaySeconds(raceStartSeconds, "Start time")
-        val finishSecondsValue = finishElapsedSeconds?.toDaySeconds(raceStartSeconds, "Finish time")
+        val startSecondsValue = startElapsedSeconds?.toDaySeconds(elapsedBaseSeconds, "Start time")
+        val finishSecondsValue = finishElapsedSeconds?.toDaySeconds(elapsedBaseSeconds, "Finish time")
         val requestedCategoryId = categoryId?.trim()?.takeIf { it.isNotEmpty() }
         val requestedCategory = requestedCategoryId?.let { id ->
             projectFile.raceData.categories.firstOrNull { it.category.id == id }?.category
@@ -1645,7 +1655,7 @@ object EventProjectEditor {
             controlPunchesText = controlPunchesText,
             controls = projectFile.raceData.controls,
             aliases = projectFile.raceData.aliases,
-            raceStartSeconds = raceStartSeconds
+            elapsedBaseSeconds = elapsedBaseSeconds
         )
         val evaluation = requestedCategoryId?.let { id ->
             projectFile.raceData.categories.firstOrNull { it.category.id == id }?.let { data ->
@@ -2343,7 +2353,7 @@ object EventProjectEditor {
         controlPunchesText: String,
         controls: List<EventControl>,
         aliases: List<EventAlias>,
-        raceStartSeconds: Long?
+        elapsedBaseSeconds: Long?
     ): List<EditedControlPunch> =
         controlPunchesText
             .trim()
@@ -2359,7 +2369,7 @@ object EventProjectEditor {
                 val seconds = parts.getOrNull(1)
                     ?.trim()
                     ?.takeIf { it.isNotEmpty() }
-                    ?.let { parseRequiredElapsedSeconds(it, "Control punch time").toDaySeconds(raceStartSeconds, "Control punch time") }
+                    ?.let { parseRequiredElapsedSeconds(it, "Control punch time").toDaySeconds(elapsedBaseSeconds, "Control punch time") }
                 EditedControlPunch(code, seconds)
             }
             ?: emptyList()

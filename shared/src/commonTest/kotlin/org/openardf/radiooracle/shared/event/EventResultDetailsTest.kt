@@ -3,7 +3,9 @@ package org.openardf.radiooracle.shared.event
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.SIRecordType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -22,7 +24,8 @@ class EventResultDetailsTest {
                         lastName = "Runner",
                         resultId = "result",
                         points = 3,
-                        place = 1
+                        place = 1,
+                        controlCodes = listOf(31, 32)
                     )
                 )
             )
@@ -38,6 +41,7 @@ class EventResultDetailsTest {
         assertEquals("OK", rows[0].statusLabel)
         assertEquals("3", rows[0].pointsText)
         assertEquals("00:20:00", rows[0].runTimeText)
+        assertEquals("31, 32", rows[0].punchCodesText)
     }
 
     @Test
@@ -110,7 +114,8 @@ class EventResultDetailsTest {
         lastName: String,
         resultId: String = "result-$id",
         points: Int = 1,
-        place: Int
+        place: Int,
+        controlCodes: List<Int> = emptyList()
     ): EventCompetitorData {
         val competitor = EventCompetitor(
             id = id,
@@ -148,7 +153,24 @@ class EventResultDetailsTest {
                     sent = false,
                     place = place
                 ),
-                punches = emptyList()
+                punches = controlCodes.mapIndexed { index, siCode ->
+                    EventAliasPunch(
+                        punch = EventPunch(
+                            id = "punch-$id-$index",
+                            raceId = "race",
+                            resultId = resultId,
+                            cardNumber = competitor.siNumber,
+                            siCode = siCode,
+                            siTimeSeconds = 600L + index,
+                            originalSiTimeSeconds = 600L + index,
+                            punchType = SIRecordType.CONTROL,
+                            order = index,
+                            punchStatus = PunchStatus.UNKNOWN,
+                            splitSeconds = 0
+                        ),
+                        alias = null
+                    )
+                }
             )
         )
     }

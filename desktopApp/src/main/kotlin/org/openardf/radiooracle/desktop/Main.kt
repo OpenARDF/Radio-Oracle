@@ -3297,6 +3297,8 @@ private data class DesktopReadoutEditDraft(
     val controlPunchesText: String,
     val resultStatus: ResultStatus,
     val categoryId: String?,
+    val originalCategoryId: String?,
+    val isPractice: Boolean,
     val updateCompetitorCategory: Boolean = false
 )
 
@@ -3657,43 +3659,61 @@ private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEdit
         val readoutData = data.readoutData ?: return@forEach
         if (readoutData.result.id == resultId) {
             val competitor = data.competitorCategory.competitor
+            val isPractice = race.raceLevel == RaceLevel.PRACTICE
+            val elapsedBaseSeconds = if (isPractice) readoutData.result.startTimeSeconds else raceStartSecondsOfDay(race.startDateTimeIso)
             return DesktopReadoutEditDraft(
                 resultId = resultId,
                 competitorName = competitor.fullName(),
                 matched = true,
-                startSeconds = elapsedRaceTimeText(readoutData.result.startTimeSeconds),
-                finishSeconds = elapsedRaceTimeText(readoutData.result.finishTimeSeconds),
-                controlPunchesText = readoutData.controlPunchText(this),
+                startSeconds = if (isPractice && readoutData.result.startTimeSeconds != null) {
+                    0L.toReadoutElapsedText()
+                } else {
+                    elapsedRaceTimeText(readoutData.result.startTimeSeconds)
+                },
+                finishSeconds = elapsedRaceTimeText(readoutData.result.finishTimeSeconds, elapsedBaseSeconds),
+                controlPunchesText = readoutData.controlPunchText(this, elapsedBaseSeconds),
                 resultStatus = readoutData.result.resultStatus,
-                categoryId = readoutData.result.categoryId ?: competitor.categoryId
+                categoryId = readoutData.result.categoryId ?: competitor.categoryId,
+                originalCategoryId = competitor.categoryId,
+                isPractice = isPractice
             )
         }
     }
     unmatchedReadoutData.forEach { readoutData ->
         if (readoutData.result.id == resultId) {
+            val isPractice = race.raceLevel == RaceLevel.PRACTICE
+            val elapsedBaseSeconds = if (isPractice) readoutData.result.startTimeSeconds else raceStartSecondsOfDay(race.startDateTimeIso)
             return DesktopReadoutEditDraft(
                 resultId = resultId,
                 competitorName = readoutData.result.cardName ?: "",
                 matched = false,
-                startSeconds = elapsedRaceTimeText(readoutData.result.startTimeSeconds),
-                finishSeconds = elapsedRaceTimeText(readoutData.result.finishTimeSeconds),
-                controlPunchesText = readoutData.controlPunchText(this),
+                startSeconds = if (isPractice && readoutData.result.startTimeSeconds != null) {
+                    0L.toReadoutElapsedText()
+                } else {
+                    elapsedRaceTimeText(readoutData.result.startTimeSeconds)
+                },
+                finishSeconds = elapsedRaceTimeText(readoutData.result.finishTimeSeconds, elapsedBaseSeconds),
+                controlPunchesText = readoutData.controlPunchText(this, elapsedBaseSeconds),
                 resultStatus = readoutData.result.resultStatus,
-                categoryId = readoutData.result.categoryId
+                categoryId = readoutData.result.categoryId,
+                originalCategoryId = null,
+                isPractice = isPractice
             )
         }
     }
     return null
 }
 
-private fun EventRaceData.elapsedRaceTimeText(daySeconds: Long?): String =
+private fun EventRaceData.elapsedRaceTimeText(
+    daySeconds: Long?,
+    elapsedBaseSeconds: Long? = raceStartSecondsOfDay(race.startDateTimeIso)
+): String =
     daySeconds?.let { seconds ->
-        val raceStartSeconds = raceStartSecondsOfDay(race.startDateTimeIso)
-        val elapsedSeconds = if (raceStartSeconds == null) {
+        val elapsedSeconds = if (elapsedBaseSeconds == null) {
             seconds
         } else {
             val secondsInDay = 24 * 60 * 60
-            ((seconds - raceStartSeconds) % secondsInDay + secondsInDay) % secondsInDay
+            ((seconds - elapsedBaseSeconds) % secondsInDay + secondsInDay) % secondsInDay
         }
         elapsedSeconds.toReadoutElapsedText()
     }.orEmpty()
@@ -3701,7 +3721,10 @@ private fun EventRaceData.elapsedRaceTimeText(daySeconds: Long?): String =
 private fun Long.toReadoutElapsedText(): String =
     DurationFormatter.secondsToFormattedString(this, useMinutes = this < 3_600)
 
-private fun org.openardf.radiooracle.shared.event.EventReadoutData.controlPunchText(raceData: EventRaceData): String =
+private fun org.openardf.radiooracle.shared.event.EventReadoutData.controlPunchText(
+    raceData: EventRaceData,
+    elapsedBaseSeconds: Long?
+): String =
     punches
         .map { aliasPunch -> aliasPunch.punch to aliasPunch.alias?.name }
         .filter { (punch, _) -> punch.punchType == SIRecordType.CONTROL }
@@ -3710,7 +3733,7 @@ private fun org.openardf.radiooracle.shared.event.EventReadoutData.controlPunchT
             val label = control?.editPunchToken(raceData.controls)
                 ?: aliasName?.takeIf { it.isNotBlank() }
                 ?: punch.siCode.toString()
-            "$label @ ${raceData.elapsedRaceTimeText(punch.siTimeSeconds)}"
+            "$label @ ${raceData.elapsedRaceTimeText(punch.siTimeSeconds, elapsedBaseSeconds)}"
         }
 
 private fun raceStartSecondsOfDay(startDateTimeIso: String): Long? {
@@ -5235,6 +5258,7 @@ private fun ReadoutEditDialog(
     var categoryId by remember(draft.resultId) { mutableStateOf(draft.categoryId) }
     var updateCompetitorCategory by remember(draft.resultId) { mutableStateOf(draft.updateCompetitorCategory) }
     var selectedControlId by remember(draft.resultId, controls) { mutableStateOf(controls.firstOrNull()?.id) }
+    val categoryChanged = draft.matched && categoryId != draft.originalCategoryId
     val sortedControls = remember(controls) {
         controls.sortedWith(compareBy<EventControl> { it.siCode }.thenBy { it.publicDisplayLabel() })
     }
@@ -5251,6 +5275,12 @@ private fun ReadoutEditDialog(
         }
     }
 
+    LaunchedEffect(categoryChanged) {
+        if (!categoryChanged) {
+            updateCompetitorCategory = false
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Edit Result") },
@@ -5264,8 +5294,13 @@ private fun ReadoutEditDialog(
                     LabeledTextField(
                         label = "Start elapsed",
                         value = startSeconds,
-                        onValueChange = { startSeconds = it },
-                        modifier = Modifier.width(160.dp)
+                        onValueChange = {
+                            if (!draft.isPractice) {
+                                startSeconds = it
+                            }
+                        },
+                        modifier = Modifier.width(160.dp),
+                        enabled = !draft.isPractice
                     )
                     LabeledTextField(
                         label = "Finish elapsed",
@@ -5326,10 +5361,14 @@ private fun ReadoutEditDialog(
                 if (draft.matched) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(
-                            checked = updateCompetitorCategory,
-                            onCheckedChange = { updateCompetitorCategory = it }
+                            checked = categoryChanged && updateCompetitorCategory,
+                            onCheckedChange = { updateCompetitorCategory = it },
+                            enabled = categoryChanged
                         )
-                        Text("Also change competitor category")
+                        Text(
+                            "Also change competitor category",
+                            color = if (categoryChanged) DesktopPalette.Black else DesktopPalette.Disconnected
+                        )
                     }
                 }
             }
@@ -9051,12 +9090,13 @@ private fun LabeledTextField(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
         Text(
             text = label,
-            color = DesktopPalette.Black,
+            color = if (enabled) DesktopPalette.Black else DesktopPalette.Disconnected,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold
         )
@@ -9064,7 +9104,8 @@ private fun LabeledTextField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled
         )
     }
 }
