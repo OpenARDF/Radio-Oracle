@@ -363,7 +363,7 @@ https://www.jdeploy.com/gh/OpenARDF/Radio-Oracle
 Current local packaging evidence: the Gradle app-image checks,
 `npm run jdeploy:pack-preview`, `npm run jdeploy:release-preflight`,
 `npm run jdeploy:local-smoke`, and
-`npm run jdeploy:registry-smoke -- 1.0.2` pass on macOS with JDK 17 selected.
+`npm run jdeploy:registry-smoke -- 1.0.3` pass on macOS with JDK 17 selected.
 Windows packaged-app smoke reached the installed executable and loaded the
 sample Event File; the npm helper scripts are cross-platform, but final Windows
 confirmation is still tracked through `CODEX_MAILBOX.md`.
