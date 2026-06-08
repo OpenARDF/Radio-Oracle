@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -3790,55 +3791,93 @@ private fun NavigationRail(
             .fillMaxHeight()
             .background(Color(0xFFF5F5F5))
             .border(1.dp, DesktopPalette.LightGrey)
-            .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(8.dp)
     ) {
-        navigationItems.forEach { item ->
-            val isSelected = item.id == navState.selectedItemId && item.children.isEmpty()
-            val isNavigationEnabled = DesktopNavigation.isItemEnabled(item, navigationReadiness)
-            val actionEnabled = item.action?.let(isNavActionEnabled) ?: true
-            val isEnabled = isNavigationEnabled && actionEnabled
-            val disabledReason = DesktopNavigation.disabledItemReason(item, navigationReadiness)
-                ?: item.action?.let(disabledNavActionReason)
-            DisabledReasonTooltip(disabledReason) {
-                Button(
-                    onClick = { onItemSelected(item) },
-                    enabled = isEnabled,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = if (item.action == DesktopNavAction.SaveEventFile) {
-                        saveEventButtonColors()
-                    } else {
-                        ButtonDefaults.buttonColors()
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            navigationItems.forEach { item ->
+                val isSelected = item.id == navState.selectedItemId && item.children.isEmpty()
+                val isNavigationEnabled = DesktopNavigation.isItemEnabled(item, navigationReadiness)
+                val actionEnabled = item.action?.let(isNavActionEnabled) ?: true
+                val isEnabled = isNavigationEnabled && actionEnabled
+                val disabledReason = DesktopNavigation.disabledItemReason(item, navigationReadiness)
+                    ?: item.action?.let(disabledNavActionReason)
+                DisabledReasonTooltip(disabledReason) {
+                    Button(
+                        onClick = { onItemSelected(item) },
+                        enabled = isEnabled,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 34.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        colors = if (item.action == DesktopNavAction.SaveEventFile) {
+                            saveEventButtonColors()
+                        } else {
+                            ButtonDefaults.buttonColors()
+                        }
+                    ) {
+                        Text(
+                            text = if (item.children.isEmpty()) item.label else "${item.label} >",
+                            fontSize = 13.sp,
+                            lineHeight = 15.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
                     }
-                ) {
-                    Text(
-                        text = if (item.children.isEmpty()) item.label else "${item.label} >",
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                    )
                 }
             }
         }
-        Spacer(modifier = Modifier.weight(1f))
-        DisabledReasonTooltip(disabledNavActionReason(DesktopNavAction.SaveEventFile)) {
-            Button(
-                onClick = onSaveEvent,
-                enabled = isNavActionEnabled(DesktopNavAction.SaveEventFile),
-                modifier = Modifier.fillMaxWidth(),
-                colors = saveEventButtonColors()
-            ) {
-                Text("Save Event")
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            DisabledReasonTooltip(disabledNavActionReason(DesktopNavAction.SaveEventFile)) {
+                Button(
+                    onClick = onSaveEvent,
+                    enabled = isNavActionEnabled(DesktopNavAction.SaveEventFile),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 34.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    colors = saveEventButtonColors()
+                ) {
+                    Text(
+                        text = "Save Event",
+                        fontSize = 13.sp,
+                        lineHeight = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
-        }
-        if (navState.submenuStack.isNotEmpty()) {
-            Button(
-                onClick = onBack,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    backgroundColor = DesktopPalette.SecondaryVariant,
-                    contentColor = DesktopPalette.White
-                )
-            ) {
-                Text("< Back")
+            if (navState.submenuStack.isNotEmpty()) {
+                Button(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 34.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = DesktopPalette.SecondaryVariant,
+                        contentColor = DesktopPalette.White
+                    )
+                ) {
+                    Text(
+                        text = "< Back",
+                        fontSize = 13.sp,
+                        lineHeight = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
