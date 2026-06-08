@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { platform, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -10,11 +10,23 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 const packageLock = JSON.parse(readFileSync("package-lock.json", "utf8"));
 const appBuildGradle = readFileSync("app/build.gradle", "utf8");
 const rootBuildGradle = readFileSync("build.gradle", "utf8");
+const settingsGradle = readFileSync("settings.gradle", "utf8");
 const desktopBuildGradle = readFileSync("desktopApp/build.gradle", "utf8");
+const versionCatalog = readFileSync("gradle/libs.versions.toml", "utf8");
 const readme = readFileSync("README.md", "utf8");
 const desktopPrep = readFileSync("docs/desktop-prep.md", "utf8");
 const npmPublishWorkflow = readFileSync(".github/workflows/publish-jdeploy.yml", "utf8");
 const githubReleaseWorkflow = readFileSync(".github/workflows/jdeploy-github-release.yml", "utf8");
+const requiredJdeploySkikoRuntimeArtifacts = [
+  "skiko-awt-runtime-angle-windows-arm64",
+  "skiko-awt-runtime-angle-windows-x64",
+  "skiko-awt-runtime-linux-arm64",
+  "skiko-awt-runtime-linux-x64",
+  "skiko-awt-runtime-macos-arm64",
+  "skiko-awt-runtime-macos-x64",
+  "skiko-awt-runtime-windows-arm64",
+  "skiko-awt-runtime-windows-x64"
+];
 
 function fail(message) {
   console.error(`ERROR: ${message}`);
@@ -82,8 +94,14 @@ if (!rootBuildGradle.includes(`ext.radioOracleVersion = "${packageJson.version}"
   fail("root radioOracleVersion must match package.json version");
 }
 
+requireIncludes("Gradle repositories", settingsGradle, "https://maven.pkg.jetbrains.space/public/p/compose/dev");
+
 if (!desktopBuildGradle.includes("packageVersion = rootProject.ext.radioOracleVersion")) {
   fail("desktop native packageVersion must use rootProject.ext.radioOracleVersion");
+}
+requireIncludes("desktop jDeploy runtime configuration", desktopBuildGradle, "desktopJdeployRuntimeClasspath");
+for (const artifact of requiredJdeploySkikoRuntimeArtifacts) {
+  requireIncludes("desktop jDeploy native runtime configuration", desktopBuildGradle, artifact);
 }
 
 requireIncludes("README desktop install guidance", readme, "https://www.jdeploy.com/gh/OpenARDF/Radio-Oracle");
@@ -113,6 +131,19 @@ requireIncludes("GitHub release workflow", githubReleaseWorkflow, "gh release ed
 
 const releaseBuildEnv = { RADIO_ORACLE_RELEASE_BUILD: "1" };
 runGradle([":desktopApp:verifyDesktopJdeployBundle"], releaseBuildEnv);
+
+const skikoVersion = versionCatalog.match(/^skiko = "([^"]+)"$/m)?.[1];
+if (!skikoVersion) {
+  fail("gradle/libs.versions.toml must define a skiko version for jDeploy native runtime validation");
+}
+const jdeployLibsDir = join(process.cwd(), "desktopApp", "build", "jdeploy", "libs");
+const stagedLibs = new Set(readdirSync(jdeployLibsDir));
+for (const artifact of ["skiko-awt", ...requiredJdeploySkikoRuntimeArtifacts]) {
+  const jarName = `${artifact}-${skikoVersion}.jar`;
+  if (!stagedLibs.has(jarName)) {
+    fail(`jDeploy staged libs are missing ${jarName}`);
+  }
+}
 
 const tempDir = mkdtempSync(join(tmpdir(), "radio-oracle-manifest-"));
 try {

@@ -248,7 +248,11 @@ signal until installer packaging metadata is finalized.
 `prepareDesktopJdeployBundle` stages an executable desktop jar plus runtime
 libraries under `desktopApp/build/jdeploy`. `verifyDesktopJdeployBundle` checks
 the jar manifest and staged classpath layout that the future jDeploy package
-metadata will consume.
+metadata will consume. Because the same jDeploy package is used to create
+Windows, Linux, and macOS launchers, the staged bundle must include Compose
+Desktop/Skiko native runtime jars for Intel x64 and ARM64 targets on all three
+operating systems, not only the native runtime for the machine that publishes
+the release.
 
 The selected public jDeploy/npm package identity is `@openardf/radio-oracle`.
 End users should install the desktop beta from the jDeploy GitHub release page:
@@ -304,7 +308,9 @@ generated app bundle or Windows executable, launches it with a temporary copy of
 app.
 
 `npm run jdeploy:release-preflight` checks package identity and version
-alignment before any intentional publish.
+alignment before any intentional publish. It also runs the Gradle jDeploy
+bundle verification, which fails if any required Windows, Linux, or macOS Skiko
+runtime jar is missing from the staged classpath.
 
 Full release builds must use an unsuffixed desktop display version that matches
 the npm/jDeploy package version. Set `RADIO_ORACLE_RELEASE_BUILD=1`, or pass

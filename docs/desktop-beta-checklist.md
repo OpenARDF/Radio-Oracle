@@ -32,6 +32,9 @@ packaging is best-effort for this beta.
 - `JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew :desktopApp:createDistributable`
 - `JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew :desktopApp:verifyDesktopDistributable`
 - `JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew :desktopApp:prepareDesktopJdeployBundle :desktopApp:verifyDesktopJdeployBundle`
+- Confirm `verifyDesktopJdeployBundle` verifies all required Compose/Skiko
+  native runtime jars for Windows, Linux, and macOS on both Intel x64 and
+  ARM64.
 - `npm install`
 - `npm run jdeploy:pack-preview`
 - `npm run jdeploy:local-smoke`
@@ -43,7 +46,11 @@ packaging is best-effort for this beta.
   warnings without blocking downloads, and prints a finish ticket through the
   selected system printer.
 - Windows: packaged app opens, loads a sample Event File, exports CSV/JSON/XML
-  files, and runs the desktop smoke workflow.
+  files, and runs the desktop smoke workflow on x64 Intel hardware and, when
+  available, ARM64 hardware.
+- Linux: packaged app opens on x64 Intel hardware and, when available, ARM64
+  hardware. Verify at least app launch and sample Event File loading before
+  calling Linux support validated.
 - Android regression: run the Android unit gate and smoke import/export/readout
   basics so desktop-shared changes do not regress the production baseline.
 

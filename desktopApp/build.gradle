@@ -47,6 +47,17 @@ def desktopJdeployBundleDir = layout.buildDirectory.dir("jdeploy")
 def desktopJdeployLibsDir = desktopJdeployBundleDir.map { it.dir("libs") }
 def desktopJdeployJarName = "Radio-Oracle-jdeploy.jar"
 def runtimeClasspath = configurations.runtimeClasspath
+def jdeploySkikoVersion = libs.versions.skiko.get()
+def requiredJdeploySkikoRuntimeArtifacts = [
+        "skiko-awt-runtime-angle-windows-arm64",
+        "skiko-awt-runtime-angle-windows-x64",
+        "skiko-awt-runtime-linux-arm64",
+        "skiko-awt-runtime-linux-x64",
+        "skiko-awt-runtime-macos-arm64",
+        "skiko-awt-runtime-macos-x64",
+        "skiko-awt-runtime-windows-arm64",
+        "skiko-awt-runtime-windows-x64"
+]
 def desktopImplementationVersion = version.toString()
 def desktopBaseVersion = rootProject.ext.radioOracleVersion.toString()
 def desktopBuildInfoDir = layout.buildDirectory.dir("generated/source/desktopBuildInfo/kotlin")
@@ -56,6 +67,20 @@ def isDesktopReleaseBuild = (findProperty("radioOracle.releaseBuild")?.toString(
 
 sourceSets {
     main.kotlin.srcDir(desktopBuildInfoDir)
+}
+
+configurations {
+    desktopJdeployRuntimeClasspath {
+        canBeConsumed = false
+        canBeResolved = true
+        extendsFrom(configurations.runtimeClasspath)
+    }
+}
+
+dependencies {
+    requiredJdeploySkikoRuntimeArtifacts.each { artifact ->
+        desktopJdeployRuntimeClasspath("org.jetbrains.skiko:${artifact}:${jdeploySkikoVersion}")
+    }
 }
 
 def shouldIncrementDesktopBuildSuffix = gradle.startParameter.taskNames.any { taskName ->
@@ -166,7 +191,7 @@ tasks.register("stageDesktopJdeployLibs", Sync) {
     group = "distribution"
     description = "Stages desktop runtime dependencies for the Radio-Oracle jDeploy bundle."
 
-    from(runtimeClasspath)
+    from(configurations.desktopJdeployRuntimeClasspath)
     into(desktopJdeployLibsDir)
 }
 
@@ -186,7 +211,7 @@ tasks.register("desktopJdeployJar", Jar) {
 
     doFirst {
         def runtimeClasspathEntries = []
-        runtimeClasspath.files.each { file ->
+        configurations.desktopJdeployRuntimeClasspath.files.each { file ->
             runtimeClasspathEntries.add("libs/${file.name}")
         }
         runtimeClasspathEntries.sort()
@@ -246,6 +271,20 @@ tasks.register("verifyDesktopJdeployBundle") {
                 def dependencyFile = new File(jarFile.parentFile, relativePath)
                 if (!dependencyFile.isFile()) {
                     throw new GradleException("Class-Path entry ${relativePath} does not exist next to the generated jDeploy jar.")
+                }
+            }
+
+            def classPathEntryNames = classPathEntries.collect { new File(it).name }.toSet()
+            def stagedLibDir = desktopJdeployLibsDir.get().asFile
+            def stagedLibNames = (stagedLibDir.listFiles() ?: []).collect { it.name }.toSet()
+            def requiredSkikoJarNames = (["skiko-awt"] + requiredJdeploySkikoRuntimeArtifacts)
+                    .collect { artifact -> "${artifact}-${jdeploySkikoVersion}.jar" }
+            requiredSkikoJarNames.each { jarName ->
+                if (!stagedLibNames.contains(jarName)) {
+                    throw new GradleException("jDeploy bundle is missing ${jarName}; Compose Desktop will not launch on every supported OS/CPU.")
+                }
+                if (!classPathEntryNames.contains(jarName)) {
+                    throw new GradleException("jDeploy jar manifest Class-Path is missing libs/${jarName}.")
                 }
             }
         }
