@@ -66,6 +66,14 @@ requireEqual("package name", packageJson.name, expectedPackageName);
 requireEqual("package-lock name", packageLock.name, expectedPackageName);
 requireEqual("package-lock version", packageLock.version, packageJson.version);
 
+const expectedBundledDependencies = ["node-fetch", "shelljs", "tar", "yauzl"];
+const bundledDependencies = packageJson.bundledDependencies || packageJson.bundleDependencies || [];
+for (const dependency of expectedBundledDependencies) {
+  if (!bundledDependencies.includes(dependency)) {
+    fail(`package.json must bundle ${dependency} so GitHub-release jDeploy tarballs can run without npm install`);
+  }
+}
+
 if (!appBuildGradle.includes("versionName = rootProject.ext.radioOracleVersion")) {
   fail("Android versionName must use rootProject.ext.radioOracleVersion");
 }

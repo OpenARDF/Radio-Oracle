@@ -1,6 +1,6 @@
 {
   "name": "@openardf/radio-oracle",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Desktop event administration shell for Radio-Oracle.",
   "author": "OpenARDF",
   "homepage": "https://github.com/OpenARDF/Radio-Oracle",
@@ -43,6 +43,12 @@
     "tar": "^7.5.15",
     "yauzl": "^3.3.2"
   },
+  "bundledDependencies": [
+    "node-fetch",
+    "shelljs",
+    "tar",
+    "yauzl"
+  ],
   "devDependencies": {
     "jdeploy": "6.1.3"
   },

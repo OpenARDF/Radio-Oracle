@@ -269,6 +269,11 @@ The npm package remains useful for registry smoke testing and direct CLI-style
 installs, but the jDeploy GitHub page is the preferred user-facing desktop
 install path.
 
+The package tarball must bundle `node-fetch`, `shelljs`, `tar`, and `yauzl`.
+The generated `jdeploy.js` launcher needs those runtime modules when a
+GitHub-release install runs from the downloaded tarball rather than from an npm
+install directory.
+
 For every jDeploy deployment, keep both paths active unless workflow
 maintenance becomes a practical burden. The GitHub-release jDeploy page is the
 public end-user install method; npm publishing remains the
@@ -362,7 +367,7 @@ GitHub-release identity and asks jDeploy to attach GitHub release installer
 assets. It also uploads the GitHub jDeploy package tarball to the same GitHub
 release for auditability.
 
-For a release version `1.0.4`, the tag must be `v1.0.4`. After the workflow
+For a release version `1.0.5`, the tag must be `v1.0.5`. After the workflow
 finishes, users install from:
 
 ```text
@@ -372,7 +377,7 @@ https://www.jdeploy.com/gh/OpenARDF/Radio-Oracle
 Current local packaging evidence: the Gradle app-image checks,
 `npm run jdeploy:pack-preview`, `npm run jdeploy:release-preflight`,
 `npm run jdeploy:local-smoke`, and
-`npm run jdeploy:registry-smoke -- 1.0.4` pass on macOS with JDK 17 selected.
+`npm run jdeploy:registry-smoke -- 1.0.5` pass on macOS with JDK 17 selected.
 Windows packaged-app smoke reached the installed executable and loaded the
 sample Event File; the npm helper scripts are cross-platform, but final Windows
 confirmation is still tracked through `CODEX_MAILBOX.md`.
