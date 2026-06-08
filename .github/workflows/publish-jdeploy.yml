@@ -1,0 +1,99 @@
+name: Publish jDeploy Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version to publish, matching package.json"
+        required: true
+        type: string
+      mode:
+        description: "Run a dry run or publish to npm"
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - publish
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish-radio-oracle
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish @openardf/radio-oracle
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    env:
+      RADIO_ORACLE_ALLOW_JDEPLOY_PUBLISH: "1"
+      RADIO_ORACLE_RELEASE_BUILD: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        id: setup-java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+
+      - name: Print tool versions
+        run: |
+          java -version
+          node --version
+          npm --version
+
+      - name: Verify requested version
+        run: |
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const requested = process.env.REQUESTED_VERSION;
+          const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          if (packageJson.version !== requested) {
+            console.error(`Workflow input version ${requested} does not match package.json version ${packageJson.version}.`);
+            process.exit(1);
+          }
+          NODE
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Run desktop and Android regression gates
+        run: |
+          ./gradlew \
+            :shared:desktopTest \
+            :desktopApp:test \
+            :shared:testDebugUnitTest \
+            :app:testDebugUnitTest \
+            :app:assembleDebug \
+            :desktopApp:checkRuntime \
+            :desktopApp:prepareDesktopJdeployBundle \
+            :desktopApp:verifyDesktopJdeployBundle
+
+      - name: Run jDeploy release preflight
+        run: npm run jdeploy:release-preflight
+
+      - name: Build npm package preview
+        run: npm run jdeploy:pack-preview
+
+      - name: Publish to npm with trusted publishing
+        if: inputs.mode == 'publish'
+        run: npm publish --access public
+
+      - name: Dry-run complete
+        if: inputs.mode != 'publish'
+        run: echo "Dry-run completed. Re-run with mode=publish to publish ${{ inputs.version }}."

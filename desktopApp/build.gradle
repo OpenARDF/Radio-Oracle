@@ -51,6 +51,8 @@ def desktopImplementationVersion = version.toString()
 def desktopBaseVersion = rootProject.ext.radioOracleVersion.toString()
 def desktopBuildInfoDir = layout.buildDirectory.dir("generated/source/desktopBuildInfo/kotlin")
 def desktopBuildSuffixFile = layout.projectDirectory.file(".gradle/desktop-build-suffix.txt")
+def isDesktopReleaseBuild = (findProperty("radioOracle.releaseBuild")?.toString()?.toBoolean() ?: false) ||
+        System.getenv("RADIO_ORACLE_RELEASE_BUILD") == "1"
 
 sourceSets {
     main.kotlin.srcDir(desktopBuildInfoDir)
@@ -58,7 +60,8 @@ sourceSets {
 
 def shouldIncrementDesktopBuildSuffix = gradle.startParameter.taskNames.any { taskName ->
     def normalizedTaskName = taskName.toLowerCase(Locale.ROOT)
-    normalizedTaskName.contains("createdistributable") ||
+    !isDesktopReleaseBuild && (
+            normalizedTaskName.contains("createdistributable") ||
             normalizedTaskName.contains("packagedistribution") ||
             normalizedTaskName.contains("packagedmg") ||
             normalizedTaskName.contains("packagemsi") ||
@@ -66,7 +69,7 @@ def shouldIncrementDesktopBuildSuffix = gradle.startParameter.taskNames.any { ta
             normalizedTaskName.contains("predesktopjdeploy") ||
             normalizedTaskName.contains("desktopjdeploy") ||
             normalizedTaskName.endsWith(":desktopapp:run") ||
-            normalizedTaskName == "run"
+            normalizedTaskName == "run")
 }
 
 tasks.register("generateDesktopBuildInfo") {
@@ -74,6 +77,7 @@ tasks.register("generateDesktopBuildInfo") {
     description = "Generates desktop build metadata shown in the app window."
 
     inputs.property("baseVersion", desktopBaseVersion)
+    inputs.property("isReleaseBuild", isDesktopReleaseBuild)
     inputs.property("shouldIncrementDesktopBuildSuffix", shouldIncrementDesktopBuildSuffix)
     outputs.dir(desktopBuildInfoDir)
     outputs.upToDateWhen { false }
@@ -82,7 +86,9 @@ tasks.register("generateDesktopBuildInfo") {
         def suffixFile = desktopBuildSuffixFile.asFile
         def currentSuffix = suffixFile.isFile() ? suffixFile.text.trim() : ""
         def buildSuffix = currentSuffix
-        if (shouldIncrementDesktopBuildSuffix) {
+        if (isDesktopReleaseBuild) {
+            buildSuffix = ""
+        } else if (shouldIncrementDesktopBuildSuffix) {
             if (currentSuffix.isBlank()) {
                 buildSuffix = "a"
             } else {
@@ -99,7 +105,7 @@ tasks.register("generateDesktopBuildInfo") {
                 }
             }
         }
-        if (buildSuffix.isBlank()) {
+        if (!isDesktopReleaseBuild && buildSuffix.isBlank()) {
             buildSuffix = "a"
         }
         if (shouldIncrementDesktopBuildSuffix) {

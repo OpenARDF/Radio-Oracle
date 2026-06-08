@@ -274,9 +274,41 @@ app.
 `npm run jdeploy:release-preflight` checks package identity and version
 alignment before any intentional publish.
 
+Full release builds must use an unsuffixed desktop display version that matches
+the npm/jDeploy package version. Set `RADIO_ORACLE_RELEASE_BUILD=1`, or pass
+`-PradioOracle.releaseBuild=true` to Gradle, when preparing a publishable
+jDeploy package. Release preflight sets this flag automatically and verifies
+that the generated jDeploy jar contains the plain base version rather than an
+iterative desktop test suffix.
+
 After a public publish, `npm run jdeploy:registry-smoke -- <version>` installs
 that exact registry version in a temporary directory, launches it with the smoke
 Event File, confirms startup, and quits the app.
+
+### Trusted Publishing
+
+The npm package should be published through npm Trusted Publishing rather than a
+long-lived npm token. The repository workflow is
+`.github/workflows/publish-jdeploy.yml`; it is manual-only, requires an explicit
+version input that must match `package.json`, runs the desktop/Android gates,
+builds the jDeploy npm payload in release mode, and publishes with OIDC when
+`mode=publish`.
+
+Configure npm at `npmjs.com` → `@openardf/radio-oracle` → Settings → Trusted
+publishing with these exact values:
+
+- Provider: GitHub Actions.
+- Organization or user: `OpenARDF`.
+- Repository: `Radio-Oracle`.
+- Workflow filename: `publish-jdeploy.yml`.
+- Environment name: `npm-publish`.
+- Allowed actions: `npm publish`.
+
+The workflow uses GitHub-hosted `ubuntu-latest`, Node 24, npm's OIDC
+`id-token: write` permission, and `RADIO_ORACLE_RELEASE_BUILD=1` so the desktop
+display version matches the package version without an iterative suffix. After
+the first successful publish through Trusted Publishing, set the npm package's
+Publishing access to require 2FA and disallow traditional tokens.
 
 Current local packaging evidence: the Gradle app-image checks,
 `npm run jdeploy:pack-preview`, `npm run jdeploy:release-preflight`,

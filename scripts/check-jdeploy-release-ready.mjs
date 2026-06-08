@@ -27,7 +27,7 @@ function gradleCommand() {
   return platform() === "win32" ? resolve("gradlew.bat") : resolve("gradlew");
 }
 
-function javaEnv() {
+function javaEnv(extra = {}) {
   let javaHome = process.env.JAVA_HOME;
   if (!javaHome && platform() === "darwin" && existsSync("/usr/libexec/java_home")) {
     javaHome = execFileSync("/usr/libexec/java_home", ["-v", "17"], { encoding: "utf8" }).trim();
@@ -37,13 +37,14 @@ function javaEnv() {
   }
   return {
     ...process.env,
+    ...extra,
     PATH: `${resolve(javaHome, "bin")}${platform() === "win32" ? ";" : ":"}${process.env.PATH || ""}`
   };
 }
 
-function runGradle(args) {
+function runGradle(args, extraEnv = {}) {
   const gradle = gradleCommand();
-  const env = javaEnv();
+  const env = javaEnv(extraEnv);
   if (platform() === "win32") {
     execFileSync("cmd.exe", ["/d", "/c", "call", gradle, ...args], { stdio: "inherit", env });
     return;
@@ -67,7 +68,8 @@ if (!desktopBuildGradle.includes("packageVersion = rootProject.ext.radioOracleVe
   fail("desktop native packageVersion must use rootProject.ext.radioOracleVersion");
 }
 
-runGradle([":desktopApp:verifyDesktopJdeployBundle"]);
+const releaseBuildEnv = { RADIO_ORACLE_RELEASE_BUILD: "1" };
+runGradle([":desktopApp:verifyDesktopJdeployBundle"], releaseBuildEnv);
 
 const tempDir = mkdtempSync(join(tmpdir(), "radio-oracle-manifest-"));
 try {
@@ -79,6 +81,24 @@ try {
   const manifest = readFileSync(join(tempDir, "META-INF/MANIFEST.MF"), "utf8");
   const implementationVersion = manifest.match(/^Implementation-Version: (.+)$/m)?.[1]?.trim();
   requireEqual("jDeploy jar Implementation-Version", implementationVersion, packageJson.version);
+
+  const classInfo = execFileSync(
+    "javap",
+    [
+      "-classpath",
+      `${process.cwd()}/desktopApp/build/jdeploy/Radio-Oracle-jdeploy.jar`,
+      "-verbose",
+      "org.openardf.radiooracle.desktop.DesktopBuildInfo"
+    ],
+    { env: javaEnv(releaseBuildEnv), encoding: "utf8" }
+  );
+  if (!classInfo.includes(`ConstantValue: String ${packageJson.version}`)) {
+    fail(`desktop release build must include an unsuffixed display version ${packageJson.version}`);
+  }
+  if (classInfo.includes(`Radio-Oracle Desktop ${packageJson.version}-`) ||
+      /\bRadio-Oracle Desktop \d+\.\d+\.\d+[a-z]/.test(classInfo)) {
+    fail("desktop release build must not include an iterative desktop build suffix");
+  }
 } finally {
   rmSync(tempDir, { recursive: true, force: true });
 }
