@@ -77,6 +77,8 @@ configurations {
     }
 }
 
+def desktopJdeployRuntimeClasspathFiles = configurations.desktopJdeployRuntimeClasspath
+
 dependencies {
     requiredJdeploySkikoRuntimeArtifacts.each { artifact ->
         desktopJdeployRuntimeClasspath("org.jetbrains.skiko:${artifact}:${jdeploySkikoVersion}")
@@ -204,6 +206,9 @@ tasks.register("desktopJdeployJar", Jar) {
 
     archiveFileName = desktopJdeployJarName
     destinationDirectory = desktopJdeployBundleDir
+    inputs.files(desktopJdeployRuntimeClasspathFiles)
+            .withPropertyName("desktopJdeployRuntimeClasspath")
+            .withPathSensitivity(PathSensitivity.NAME_ONLY)
 
     from({
         zipTree(tasks.named("jar").get().archiveFile.get().asFile)
@@ -211,7 +216,7 @@ tasks.register("desktopJdeployJar", Jar) {
 
     doFirst {
         def runtimeClasspathEntries = []
-        configurations.desktopJdeployRuntimeClasspath.files.each { file ->
+        desktopJdeployRuntimeClasspathFiles.files.each { file ->
             runtimeClasspathEntries.add("libs/${file.name}")
         }
         runtimeClasspathEntries.sort()
@@ -242,6 +247,12 @@ tasks.register("verifyDesktopJdeployBundle") {
     description = "Verifies that the generated Radio-Oracle jDeploy jar is executable and references staged dependencies."
 
     dependsOn(tasks.named("prepareDesktopJdeployBundle"))
+    inputs.file(desktopJdeployJarFile)
+            .withPropertyName("desktopJdeployJar")
+            .withPathSensitivity(PathSensitivity.NAME_ONLY)
+    inputs.dir(desktopJdeployLibsDir)
+            .withPropertyName("desktopJdeployLibs")
+            .withPathSensitivity(PathSensitivity.NAME_ONLY)
 
     doLast {
         def jarFile = desktopJdeployJarFile.get().asFile
@@ -275,10 +286,10 @@ tasks.register("verifyDesktopJdeployBundle") {
             }
 
             def classPathEntryNames = classPathEntries.collect { new File(it).name }.toSet()
-            def stagedLibDir = desktopJdeployLibsDir.get().asFile
+            def stagedLibDir = new File(jarFile.parentFile, "libs")
             def stagedLibNames = (stagedLibDir.listFiles() ?: []).collect { it.name }.toSet()
             def requiredSkikoJarNames = (["skiko-awt"] + requiredJdeploySkikoRuntimeArtifacts)
-                    .collect { artifact -> "${artifact}-${jdeploySkikoVersion}.jar" }
+                    .collect { artifact -> "${artifact}-${jdeploySkikoVersion}.jar".toString() }
             requiredSkikoJarNames.each { jarName ->
                 if (!stagedLibNames.contains(jarName)) {
                     throw new GradleException("jDeploy bundle is missing ${jarName}; Compose Desktop will not launch on every supported OS/CPU.")
