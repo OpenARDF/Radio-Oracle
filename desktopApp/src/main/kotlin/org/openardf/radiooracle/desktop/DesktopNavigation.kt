@@ -159,9 +159,10 @@ data class DesktopNavState(
         if (submenuStack.isEmpty()) {
             return this
         }
+        val activeMenuItems = DesktopNavigation.menuItemsForStack(workflow, submenuStack)
         if (
             selectedItemId != submenuStack.last() &&
-            DesktopNavigation.currentItems(this).any { it.id == selectedItemId }
+            activeMenuItems.any { it.id == selectedItemId }
         ) {
             val currentMenu = DesktopNavigation.itemById(workflow, submenuStack.last())
             return copy(
@@ -220,10 +221,30 @@ object DesktopNavigation {
                             workflow,
                             DesktopSection.ElevationCache
                         ),
-                        item(
+                        group(
                             "setup.controls.import-export",
                             "Import/Export",
                             workflow,
+                            listOf(
+                                action(
+                                    "setup.controls.import-controls",
+                                    "Import Controls CSV...",
+                                    workflow,
+                                    DesktopNavAction.ImportControlsCsv
+                                ),
+                                action(
+                                    "setup.controls.import-kml-kmz",
+                                    "Import Controls/Route KML/KMZ...",
+                                    workflow,
+                                    DesktopNavAction.ImportCourseKmlKmz
+                                ),
+                                action(
+                                    "setup.controls.export-controls",
+                                    "Export Controls CSV...",
+                                    workflow,
+                                    DesktopNavAction.ExportControlsCsv
+                                )
+                            ),
                             DesktopSection.ControlsImportExport
                         )
                     ),
@@ -436,16 +457,21 @@ object DesktopNavigation {
             )
         }
 
-    fun currentItems(state: DesktopNavState): List<DesktopNavItem> =
-        state.submenuStack.fold(roots.getValue(state.workflow)) { items, id ->
+    fun currentItems(state: DesktopNavState): List<DesktopNavItem> {
+        val activeMenuItems = menuItemsForStack(state.workflow, state.submenuStack)
+        val selectedLeaf = activeMenuItems.firstOrNull { it.id == state.selectedItemId && it.children.isEmpty() }
+        return selectedLeaf?.children ?: activeMenuItems
+    }
+
+    fun menuItemsForStack(workflow: DesktopWorkflow, submenuStack: List<String>): List<DesktopNavItem> =
+        submenuStack.fold(roots.getValue(workflow)) { items, id ->
             items.firstOrNull { it.id == id }?.children ?: items
         }
 
     fun selectItem(state: DesktopNavState, item: DesktopNavItem): DesktopNavSelection =
         when {
             item.children.isNotEmpty() -> DesktopNavSelection(state.enter(item))
-            item.action == DesktopNavAction.OpenEventFile -> DesktopNavSelection(state.returnToCurrentMenu(item), item.action)
-            item.action != null -> DesktopNavSelection(if (item.section == null) state else state.enter(item), item.action)
+            item.action != null -> DesktopNavSelection(state.enter(item), item.action)
             item.section != null -> DesktopNavSelection(state.enter(item))
             else -> DesktopNavSelection(state)
         }
@@ -616,7 +642,9 @@ object DesktopNavigation {
             labels += item.label
             items = item.children
         }
-        currentItems(state).firstOrNull { it.id == state.selectedItemId }?.let { selected ->
+        menuItemsForStack(state.workflow, state.submenuStack)
+            .firstOrNull { it.id == state.selectedItemId }
+            ?.let { selected ->
             if (selected.label !in labels) {
                 labels += selected.label
             }
@@ -641,12 +669,12 @@ object DesktopNavigation {
         }
 
     fun selectedLabel(state: DesktopNavState): String =
-        if (state.selectedSection == DesktopSection.WorkflowHome) {
-            state.workflow.label
-        } else {
-            allItems(state.workflow).firstOrNull { it.id == state.selectedItemId }?.label
-                ?: state.selectedSection.label
-        }
+        allItems(state.workflow).firstOrNull { it.id == state.selectedItemId }?.label
+            ?: if (state.selectedSection == DesktopSection.WorkflowHome) {
+                state.workflow.label
+            } else {
+                state.selectedSection.label
+            }
 
     private fun allItems(workflow: DesktopWorkflow): List<DesktopNavItem> {
         fun flatten(items: List<DesktopNavItem>): List<DesktopNavItem> =
@@ -738,7 +766,9 @@ object DesktopNavigation {
                 DesktopSection.Settings,
                 requiresEventFile = false
             ),
-            action("setup.event-file.save", "Save Event", workflow, DesktopNavAction.SaveEventFile)
+            action("setup.event-file.save", "Save Event", workflow, DesktopNavAction.SaveEventFile),
+            action("setup.event-file.save-as", "Save Event As...", workflow, DesktopNavAction.SaveEventFileAs),
+            action("setup.event-file.close", "Close Event File", workflow, DesktopNavAction.CloseEventFile)
         )
 
     private fun item(
@@ -789,13 +819,4 @@ object DesktopNavigation {
             requiresEventFile = requiresEventFile,
             children = children
         )
-
-    private fun DesktopNavState.returnToCurrentMenu(item: DesktopNavItem): DesktopNavState {
-        val currentMenuId = submenuStack.lastOrNull() ?: return this
-        val currentMenu = itemById(workflow, currentMenuId)
-        return copy(
-            selectedSection = item.section ?: currentMenu?.section ?: selectedSection,
-            selectedItemId = currentMenuId
-        )
-    }
 }

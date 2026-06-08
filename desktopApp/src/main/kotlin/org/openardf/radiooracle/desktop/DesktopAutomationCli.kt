@@ -312,6 +312,11 @@ object DesktopAutomationCli {
                 selectedLabels += label
                 return@forEach
             }
+            if (label == "Save Event") {
+                action = DesktopNavAction.SaveEventFile
+                selectedLabels += label
+                return@forEach
+            }
             val item = currentItem
             if (item == null) {
                 err.println("Menu item '$label' is not available from ${DesktopNavigation.breadcrumb(state)}.")

@@ -161,7 +161,7 @@ class DesktopNavigationTest {
     }
 
     @Test
-    fun openEventFileActionReturnsToEventFileMenu() {
+    fun openEventFileActionFocusesLoadFileContext() {
         val eventFileState = DesktopNavigation.selectItem(
             DesktopNavState(),
             DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
@@ -175,8 +175,9 @@ class DesktopNavigationTest {
         assertEquals(DesktopNavAction.OpenEventFile, selection.action)
         assertEquals(listOf("setup.event-file"), selection.state.submenuStack)
         assertEquals(DesktopSection.Races, selection.state.selectedSection)
-        assertEquals("setup.event-file", selection.state.selectedItemId)
-        assertEquals("Setup > Event File", DesktopNavigation.breadcrumb(selection.state))
+        assertEquals("setup.event-file.open", selection.state.selectedItemId)
+        assertEquals("Setup > Event File > Load File...", DesktopNavigation.breadcrumb(selection.state))
+        assertEquals(emptyList<String>(), DesktopNavigation.currentItems(selection.state).map { it.label })
     }
 
     @Test
@@ -290,6 +291,8 @@ class DesktopNavigationTest {
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.ImportEventRegWebsite }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFile }.requiresEventFile)
+        assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFileAs }.requiresEventFile)
+        assertTrue(eventFileActions.first { it.action == DesktopNavAction.CloseEventFile }.requiresEventFile)
         assertFalse(eventFileActions.first { it.label == "Settings" }.requiresEventFile)
         assertEquals(
             listOf(
@@ -299,7 +302,9 @@ class DesktopNavigationTest {
                 "Import EventReg Website...",
                 "Export Android Event File...",
                 "Settings",
-                "Save Event"
+                "Save Event",
+                "Save Event As...",
+                "Close Event File"
             ),
             eventFileActions.map { it.label }
         )
@@ -462,7 +467,9 @@ class DesktopNavigationTest {
                 "Import EventReg Website...",
                 "Export Android Event File...",
                 "Settings",
-                "Save Event"
+                "Save Event",
+                "Save Event As...",
+                "Close Event File"
             ),
             eventFileItems.map { it.label }
         )
@@ -501,6 +508,10 @@ class DesktopNavigationTest {
         assertEquals(DesktopSection.CourseAnalysis, controlItems.first { it.label == "Course Analyzer" }.section)
         assertEquals(DesktopSection.ElevationCache, controlItems.first { it.label == "Elevation Data" }.section)
         assertEquals(DesktopSection.ControlsImportExport, controlItems.first { it.label == "Import/Export" }.section)
+        assertEquals(
+            listOf("Import Controls CSV...", "Import Controls/Route KML/KMZ...", "Export Controls CSV..."),
+            controlItems.first { it.label == "Import/Export" }.children.map { it.label }
+        )
         assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Protected Course Order" }.section)
         assertEquals(
             listOf("Competitors", "Import Competitors CSV...", "Import EventReg Website...", "Export Competitors CSV..."),
@@ -571,6 +582,7 @@ class DesktopNavigationTest {
         assertEquals(DesktopSection.Races, state.selectedSection)
         assertEquals("setup.event-file.new", state.selectedItemId)
         assertEquals("Setup > Event File > New Event File", DesktopNavigation.breadcrumb(state))
+        assertEquals(emptyList<String>(), DesktopNavigation.currentItems(state).map { it.label })
     }
 
     @Test
@@ -587,6 +599,108 @@ class DesktopNavigationTest {
         assertEquals(DesktopNavAction.NewEventFile, selection.action)
         assertEquals(DesktopSection.Races, selection.state.selectedSection)
         assertEquals("setup.event-file.new", selection.state.selectedItemId)
+    }
+
+    @Test
+    fun selectingNewEventFileHidesUnrelatedEventFileButtonsUntilBack() {
+        val eventFileState = DesktopNavigation.selectItem(
+            DesktopNavState(),
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+        ).state
+        val state = DesktopNavigation.selectItem(
+            eventFileState,
+            DesktopNavigation.currentItems(eventFileState).first { it.label == "New Event File" }
+        ).state
+
+        assertEquals("Setup > Event File > New Event File", DesktopNavigation.breadcrumb(state))
+        assertEquals(emptyList<String>(), DesktopNavigation.currentItems(state).map { it.label })
+
+        val backState = state.back()
+
+        assertEquals("Setup > Event File", DesktopNavigation.breadcrumb(backState))
+        assertEquals(
+            listOf(
+                "New Event File",
+                "Load File...",
+                "Import Android Event File...",
+                "Import EventReg Website...",
+                "Export Android Event File...",
+                "Settings",
+                "Save Event",
+                "Save Event As...",
+                "Close Event File"
+            ),
+            DesktopNavigation.currentItems(backState).map { it.label }
+        )
+    }
+
+    @Test
+    fun selectingSetupSectionLeafHidesSiblingButtonsUntilBack() {
+        val controlsState = DesktopNavigation.selectItem(
+            DesktopNavState(),
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Controls" }
+        ).state
+        val defineControlsState = DesktopNavigation.selectItem(
+            controlsState,
+            DesktopNavigation.currentItems(controlsState).first { it.label == "Define Controls" }
+        ).state
+
+        assertEquals("Setup > Controls > Define Controls", DesktopNavigation.breadcrumb(defineControlsState))
+        assertEquals(emptyList<String>(), DesktopNavigation.currentItems(defineControlsState).map { it.label })
+
+        val backState = defineControlsState.back()
+
+        assertEquals("Setup > Controls", DesktopNavigation.breadcrumb(backState))
+        assertEquals(
+            listOf("Define Controls", "Course Analyzer", "Elevation Data", "Import/Export"),
+            DesktopNavigation.currentItems(backState).map { it.label }
+        )
+    }
+
+    @Test
+    fun selectingNestedExportActionHidesSiblingExportButtonsUntilBack() {
+        val resultsState = DesktopNavState().switchWorkflow(DesktopWorkflow.ResultsExport)
+        val exportsState = DesktopNavigation.selectItem(
+            resultsState,
+            DesktopNavigation.currentItems(resultsState).first { it.label == "Exports" }
+        ).state
+        val jsonXmlState = DesktopNavigation.selectItem(
+            exportsState,
+            DesktopNavigation.currentItems(exportsState).first { it.label == "JSON/XML" }
+        ).state
+        val selectedExportState = DesktopNavigation.selectItem(
+            jsonXmlState,
+            DesktopNavigation.currentItems(jsonXmlState).first { it.label == "Export Live Results JSON..." }
+        ).state
+
+        assertEquals(
+            "Results/File Export > Exports > JSON/XML > Export Live Results JSON...",
+            DesktopNavigation.breadcrumb(selectedExportState)
+        )
+        assertEquals(emptyList<String>(), DesktopNavigation.currentItems(selectedExportState).map { it.label })
+
+        val backState = selectedExportState.back()
+
+        assertEquals("Results/File Export > Exports > JSON/XML", DesktopNavigation.breadcrumb(backState))
+        assertEquals(
+            listOf(
+                "Export Live Results JSON...",
+                "Export Final Results JSON...",
+                "Export IOF Result List XML...",
+                "Export ARDF JSON..."
+            ),
+            DesktopNavigation.currentItems(backState).map { it.label }
+        )
+    }
+
+    @Test
+    fun everyNavigationActionIsStillReachableFromTheMenuTree() {
+        val reachableActions = DesktopWorkflow.entries
+            .flatMap { workflow -> flatten(DesktopNavigation.rootItems(workflow)) }
+            .mapNotNull { it.action }
+            .toSet()
+
+        assertEquals(DesktopNavAction.entries.toSet(), reachableActions)
     }
 
     @Test
@@ -621,4 +735,7 @@ class DesktopNavigationTest {
         assertEquals("About Radio-Oracle", DesktopNavigation.selectedLabel(state))
         assertEquals("Help/About/App Settings > Help > About Radio-Oracle", DesktopNavigation.breadcrumb(state))
     }
+
+    private fun flatten(items: List<DesktopNavItem>): List<DesktopNavItem> =
+        items + items.flatMap { flatten(it.children) }
 }
