@@ -251,6 +251,26 @@ the jar manifest and staged classpath layout that the future jDeploy package
 metadata will consume.
 
 The selected public jDeploy/npm package identity is `@openardf/radio-oracle`.
+End users should install the desktop beta from the jDeploy GitHub release page:
+
+```text
+https://www.jdeploy.com/gh/OpenARDF/Radio-Oracle
+```
+
+This page follows GitHub release installer assets created by
+`.github/workflows/jdeploy-github-release.yml`. The npm package remains useful
+for registry smoke testing and direct CLI-style installs, but the jDeploy
+GitHub page is the preferred user-facing desktop install path.
+
+For every jDeploy deployment, keep both paths active unless workflow
+maintenance becomes a practical burden. The GitHub-release jDeploy page is the
+public end-user install method; npm publishing remains the
+registry/provenance/automation path. A deployment is not complete until the
+GitHub release installer workflow has produced the user-facing release assets
+and the npm Trusted Publishing workflow has published the matching package
+version or the release notes explicitly record why one path was intentionally
+skipped.
+
 Local metadata checks are available through:
 
 ```shell
@@ -281,9 +301,23 @@ jDeploy package. Release preflight sets this flag automatically and verifies
 that the generated jDeploy jar contains the plain base version rather than an
 iterative desktop test suffix.
 
-After a public publish, `npm run jdeploy:registry-smoke -- <version>` installs
-that exact registry version in a temporary directory, launches it with the smoke
-Event File, confirms startup, and quits the app.
+After a public npm publish, `npm run jdeploy:registry-smoke -- <version>`
+installs that exact registry version in a temporary directory, launches it with
+the smoke Event File, confirms startup, and quits the app.
+
+The normal deployment sequence is:
+
+1. Bump Android, desktop, and npm/jDeploy versions together.
+2. Run `npm run jdeploy:release-preflight`.
+3. Merge the release state to `main`.
+4. Push the matching `v<version>` tag and let
+   `.github/workflows/jdeploy-github-release.yml` publish GitHub release
+   installer assets.
+5. Run `.github/workflows/publish-jdeploy.yml` in `publish` mode for the same
+   version.
+6. Run `npm run jdeploy:registry-smoke -- <version>`.
+7. Verify that the README's jDeploy install page remains the public desktop
+   install link.
 
 ### Trusted Publishing
 
@@ -310,10 +344,26 @@ display version matches the package version without an iterative suffix. After
 the first successful publish through Trusted Publishing, set the npm package's
 Publishing access to require 2FA and disallow traditional tokens.
 
+### GitHub Release Installers
+
+End-user desktop installers are published by
+`.github/workflows/jdeploy-github-release.yml`. The workflow runs when a `v*`
+tag is pushed, verifies that the tag exactly matches `package.json`, runs the
+desktop and Android regression gates, runs the jDeploy release preflight, and
+then asks jDeploy to attach GitHub release installer assets. It also uploads the
+canonical package tarball to the same GitHub release for auditability.
+
+For a release version `1.0.3`, the tag must be `v1.0.3`. After the workflow
+finishes, users install from:
+
+```text
+https://www.jdeploy.com/gh/OpenARDF/Radio-Oracle
+```
+
 Current local packaging evidence: the Gradle app-image checks,
 `npm run jdeploy:pack-preview`, `npm run jdeploy:release-preflight`,
 `npm run jdeploy:local-smoke`, and
-`npm run jdeploy:registry-smoke -- 1.0.1` pass on macOS with JDK 17 selected.
+`npm run jdeploy:registry-smoke -- 1.0.2` pass on macOS with JDK 17 selected.
 Windows packaged-app smoke reached the installed executable and loaded the
 sample Event File; the npm helper scripts are cross-platform, but final Windows
 confirmation is still tracked through `CODEX_MAILBOX.md`.
@@ -512,14 +562,16 @@ repeatable package validation.
    smoke-test Event File is available at `samples/desktop-smoke.rom.json`, with
    automated desktop coverage for the session-level open, edit, save, close,
    reopen, export-copy, CSV export, and ARDF JSON export flows.
-5. In progress: add jDeploy metadata after the desktop app can complete a real
-   smoke scenario. The Gradle-side jDeploy bundle tasks now build and verify
+5. In progress: keep the jDeploy deployment path aligned with the desktop smoke
+   scenario. The Gradle-side jDeploy bundle tasks now build and verify
    `desktopApp/build/jdeploy/Radio-Oracle-jdeploy.jar`. The npm/jDeploy
    package metadata now uses `@openardf/radio-oracle`, local package preview is
    covered by `npm run jdeploy:pack-preview`, local install/launch smoke is
    covered by `npm run jdeploy:local-smoke`, public install/launch smoke is
-   covered by `npm run jdeploy:registry-smoke -- <version>`, and the first
-   public npm package is published as `@openardf/radio-oracle@1.0.1`.
+   covered by `npm run jdeploy:registry-smoke -- <version>`, GitHub release
+   installer assets are published by `.github/workflows/jdeploy-github-release.yml`,
+   and npm registry/provenance publishing is handled by
+   `.github/workflows/publish-jdeploy.yml`.
 6. In progress: keep hardened Android-style race-day SI download post-beta, but
    continue desktop USB feasibility, single-card download, and experimental
    continuous-readout slices before relying on that deferral. The first

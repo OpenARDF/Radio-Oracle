@@ -1,98 +1,54 @@
 # Radio-Oracle
 
-Radio-Oracle is an Android app for managing radio orienteering events on race
-day.
+Radio-Oracle is an app for managing radio orienteering events, including event
+setup, SPORTident readout, results, exports, and live-result support.
 
-Radio-Oracle is maintained by OpenARDF and derived from the MIT-licensed
-Radio-O-Manager app by Pavel Kolský and contributors.
+Download the latest desktop release:
+[Install Radio-Oracle](https://www.jdeploy.com/gh/OpenARDF/Radio-Oracle)
+
+License: MIT. See [LICENSE](LICENSE).
 
 ## What It Does
 
 Radio-Oracle is intended to help organizers:
 
-1. create or import races with categories, aliases, and competitors
-2. read SportIdent cards
+1. create or import races, categories, controls, and competitors
+2. read SPORTident cards
 3. calculate and review results
-4. export results
+4. export event data and results
 5. print finish tickets
 6. send live results
 
-## Desktop Beta
+The goal is to make radio orienteering event administration practical before,
+during, and after race day.
 
-Radio-Oracle also has a desktop event-admin beta distributed through jDeploy as
-`@openardf/radio-oracle`. The desktop app is intended for pre-event and
-post-event administration away from the finish table.
+## Platform Status
 
-The desktop beta supports:
+- Android is the established race-day app.
+- The desktop app is a beta for event setup, administration, analysis, readout,
+  and results work on Windows and macOS.
+- Linux desktop support is best-effort and not yet a primary validation target.
 
-- opening, editing, saving, and exporting `.rom.json` Event Files;
-- managing races, categories, control points, aliases, competitors, manual
-  readouts, and results;
-- importing Android-compatible category, competitor, and start-list CSV files
-  plus Android race-backup JSON files;
-- exporting category, competitor, start-list, start-list-by-category,
-  start-list-by-minute, readout, result, result TXT/HTML, IOF start/result-list
-  XML, Android-shaped race-backup/final-result JSON, and ARDF JSON files;
-- detecting an attached SPORTident USB download box and warning when it is not
-  in READOUT/SI MASTER mode;
-- downloading one SI5/SI6/SI8/SI9/SIAC card at a time from an attached
-  READOUT/SI MASTER station;
-- running an experimental continuous SI5/SI6/SI8/SI9/SIAC card readout loop
-  from an attached READOUT/SI MASTER station;
-- choosing whether duplicate SI-card reads are ignored, replaced, or stored as
-  new readouts;
-- showing the most recent readout SI card, competitor, status, timestamp, and
-  warning/error state;
-- playing optional desktop alert sounds for duplicate or error/unknown SI
-  readouts;
-- inspecting competitors in drawn start-time order in a Start List desktop view;
-- drawing start times by category with club rotation and a configurable interval;
-- assigning unmatched readouts to competitors;
-- marking competitors DNS without an SI-card readout;
-- previewing finish-ticket text for readouts using the shared ticket renderer;
-- summarizing live-result send readiness and exporting Android-shaped
-  live-result and final-result JSON payloads;
-- manually sending unsent matched live results to ROBIS using the race API key;
-- sending unsent matched ROBIS live results in the background when enabled in
-  Settings;
-- serving auto-refreshing loopback-only local result/category/start-list/in-forest
-  displays plus `/results.json`, `/categories.json`, `/starts.json`, and
-  `/in-forest.json` endpoints from the open desktop Event File;
-- tracking started competitors without readouts in an In Forest desktop view.
+## Project Status
 
-The desktop beta does not yet replace the Android race-day workflow. Live
-printer transport, shared SQL persistence, and station maintenance writes remain
-post-beta work.
+The project currently includes:
 
-Local desktop packaging and smoke commands are documented in
-[`docs/desktop-prep.md`](docs/desktop-prep.md).
+- Android race-day workflows for SPORTident readout, results, printing, and live
+  results
+- a desktop Event File editor for `.rom.json` event data
+- desktop import/export tools for categories, competitors, starts, readouts,
+  results, Android-compatible JSON, IOF XML, ARDF JSON, KML/KMZ controls, and
+  course analysis artifacts
+- desktop SPORTident download support for attached READOUT/SI MASTER stations
+- shared Kotlin event, result, import/export, and validation logic
 
-## Equipment Needed
+## More Information
 
-- SportIdent BSM 7 / BSM 8 reader
-- USB to OTG adapter
-- Bluetooth printer for ticket printout
-
-## Supported Competition Formats
-
-- Classics
-- Foxoring
-- Orienteering
-- Sprint
-
-## Third Party Libraries and Resources
-
-- **Logo** - original Radio-Oracle artwork generated for this app using Codex
-- [SortableTableView](https://github.com/ISchwarz23/SortableTableView)
-- [kotlin-csv](https://github.com/doyaaaaaken/kotlin-csv)
-- [UsbSerial](https://github.com/felHR85/UsbSerial)
-- [ESCPOS-ThermalPrinter-Android](https://github.com/DantSu/ESCPOS-ThermalPrinter-Android)
-- [Moshi](https://github.com/square/moshi)
-- [OkHttp](https://github.com/square/okhttp)
-- [Markwon](https://github.com/noties/Markwon)
+- [Desktop preparation and packaging](docs/desktop-prep.md)
+- [Course Analyzer documentation](docs/course-analyzer.md)
+- [Competitor CSV format](docs/competitor-csv.md)
 
 ## Credits
 
-- OpenARDF maintains Radio-Oracle.
-- Radio-Oracle is derived from the MIT-licensed Radio-O-Manager app by
-  Pavel Kolský, Vojtěch Kopal, and Jakub Šrom.
+Radio-Oracle is maintained by OpenARDF and derived from the MIT-licensed
+Radio-O-Manager app by Pavel Kolský, Vojtěch Kopal, and Jakub Šrom.

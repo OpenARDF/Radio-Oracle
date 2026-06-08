@@ -11,6 +11,10 @@ const packageLock = JSON.parse(readFileSync("package-lock.json", "utf8"));
 const appBuildGradle = readFileSync("app/build.gradle", "utf8");
 const rootBuildGradle = readFileSync("build.gradle", "utf8");
 const desktopBuildGradle = readFileSync("desktopApp/build.gradle", "utf8");
+const readme = readFileSync("README.md", "utf8");
+const desktopPrep = readFileSync("docs/desktop-prep.md", "utf8");
+const npmPublishWorkflow = readFileSync(".github/workflows/publish-jdeploy.yml", "utf8");
+const githubReleaseWorkflow = readFileSync(".github/workflows/jdeploy-github-release.yml", "utf8");
 
 function fail(message) {
   console.error(`ERROR: ${message}`);
@@ -20,6 +24,12 @@ function fail(message) {
 function requireEqual(label, actual, expected) {
   if (actual !== expected) {
     fail(`${label} expected ${expected} but found ${actual}`);
+  }
+}
+
+function requireIncludes(label, text, expected) {
+  if (!text.includes(expected)) {
+    fail(`${label} must include ${expected}`);
   }
 }
 
@@ -67,6 +77,28 @@ if (!rootBuildGradle.includes(`ext.radioOracleVersion = "${packageJson.version}"
 if (!desktopBuildGradle.includes("packageVersion = rootProject.ext.radioOracleVersion")) {
   fail("desktop native packageVersion must use rootProject.ext.radioOracleVersion");
 }
+
+requireIncludes("README desktop install guidance", readme, "https://www.jdeploy.com/gh/OpenARDF/Radio-Oracle");
+requireIncludes("desktop-prep install guidance", desktopPrep, "GitHub Release Installers");
+requireIncludes("desktop-prep install guidance", desktopPrep, "https://www.jdeploy.com/gh/OpenARDF/Radio-Oracle");
+requireIncludes("desktop-prep deployment guidance", desktopPrep, "GitHub-release jDeploy page");
+requireIncludes("desktop-prep deployment guidance", desktopPrep, "public end-user install method");
+requireIncludes("desktop-prep deployment guidance", desktopPrep, "registry/provenance/automation path");
+
+requireIncludes("npm publish workflow", npmPublishWorkflow, "workflow_dispatch:");
+requireIncludes("npm publish workflow", npmPublishWorkflow, "id-token: write");
+requireIncludes("npm publish workflow", npmPublishWorkflow, "node-version: \"24\"");
+requireIncludes("npm publish workflow", npmPublishWorkflow, "RADIO_ORACLE_ALLOW_JDEPLOY_PUBLISH: \"1\"");
+requireIncludes("npm publish workflow", npmPublishWorkflow, "RADIO_ORACLE_RELEASE_BUILD: \"1\"");
+requireIncludes("npm publish workflow", npmPublishWorkflow, "npm publish --access public");
+
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "tags:");
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "- \"v*\"");
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "node-version: \"24\"");
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "RADIO_ORACLE_RELEASE_BUILD: \"1\"");
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "deploy_target: github");
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "gh release upload");
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "gh release edit");
 
 const releaseBuildEnv = { RADIO_ORACLE_RELEASE_BUILD: "1" };
 runGradle([":desktopApp:verifyDesktopJdeployBundle"], releaseBuildEnv);
