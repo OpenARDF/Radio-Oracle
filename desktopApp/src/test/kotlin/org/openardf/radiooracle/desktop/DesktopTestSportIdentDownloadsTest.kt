@@ -5,6 +5,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.ControlPointType
+import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
@@ -23,10 +24,10 @@ class DesktopTestSportIdentDownloadsTest {
 
         assertEquals(2, result.insertedCount)
         assertEquals(1111, result.projectFile.readoutFor("comp-1")?.result?.siNumber)
-        assertEquals(2222, result.projectFile.readoutFor("comp-2")?.result?.siNumber)
-        assertNull(result.projectFile.readoutFor("comp-3"))
+        assertEquals(1112, result.projectFile.readoutFor("comp-2")?.result?.siNumber)
+        assertNull(result.projectFile.readoutFor("comp-no-card"))
         assertEquals(
-            listOf(31, 32),
+            listOf(31, 32, 90),
             result.projectFile.readoutFor("comp-1")?.punches
                 ?.filter { it.punch.punchType == SIRecordType.CONTROL }
                 ?.map { it.punch.siCode }
@@ -54,12 +55,35 @@ class DesktopTestSportIdentDownloadsTest {
         assertNotNull(secondInsert.projectFile.readoutFor("comp-2"))
     }
 
-    private fun sampleProject() =
-        EventProjectFactory.createEmptyProject(
+    @Test
+    fun insertsVariedDownloadedReadoutsForResultsTesting() {
+        val result = DesktopTestSportIdentDownloads.insert(
+            projectFile = sampleProject(competitorCount = 12),
+            maxDownloads = 12,
+            readoutDateTimeIso = "2026-06-05T12:00:00"
+        )
+        val readouts = result.projectFile.raceData.competitorData.mapNotNull { it.readoutData }
+        val statuses = readouts.map { it.result.resultStatus }.toSet()
+
+        assertEquals(12, result.insertedCount)
+        assertEquals(true, statuses.contains(ResultStatus.OK))
+        assertEquals(true, statuses.contains(ResultStatus.DID_NOT_FINISH))
+        assertEquals(true, statuses.contains(ResultStatus.ERROR))
+        assertEquals(true, readouts.any { it.result.points == 2 })
+        assertEquals(true, readouts.any { it.result.points in 1..1 })
+        assertEquals(true, readouts.count { it.result.finishTimeSeconds != null } >= 10)
+        assertEquals(true, readouts.count { readout ->
+            readout.punches.any { it.punch.siCode == 90 && it.punch.punchType == SIRecordType.CONTROL }
+        } >= 10)
+    }
+
+    private fun sampleProject(competitorCount: Int = 2) =
+        (1..competitorCount).fold(
+            EventProjectFactory.createEmptyProject(
             raceId = "race",
             raceName = "Test Downloads",
             startDateTimeIso = "2026-06-05T09:00"
-        )
+            )
             .let { EventProjectEditor.addCategory(it, "cat", "M21") }
             .let {
                 EventProjectEditor.addControl(
@@ -68,7 +92,7 @@ class DesktopTestSportIdentDownloadsTest {
                     label = "F1",
                     siCode = "31",
                     type = ControlPointType.CONTROL,
-                    scored = true,
+                    scored = false,
                     publicLabel = "1",
                     notes = ""
                 )
@@ -80,8 +104,20 @@ class DesktopTestSportIdentDownloadsTest {
                     label = "F2",
                     siCode = "32",
                     type = ControlPointType.CONTROL,
-                    scored = true,
+                    scored = false,
                     publicLabel = "2",
+                    notes = ""
+                )
+            }
+            .let {
+                EventProjectEditor.addControl(
+                    projectFile = it,
+                    controlId = "beacon-90",
+                    label = "Beacon",
+                    siCode = "90",
+                    type = ControlPointType.BEACON,
+                    scored = false,
+                    publicLabel = "B",
                     notes = ""
                 )
             }
@@ -89,15 +125,22 @@ class DesktopTestSportIdentDownloadsTest {
                 EventProjectEditor.updateCategoryControlPoints(
                     projectFile = it,
                     categoryId = "cat",
-                    controlPointsText = "F1 F2"
+                    controlPointsText = "F1 F2 Beacon"
                 ) { index -> "cat-control-$index" }
             }
-            .let { EventProjectEditor.addCompetitor(it, "comp-1", "Alice", "Runner", "1", "1111") }
-            .let { EventProjectEditor.assignCompetitorCategory(it, "comp-1", "cat") }
-            .let { EventProjectEditor.addCompetitor(it, "comp-2", "Bob", "Racer", "2", "2222") }
-            .let { EventProjectEditor.assignCompetitorCategory(it, "comp-2", "cat") }
-            .let { EventProjectEditor.addCompetitor(it, "comp-3", "No", "Card", "3", "") }
-            .let { EventProjectEditor.assignCompetitorCategory(it, "comp-3", "cat") }
+        ) { project, index ->
+            EventProjectEditor.addCompetitor(
+                project,
+                "comp-$index",
+                "Runner",
+                "$index",
+                index.toString(),
+                (1110 + index).toString()
+            ).let { EventProjectEditor.assignCompetitorCategory(it, "comp-$index", "cat") }
+        }.let { project ->
+            EventProjectEditor.addCompetitor(project, "comp-no-card", "No", "Card", (competitorCount + 1).toString(), "")
+                .let { EventProjectEditor.assignCompetitorCategory(it, "comp-no-card", "cat") }
+        }
 
     private fun org.openardf.radiooracle.shared.event.EventProjectFile.readoutFor(competitorId: String) =
         raceData.competitorData

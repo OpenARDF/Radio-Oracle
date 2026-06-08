@@ -123,11 +123,12 @@ object ArdfJsonExports {
 
     private fun EventCompetitorData.toArdfCompetitor(raceData: EventRaceData): ArdfCompetitor {
         val competitor = competitorCategory.competitor
+        val resultCategoryId = readoutData?.result?.categoryId ?: competitor.categoryId
         return ArdfCompetitor(
             firstName = competitor.firstName,
             lastName = competitor.lastName,
             competitorClub = competitor.club.takeIf { it.isNotBlank() },
-            competitorCategory = raceData.categoryNameFor(competitor.categoryId),
+            competitorCategory = raceData.categoryNameFor(resultCategoryId),
             competitorIndex = competitor.index.takeIf { it.isNotBlank() },
             competitorGender = competitor.isMan,
             birthYear = competitor.birthYear,
@@ -135,7 +136,7 @@ object ArdfJsonExports {
             siRent = competitor.siRent,
             startNumber = competitor.startNumber,
             competitorStartTime = competitor.drawnStartTimeSeconds?.let { DurationFormatter.secondsToFormattedString(it, useMinutes = true) },
-            result = readoutData?.toArdfResult(raceData, competitor.categoryId)
+            result = readoutData?.toArdfResult(raceData, resultCategoryId)
         )
     }
 

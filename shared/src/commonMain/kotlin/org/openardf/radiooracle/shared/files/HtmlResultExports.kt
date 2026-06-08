@@ -19,7 +19,7 @@ object HtmlResultExports {
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
     ): String {
         val placedByCategory = raceData.competitorData
-            .groupBy { it.competitorCategory.category?.id ?: it.competitorCategory.competitor.categoryId }
+            .groupBy { it.resultCategoryId() }
             .mapValues { (_, categoryCompetitors) -> EventResultPlacement.sortByPlace(categoryCompetitors) }
 
         return buildString {
@@ -118,6 +118,9 @@ object HtmlResultExports {
         appendHtml(readoutData.punches.toSplitText(controlLabelsByCode))
         append("</td></tr>")
     }
+
+    private fun EventCompetitorData.resultCategoryId(): String? =
+        readoutData?.result?.categoryId ?: competitorCategory.category?.id ?: competitorCategory.competitor.categoryId
 
     private fun org.openardf.radiooracle.shared.event.EventResult.placeText(): String =
         if (resultStatus == ResultStatus.OK && place > 0) {

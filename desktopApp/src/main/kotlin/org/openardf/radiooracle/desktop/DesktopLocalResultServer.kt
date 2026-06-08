@@ -105,7 +105,9 @@ class DesktopLocalResultServer(
             results.forEachIndexed { index, result ->
                 if (index > 0) append(',')
                 append('{')
-                append(""""place":""")
+                append(""""category":""")
+                appendJsonString(result.categoryName)
+                append(""","place":""")
                 appendJsonString(result.placeText)
                 append(""","competitor":""")
                 appendJsonString(result.competitorName)
@@ -223,30 +225,39 @@ class DesktopLocalResultServer(
         val projectFile = projectSupplier()
         val raceName = projectFile?.raceData?.race?.name ?: "No Event File open"
         val results = projectFile?.let { EventResultDetails.from(it.raceData) } ?: emptyList()
+        val groupedResults = results.groupBy { it.categoryId to it.categoryName }
 
         return buildString {
             append("<!doctype html><html><head><meta charset=\"utf-8\">")
             append(autoRefreshMeta)
             append("<title>Radio-Oracle Results</title>")
             append("<style>body{font-family:sans-serif;margin:24px}table{border-collapse:collapse}")
-            append("td,th{border-bottom:1px solid #ddd;padding:6px 10px;text-align:left}</style>")
+            append("td,th{border-bottom:1px solid #ddd;padding:6px 10px;text-align:left}")
+            append("tr.category th{background:#eee;font-size:1.05em}</style>")
             append("</head><body><h1>")
             appendHtml(raceName)
             append("</h1>")
             appendLocalNavigation()
             append("<table><thead><tr><th>Place</th><th>Competitor</th><th>Status</th><th>Points</th><th>Runtime</th></tr></thead><tbody>")
-            results.forEach { result ->
-                append("<tr><td>")
-                appendHtml(result.placeText)
-                append("</td><td>")
-                appendHtml(result.competitorName)
-                append("</td><td>")
-                appendHtml(result.statusLabel)
-                append("</td><td>")
-                appendHtml(result.pointsText)
-                append("</td><td>")
-                appendHtml(result.runTimeText)
-                append("</td></tr>")
+            groupedResults.forEach { (category, categoryResults) ->
+                append("<tr class=\"category\"><th colspan=\"5\">")
+                appendHtml(category.second)
+                append(" (")
+                append(categoryResults.size)
+                append(")</th></tr>")
+                categoryResults.forEach { result ->
+                    append("<tr><td>")
+                    appendHtml(result.placeText)
+                    append("</td><td>")
+                    appendHtml(result.competitorName)
+                    append("</td><td>")
+                    appendHtml(result.statusLabel)
+                    append("</td><td>")
+                    appendHtml(result.pointsText)
+                    append("</td><td>")
+                    appendHtml(result.runTimeText)
+                    append("</td></tr>")
+                }
             }
             append("</tbody></table></body></html>")
         }

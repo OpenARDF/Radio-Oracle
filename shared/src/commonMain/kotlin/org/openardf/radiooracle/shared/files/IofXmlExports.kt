@@ -46,7 +46,7 @@ object IofXmlExports {
     fun resultList(raceData: EventRaceData, creator: String = "Radio-Oracle Desktop"): String {
         val raceStart = parseRaceStart(raceData.race.startDateTimeIso)
         val placedByCategory = raceData.competitorData
-            .groupBy { it.competitorCategory.category?.id ?: it.competitorCategory.competitor.categoryId }
+            .groupBy { it.resultCategoryId() }
             .mapValues { (_, categoryCompetitors) -> EventResultPlacement.sortByPlace(categoryCompetitors) }
         return buildString {
             append("""<?xml version="1.0" encoding="UTF-8"?>""")
@@ -62,6 +62,9 @@ object IofXmlExports {
             append("</ResultList>\n")
         }
     }
+
+    private fun EventCompetitorData.resultCategoryId(): String? =
+        readoutData?.result?.categoryId ?: competitorCategory.category?.id ?: competitorCategory.competitor.categoryId
 
     private fun StringBuilder.appendEvent(raceData: EventRaceData, raceStart: LocalDateTime) {
         append("  <Event>\n")

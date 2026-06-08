@@ -230,7 +230,8 @@ data class EventResult(
     val modified: Boolean,
     val sent: Boolean,
     val cardName: String? = null,
-    val place: Int = 0
+    val place: Int = 0,
+    val categoryId: String? = null
 )
 
 /** Portable punch plus optional alias resolved for display. */

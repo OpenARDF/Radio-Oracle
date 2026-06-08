@@ -61,6 +61,6 @@ enum class DesktopSection(val label: String) {
     Results("Results"),
     LiveResultSettings("Live Result Settings"),
     DisplaySettings("Display Settings"),
-    EventDiagnostics("Event Diagnostics"),
+    EventDiagnostics("Testing"),
     Settings("Settings")
 }

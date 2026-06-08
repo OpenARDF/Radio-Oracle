@@ -119,6 +119,7 @@ import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.printing.FinishTicketRenderer
 import org.openardf.radiooracle.shared.results.EventResultSending
 import org.openardf.radiooracle.shared.time.DurationFormatter
@@ -244,7 +245,8 @@ private val ResultTableColumns = listOf(
     FixedTableColumn("Status", 136.dp),
     FixedTableColumn("Points", 80.dp),
     FixedTableColumn("Runtime", 104.dp),
-    FixedTableColumn("", 104.dp)
+    FixedTableColumn("Punches", 240.dp),
+    FixedTableColumn("Edit", 104.dp)
 )
 
 private val ReadoutTableColumns = listOf(
@@ -256,7 +258,7 @@ private val ReadoutTableColumns = listOf(
     FixedTableColumn("Punches", 260.dp),
     FixedTableColumn("Assign to", 240.dp),
     FixedTableColumn("", 104.dp),
-    FixedTableColumn("", 104.dp),
+    FixedTableColumn("Edit", 104.dp),
     FixedTableColumn("", 104.dp)
 )
 
@@ -316,6 +318,7 @@ fun main(args: Array<String>) = application {
         var pendingAssignedControlsWarning by remember { mutableStateOf<EventAssignedControlWarning?>(null) }
         var assignedControlsWarningJob by remember { mutableStateOf<Job?>(null) }
         var isNationalStartListDefaultsDialogVisible by remember { mutableStateOf(false) }
+        var pendingReadoutEdit by remember { mutableStateOf<DesktopReadoutEditDraft?>(null) }
         var siReaderState by remember { mutableStateOf(DesktopSiReaderUiState.disconnected()) }
         var pendingSiModeWarning by remember { mutableStateOf<DesktopSiReaderUiState?>(null) }
         var lastShownSiModeWarningKey by remember { mutableStateOf<String?>(null) }
@@ -636,6 +639,75 @@ fun main(args: Array<String>) = application {
             }.onFailure { error ->
                 projectStatusText = "Test SI download insert failed: ${error.message ?: error::class.simpleName}"
                 DesktopDebugLog.error("SI", projectStatusText)
+            }
+        }
+
+        fun insertTestControls() {
+            val currentProject = projectSession.currentProject
+            if (currentProject == null) {
+                projectStatusText = "Open or create an Event File before inserting test controls."
+                return
+            }
+            runCatching {
+                val result = DesktopTestEventData.insertControls(currentProject)
+                if (result.insertedCount > 0) {
+                    projectFile = projectSession.updateCurrentProject { result.projectFile }
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText =
+                        "Inserted ${result.insertedCount} test control${if (result.insertedCount == 1) "" else "s"}."
+                } else {
+                    projectStatusText = "No test controls inserted; compatible test controls already exist."
+                }
+                DesktopDebugLog.info("Testing", "Inserted ${result.insertedCount} test controls")
+            }.onFailure { error ->
+                projectStatusText = "Test control insert failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("Testing", projectStatusText)
+            }
+        }
+
+        fun insertTestCategories() {
+            val currentProject = projectSession.currentProject
+            if (currentProject == null) {
+                projectStatusText = "Open or create an Event File before inserting test categories."
+                return
+            }
+            runCatching {
+                val result = DesktopTestEventData.insertCategories(currentProject)
+                if (result.insertedCount > 0) {
+                    projectFile = projectSession.updateCurrentProject { result.projectFile }
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText =
+                        "Inserted ${result.insertedCount} test categor${if (result.insertedCount == 1) "y" else "ies"}."
+                } else {
+                    projectStatusText = "No test categories inserted; compatible test categories already exist."
+                }
+                DesktopDebugLog.info("Testing", "Inserted ${result.insertedCount} test categories")
+            }.onFailure { error ->
+                projectStatusText = "Test category insert failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("Testing", projectStatusText)
+            }
+        }
+
+        fun insertTestCompetitors() {
+            val currentProject = projectSession.currentProject
+            if (currentProject == null) {
+                projectStatusText = "Open or create an Event File before inserting test competitors."
+                return
+            }
+            runCatching {
+                val result = DesktopTestEventData.insertCompetitors(currentProject)
+                if (result.insertedCount > 0) {
+                    projectFile = projectSession.updateCurrentProject { result.projectFile }
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText =
+                        "Inserted ${result.insertedCount} test competitor${if (result.insertedCount == 1) "" else "s"}."
+                } else {
+                    projectStatusText = "No test competitors inserted; compatible test competitors already exist."
+                }
+                DesktopDebugLog.info("Testing", "Inserted ${result.insertedCount} test competitors")
+            }.onFailure { error ->
+                projectStatusText = "Test competitor insert failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("Testing", projectStatusText)
             }
         }
 
@@ -2073,6 +2145,41 @@ fun main(args: Array<String>) = application {
                 onCancel = { pendingCompetitorsCsvImportPath = null }
             )
         }
+        pendingReadoutEdit?.let { draft ->
+            ReadoutEditDialog(
+                draft = draft,
+                categories = projectFile?.let { EventCategoryDetails.from(it.raceData) } ?: emptyList(),
+                onSave = { updatedDraft ->
+                    runCatching {
+                        projectFile = projectSession.updateCurrentProject { currentProject ->
+                            EventProjectEditor.updateReadoutEdit(
+                                projectFile = currentProject,
+                                resultId = updatedDraft.resultId,
+                                startSeconds = updatedDraft.startSeconds,
+                                finishSeconds = updatedDraft.finishSeconds,
+                                controlPunchesText = updatedDraft.controlPunchesText,
+                                resultStatus = updatedDraft.resultStatus,
+                                categoryId = updatedDraft.categoryId,
+                                updateCompetitorCategory = updatedDraft.updateCompetitorCategory,
+                                punchIdFactory = { index, type -> "edited-punch-${UUID.randomUUID()}-$index-${type.name}" }
+                            )
+                        }
+                        hasUnsavedChanges = projectSession.hasUnsavedChanges
+                        pendingReadoutEdit = null
+                        projectStatusText = "Result edit applied."
+                        DesktopDebugLog.info(
+                            "Results",
+                            "Edited result ${updatedDraft.resultId}; category=${updatedDraft.categoryId ?: "none"}; " +
+                                "updateCompetitorCategory=${updatedDraft.updateCompetitorCategory}"
+                        )
+                    }.onFailure { error ->
+                        projectStatusText = "Result edit failed: ${error.message ?: error::class.simpleName}"
+                        DesktopDebugLog.error("Results", projectStatusText)
+                    }
+                },
+                onCancel = { pendingReadoutEdit = null }
+            )
+        }
 
         RadioOManagerDesktopApp(
             projectFile = projectFile,
@@ -2093,6 +2200,9 @@ fun main(args: Array<String>) = application {
             raceClockTick = raceClockTick,
             isNavActionEnabled = ::isNavActionEnabled,
             disabledNavActionReason = ::disabledNavActionReason,
+            onInsertTestControls = ::insertTestControls,
+            onInsertTestCategories = ::insertTestCategories,
+            onInsertTestCompetitors = ::insertTestCompetitors,
             onInsertTestSportIdentDownloads = ::insertTestSportIdentDownloads,
             onNavAction = ::handleNavAction,
             isProtectedCourseOrderUnlocked = protectedCoursePassword != null,
@@ -2429,8 +2539,19 @@ fun main(args: Array<String>) = application {
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
+                    DesktopDebugLog.info("Results", "Updated result $resultId status to ${resultStatus.name}")
                 }.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("Results", projectStatusText)
+                }
+            },
+            onEditReadout = { resultId ->
+                val currentProject = projectSession.currentProject
+                val draft = currentProject?.raceData?.readoutEditDraft(resultId)
+                if (draft == null) {
+                    projectStatusText = "Readout was not found: $resultId"
+                } else {
+                    pendingReadoutEdit = draft
                 }
             },
             onAssignUnmatchedReadout = { resultId, competitorId ->
@@ -3166,6 +3287,18 @@ private data class DesktopCompetitorSiCardDraft(
     val club: String? = null
 )
 
+private data class DesktopReadoutEditDraft(
+    val resultId: String,
+    val competitorName: String,
+    val matched: Boolean,
+    val startSeconds: String,
+    val finishSeconds: String,
+    val controlPunchesText: String,
+    val resultStatus: ResultStatus,
+    val categoryId: String?,
+    val updateCompetitorCategory: Boolean = false
+)
+
 /**
  * Builds the launchable desktop app shell.
  *
@@ -3212,6 +3345,7 @@ private fun RadioOManagerDesktopApp(
     onRemoveCompetitor: (String, Boolean) -> Unit = { _, _ -> },
     onRemoveReadout: (String) -> Unit = {},
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit = { _, _ -> },
+    onEditReadout: (String) -> Unit = {},
     onAssignUnmatchedReadout: (String, String) -> Unit = { _, _ -> },
     onDownloadSportIdentReadout: () -> Unit = {},
     onStartContinuousSportIdentReadout: () -> Unit = {},
@@ -3248,6 +3382,9 @@ private fun RadioOManagerDesktopApp(
     onLockProtectedCourseOrder: () -> Unit = {},
     isNavActionEnabled: (DesktopNavAction) -> Boolean = { false },
     disabledNavActionReason: (DesktopNavAction) -> String? = { null },
+    onInsertTestControls: () -> Unit = {},
+    onInsertTestCategories: () -> Unit = {},
+    onInsertTestCompetitors: () -> Unit = {},
     onInsertTestSportIdentDownloads: () -> Unit = {},
     onNavAction: (DesktopNavAction) -> Unit = {},
     hasDefaultUnsavedNewEventFileDraft: Boolean = false,
@@ -3373,6 +3510,7 @@ private fun RadioOManagerDesktopApp(
                                 onRemoveCompetitor = onRemoveCompetitor,
                                 onRemoveReadout = onRemoveReadout,
                                 onUpdateReadoutStatus = onUpdateReadoutStatus,
+                                onEditReadout = onEditReadout,
                                 onAssignUnmatchedReadout = onAssignUnmatchedReadout,
                                 onDownloadSportIdentReadout = onDownloadSportIdentReadout,
                                 onStartContinuousSportIdentReadout = onStartContinuousSportIdentReadout,
@@ -3417,6 +3555,9 @@ private fun RadioOManagerDesktopApp(
                                 onUpdateProtectedControlLocation = onUpdateProtectedControlLocation,
                                 onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword,
                                 isNavActionEnabled = isNavActionEnabled,
+                                onInsertTestControls = onInsertTestControls,
+                                onInsertTestCategories = onInsertTestCategories,
+                                onInsertTestCompetitors = onInsertTestCompetitors,
                                 onInsertTestSportIdentDownloads = onInsertTestSportIdentDownloads,
                                 onNavAction = onNavAction
                             )
@@ -3510,6 +3651,46 @@ internal fun desktopTopBarEventText(projectFile: EventProjectFile?): String =
         ?.let { "Event:$it" }
         ?: "No event file loaded"
 
+private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEditDraft? {
+    competitorData.forEach { data ->
+        val readoutData = data.readoutData ?: return@forEach
+        if (readoutData.result.id == resultId) {
+            val competitor = data.competitorCategory.competitor
+            return DesktopReadoutEditDraft(
+                resultId = resultId,
+                competitorName = competitor.fullName(),
+                matched = true,
+                startSeconds = readoutData.result.startTimeSeconds?.toString() ?: "",
+                finishSeconds = readoutData.result.finishTimeSeconds?.toString() ?: "",
+                controlPunchesText = readoutData.controlPunchText(),
+                resultStatus = readoutData.result.resultStatus,
+                categoryId = readoutData.result.categoryId ?: competitor.categoryId
+            )
+        }
+    }
+    unmatchedReadoutData.forEach { readoutData ->
+        if (readoutData.result.id == resultId) {
+            return DesktopReadoutEditDraft(
+                resultId = resultId,
+                competitorName = readoutData.result.cardName ?: "",
+                matched = false,
+                startSeconds = readoutData.result.startTimeSeconds?.toString() ?: "",
+                finishSeconds = readoutData.result.finishTimeSeconds?.toString() ?: "",
+                controlPunchesText = readoutData.controlPunchText(),
+                resultStatus = readoutData.result.resultStatus,
+                categoryId = readoutData.result.categoryId
+            )
+        }
+    }
+    return null
+}
+
+private fun org.openardf.radiooracle.shared.event.EventReadoutData.controlPunchText(): String =
+    punches
+        .map { it.punch }
+        .filter { it.punchType == SIRecordType.CONTROL }
+        .joinToString(" ") { punch -> "${punch.siCode}@${punch.siTimeSeconds}" }
+
 @Composable
 private fun saveEventButtonColors() =
     ButtonDefaults.buttonColors(
@@ -3531,7 +3712,7 @@ private fun NavigationRail(
     onItemSelected: (DesktopNavItem) -> Unit
 ) {
     val items = DesktopNavigation.currentItems(navState)
-    val hasMenuSaveEvent = items.any { it.action == DesktopNavAction.SaveEventFile }
+    val navigationItems = items.filterNot { it.action == DesktopNavAction.SaveEventFile }
     Column(
         modifier = Modifier
             .width(220.dp)
@@ -3541,7 +3722,7 @@ private fun NavigationRail(
             .padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        items.forEach { item ->
+        navigationItems.forEach { item ->
             val isSelected = item.id == navState.selectedItemId && item.children.isEmpty()
             val isNavigationEnabled = DesktopNavigation.isItemEnabled(item, navigationReadiness)
             val actionEnabled = item.action?.let(isNavActionEnabled) ?: true
@@ -3566,20 +3747,18 @@ private fun NavigationRail(
                 }
             }
         }
-        if (navState.submenuStack.isNotEmpty()) {
-            Spacer(modifier = Modifier.weight(1f))
-            if (!hasMenuSaveEvent) {
-                DisabledReasonTooltip(disabledNavActionReason(DesktopNavAction.SaveEventFile)) {
-                    Button(
-                        onClick = onSaveEvent,
-                        enabled = isNavActionEnabled(DesktopNavAction.SaveEventFile),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = saveEventButtonColors()
-                    ) {
-                        Text("Save Event")
-                    }
-                }
+        Spacer(modifier = Modifier.weight(1f))
+        DisabledReasonTooltip(disabledNavActionReason(DesktopNavAction.SaveEventFile)) {
+            Button(
+                onClick = onSaveEvent,
+                enabled = isNavActionEnabled(DesktopNavAction.SaveEventFile),
+                modifier = Modifier.fillMaxWidth(),
+                colors = saveEventButtonColors()
+            ) {
+                Text("Save Event")
             }
+        }
+        if (navState.submenuStack.isNotEmpty()) {
             Button(
                 onClick = onBack,
                 modifier = Modifier.fillMaxWidth(),
@@ -3706,6 +3885,7 @@ private fun SectionWorkspace(
     onRemoveCompetitor: (String, Boolean) -> Unit,
     onRemoveReadout: (String) -> Unit,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
+    onEditReadout: (String) -> Unit,
     onAssignUnmatchedReadout: (String, String) -> Unit,
     onDownloadSportIdentReadout: () -> Unit,
     onStartContinuousSportIdentReadout: () -> Unit,
@@ -3750,6 +3930,9 @@ private fun SectionWorkspace(
     onUpdateProtectedControlLocation: (String, String, String) -> String,
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
+    onInsertTestControls: () -> Unit,
+    onInsertTestCategories: () -> Unit,
+    onInsertTestCompetitors: () -> Unit,
     onInsertTestSportIdentDownloads: () -> Unit,
     onNavAction: (DesktopNavAction) -> Unit
 ) {
@@ -3884,6 +4067,7 @@ private fun SectionWorkspace(
                 competitors = EventCompetitorDetails.from(projectFile.raceData),
                 onRemoveReadout = onRemoveReadout,
                 onUpdateReadoutStatus = onUpdateReadoutStatus,
+                onEditReadout = onEditReadout,
                 onAssignUnmatchedReadout = onAssignUnmatchedReadout,
                 onDownloadSportIdentReadout = onDownloadSportIdentReadout,
                 onStartContinuousSportIdentReadout = onStartContinuousSportIdentReadout,
@@ -3909,13 +4093,17 @@ private fun SectionWorkspace(
         }
         if (section == DesktopSection.Results && projectFile != null) {
             ResultDetailsPanel(
-                results = EventResultDetails.from(projectFile.raceData),
-                onUpdateReadoutStatus = onUpdateReadoutStatus
+                results = EventResultDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
+                onUpdateReadoutStatus = onUpdateReadoutStatus,
+                onEditReadout = onEditReadout
             )
         }
         if (section == DesktopSection.EventDiagnostics) {
             EventDiagnosticsPanel(
                 diagnostics = DesktopProjectDiagnostics.from(projectFile),
+                onInsertTestControls = onInsertTestControls,
+                onInsertTestCategories = onInsertTestCategories,
+                onInsertTestCompetitors = onInsertTestCompetitors,
                 onInsertTestSportIdentDownloads = onInsertTestSportIdentDownloads
             )
         }
@@ -3976,8 +4164,12 @@ private fun SectionWorkspace(
 @Composable
 private fun EventDiagnosticsPanel(
     diagnostics: DesktopProjectDiagnostics,
+    onInsertTestControls: () -> Unit,
+    onInsertTestCategories: () -> Unit,
+    onInsertTestCompetitors: () -> Unit,
     onInsertTestSportIdentDownloads: () -> Unit
 ) {
+    val isEventFileOpen = diagnostics.projectState == "Event File open"
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DetailRow("Event File", diagnostics.projectState)
         DetailRow("Schema", diagnostics.schemaText.ifBlank { "None" })
@@ -3999,11 +4191,36 @@ private fun EventDiagnosticsPanel(
             )
         )
         DetailRow("Validation", diagnostics.validationState)
-        Button(
-            onClick = onInsertTestSportIdentDownloads,
-            enabled = diagnostics.projectState == "Event File open"
-        ) {
-            ButtonLabel("Insert Test SI Downloads")
+        Text(
+            text = "Generated test data is inserted in stages. Categories include course assignments, competitors include test SI numbers and drawn start times, and test SI downloads use those competitors and assigned categories.",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = onInsertTestControls,
+                enabled = isEventFileOpen
+            ) {
+                ButtonLabel("Insert Test Controls")
+            }
+            Button(
+                onClick = onInsertTestCategories,
+                enabled = isEventFileOpen
+            ) {
+                ButtonLabel("Insert Test Categories")
+            }
+            Button(
+                onClick = onInsertTestCompetitors,
+                enabled = isEventFileOpen
+            ) {
+                ButtonLabel("Insert Test Competitors")
+            }
+            Button(
+                onClick = onInsertTestSportIdentDownloads,
+                enabled = isEventFileOpen
+            ) {
+                ButtonLabel("Insert Test SI Downloads")
+            }
         }
         diagnostics.validationIssues.forEach { issue ->
             Text(
@@ -4170,10 +4387,12 @@ private fun ReadoutDuplicatePolicyPicker(
 @Composable
 private fun ResultDetailsPanel(
     results: List<EventResultDetails>,
-    onUpdateReadoutStatus: (String, ResultStatus) -> Unit
+    onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
+    onEditReadout: (String) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(ResultTableColumns)
+    val groupedResults = results.groupBy { it.categoryId to it.categoryName }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(modifier = Modifier.fillMaxWidth().horizontalScroll(horizontalScrollState)) {
@@ -4181,9 +4400,12 @@ private fun ResultDetailsPanel(
                 modifier = Modifier.width(tableWidth),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                FixedDetailHeaderRow(ResultTableColumns)
-                results.forEach { result ->
-                    ResultDetailRow(result, onUpdateReadoutStatus)
+                groupedResults.forEach { (category, categoryResults) ->
+                    ResultCategoryHeader(category.second, categoryResults.size, tableWidth)
+                    FixedDetailHeaderRow(ResultTableColumns)
+                    categoryResults.forEach { result ->
+                        ResultDetailRow(result, onUpdateReadoutStatus, onEditReadout)
+                    }
                 }
             }
         }
@@ -4194,14 +4416,30 @@ private fun ResultDetailsPanel(
     }
 }
 
+/** Shows the competition category for the result rows that follow. */
+@Composable
+private fun ResultCategoryHeader(
+    categoryName: String,
+    resultCount: Int,
+    tableWidth: Dp
+) {
+    Text(
+        text = "$categoryName ($resultCount)",
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier
+            .width(tableWidth)
+            .background(MaterialTheme.colors.onSurface.copy(alpha = 0.06f))
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+    )
+}
+
 /** Shows one ranked result row with explicit manual status editing. */
 @Composable
 private fun ResultDetailRow(
     result: EventResultDetails,
-    onUpdateReadoutStatus: (String, ResultStatus) -> Unit
+    onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
+    onEditReadout: (String) -> Unit
 ) {
-    var selectedStatus by remember(result.id, result.resultStatus) { mutableStateOf(result.resultStatus) }
-
     Row(
         modifier = Modifier.width(fixedTableWidth(ResultTableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
@@ -4210,18 +4448,22 @@ private fun ResultDetailRow(
         FixedTableText(result.placeText, ResultTableColumns[0].width)
         FixedTableText(result.competitorName, ResultTableColumns[1].width)
         ResultStatusPicker(
-            selectedStatus = selectedStatus,
-            onStatusSelected = { selectedStatus = it },
+            selectedStatus = result.resultStatus,
+            onStatusSelected = { status ->
+                if (status != result.resultStatus) {
+                    onUpdateReadoutStatus(result.id, status)
+                }
+            },
             modifier = Modifier.width(ResultTableColumns[2].width)
         )
         FixedTableText(result.pointsText, ResultTableColumns[3].width)
         FixedTableText(result.runTimeText, ResultTableColumns[4].width)
+        FixedTableText(result.punchCodesText, ResultTableColumns[5].width)
         Button(
-            onClick = { onUpdateReadoutStatus(result.id, selectedStatus) },
-            modifier = Modifier.width(ResultTableColumns[5].width),
-            enabled = selectedStatus != result.resultStatus || result.automaticStatus
+            onClick = { onEditReadout(result.id) },
+            modifier = Modifier.width(ResultTableColumns[6].width)
         ) {
-            ButtonLabel("Status")
+            ButtonLabel("Edit")
         }
     }
 }
@@ -4481,6 +4723,7 @@ private fun ReadoutDetailsPanel(
     competitors: List<EventCompetitorDetails>,
     onRemoveReadout: (String) -> Unit,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
+    onEditReadout: (String) -> Unit,
     onAssignUnmatchedReadout: (String, String) -> Unit,
     onDownloadSportIdentReadout: () -> Unit,
     onStartContinuousSportIdentReadout: () -> Unit,
@@ -4606,6 +4849,7 @@ private fun ReadoutDetailsPanel(
                             readout = readout,
                             competitors = competitorsWithoutReadouts,
                             onUpdateReadoutStatus = onUpdateReadoutStatus,
+                            onEditReadout = onEditReadout,
                             onAssignUnmatchedReadout = onAssignUnmatchedReadout,
                             onPreviewFinishTicket = {
                                 ticketPreviewResultId = readout.id
@@ -4768,10 +5012,10 @@ private fun ReadoutDetailRow(
     readout: EventReadoutDetails,
     competitors: List<EventCompetitorDetails>,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
+    onEditReadout: (String) -> Unit,
     onAssignUnmatchedReadout: (String, String) -> Unit,
     onPreviewFinishTicket: () -> Unit
 ) {
-    var selectedStatus by remember(readout.id, readout.resultStatus) { mutableStateOf(readout.resultStatus) }
     var selectedCompetitorId by remember(readout.id) { mutableStateOf<String?>(null) }
 
     Row(
@@ -4782,8 +5026,12 @@ private fun ReadoutDetailRow(
         FixedTableText(readout.siNumberText, ReadoutTableColumns[0].width)
         FixedTableText(readout.competitorName, ReadoutTableColumns[1].width)
         ResultStatusPicker(
-            selectedStatus = selectedStatus,
-            onStatusSelected = { selectedStatus = it },
+            selectedStatus = readout.resultStatus,
+            onStatusSelected = { status ->
+                if (status != readout.resultStatus) {
+                    onUpdateReadoutStatus(readout.id, status)
+                }
+            },
             modifier = Modifier.width(ReadoutTableColumns[2].width)
         )
         FixedTableText(readout.pointsText, ReadoutTableColumns[3].width)
@@ -4812,11 +5060,10 @@ private fun ReadoutDetailRow(
             }
         }
         Button(
-            onClick = { onUpdateReadoutStatus(readout.id, selectedStatus) },
-            modifier = Modifier.width(ReadoutTableColumns[8].width),
-            enabled = selectedStatus != readout.resultStatus || readout.automaticStatus
+            onClick = { onEditReadout(readout.id) },
+            modifier = Modifier.width(ReadoutTableColumns[8].width)
         ) {
-            ButtonLabel("Status")
+            ButtonLabel("Edit")
         }
         Button(
             onClick = onPreviewFinishTicket,
@@ -4926,6 +5173,107 @@ private fun ResultStatusPicker(
             }
         }
     }
+}
+
+@Composable
+private fun ReadoutEditDialog(
+    draft: DesktopReadoutEditDraft,
+    categories: List<EventCategoryDetails>,
+    onSave: (DesktopReadoutEditDraft) -> Unit,
+    onCancel: () -> Unit
+) {
+    var startSeconds by remember(draft.resultId) { mutableStateOf(draft.startSeconds) }
+    var finishSeconds by remember(draft.resultId) { mutableStateOf(draft.finishSeconds) }
+    var controlPunchesText by remember(draft.resultId) { mutableStateOf(draft.controlPunchesText) }
+    var resultStatus by remember(draft.resultId) { mutableStateOf(draft.resultStatus) }
+    var categoryId by remember(draft.resultId) { mutableStateOf(draft.categoryId) }
+    var updateCompetitorCategory by remember(draft.resultId) { mutableStateOf(draft.updateCompetitorCategory) }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Edit Result") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = draft.competitorName.ifBlank { "Unmatched readout" },
+                    fontWeight = FontWeight.Bold
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LabeledTextField(
+                        label = "Start seconds",
+                        value = startSeconds,
+                        onValueChange = { startSeconds = it },
+                        modifier = Modifier.width(160.dp)
+                    )
+                    LabeledTextField(
+                        label = "Finish seconds",
+                        value = finishSeconds,
+                        onValueChange = { finishSeconds = it },
+                        modifier = Modifier.width(160.dp)
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Control punches", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    TextField(
+                        value = controlPunchesText,
+                        onValueChange = { controlPunchesText = it },
+                        singleLine = false,
+                        modifier = Modifier.width(420.dp).height(88.dp)
+                    )
+                    Text(
+                        text = "Use SI@seconds entries, such as 31@37100 32@37420. Plain SI codes may be used for added punches with unknown times.",
+                        color = DesktopPalette.Disconnected,
+                        fontSize = 12.sp
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ResultStatusPicker(
+                        selectedStatus = resultStatus,
+                        onStatusSelected = { resultStatus = it },
+                        modifier = Modifier.width(160.dp)
+                    )
+                    CategoryPicker(
+                        selectedCategoryId = categoryId,
+                        categories = categories,
+                        onCategorySelected = { categoryId = it },
+                        modifier = Modifier.width(220.dp)
+                    )
+                }
+                if (draft.matched) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = updateCompetitorCategory,
+                            onCheckedChange = { updateCompetitorCategory = it }
+                        )
+                        Text("Also change competitor category")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onSave(
+                        draft.copy(
+                            startSeconds = startSeconds,
+                            finishSeconds = finishSeconds,
+                            controlPunchesText = controlPunchesText,
+                            resultStatus = resultStatus,
+                            categoryId = categoryId,
+                            updateCompetitorCategory = updateCompetitorCategory
+                        )
+                    )
+                }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 /** Shows a compact competitor selector with an explicit unmatched-readout option. */

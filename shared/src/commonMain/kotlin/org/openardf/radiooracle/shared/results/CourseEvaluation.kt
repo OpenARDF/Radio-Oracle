@@ -11,12 +11,13 @@ data class EvaluationControlPoint(
     val siCode: Int,
     val type: ControlPointType,
     /**
-     * True for an elective radio-o fox worth one point when punched.
+     * True for an elective radio-o control worth one point when punched.
      *
      * False for a required zero-point radio-o control, such as a Beacon or
      * Spectator control. This flag is intentionally ignored for orienteering,
      * where every course control is required and scoring follows ordered-course
-     * completion rules.
+     * completion rules. Radio-o CONTROL role entries are treated as scored
+     * foxes even when imported legacy data incorrectly stores scored=false.
      */
     val scored: Boolean = type == ControlPointType.CONTROL
 )
@@ -191,7 +192,7 @@ object CourseEvaluator {
                     } else {
                         statuses[punchIndex] = PunchStatus.INVALID
                     }
-                } else if (matchingControl.scored) {
+                } else if (matchingControl.effectiveScored) {
                     if (takenScored.add(punch.siCode)) {
                         statuses[punchIndex] = PunchStatus.VALID
                         points++
@@ -212,7 +213,7 @@ object CourseEvaluator {
         return LoopEvaluation(
             points = points,
             statuses = statuses,
-            missingRequiredControl = loopControls.any { !it.scored && !fulfilledRequired.contains(it.siCode) }
+            missingRequiredControl = loopControls.any { !it.effectiveScored && !fulfilledRequired.contains(it.siCode) }
         )
     }
 
@@ -231,4 +232,7 @@ object CourseEvaluator {
         val statuses: List<PunchStatus>,
         val missingRequiredControl: Boolean
     )
+
+    private val EvaluationControlPoint.effectiveScored: Boolean
+        get() = type == ControlPointType.CONTROL || scored
 }

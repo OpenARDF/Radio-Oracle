@@ -34,18 +34,25 @@ object LiveResultJsonExports {
                 return@mapNotNull null
             }
             val competitorCategory = competitorData.competitorCategory
-            val category = competitorCategory.category ?: return@mapNotNull null
             val competitor = competitorCategory.competitor
+            val categoryId = readoutData.result.categoryId ?: competitorCategory.category?.id ?: competitor.categoryId
+            val categoryName = raceData.categoryNameFor(categoryId)
+                .ifBlank { competitorCategory.category?.name.orEmpty() }
+                .takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
 
             LiveResultCompetitorJson(
                 competitorIndex = competitor.index.takeIf { it.isNotBlank() },
                 siNumber = competitor.siNumber ?: readoutData.result.siNumber ?: 0,
                 lastName = competitor.lastName,
                 firstName = competitor.firstName,
-                competitorCategory = category.name,
+                competitorCategory = categoryName,
                 result = readoutData.toLiveResultJson(raceData)
             )
         }
+
+    private fun EventRaceData.categoryNameFor(categoryId: String?): String =
+        categoryId?.let { id -> categories.firstOrNull { it.category.id == id }?.category?.name } ?: ""
 
     private fun EventReadoutData.toLiveResultJson(raceData: EventRaceData): LiveResultJson {
         val punchLabelsByCode = FinalResultJsonExports.controlLabelsByCode(raceData)

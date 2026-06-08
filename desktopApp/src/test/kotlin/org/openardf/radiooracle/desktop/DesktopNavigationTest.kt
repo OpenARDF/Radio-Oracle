@@ -305,11 +305,11 @@ class DesktopNavigationTest {
         )
         assertEquals(
             listOf(
-                "Event Diagnostics",
                 "SI Readout Settings",
                 "Live Result Settings",
                 "Display Settings",
-                "App Settings"
+                "App Settings",
+                "Testing"
             ),
             eventFileActions.first { it.label == "Settings" }.children.map { it.label }
         )

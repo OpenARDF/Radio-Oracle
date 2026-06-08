@@ -26,7 +26,7 @@ class DesktopPaletteTest {
                 "Results",
                 "Live Result Settings",
                 "Display Settings",
-                "Event Diagnostics",
+                "Testing",
                 "Settings"
             ),
             DesktopSection.entries.map { it.label }

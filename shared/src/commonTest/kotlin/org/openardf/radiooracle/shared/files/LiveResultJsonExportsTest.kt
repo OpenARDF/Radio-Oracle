@@ -15,6 +15,7 @@ import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAlias
 import org.openardf.radiooracle.shared.event.EventAliasPunch
 import org.openardf.radiooracle.shared.event.EventCategory
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
@@ -127,6 +128,33 @@ class LiveResultJsonExportsTest {
         assertEquals("F1", punch["code"]!!.jsonPrimitive.content)
     }
 
+    @Test
+    fun resultCategoryOverrideControlsExportedCategoryName() {
+        val registeredCategory = category()
+        val resultCategory = category().copy(id = "result-category", name = "W21", order = 2)
+        val rows = LiveResultJsonExports.resultRows(
+            raceData(
+                competitors = listOf(
+                    competitorData(
+                        id = "competitor",
+                        category = registeredCategory,
+                        readout = readout("result", categoryId = resultCategory.id)
+                    )
+                )
+            ).copy(
+                categories = listOf(
+                    EventCategoryData(
+                        category = resultCategory,
+                        controlPoints = emptyList(),
+                        competitors = emptyList()
+                    )
+                )
+            )
+        )
+
+        assertEquals("W21", rows.single().competitorCategory)
+    }
+
     private fun raceData(
         competitors: List<EventCompetitorData>? = null,
         resultStatus: ResultStatus = ResultStatus.OK,
@@ -206,7 +234,8 @@ class LiveResultJsonExportsTest {
     private fun readout(
         id: String,
         resultStatus: ResultStatus = ResultStatus.OK,
-        punchStatus: PunchStatus = PunchStatus.UNKNOWN
+        punchStatus: PunchStatus = PunchStatus.UNKNOWN,
+        categoryId: String? = null
     ): EventReadoutData {
         val alias = EventAlias("alias", "race", 31, "Fox")
         return EventReadoutData(
@@ -226,7 +255,8 @@ class LiveResultJsonExportsTest {
                 runTimeSeconds = 1_200,
                 modified = false,
                 sent = false,
-                place = 2
+                place = 2,
+                categoryId = categoryId
             ),
             punches = listOf(
                 punch("start", 0, SIRecordType.START, PunchStatus.VALID, 36_000, 0, null),

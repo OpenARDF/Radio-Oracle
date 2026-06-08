@@ -1335,6 +1335,105 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun editsMatchedReadoutAndCanUpdateCompetitorCategory() {
+        val shortCategory = category("cat-short", "M21")
+        val longCategory = category("cat-long", "M40")
+        val original = projectFile(
+            categories = listOf(
+                categoryData("cat-short", "M21", controlSiCodes = listOf(31)),
+                categoryData("cat-long", "M40", controlSiCodes = listOf(31, 33))
+            ),
+            aliases = listOf(alias("alias-31", 31, "F1"), alias("alias-33", 33, "F3")),
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    siNumber = 1111,
+                    category = shortCategory,
+                    readoutData = readout("result-1", "comp-1", 1111, sent = true)
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.updateReadoutEdit(
+            projectFile = original,
+            resultId = "result-1",
+            startSeconds = "600",
+            finishSeconds = "1800",
+            controlPunchesText = "31@900 33@1200",
+            resultStatus = ResultStatus.OK,
+            categoryId = longCategory.id,
+            updateCompetitorCategory = true,
+            punchIdFactory = { index, type -> "edit-$index-${type.name}" }
+        )
+
+        val competitorData = updated.raceData.competitorData.single()
+        val readout = competitorData.readoutData!!
+        assertEquals(longCategory.id, competitorData.competitorCategory.competitor.categoryId)
+        assertEquals(longCategory, competitorData.competitorCategory.category)
+        assertEquals(longCategory.id, readout.result.categoryId)
+        assertEquals(600, readout.result.startTimeSeconds)
+        assertEquals(1800, readout.result.finishTimeSeconds)
+        assertEquals(1200, readout.result.runTimeSeconds)
+        assertEquals(2, readout.result.points)
+        assertEquals(ResultStatus.OK, readout.result.resultStatus)
+        assertEquals(false, readout.result.automaticStatus)
+        assertEquals(true, readout.result.modified)
+        assertEquals(false, readout.result.sent)
+        assertEquals(1, readout.result.place)
+        assertEquals(
+            listOf(SIRecordType.START, SIRecordType.CONTROL, SIRecordType.CONTROL, SIRecordType.FINISH),
+            readout.punches.map { it.punch.punchType }
+        )
+        assertEquals(listOf(0, 31, 33, 0), readout.punches.map { it.punch.siCode })
+        assertEquals(listOf(600L, 900L, 1200L, 1800L), readout.punches.map { it.punch.siTimeSeconds })
+        assertEquals(listOf(0L, 300L, 300L, 600L), readout.punches.map { it.punch.splitSeconds })
+        assertEquals(listOf(null, "F1", "F3", null), readout.punches.map { it.alias?.name })
+    }
+
+    @Test
+    fun editsMatchedReadoutCategoryWithoutChangingCompetitorCategory() {
+        val shortCategory = category("cat-short", "M21")
+        val longCategory = category("cat-long", "M40")
+        val original = projectFile(
+            categories = listOf(
+                categoryData("cat-short", "M21", controlSiCodes = listOf(31)),
+                categoryData("cat-long", "M40", controlSiCodes = listOf(31, 33))
+            ),
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    siNumber = 1111,
+                    category = shortCategory,
+                    readoutData = readout("result-1", "comp-1", 1111)
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.updateReadoutEdit(
+            projectFile = original,
+            resultId = "result-1",
+            startSeconds = "600",
+            finishSeconds = "1800",
+            controlPunchesText = "31 33",
+            resultStatus = ResultStatus.OK,
+            categoryId = longCategory.id,
+            updateCompetitorCategory = false,
+            punchIdFactory = { index, type -> "edit-$index-${type.name}" }
+        )
+
+        val competitorData = updated.raceData.competitorData.single()
+        val readout = competitorData.readoutData!!
+        assertEquals(shortCategory.id, competitorData.competitorCategory.competitor.categoryId)
+        assertEquals(shortCategory, competitorData.competitorCategory.category)
+        assertEquals(longCategory.id, readout.result.categoryId)
+        assertEquals(2, readout.result.points)
+    }
+
+    @Test
     fun marksMatchedReadoutsSent() {
         val original = projectFile(
             competitors = listOf(
@@ -1574,6 +1673,54 @@ class EventProjectEditorTest {
         assertEquals(listOf(0L, 200L, 60L, 60L, 880L), readout.punches.map { it.punch.splitSeconds })
         assertEquals("F1", readout.punches[1].alias?.name)
         assertEquals(emptyList(), updated.raceData.unmatchedReadoutData)
+    }
+
+    @Test
+    fun downloadedReadoutsAssignPlacesWithinEachCategory() {
+        val categoryAData = categoryData("cat-a", "M21", order = 1, controlSiCodes = listOf(31, 32))
+        val categoryBData = categoryData("cat-b", "M50", order = 2, controlSiCodes = listOf(31))
+        val original = projectFile(
+            categories = listOf(categoryAData, categoryBData),
+            competitors = listOf(
+                competitorData("comp-a2", "Ann", "Second", siNumber = 2005002, category = categoryAData.category),
+                competitorData("comp-b1", "Ben", "Winner", siNumber = 2005003, category = categoryBData.category),
+                competitorData("comp-a1", "Al", "Winner", siNumber = 2005001, category = categoryAData.category)
+            )
+        )
+
+        val withASecond = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = original,
+            resultId = "result-a2",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = sportIdentReadout(siNumber = 2005002, controlCodes = listOf(31)),
+            readoutDateTimeIso = "2026-05-31T12:00",
+            punchIdFactory = { index, type -> "a2-punch-$index-${type.name}" }
+        )
+        val withBFirst = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = withASecond,
+            resultId = "result-b1",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = sportIdentReadout(siNumber = 2005003, controlCodes = listOf(31)),
+            readoutDateTimeIso = "2026-05-31T12:01",
+            punchIdFactory = { index, type -> "b1-punch-$index-${type.name}" }
+        )
+        val updated = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = withBFirst,
+            resultId = "result-a1",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = sportIdentReadout(siNumber = 2005001, controlCodes = listOf(31, 32)),
+            readoutDateTimeIso = "2026-05-31T12:02",
+            punchIdFactory = { index, type -> "a1-punch-$index-${type.name}" }
+        )
+
+        assertEquals(
+            listOf("comp-a2", "comp-b1", "comp-a1"),
+            updated.raceData.competitorData.map { it.competitorCategory.competitor.id }
+        )
+        assertEquals(
+            listOf(2, 1, 1),
+            updated.raceData.competitorData.map { it.readoutData!!.result.place }
+        )
     }
 
     @Test

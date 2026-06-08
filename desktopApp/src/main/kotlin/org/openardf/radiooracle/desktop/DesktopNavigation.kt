@@ -700,13 +700,6 @@ object DesktopNavigation {
                 workflow,
                 listOf(
                     item(
-                        "setup.event-file.diagnostics",
-                        "Event Diagnostics",
-                        workflow,
-                        DesktopSection.EventDiagnostics,
-                        requiresEventFile = false
-                    ),
-                    item(
                         "setup.event-file.si-settings",
                         "SI Readout Settings",
                         workflow,
@@ -732,6 +725,13 @@ object DesktopNavigation {
                         "App Settings",
                         workflow,
                         DesktopSection.Settings,
+                        requiresEventFile = false
+                    ),
+                    item(
+                        "setup.event-file.diagnostics",
+                        "Testing",
+                        workflow,
+                        DesktopSection.EventDiagnostics,
                         requiresEventFile = false
                     )
                 ),

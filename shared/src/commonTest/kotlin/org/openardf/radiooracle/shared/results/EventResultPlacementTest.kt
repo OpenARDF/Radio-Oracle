@@ -50,6 +50,20 @@ class EventResultPlacementTest {
         assertEquals(listOf(1), grouped["b"]!!.map { it.readoutData!!.result.place })
     }
 
+    @Test
+    fun assignsCategoryPlacesWithoutReorderingCompetitors() {
+        val categoryAFirst = competitor("a1", result(points = 2, runTimeSeconds = 100), categoryId = "a")
+        val categoryASecond = competitor("a2", result(points = 1, runTimeSeconds = 100), categoryId = "a")
+        val categoryBFirst = competitor("b1", result(points = 1, runTimeSeconds = 100), categoryId = "b")
+
+        val placed = EventResultPlacement.assignPlacesByCategory(
+            listOf(categoryASecond, categoryBFirst, categoryAFirst)
+        )
+
+        assertEquals(listOf("a2", "b1", "a1"), placed.map { it.competitorCategory.competitor.id })
+        assertEquals(listOf(2, 1, 1), placed.map { it.readoutData!!.result.place })
+    }
+
     private fun competitor(
         id: String,
         readout: EventResult?,

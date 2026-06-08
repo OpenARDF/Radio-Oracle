@@ -118,11 +118,14 @@ object FinalResultJsonExports {
     private fun EventCompetitorData.toFinalCompetitor(raceData: EventRaceData): FinalCompetitorJson {
         val competitor = competitorCategory.competitor
         val result = readoutData?.takeUnless { it.result.resultStatus == ResultStatus.ERROR }
+        val resultCategoryId = result?.result?.categoryId ?: competitorCategory.category?.id ?: competitor.categoryId
+        val resultCategoryName = raceData.categoryNameFor(resultCategoryId)
+            .ifBlank { competitorCategory.category?.name.orEmpty() }
         return FinalCompetitorJson(
             firstName = competitor.firstName,
             lastName = competitor.lastName,
             competitorClub = competitor.club,
-            competitorCategory = competitorCategory.category?.name ?: "",
+            competitorCategory = resultCategoryName,
             competitorIndex = competitor.index.takeIf { it.isNotBlank() },
             competitorGender = competitor.isMan,
             birthYear = competitor.birthYear,
@@ -135,6 +138,9 @@ object FinalResultJsonExports {
             result = result?.toFinalResult(raceData)
         )
     }
+
+    private fun EventRaceData.categoryNameFor(categoryId: String?): String =
+        categoryId?.let { id -> categories.firstOrNull { it.category.id == id }?.category?.name } ?: ""
 
     private fun EventReadoutData.toFinalResult(raceData: EventRaceData): FinalResultJson {
         val punchLabelsByCode = controlLabelsByCode(raceData)

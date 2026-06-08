@@ -21,7 +21,7 @@ object TextResultExports {
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
     ): String {
         val placedByCategory = raceData.competitorData
-            .groupBy { it.competitorCategory.category?.id ?: it.competitorCategory.competitor.categoryId }
+            .groupBy { it.resultCategoryId() }
             .mapValues { (_, categoryCompetitors) -> EventResultPlacement.sortByPlace(categoryCompetitors) }
 
         return buildString {
@@ -90,6 +90,9 @@ object TextResultExports {
         }
         appendLine()
     }
+
+    private fun EventCompetitorData.resultCategoryId(): String? =
+        readoutData?.result?.categoryId ?: competitorCategory.category?.id ?: competitorCategory.competitor.categoryId
 
     private fun StringBuilder.appendCompetitorRow(
         competitorData: EventCompetitorData,

@@ -65,13 +65,13 @@ internal object DesktopTestSportIdentDownloads {
             val siNumber = competitor.siNumber ?: return@forEachIndexed
             val startSeconds = generatedStartSeconds(projectFile.raceData, competitor.drawnStartTimeSeconds, index)
             val finishSeconds = generatedFinishSeconds(startSeconds, index)
-            val controlCodes = controlCodesFor(workingProjectFile.raceData, competitor.categoryId)
+            val controlCodes = punchCodesFor(workingProjectFile.raceData, competitor.categoryId, index)
             val readout = SportIdentCardReadout(
                 siNumber = siNumber,
                 series = 6,
                 checkTime = SportIdentTime((startSeconds - 60L).coerceAtLeast(0L)),
                 startTime = SportIdentTime(startSeconds),
-                finishTime = SportIdentTime(finishSeconds),
+                finishTime = if (shouldIncludeFinishTime(index)) SportIdentTime(finishSeconds) else null,
                 punches = controlCodes.mapIndexed { punchIndex, siCode ->
                     SportIdentCardPunch(
                         siCode = siCode,
@@ -122,21 +122,61 @@ internal object DesktopTestSportIdentDownloads {
         }.getOrDefault(DefaultRaceStartSeconds)
 
     @Suppress("DEPRECATION")
-    private fun controlCodesFor(raceData: EventRaceData, categoryId: String?): List<Int> {
+    private fun shouldIncludeFinishTime(index: Int): Boolean =
+        index % 10 != 9
+
+    @Suppress("DEPRECATION")
+    private fun punchCodesFor(raceData: EventRaceData, categoryId: String?, index: Int): List<Int> {
         val categoryData = raceData.categories.firstOrNull { it.category.id == categoryId } ?: return emptyList()
         val controlsById = raceData.controls.associateBy { it.id }
-        return categoryData.controlPoints
+        val courseControls = categoryData.controlPoints
             .sortedBy { it.order }
             .mapNotNull { controlPoint ->
                 val control = controlsById[controlPoint.controlId]
-                val type = control?.type ?: controlPoint.type
-                val scored = control?.scored ?: controlPoint.type.defaultScored()
-                val siCode = control?.siCode ?: controlPoint.siCode
-                siCode.takeIf { type == ControlPointType.CONTROL && scored }
+                CourseTestControl(
+                    siCode = control?.siCode ?: controlPoint.siCode,
+                    type = control?.type ?: controlPoint.type,
+                    scored = control?.scored ?: controlPoint.type.defaultScored()
+                )
             }
+        if (courseControls.isEmpty()) {
+            return emptyList()
+        }
+        val scoredControls = courseControls.filter { it.effectiveScored }
+        val requiredUnscoredControls = courseControls.filterNot { it.effectiveScored }
+        val beacon = courseControls.lastOrNull { it.type == ControlPointType.BEACON }
+        val shouldPunchBeacon = index % 6 != 5
+        val selectedScoredControls = when (index % 8) {
+            0, 1, 2 -> scoredControls
+            3 -> scoredControls.take((scoredControls.size - 1).coerceAtLeast(0))
+            4 -> scoredControls.filterIndexed { controlIndex, _ -> controlIndex % 2 == 0 }
+            5 -> scoredControls.take(1)
+            6 -> scoredControls.take((scoredControls.size * 2 / 3).coerceAtLeast(1))
+            else -> scoredControls.drop(1).ifEmpty { scoredControls }
+        }
+        val requiredWithoutBeacon = requiredUnscoredControls.filterNot { it == beacon }
+        return buildList {
+            addAll(selectedScoredControls.map { it.siCode })
+            if (index % 7 == 6 && selectedScoredControls.isNotEmpty()) {
+                add(selectedScoredControls.first().siCode)
+            }
+            addAll(requiredWithoutBeacon.map { it.siCode })
+            if (shouldPunchBeacon && beacon != null) {
+                add(beacon.siCode)
+            }
+        }
     }
 
     private fun EventRaceData.containsReadoutForSiNumber(siNumber: Int): Boolean =
         competitorData.any { it.readoutData?.result?.siNumber == siNumber } ||
             unmatchedReadoutData.any { it.result.siNumber == siNumber }
+
+    private data class CourseTestControl(
+        val siCode: Int,
+        val type: ControlPointType,
+        val scored: Boolean
+    ) {
+        val effectiveScored: Boolean
+            get() = type == ControlPointType.CONTROL || scored
+    }
 }

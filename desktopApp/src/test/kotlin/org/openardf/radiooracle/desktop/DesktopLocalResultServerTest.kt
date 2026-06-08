@@ -28,6 +28,7 @@ class DesktopLocalResultServerTest {
 
         assertTrue(json.contains(""""project_open":true"""))
         assertTrue(json.contains(""""race_name":"Local \"Race\"""""))
+        assertTrue(json.contains(""""category":"M21""""))
         assertTrue(json.contains(""""competitor":"RUNNER Alice""""))
         assertTrue(json.contains(""""status":"OK""""))
     }
@@ -110,6 +111,7 @@ class DesktopLocalResultServerTest {
             assertTrue(html.contains("<a href=\"/categories\">Categories</a>"))
             assertTrue(html.contains("<a href=\"/results.json\">results</a>"))
             assertTrue(html.contains("<title>Radio-Oracle Results</title>"))
+            assertTrue(html.contains("<tr class=\"category\"><th colspan=\"5\">M21 (1)</th></tr>"))
         } finally {
             server.stop()
         }

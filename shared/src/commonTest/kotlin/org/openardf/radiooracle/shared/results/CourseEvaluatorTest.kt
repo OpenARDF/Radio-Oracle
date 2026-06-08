@@ -86,6 +86,26 @@ class CourseEvaluatorTest {
     }
 
     @Test
+    fun radioOControlRoleScoresEvenIfLegacyDataMarksItUnscored() {
+        val evaluation = CourseEvaluator.evaluate(
+            RaceType.CLASSIC,
+            punches = punches(31, 32, 36),
+            controlPoints = listOf(
+                EvaluationControlPoint(31, ControlPointType.CONTROL, scored = false),
+                EvaluationControlPoint(32, ControlPointType.CONTROL, scored = false),
+                EvaluationControlPoint(36, ControlPointType.BEACON, scored = false)
+            )
+        )
+
+        assertEquals(2, evaluation.points)
+        assertEquals(ResultStatus.OK, evaluation.resultStatus)
+        assertEquals(
+            listOf(PunchStatus.VALID, PunchStatus.VALID, PunchStatus.VALID),
+            evaluation.punchStatuses
+        )
+    }
+
+    @Test
     fun missingSprintSpectatorIsDnfAndDoesNotAddPoints() {
         val evaluation = CourseEvaluator.evaluate(
             RaceType.SPRINT,

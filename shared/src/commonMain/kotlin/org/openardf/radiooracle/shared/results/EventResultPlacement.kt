@@ -35,8 +35,19 @@ object EventResultPlacement {
         competitors: List<EventCompetitorData>
     ): Map<String?, List<EventCompetitorData>> {
         return competitors
-            .groupBy { it.competitorCategory.category?.id }
+            .groupBy { it.competitionCategoryId() }
             .mapValues { (_, categoryCompetitors) -> sortByPlace(categoryCompetitors) }
+    }
+
+    /** Assigns places within each category while preserving the caller's competitor order. */
+    fun assignPlacesByCategory(competitors: List<EventCompetitorData>): List<EventCompetitorData> {
+        val placedByCompetitorId = groupByCategoryAndSortByPlace(competitors)
+            .values
+            .flatten()
+            .associateBy { it.competitorCategory.competitor.id }
+        return competitors.map { competitorData ->
+            placedByCompetitorId[competitorData.competitorCategory.competitor.id] ?: competitorData
+        }
     }
 
     private fun compareCompetitorData(first: EventCompetitorData, second: EventCompetitorData): Int {
@@ -50,6 +61,9 @@ object EventResultPlacement {
             else -> firstReadout.result.compareRanking(secondReadout.result)
         }
     }
+
+    private fun EventCompetitorData.competitionCategoryId(): String? =
+        readoutData?.result?.categoryId ?: competitorCategory.category?.id ?: competitorCategory.competitor.categoryId
 
     private fun EventResult.compareRanking(other: EventResult): Int {
         return when {
