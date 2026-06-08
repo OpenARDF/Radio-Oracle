@@ -1343,6 +1343,10 @@ class EventProjectEditorTest {
                 categoryData("cat-short", "M21", controlSiCodes = listOf(31)),
                 categoryData("cat-long", "M40", controlSiCodes = listOf(31, 33))
             ),
+            controls = listOf(
+                EventControl("control-31", "race", "F1", 31, ControlPointType.CONTROL, publicLabel = "Fox 1"),
+                EventControl("control-33", "race", "F3", 33, ControlPointType.CONTROL, publicLabel = "Fox 3")
+            ),
             aliases = listOf(alias("alias-31", 31, "F1"), alias("alias-33", 33, "F3")),
             competitors = listOf(
                 competitorData(
@@ -1359,9 +1363,9 @@ class EventProjectEditorTest {
         val updated = EventProjectEditor.updateReadoutEdit(
             projectFile = original,
             resultId = "result-1",
-            startSeconds = "600",
-            finishSeconds = "1800",
-            controlPunchesText = "31@900 33@1200",
+            startSeconds = "10:00",
+            finishSeconds = "30:00",
+            controlPunchesText = "Fox 1 @ 15:00\nFox 3 @ 20:00",
             resultStatus = ResultStatus.OK,
             categoryId = longCategory.id,
             updateCompetitorCategory = true,
@@ -1373,8 +1377,8 @@ class EventProjectEditorTest {
         assertEquals(longCategory.id, competitorData.competitorCategory.competitor.categoryId)
         assertEquals(longCategory, competitorData.competitorCategory.category)
         assertEquals(longCategory.id, readout.result.categoryId)
-        assertEquals(600, readout.result.startTimeSeconds)
-        assertEquals(1800, readout.result.finishTimeSeconds)
+        assertEquals(36_600, readout.result.startTimeSeconds)
+        assertEquals(37_800, readout.result.finishTimeSeconds)
         assertEquals(1200, readout.result.runTimeSeconds)
         assertEquals(2, readout.result.points)
         assertEquals(ResultStatus.OK, readout.result.resultStatus)
@@ -1387,7 +1391,7 @@ class EventProjectEditorTest {
             readout.punches.map { it.punch.punchType }
         )
         assertEquals(listOf(0, 31, 33, 0), readout.punches.map { it.punch.siCode })
-        assertEquals(listOf(600L, 900L, 1200L, 1800L), readout.punches.map { it.punch.siTimeSeconds })
+        assertEquals(listOf(36_600L, 36_900L, 37_200L, 37_800L), readout.punches.map { it.punch.siTimeSeconds })
         assertEquals(listOf(0L, 300L, 300L, 600L), readout.punches.map { it.punch.splitSeconds })
         assertEquals(listOf(null, "F1", "F3", null), readout.punches.map { it.alias?.name })
     }
@@ -1416,9 +1420,9 @@ class EventProjectEditorTest {
         val updated = EventProjectEditor.updateReadoutEdit(
             projectFile = original,
             resultId = "result-1",
-            startSeconds = "600",
-            finishSeconds = "1800",
-            controlPunchesText = "31 33",
+            startSeconds = "10:00",
+            finishSeconds = "30:00",
+            controlPunchesText = "31\n33",
             resultStatus = ResultStatus.OK,
             categoryId = longCategory.id,
             updateCompetitorCategory = false,

@@ -2149,6 +2149,7 @@ fun main(args: Array<String>) = application {
             ReadoutEditDialog(
                 draft = draft,
                 categories = projectFile?.let { EventCategoryDetails.from(it.raceData) } ?: emptyList(),
+                controls = projectFile?.raceData?.controls ?: emptyList(),
                 onSave = { updatedDraft ->
                     runCatching {
                         projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -3660,9 +3661,9 @@ private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEdit
                 resultId = resultId,
                 competitorName = competitor.fullName(),
                 matched = true,
-                startSeconds = readoutData.result.startTimeSeconds?.toString() ?: "",
-                finishSeconds = readoutData.result.finishTimeSeconds?.toString() ?: "",
-                controlPunchesText = readoutData.controlPunchText(),
+                startSeconds = elapsedRaceTimeText(readoutData.result.startTimeSeconds),
+                finishSeconds = elapsedRaceTimeText(readoutData.result.finishTimeSeconds),
+                controlPunchesText = readoutData.controlPunchText(this),
                 resultStatus = readoutData.result.resultStatus,
                 categoryId = readoutData.result.categoryId ?: competitor.categoryId
             )
@@ -3674,9 +3675,9 @@ private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEdit
                 resultId = resultId,
                 competitorName = readoutData.result.cardName ?: "",
                 matched = false,
-                startSeconds = readoutData.result.startTimeSeconds?.toString() ?: "",
-                finishSeconds = readoutData.result.finishTimeSeconds?.toString() ?: "",
-                controlPunchesText = readoutData.controlPunchText(),
+                startSeconds = elapsedRaceTimeText(readoutData.result.startTimeSeconds),
+                finishSeconds = elapsedRaceTimeText(readoutData.result.finishTimeSeconds),
+                controlPunchesText = readoutData.controlPunchText(this),
                 resultStatus = readoutData.result.resultStatus,
                 categoryId = readoutData.result.categoryId
             )
@@ -3685,11 +3686,55 @@ private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEdit
     return null
 }
 
-private fun org.openardf.radiooracle.shared.event.EventReadoutData.controlPunchText(): String =
+private fun EventRaceData.elapsedRaceTimeText(daySeconds: Long?): String =
+    daySeconds?.let { seconds ->
+        val raceStartSeconds = raceStartSecondsOfDay(race.startDateTimeIso)
+        val elapsedSeconds = if (raceStartSeconds == null) {
+            seconds
+        } else {
+            val secondsInDay = 24 * 60 * 60
+            ((seconds - raceStartSeconds) % secondsInDay + secondsInDay) % secondsInDay
+        }
+        elapsedSeconds.toReadoutElapsedText()
+    }.orEmpty()
+
+private fun Long.toReadoutElapsedText(): String =
+    DurationFormatter.secondsToFormattedString(this, useMinutes = this < 3_600)
+
+private fun org.openardf.radiooracle.shared.event.EventReadoutData.controlPunchText(raceData: EventRaceData): String =
     punches
-        .map { it.punch }
-        .filter { it.punchType == SIRecordType.CONTROL }
-        .joinToString(" ") { punch -> "${punch.siCode}@${punch.siTimeSeconds}" }
+        .map { aliasPunch -> aliasPunch.punch to aliasPunch.alias?.name }
+        .filter { (punch, _) -> punch.punchType == SIRecordType.CONTROL }
+        .joinToString("\n") { (punch, aliasName) ->
+            val control = raceData.controls.firstOrNull { it.siCode == punch.siCode }
+            val label = control?.editPunchToken(raceData.controls)
+                ?: aliasName?.takeIf { it.isNotBlank() }
+                ?: punch.siCode.toString()
+            "$label @ ${raceData.elapsedRaceTimeText(punch.siTimeSeconds)}"
+        }
+
+private fun raceStartSecondsOfDay(startDateTimeIso: String): Long? {
+    val time = startDateTimeIso.substringAfter('T', missingDelimiterValue = "")
+        .substringBefore('.')
+        .substringBefore('Z')
+        .substringBefore('+')
+        .substringBefore('-')
+    if (time.isBlank()) {
+        return null
+    }
+    val parts = time.split(":")
+    if (parts.size < 2) {
+        return null
+    }
+    val hour = parts[0].toLongOrNull() ?: return null
+    val minute = parts[1].toLongOrNull() ?: return null
+    val second = parts.getOrNull(2)?.toLongOrNull() ?: 0
+    return if (hour in 0..23 && minute in 0..59 && second in 0..59) {
+        hour * 3_600 + minute * 60 + second
+    } else {
+        null
+    }
+}
 
 @Composable
 private fun saveEventButtonColors() =
@@ -5179,6 +5224,7 @@ private fun ResultStatusPicker(
 private fun ReadoutEditDialog(
     draft: DesktopReadoutEditDraft,
     categories: List<EventCategoryDetails>,
+    controls: List<EventControl>,
     onSave: (DesktopReadoutEditDraft) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -5188,6 +5234,22 @@ private fun ReadoutEditDialog(
     var resultStatus by remember(draft.resultId) { mutableStateOf(draft.resultStatus) }
     var categoryId by remember(draft.resultId) { mutableStateOf(draft.categoryId) }
     var updateCompetitorCategory by remember(draft.resultId) { mutableStateOf(draft.updateCompetitorCategory) }
+    var selectedControlId by remember(draft.resultId, controls) { mutableStateOf(controls.firstOrNull()?.id) }
+    val sortedControls = remember(controls) {
+        controls.sortedWith(compareBy<EventControl> { it.siCode }.thenBy { it.publicDisplayLabel() })
+    }
+    val usedPunchControlKeys = remember(controlPunchesText) { controlPunchesText.usedPunchControlKeys() }
+    val availableControls = remember(sortedControls, usedPunchControlKeys) {
+        sortedControls.filter { control ->
+            control.entryKeys().none { it in usedPunchControlKeys }
+        }
+    }
+
+    LaunchedEffect(availableControls, selectedControlId) {
+        if (selectedControlId == null || availableControls.none { it.id == selectedControlId }) {
+            selectedControlId = availableControls.firstOrNull()?.id
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -5200,13 +5262,13 @@ private fun ReadoutEditDialog(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     LabeledTextField(
-                        label = "Start seconds",
+                        label = "Start elapsed",
                         value = startSeconds,
                         onValueChange = { startSeconds = it },
                         modifier = Modifier.width(160.dp)
                     )
                     LabeledTextField(
-                        label = "Finish seconds",
+                        label = "Finish elapsed",
                         value = finishSeconds,
                         onValueChange = { finishSeconds = it },
                         modifier = Modifier.width(160.dp)
@@ -5214,6 +5276,28 @@ private fun ReadoutEditDialog(
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Control punches", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ReadoutControlPicker(
+                            selectedControlId = selectedControlId,
+                            controls = availableControls,
+                            onControlSelected = { selectedControlId = it },
+                            modifier = Modifier.width(260.dp)
+                        )
+                        Button(
+                            onClick = {
+                                val control = availableControls.firstOrNull { it.id == selectedControlId } ?: return@Button
+                                val punchTime = startSeconds.ifBlank { "00:00" }
+                                controlPunchesText = appendReadoutPunchLine(
+                                    controlPunchesText,
+                                    "${control.editPunchToken(sortedControls)} @ $punchTime"
+                                )
+                                selectedControlId = availableControls.firstOrNull { it.id != control.id }?.id
+                            },
+                            enabled = selectedControlId != null
+                        ) {
+                            ButtonLabel("Add Punch")
+                        }
+                    }
                     TextField(
                         value = controlPunchesText,
                         onValueChange = { controlPunchesText = it },
@@ -5221,7 +5305,7 @@ private fun ReadoutEditDialog(
                         modifier = Modifier.width(420.dp).height(88.dp)
                     )
                     Text(
-                        text = "Use SI@seconds entries, such as 31@37100 32@37420. Plain SI codes may be used for added punches with unknown times.",
+                        text = "Use one punch per line, such as Fox 1 @ 15:00. The picker inserts valid labels; typed SI codes, public labels, and control labels are also accepted.",
                         color = DesktopPalette.Disconnected,
                         fontSize = 12.sp
                     )
@@ -5274,6 +5358,43 @@ private fun ReadoutEditDialog(
             }
         }
     )
+}
+
+@Composable
+private fun ReadoutControlPicker(
+    selectedControlId: String?,
+    controls: List<EventControl>,
+    onControlSelected: (String?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedControl = controls.firstOrNull { it.id == selectedControlId }
+    val selectedText = selectedControl?.publicDisplayLabel() ?: "No controls available"
+
+    Box(modifier = modifier) {
+        Button(
+            onClick = { expanded = true },
+            enabled = controls.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(selectedText)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            controls.forEach { control ->
+                DropdownMenuItem(
+                    onClick = {
+                        expanded = false
+                        onControlSelected(control.id)
+                    }
+                ) {
+                    Text("${control.publicDisplayLabel()} (${control.siCode})")
+                }
+            }
+        }
+    }
 }
 
 /** Shows a compact competitor selector with an explicit unmatched-readout option. */
@@ -8492,6 +8613,53 @@ private fun appendPublicControlLabel(controlPointsText: String, publicLabel: Str
     val existingText = controlPointsText.trim()
     return if (existingText.isEmpty()) token else "$existingText $token"
 }
+
+private fun appendReadoutPunchLine(controlPunchesText: String, punchLine: String): String {
+    val existingText = controlPunchesText.trim()
+    return if (existingText.isEmpty()) punchLine else "$existingText\n$punchLine"
+}
+
+private fun String.usedPunchControlKeys(): Set<String> =
+    lines()
+        .flatMap { line -> line.split(";") }
+        .flatMap { entry ->
+            val controlText = entry.substringBefore("@").trim()
+            val numericTokens = controlText.split(Regex("\\s+")).filter { it.isNotBlank() }
+            if (
+                "@" !in entry &&
+                numericTokens.size > 1 &&
+                numericTokens.all { it.toIntOrNull() != null }
+            ) {
+                numericTokens
+            } else {
+                listOf(controlText)
+            }
+        }
+        .map { it.normalizedReadoutControlToken() }
+        .filter { it.isNotEmpty() }
+        .toSet()
+
+private fun EventControl.editPunchToken(allControls: List<EventControl>): String {
+    val publicLabel = publicDisplayLabel()
+    val publicLabelKey = publicLabel.normalizedReadoutControlToken()
+    val isAmbiguous = allControls
+        .filter { control -> publicLabelKey in control.entryKeys() }
+        .map { it.siCode }
+        .distinct()
+        .size > 1
+    return if (isAmbiguous) siCode.toString() else publicLabel
+}
+
+private fun EventControl.entryKeys(): Set<String> =
+    buildSet {
+        add(siCode.toString().normalizedReadoutControlToken())
+        add(label.normalizedReadoutControlToken())
+        add(publicDisplayLabel().normalizedReadoutControlToken())
+        publicLabel?.takeIf { it.isNotBlank() }?.let { add(it.normalizedReadoutControlToken()) }
+    }
+
+private fun String.normalizedReadoutControlToken(): String =
+    trim().lowercase().replace(Regex("\\s+"), " ")
 
 private fun selectedPublicControlLabels(
     controlPointsText: String,

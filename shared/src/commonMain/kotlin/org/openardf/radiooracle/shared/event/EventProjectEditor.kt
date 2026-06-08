@@ -1611,9 +1611,11 @@ object EventProjectEditor {
     /**
      * Replaces one readout's editable timing, control-punch, status, and category fields.
      *
-     * Control punches are entered as SI codes with optional absolute seconds,
-     * for example: `31@37100 32@37420 90@38100`. If a punch time is omitted,
-     * the edited start time is used as a conservative fallback.
+     * Times are entered as elapsed race times in `mm:ss` or `hh:mm:ss` format.
+     * Control punches are entered one per line as a public label, control label,
+     * or SI code with an optional elapsed punch time, for example:
+     * `Fox 1 @ 15:00`. If a punch time is omitted, the edited start time is used
+     * as a conservative fallback.
      */
     fun updateReadoutEdit(
         projectFile: EventProjectFile,
@@ -1626,17 +1628,25 @@ object EventProjectEditor {
         updateCompetitorCategory: Boolean,
         punchIdFactory: (Int, SIRecordType) -> String
     ): EventProjectFile {
-        val startSecondsValue = parseOptionalDaySeconds(startSeconds, "Start time")
-        val finishSecondsValue = parseOptionalDaySeconds(finishSeconds, "Finish time")
-        require(startSecondsValue == null || finishSecondsValue == null || finishSecondsValue >= startSecondsValue) {
+        val raceStartSeconds = raceStartSecondsOfDay(projectFile.raceData.race.startDateTimeIso)
+        val startElapsedSeconds = parseOptionalElapsedSeconds(startSeconds, "Start time")
+        val finishElapsedSeconds = parseOptionalElapsedSeconds(finishSeconds, "Finish time")
+        require(startElapsedSeconds == null || finishElapsedSeconds == null || finishElapsedSeconds >= startElapsedSeconds) {
             "Finish time cannot be earlier than start time."
         }
+        val startSecondsValue = startElapsedSeconds?.toDaySeconds(raceStartSeconds, "Start time")
+        val finishSecondsValue = finishElapsedSeconds?.toDaySeconds(raceStartSeconds, "Finish time")
         val requestedCategoryId = categoryId?.trim()?.takeIf { it.isNotEmpty() }
         val requestedCategory = requestedCategoryId?.let { id ->
             projectFile.raceData.categories.firstOrNull { it.category.id == id }?.category
                 ?: throw IllegalArgumentException("Category was not found: $id")
         }
-        val controlPunchEntries = parseControlPunchEntries(controlPunchesText)
+        val controlPunchEntries = parseControlPunchEntries(
+            controlPunchesText = controlPunchesText,
+            controls = projectFile.raceData.controls,
+            aliases = projectFile.raceData.aliases,
+            raceStartSeconds = raceStartSeconds
+        )
         val evaluation = requestedCategoryId?.let { id ->
             projectFile.raceData.categories.firstOrNull { it.category.id == id }?.let { data ->
                 CourseEvaluator.evaluate(
@@ -1651,8 +1661,8 @@ object EventProjectEditor {
         } else {
             resultStatus
         }
-        val runTimeSeconds = if (startSecondsValue != null && finishSecondsValue != null) {
-            finishSecondsValue - startSecondsValue
+        val runTimeSeconds = if (startElapsedSeconds != null && finishElapsedSeconds != null) {
+            finishElapsedSeconds - startElapsedSeconds
         } else {
             0
         }
@@ -2329,26 +2339,126 @@ object EventProjectEditor {
             }
             ?: emptyList()
 
-    private fun parseControlPunchEntries(controlPunchesText: String): List<EditedControlPunch> =
+    private fun parseControlPunchEntries(
+        controlPunchesText: String,
+        controls: List<EventControl>,
+        aliases: List<EventAlias>,
+        raceStartSeconds: Long?
+    ): List<EditedControlPunch> =
         controlPunchesText
             .trim()
             .takeIf { it.isNotEmpty() }
-            ?.split(Regex("[,\\s]+"))
-            ?.map { token ->
-                val parts = token.split("@", ":", limit = 2)
-                val code = parts[0].toIntOrNull()
-                    ?: throw IllegalArgumentException("Control punch code is invalid: $token")
-                require(SportIdentCodes.isSICodeValid(code)) {
-                    "Control code is outside the supported SportIdent station range: $code"
+            ?.let(::controlPunchEntryLines)
+            ?.map { line ->
+                val parts = line.split("@", limit = 2)
+                val controlText = parts[0].trim()
+                require(controlText.isNotEmpty()) {
+                    "Control punch label is required."
                 }
-                val seconds = parts.getOrNull(1)?.takeIf { it.isNotBlank() }?.toLongOrNull()
-                    ?: if (parts.size > 1) throw IllegalArgumentException("Control punch time is invalid: $token") else null
-                require(seconds == null || seconds in 0..<SportIdentCodes.SECONDS_DAY) {
-                    "Control punch time must be within one day: $token"
-                }
+                val code = resolveControlPunchCode(controlText, controls, aliases)
+                val seconds = parts.getOrNull(1)
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { parseRequiredElapsedSeconds(it, "Control punch time").toDaySeconds(raceStartSeconds, "Control punch time") }
                 EditedControlPunch(code, seconds)
             }
             ?: emptyList()
+
+    private fun controlPunchEntryLines(controlPunchesText: String): List<String> =
+        controlPunchesText
+            .lines()
+            .flatMap { line -> line.split(";") }
+            .flatMap { entry ->
+                val trimmedEntry = entry.trim()
+                val numericTokens = trimmedEntry.split(Regex("\\s+")).filter { it.isNotBlank() }
+                if (
+                    "@" !in trimmedEntry &&
+                    numericTokens.size > 1 &&
+                    numericTokens.all { it.toIntOrNull()?.let(SportIdentCodes::isSICodeValid) == true }
+                ) {
+                    numericTokens
+                } else {
+                    listOf(trimmedEntry)
+                }
+            }
+            .filter { it.isNotBlank() }
+
+    private fun resolveControlPunchCode(
+        controlText: String,
+        controls: List<EventControl>,
+        aliases: List<EventAlias>
+    ): Int {
+        val directCode = controlText.toIntOrNull()
+        if (directCode != null) {
+            require(SportIdentCodes.isSICodeValid(directCode)) {
+                "Control code is outside the supported SportIdent station range: $directCode"
+            }
+            return directCode
+        }
+
+        val normalizedText = controlText.normalizedControlToken()
+        val matches = (
+            controls.flatMap { control ->
+                listOfNotNull(
+                    control.publicLabel?.takeIf { it.isNotBlank() },
+                    control.label
+                ).map { it.normalizedControlToken() to control.siCode }
+            } +
+                aliases.map { it.name.normalizedControlToken() to it.siCode }
+            )
+            .filter { (label, _) -> label == normalizedText }
+            .map { (_, siCode) -> siCode }
+            .distinct()
+        require(matches.isNotEmpty()) {
+            "Control punch label was not found: $controlText"
+        }
+        require(matches.size == 1) {
+            "Control punch label is ambiguous: $controlText"
+        }
+        return matches.single()
+    }
+
+    private fun String.normalizedControlToken(): String =
+        trim().lowercase().replace(Regex("\\s+"), " ")
+
+    private fun parseOptionalElapsedSeconds(value: String, fieldName: String): Long? {
+        val trimmedValue = value.trim()
+        if (trimmedValue.isEmpty()) {
+            return null
+        }
+        return parseRequiredElapsedSeconds(trimmedValue, fieldName)
+    }
+
+    private fun parseRequiredElapsedSeconds(value: String, fieldName: String): Long {
+        val parts = value.trim().split(":")
+        require(parts.size == 2 || parts.size == 3) {
+            "$fieldName is invalid. Use mm:ss or hh:mm:ss."
+        }
+        val hours = if (parts.size == 3) {
+            parts[0].toLongOrNull()
+                ?: throw IllegalArgumentException("$fieldName hours are invalid.")
+        } else {
+            0
+        }
+        val minuteIndex = if (parts.size == 3) 1 else 0
+        val secondIndex = if (parts.size == 3) 2 else 1
+        val minutes = parts[minuteIndex].toLongOrNull()
+            ?: throw IllegalArgumentException("$fieldName minutes are invalid.")
+        val seconds = parts[secondIndex].toLongOrNull()
+            ?: throw IllegalArgumentException("$fieldName seconds are invalid.")
+        require(hours >= 0 && minutes in 0..59 && seconds in 0..59) {
+            "$fieldName is invalid. Use mm:ss or hh:mm:ss."
+        }
+        return hours * 3_600 + minutes * 60 + seconds
+    }
+
+    private fun Long.toDaySeconds(raceStartSeconds: Long?, fieldName: String): Long {
+        val seconds = (raceStartSeconds ?: 0L) + this
+        require(seconds in 0..<SportIdentCodes.SECONDS_DAY) {
+            "$fieldName must stay within the event day."
+        }
+        return seconds
+    }
 
     private fun buildManualPunches(
         raceId: String,
