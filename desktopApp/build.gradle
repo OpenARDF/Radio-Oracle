@@ -49,8 +49,6 @@ def desktopJdeployJarName = "Radio-Oracle-jdeploy.jar"
 def runtimeClasspath = configurations.runtimeClasspath
 def jdeploySkikoVersion = libs.versions.skiko.get()
 def requiredJdeploySkikoRuntimeArtifacts = [
-        "skiko-awt-runtime-angle-windows-arm64",
-        "skiko-awt-runtime-angle-windows-x64",
         "skiko-awt-runtime-linux-arm64",
         "skiko-awt-runtime-linux-x64",
         "skiko-awt-runtime-macos-arm64",

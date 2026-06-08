@@ -18,8 +18,6 @@ const desktopPrep = readFileSync("docs/desktop-prep.md", "utf8");
 const npmPublishWorkflow = readFileSync(".github/workflows/publish-jdeploy.yml", "utf8");
 const githubReleaseWorkflow = readFileSync(".github/workflows/jdeploy-github-release.yml", "utf8");
 const requiredJdeploySkikoRuntimeArtifacts = [
-  "skiko-awt-runtime-angle-windows-arm64",
-  "skiko-awt-runtime-angle-windows-x64",
   "skiko-awt-runtime-linux-arm64",
   "skiko-awt-runtime-linux-x64",
   "skiko-awt-runtime-macos-arm64",
