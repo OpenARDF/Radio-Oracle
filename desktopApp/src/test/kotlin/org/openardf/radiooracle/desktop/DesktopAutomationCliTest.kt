@@ -225,11 +225,13 @@ class DesktopAutomationCliTest {
 
         assertEquals(0, importResult.exitCode)
         assertTrue(importResult.stdout.contains("\"action\":\"ImportAndroidRaceBackup\""))
-        assertTrue(importResult.stdout.contains("\"breadcrumb\":\"Setup > Event File > Import Android Event File...\""))
+        assertTrue(importResult.stdout.contains("\"breadcrumb\":\"Setup > Event File\""))
+        assertTrue(importResult.stdout.contains("\"selectedItemId\":\"setup.event-file\""))
 
         assertEquals(0, exportResult.exitCode)
         assertTrue(exportResult.stdout.contains("\"action\":\"ExportAndroidRaceBackupJson\""))
-        assertTrue(exportResult.stdout.contains("\"breadcrumb\":\"Setup > Event File > Export Android Event File...\""))
+        assertTrue(exportResult.stdout.contains("\"breadcrumb\":\"Setup > Event File\""))
+        assertTrue(exportResult.stdout.contains("\"selectedItemId\":\"setup.event-file\""))
     }
 
     @Test

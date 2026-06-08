@@ -3430,7 +3430,10 @@ private fun RadioOManagerDesktopApp(
                 onLockProtectedCourseOrder()
             }
             navState = nextState
-            action?.let(onNavAction)
+            action?.let {
+                onNavAction(it)
+                navState = DesktopNavigation.returnToParentMenuAfterAction(nextState, it)
+            }
         }
 
         fun requestNavigation(intent: DesktopPendingNavigation) {

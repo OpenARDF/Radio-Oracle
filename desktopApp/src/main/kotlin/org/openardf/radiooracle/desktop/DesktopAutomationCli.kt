@@ -349,6 +349,9 @@ object DesktopAutomationCli {
             if (simulateEditedDraft && action == DesktopNavAction.NewEventFile) {
                 hasEditedUnsavedNewEventDraft = true
             }
+            action?.let {
+                state = DesktopNavigation.returnToParentMenuAfterAction(state, it)
+            }
             selectedLabels += label
         }
         out.println(navSelectJson(selectedLabels, state, action, guarded = false))

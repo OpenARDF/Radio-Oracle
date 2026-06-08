@@ -164,11 +164,7 @@ data class DesktopNavState(
             selectedItemId != submenuStack.last() &&
             activeMenuItems.any { it.id == selectedItemId }
         ) {
-            val currentMenu = DesktopNavigation.itemById(workflow, submenuStack.last())
-            return copy(
-                selectedSection = currentMenu?.section ?: selectedSection,
-                selectedItemId = submenuStack.last()
-            )
+            return DesktopNavigation.returnToParentMenu(this)
         }
         val nextStack = submenuStack.dropLast(1)
         return if (nextStack.isEmpty()) {
@@ -475,6 +471,19 @@ object DesktopNavigation {
             item.section != null -> DesktopNavSelection(state.enter(item))
             else -> DesktopNavSelection(state)
         }
+
+    fun shouldReturnToParentMenuAfterAction(action: DesktopNavAction): Boolean =
+        action != DesktopNavAction.NewEventFile
+
+    fun returnToParentMenuAfterAction(state: DesktopNavState, action: DesktopNavAction): DesktopNavState =
+        if (shouldReturnToParentMenuAfterAction(action)) {
+            state.withParentMenuSelected()
+        } else {
+            state
+        }
+
+    fun returnToParentMenu(state: DesktopNavState): DesktopNavState =
+        state.withParentMenuSelected()
 
     fun findCurrentItemByLabel(state: DesktopNavState, label: String): DesktopNavItem? =
         currentItems(state).firstOrNull { it.label == label }
@@ -819,4 +828,13 @@ object DesktopNavigation {
             requiresEventFile = requiresEventFile,
             children = children
         )
+
+    private fun DesktopNavState.withParentMenuSelected(): DesktopNavState {
+        val currentMenuId = submenuStack.lastOrNull() ?: return this
+        val currentMenu = itemById(workflow, currentMenuId)
+        return copy(
+            selectedSection = currentMenu?.section ?: selectedSection,
+            selectedItemId = currentMenuId
+        )
+    }
 }

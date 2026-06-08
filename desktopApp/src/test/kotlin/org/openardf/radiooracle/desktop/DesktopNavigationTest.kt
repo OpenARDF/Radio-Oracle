@@ -181,6 +181,64 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun completedTransientActionReturnsToParentMenu() {
+        val eventFileState = DesktopNavigation.selectItem(
+            DesktopNavState(),
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+        ).state
+        val selection = DesktopNavigation.selectItem(
+            eventFileState,
+            DesktopNavigation.currentItems(eventFileState).first { it.action == DesktopNavAction.OpenEventFile }
+        )
+
+        val completedState = DesktopNavigation.returnToParentMenuAfterAction(
+            selection.state,
+            DesktopNavAction.OpenEventFile
+        )
+
+        assertEquals(listOf("setup.event-file"), completedState.submenuStack)
+        assertEquals("setup.event-file", completedState.selectedItemId)
+        assertEquals(DesktopSection.Races, completedState.selectedSection)
+        assertEquals("Setup > Event File", DesktopNavigation.breadcrumb(completedState))
+        assertEquals(
+            listOf(
+                "New Event File",
+                "Load File...",
+                "Import Android Event File...",
+                "Import EventReg Website...",
+                "Export Android Event File...",
+                "Settings",
+                "Save Event",
+                "Save Event As...",
+                "Close Event File"
+            ),
+            DesktopNavigation.currentItems(completedState).map { it.label }
+        )
+    }
+
+    @Test
+    fun completedNewEventFileActionKeepsEditingWorkspaceSelected() {
+        val eventFileState = DesktopNavigation.selectItem(
+            DesktopNavState(),
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+        ).state
+        val selection = DesktopNavigation.selectItem(
+            eventFileState,
+            DesktopNavigation.currentItems(eventFileState).first { it.action == DesktopNavAction.NewEventFile }
+        )
+
+        val completedState = DesktopNavigation.returnToParentMenuAfterAction(
+            selection.state,
+            DesktopNavAction.NewEventFile
+        )
+
+        assertEquals("setup.event-file.new", completedState.selectedItemId)
+        assertEquals(DesktopSection.Races, completedState.selectedSection)
+        assertEquals("Setup > Event File > New Event File", DesktopNavigation.breadcrumb(completedState))
+        assertEquals(emptyList<String>(), DesktopNavigation.currentItems(completedState).map { it.label })
+    }
+
+    @Test
     fun unsavedNewEventDraftGuardBlocksNavigationAway() {
         val eventFileState = DesktopNavigation.selectItem(
             DesktopNavState(),
