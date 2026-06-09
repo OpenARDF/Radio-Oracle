@@ -6620,6 +6620,22 @@ private fun VenueElevationCachePanel(
                 ) {
                     ButtonLabel("Download OR DOGAMI LiDAR DTM")
                 }
+                Button(
+                    onClick = {
+                        val bounds = parsedBoundingBox ?: return@Button
+                        val resolution = resolutionMeters ?: return@Button
+                        onDownloadCache(
+                            venueNameDraft,
+                            bounds,
+                            resolution,
+                            bufferMeters,
+                            DesktopVenueElevationCacheSource.NorthCarolinaOneMapLidarDem
+                        )
+                    },
+                    enabled = parsedBoundingBox != null && resolutionMeters != null && resolutionMeters > 0.0
+                ) {
+                    ButtonLabel("Download NC OneMap LiDAR DEM")
+                }
             }
         }
         Text(

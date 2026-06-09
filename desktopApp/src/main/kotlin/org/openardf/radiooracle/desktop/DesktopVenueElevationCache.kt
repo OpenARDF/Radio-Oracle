@@ -51,7 +51,8 @@ enum class DesktopVenueElevationCacheSource(
 ) {
     Usgs3Dep("USGS 3DEP"),
     WashingtonDnrLidarDtm("Washington DNR LiDAR DTM"),
-    OregonDogamiLidarDtm("Oregon DOGAMI LiDAR DTM")
+    OregonDogamiLidarDtm("Oregon DOGAMI LiDAR DTM"),
+    NorthCarolinaOneMapLidarDem("NC OneMap LiDAR DEM")
 }
 
 data class DesktopVenueElevationBoundingBox(
@@ -157,6 +158,7 @@ object DesktopVenueElevationCache {
     private const val DEFAULT_SOURCE_NAME = "USGS 3DEP"
     private const val WASHINGTON_DNR_SOURCE_NAME = "Washington DNR LiDAR DTM"
     private const val OREGON_DOGAMI_SOURCE_NAME = "Oregon DOGAMI LiDAR DTM"
+    private const val NORTH_CAROLINA_ONEMAP_SOURCE_NAME = "NC OneMap LiDAR DEM"
     private const val ARCGIS_SAMPLE_BATCH_SIZE = 250
     private const val ARCGIS_SAMPLE_RETRY_COUNT = 4
     private const val FEET_TO_METERS = 0.3048
@@ -338,6 +340,14 @@ object DesktopVenueElevationCache {
                 )
             DesktopVenueElevationCacheSource.OregonDogamiLidarDtm ->
                 downloadOregonDogamiLidarDtm(
+                    venueName = venueName,
+                    boundingBox = boundingBox,
+                    resolutionMeters = resolutionMeters,
+                    bufferMeters = bufferMeters,
+                    onProgress = onProgress
+                )
+            DesktopVenueElevationCacheSource.NorthCarolinaOneMapLidarDem ->
+                downloadNorthCarolinaOneMapLidarDem(
                     venueName = venueName,
                     boundingBox = boundingBox,
                     resolutionMeters = resolutionMeters,
@@ -576,6 +586,79 @@ object DesktopVenueElevationCache {
             )
         }
 
+    private suspend fun downloadNorthCarolinaOneMapLidarDem(
+        venueName: String,
+        boundingBox: DesktopVenueElevationBoundingBox,
+        resolutionMeters: Double,
+        bufferMeters: Double,
+        onProgress: (DesktopVenueElevationCacheProgress) -> Unit = {}
+    ): DesktopVenueElevationCacheSummary =
+        withContext(Dispatchers.IO) {
+            val cleanVenueName = venueName.trim().ifBlank { "Venue" }
+            val estimate = estimate(boundingBox, resolutionMeters, bufferMeters)
+            val points = estimate.gridPoints()
+            onProgress(
+                DesktopVenueElevationCacheProgress(
+                    venueName = cleanVenueName,
+                    completedPointCount = 0,
+                    totalPointCount = points.size
+                )
+            )
+            val elevations = MutableList<Double?>(points.size) { null }
+            var completed = 0
+            points.chunked(ARCGIS_SAMPLE_BATCH_SIZE).forEachIndexed { chunkIndex, chunk ->
+                coroutineContext.ensureActive()
+                val values = northCarolinaOneMapSamplesWithRetry(chunk, chunkIndex + 1)
+                values.forEachIndexed { index, value ->
+                    elevations[chunkIndex * ARCGIS_SAMPLE_BATCH_SIZE + index] = value
+                }
+                completed += chunk.size
+                onProgress(
+                    DesktopVenueElevationCacheProgress(
+                        venueName = cleanVenueName,
+                        completedPointCount = completed,
+                        totalPointCount = points.size
+                    )
+                )
+            }
+            val file = DesktopVenueElevationCacheFile(
+                metadata = DesktopVenueElevationCacheMetadata(
+                    version = CACHE_VERSION,
+                    venueName = cleanVenueName,
+                    sourceName = NORTH_CAROLINA_ONEMAP_SOURCE_NAME,
+                    sourceUrl = NORTH_CAROLINA_ONEMAP_DEM_GET_SAMPLES_URL,
+                    resolutionMeters = resolutionMeters,
+                    rowCount = estimate.rowCount,
+                    columnCount = estimate.columnCount,
+                    boundingBox = estimate.boundingBox.toSerializable(),
+                    createdAtIso = Instant.now().toString()
+                ),
+                elevations = elevations
+            )
+            val directory = cacheDirectory()
+            Files.createDirectories(directory)
+            val path = uniqueCachePath(directory, cleanVenueName, resolutionMeters)
+            Files.writeString(path, file.toJsonString())
+            loadedSignature = ""
+            val hash = fileSha256(path)
+            DesktopDebugLog.info(
+                "ElevationCache",
+                "Downloaded venue=$cleanVenueName source=$NORTH_CAROLINA_ONEMAP_SOURCE_NAME resolution=${resolutionMeters}m " +
+                    "points=${points.size} resolved=${elevations.count { it != null }} file=${path.fileName} hash=${hash.take(12)}"
+            )
+            DesktopVenueElevationCacheSummary(
+                venueName = cleanVenueName,
+                path = path,
+                rowCount = estimate.rowCount,
+                columnCount = estimate.columnCount,
+                pointCount = points.size,
+                resolvedPointCount = elevations.count { it != null },
+                sourceName = NORTH_CAROLINA_ONEMAP_SOURCE_NAME,
+                resolutionMeters = resolutionMeters,
+                fileSha256 = hash
+            )
+        }
+
     private fun loadCaches(): List<DesktopVenueElevationCacheFile> {
         val directory = cacheDirectory()
         if (!Files.isDirectory(directory)) {
@@ -740,7 +823,7 @@ object DesktopVenueElevationCache {
 
     private fun DesktopVenueElevationCacheFile.sourcePriority(): Int =
         when {
-            metadata.sourceName.contains("LiDAR DTM", ignoreCase = true) -> 0
+            metadata.sourceName.contains("LiDAR", ignoreCase = true) -> 0
             metadata.sourceName == DEFAULT_SOURCE_NAME -> 1
             else -> 2
         }
@@ -853,6 +936,36 @@ object DesktopVenueElevationCache {
             }
         }
         throw lastError ?: IllegalStateException("Oregon DOGAMI sample request failed.")
+    }
+
+    private fun northCarolinaOneMapSamplesWithRetry(points: List<CourseGeoPoint>, batchNumber: Int): List<Double?> {
+        var lastError: Throwable? = null
+        repeat(ARCGIS_SAMPLE_RETRY_COUNT) { attemptIndex ->
+            try {
+                return arcGisImageSamples(
+                    serviceUrl = NORTH_CAROLINA_ONEMAP_DEM_GET_SAMPLES_URL,
+                    points = points,
+                    sourceName = NORTH_CAROLINA_ONEMAP_SOURCE_NAME,
+                    valueMultiplier = FEET_TO_METERS
+                )
+            } catch (error: Throwable) {
+                lastError = error
+                val attempt = attemptIndex + 1
+                if (!error.isRetryableElevationServiceError() || attempt == ARCGIS_SAMPLE_RETRY_COUNT) {
+                    DesktopDebugLog.warn(
+                        "ElevationCache",
+                        "NC OneMap sample batch failed batch=$batchNumber attempt=$attempt points=${points.size}: ${error.message ?: error::class.simpleName}"
+                    )
+                    throw error
+                }
+                DesktopDebugLog.warn(
+                    "ElevationCache",
+                    "NC OneMap sample batch retry batch=$batchNumber attempt=$attempt points=${points.size}: ${error.message ?: error::class.simpleName}"
+                )
+                Thread.sleep(1_000L * attempt)
+            }
+        }
+        throw lastError ?: IllegalStateException("NC OneMap sample request failed.")
     }
 
     private fun Throwable.isRetryableElevationServiceError(): Boolean =
@@ -1263,6 +1376,8 @@ private const val USGS_GET_SAMPLES_URL =
     "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/getSamples"
 private const val OREGON_DOGAMI_DTM_GET_SAMPLES_URL =
     "https://gis.dogami.oregon.gov/arcgis/rest/services/lidar/DIGITAL_TERRAIN_MODEL_MOSAIC/ImageServer/getSamples"
+private const val NORTH_CAROLINA_ONEMAP_DEM_GET_SAMPLES_URL =
+    "https://services.gis.nc.gov/secure/rest/services/Elevation/DEM03/ImageServer/getSamples"
 private const val WASHINGTON_DNR_PROJECT_URL = "https://lidarportal.dnr.wa.gov/project"
 private const val WASHINGTON_DNR_DOWNLOAD_URL = "https://lidarportal.dnr.wa.gov/download"
 

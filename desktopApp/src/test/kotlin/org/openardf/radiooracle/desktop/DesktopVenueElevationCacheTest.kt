@@ -37,6 +37,36 @@ class DesktopVenueElevationCacheTest {
     }
 
     @Test
+    fun prefersNorthCarolinaLidarDemCacheOverFinerUsgsCache() {
+        withTemporaryUserHome { home ->
+            val cacheDirectory = home
+                .resolve("Library")
+                .resolve("Application Support")
+                .resolve("Radio-Oracle")
+                .resolve("elevations")
+            Files.createDirectories(cacheDirectory)
+            writeCache(
+                path = cacheDirectory.resolve("a-usgs-1m.roelev.json"),
+                sourceName = "USGS 3DEP",
+                resolutionMeters = 1.0,
+                elevationMeters = 10.0
+            )
+            writeCache(
+                path = cacheDirectory.resolve("b-nc-onemap-3m.roelev.json"),
+                sourceName = "NC OneMap LiDAR DEM",
+                resolutionMeters = 3.0,
+                elevationMeters = 30.0
+            )
+
+            assertEquals(
+                30.0,
+                DesktopVenueElevationCache.elevationMeters(CourseGeoPoint(latitude = 45.0, longitude = -122.0)) ?: -1.0,
+                0.001
+            )
+        }
+    }
+
+    @Test
     fun usesFinerResolutionWithinSameSourceTier() {
         withTemporaryUserHome { home ->
             val cacheDirectory = home
