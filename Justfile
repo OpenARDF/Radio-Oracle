@@ -30,7 +30,7 @@ desktop-close:
     pgrep -fl Radio-Oracle || true
 
 desktop-launch:
-    open -a "{{app_bundle}}"
+    open "{{justfile_directory()}}/{{app_bundle}}"
     sleep 3
     pgrep -fl Radio-Oracle
 
