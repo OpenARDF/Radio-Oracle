@@ -1401,7 +1401,7 @@ fun main(args: Array<String>) = application {
                         }
                     }
                     result.onSuccess { (updatedProject, summary) ->
-                        if (summary.isControlLocationNoOp) {
+                        if (summary.isControlLocationNoOp && !summary.hasLabelConversions) {
                             pendingCourseKmlKmzImportReview = null
                             projectStatusText =
                                 "KML/KMZ import found ${summary.matchedControlPointCount} matching controls, but no protected control locations changed."
@@ -2900,6 +2900,15 @@ private fun CourseKmlKmzImportReviewDialog(
                     Text("Duplicate categories already imported: ${summary.duplicateCategoryCount}")
                 }
                 Text("Matched controls: ${summary.matchedControlPointCount} of ${summary.controlPointCount} point placemarks")
+                if (summary.labelConversions.isNotEmpty()) {
+                    Text("Imported control names to treat as existing Event File labels:")
+                    summary.labelConversions.take(8).forEach { conversion ->
+                        Text("${conversion.importedName} -> ${conversion.eventControlLabel}")
+                    }
+                    if (summary.labelConversions.size > 8) {
+                        Text("Additional likely name matches: ${summary.labelConversions.size - 8}")
+                    }
+                }
                 if (summary.changedControlLocationCount > 0) {
                     Text("Control locations to update: ${summary.changedControlLocationCount}")
                     Text("Protected courses affected by location changes: ${summary.controlLocationAffectedCategoryCount}")
@@ -2932,8 +2941,12 @@ private fun CourseKmlKmzImportReviewDialog(
                 Text(
                     text = if (summary.isDuplicateOnly) {
                         "This file has the same SHA-256 hash as protected route data already stored in the Event File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Event File unchanged."
+                    } else if (summary.hasLabelConversions && summary.importedCategoryCount == 0 && summary.changedControlLocationCount == 0) {
+                        "Keep imported data to use these KML/KMZ names as matches to existing Event File labels. Control labels and public labels are not renamed. No protected route facts or control locations will change. Cancel leaves the Event File unchanged."
                     } else if (summary.importedCategoryCount == 0 && summary.changedControlLocationCount > 0) {
                         "Keep imported data to update protected control locations. Affected protected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Cancel leaves the Event File unchanged."
+                    } else if (summary.hasLabelConversions) {
+                        "Keep imported data to use these KML/KMZ names as matches to existing Event File labels, update protected route facts, protected ideal order, and any changed protected control locations. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged."
                     } else {
                         "Keep imported data to update protected route facts, protected ideal order, and any changed protected control locations. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
                     },
@@ -3811,7 +3824,6 @@ private fun NavigationRail(
 ) {
     val items = DesktopNavigation.currentItems(navState)
     val navigationItems = items.filterNot { it.action == DesktopNavAction.SaveEventFile }
-    val selectedLeafLabel = DesktopNavigation.selectedLeafLabel(navState)
     Column(
         modifier = Modifier
             .width(220.dp)
@@ -3827,29 +3839,6 @@ private fun NavigationRail(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            selectedLeafLabel?.let { label ->
-                Button(
-                    onClick = {},
-                    enabled = false,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 34.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        disabledBackgroundColor = DesktopPalette.SecondaryVariant,
-                        disabledContentColor = DesktopPalette.White
-                    )
-                ) {
-                    Text(
-                        text = label,
-                        fontSize = 13.sp,
-                        lineHeight = 15.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
             navigationItems.forEach { item ->
                 val isSelected = item.id == navState.selectedItemId && item.children.isEmpty()
                 val isNavigationEnabled = DesktopNavigation.isItemEnabled(item, navigationReadiness)
@@ -4190,6 +4179,7 @@ private fun SectionWorkspace(
                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                 onRetrieveMissingElevations = onRetrieveMissingCourseElevations,
+                onImportControlsRouteKmlKmz = onImportControlsRouteKmlKmz,
                 onUnlock = onUnlockProtectedCourseOrder,
                 onUseCalculatedRoute = onUseCalculatedCourseAnalysisRoute,
                 onApplyFoxRenumberingOnly = onApplyCourseAnalysisFoxRenumberingOnly
@@ -6687,6 +6677,7 @@ private fun CourseAnalysisPanel(
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onRetrieveMissingElevations: (String) -> Unit,
+    onImportControlsRouteKmlKmz: () -> Unit,
     onUnlock: (String) -> Boolean,
     onUseCalculatedRoute: (DesktopCourseCalculatedRouteApplication) -> String,
     onApplyFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String
@@ -6754,6 +6745,19 @@ private fun CourseAnalysisPanel(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(onClick = onImportControlsRouteKmlKmz) {
+                ButtonLabel("Import Controls/Route KML/KMZ...")
+            }
+            Text(
+                text = "Import a category route before running analysis.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        }
         if (categories.isEmpty()) {
             Text(
                 text = "Import protected controls/route KML/KMZ data for a category before running course analysis.",

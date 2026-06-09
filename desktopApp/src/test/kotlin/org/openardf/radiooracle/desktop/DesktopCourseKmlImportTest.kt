@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import java.nio.file.Files
@@ -88,6 +89,73 @@ class DesktopCourseKmlImportTest {
         val category = updated.raceData.categories.single().category
         assertEquals(2, summary.matchedControlPointCount)
         assertEquals("1 M", DesktopProtectedCourseOrder.decrypt(category.encryptedIdealOrder!!, "course-key"))
+    }
+
+    @Test
+    fun reportsLikelyControlLabelConversionsBeforeImportIsKept() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithCompactFoxLabels())
+        val baseProject = EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00")
+            .withControlPublicLabel(siCode = 31, publicLabel = "Fox 1")
+            .withControlPublicLabel(siCode = 32, publicLabel = "Fox 2")
+        val project = EventProjectEditor.addCategory(
+            baseProject,
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val category = updated.raceData.categories.single().category
+        assertEquals(2, summary.matchedControlPointCount)
+        assertEquals(
+            listOf(
+                DesktopCourseKmlLabelConversion("Transmitter 1", "Fox 1"),
+                DesktopCourseKmlLabelConversion("FOX2", "Fox 2")
+            ),
+            summary.labelConversions
+        )
+        assertEquals(true, summary.hasLabelConversions)
+        assertEquals("'Fox 1' 'Fox 2'", DesktopProtectedCourseOrder.decrypt(category.encryptedIdealOrder!!, "course-key"))
+        assertEquals("1", updated.raceData.controls.single { it.siCode == 31 }.label)
+        assertEquals("Fox 1", updated.raceData.controls.single { it.siCode == 31 }.publicLabel)
+        assertEquals("2", updated.raceData.controls.single { it.siCode == 32 }.label)
+        assertEquals("Fox 2", updated.raceData.controls.single { it.siCode == 32 }.publicLabel)
+    }
+
+    @Test
+    fun doesNotGuessNumberBasedControlMatchWhenAmbiguous() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithAmbiguousControlNumber())
+        val baseProject = EventProjectEditor.addControl(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            controlId = "control-fast-1",
+            label = "F1",
+            siCode = "41",
+            type = ControlPointType.CONTROL
+        )
+        val project = EventProjectEditor.addCategory(
+            baseProject,
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val category = updated.raceData.categories.single().category
+        assertEquals(0, summary.matchedControlPointCount)
+        assertEquals(emptyList<DesktopCourseKmlLabelConversion>(), summary.labelConversions)
+        assertEquals(null, category.encryptedIdealOrder)
     }
 
     @Test
@@ -640,6 +708,56 @@ class DesktopCourseKmlImportTest {
         </kml>
         """.trimIndent()
 
+    private fun sampleKmlWithCompactFoxLabels(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>Transmitter 1</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>FOX2</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9990,39.0000,0
+                  -94.9980,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleKmlWithAmbiguousControlNumber(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>Transmitter 1</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9990,39.0000,0
+                  -94.9980,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
     private fun controlsOnlyKml(longitude31: Double, longitude32: Double): String =
         """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -656,4 +774,21 @@ class DesktopCourseKmlImportTest {
           </Document>
         </kml>
         """.trimIndent()
+
+    private fun org.openardf.radiooracle.shared.event.EventProjectFile.withControlPublicLabel(
+        siCode: Int,
+        publicLabel: String
+    ): org.openardf.radiooracle.shared.event.EventProjectFile {
+        val control = raceData.controls.single { it.siCode == siCode }
+        return EventProjectEditor.updateControl(
+            projectFile = this,
+            controlId = control.id,
+            label = control.label,
+            siCode = control.siCode.toString(),
+            type = control.type,
+            scored = control.scored,
+            publicLabel = publicLabel,
+            notes = control.notes.orEmpty()
+        )
+    }
 }

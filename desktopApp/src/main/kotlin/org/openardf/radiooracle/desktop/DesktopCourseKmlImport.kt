@@ -42,6 +42,7 @@ data class DesktopCourseKmlImportSummary(
     val routeCount: Int,
     val controlPointCount: Int,
     val matchedControlPointCount: Int,
+    val labelConversions: List<DesktopCourseKmlLabelConversion>,
     val matchedCategoryIds: List<String>,
     val matchedCategoryNames: List<String>,
     val routeElevationPointCount: Int,
@@ -67,7 +68,15 @@ data class DesktopCourseKmlImportSummary(
             duplicateCategoryCount == 0 &&
             changedControlLocationCount == 0 &&
             matchedControlPointCount > 0
+
+    val hasLabelConversions: Boolean
+        get() = labelConversions.isNotEmpty()
 }
+
+data class DesktopCourseKmlLabelConversion(
+    val importedName: String,
+    val eventControlLabel: String
+)
 
 data class DesktopRouteElevationProgress(
     val completedPointCount: Int,
@@ -102,7 +111,8 @@ object DesktopCourseKmlImporter {
             "CourseKml",
             "Import parsed ${path.fileName}: hash=${sourceSha256.shortHash()} pointPlacemarks=${courseData.controls.size} routePlacemarks=${courseData.routes.size}"
         )
-        val controls = matchedControls(courseData.controls, projectFile.raceData.controls)
+        val matchedControlResult = matchedControls(courseData.controls, projectFile.raceData.controls)
+        val controls = matchedControlResult.controls
         val controlsByLabel = controls.associateBy { it.label.normalizedCourseName() }
         val categories = projectFile.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
         val courseInfoByCategoryId = projectFile.raceData.categories.mapNotNull { categoryData ->
@@ -250,6 +260,7 @@ object DesktopCourseKmlImporter {
             routeCount = courseData.routes.size,
             controlPointCount = courseData.controls.size,
             matchedControlPointCount = controls.size,
+            labelConversions = matchedControlResult.labelConversions,
             matchedCategoryIds = matchedCategoryIds,
             matchedCategoryNames = matchedCategoryNames,
             routeElevationPointCount = routeElevationPointCount,
@@ -262,7 +273,7 @@ object DesktopCourseKmlImporter {
         )
         DesktopDebugLog.info(
             "CourseKml",
-            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} changedControlLocations=${summary.changedControlLocationCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
+            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} changedControlLocations=${summary.changedControlLocationCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} labelConversions=${summary.labelConversions.size} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
         )
         return updatedProject to summary
     }
@@ -574,26 +585,40 @@ object DesktopCourseKmlImporter {
     private fun matchedControls(
         importedControls: List<CourseControlPoint>,
         eventControls: List<EventControl>
-    ): List<CourseMatchedControl> {
+    ): CourseMatchedControlResult {
         // Control names from map files are user-authored, so match the visible
         // identifiers users can see in the Event File: SI code, control label,
         // and public label. Duplicate tokens are ignored to avoid guessing.
-        val controlsByToken = eventControls.flatMap { control ->
+        val controlTokens = eventControls.flatMap { control ->
             listOfNotNull(
-                control.siCode.toString() to control,
-                control.label.takeIf { it.isNotBlank() }?.let { it to control },
-                control.publicLabel?.takeIf { it.isNotBlank() }?.let { it to control }
+                ControlMatchToken(control.siCode.toString(), control),
+                control.label.takeIf { it.isNotBlank() }?.let { ControlMatchToken(it, control) },
+                control.publicLabel?.takeIf { it.isNotBlank() }?.let { ControlMatchToken(it, control) }
             )
         }
-            .groupBy { (token, _) -> token.normalizedCourseName() }
-            .mapNotNull { (token, matches) ->
-                matches.map { (_, control) -> control.id }.distinct().singleOrNull()?.let {
-                    token to matches.first().second
-                }
+        val labelTokens = eventControls.flatMap { control ->
+            listOfNotNull(
+                control.label.takeIf { it.isNotBlank() }?.let { ControlMatchToken(it, control) },
+                control.publicLabel?.takeIf { it.isNotBlank() }?.let { ControlMatchToken(it, control) }
+            )
+        }
+        val controlsByToken = uniqueControlTokensBy(controlTokens) { it.token.normalizedCourseName() }
+        val controlsByCompactToken = uniqueControlTokensBy(controlTokens) { it.token.compactCourseName() }
+        val controlsByNumber = uniqueControlTokensBy(labelTokens) { it.token.singleEmbeddedNumber()?.toString().orEmpty() }
+            .filterKeys { it.isNotBlank() }
+        val labelConversions = mutableListOf<DesktopCourseKmlLabelConversion>()
+        val controls = importedControls.mapNotNull { imported ->
+            val exactMatch = controlsByToken[imported.name.normalizedCourseName()]
+            val match = exactMatch
+                ?: controlsByCompactToken[imported.name.compactCourseName()]
+                ?: imported.name.singleEmbeddedNumber()?.let { number -> controlsByNumber[number.toString()] }
+            match?.takeIf { imported.name.trim() != it.token.trim() }?.let { token ->
+                labelConversions += DesktopCourseKmlLabelConversion(
+                    importedName = imported.name,
+                    eventControlLabel = token.control.displayCourseLabel()
+                )
             }
-            .toMap()
-        return importedControls.mapNotNull { imported ->
-            controlsByToken[imported.name.normalizedCourseName()]?.let { control ->
+            match?.control?.let { control ->
                 CourseMatchedControl(
                     controlId = control.id,
                     label = control.idealOrderToken(),
@@ -603,6 +628,24 @@ object DesktopCourseKmlImporter {
                 )
             }
         }
+        return CourseMatchedControlResult(
+            controls = controls,
+            labelConversions = labelConversions.distinct()
+        )
+    }
+
+    private fun uniqueControlTokensBy(
+        controlTokens: List<ControlMatchToken>,
+        key: (ControlMatchToken) -> String
+    ): Map<String, ControlMatchToken> {
+        return controlTokens
+            .groupBy(key)
+            .mapNotNull { (token, matches) ->
+                matches.map { it.control.id }.distinct().singleOrNull()?.let {
+                    token to matches.first()
+                }
+            }
+            .toMap()
     }
 
     private fun controlLocationUpdates(
@@ -948,6 +991,16 @@ private data class CourseMatchedControl(
     val point: CourseGeoPoint
 )
 
+private data class CourseMatchedControlResult(
+    val controls: List<CourseMatchedControl>,
+    val labelConversions: List<DesktopCourseKmlLabelConversion>
+)
+
+private data class ControlMatchToken(
+    val token: String,
+    val control: EventControl
+)
+
 private data class CategoryRouteElevationTarget(
     val categoryId: String,
     val categoryName: String,
@@ -973,13 +1026,24 @@ private fun String.shortHash(): String =
     take(12)
 
 private fun EventControl.idealOrderToken(): String {
-    val label = publicLabel?.trim()?.takeIf { it.isNotEmpty() } ?: label
+    val label = displayCourseLabel()
     val needsQuoting = label.any { it.isWhitespace() || it == ',' || it == ';' }
     return if (needsQuoting) "'$label'" else label
 }
 
+private fun EventControl.displayCourseLabel(): String =
+    publicLabel?.trim()?.takeIf { it.isNotEmpty() } ?: label
+
 private fun String.normalizedCourseName(): String =
     trim().lowercase().replace(Regex("\\s+"), " ")
+
+private fun String.compactCourseName(): String =
+    normalizedCourseName().replace(" ", "")
+
+private fun String.singleEmbeddedNumber(): Int? {
+    val numbers = Regex("\\d+").findAll(this).mapNotNull { it.value.toIntOrNull() }.toList()
+    return numbers.singleOrNull()
+}
 
 private fun org.w3c.dom.Node.childText(tagName: String): String? =
     childNodes.asSequence()
