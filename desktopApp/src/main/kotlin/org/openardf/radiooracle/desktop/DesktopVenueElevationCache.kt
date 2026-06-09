@@ -52,7 +52,7 @@ enum class DesktopVenueElevationCacheSource(
     Usgs3Dep("USGS 3DEP"),
     WashingtonDnrLidarDtm("Washington DNR LiDAR DTM"),
     OregonDogamiLidarDtm("Oregon DOGAMI LiDAR DTM"),
-    NorthCarolinaOneMapLidarDem("NC OneMap LiDAR DEM")
+    NorthCarolinaStateLidarPortalDem("NC State University Libraries / GIS Portal LiDAR")
 }
 
 data class DesktopVenueElevationBoundingBox(
@@ -158,10 +158,9 @@ object DesktopVenueElevationCache {
     private const val DEFAULT_SOURCE_NAME = "USGS 3DEP"
     private const val WASHINGTON_DNR_SOURCE_NAME = "Washington DNR LiDAR DTM"
     private const val OREGON_DOGAMI_SOURCE_NAME = "Oregon DOGAMI LiDAR DTM"
-    private const val NORTH_CAROLINA_ONEMAP_SOURCE_NAME = "NC OneMap LiDAR DEM"
+    private const val NORTH_CAROLINA_STATE_PORTAL_SOURCE_NAME = "NC State University Libraries / GIS Portal LiDAR"
     private const val ARCGIS_SAMPLE_BATCH_SIZE = 250
     private const val ARCGIS_SAMPLE_RETRY_COUNT = 4
-    private const val FEET_TO_METERS = 0.3048
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
     private val httpClient: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(20))
@@ -319,6 +318,7 @@ object DesktopVenueElevationCache {
         resolutionMeters: Double,
         bufferMeters: Double,
         source: DesktopVenueElevationCacheSource = DesktopVenueElevationCacheSource.Usgs3Dep,
+        sourceUrl: String = "",
         onProgress: (DesktopVenueElevationCacheProgress) -> Unit = {}
     ): DesktopVenueElevationCacheSummary =
         when (source) {
@@ -346,12 +346,13 @@ object DesktopVenueElevationCache {
                     bufferMeters = bufferMeters,
                     onProgress = onProgress
                 )
-            DesktopVenueElevationCacheSource.NorthCarolinaOneMapLidarDem ->
-                downloadNorthCarolinaOneMapLidarDem(
+            DesktopVenueElevationCacheSource.NorthCarolinaStateLidarPortalDem ->
+                downloadNorthCarolinaLidarPortalDem(
                     venueName = venueName,
                     boundingBox = boundingBox,
                     resolutionMeters = resolutionMeters,
                     bufferMeters = bufferMeters,
+                    sourceUrl = sourceUrl,
                     onProgress = onProgress
                 )
         }
@@ -459,11 +460,16 @@ object DesktopVenueElevationCache {
                 "${cacheSlug(cleanVenueName)}-wa-dnr-dtm-${dataset.id}-${Instant.now().toString().replace(Regex("[^0-9TZ]"), "")}.zip"
             )
             val downloadUri = washingtonDnrDownloadUri(estimate.boundingBox, dataset.id)
-            downloadFile(downloadUri, zipPath)
+            downloadFile(downloadUri, zipPath, WASHINGTON_DNR_SOURCE_NAME)
             coroutineContext.ensureActive()
             val workDirectory = Files.createTempDirectory("radio-oracle-wa-dnr-dtm-")
             try {
-                val rasterPath = extractDnrRaster(workDirectory, zipPath, gdal)
+                val rasterPath = extractRasterArchive(
+                    workDirectory = workDirectory,
+                    zipPath = zipPath,
+                    gdal = gdal,
+                    sourceLabel = WASHINGTON_DNR_SOURCE_NAME
+                )
                 coroutineContext.ensureActive()
                 val elevations = gdal.sampleWgs84(rasterPath, points)
                 onProgress(
@@ -586,14 +592,28 @@ object DesktopVenueElevationCache {
             )
         }
 
-    private suspend fun downloadNorthCarolinaOneMapLidarDem(
+    private suspend fun downloadNorthCarolinaLidarPortalDem(
         venueName: String,
         boundingBox: DesktopVenueElevationBoundingBox,
         resolutionMeters: Double,
         bufferMeters: Double,
+        sourceUrl: String,
         onProgress: (DesktopVenueElevationCacheProgress) -> Unit = {}
     ): DesktopVenueElevationCacheSummary =
         withContext(Dispatchers.IO) {
+            val trimmedSourceUrl = sourceUrl.trim()
+            val portalUri = runCatching { URI(trimmedSourceUrl) }.getOrElse {
+                error("NC State GIS portal requires a valid URL to a GeoTIFF raster or GeoTIFF ZIP file.")
+            }
+            if (trimmedSourceUrl.isBlank()) {
+                error("NC State GIS portal requires a valid raster URL.")
+            }
+            val sourceSuffix = sourceUrlToFileSuffix(trimmedSourceUrl)
+            if (sourceSuffix == ".bin") {
+                error(
+                    "NC State GIS portal requires a raster URL ending in .tif, .tiff, or .zip."
+                )
+            }
             val cleanVenueName = venueName.trim().ifBlank { "Venue" }
             val estimate = estimate(boundingBox, resolutionMeters, bufferMeters)
             val points = estimate.gridPoints()
@@ -604,29 +624,36 @@ object DesktopVenueElevationCache {
                     totalPointCount = points.size
                 )
             )
-            val elevations = MutableList<Double?>(points.size) { null }
-            var completed = 0
-            points.chunked(ARCGIS_SAMPLE_BATCH_SIZE).forEachIndexed { chunkIndex, chunk ->
-                coroutineContext.ensureActive()
-                val values = northCarolinaOneMapSamplesWithRetry(chunk, chunkIndex + 1)
-                values.forEachIndexed { index, value ->
-                    elevations[chunkIndex * ARCGIS_SAMPLE_BATCH_SIZE + index] = value
-                }
-                completed += chunk.size
-                onProgress(
-                    DesktopVenueElevationCacheProgress(
-                        venueName = cleanVenueName,
-                        completedPointCount = completed,
-                        totalPointCount = points.size
-                    )
+            val sourceDirectory = cacheDirectory().resolve("sources")
+            Files.createDirectories(sourceDirectory)
+            val gdal = DesktopGdalTools.requireAvailable()
+            val workDirectory = Files.createTempDirectory("radio-oracle-nc-state-portal-")
+            val elevations = try {
+                val sourcePath = sourceDirectory.resolve(
+                    "${cacheSlug(cleanVenueName)}-nc-portal-${Instant.now().toString().replace(Regex("[^0-9TZ]"), "")}$sourceSuffix"
                 )
+                downloadFile(portalUri, sourcePath, NORTH_CAROLINA_STATE_PORTAL_SOURCE_NAME)
+                coroutineContext.ensureActive()
+                val rasterPath = if (isZipArchive(sourcePath)) {
+                    extractRasterArchive(
+                        workDirectory = workDirectory,
+                        zipPath = sourcePath,
+                        gdal = gdal,
+                        sourceLabel = NORTH_CAROLINA_STATE_PORTAL_SOURCE_NAME
+                    )
+                } else {
+                    sourcePath
+                }
+                gdal.sampleWgs84(rasterPath, points)
+            } finally {
+                runCatching { deleteRecursively(workDirectory) }
             }
             val file = DesktopVenueElevationCacheFile(
                 metadata = DesktopVenueElevationCacheMetadata(
                     version = CACHE_VERSION,
                     venueName = cleanVenueName,
-                    sourceName = NORTH_CAROLINA_ONEMAP_SOURCE_NAME,
-                    sourceUrl = NORTH_CAROLINA_ONEMAP_DEM_GET_SAMPLES_URL,
+                    sourceName = NORTH_CAROLINA_STATE_PORTAL_SOURCE_NAME,
+                    sourceUrl = trimmedSourceUrl,
                     resolutionMeters = resolutionMeters,
                     rowCount = estimate.rowCount,
                     columnCount = estimate.columnCount,
@@ -643,7 +670,7 @@ object DesktopVenueElevationCache {
             val hash = fileSha256(path)
             DesktopDebugLog.info(
                 "ElevationCache",
-                "Downloaded venue=$cleanVenueName source=$NORTH_CAROLINA_ONEMAP_SOURCE_NAME resolution=${resolutionMeters}m " +
+                "Downloaded venue=$cleanVenueName source=$NORTH_CAROLINA_STATE_PORTAL_SOURCE_NAME resolution=${resolutionMeters}m " +
                     "points=${points.size} resolved=${elevations.count { it != null }} file=${path.fileName} hash=${hash.take(12)}"
             )
             DesktopVenueElevationCacheSummary(
@@ -653,7 +680,7 @@ object DesktopVenueElevationCache {
                 columnCount = estimate.columnCount,
                 pointCount = points.size,
                 resolvedPointCount = elevations.count { it != null },
-                sourceName = NORTH_CAROLINA_ONEMAP_SOURCE_NAME,
+                sourceName = NORTH_CAROLINA_STATE_PORTAL_SOURCE_NAME,
                 resolutionMeters = resolutionMeters,
                 fileSha256 = hash
             )
@@ -938,36 +965,6 @@ object DesktopVenueElevationCache {
         throw lastError ?: IllegalStateException("Oregon DOGAMI sample request failed.")
     }
 
-    private fun northCarolinaOneMapSamplesWithRetry(points: List<CourseGeoPoint>, batchNumber: Int): List<Double?> {
-        var lastError: Throwable? = null
-        repeat(ARCGIS_SAMPLE_RETRY_COUNT) { attemptIndex ->
-            try {
-                return arcGisImageSamples(
-                    serviceUrl = NORTH_CAROLINA_ONEMAP_DEM_GET_SAMPLES_URL,
-                    points = points,
-                    sourceName = NORTH_CAROLINA_ONEMAP_SOURCE_NAME,
-                    valueMultiplier = FEET_TO_METERS
-                )
-            } catch (error: Throwable) {
-                lastError = error
-                val attempt = attemptIndex + 1
-                if (!error.isRetryableElevationServiceError() || attempt == ARCGIS_SAMPLE_RETRY_COUNT) {
-                    DesktopDebugLog.warn(
-                        "ElevationCache",
-                        "NC OneMap sample batch failed batch=$batchNumber attempt=$attempt points=${points.size}: ${error.message ?: error::class.simpleName}"
-                    )
-                    throw error
-                }
-                DesktopDebugLog.warn(
-                    "ElevationCache",
-                    "NC OneMap sample batch retry batch=$batchNumber attempt=$attempt points=${points.size}: ${error.message ?: error::class.simpleName}"
-                )
-                Thread.sleep(1_000L * attempt)
-            }
-        }
-        throw lastError ?: IllegalStateException("NC OneMap sample request failed.")
-    }
-
     private fun Throwable.isRetryableElevationServiceError(): Boolean =
         message?.contains("HTTP 502") == true ||
             message?.contains("HTTP 503") == true ||
@@ -1172,7 +1169,7 @@ object DesktopVenueElevationCache {
     private fun Double.decimal(places: Int): String =
         "%.${places}f".format(Locale.US, this)
 
-    private fun downloadFile(uri: URI, path: Path) {
+    private fun downloadFile(uri: URI, path: Path, sourceName: String) {
         val request = HttpRequest.newBuilder(uri)
             .header("User-Agent", "Radio-Oracle Desktop")
             .GET()
@@ -1180,10 +1177,10 @@ object DesktopVenueElevationCache {
             .build()
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofFile(path))
         require(response.statusCode() in 200..299) {
-            "Washington DNR DTM download returned HTTP ${response.statusCode()}."
+            "$sourceName download returned HTTP ${response.statusCode()}."
         }
         require(Files.size(path) > 0L) {
-            "Washington DNR DTM download returned an empty file."
+            "$sourceName download returned an empty file."
         }
     }
 
@@ -1198,10 +1195,36 @@ object DesktopVenueElevationCache {
         }
     }
 
-    private fun extractDnrRaster(
+    private fun isZipArchive(path: Path): Boolean {
+        return runCatching {
+            Files.newInputStream(path).use { input ->
+                val header = ByteArray(4)
+                val readCount = input.read(header)
+                readCount == 4 &&
+                    header[0] == 0x50.toByte() &&
+                    header[1] == 0x4B.toByte() &&
+                    header[2] == 0x03.toByte() &&
+                    header[3] == 0x04.toByte()
+            }
+        }.getOrElse { false }
+    }
+
+    private fun sourceUrlToFileSuffix(sourceUrl: String): String {
+        val path = runCatching { URI(sourceUrl).path.lowercase(Locale.US) }.getOrNull()
+        return if (path?.endsWith(".zip") == true) {
+            ".zip"
+        } else if (path?.endsWith(".tif") == true || path?.endsWith(".tiff") == true) {
+            ".tif"
+        } else {
+            ".bin"
+        }
+    }
+
+    private fun extractRasterArchive(
         workDirectory: Path,
         zipPath: Path,
-        gdal: DesktopGdalTools
+        gdal: DesktopGdalTools,
+        sourceLabel: String
     ): Path {
         val extractDirectory = workDirectory.resolve("extract")
         Files.createDirectories(extractDirectory)
@@ -1214,7 +1237,7 @@ object DesktopVenueElevationCache {
                 }
                 val output = extractDirectory.resolve(fileName).normalize()
                 require(output.startsWith(extractDirectory)) {
-                    "Washington DNR ZIP entry is outside the extraction directory: ${entry.name}"
+                    "$sourceLabel ZIP entry is outside the extraction directory: ${entry.name}"
                 }
                 Files.copy(zip, output, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
             }
@@ -1230,7 +1253,7 @@ object DesktopVenueElevationCache {
                 .toList()
         }
         require(rasters.isNotEmpty()) {
-            "Washington DNR DTM package did not contain GeoTIFF raster files."
+            "$sourceLabel download package did not contain GeoTIFF raster files."
         }
         if (rasters.size == 1) {
             return rasters.single()
@@ -1376,10 +1399,9 @@ private const val USGS_GET_SAMPLES_URL =
     "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/getSamples"
 private const val OREGON_DOGAMI_DTM_GET_SAMPLES_URL =
     "https://gis.dogami.oregon.gov/arcgis/rest/services/lidar/DIGITAL_TERRAIN_MODEL_MOSAIC/ImageServer/getSamples"
-private const val NORTH_CAROLINA_ONEMAP_DEM_GET_SAMPLES_URL =
-    "https://services.gis.nc.gov/secure/rest/services/Elevation/DEM03/ImageServer/getSamples"
 private const val WASHINGTON_DNR_PROJECT_URL = "https://lidarportal.dnr.wa.gov/project"
 private const val WASHINGTON_DNR_DOWNLOAD_URL = "https://lidarportal.dnr.wa.gov/download"
+private const val FEET_TO_METERS = 0.3048
 
 private fun metersPerDegreeLongitude(latitude: Double): Double =
     METERS_PER_DEGREE_LATITUDE * cos(Math.toRadians(latitude))

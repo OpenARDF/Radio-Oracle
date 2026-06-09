@@ -1291,8 +1291,13 @@ fun main(args: Array<String>) = application {
             boundingBox: DesktopVenueElevationBoundingBox,
             resolutionMeters: Double,
             bufferMeters: Double,
-            source: DesktopVenueElevationCacheSource
+            source: DesktopVenueElevationCacheSource,
+            sourceUrl: String = ""
         ) {
+            if (source == DesktopVenueElevationCacheSource.NorthCarolinaStateLidarPortalDem && sourceUrl.isBlank()) {
+                projectStatusText = "NC State GIS Portal requires a source URL."
+                return
+            }
             if (venueElevationCacheJob?.isActive == true) {
                 return
             }
@@ -1308,14 +1313,15 @@ fun main(args: Array<String>) = application {
                     DesktopVenueElevationCache.download(
                         venueName = cleanVenueName,
                         boundingBox = boundingBox,
-                        resolutionMeters = resolutionMeters,
-                        bufferMeters = bufferMeters,
-                        source = source,
-                        onProgress = { progress ->
-                            venueElevationCacheProgress = VenueElevationCacheProgressUiState(
-                                venueName = progress.venueName,
-                                completedPointCount = progress.completedPointCount,
-                                totalPointCount = progress.totalPointCount
+                    resolutionMeters = resolutionMeters,
+                    bufferMeters = bufferMeters,
+                    source = source,
+                    sourceUrl = sourceUrl,
+                    onProgress = { progress ->
+                        venueElevationCacheProgress = VenueElevationCacheProgressUiState(
+                            venueName = progress.venueName,
+                            completedPointCount = progress.completedPointCount,
+                            totalPointCount = progress.totalPointCount
                             )
                         }
                     )
@@ -3530,7 +3536,7 @@ private fun RadioOManagerDesktopApp(
     protectedIdealOrderByCategoryId: Map<String, String> = emptyMap(),
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
     onRetrieveMissingCourseElevations: (String) -> Unit = {},
-    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource) -> Unit = { _, _, _, _, _ -> },
+    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit = { _, _, _, _, _, _ -> },
     onOpenVenueElevationCacheFolder: () -> Unit = {},
     elevationCacheRefreshToken: Int = 0,
     onUnlockProtectedCourseOrder: (String) -> Boolean = { false },
@@ -4190,7 +4196,7 @@ private fun SectionWorkspace(
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onRetrieveMissingCourseElevations: (String) -> Unit,
-    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource) -> Unit,
+    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
     onOpenVenueElevationCacheFolder: () -> Unit,
     elevationCacheRefreshToken: Int,
     onUnlockProtectedCourseOrder: (String) -> Boolean,
@@ -6453,7 +6459,7 @@ private fun VenueElevationCachePanel(
     projectFile: EventProjectFile,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     refreshToken: Int,
-    onDownloadCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource) -> Unit,
+    onDownloadCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
     onOpenCacheFolder: () -> Unit
 ) {
     val importedBounds = remember(protectedCourseInfoByCategoryId) {
@@ -6469,6 +6475,7 @@ private fun VenueElevationCachePanel(
     var maxLongitudeDraft by remember { mutableStateOf("") }
     var bufferMetersDraft by remember { mutableStateOf("500") }
     var resolutionMetersDraft by remember { mutableStateOf("10") }
+    var northCarolinaPortalSourceUrlDraft by remember { mutableStateOf("") }
     val spotCheckScope = rememberCoroutineScope()
     var spotCheckInProgress by remember { mutableStateOf<DesktopVenueElevationCacheListing?>(null) }
     var spotCheckResult by remember { mutableStateOf<DesktopVenueElevationSpotCheckSummary?>(null) }
@@ -6580,7 +6587,8 @@ private fun VenueElevationCachePanel(
                         bounds,
                         resolution,
                         bufferMeters,
-                        DesktopVenueElevationCacheSource.Usgs3Dep
+                        DesktopVenueElevationCacheSource.Usgs3Dep,
+                        ""
                     )
                 },
                 enabled = parsedBoundingBox != null && resolutionMeters != null && resolutionMeters > 0.0
@@ -6597,7 +6605,8 @@ private fun VenueElevationCachePanel(
                             bounds,
                             resolution,
                             bufferMeters,
-                            DesktopVenueElevationCacheSource.WashingtonDnrLidarDtm
+                            DesktopVenueElevationCacheSource.WashingtonDnrLidarDtm,
+                            ""
                         )
                     },
                     enabled = parsedBoundingBox != null && resolutionMeters != null && resolutionMeters > 0.0
@@ -6613,7 +6622,8 @@ private fun VenueElevationCachePanel(
                             bounds,
                             resolution,
                             bufferMeters,
-                            DesktopVenueElevationCacheSource.OregonDogamiLidarDtm
+                            DesktopVenueElevationCacheSource.OregonDogamiLidarDtm,
+                            ""
                         )
                     },
                     enabled = parsedBoundingBox != null && resolutionMeters != null && resolutionMeters > 0.0
@@ -6629,14 +6639,29 @@ private fun VenueElevationCachePanel(
                             bounds,
                             resolution,
                             bufferMeters,
-                            DesktopVenueElevationCacheSource.NorthCarolinaOneMapLidarDem
+                            DesktopVenueElevationCacheSource.NorthCarolinaStateLidarPortalDem,
+                            northCarolinaPortalSourceUrlDraft
                         )
                     },
-                    enabled = parsedBoundingBox != null && resolutionMeters != null && resolutionMeters > 0.0
+                    enabled = parsedBoundingBox != null &&
+                        resolutionMeters != null &&
+                        resolutionMeters > 0.0 &&
+                        northCarolinaPortalSourceUrlDraft.isNotBlank()
                 ) {
-                    ButtonLabel("Download NC OneMap LiDAR DEM")
+                    ButtonLabel("Download NC State GIS Portal LiDAR")
                 }
             }
+            LabeledTextField(
+                "NC State GIS portal raster URL",
+                northCarolinaPortalSourceUrlDraft,
+                { northCarolinaPortalSourceUrlDraft = it },
+                Modifier.width(640.dp)
+            )
+            Text(
+                text = "Provide a direct download URL to a GeoTIFF raster (.tif/.tiff) or GeoTIFF ZIP (.zip) from NC State University Libraries / GIS Portal.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
         }
         Text(
             text = "Cache folder: ${DesktopVenueElevationCache.cacheDirectory()}",

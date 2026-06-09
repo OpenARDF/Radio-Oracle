@@ -52,8 +52,8 @@ class DesktopVenueElevationCacheTest {
                 elevationMeters = 10.0
             )
             writeCache(
-                path = cacheDirectory.resolve("b-nc-onemap-3m.roelev.json"),
-                sourceName = "NC OneMap LiDAR DEM",
+                path = cacheDirectory.resolve("b-nc-state-portal-3m.roelev.json"),
+                sourceName = "NC State University Libraries / GIS Portal LiDAR",
                 resolutionMeters = 3.0,
                 elevationMeters = 30.0
             )
