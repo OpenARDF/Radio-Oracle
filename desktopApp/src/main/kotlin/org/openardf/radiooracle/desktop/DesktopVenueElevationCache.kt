@@ -170,7 +170,6 @@ object DesktopVenueElevationCache {
     private const val OREGON_DOGAMI_SOURCE_NAME = "Oregon DOGAMI LiDAR DTM"
     private const val ARCGIS_SAMPLE_BATCH_SIZE = 250
     private const val ARCGIS_SAMPLE_RETRY_COUNT = 4
-    private const val LOCAL_RASTER_SAMPLE_CHUNK_SIZE = 50_000
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
     private val httpClient: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(20))
@@ -666,28 +665,28 @@ object DesktopVenueElevationCache {
                     sourcePath.toString()
                 }
                 elevationUnits = gdal.elevationUnits(rasterPath)
-                val elevations = MutableList<Double?>(points.size) { null }
-                var completed = 0
-                points.chunked(LOCAL_RASTER_SAMPLE_CHUNK_SIZE).forEachIndexed { chunkIndex, chunk ->
-                    coroutineContext.ensureActive()
-                    val values = gdal.sampleWgs84(
-                        rasterPath = rasterPath,
-                        points = chunk,
-                        valueMultiplier = elevationUnits.valueMultiplier
-                    )
-                    values.forEachIndexed { index, value ->
-                        elevations[chunkIndex * LOCAL_RASTER_SAMPLE_CHUNK_SIZE + index] = value
+                gdal.sampleWgs84(
+                    rasterPath = rasterPath,
+                    points = points,
+                    valueMultiplier = elevationUnits.valueMultiplier,
+                    onSampledCount = { completed ->
+                        onProgress(
+                            DesktopVenueElevationCacheProgress(
+                                venueName = cleanVenueName,
+                                completedPointCount = completed,
+                                totalPointCount = points.size
+                            )
+                        )
                     }
-                    completed += chunk.size
+                ).also {
                     onProgress(
                         DesktopVenueElevationCacheProgress(
                             venueName = cleanVenueName,
-                            completedPointCount = completed,
+                            completedPointCount = points.size,
                             totalPointCount = points.size
                         )
                     )
                 }
-                elevations
             } finally {
                 runCatching { deleteRecursively(workDirectory) }
             }
@@ -1511,6 +1510,7 @@ private const val WASHINGTON_DNR_PROJECT_URL = "https://lidarportal.dnr.wa.gov/p
 private const val WASHINGTON_DNR_DOWNLOAD_URL = "https://lidarportal.dnr.wa.gov/download"
 private const val FEET_TO_METERS = 0.3048
 private const val US_SURVEY_FOOT_TO_METERS = 1200.0 / 3937.0
+private const val GDAL_SAMPLE_PROGRESS_INTERVAL = 5_000
 
 private data class DesktopGdalElevationUnits(
     val label: String,
@@ -1538,15 +1538,17 @@ private class DesktopGdalTools(
     suspend fun sampleWgs84(
         rasterPath: Path,
         points: List<CourseGeoPoint>,
-        valueMultiplier: Double = 1.0
+        valueMultiplier: Double = 1.0,
+        onSampledCount: (Int) -> Unit = {}
     ): List<Double?> {
-        return sampleWgs84(rasterPath.toString(), points, valueMultiplier)
+        return sampleWgs84(rasterPath.toString(), points, valueMultiplier, onSampledCount)
     }
 
     suspend fun sampleWgs84(
         rasterPath: String,
         points: List<CourseGeoPoint>,
-        valueMultiplier: Double = 1.0
+        valueMultiplier: Double = 1.0,
+        onSampledCount: (Int) -> Unit = {}
     ): List<Double?> {
         if (points.isEmpty()) {
             return emptyList()
@@ -1563,18 +1565,17 @@ private class DesktopGdalTools(
             rasterPath
         )
             .start()
-        val outputFuture = CompletableFuture.supplyAsync {
-            process.inputStream.bufferedReader().use { it.readLines() }
-        }
         val errorFuture = CompletableFuture.supplyAsync {
             process.errorStream.bufferedReader().use { it.readText() }
         }
-        process.outputStream.bufferedWriter().use { writer ->
-            points.forEach { point ->
-                writer.append(point.longitude.gdalCoordinateText())
-                writer.append(' ')
-                writer.append(point.latitude.gdalCoordinateText())
-                writer.newLine()
+        val inputFuture = CompletableFuture.runAsync {
+            process.outputStream.bufferedWriter().use { writer ->
+                points.forEach { point ->
+                    writer.append(point.longitude.gdalCoordinateText())
+                    writer.append(' ')
+                    writer.append(point.latitude.gdalCoordinateText())
+                    writer.newLine()
+                }
             }
         }
         val cancellationHandle = coroutineContext[Job]?.invokeOnCompletion { cause ->
@@ -1582,26 +1583,45 @@ private class DesktopGdalTools(
                 process.destroyForcibly()
             }
         }
+        val elevations = MutableList<Double?>(points.size) { null }
+        var outputLineCount = 0
         val exitCode = try {
+            process.inputStream.bufferedReader().useLines { lines ->
+                lines.forEach { line ->
+                    if (outputLineCount < points.size) {
+                        elevations[outputLineCount] = line
+                            .split(',')
+                            .lastOrNull()
+                            ?.trim()
+                            ?.takeUnless {
+                                it.equals("nan", ignoreCase = true) || it.equals("inf", ignoreCase = true)
+                            }
+                            ?.toDoubleOrNull()
+                            ?.times(valueMultiplier)
+                    }
+                    outputLineCount += 1
+                    if (outputLineCount % GDAL_SAMPLE_PROGRESS_INTERVAL == 0 || outputLineCount == points.size) {
+                        onSampledCount(outputLineCount.coerceAtMost(points.size))
+                    }
+                }
+            }
             process.waitFor()
         } finally {
             cancellationHandle?.dispose()
         }
         coroutineContext.ensureActive()
-        val output = outputFuture.get()
         val error = errorFuture.get()
+        runCatching { inputFuture.get() }
+            .onFailure { failure ->
+                if (exitCode == 0) {
+                    throw failure
+                }
+            }
         require(exitCode == 0) {
-            "GDAL gdallocationinfo failed with exit code $exitCode: ${error.ifBlank { output.takeLast(5).joinToString(" ") }}"
+            "GDAL gdallocationinfo failed with exit code $exitCode: ${error.trim()}"
         }
-        return points.indices.map { index ->
-            output.getOrNull(index)
-                ?.split(',')
-                ?.lastOrNull()
-                ?.trim()
-                ?.takeUnless { it.equals("nan", ignoreCase = true) || it.equals("inf", ignoreCase = true) }
-                ?.toDoubleOrNull()
-                ?.times(valueMultiplier)
-        }
+        onSampledCount(outputLineCount.coerceAtMost(points.size))
+        return elevations
     }
 
     suspend fun elevationUnits(rasterPath: String): DesktopGdalElevationUnits {
