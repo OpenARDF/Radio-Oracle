@@ -270,6 +270,21 @@ object DesktopFileDialogs {
         return Path.of(directory, file)
     }
 
+    fun chooseElevationRaster(): Path? {
+        val dialog = FileDialog(null as Frame?, "Select Elevation Raster", FileDialog.LOAD)
+        dialog.filenameFilter = FilenameFilter { _, name ->
+            name.endsWith(".tif", ignoreCase = true) ||
+                name.endsWith(".tiff", ignoreCase = true) ||
+                name.endsWith(".zip", ignoreCase = true)
+        }
+        dialog.file = "*.tif;*.tiff;*.zip"
+        dialog.isVisible = true
+
+        val directory = dialog.directory ?: return null
+        val file = dialog.file ?: return null
+        return Path.of(directory, file)
+    }
+
     fun chooseImportAndroidRaceBackupJson(): Path? =
         chooseFile(
             "Import Android Event File",

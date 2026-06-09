@@ -1,9 +1,11 @@
 package org.openardf.radiooracle.desktop
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
@@ -34,6 +36,7 @@ import java.util.Locale
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipFile
 import kotlin.coroutines.coroutineContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -59,7 +62,7 @@ enum class DesktopVenueElevationCacheSource(
     Usgs3Dep("USGS 3DEP"),
     WashingtonDnrLidarDtm("Washington DNR LiDAR DTM"),
     OregonDogamiLidarDtm("Oregon DOGAMI LiDAR DTM"),
-    NorthCarolinaStateLidarPortalDem("NC State University Libraries / GIS Portal LiDAR")
+    LocalLidarRaster("Local LiDAR Raster")
 }
 
 data class DesktopVenueElevationBoundingBox(
@@ -165,7 +168,6 @@ object DesktopVenueElevationCache {
     private const val DEFAULT_SOURCE_NAME = "USGS 3DEP"
     private const val WASHINGTON_DNR_SOURCE_NAME = "Washington DNR LiDAR DTM"
     private const val OREGON_DOGAMI_SOURCE_NAME = "Oregon DOGAMI LiDAR DTM"
-    private const val NORTH_CAROLINA_STATE_PORTAL_SOURCE_NAME = "NC State University Libraries / GIS Portal LiDAR"
     private const val ARCGIS_SAMPLE_BATCH_SIZE = 250
     private const val ARCGIS_SAMPLE_RETRY_COUNT = 4
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
@@ -375,13 +377,13 @@ object DesktopVenueElevationCache {
                     bufferMeters = bufferMeters,
                     onProgress = onProgress
                 )
-            DesktopVenueElevationCacheSource.NorthCarolinaStateLidarPortalDem ->
-                downloadNorthCarolinaLidarPortalDem(
+            DesktopVenueElevationCacheSource.LocalLidarRaster ->
+                createFromLocalLidarRaster(
                     venueName = venueName,
                     boundingBox = boundingBox,
                     resolutionMeters = resolutionMeters,
                     bufferMeters = bufferMeters,
-                    sourceUrl = sourceUrl,
+                    sourcePathText = sourceUrl,
                     onProgress = onProgress
                 )
         }
@@ -621,27 +623,22 @@ object DesktopVenueElevationCache {
             )
         }
 
-    private suspend fun downloadNorthCarolinaLidarPortalDem(
+    private suspend fun createFromLocalLidarRaster(
         venueName: String,
         boundingBox: DesktopVenueElevationBoundingBox,
         resolutionMeters: Double,
         bufferMeters: Double,
-        sourceUrl: String,
+        sourcePathText: String,
         onProgress: (DesktopVenueElevationCacheProgress) -> Unit = {}
     ): DesktopVenueElevationCacheSummary =
         withContext(Dispatchers.IO) {
-            val trimmedSourceUrl = sourceUrl.trim()
-            val portalUri = runCatching { URI(trimmedSourceUrl) }.getOrElse {
-                error("NC State GIS portal requires a valid URL to a GeoTIFF raster or GeoTIFF ZIP file.")
+            val sourcePath = Path.of(sourcePathText.trim()).toAbsolutePath().normalize()
+            require(Files.isRegularFile(sourcePath)) {
+                "Local LiDAR raster file was not found: $sourcePath"
             }
-            if (trimmedSourceUrl.isBlank()) {
-                error("NC State GIS portal requires a valid raster URL.")
-            }
-            val sourceSuffix = sourceUrlToFileSuffix(trimmedSourceUrl)
-            if (sourceSuffix == ".bin") {
-                error(
-                    "NC State GIS portal requires a raster URL ending in .tif, .tiff, or .zip."
-                )
+            val sourceSuffix = localRasterFileSuffix(sourcePath)
+            require(sourceSuffix != ".bin") {
+                "Local LiDAR raster must be a GeoTIFF raster (.tif/.tiff) or GeoTIFF ZIP (.zip)."
             }
             val cleanVenueName = venueName.trim().ifBlank { "Venue" }
             val estimate = estimate(boundingBox, resolutionMeters, bufferMeters)
@@ -653,36 +650,37 @@ object DesktopVenueElevationCache {
                     totalPointCount = points.size
                 )
             )
-            val sourceDirectory = cacheDirectory().resolve("sources")
-            Files.createDirectories(sourceDirectory)
             val gdal = DesktopGdalTools.requireAvailable()
-            val workDirectory = Files.createTempDirectory("radio-oracle-nc-state-portal-")
+            val workDirectory = Files.createTempDirectory("radio-oracle-local-lidar-")
             val elevations = try {
-                val sourcePath = sourceDirectory.resolve(
-                    "${cacheSlug(cleanVenueName)}-nc-portal-${Instant.now().toString().replace(Regex("[^0-9TZ]"), "")}$sourceSuffix"
-                )
-                downloadFile(portalUri, sourcePath, NORTH_CAROLINA_STATE_PORTAL_SOURCE_NAME)
-                coroutineContext.ensureActive()
-                val rasterPath = if (isZipArchive(sourcePath)) {
-                    extractRasterArchive(
+                val rasterPath = if (sourceSuffix == ".zip") {
+                    rasterPathForZipArchive(
                         workDirectory = workDirectory,
                         zipPath = sourcePath,
                         gdal = gdal,
-                        sourceLabel = NORTH_CAROLINA_STATE_PORTAL_SOURCE_NAME
+                        sourceLabel = "Local LiDAR raster"
                     )
                 } else {
-                    sourcePath
+                    sourcePath.toString()
                 }
+                coroutineContext.ensureActive()
                 gdal.sampleWgs84(rasterPath, points)
             } finally {
                 runCatching { deleteRecursively(workDirectory) }
             }
+            onProgress(
+                DesktopVenueElevationCacheProgress(
+                    venueName = cleanVenueName,
+                    completedPointCount = points.size,
+                    totalPointCount = points.size
+                )
+            )
             val file = DesktopVenueElevationCacheFile(
                 metadata = DesktopVenueElevationCacheMetadata(
                     version = CACHE_VERSION,
                     venueName = cleanVenueName,
-                    sourceName = NORTH_CAROLINA_STATE_PORTAL_SOURCE_NAME,
-                    sourceUrl = trimmedSourceUrl,
+                    sourceName = "Local LiDAR Raster - ${sourcePath.fileName}",
+                    sourceUrl = sourcePath.toString(),
                     resolutionMeters = resolutionMeters,
                     rowCount = estimate.rowCount,
                     columnCount = estimate.columnCount,
@@ -699,8 +697,9 @@ object DesktopVenueElevationCache {
             val hash = fileSha256(path)
             DesktopDebugLog.info(
                 "ElevationCache",
-                "Downloaded venue=$cleanVenueName source=$NORTH_CAROLINA_STATE_PORTAL_SOURCE_NAME resolution=${resolutionMeters}m " +
-                    "points=${points.size} resolved=${elevations.count { it != null }} file=${path.fileName} hash=${hash.take(12)}"
+                "Created venue=$cleanVenueName source=Local LiDAR Raster sourceFile=${sourcePath.fileName} " +
+                    "resolution=${resolutionMeters}m points=${points.size} resolved=${elevations.count { it != null }} " +
+                    "file=${path.fileName} hash=${hash.take(12)}"
             )
             DesktopVenueElevationCacheSummary(
                 venueName = cleanVenueName,
@@ -709,7 +708,7 @@ object DesktopVenueElevationCache {
                 columnCount = estimate.columnCount,
                 pointCount = points.size,
                 resolvedPointCount = elevations.count { it != null },
-                sourceName = NORTH_CAROLINA_STATE_PORTAL_SOURCE_NAME,
+                sourceName = file.metadata.sourceName,
                 resolutionMeters = resolutionMeters,
                 fileSha256 = hash
             )
@@ -1254,15 +1253,55 @@ object DesktopVenueElevationCache {
         }.getOrElse { false }
     }
 
-    private fun sourceUrlToFileSuffix(sourceUrl: String): String {
-        val path = runCatching { URI(sourceUrl).path.lowercase(Locale.US) }.getOrNull()
-        return if (path?.endsWith(".zip") == true) {
+    private fun localRasterFileSuffix(path: Path): String {
+        val name = path.fileName.toString().lowercase(Locale.US)
+        return if (name.endsWith(".zip")) {
             ".zip"
-        } else if (path?.endsWith(".tif") == true || path?.endsWith(".tiff") == true) {
+        } else if (name.endsWith(".tif") || name.endsWith(".tiff")) {
             ".tif"
         } else {
             ".bin"
         }
+    }
+
+    private fun rasterPathForZipArchive(
+        workDirectory: Path,
+        zipPath: Path,
+        gdal: DesktopGdalTools,
+        sourceLabel: String
+    ): String {
+        val rasters = ZipFile(zipPath.toFile()).use { zip ->
+            zip.entries().asSequence()
+                .filterNot { it.isDirectory }
+                .map { it.name }
+                .filter {
+                    val name = it.lowercase(Locale.US)
+                    name.endsWith(".tif") || name.endsWith(".tiff")
+                }
+                .sorted()
+                .toList()
+        }
+        require(rasters.isNotEmpty()) {
+            "$sourceLabel package did not contain GeoTIFF raster files."
+        }
+        val zipVsiPrefix = "/vsizip/${zipPath.toAbsolutePath().normalize()}"
+        if (rasters.size == 1) {
+            return "$zipVsiPrefix/${rasters.single()}"
+        }
+        val inputList = workDirectory.resolve("rasters.txt")
+        Files.writeString(inputList, rasters.joinToString(System.lineSeparator()) { "$zipVsiPrefix/$it" })
+        val vrt = workDirectory.resolve("dtm.vrt")
+        gdal.runCommand(
+            listOf(
+                gdal.gdalBuildVrt.toString(),
+                "-quiet",
+                "-overwrite",
+                "-input_file_list",
+                inputList.toString(),
+                vrt.toString()
+            )
+        )
+        return vrt.toString()
     }
 
     private fun extractRasterArchive(
@@ -1458,7 +1497,11 @@ private class DesktopGdalTools(
     val gdalBuildVrt: Path,
     private val gdalLocationInfo: Path
 ) {
-    fun sampleWgs84(rasterPath: Path, points: List<CourseGeoPoint>): List<Double?> {
+    suspend fun sampleWgs84(rasterPath: Path, points: List<CourseGeoPoint>): List<Double?> {
+        return sampleWgs84(rasterPath.toString(), points)
+    }
+
+    suspend fun sampleWgs84(rasterPath: String, points: List<CourseGeoPoint>): List<Double?> {
         if (points.isEmpty()) {
             return emptyList()
         }
@@ -1471,7 +1514,7 @@ private class DesktopGdalTools(
             "-wgs84",
             "-r",
             "bilinear",
-            rasterPath.toString()
+            rasterPath
         )
             .start()
         val outputFuture = CompletableFuture.supplyAsync {
@@ -1488,7 +1531,17 @@ private class DesktopGdalTools(
                 writer.newLine()
             }
         }
-        val exitCode = process.waitFor()
+        val cancellationHandle = coroutineContext[Job]?.invokeOnCompletion { cause ->
+            if (cause is CancellationException) {
+                process.destroyForcibly()
+            }
+        }
+        val exitCode = try {
+            process.waitFor()
+        } finally {
+            cancellationHandle?.dispose()
+        }
+        coroutineContext.ensureActive()
         val output = outputFuture.get()
         val error = errorFuture.get()
         require(exitCode == 0) {

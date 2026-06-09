@@ -1294,18 +1294,23 @@ fun main(args: Array<String>) = application {
             source: DesktopVenueElevationCacheSource,
             sourceUrl: String = ""
         ) {
-            if (source == DesktopVenueElevationCacheSource.NorthCarolinaStateLidarPortalDem && sourceUrl.isBlank()) {
-                projectStatusText = "NC State GIS Portal requires a source URL."
+            if (source == DesktopVenueElevationCacheSource.LocalLidarRaster && sourceUrl.isBlank()) {
+                projectStatusText = "Local LiDAR Raster requires a source file."
                 return
             }
             if (venueElevationCacheJob?.isActive == true) {
                 return
             }
             val cleanVenueName = venueName.trim().ifBlank { "Venue" }
-            projectStatusText = "Downloading ${source.label} elevation cache for $cleanVenueName..."
+            val cacheActionText = if (source == DesktopVenueElevationCacheSource.LocalLidarRaster) {
+                "Creating"
+            } else {
+                "Downloading"
+            }
+            projectStatusText = "$cacheActionText ${source.label} elevation cache for $cleanVenueName..."
             DesktopDebugLog.info(
                 "ElevationCache",
-                "Download started venue=$cleanVenueName source=${source.label} resolution=${resolutionMeters}m buffer=${bufferMeters}m " +
+                "$cacheActionText started venue=$cleanVenueName source=${source.label} resolution=${resolutionMeters}m buffer=${bufferMeters}m " +
                     "bounds=${boundingBox.minLatitude},${boundingBox.minLongitude}..${boundingBox.maxLatitude},${boundingBox.maxLongitude}"
             )
             venueElevationCacheProgress = VenueElevationCacheProgressUiState(
@@ -1339,15 +1344,15 @@ fun main(args: Array<String>) = application {
                     projectStatusText = if (error is CancellationException) {
                         DesktopDebugLog.info(
                             "ElevationCache",
-                            "Download canceled venue=$cleanVenueName source=${source.label}"
+                            "$cacheActionText canceled venue=$cleanVenueName source=${source.label}"
                         )
-                        "Elevation cache download canceled."
+                        "Elevation cache ${cacheActionText.lowercase()} canceled."
                     } else {
                         DesktopDebugLog.error(
                             "ElevationCache",
-                            "Download failed venue=$cleanVenueName source=${source.label}: ${error.message ?: error::class.simpleName}"
+                            "$cacheActionText failed venue=$cleanVenueName source=${source.label}: ${error.message ?: error::class.simpleName}"
                         )
-                        "Elevation cache download failed: ${error.message ?: error::class.simpleName}"
+                        "Elevation cache ${cacheActionText.lowercase()} failed: ${error.message ?: error::class.simpleName}"
                     }
                 }
                 venueElevationCacheProgress = null
@@ -6488,7 +6493,7 @@ private fun VenueElevationCachePanel(
     var maxLongitudeDraft by remember { mutableStateOf("") }
     var bufferMetersDraft by remember { mutableStateOf("500") }
     var resolutionMetersDraft by remember { mutableStateOf("10") }
-    var northCarolinaPortalSourceUrlDraft by remember { mutableStateOf("") }
+    var localRasterPathDraft by remember { mutableStateOf("") }
     val spotCheckScope = rememberCoroutineScope()
     var spotCheckInProgress by remember { mutableStateOf<DesktopVenueElevationCacheListing?>(null) }
     var spotCheckResult by remember { mutableStateOf<DesktopVenueElevationSpotCheckSummary?>(null) }
@@ -6643,6 +6648,17 @@ private fun VenueElevationCachePanel(
                 ) {
                     ButtonLabel("Download OR DOGAMI LiDAR DTM")
                 }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Button(
+                    onClick = {
+                        DesktopFileDialogs.chooseElevationRaster()?.let { path ->
+                            localRasterPathDraft = path.toString()
+                        }
+                    }
+                ) {
+                    ButtonLabel("Select Local Raster...")
+                }
                 Button(
                     onClick = {
                         val bounds = parsedBoundingBox ?: return@Button
@@ -6652,26 +6668,26 @@ private fun VenueElevationCachePanel(
                             bounds,
                             resolution,
                             bufferMeters,
-                            DesktopVenueElevationCacheSource.NorthCarolinaStateLidarPortalDem,
-                            northCarolinaPortalSourceUrlDraft
+                            DesktopVenueElevationCacheSource.LocalLidarRaster,
+                            localRasterPathDraft
                         )
                     },
                     enabled = parsedBoundingBox != null &&
                         resolutionMeters != null &&
                         resolutionMeters > 0.0 &&
-                        northCarolinaPortalSourceUrlDraft.isNotBlank()
+                        localRasterPathDraft.isNotBlank()
                 ) {
-                    ButtonLabel("Download NC State GIS Portal LiDAR")
+                    ButtonLabel("Create Cache from Local Raster")
                 }
             }
             LabeledTextField(
-                "NC State GIS portal raster URL",
-                northCarolinaPortalSourceUrlDraft,
-                { northCarolinaPortalSourceUrlDraft = it },
+                "Local raster file",
+                localRasterPathDraft,
+                { localRasterPathDraft = it },
                 Modifier.width(640.dp)
             )
             Text(
-                text = "Provide a direct download URL to a GeoTIFF raster (.tif/.tiff) or GeoTIFF ZIP (.zip) from NC State University Libraries / GIS Portal.",
+                text = "Use a local GeoTIFF raster (.tif/.tiff) or GeoTIFF ZIP (.zip), such as a countywide LiDAR DEM, to create a venue-sized cache without downloading elevation data.",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
