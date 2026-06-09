@@ -1303,6 +1303,11 @@ fun main(args: Array<String>) = application {
             }
             val cleanVenueName = venueName.trim().ifBlank { "Venue" }
             projectStatusText = "Downloading ${source.label} elevation cache for $cleanVenueName..."
+            DesktopDebugLog.info(
+                "ElevationCache",
+                "Download started venue=$cleanVenueName source=${source.label} resolution=${resolutionMeters}m buffer=${bufferMeters}m " +
+                    "bounds=${boundingBox.minLatitude},${boundingBox.minLongitude}..${boundingBox.maxLatitude},${boundingBox.maxLongitude}"
+            )
             venueElevationCacheProgress = VenueElevationCacheProgressUiState(
                 venueName = cleanVenueName,
                 completedPointCount = 0,
@@ -1313,15 +1318,15 @@ fun main(args: Array<String>) = application {
                     DesktopVenueElevationCache.download(
                         venueName = cleanVenueName,
                         boundingBox = boundingBox,
-                    resolutionMeters = resolutionMeters,
-                    bufferMeters = bufferMeters,
-                    source = source,
-                    sourceUrl = sourceUrl,
-                    onProgress = { progress ->
-                        venueElevationCacheProgress = VenueElevationCacheProgressUiState(
-                            venueName = progress.venueName,
-                            completedPointCount = progress.completedPointCount,
-                            totalPointCount = progress.totalPointCount
+                        resolutionMeters = resolutionMeters,
+                        bufferMeters = bufferMeters,
+                        source = source,
+                        sourceUrl = sourceUrl,
+                        onProgress = { progress ->
+                            venueElevationCacheProgress = VenueElevationCacheProgressUiState(
+                                venueName = progress.venueName,
+                                completedPointCount = progress.completedPointCount,
+                                totalPointCount = progress.totalPointCount
                             )
                         }
                     )
@@ -1332,8 +1337,16 @@ fun main(args: Array<String>) = application {
                         "Downloaded ${summary.sourceName} elevation cache for ${summary.venueName}: ${summary.resolvedPointCount}/${summary.pointCount} points at ${summary.resolutionMeters.roundToInt()} m."
                 }.onFailure { error ->
                     projectStatusText = if (error is CancellationException) {
+                        DesktopDebugLog.info(
+                            "ElevationCache",
+                            "Download canceled venue=$cleanVenueName source=${source.label}"
+                        )
                         "Elevation cache download canceled."
                     } else {
+                        DesktopDebugLog.error(
+                            "ElevationCache",
+                            "Download failed venue=$cleanVenueName source=${source.label}: ${error.message ?: error::class.simpleName}"
+                        )
                         "Elevation cache download failed: ${error.message ?: error::class.simpleName}"
                     }
                 }

@@ -2,6 +2,7 @@ package org.openardf.radiooracle.desktop
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -23,6 +24,7 @@ import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.util.concurrent.CompletionException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -31,6 +33,8 @@ import java.time.Duration
 import java.util.zip.ZipInputStream
 import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilderFactory
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.max
@@ -913,18 +917,21 @@ object DesktopCourseKmlImporter {
         return total.roundToInt().takeIf { measuredSegmentCount > 0 }
     }
 
-    private fun usgsElevationMeters(point: CourseGeoPoint): Double? {
+    private suspend fun usgsElevationMeters(point: CourseGeoPoint): Double? {
         val url = "https://epqs.nationalmap.gov/v1/json?x=${point.longitude.url()}&y=${point.latitude.url()}&units=Meters&wkid=4326"
         val request = HttpRequest.newBuilder(URI(url))
             .timeout(Duration.ofSeconds(20))
             .header("User-Agent", "Radio-Oracle/${DesktopBuildInfo.displayVersion}")
             .GET()
             .build()
-        val response = HttpClient.newBuilder()
+        val response = sendRequest(
+            request = request,
+            responseBodyHandler = HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8),
+            client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build()
-            .send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+        )
         require(response.statusCode() in 200..299) {
             "USGS elevation service returned HTTP ${response.statusCode()}."
         }
@@ -933,6 +940,29 @@ object DesktopCourseKmlImporter {
             ?.jsonPrimitive
             ?.content
             ?.toDoubleOrNull()
+    }
+
+    private suspend fun <T> sendRequest(
+        client: HttpClient,
+        request: HttpRequest,
+        responseBodyHandler: HttpResponse.BodyHandler<T>
+    ): HttpResponse<T> {
+        val future = client.sendAsync(request, responseBodyHandler)
+        return suspendCancellableCoroutine { continuation ->
+            continuation.invokeOnCancellation {
+                future.cancel(true)
+            }
+            future.whenComplete { response, throwable ->
+                if (!continuation.isActive) {
+                    return@whenComplete
+                }
+                if (response != null) {
+                    continuation.resume(response)
+                    return@whenComplete
+                }
+                continuation.resumeWithException((throwable as? CompletionException)?.cause ?: throwable ?: IllegalStateException("Unknown network error."))
+            }
+        }
     }
 
     private fun Double.url(): String =

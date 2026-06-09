@@ -2,6 +2,8 @@ package org.openardf.radiooracle.desktop
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
@@ -21,15 +23,20 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.time.Duration
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionException
 import java.util.zip.ZipInputStream
 import kotlin.coroutines.coroutineContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
@@ -166,6 +173,28 @@ object DesktopVenueElevationCache {
         .connectTimeout(Duration.ofSeconds(20))
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build()
+
+    private suspend fun <T> sendRequest(
+        request: HttpRequest,
+        bodyHandler: HttpResponse.BodyHandler<T>
+    ): HttpResponse<T> {
+        val requestFuture = httpClient.sendAsync(request, bodyHandler)
+        return suspendCancellableCoroutine { continuation ->
+            continuation.invokeOnCancellation {
+                requestFuture.cancel(true)
+            }
+            requestFuture.whenComplete { response, throwable ->
+                if (!continuation.isActive) {
+                    return@whenComplete
+                }
+                if (response != null) {
+                    continuation.resume(response)
+                } else {
+                    continuation.resumeWithException((throwable as? CompletionException)?.cause ?: throwable ?: IOException("Unknown network error."))
+                }
+            }
+        }
+    }
 
     @Volatile
     private var loadedSignature: String = ""
@@ -910,7 +939,7 @@ object DesktopVenueElevationCache {
             .trim('-')
             .ifBlank { "venue" }
 
-    private fun usgs3DepSamplesWithRetry(points: List<CourseGeoPoint>, batchNumber: Int): List<Double?> {
+    private suspend fun usgs3DepSamplesWithRetry(points: List<CourseGeoPoint>, batchNumber: Int): List<Double?> {
         var lastError: Throwable? = null
         repeat(ARCGIS_SAMPLE_RETRY_COUNT) { attemptIndex ->
             try {
@@ -929,13 +958,13 @@ object DesktopVenueElevationCache {
                     "ElevationCache",
                     "USGS sample batch retry batch=$batchNumber attempt=$attempt points=${points.size}: ${error.message ?: error::class.simpleName}"
                 )
-                Thread.sleep(1_000L * attempt)
+                delay(1_000L * attempt)
             }
         }
         throw lastError ?: IllegalStateException("USGS 3DEP sample request failed.")
     }
 
-    private fun oregonDogamiSamplesWithRetry(points: List<CourseGeoPoint>, batchNumber: Int): List<Double?> {
+    private suspend fun oregonDogamiSamplesWithRetry(points: List<CourseGeoPoint>, batchNumber: Int): List<Double?> {
         var lastError: Throwable? = null
         repeat(ARCGIS_SAMPLE_RETRY_COUNT) { attemptIndex ->
             try {
@@ -959,7 +988,7 @@ object DesktopVenueElevationCache {
                     "ElevationCache",
                     "Oregon DOGAMI sample batch retry batch=$batchNumber attempt=$attempt points=${points.size}: ${error.message ?: error::class.simpleName}"
                 )
-                Thread.sleep(1_000L * attempt)
+                delay(1_000L * attempt)
             }
         }
         throw lastError ?: IllegalStateException("Oregon DOGAMI sample request failed.")
@@ -971,7 +1000,7 @@ object DesktopVenueElevationCache {
             message?.contains("HTTP 504") == true ||
             message?.contains("timed out", ignoreCase = true) == true
 
-    private fun usgs3DepSamples(points: List<CourseGeoPoint>): List<Double?> {
+    private suspend fun usgs3DepSamples(points: List<CourseGeoPoint>): List<Double?> {
         return arcGisImageSamples(
             serviceUrl = USGS_GET_SAMPLES_URL,
             points = points,
@@ -979,7 +1008,7 @@ object DesktopVenueElevationCache {
         )
     }
 
-    private fun arcGisImageSamples(
+    private suspend fun arcGisImageSamples(
         serviceUrl: String,
         points: List<CourseGeoPoint>,
         sourceName: String,
@@ -1014,7 +1043,7 @@ object DesktopVenueElevationCache {
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .timeout(Duration.ofSeconds(45))
             .build()
-        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        val response = sendRequest(request, HttpResponse.BodyHandlers.ofString())
         require(response.statusCode() in 200..299) {
             "$sourceName returned HTTP ${response.statusCode()}."
         }
@@ -1035,7 +1064,7 @@ object DesktopVenueElevationCache {
         return values
     }
 
-    private fun openTopoDataElevations(dataset: String, points: List<CourseGeoPoint>): List<Double?> {
+    private suspend fun openTopoDataElevations(dataset: String, points: List<CourseGeoPoint>): List<Double?> {
         if (points.isEmpty()) {
             return emptyList()
         }
@@ -1052,7 +1081,7 @@ object DesktopVenueElevationCache {
             .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
             .timeout(Duration.ofSeconds(45))
             .build()
-        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        val response = sendRequest(request, HttpResponse.BodyHandlers.ofString())
         require(response.statusCode() in 200..299) {
             "OpenTopoData returned HTTP ${response.statusCode()}."
         }
@@ -1069,13 +1098,13 @@ object DesktopVenueElevationCache {
     private fun String.url(): String =
         URLEncoder.encode(this, StandardCharsets.UTF_8)
 
-    private fun washingtonDnrProjectIndex(): List<WashingtonDnrLidarProject> {
+    private suspend fun washingtonDnrProjectIndex(): List<WashingtonDnrLidarProject> {
         val request = HttpRequest.newBuilder(URI.create(WASHINGTON_DNR_PROJECT_URL))
             .header("User-Agent", "Radio-Oracle Desktop")
             .GET()
             .timeout(Duration.ofSeconds(60))
             .build()
-        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        val response = sendRequest(request, HttpResponse.BodyHandlers.ofString())
         require(response.statusCode() in 200..299) {
             "Washington DNR project index returned HTTP ${response.statusCode()}."
         }
@@ -1169,18 +1198,34 @@ object DesktopVenueElevationCache {
     private fun Double.decimal(places: Int): String =
         "%.${places}f".format(Locale.US, this)
 
-    private fun downloadFile(uri: URI, path: Path, sourceName: String) {
+    private suspend fun downloadFile(uri: URI, path: Path, sourceName: String) {
+        val temporaryPath = path.resolveSibling("${path.fileName}.download")
+        Files.deleteIfExists(temporaryPath)
         val request = HttpRequest.newBuilder(uri)
             .header("User-Agent", "Radio-Oracle Desktop")
             .GET()
             .timeout(Duration.ofMinutes(30))
             .build()
-        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofFile(path))
-        require(response.statusCode() in 200..299) {
-            "$sourceName download returned HTTP ${response.statusCode()}."
-        }
-        require(Files.size(path) > 0L) {
-            "$sourceName download returned an empty file."
+        var completed = false
+        try {
+            val response = sendRequest(request, HttpResponse.BodyHandlers.ofFile(temporaryPath))
+            require(response.statusCode() in 200..299) {
+                "$sourceName download returned HTTP ${response.statusCode()}."
+            }
+            require(Files.size(temporaryPath) > 0L) {
+                "$sourceName download returned an empty file."
+            }
+            Files.move(
+                temporaryPath,
+                path,
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING
+            )
+            completed = true
+        } finally {
+            if (!completed) {
+                runCatching { Files.deleteIfExists(temporaryPath) }
+            }
         }
     }
 
