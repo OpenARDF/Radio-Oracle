@@ -24,6 +24,7 @@ data class DesktopCourseAnalysisSummary(
     val calculatedRouteSection: DesktopCourseAnalysisSection?,
     val summaryExplanation: String,
     val profileComparison: List<DesktopCourseElevationProfileSummary>,
+    val elevationCacheNotes: List<String>,
     val routeMaps: List<DesktopCourseRouteMap>,
     val kmlFolders: List<DesktopCourseKmlExportFolder>,
     val calculatedRouteApplication: DesktopCourseCalculatedRouteApplication?,
@@ -227,7 +228,8 @@ object DesktopCourseAnalyzer {
         categoryId: String,
         protectedCourseInfo: ProtectedCourseInfo?,
         protectedIdealOrderText: String?,
-        elevationLookup: (CourseGeoPoint) -> Double? = { null }
+        elevationLookup: (CourseGeoPoint) -> Double? = { null },
+        elevationCacheNotes: (List<CourseGeoPoint>) -> List<String> = { emptyList() }
     ): DesktopCourseAnalysisSummary {
         val categoryData = projectFile.raceData.categories.first { it.category.id == categoryId }
         val category = categoryData.category
@@ -630,6 +632,13 @@ object DesktopCourseAnalyzer {
                 climbMeters = calculatedRouteAnalysis?.climbMeters?.roundToInt()
             )
         }
+        val profileRoutePoints = if (profileComparison.any { it.profile.isNotEmpty() }) {
+            kmlFolders
+                .flatMap { it.routePoints }
+                .distinctBy { it.coordinateKey() }
+        } else {
+            emptyList()
+        }
 
         return DesktopCourseAnalysisSummary(
             categoryName = category.name,
@@ -637,6 +646,7 @@ object DesktopCourseAnalyzer {
             calculatedRouteSection = calculatedSection,
             summaryExplanation = summaryExplanation(providedSection, calculatedSection),
             profileComparison = profileComparison,
+            elevationCacheNotes = elevationCacheNotes(profileRoutePoints),
             routeMaps = routeMaps,
             kmlFolders = kmlFolders,
             calculatedRouteApplication = calculatedRouteApplication,

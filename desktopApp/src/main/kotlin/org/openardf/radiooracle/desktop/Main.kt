@@ -6858,7 +6858,8 @@ private fun CourseAnalysisPanel(
             categoryId = categoryId,
             protectedCourseInfo = protectedCourseInfoByCategoryId[categoryId],
             protectedIdealOrderText = protectedIdealOrderByCategoryId[categoryId],
-            elevationLookup = DesktopVenueElevationCache::elevationMeters
+            elevationLookup = DesktopVenueElevationCache::elevationMeters,
+            elevationCacheNotes = DesktopVenueElevationCache::analysisSourceNotes
         )
     }
 
@@ -7207,7 +7208,7 @@ private fun CourseAnalysisSummarySection(result: DesktopCourseAnalysisSummary) {
         )
         CourseAnalysisDetailRows(result)
         CourseAnalysisMetricRows(result.metrics)
-        CourseAnalysisProfileComparison(result.profileComparison)
+        CourseAnalysisProfileComparison(result.profileComparison, result.elevationCacheNotes)
         CourseAnalysisRouteMaps(result.routeMaps)
     }
 }
@@ -7263,7 +7264,10 @@ private fun CourseAnalysisLegRows(title: String, legs: List<DesktopCourseLegRow>
 }
 
 @Composable
-private fun CourseAnalysisProfileComparison(profiles: List<DesktopCourseElevationProfileSummary>) {
+private fun CourseAnalysisProfileComparison(
+    profiles: List<DesktopCourseElevationProfileSummary>,
+    elevationCacheNotes: List<String>
+) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = "Elevation profiles (cache grid; source resolution varies)",
@@ -7278,6 +7282,13 @@ private fun CourseAnalysisProfileComparison(profiles: List<DesktopCourseElevatio
                 fontSize = 13.sp
             )
             return@Column
+        }
+        elevationCacheNotes.forEach { note ->
+            Text(
+                text = note,
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             profiles.forEach { profile ->

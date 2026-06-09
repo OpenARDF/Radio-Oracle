@@ -241,6 +241,31 @@ object DesktopVenueElevationCache {
             )
             .firstNotNullOfOrNull { it.elevationMeters(point) }
 
+    fun analysisSourceNotes(points: List<CourseGeoPoint>): List<String> {
+        if (points.isEmpty()) {
+            return emptyList()
+        }
+        val selectedCaches = points
+            .mapNotNull { point -> selectedCache(point) }
+            .distinctBy { it.path }
+            .sortedWith(
+                compareBy<DesktopVenueElevationCacheFile> { it.metadata.venueName.lowercase() }
+                    .thenBy { it.sourcePriority() }
+                    .thenBy { it.metadata.resolutionMeters }
+                    .thenBy { it.path.fileName.toString() }
+            )
+        return if (selectedCaches.isEmpty()) {
+            listOf("Elevation cache: no local cache file matched the route/profile points.")
+        } else {
+            listOf(
+                "Elevation cache: " + selectedCaches.joinToString("; ") { cache ->
+                    "${cache.metadata.venueName} - ${cache.metadata.sourceName}, " +
+                        "${cache.metadata.resolutionMeters.metersText()} grid (${cache.path.fileName})"
+                }
+            )
+        }
+    }
+
     suspend fun spotCheck(
         cachePath: Path,
         referenceSource: DesktopVenueElevationReferenceSource,
@@ -702,11 +727,29 @@ object DesktopVenueElevationCache {
     private fun DesktopVenueElevationCacheFile.elevationAt(row: Int, column: Int): Double? =
         elevations.getOrNull(row * metadata.columnCount + column)
 
+    private fun selectedCache(point: CourseGeoPoint): DesktopVenueElevationCacheFile? =
+        loadCaches()
+            .filter { it.metadata.boundingBox.toPublic().contains(point) }
+            .sortedWith(
+                compareBy<DesktopVenueElevationCacheFile> { it.sourcePriority() }
+                    .thenBy { it.metadata.resolutionMeters }
+                    .thenByDescending { it.metadata.createdAtIso }
+                    .thenBy { it.path.fileName.toString() }
+            )
+            .firstOrNull { it.elevationMeters(point) != null }
+
     private fun DesktopVenueElevationCacheFile.sourcePriority(): Int =
         when {
             metadata.sourceName.contains("LiDAR DTM", ignoreCase = true) -> 0
             metadata.sourceName == DEFAULT_SOURCE_NAME -> 1
             else -> 2
+        }
+
+    private fun Double.metersText(): String =
+        if (kotlin.math.abs(this - roundToInt()) < 0.01) {
+            "${roundToInt()} m"
+        } else {
+            "%.2f m".format(Locale.US, this)
         }
 
     private fun ProtectedCourseInfo.allGeoPoints(): List<CourseGeoPoint> =

@@ -66,6 +66,62 @@ class DesktopVenueElevationCacheTest {
         }
     }
 
+    @Test
+    fun reportsAnalysisSourceNotesForSelectedCacheFile() {
+        withTemporaryUserHome { home ->
+            val cacheDirectory = home
+                .resolve("Library")
+                .resolve("Application Support")
+                .resolve("Radio-Oracle")
+                .resolve("elevations")
+            Files.createDirectories(cacheDirectory)
+            writeCache(
+                path = cacheDirectory.resolve("a-usgs-1m.roelev.json"),
+                sourceName = "USGS 3DEP",
+                resolutionMeters = 1.0,
+                elevationMeters = 10.0
+            )
+            writeCache(
+                path = cacheDirectory.resolve("b-oregon-dogami-3m.roelev.json"),
+                sourceName = "Oregon DOGAMI LiDAR DTM",
+                resolutionMeters = 3.0,
+                elevationMeters = 20.0
+            )
+
+            assertEquals(
+                listOf("Elevation cache: Test Venue - Oregon DOGAMI LiDAR DTM, 3 m grid (b-oregon-dogami-3m.roelev.json)"),
+                DesktopVenueElevationCache.analysisSourceNotes(
+                    listOf(CourseGeoPoint(latitude = 45.0, longitude = -122.0))
+                )
+            )
+        }
+    }
+
+    @Test
+    fun reportsWhenNoAnalysisCacheMatchesRoutePoints() {
+        withTemporaryUserHome { home ->
+            val cacheDirectory = home
+                .resolve("Library")
+                .resolve("Application Support")
+                .resolve("Radio-Oracle")
+                .resolve("elevations")
+            Files.createDirectories(cacheDirectory)
+            writeCache(
+                path = cacheDirectory.resolve("a-usgs-1m.roelev.json"),
+                sourceName = "USGS 3DEP",
+                resolutionMeters = 1.0,
+                elevationMeters = 10.0
+            )
+
+            assertEquals(
+                listOf("Elevation cache: no local cache file matched the route/profile points."),
+                DesktopVenueElevationCache.analysisSourceNotes(
+                    listOf(CourseGeoPoint(latitude = 40.0, longitude = -120.0))
+                )
+            )
+        }
+    }
+
     private fun withTemporaryUserHome(block: (Path) -> Unit) {
         val originalHome = System.getProperty("user.home")
         val home = Files.createTempDirectory("radio-oracle-home")

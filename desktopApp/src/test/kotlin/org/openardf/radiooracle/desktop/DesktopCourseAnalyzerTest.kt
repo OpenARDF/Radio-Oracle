@@ -57,7 +57,11 @@ class DesktopCourseAnalyzerTest {
             projectFile = projectFile,
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo,
-            protectedIdealOrderText = "31 32 33 Beacon"
+            protectedIdealOrderText = "31 32 33 Beacon",
+            elevationCacheNotes = { points ->
+                assertTrue(points.isNotEmpty())
+                listOf("Elevation cache: Test Venue - USGS 3DEP, 3 m grid (test.roelev.json)")
+            }
         )
 
         assertEquals(6, summary.calculatedRouteCount)
@@ -85,6 +89,10 @@ class DesktopCourseAnalyzerTest {
         assertEquals(listOf("31", "32", "33"), summary.profileComparison.first { it.title == "Stored route" }.markers.map { it.label })
         assertEquals(1, summary.routeMaps.size)
         assertEquals(listOf("Stored foxes and route"), summary.kmlFolders.map { it.title })
+        assertEquals(
+            listOf("Elevation cache: Test Venue - USGS 3DEP, 3 m grid (test.roelev.json)"),
+            summary.elevationCacheNotes
+        )
         assertEquals(false, summary.hasMissingElevationData)
         assertNotNull(summary.estimatedIdealSeconds)
         assertEquals(5, summary.elevationProfile.size)

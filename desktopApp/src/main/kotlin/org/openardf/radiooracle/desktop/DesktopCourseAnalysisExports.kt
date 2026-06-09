@@ -105,6 +105,9 @@ object DesktopCourseAnalysisExports {
         }
         appendLine()
         appendLine("Elevation profiles")
+        result.elevationCacheNotes.forEach { note ->
+            appendLine(note)
+        }
         if (result.profileComparison.isEmpty() || result.profileComparison.all { it.profile.isEmpty() }) {
             appendLine("No elevation profiles available because local elevation data is incomplete.")
         } else {
@@ -369,21 +372,28 @@ object DesktopCourseAnalysisExports {
     private fun graphicsPageContents(result: DesktopCourseAnalysisSummary): List<String> =
         buildList {
             if (result.profileComparison.any { it.profile.isNotEmpty() }) {
-                add(elevationProfilesPageContent(result.profileComparison))
+                add(elevationProfilesPageContent(result.profileComparison, result.elevationCacheNotes))
             }
             if (result.routeMaps.isNotEmpty()) {
                 add(routeMapsPageContent(result.routeMaps))
             }
         }
 
-    private fun elevationProfilesPageContent(profiles: List<DesktopCourseElevationProfileSummary>): String =
+    private fun elevationProfilesPageContent(
+        profiles: List<DesktopCourseElevationProfileSummary>,
+        elevationCacheNotes: List<String>
+    ): String =
         buildString {
             appendText(54.0, 750.0, 16, "Elevation Profile Graphics")
+            elevationCacheNotes.take(3).forEachIndexed { index, note ->
+                appendText(54.0, 728.0 - index * 12.0, 9, note)
+            }
+            val firstTop = 690.0 - elevationCacheNotes.take(3).size * 12.0
             profiles
                 .filter { it.profile.isNotEmpty() }
                 .take(3)
                 .forEachIndexed { index, profile ->
-                    val top = 690.0 - index * 205.0
+                    val top = firstTop - index * 205.0
                     appendText(54.0, top + 18.0, 12, profile.title)
                     appendElevationProfile(profile, 54.0, top - 150.0, 500.0, 145.0)
                 }
