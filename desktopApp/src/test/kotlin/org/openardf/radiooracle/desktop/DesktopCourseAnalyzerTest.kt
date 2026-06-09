@@ -623,11 +623,54 @@ class DesktopCourseAnalyzerTest {
         assertEquals(listOf("Fox 1", "Fox 2", "Fox 3"), summary.waitRows.map { it.controlLabel })
     }
 
+    @Test
+    fun resolvesImportedProtectedIdealOrderWhenCategoryHasNoAssignedControls() {
+        val projectFile = projectFile(
+            foxCount = 3,
+            publicLabels = listOf("Fox 1", "Fox 2", "Fox 3"),
+            siCodes = listOf(31, 32, 33),
+            assignControls = false
+        )
+        val baseProtectedInfo = protectedInfo(foxCount = 3)
+        val protectedInfo = baseProtectedInfo.copy(
+            idealOrder = "Fox1 Fox2 Beacon",
+            controlPoints = baseProtectedInfo.controlPoints.map { control ->
+                when (control.controlId) {
+                    "control-1" -> control.copy(label = "Fox1")
+                    "control-2" -> control.copy(label = "Fox2")
+                    "control-3" -> control.copy(label = "Fox3")
+                    else -> control
+                }
+            },
+            courseObjects = baseProtectedInfo.courseObjects.map { courseObject ->
+                when (courseObject.id) {
+                    "control-1" -> courseObject.copy(label = "Fox1")
+                    "control-2" -> courseObject.copy(label = "Fox2")
+                    "control-3" -> courseObject.copy(label = "Fox3")
+                    else -> courseObject
+                }
+            }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = protectedInfo.idealOrder
+        )
+
+        assertTrue(summary.missingElements.none { it.contains("Protected ideal order could not be resolved") })
+        assertEquals(listOf("S", "Fox 1", "Fox 2", "B"), summary.providedIdealOrder)
+        assertTrue(summary.calculatedIdealOrder.none { it == "Fox 3" })
+        assertEquals(listOf("Fox 1", "Fox 2"), summary.waitRows.map { it.controlLabel })
+    }
+
     private fun projectFile(
         foxCount: Int,
         publicLabels: List<String>? = null,
         siCodes: List<Int>? = null,
-        raceType: RaceType = RaceType.CLASSIC
+        raceType: RaceType = RaceType.CLASSIC,
+        assignControls: Boolean = true
     ): EventProjectFile {
         val controls = (1..foxCount).map { number ->
             val siCode = siCodes?.getOrNull(number - 1) ?: (30 + number)
@@ -662,15 +705,19 @@ class DesktopCourseAnalyzerTest {
             timeLimitSeconds = null,
             controlPointsString = ""
         )
-        val controlPoints = controls.mapIndexed { index, control ->
-            EventControlPoint(
-                id = "cp-${control.id}",
-                categoryId = CATEGORY_ID,
-                siCode = control.siCode,
-                type = control.type,
-                order = index + 1,
-                controlId = control.id
-            )
+        val controlPoints = if (assignControls) {
+            controls.mapIndexed { index, control ->
+                EventControlPoint(
+                    id = "cp-${control.id}",
+                    categoryId = CATEGORY_ID,
+                    siCode = control.siCode,
+                    type = control.type,
+                    order = index + 1,
+                    controlId = control.id
+                )
+            }
+        } else {
+            emptyList()
         }
         return EventProjectFile(
             raceData = EventRaceData(

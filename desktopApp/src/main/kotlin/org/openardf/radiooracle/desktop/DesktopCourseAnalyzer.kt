@@ -232,7 +232,14 @@ object DesktopCourseAnalyzer {
         val categoryData = projectFile.raceData.categories.first { it.category.id == categoryId }
         val category = categoryData.category
         val raceType = category.effectiveRaceType(projectFile.raceData.race)
-        val assignedControls = assignedControls(projectFile, categoryId)
+        val idealOrderText = protectedIdealOrderText?.takeIf { it.isNotBlank() }
+            ?: protectedCourseInfo?.idealOrder?.takeIf { it.isNotBlank() }
+        val categoryAssignedControls = assignedControls(projectFile, categoryId)
+        val assignedControls = categoryAssignedControls.ifEmpty {
+            protectedCourseInfo
+                ?.let { protectedAssignedControls(projectFile, it, idealOrderText) }
+                .orEmpty()
+        }
         val protectedControlPointsById = protectedCourseInfo?.controlPoints.orEmpty().associateBy { it.controlId }
         val protectedCoordinateLookup = protectedCoordinateLookup(protectedCourseInfo)
         val missing = mutableListOf<String>()
@@ -321,8 +328,6 @@ object DesktopCourseAnalyzer {
             null
         }
 
-        val idealOrderText = protectedIdealOrderText?.takeIf { it.isNotBlank() }
-            ?: protectedCourseInfo?.idealOrder?.takeIf { it.isNotBlank() }
         val providedControls = idealOrderText
             ?.let { idealOrder ->
                 runCatching {
@@ -694,6 +699,46 @@ object DesktopCourseAnalyzer {
             }
             .distinctBy { it.id }
     }
+
+    private fun protectedAssignedControls(
+        projectFile: EventProjectFile,
+        courseInfo: ProtectedCourseInfo,
+        idealOrderText: String?
+    ): List<EventControl> {
+        val controlsById = projectFile.raceData.controls.associateBy { it.id }
+        val protectedControls = courseInfo.controlPoints
+            .map { protectedControl ->
+                controlsById[protectedControl.controlId]
+                    ?: protectedControl.toEventControl(projectFile.raceData.race.id)
+            }
+            .filter {
+                it.type == ControlPointType.CONTROL ||
+                    it.type == ControlPointType.SEPARATOR ||
+                    it.type == ControlPointType.BEACON
+            }
+            .distinctBy { it.id }
+        return idealOrderText
+            ?.let { idealOrder ->
+                runCatching {
+                    val controlsByProtectedOrder = protectedControls.associateBy { it.id }
+                    ProtectedIdealOrderRules.resolveControlIds(idealOrder, protectedControls)
+                        .mapNotNull { controlsByProtectedOrder[it] }
+                        .distinctBy { it.id }
+                }.getOrNull()
+            }
+            ?.takeIf { it.isNotEmpty() }
+            ?: protectedControls
+    }
+
+    private fun ProtectedCourseControlPoint.toEventControl(raceId: String): EventControl =
+        EventControl(
+            id = controlId,
+            raceId = raceId,
+            label = label,
+            siCode = label.filter(Char::isDigit).toIntOrNull() ?: 0,
+            type = type,
+            publicLabel = label
+        )
 
     /**
      * Section 1 analyzes the stored route. The imported route geometry is used for
