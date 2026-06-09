@@ -319,6 +319,11 @@ jDeploy package. Release preflight sets this flag automatically and verifies
 that the generated jDeploy jar contains the plain base version rather than an
 iterative desktop test suffix.
 
+Interactive desktop test builds append an alphabetic suffix to the numeric base
+version, such as `1.0.7a`, `1.0.7b`, through `1.0.7z`, then `1.0.7aa`,
+`1.0.7ab`, and so on. When the numeric base version changes, the desktop test
+suffix resets to `a` for that new base version.
+
 After a public npm publish, `npm run jdeploy:registry-smoke -- <version>`
 installs that exact registry version in a temporary directory, launches it with
 the smoke Event File, confirms startup, and quits the app.

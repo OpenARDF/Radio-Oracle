@@ -109,7 +109,27 @@ tasks.register("generateDesktopBuildInfo") {
 
     doLast {
         def suffixFile = desktopBuildSuffixFile.asFile
-        def currentSuffix = suffixFile.isFile() ? suffixFile.text.trim() : ""
+        def storedBaseVersion = ""
+        def currentSuffix = ""
+        if (suffixFile.isFile()) {
+            def suffixFileText = suffixFile.text.trim()
+            def suffixFileLines = suffixFileText.readLines()
+            if (suffixFileLines.any { it.startsWith("baseVersion=") } || suffixFileLines.any { it.startsWith("suffix=") }) {
+                storedBaseVersion = suffixFileLines
+                        .find { it.startsWith("baseVersion=") }
+                        ?.substring("baseVersion=".length())
+                        ?.trim() ?: ""
+                currentSuffix = suffixFileLines
+                        .find { it.startsWith("suffix=") }
+                        ?.substring("suffix=".length())
+                        ?.trim() ?: ""
+            } else {
+                currentSuffix = suffixFileText
+            }
+        }
+        if (!storedBaseVersion.isBlank() && storedBaseVersion != desktopBaseVersion) {
+            currentSuffix = ""
+        }
         def buildSuffix = currentSuffix
         if (isDesktopReleaseBuild) {
             buildSuffix = ""
@@ -135,7 +155,7 @@ tasks.register("generateDesktopBuildInfo") {
         }
         if (shouldIncrementDesktopBuildSuffix) {
             suffixFile.parentFile.mkdirs()
-            suffixFile.text = buildSuffix
+            suffixFile.text = "baseVersion=${desktopBaseVersion}\nsuffix=${buildSuffix}\n"
         }
 
         def baseVersion = desktopBaseVersion

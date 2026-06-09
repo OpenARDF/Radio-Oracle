@@ -52,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -1288,13 +1289,14 @@ fun main(args: Array<String>) = application {
             venueName: String,
             boundingBox: DesktopVenueElevationBoundingBox,
             resolutionMeters: Double,
-            bufferMeters: Double
+            bufferMeters: Double,
+            source: DesktopVenueElevationCacheSource
         ) {
             if (venueElevationCacheJob?.isActive == true) {
                 return
             }
             val cleanVenueName = venueName.trim().ifBlank { "Venue" }
-            projectStatusText = "Downloading elevation cache for $cleanVenueName..."
+            projectStatusText = "Downloading ${source.label} elevation cache for $cleanVenueName..."
             venueElevationCacheProgress = VenueElevationCacheProgressUiState(
                 venueName = cleanVenueName,
                 completedPointCount = 0,
@@ -1307,6 +1309,7 @@ fun main(args: Array<String>) = application {
                         boundingBox = boundingBox,
                         resolutionMeters = resolutionMeters,
                         bufferMeters = bufferMeters,
+                        source = source,
                         onProgress = { progress ->
                             venueElevationCacheProgress = VenueElevationCacheProgressUiState(
                                 venueName = progress.venueName,
@@ -1319,7 +1322,7 @@ fun main(args: Array<String>) = application {
                 result.onSuccess { summary ->
                     venueElevationCacheRefreshToken++
                     projectStatusText =
-                        "Downloaded elevation cache for ${summary.venueName}: ${summary.resolvedPointCount}/${summary.pointCount} points at ${summary.resolutionMeters.roundToInt()} m."
+                        "Downloaded ${summary.sourceName} elevation cache for ${summary.venueName}: ${summary.resolvedPointCount}/${summary.pointCount} points at ${summary.resolutionMeters.roundToInt()} m."
                 }.onFailure { error ->
                     projectStatusText = if (error is CancellationException) {
                         "Elevation cache download canceled."
@@ -3393,7 +3396,7 @@ private fun RadioOManagerDesktopApp(
     protectedIdealOrderByCategoryId: Map<String, String> = emptyMap(),
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
     onRetrieveMissingCourseElevations: (String) -> Unit = {},
-    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double) -> Unit = { _, _, _, _ -> },
+    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource) -> Unit = { _, _, _, _, _ -> },
     onOpenVenueElevationCacheFolder: () -> Unit = {},
     elevationCacheRefreshToken: Int = 0,
     onUnlockProtectedCourseOrder: (String) -> Boolean = { false },
@@ -3808,6 +3811,7 @@ private fun NavigationRail(
 ) {
     val items = DesktopNavigation.currentItems(navState)
     val navigationItems = items.filterNot { it.action == DesktopNavAction.SaveEventFile }
+    val selectedLeafLabel = DesktopNavigation.selectedLeafLabel(navState)
     Column(
         modifier = Modifier
             .width(220.dp)
@@ -3823,6 +3827,29 @@ private fun NavigationRail(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            selectedLeafLabel?.let { label ->
+                Button(
+                    onClick = {},
+                    enabled = false,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 34.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        disabledBackgroundColor = DesktopPalette.SecondaryVariant,
+                        disabledContentColor = DesktopPalette.White
+                    )
+                ) {
+                    Text(
+                        text = label,
+                        fontSize = 13.sp,
+                        lineHeight = 15.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
             navigationItems.forEach { item ->
                 val isSelected = item.id == navState.selectedItemId && item.children.isEmpty()
                 val isNavigationEnabled = DesktopNavigation.isItemEnabled(item, navigationReadiness)
@@ -4053,7 +4080,7 @@ private fun SectionWorkspace(
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onRetrieveMissingCourseElevations: (String) -> Unit,
-    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double) -> Unit,
+    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource) -> Unit,
     onOpenVenueElevationCacheFolder: () -> Unit,
     elevationCacheRefreshToken: Int,
     onUnlockProtectedCourseOrder: (String) -> Boolean,
@@ -6315,7 +6342,7 @@ private fun VenueElevationCachePanel(
     projectFile: EventProjectFile,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     refreshToken: Int,
-    onDownloadCache: (String, DesktopVenueElevationBoundingBox, Double, Double) -> Unit,
+    onDownloadCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource) -> Unit,
     onOpenCacheFolder: () -> Unit
 ) {
     val importedBounds = remember(protectedCourseInfoByCategoryId) {
@@ -6331,6 +6358,33 @@ private fun VenueElevationCachePanel(
     var maxLongitudeDraft by remember { mutableStateOf("") }
     var bufferMetersDraft by remember { mutableStateOf("500") }
     var resolutionMetersDraft by remember { mutableStateOf("10") }
+    val spotCheckScope = rememberCoroutineScope()
+    var spotCheckInProgress by remember { mutableStateOf<DesktopVenueElevationCacheListing?>(null) }
+    var spotCheckResult by remember { mutableStateOf<DesktopVenueElevationSpotCheckSummary?>(null) }
+    var spotCheckError by remember { mutableStateOf<String?>(null) }
+
+    fun startSpotCheck(
+        listing: DesktopVenueElevationCacheListing,
+        source: DesktopVenueElevationReferenceSource
+    ) {
+        spotCheckInProgress = listing
+        spotCheckResult = null
+        spotCheckError = null
+        spotCheckScope.launch {
+            runCatching {
+                DesktopVenueElevationCache.spotCheck(
+                    cachePath = listing.path,
+                    referenceSource = source,
+                    samplePointCount = 100
+                )
+            }.onSuccess { summary ->
+                spotCheckResult = summary
+            }.onFailure { error ->
+                spotCheckError = error.message ?: error::class.simpleName
+            }
+            spotCheckInProgress = null
+        }
+    }
 
     fun applyBoundingBox(bounds: DesktopVenueElevationBoundingBox) {
         minLatitudeDraft = bounds.minLatitude.decimalText()
@@ -6405,15 +6459,57 @@ private fun VenueElevationCachePanel(
                 fontSize = 14.sp
             )
         }
-        Button(
-            onClick = {
-                val bounds = parsedBoundingBox ?: return@Button
-                val resolution = resolutionMeters ?: return@Button
-                onDownloadCache(venueNameDraft, bounds, resolution, bufferMeters)
-            },
-            enabled = parsedBoundingBox != null && resolutionMeters != null && resolutionMeters > 0.0
-        ) {
-            ButtonLabel("Download Elevation Data")
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    val bounds = parsedBoundingBox ?: return@Button
+                    val resolution = resolutionMeters ?: return@Button
+                    onDownloadCache(
+                        venueNameDraft,
+                        bounds,
+                        resolution,
+                        bufferMeters,
+                        DesktopVenueElevationCacheSource.Usgs3Dep
+                    )
+                },
+                enabled = parsedBoundingBox != null && resolutionMeters != null && resolutionMeters > 0.0
+            ) {
+                ButtonLabel("Download USGS 3DEP")
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = {
+                        val bounds = parsedBoundingBox ?: return@Button
+                        val resolution = resolutionMeters ?: return@Button
+                        onDownloadCache(
+                            venueNameDraft,
+                            bounds,
+                            resolution,
+                            bufferMeters,
+                            DesktopVenueElevationCacheSource.WashingtonDnrLidarDtm
+                        )
+                    },
+                    enabled = parsedBoundingBox != null && resolutionMeters != null && resolutionMeters > 0.0
+                ) {
+                    ButtonLabel("Download WA DNR LiDAR DTM")
+                }
+                Button(
+                    onClick = {
+                        val bounds = parsedBoundingBox ?: return@Button
+                        val resolution = resolutionMeters ?: return@Button
+                        onDownloadCache(
+                            venueNameDraft,
+                            bounds,
+                            resolution,
+                            bufferMeters,
+                            DesktopVenueElevationCacheSource.OregonDogamiLidarDtm
+                        )
+                    },
+                    enabled = parsedBoundingBox != null && resolutionMeters != null && resolutionMeters > 0.0
+                ) {
+                    ButtonLabel("Download OR DOGAMI LiDAR DTM")
+                }
+            }
         }
         Text(
             text = "Cache folder: ${DesktopVenueElevationCache.cacheDirectory()}",
@@ -6453,10 +6549,126 @@ private fun VenueElevationCachePanel(
                         color = DesktopPalette.Black,
                         fontSize = 12.sp
                     )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DesktopVenueElevationReferenceSource.entries.forEach { source ->
+                            Button(
+                                onClick = { startSpotCheck(listing, source) },
+                                enabled = spotCheckInProgress == null
+                            ) {
+                                ButtonLabel(
+                                    if (spotCheckInProgress?.path == listing.path) {
+                                        "Checking..."
+                                    } else {
+                                        "Spot Check ${source.label}"
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
+        spotCheckError?.let { error ->
+            Text(
+                text = "Spot check failed: $error",
+                color = DesktopPalette.Error,
+                fontSize = 13.sp
+            )
+        }
+        spotCheckResult?.let { result ->
+            VenueElevationSpotCheckResultPanel(result)
+        }
     }
+}
+
+@Composable
+private fun VenueElevationSpotCheckResultPanel(
+    result: DesktopVenueElevationSpotCheckSummary
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Spot check: ${result.venueName} vs ${result.referenceSource.label}",
+            color = DesktopPalette.Black,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = buildString {
+                append("${result.comparedPointCount}/${result.requestedPointCount} points compared")
+                append("  avg diff ${result.averageDifferenceMeters?.let(::signedMetersText) ?: "n/a"}")
+                append("  avg abs ${result.averageAbsoluteDifferenceMeters?.let(::metersText) ?: "n/a"}")
+                append("  max abs ${result.maximumAbsoluteDifferenceMeters?.let(::metersText) ?: "n/a"}")
+                if (result.missingCacheCount > 0 || result.missingReferenceCount > 0) {
+                    append("  missing cache ${result.missingCacheCount}, reference ${result.missingReferenceCount}")
+                }
+            },
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        SpotCheckHeatMap(result)
+        Text(
+            text = "Largest differences",
+            color = DesktopPalette.Black,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+        )
+        result.rows
+            .filter { it.differenceMeters != null }
+            .take(10)
+            .forEach { row ->
+                Text(
+                    text = "row ${row.row}, col ${row.column}: cache ${row.cachedMeters?.let(::metersText) ?: "n/a"}, ${result.referenceSource.label} ${row.referenceMeters?.let(::metersText) ?: "n/a"}, diff ${row.differenceMeters?.let(::signedMetersText) ?: "n/a"} at ${row.latitude.decimalText()}, ${row.longitude.decimalText()}",
+                    color = DesktopPalette.Black,
+                    fontSize = 12.sp
+                )
+            }
+    }
+}
+
+@Composable
+private fun SpotCheckHeatMap(result: DesktopVenueElevationSpotCheckSummary) {
+    val rows = result.rows
+    val maxAbsDifference = result.maximumAbsoluteDifferenceMeters?.coerceAtLeast(0.1) ?: 0.1
+    Canvas(
+        modifier = Modifier
+            .width(220.dp)
+            .height(150.dp)
+            .border(1.dp, DesktopPalette.LightGrey)
+            .background(Color(0xFFF8F8F8))
+    ) {
+        if (rows.isEmpty()) {
+            return@Canvas
+        }
+        val minRow = rows.minOf { it.row }
+        val maxRow = rows.maxOf { it.row }.coerceAtLeast(minRow + 1)
+        val minColumn = rows.minOf { it.column }
+        val maxColumn = rows.maxOf { it.column }.coerceAtLeast(minColumn + 1)
+        val cellWidth = size.width / (maxColumn - minColumn + 1).toFloat()
+        val cellHeight = size.height / (maxRow - minRow + 1).toFloat()
+        rows.forEach { row ->
+            val difference = row.differenceMeters
+            val intensity = difference?.let { (abs(it) / maxAbsDifference).coerceIn(0.15, 1.0).toFloat() } ?: 0.3f
+            val color = when {
+                difference == null -> Color.Gray.copy(alpha = 0.35f)
+                difference > 0.0 -> Color(0xFFD32F2F).copy(alpha = intensity)
+                difference < 0.0 -> Color(0xFF1976D2).copy(alpha = intensity)
+                else -> Color(0xFF2E7D32).copy(alpha = 0.35f)
+            }
+            drawRect(
+                color = color,
+                topLeft = Offset(
+                    x = (row.column - minColumn) * cellWidth,
+                    y = (maxRow - row.row) * cellHeight
+                ),
+                size = Size(cellWidth.coerceAtLeast(1f), cellHeight.coerceAtLeast(1f))
+            )
+        }
+    }
+    Text(
+        text = "Red: cache higher. Blue: cache lower. Gray: missing comparison point.",
+        color = DesktopPalette.Black,
+        fontSize = 12.sp
+    )
 }
 
 @Composable
@@ -7257,6 +7469,12 @@ private fun CourseAnalysisRow(label: String, value: String, valueColor: Color = 
 
 private fun kilometersText(value: Int?): String =
     value?.let { "${twoDecimalText(it / 1000.0)} km" } ?: "Unknown"
+
+private fun metersText(value: Double): String =
+    "${oneDecimal(value)} m"
+
+private fun signedMetersText(value: Double): String =
+    "${if (value >= 0.0) "+" else ""}${oneDecimal(value)} m"
 
 private fun climbText(value: Int?): String =
     value?.let { "$it m" } ?: "Unknown"

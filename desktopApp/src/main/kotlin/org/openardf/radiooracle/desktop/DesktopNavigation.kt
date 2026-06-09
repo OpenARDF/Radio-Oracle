@@ -459,6 +459,15 @@ object DesktopNavigation {
         return selectedLeaf?.children ?: activeMenuItems
     }
 
+    fun selectedLeafLabel(state: DesktopNavState): String? {
+        if (state.submenuStack.isEmpty()) {
+            return null
+        }
+        return menuItemsForStack(state.workflow, state.submenuStack)
+            .firstOrNull { it.id == state.selectedItemId && it.children.isEmpty() }
+            ?.label
+    }
+
     fun menuItemsForStack(workflow: DesktopWorkflow, submenuStack: List<String>): List<DesktopNavItem> =
         submenuStack.fold(roots.getValue(workflow)) { items, id ->
             items.firstOrNull { it.id == id }?.children ?: items

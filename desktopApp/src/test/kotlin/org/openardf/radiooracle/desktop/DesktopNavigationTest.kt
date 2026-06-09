@@ -705,10 +705,38 @@ class DesktopNavigationTest {
 
         assertEquals("Setup > Controls > Define Controls", DesktopNavigation.breadcrumb(defineControlsState))
         assertEquals(emptyList<String>(), DesktopNavigation.currentItems(defineControlsState).map { it.label })
+        assertEquals("Define Controls", DesktopNavigation.selectedLeafLabel(defineControlsState))
 
         val backState = defineControlsState.back()
 
         assertEquals("Setup > Controls", DesktopNavigation.breadcrumb(backState))
+        assertEquals(null, DesktopNavigation.selectedLeafLabel(backState))
+        assertEquals(
+            listOf("Define Controls", "Course Analyzer", "Elevation Data", "Import/Export"),
+            DesktopNavigation.currentItems(backState).map { it.label }
+        )
+    }
+
+    @Test
+    fun selectingCourseAnalyzerKeepsCurrentLeafVisibleUntilBack() {
+        val controlsState = DesktopNavigation.selectItem(
+            DesktopNavState(),
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Controls" }
+        ).state
+        val courseAnalyzerState = DesktopNavigation.selectItem(
+            controlsState,
+            DesktopNavigation.currentItems(controlsState).first { it.label == "Course Analyzer" }
+        ).state
+
+        assertEquals(DesktopSection.CourseAnalysis, courseAnalyzerState.selectedSection)
+        assertEquals("Setup > Controls > Course Analyzer", DesktopNavigation.breadcrumb(courseAnalyzerState))
+        assertEquals(emptyList<String>(), DesktopNavigation.currentItems(courseAnalyzerState).map { it.label })
+        assertEquals("Course Analyzer", DesktopNavigation.selectedLeafLabel(courseAnalyzerState))
+
+        val backState = courseAnalyzerState.back()
+
+        assertEquals("Setup > Controls", DesktopNavigation.breadcrumb(backState))
+        assertEquals(null, DesktopNavigation.selectedLeafLabel(backState))
         assertEquals(
             listOf("Define Controls", "Course Analyzer", "Elevation Data", "Import/Export"),
             DesktopNavigation.currentItems(backState).map { it.label }

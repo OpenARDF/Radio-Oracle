@@ -26,12 +26,33 @@ import java.nio.file.Path
 import java.security.MessageDigest
 import java.time.Duration
 import java.time.Instant
+import java.util.Locale
+import java.util.concurrent.CompletableFuture
+import java.util.zip.ZipInputStream
 import kotlin.coroutines.coroutineContext
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
+
+enum class DesktopVenueElevationReferenceSource(
+    val label: String
+) {
+    Usgs3DepLive("USGS 3DEP live"),
+    OpenTopoDataNed10m("OpenTopoData NED 10m")
+}
+
+enum class DesktopVenueElevationCacheSource(
+    val label: String
+) {
+    Usgs3Dep("USGS 3DEP"),
+    WashingtonDnrLidarDtm("Washington DNR LiDAR DTM"),
+    OregonDogamiLidarDtm("Oregon DOGAMI LiDAR DTM")
+}
 
 data class DesktopVenueElevationBoundingBox(
     val minLatitude: Double,
@@ -107,14 +128,42 @@ data class DesktopVenueElevationCacheListing(
     val boundingBox: DesktopVenueElevationBoundingBox
 )
 
+data class DesktopVenueElevationSpotCheckSummary(
+    val venueName: String,
+    val cachePath: Path,
+    val referenceSource: DesktopVenueElevationReferenceSource,
+    val requestedPointCount: Int,
+    val comparedPointCount: Int,
+    val missingCacheCount: Int,
+    val missingReferenceCount: Int,
+    val averageDifferenceMeters: Double?,
+    val averageAbsoluteDifferenceMeters: Double?,
+    val maximumAbsoluteDifferenceMeters: Double?,
+    val rows: List<DesktopVenueElevationSpotCheckRow>
+)
+
+data class DesktopVenueElevationSpotCheckRow(
+    val row: Int,
+    val column: Int,
+    val latitude: Double,
+    val longitude: Double,
+    val cachedMeters: Double?,
+    val referenceMeters: Double?,
+    val differenceMeters: Double?
+)
+
 object DesktopVenueElevationCache {
     private const val CACHE_VERSION = 1
     private const val DEFAULT_SOURCE_NAME = "USGS 3DEP"
-    private const val USGS_SAMPLE_BATCH_SIZE = 250
-    private const val USGS_SAMPLE_RETRY_COUNT = 4
+    private const val WASHINGTON_DNR_SOURCE_NAME = "Washington DNR LiDAR DTM"
+    private const val OREGON_DOGAMI_SOURCE_NAME = "Oregon DOGAMI LiDAR DTM"
+    private const val ARCGIS_SAMPLE_BATCH_SIZE = 250
+    private const val ARCGIS_SAMPLE_RETRY_COUNT = 4
+    private const val FEET_TO_METERS = 0.3048
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
     private val httpClient: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(20))
+        .followRedirects(HttpClient.Redirect.NORMAL)
         .build()
 
     @Volatile
@@ -184,10 +233,95 @@ object DesktopVenueElevationCache {
     fun elevationMeters(point: CourseGeoPoint): Double? =
         loadCaches()
             .filter { it.metadata.boundingBox.toPublic().contains(point) }
-            .sortedBy { it.metadata.resolutionMeters }
+            .sortedWith(
+                compareBy<DesktopVenueElevationCacheFile> { it.sourcePriority() }
+                    .thenBy { it.metadata.resolutionMeters }
+                    .thenByDescending { it.metadata.createdAtIso }
+                    .thenBy { it.path.fileName.toString() }
+            )
             .firstNotNullOfOrNull { it.elevationMeters(point) }
 
+    suspend fun spotCheck(
+        cachePath: Path,
+        referenceSource: DesktopVenueElevationReferenceSource,
+        samplePointCount: Int = 100
+    ): DesktopVenueElevationSpotCheckSummary =
+        withContext(Dispatchers.IO) {
+            val cache = parseCacheFile(Files.readString(cachePath), cachePath)
+            val samplePoints = cache.spotCheckPoints(samplePointCount)
+            val referenceValues = when (referenceSource) {
+                DesktopVenueElevationReferenceSource.Usgs3DepLive ->
+                    samplePoints.chunked(ARCGIS_SAMPLE_BATCH_SIZE).flatMapIndexed { chunkIndex, chunk ->
+                        usgs3DepSamplesWithRetry(chunk.map { it.point }, chunkIndex + 1)
+                    }
+                DesktopVenueElevationReferenceSource.OpenTopoDataNed10m ->
+                    openTopoDataElevations("ned10m", samplePoints.map { it.point })
+            }
+            val rows = samplePoints.mapIndexed { index, sample ->
+                val cached = cache.elevationAt(sample.row, sample.column)
+                val reference = referenceValues.getOrNull(index)
+                DesktopVenueElevationSpotCheckRow(
+                    row = sample.row,
+                    column = sample.column,
+                    latitude = sample.point.latitude,
+                    longitude = sample.point.longitude,
+                    cachedMeters = cached,
+                    referenceMeters = reference,
+                    differenceMeters = if (cached != null && reference != null) cached - reference else null
+                )
+            }
+            val differences = rows.mapNotNull { it.differenceMeters }
+            DesktopVenueElevationSpotCheckSummary(
+                venueName = cache.metadata.venueName,
+                cachePath = cache.path,
+                referenceSource = referenceSource,
+                requestedPointCount = samplePoints.size,
+                comparedPointCount = differences.size,
+                missingCacheCount = rows.count { it.cachedMeters == null },
+                missingReferenceCount = rows.count { it.referenceMeters == null },
+                averageDifferenceMeters = differences.takeIf { it.isNotEmpty() }?.average(),
+                averageAbsoluteDifferenceMeters = differences.takeIf { it.isNotEmpty() }?.map(::abs)?.average(),
+                maximumAbsoluteDifferenceMeters = differences.takeIf { it.isNotEmpty() }?.maxOf { abs(it) },
+                rows = rows.sortedByDescending { abs(it.differenceMeters ?: 0.0) }
+            )
+        }
+
     suspend fun download(
+        venueName: String,
+        boundingBox: DesktopVenueElevationBoundingBox,
+        resolutionMeters: Double,
+        bufferMeters: Double,
+        source: DesktopVenueElevationCacheSource = DesktopVenueElevationCacheSource.Usgs3Dep,
+        onProgress: (DesktopVenueElevationCacheProgress) -> Unit = {}
+    ): DesktopVenueElevationCacheSummary =
+        when (source) {
+            DesktopVenueElevationCacheSource.Usgs3Dep ->
+                downloadUsgs3Dep(
+                    venueName = venueName,
+                    boundingBox = boundingBox,
+                    resolutionMeters = resolutionMeters,
+                    bufferMeters = bufferMeters,
+                    onProgress = onProgress
+                )
+            DesktopVenueElevationCacheSource.WashingtonDnrLidarDtm ->
+                downloadWashingtonDnrLidarDtm(
+                    venueName = venueName,
+                    boundingBox = boundingBox,
+                    resolutionMeters = resolutionMeters,
+                    bufferMeters = bufferMeters,
+                    onProgress = onProgress
+                )
+            DesktopVenueElevationCacheSource.OregonDogamiLidarDtm ->
+                downloadOregonDogamiLidarDtm(
+                    venueName = venueName,
+                    boundingBox = boundingBox,
+                    resolutionMeters = resolutionMeters,
+                    bufferMeters = bufferMeters,
+                    onProgress = onProgress
+                )
+        }
+
+    private suspend fun downloadUsgs3Dep(
         venueName: String,
         boundingBox: DesktopVenueElevationBoundingBox,
         resolutionMeters: Double,
@@ -207,11 +341,11 @@ object DesktopVenueElevationCache {
             )
             val elevations = MutableList<Double?>(points.size) { null }
             var completed = 0
-            points.chunked(USGS_SAMPLE_BATCH_SIZE).forEachIndexed { chunkIndex, chunk ->
+            points.chunked(ARCGIS_SAMPLE_BATCH_SIZE).forEachIndexed { chunkIndex, chunk ->
                 coroutineContext.ensureActive()
                 val values = usgs3DepSamplesWithRetry(chunk, chunkIndex + 1)
                 values.forEachIndexed { index, value ->
-                    elevations[chunkIndex * USGS_SAMPLE_BATCH_SIZE + index] = value
+                    elevations[chunkIndex * ARCGIS_SAMPLE_BATCH_SIZE + index] = value
                 }
                 completed += chunk.size
                 onProgress(
@@ -255,6 +389,163 @@ object DesktopVenueElevationCache {
                 pointCount = points.size,
                 resolvedPointCount = elevations.count { it != null },
                 sourceName = DEFAULT_SOURCE_NAME,
+                resolutionMeters = resolutionMeters,
+                fileSha256 = hash
+            )
+        }
+
+    private suspend fun downloadWashingtonDnrLidarDtm(
+        venueName: String,
+        boundingBox: DesktopVenueElevationBoundingBox,
+        resolutionMeters: Double,
+        bufferMeters: Double,
+        onProgress: (DesktopVenueElevationCacheProgress) -> Unit = {}
+    ): DesktopVenueElevationCacheSummary =
+        withContext(Dispatchers.IO) {
+            val gdal = DesktopGdalTools.requireAvailable()
+            val cleanVenueName = venueName.trim().ifBlank { "Venue" }
+            val estimate = estimate(boundingBox, resolutionMeters, bufferMeters)
+            val projectIndex = washingtonDnrProjectIndex()
+            val dataset = projectIndex.bestDtmDatasetFor(estimate.boundingBox)
+                ?: error("No Washington DNR DTM dataset intersects the requested bounding box.")
+            val points = estimate.gridPoints()
+            onProgress(
+                DesktopVenueElevationCacheProgress(
+                    venueName = cleanVenueName,
+                    completedPointCount = 0,
+                    totalPointCount = points.size
+                )
+            )
+            val directory = cacheDirectory()
+            Files.createDirectories(directory)
+            val sourceDirectory = directory.resolve("sources")
+            Files.createDirectories(sourceDirectory)
+            val zipPath = sourceDirectory.resolve(
+                "${cacheSlug(cleanVenueName)}-wa-dnr-dtm-${dataset.id}-${Instant.now().toString().replace(Regex("[^0-9TZ]"), "")}.zip"
+            )
+            val downloadUri = washingtonDnrDownloadUri(estimate.boundingBox, dataset.id)
+            downloadFile(downloadUri, zipPath)
+            coroutineContext.ensureActive()
+            val workDirectory = Files.createTempDirectory("radio-oracle-wa-dnr-dtm-")
+            try {
+                val rasterPath = extractDnrRaster(workDirectory, zipPath, gdal)
+                coroutineContext.ensureActive()
+                val elevations = gdal.sampleWgs84(rasterPath, points)
+                onProgress(
+                    DesktopVenueElevationCacheProgress(
+                        venueName = cleanVenueName,
+                        completedPointCount = points.size,
+                        totalPointCount = points.size
+                    )
+                )
+                val file = DesktopVenueElevationCacheFile(
+                    metadata = DesktopVenueElevationCacheMetadata(
+                        version = CACHE_VERSION,
+                        venueName = cleanVenueName,
+                        sourceName = "$WASHINGTON_DNR_SOURCE_NAME - ${dataset.projectName}",
+                        sourceUrl = downloadUri.toString(),
+                        resolutionMeters = resolutionMeters,
+                        rowCount = estimate.rowCount,
+                        columnCount = estimate.columnCount,
+                        boundingBox = estimate.boundingBox.toSerializable(),
+                        createdAtIso = Instant.now().toString()
+                    ),
+                    elevations = elevations
+                )
+                val path = uniqueCachePath(directory, cleanVenueName, resolutionMeters)
+                Files.writeString(path, file.toJsonString())
+                loadedSignature = ""
+                val hash = fileSha256(path)
+                DesktopDebugLog.info(
+                    "ElevationCache",
+                    "Downloaded venue=$cleanVenueName source=$WASHINGTON_DNR_SOURCE_NAME project=${dataset.projectName} " +
+                        "resolution=${resolutionMeters}m points=${points.size} resolved=${elevations.count { it != null }} " +
+                        "file=${path.fileName} hash=${hash.take(12)}"
+                )
+                DesktopVenueElevationCacheSummary(
+                    venueName = cleanVenueName,
+                    path = path,
+                    rowCount = estimate.rowCount,
+                    columnCount = estimate.columnCount,
+                    pointCount = points.size,
+                    resolvedPointCount = elevations.count { it != null },
+                    sourceName = file.metadata.sourceName,
+                    resolutionMeters = resolutionMeters,
+                    fileSha256 = hash
+                )
+            } finally {
+                runCatching { deleteRecursively(workDirectory) }
+            }
+        }
+
+    private suspend fun downloadOregonDogamiLidarDtm(
+        venueName: String,
+        boundingBox: DesktopVenueElevationBoundingBox,
+        resolutionMeters: Double,
+        bufferMeters: Double,
+        onProgress: (DesktopVenueElevationCacheProgress) -> Unit = {}
+    ): DesktopVenueElevationCacheSummary =
+        withContext(Dispatchers.IO) {
+            val cleanVenueName = venueName.trim().ifBlank { "Venue" }
+            val estimate = estimate(boundingBox, resolutionMeters, bufferMeters)
+            val points = estimate.gridPoints()
+            onProgress(
+                DesktopVenueElevationCacheProgress(
+                    venueName = cleanVenueName,
+                    completedPointCount = 0,
+                    totalPointCount = points.size
+                )
+            )
+            val elevations = MutableList<Double?>(points.size) { null }
+            var completed = 0
+            points.chunked(ARCGIS_SAMPLE_BATCH_SIZE).forEachIndexed { chunkIndex, chunk ->
+                coroutineContext.ensureActive()
+                val values = oregonDogamiSamplesWithRetry(chunk, chunkIndex + 1)
+                values.forEachIndexed { index, value ->
+                    elevations[chunkIndex * ARCGIS_SAMPLE_BATCH_SIZE + index] = value
+                }
+                completed += chunk.size
+                onProgress(
+                    DesktopVenueElevationCacheProgress(
+                        venueName = cleanVenueName,
+                        completedPointCount = completed,
+                        totalPointCount = points.size
+                    )
+                )
+            }
+            val file = DesktopVenueElevationCacheFile(
+                metadata = DesktopVenueElevationCacheMetadata(
+                    version = CACHE_VERSION,
+                    venueName = cleanVenueName,
+                    sourceName = OREGON_DOGAMI_SOURCE_NAME,
+                    sourceUrl = OREGON_DOGAMI_DTM_GET_SAMPLES_URL,
+                    resolutionMeters = resolutionMeters,
+                    rowCount = estimate.rowCount,
+                    columnCount = estimate.columnCount,
+                    boundingBox = estimate.boundingBox.toSerializable(),
+                    createdAtIso = Instant.now().toString()
+                ),
+                elevations = elevations
+            )
+            val directory = cacheDirectory()
+            Files.createDirectories(directory)
+            val path = uniqueCachePath(directory, cleanVenueName, resolutionMeters)
+            Files.writeString(path, file.toJsonString())
+            loadedSignature = ""
+            val hash = fileSha256(path)
+            DesktopDebugLog.info(
+                "ElevationCache",
+                "Downloaded venue=$cleanVenueName source=$OREGON_DOGAMI_SOURCE_NAME resolution=${resolutionMeters}m " +
+                    "points=${points.size} resolved=${elevations.count { it != null }} file=${path.fileName} hash=${hash.take(12)}"
+            )
+            DesktopVenueElevationCacheSummary(
+                venueName = cleanVenueName,
+                path = path,
+                rowCount = estimate.rowCount,
+                columnCount = estimate.columnCount,
+                pointCount = points.size,
+                resolvedPointCount = elevations.count { it != null },
+                sourceName = OREGON_DOGAMI_SOURCE_NAME,
                 resolutionMeters = resolutionMeters,
                 fileSha256 = hash
             )
@@ -312,6 +603,71 @@ object DesktopVenueElevationCache {
             }
         }
 
+    private fun DesktopVenueElevationCacheFile.spotCheckPoints(samplePointCount: Int): List<DesktopVenueElevationSpotCheckPoint> {
+        val targetCount = samplePointCount.coerceAtLeast(1)
+        val rowTarget = ceil(
+            sqrt(targetCount.toDouble() * metadata.rowCount.toDouble() / metadata.columnCount.toDouble().coerceAtLeast(1.0))
+        ).toInt().coerceIn(1, metadata.rowCount.coerceAtLeast(1))
+        var columnTarget = ceil(targetCount.toDouble() / rowTarget.toDouble()).toInt()
+            .coerceIn(1, metadata.columnCount.coerceAtLeast(1))
+        var adjustedRowTarget = rowTarget
+        while (adjustedRowTarget * columnTarget < targetCount &&
+            (adjustedRowTarget < metadata.rowCount || columnTarget < metadata.columnCount)
+        ) {
+            if (columnTarget < metadata.columnCount) {
+                columnTarget += 1
+            } else {
+                adjustedRowTarget += 1
+            }
+        }
+        val rows = evenlySpacedIndices(metadata.rowCount, adjustedRowTarget)
+        val columns = evenlySpacedIndices(metadata.columnCount, columnTarget)
+        val candidates = buildList {
+            rows.forEach { row ->
+                columns.forEach { column ->
+                    add(
+                        DesktopVenueElevationSpotCheckPoint(
+                            row = row,
+                            column = column,
+                            point = gridPoint(row, column)
+                        )
+                    )
+                }
+            }
+        }
+        return evenlySpacedIndices(candidates.size, targetCount).map(candidates::get)
+    }
+
+    private fun DesktopVenueElevationCacheFile.gridPoint(row: Int, column: Int): CourseGeoPoint {
+        val bbox = metadata.boundingBox.toPublic()
+        val latitude = if (metadata.rowCount <= 1) {
+            bbox.minLatitude
+        } else {
+            bbox.minLatitude + (bbox.maxLatitude - bbox.minLatitude) * row.toDouble() / (metadata.rowCount - 1).toDouble()
+        }
+        val longitude = if (metadata.columnCount <= 1) {
+            bbox.minLongitude
+        } else {
+            bbox.minLongitude + (bbox.maxLongitude - bbox.minLongitude) * column.toDouble() / (metadata.columnCount - 1).toDouble()
+        }
+        return CourseGeoPoint(latitude = latitude, longitude = longitude)
+    }
+
+    private fun evenlySpacedIndices(size: Int, targetCount: Int): List<Int> {
+        if (size <= 0 || targetCount <= 0) {
+            return emptyList()
+        }
+        val count = min(size, targetCount).coerceAtLeast(1)
+        if (count == 1) {
+            return listOf(0)
+        }
+        return (0 until count)
+            .map { index ->
+                ((size - 1).toDouble() * index.toDouble() / (count - 1).toDouble()).roundToInt()
+            }
+            .distinct()
+    }
+
     private fun DesktopVenueElevationCacheFile.elevationMeters(point: CourseGeoPoint): Double? {
         val bbox = metadata.boundingBox.toPublic()
         if (!bbox.contains(point) || metadata.rowCount <= 0 || metadata.columnCount <= 0) {
@@ -345,6 +701,13 @@ object DesktopVenueElevationCache {
 
     private fun DesktopVenueElevationCacheFile.elevationAt(row: Int, column: Int): Double? =
         elevations.getOrNull(row * metadata.columnCount + column)
+
+    private fun DesktopVenueElevationCacheFile.sourcePriority(): Int =
+        when {
+            metadata.sourceName.contains("LiDAR DTM", ignoreCase = true) -> 0
+            metadata.sourceName == DEFAULT_SOURCE_NAME -> 1
+            else -> 2
+        }
 
     private fun ProtectedCourseInfo.allGeoPoints(): List<CourseGeoPoint> =
         route.map { CourseGeoPoint(it.latitude, it.longitude) } +
@@ -381,25 +744,28 @@ object DesktopVenueElevationCache {
         )
 
     private fun uniqueCachePath(directory: Path, venueName: String, resolutionMeters: Double): Path {
-        val slug = venueName
-            .lowercase()
-            .replace(Regex("[^a-z0-9]+"), "-")
-            .trim('-')
-            .ifBlank { "venue" }
+        val slug = cacheSlug(venueName)
         val resolutionText = resolutionMeters.roundToInt().coerceAtLeast(1).toString()
         val timestamp = Instant.now().toString().replace(Regex("[^0-9TZ]"), "")
         return directory.resolve("$slug-${resolutionText}m-$timestamp.roelev.json")
     }
 
+    private fun cacheSlug(value: String): String =
+        value
+            .lowercase()
+            .replace(Regex("[^a-z0-9]+"), "-")
+            .trim('-')
+            .ifBlank { "venue" }
+
     private fun usgs3DepSamplesWithRetry(points: List<CourseGeoPoint>, batchNumber: Int): List<Double?> {
         var lastError: Throwable? = null
-        repeat(USGS_SAMPLE_RETRY_COUNT) { attemptIndex ->
+        repeat(ARCGIS_SAMPLE_RETRY_COUNT) { attemptIndex ->
             try {
                 return usgs3DepSamples(points)
             } catch (error: Throwable) {
                 lastError = error
                 val attempt = attemptIndex + 1
-                if (!error.isRetryableElevationServiceError() || attempt == USGS_SAMPLE_RETRY_COUNT) {
+                if (!error.isRetryableElevationServiceError() || attempt == ARCGIS_SAMPLE_RETRY_COUNT) {
                     DesktopDebugLog.warn(
                         "ElevationCache",
                         "USGS sample batch failed batch=$batchNumber attempt=$attempt points=${points.size}: ${error.message ?: error::class.simpleName}"
@@ -416,6 +782,36 @@ object DesktopVenueElevationCache {
         throw lastError ?: IllegalStateException("USGS 3DEP sample request failed.")
     }
 
+    private fun oregonDogamiSamplesWithRetry(points: List<CourseGeoPoint>, batchNumber: Int): List<Double?> {
+        var lastError: Throwable? = null
+        repeat(ARCGIS_SAMPLE_RETRY_COUNT) { attemptIndex ->
+            try {
+                return arcGisImageSamples(
+                    serviceUrl = OREGON_DOGAMI_DTM_GET_SAMPLES_URL,
+                    points = points,
+                    sourceName = OREGON_DOGAMI_SOURCE_NAME,
+                    valueMultiplier = FEET_TO_METERS
+                )
+            } catch (error: Throwable) {
+                lastError = error
+                val attempt = attemptIndex + 1
+                if (!error.isRetryableElevationServiceError() || attempt == ARCGIS_SAMPLE_RETRY_COUNT) {
+                    DesktopDebugLog.warn(
+                        "ElevationCache",
+                        "Oregon DOGAMI sample batch failed batch=$batchNumber attempt=$attempt points=${points.size}: ${error.message ?: error::class.simpleName}"
+                    )
+                    throw error
+                }
+                DesktopDebugLog.warn(
+                    "ElevationCache",
+                    "Oregon DOGAMI sample batch retry batch=$batchNumber attempt=$attempt points=${points.size}: ${error.message ?: error::class.simpleName}"
+                )
+                Thread.sleep(1_000L * attempt)
+            }
+        }
+        throw lastError ?: IllegalStateException("Oregon DOGAMI sample request failed.")
+    }
+
     private fun Throwable.isRetryableElevationServiceError(): Boolean =
         message?.contains("HTTP 502") == true ||
             message?.contains("HTTP 503") == true ||
@@ -423,6 +819,19 @@ object DesktopVenueElevationCache {
             message?.contains("timed out", ignoreCase = true) == true
 
     private fun usgs3DepSamples(points: List<CourseGeoPoint>): List<Double?> {
+        return arcGisImageSamples(
+            serviceUrl = USGS_GET_SAMPLES_URL,
+            points = points,
+            sourceName = "USGS 3DEP sample service"
+        )
+    }
+
+    private fun arcGisImageSamples(
+        serviceUrl: String,
+        points: List<CourseGeoPoint>,
+        sourceName: String,
+        valueMultiplier: Double = 1.0
+    ): List<Double?> {
         if (points.isEmpty()) {
             return emptyList()
         }
@@ -446,7 +855,7 @@ object DesktopVenueElevationCache {
         ).joinToString("&") { (key, value) ->
             "${key.url()}=${value.url()}"
         }
-        val request = HttpRequest.newBuilder(URI.create(USGS_GET_SAMPLES_URL))
+        val request = HttpRequest.newBuilder(URI.create(serviceUrl))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .header("User-Agent", "Radio-Oracle Desktop")
             .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -454,7 +863,7 @@ object DesktopVenueElevationCache {
             .build()
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
         require(response.statusCode() in 200..299) {
-            "USGS 3DEP sample service returned HTTP ${response.statusCode()}."
+            "$sourceName returned HTTP ${response.statusCode()}."
         }
         val values = MutableList<Double?>(points.size) { null }
         val root = json.parseToJsonElement(response.body()).jsonObject
@@ -467,14 +876,224 @@ object DesktopVenueElevationCache {
             val value = sampleObject["value"]?.jsonPrimitive?.content?.toDoubleOrNull()
                 ?: sampleObject["value"]?.jsonPrimitive?.doubleOrNull
             if (locationId != null && locationId in values.indices) {
-                values[locationId] = value
+                values[locationId] = value?.times(valueMultiplier)
             }
         }
         return values
     }
 
+    private fun openTopoDataElevations(dataset: String, points: List<CourseGeoPoint>): List<Double?> {
+        if (points.isEmpty()) {
+            return emptyList()
+        }
+        val locations = points.joinToString("|") { point ->
+            "${point.latitude},${point.longitude}"
+        }
+        val body = buildJsonObject {
+            put("locations", locations)
+            put("interpolation", "bilinear")
+        }.toString()
+        val request = HttpRequest.newBuilder(URI.create("https://api.opentopodata.org/v1/$dataset"))
+            .header("User-Agent", "Radio-Oracle Desktop")
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+            .timeout(Duration.ofSeconds(45))
+            .build()
+        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        require(response.statusCode() in 200..299) {
+            "OpenTopoData returned HTTP ${response.statusCode()}."
+        }
+        val root = json.parseToJsonElement(response.body()).jsonObject
+        val status = root["status"]?.jsonPrimitive?.content
+        require(status == null || status == "OK") {
+            "OpenTopoData returned status ${status ?: "UNKNOWN"}."
+        }
+        return root["results"]?.jsonArray?.map { result ->
+            result.jsonObject["elevation"]?.jsonPrimitive?.doubleOrNull
+        } ?: emptyList()
+    }
+
     private fun String.url(): String =
         URLEncoder.encode(this, StandardCharsets.UTF_8)
+
+    private fun washingtonDnrProjectIndex(): List<WashingtonDnrLidarProject> {
+        val request = HttpRequest.newBuilder(URI.create(WASHINGTON_DNR_PROJECT_URL))
+            .header("User-Agent", "Radio-Oracle Desktop")
+            .GET()
+            .timeout(Duration.ofSeconds(60))
+            .build()
+        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        require(response.statusCode() in 200..299) {
+            "Washington DNR project index returned HTTP ${response.statusCode()}."
+        }
+        return json.parseToJsonElement(response.body()).jsonArray.mapNotNull { projectElement ->
+            val project = projectElement.jsonObject
+            val projectName = project["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
+            val datasets = project["datasets"]?.jsonArray.orEmpty().mapNotNull { datasetElement ->
+                val dataset = datasetElement.jsonObject
+                val name = dataset["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
+                WashingtonDnrLidarDataset(
+                    id = dataset["ID"]?.jsonPrimitive?.content?.toIntOrNull() ?: return@mapNotNull null,
+                    projectName = projectName,
+                    name = name,
+                    boundingBox = DesktopVenueElevationBoundingBox(
+                        minLatitude = dataset["YMin"]?.jsonPrimitive?.content?.toDoubleOrNull() ?: return@mapNotNull null,
+                        maxLatitude = dataset["YMax"]?.jsonPrimitive?.content?.toDoubleOrNull() ?: return@mapNotNull null,
+                        minLongitude = dataset["XMin"]?.jsonPrimitive?.content?.toDoubleOrNull() ?: return@mapNotNull null,
+                        maxLongitude = dataset["XMax"]?.jsonPrimitive?.content?.toDoubleOrNull() ?: return@mapNotNull null
+                    )
+                )
+            }
+            WashingtonDnrLidarProject(name = projectName, datasets = datasets)
+        }
+    }
+
+    private fun List<WashingtonDnrLidarProject>.bestDtmDatasetFor(
+        boundingBox: DesktopVenueElevationBoundingBox
+    ): WashingtonDnrLidarDataset? {
+        val center = CourseGeoPoint(
+            latitude = (boundingBox.minLatitude + boundingBox.maxLatitude) / 2.0,
+            longitude = (boundingBox.minLongitude + boundingBox.maxLongitude) / 2.0
+        )
+        return flatMap { it.datasets }
+            .filter { it.name == "DTM" && it.boundingBox.intersects(boundingBox) }
+            .maxWithOrNull(
+                compareBy<WashingtonDnrLidarDataset> { if (it.boundingBox.contains(center)) 1 else 0 }
+                    .thenBy { it.boundingBox.overlapAreaDegrees(boundingBox) }
+                    .thenBy { it.projectYear() }
+                    .thenBy { it.id }
+            )
+    }
+
+    private fun WashingtonDnrLidarDataset.projectYear(): Int =
+        Regex("""\b(19|20)\d{2}\b""")
+            .findAll(projectName)
+            .mapNotNull { it.value.toIntOrNull() }
+            .maxOrNull() ?: 0
+
+    private fun DesktopVenueElevationBoundingBox.intersects(other: DesktopVenueElevationBoundingBox): Boolean =
+        minLatitude <= other.maxLatitude &&
+            maxLatitude >= other.minLatitude &&
+            minLongitude <= other.maxLongitude &&
+            maxLongitude >= other.minLongitude
+
+    private fun DesktopVenueElevationBoundingBox.overlapAreaDegrees(other: DesktopVenueElevationBoundingBox): Double {
+        val latitude = (min(maxLatitude, other.maxLatitude) - max(minLatitude, other.minLatitude)).coerceAtLeast(0.0)
+        val longitude = (min(maxLongitude, other.maxLongitude) - max(minLongitude, other.minLongitude)).coerceAtLeast(0.0)
+        return latitude * longitude
+    }
+
+    private fun washingtonDnrDownloadUri(
+        boundingBox: DesktopVenueElevationBoundingBox,
+        datasetId: Int
+    ): URI {
+        val geoJson = buildString {
+            append("""{"type":"Polygon","coordinates":[[[""")
+            append(boundingBox.minLongitude.decimal(6))
+            append(',')
+            append(boundingBox.minLatitude.decimal(6))
+            append("],[")
+            append(boundingBox.minLongitude.decimal(6))
+            append(',')
+            append(boundingBox.maxLatitude.decimal(6))
+            append("],[")
+            append(boundingBox.maxLongitude.decimal(6))
+            append(',')
+            append(boundingBox.maxLatitude.decimal(6))
+            append("],[")
+            append(boundingBox.maxLongitude.decimal(6))
+            append(',')
+            append(boundingBox.minLatitude.decimal(6))
+            append("],[")
+            append(boundingBox.minLongitude.decimal(6))
+            append(',')
+            append(boundingBox.minLatitude.decimal(6))
+            append("]]]}")
+        }
+        return URI.create("$WASHINGTON_DNR_DOWNLOAD_URL?geojson=${geoJson.url()}&ids=$datasetId")
+    }
+
+    private fun Double.decimal(places: Int): String =
+        "%.${places}f".format(Locale.US, this)
+
+    private fun downloadFile(uri: URI, path: Path) {
+        val request = HttpRequest.newBuilder(uri)
+            .header("User-Agent", "Radio-Oracle Desktop")
+            .GET()
+            .timeout(Duration.ofMinutes(30))
+            .build()
+        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofFile(path))
+        require(response.statusCode() in 200..299) {
+            "Washington DNR DTM download returned HTTP ${response.statusCode()}."
+        }
+        require(Files.size(path) > 0L) {
+            "Washington DNR DTM download returned an empty file."
+        }
+    }
+
+    private fun deleteRecursively(path: Path) {
+        if (!Files.exists(path)) {
+            return
+        }
+        Files.walk(path).use { stream ->
+            stream
+                .sorted(Comparator.reverseOrder())
+                .forEach { Files.deleteIfExists(it) }
+        }
+    }
+
+    private fun extractDnrRaster(
+        workDirectory: Path,
+        zipPath: Path,
+        gdal: DesktopGdalTools
+    ): Path {
+        val extractDirectory = workDirectory.resolve("extract")
+        Files.createDirectories(extractDirectory)
+        ZipInputStream(Files.newInputStream(zipPath)).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                val fileName = Path.of(entry.name).fileName?.toString() ?: continue
+                if (entry.isDirectory || fileName.isBlank()) {
+                    continue
+                }
+                val output = extractDirectory.resolve(fileName).normalize()
+                require(output.startsWith(extractDirectory)) {
+                    "Washington DNR ZIP entry is outside the extraction directory: ${entry.name}"
+                }
+                Files.copy(zip, output, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
+        val rasters = Files.walk(extractDirectory).use { stream ->
+            stream
+                .filter { Files.isRegularFile(it) }
+                .filter {
+                    val name = it.fileName.toString().lowercase(Locale.US)
+                    name.endsWith(".tif") || name.endsWith(".tiff")
+                }
+                .sorted()
+                .toList()
+        }
+        require(rasters.isNotEmpty()) {
+            "Washington DNR DTM package did not contain GeoTIFF raster files."
+        }
+        if (rasters.size == 1) {
+            return rasters.single()
+        }
+        val inputList = workDirectory.resolve("rasters.txt")
+        Files.writeString(inputList, rasters.joinToString(System.lineSeparator()) { it.toAbsolutePath().toString() })
+        val vrt = workDirectory.resolve("dtm.vrt")
+        gdal.runCommand(
+            listOf(
+                gdal.gdalBuildVrt.toString(),
+                "-quiet",
+                "-overwrite",
+                "-input_file_list",
+                inputList.toString(),
+                vrt.toString()
+            )
+        )
+        return vrt
+    }
 
     private fun fileSha256(path: Path): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -559,6 +1178,24 @@ private data class DesktopVenueElevationCacheFile(
     val path: Path = Path.of("")
 )
 
+private data class DesktopVenueElevationSpotCheckPoint(
+    val row: Int,
+    val column: Int,
+    val point: CourseGeoPoint
+)
+
+private data class WashingtonDnrLidarProject(
+    val name: String,
+    val datasets: List<WashingtonDnrLidarDataset>
+)
+
+private data class WashingtonDnrLidarDataset(
+    val id: Int,
+    val projectName: String,
+    val name: String,
+    val boundingBox: DesktopVenueElevationBoundingBox
+)
+
 private data class DesktopVenueElevationCacheMetadata(
     val version: Int,
     val venueName: String,
@@ -581,6 +1218,101 @@ private data class DesktopVenueElevationBoundingBoxValue(
 private const val METERS_PER_DEGREE_LATITUDE = 111_320.0
 private const val USGS_GET_SAMPLES_URL =
     "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/getSamples"
+private const val OREGON_DOGAMI_DTM_GET_SAMPLES_URL =
+    "https://gis.dogami.oregon.gov/arcgis/rest/services/lidar/DIGITAL_TERRAIN_MODEL_MOSAIC/ImageServer/getSamples"
+private const val WASHINGTON_DNR_PROJECT_URL = "https://lidarportal.dnr.wa.gov/project"
+private const val WASHINGTON_DNR_DOWNLOAD_URL = "https://lidarportal.dnr.wa.gov/download"
 
 private fun metersPerDegreeLongitude(latitude: Double): Double =
     METERS_PER_DEGREE_LATITUDE * cos(Math.toRadians(latitude))
+
+private fun Double.gdalCoordinateText(): String =
+    "%.8f".format(Locale.US, this)
+
+private class DesktopGdalTools(
+    val gdalBuildVrt: Path,
+    private val gdalLocationInfo: Path
+) {
+    fun sampleWgs84(rasterPath: Path, points: List<CourseGeoPoint>): List<Double?> {
+        if (points.isEmpty()) {
+            return emptyList()
+        }
+        val process = ProcessBuilder(
+            gdalLocationInfo.toString(),
+            "-valonly",
+            "-E",
+            "-field_sep",
+            ",",
+            "-wgs84",
+            "-r",
+            "bilinear",
+            rasterPath.toString()
+        )
+            .start()
+        val outputFuture = CompletableFuture.supplyAsync {
+            process.inputStream.bufferedReader().use { it.readLines() }
+        }
+        val errorFuture = CompletableFuture.supplyAsync {
+            process.errorStream.bufferedReader().use { it.readText() }
+        }
+        process.outputStream.bufferedWriter().use { writer ->
+            points.forEach { point ->
+                writer.append(point.longitude.gdalCoordinateText())
+                writer.append(' ')
+                writer.append(point.latitude.gdalCoordinateText())
+                writer.newLine()
+            }
+        }
+        val exitCode = process.waitFor()
+        val output = outputFuture.get()
+        val error = errorFuture.get()
+        require(exitCode == 0) {
+            "GDAL gdallocationinfo failed with exit code $exitCode: ${error.ifBlank { output.takeLast(5).joinToString(" ") }}"
+        }
+        return points.indices.map { index ->
+            output.getOrNull(index)
+                ?.split(',')
+                ?.lastOrNull()
+                ?.trim()
+                ?.takeUnless { it.equals("nan", ignoreCase = true) || it.equals("inf", ignoreCase = true) }
+                ?.toDoubleOrNull()
+        }
+    }
+
+    fun runCommand(command: List<String>) {
+        val process = ProcessBuilder(command)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+        val exitCode = process.waitFor()
+        require(exitCode == 0) {
+            "GDAL command failed with exit code $exitCode: ${output.trim()}"
+        }
+    }
+
+    companion object {
+        fun requireAvailable(): DesktopGdalTools {
+            val buildVrt = findExecutable("gdalbuildvrt")
+            val locationInfo = findExecutable("gdallocationinfo")
+            require(buildVrt != null && locationInfo != null) {
+                "Washington DNR LiDAR DTM import requires GDAL command-line tools (gdalbuildvrt and gdallocationinfo)."
+            }
+            return DesktopGdalTools(gdalBuildVrt = buildVrt, gdalLocationInfo = locationInfo)
+        }
+
+        private fun findExecutable(name: String): Path? {
+            val candidates = buildList {
+                System.getenv("PATH")
+                    ?.split(java.io.File.pathSeparator)
+                    ?.filter { it.isNotBlank() }
+                    ?.map { Path.of(it).resolve(name) }
+                    ?.let(::addAll)
+                add(Path.of("/opt/local/bin").resolve(name))
+                add(Path.of("/opt/homebrew/bin").resolve(name))
+                add(Path.of("/usr/local/bin").resolve(name))
+                add(Path.of("/usr/bin").resolve(name))
+            }
+            return candidates.firstOrNull { Files.isExecutable(it) }
+        }
+    }
+}
