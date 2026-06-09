@@ -3164,7 +3164,7 @@ private fun VenueElevationCacheProgressDialog(
     val fraction = completed.toFloat() / total.toFloat()
     AlertDialog(
         onDismissRequest = {},
-        title = { Text("Downloading elevation cache") },
+        title = { Text("Creating elevation cache") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Venue: ${progress.venueName}")
@@ -3177,7 +3177,7 @@ private fun VenueElevationCacheProgressDialog(
                     text = if (progress.cancelRequested) {
                         "Canceling after the current elevation request finishes..."
                     } else {
-                        "The downloaded grid will be reused for route and control elevations inside its bounding box."
+                        "The elevation grid will be reused for route and control elevations inside its bounding box."
                     },
                     fontSize = 13.sp,
                     color = Color.DarkGray

@@ -170,6 +170,7 @@ object DesktopVenueElevationCache {
     private const val OREGON_DOGAMI_SOURCE_NAME = "Oregon DOGAMI LiDAR DTM"
     private const val ARCGIS_SAMPLE_BATCH_SIZE = 250
     private const val ARCGIS_SAMPLE_RETRY_COUNT = 4
+    private const val LOCAL_RASTER_SAMPLE_CHUNK_SIZE = 50_000
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
     private val httpClient: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(20))
@@ -652,6 +653,7 @@ object DesktopVenueElevationCache {
             )
             val gdal = DesktopGdalTools.requireAvailable()
             val workDirectory = Files.createTempDirectory("radio-oracle-local-lidar-")
+            var elevationUnits = DesktopGdalElevationUnits("unspecified", 1.0)
             val elevations = try {
                 val rasterPath = if (sourceSuffix == ".zip") {
                     rasterPathForZipArchive(
@@ -663,8 +665,29 @@ object DesktopVenueElevationCache {
                 } else {
                     sourcePath.toString()
                 }
-                coroutineContext.ensureActive()
-                gdal.sampleWgs84(rasterPath, points)
+                elevationUnits = gdal.elevationUnits(rasterPath)
+                val elevations = MutableList<Double?>(points.size) { null }
+                var completed = 0
+                points.chunked(LOCAL_RASTER_SAMPLE_CHUNK_SIZE).forEachIndexed { chunkIndex, chunk ->
+                    coroutineContext.ensureActive()
+                    val values = gdal.sampleWgs84(
+                        rasterPath = rasterPath,
+                        points = chunk,
+                        valueMultiplier = elevationUnits.valueMultiplier
+                    )
+                    values.forEachIndexed { index, value ->
+                        elevations[chunkIndex * LOCAL_RASTER_SAMPLE_CHUNK_SIZE + index] = value
+                    }
+                    completed += chunk.size
+                    onProgress(
+                        DesktopVenueElevationCacheProgress(
+                            venueName = cleanVenueName,
+                            completedPointCount = completed,
+                            totalPointCount = points.size
+                        )
+                    )
+                }
+                elevations
             } finally {
                 runCatching { deleteRecursively(workDirectory) }
             }
@@ -679,7 +702,7 @@ object DesktopVenueElevationCache {
                 metadata = DesktopVenueElevationCacheMetadata(
                     version = CACHE_VERSION,
                     venueName = cleanVenueName,
-                    sourceName = "Local LiDAR Raster - ${sourcePath.fileName}",
+                    sourceName = "Local LiDAR Raster - ${sourcePath.fileName}${elevationUnits.sourceNameSuffix()}",
                     sourceUrl = sourcePath.toString(),
                     resolutionMeters = resolutionMeters,
                     rowCount = estimate.rowCount,
@@ -698,6 +721,7 @@ object DesktopVenueElevationCache {
             DesktopDebugLog.info(
                 "ElevationCache",
                 "Created venue=$cleanVenueName source=Local LiDAR Raster sourceFile=${sourcePath.fileName} " +
+                    "unit=${elevationUnits.label} multiplier=${elevationUnits.valueMultiplier} " +
                     "resolution=${resolutionMeters}m points=${points.size} resolved=${elevations.count { it != null }} " +
                     "file=${path.fileName} hash=${hash.take(12)}"
             )
@@ -1486,6 +1510,19 @@ private const val OREGON_DOGAMI_DTM_GET_SAMPLES_URL =
 private const val WASHINGTON_DNR_PROJECT_URL = "https://lidarportal.dnr.wa.gov/project"
 private const val WASHINGTON_DNR_DOWNLOAD_URL = "https://lidarportal.dnr.wa.gov/download"
 private const val FEET_TO_METERS = 0.3048
+private const val US_SURVEY_FOOT_TO_METERS = 1200.0 / 3937.0
+
+private data class DesktopGdalElevationUnits(
+    val label: String,
+    val valueMultiplier: Double
+) {
+    fun sourceNameSuffix(): String =
+        if (valueMultiplier == 1.0) {
+            ""
+        } else {
+            " ($label to meters)"
+        }
+}
 
 private fun metersPerDegreeLongitude(latitude: Double): Double =
     METERS_PER_DEGREE_LATITUDE * cos(Math.toRadians(latitude))
@@ -1495,13 +1532,22 @@ private fun Double.gdalCoordinateText(): String =
 
 private class DesktopGdalTools(
     val gdalBuildVrt: Path,
+    private val gdalInfo: Path,
     private val gdalLocationInfo: Path
 ) {
-    suspend fun sampleWgs84(rasterPath: Path, points: List<CourseGeoPoint>): List<Double?> {
-        return sampleWgs84(rasterPath.toString(), points)
+    suspend fun sampleWgs84(
+        rasterPath: Path,
+        points: List<CourseGeoPoint>,
+        valueMultiplier: Double = 1.0
+    ): List<Double?> {
+        return sampleWgs84(rasterPath.toString(), points, valueMultiplier)
     }
 
-    suspend fun sampleWgs84(rasterPath: String, points: List<CourseGeoPoint>): List<Double?> {
+    suspend fun sampleWgs84(
+        rasterPath: String,
+        points: List<CourseGeoPoint>,
+        valueMultiplier: Double = 1.0
+    ): List<Double?> {
         if (points.isEmpty()) {
             return emptyList()
         }
@@ -1554,6 +1600,28 @@ private class DesktopGdalTools(
                 ?.trim()
                 ?.takeUnless { it.equals("nan", ignoreCase = true) || it.equals("inf", ignoreCase = true) }
                 ?.toDoubleOrNull()
+                ?.times(valueMultiplier)
+        }
+    }
+
+    suspend fun elevationUnits(rasterPath: String): DesktopGdalElevationUnits {
+        val output = processOutput(listOf(gdalInfo.toString(), rasterPath))
+        val unit = Regex("""(?m)^\s*Unit Type:\s*(.+?)\s*$""")
+            .find(output)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.lowercase(Locale.US)
+            ?: return DesktopGdalElevationUnits("unspecified", 1.0)
+        return when {
+            unit.contains("us survey foot") || unit == "ftus" ->
+                DesktopGdalElevationUnits("US survey foot", US_SURVEY_FOOT_TO_METERS)
+            unit.contains("foot") || unit.contains("feet") || unit == "ft" ->
+                DesktopGdalElevationUnits("foot", FEET_TO_METERS)
+            unit.contains("metre") || unit.contains("meter") || unit == "m" ->
+                DesktopGdalElevationUnits("meter", 1.0)
+            else ->
+                DesktopGdalElevationUnits(unit, 1.0)
         }
     }
 
@@ -1568,14 +1636,40 @@ private class DesktopGdalTools(
         }
     }
 
+    private suspend fun processOutput(command: List<String>): String {
+        val process = ProcessBuilder(command)
+            .redirectErrorStream(true)
+            .start()
+        val outputFuture = CompletableFuture.supplyAsync {
+            process.inputStream.bufferedReader().use { it.readText() }
+        }
+        val cancellationHandle = coroutineContext[Job]?.invokeOnCompletion { cause ->
+            if (cause is CancellationException) {
+                process.destroyForcibly()
+            }
+        }
+        val exitCode = try {
+            process.waitFor()
+        } finally {
+            cancellationHandle?.dispose()
+        }
+        coroutineContext.ensureActive()
+        val output = outputFuture.get()
+        require(exitCode == 0) {
+            "GDAL command failed with exit code $exitCode: ${output.trim()}"
+        }
+        return output
+    }
+
     companion object {
         fun requireAvailable(): DesktopGdalTools {
             val buildVrt = findExecutable("gdalbuildvrt")
+            val info = findExecutable("gdalinfo")
             val locationInfo = findExecutable("gdallocationinfo")
-            require(buildVrt != null && locationInfo != null) {
-                "Washington DNR LiDAR DTM import requires GDAL command-line tools (gdalbuildvrt and gdallocationinfo)."
+            require(buildVrt != null && info != null && locationInfo != null) {
+                "LiDAR raster import requires GDAL command-line tools (gdalbuildvrt, gdalinfo, and gdallocationinfo)."
             }
-            return DesktopGdalTools(gdalBuildVrt = buildVrt, gdalLocationInfo = locationInfo)
+            return DesktopGdalTools(gdalBuildVrt = buildVrt, gdalInfo = info, gdalLocationInfo = locationInfo)
         }
 
         private fun findExecutable(name: String): Path? {
