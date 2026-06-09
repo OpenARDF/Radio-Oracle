@@ -347,6 +347,7 @@ fun main(args: Array<String>) = application {
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var isCourseKmlKmzUnlockDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzImportReview by remember { mutableStateOf<PendingCourseKmlKmzImportReview?>(null) }
+        var pendingCourseKmlKmzCategoryMapping by remember { mutableStateOf<PendingCourseKmlKmzCategoryMapping?>(null) }
         var courseKmlKmzElevationProgress by remember { mutableStateOf<CourseKmlKmzElevationProgressUiState?>(null) }
         var courseKmlKmzElevationJob by remember { mutableStateOf<Job?>(null) }
         var venueElevationCacheProgress by remember { mutableStateOf<VenueElevationCacheProgressUiState?>(null) }
@@ -1382,51 +1383,92 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun chooseImportCourseKmlKmzUnlocked(password: String) {
+        fun startCourseKmlKmzImport(path: Path, password: String, categoryOverrideId: String? = null) {
             val currentProject = projectSession.currentProject ?: return
             if (isImportingCourseKmlKmz) {
                 return
             }
-            DesktopFileDialogs.chooseImportKmlKmz()?.let { path ->
-                isImportingCourseKmlKmz = true
-                projectStatusText = "Importing protected controls/route KML/KMZ..."
-                appCoroutineScope.launch {
-                    val result = runCatching {
-                        withContext(Dispatchers.IO) {
-                            DesktopCourseKmlImporter.importProtectedCourseInfo(
-                                path = path,
-                                projectFile = currentProject,
-                                password = password
-                            )
-                        }
+            isImportingCourseKmlKmz = true
+            projectStatusText = "Importing protected controls/route KML/KMZ..."
+            appCoroutineScope.launch {
+                val result = runCatching {
+                    withContext(Dispatchers.IO) {
+                        DesktopCourseKmlImporter.importProtectedCourseInfo(
+                            path = path,
+                            projectFile = currentProject,
+                            password = password,
+                            categoryOverrideId = categoryOverrideId
+                        )
                     }
-                    result.onSuccess { (updatedProject, summary) ->
-                        if (summary.isControlLocationNoOp && !summary.hasLabelConversions) {
-                            pendingCourseKmlKmzImportReview = null
-                            projectStatusText =
-                                "KML/KMZ import found ${summary.matchedControlPointCount} matching controls, but no protected control locations changed."
-                        } else if (summary.isDuplicateOnly && !summary.hasDuplicateMissingElevations) {
-                            pendingCourseKmlKmzImportReview = null
-                            projectStatusText =
-                                "Duplicate controls/route KML/KMZ request: identical file already imported and all elevations are available."
-                        } else {
-                            pendingCourseKmlKmzImportReview = PendingCourseKmlKmzImportReview(
-                                sourceName = path.fileName.toString(),
-                                updatedProject = updatedProject,
-                                summary = summary,
-                                password = password
-                            )
-                            projectStatusText = if (summary.isDuplicateOnly) {
-                                "Identical controls/route data already imported. Review missing elevation retrieval option."
-                            } else {
-                                "Review imported controls/route data before applying it."
-                            }
-                        }
-                    }.onFailure { error ->
-                        projectStatusText = "Controls/route KML/KMZ import failed: ${error.message ?: error::class.simpleName}"
-                    }
-                    isImportingCourseKmlKmz = false
                 }
+                result.onSuccess { (updatedProject, summary) ->
+                    val categoryOptions = currentProject.raceData.categories
+                        .sortedWith(EventCategorySort.byDisplayName)
+                        .map { it.category.id to it.category.name }
+                    if (
+                        categoryOverrideId == null &&
+                        summary.routeCount == 1 &&
+                        summary.matchedCategoryCount == 0 &&
+                        categoryOptions.isNotEmpty()
+                    ) {
+                        pendingCourseKmlKmzImportReview = null
+                        pendingCourseKmlKmzCategoryMapping = PendingCourseKmlKmzCategoryMapping(
+                            sourceName = path.fileName.toString(),
+                            path = path,
+                            password = password,
+                            categoryOptions = categoryOptions,
+                            matchedControlPointCount = summary.matchedControlPointCount,
+                            controlPointCount = summary.controlPointCount,
+                            labelConversions = summary.labelConversions
+                        )
+                        projectStatusText = "Choose the Event File category for this KML/KMZ route."
+                    } else if (
+                        summary.routeCount > 0 &&
+                        summary.matchedCategoryCount == 0 &&
+                        categoryOptions.isEmpty()
+                    ) {
+                        pendingCourseKmlKmzImportReview = null
+                        pendingCourseKmlKmzCategoryMapping = null
+                        projectStatusText =
+                            "KML/KMZ route data was not applied because the Event File has no categories."
+                    } else if (summary.isControlLocationNoOp && !summary.hasLabelConversions) {
+                        pendingCourseKmlKmzImportReview = null
+                        pendingCourseKmlKmzCategoryMapping = null
+                        projectStatusText =
+                            "KML/KMZ import found ${summary.matchedControlPointCount} matching controls, but no protected control locations changed."
+                    } else if (summary.isDuplicateOnly && !summary.hasDuplicateMissingElevations) {
+                        pendingCourseKmlKmzImportReview = null
+                        pendingCourseKmlKmzCategoryMapping = null
+                        projectStatusText =
+                            "Duplicate controls/route KML/KMZ request: identical file already imported and all elevations are available."
+                    } else {
+                        pendingCourseKmlKmzCategoryMapping = null
+                        pendingCourseKmlKmzImportReview = PendingCourseKmlKmzImportReview(
+                            sourceName = path.fileName.toString(),
+                            updatedProject = updatedProject,
+                            summary = summary,
+                            password = password
+                        )
+                        projectStatusText = if (summary.isDuplicateOnly) {
+                            "Identical controls/route data already imported. Review missing elevation retrieval option."
+                        } else {
+                            "Review imported controls/route data before applying it."
+                        }
+                    }
+                }.onFailure { error ->
+                    pendingCourseKmlKmzCategoryMapping = null
+                    projectStatusText = "Controls/route KML/KMZ import failed: ${error.message ?: error::class.simpleName}"
+                }
+                isImportingCourseKmlKmz = false
+            }
+        }
+
+        fun chooseImportCourseKmlKmzUnlocked(password: String) {
+            if (isImportingCourseKmlKmz) {
+                return
+            }
+            DesktopFileDialogs.chooseImportKmlKmz()?.let { path ->
+                startCourseKmlKmzImport(path, password)
             }
         }
 
@@ -2130,6 +2172,19 @@ fun main(args: Array<String>) = application {
                     }
                 },
                 onCancel = { isCourseKmlKmzUnlockDialogVisible = false }
+            )
+        }
+        pendingCourseKmlKmzCategoryMapping?.let { mapping ->
+            CourseKmlKmzCategoryMappingDialog(
+                mapping = mapping,
+                onApply = { categoryId ->
+                    pendingCourseKmlKmzCategoryMapping = null
+                    startCourseKmlKmzImport(mapping.path, mapping.password, categoryId)
+                },
+                onCancel = {
+                    pendingCourseKmlKmzCategoryMapping = null
+                    projectStatusText = "Controls/route KML/KMZ import canceled. No changes applied."
+                }
             )
         }
         pendingCourseKmlKmzImportReview?.let { review ->
@@ -2975,6 +3030,62 @@ private fun CourseKmlKmzImportReviewDialog(
 }
 
 @Composable
+private fun CourseKmlKmzCategoryMappingDialog(
+    mapping: PendingCourseKmlKmzCategoryMapping,
+    onApply: (categoryId: String) -> Unit,
+    onCancel: () -> Unit
+) {
+    var selectedCategoryId by remember(mapping.sourceName, mapping.categoryOptions) {
+        mutableStateOf(mapping.categoryOptions.firstOrNull()?.first)
+    }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Choose route category") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("File: ${mapping.sourceName}")
+                Text("No LineString name or file name matched an Event File category.")
+                Text("Choose the category this KML/KMZ route should update.")
+                CourseAnalysisCategoryPicker(
+                    selectedCategoryId = selectedCategoryId,
+                    categories = mapping.categoryOptions,
+                    onCategorySelected = { selectedCategoryId = it },
+                    modifier = Modifier.width(280.dp)
+                )
+                Text("Matched controls: ${mapping.matchedControlPointCount} of ${mapping.controlPointCount} point placemarks")
+                if (mapping.labelConversions.isNotEmpty()) {
+                    Text("Imported control names to treat as existing Event File labels:")
+                    mapping.labelConversions.take(8).forEach { conversion ->
+                        Text("${conversion.importedName} -> ${conversion.eventControlLabel}")
+                    }
+                    if (mapping.labelConversions.size > 8) {
+                        Text("Additional likely name matches: ${mapping.labelConversions.size - 8}")
+                    }
+                }
+                Text(
+                    text = "The selected category will be used only for this import. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged.",
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { selectedCategoryId?.let(onApply) },
+                enabled = selectedCategoryId != null
+            ) {
+                Text("Use Selected Category")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
 private fun CourseKmlKmzElevationProgressDialog(
     progress: CourseKmlKmzElevationProgressUiState,
     onCancel: () -> Unit
@@ -3289,6 +3400,16 @@ private data class PendingCourseKmlKmzImportReview(
     val updatedProject: EventProjectFile,
     val summary: DesktopCourseKmlImportSummary,
     val password: String
+)
+
+private data class PendingCourseKmlKmzCategoryMapping(
+    val sourceName: String,
+    val path: Path,
+    val password: String,
+    val categoryOptions: List<Pair<String, String>>,
+    val matchedControlPointCount: Int,
+    val controlPointCount: Int,
+    val labelConversions: List<DesktopCourseKmlLabelConversion>
 )
 
 private data class CourseAnalysisMissingDataPrompt(

@@ -8,6 +8,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.event.EventCategorySort
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
@@ -103,6 +104,7 @@ object DesktopCourseKmlImporter {
         path: Path,
         projectFile: EventProjectFile,
         password: String,
+        categoryOverrideId: String? = null,
         elevationProvider: (CourseGeoPoint) -> Double? = { point -> DesktopVenueElevationCache.elevationMeters(point) }
     ): Pair<EventProjectFile, DesktopCourseKmlImportSummary> {
         val sourceSha256 = fileSha256(path)
@@ -120,6 +122,12 @@ object DesktopCourseKmlImporter {
                 categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
             }
         }.toMap()
+        val routeCategoryTargets = routeCategoryTargets(
+            routes = courseData.routes,
+            categories = categories,
+            sourceName = path.fileName.toString(),
+            categoryOverrideId = categoryOverrideId
+        )
         val controlLocationUpdates = controlLocationUpdates(
             matchedControls = controls,
             courseInfoByCategoryId = courseInfoByCategoryId
@@ -147,9 +155,7 @@ object DesktopCourseKmlImporter {
         val matchedCategoryNames = mutableListOf<String>()
 
         courseData.routes.forEach { route ->
-            val categoryData = categories.firstOrNull { categoryData ->
-                categoryData.category.name.normalizedCourseName() == route.name.normalizedCourseName()
-            } ?: return@forEach
+            val categoryData = routeCategoryTargets[route] ?: return@forEach
             matchedCategoryCount++
             matchedCategoryIds += categoryData.category.id
             matchedCategoryNames += categoryData.category.name
@@ -276,6 +282,44 @@ object DesktopCourseKmlImporter {
             "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} changedControlLocations=${summary.changedControlLocationCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} labelConversions=${summary.labelConversions.size} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
         )
         return updatedProject to summary
+    }
+
+    private fun routeCategoryTargets(
+        routes: List<CourseRoute>,
+        categories: List<EventCategoryData>,
+        sourceName: String,
+        categoryOverrideId: String?
+    ): Map<CourseRoute, EventCategoryData> {
+        val targets = mutableMapOf<CourseRoute, EventCategoryData>()
+        val usedCategoryIds = mutableSetOf<String>()
+        routes.forEach { route ->
+            val categoryData = categories.firstOrNull { categoryData ->
+                categoryData.category.name.matchesCategoryRouteName(route.name)
+            } ?: return@forEach
+            targets[route] = categoryData
+            usedCategoryIds += categoryData.category.id
+        }
+
+        val unmatchedRoutes = routes.filterNot { it in targets }
+        if (unmatchedRoutes.size == 1) {
+            val inferredCategory = filenameMatchedCategory(sourceName, categories)
+                ?: categoryOverrideId
+                    ?.let { id -> categories.firstOrNull { categoryData -> categoryData.category.id == id } }
+            if (inferredCategory != null && inferredCategory.category.id !in usedCategoryIds) {
+                targets[unmatchedRoutes.single()] = inferredCategory
+            }
+        }
+        return targets
+    }
+
+    private fun filenameMatchedCategory(
+        sourceName: String,
+        categories: List<EventCategoryData>
+    ): EventCategoryData? {
+        val filenameText = sourceName.substringBeforeLast('.').categoryMatchText()
+        return categories
+            .filter { categoryData -> filenameText.containsCategoryName(categoryData.category.name) }
+            .singleOrNull()
     }
 
     suspend fun fetchProtectedCourseElevations(
@@ -1043,6 +1087,28 @@ private fun String.compactCourseName(): String =
 private fun String.singleEmbeddedNumber(): Int? {
     val numbers = Regex("\\d+").findAll(this).mapNotNull { it.value.toIntOrNull() }.toList()
     return numbers.singleOrNull()
+}
+
+private fun String.categoryMatchText(): String =
+    normalizedCourseName()
+        .replace(Regex("[^a-z0-9]+"), " ")
+        .trim()
+
+private fun String.compactCategoryMatchText(): String =
+    categoryMatchText().replace(" ", "")
+
+private fun String.matchesCategoryRouteName(importedRouteName: String): Boolean =
+    categoryMatchText() == importedRouteName.categoryMatchText() ||
+        compactCategoryMatchText() == importedRouteName.compactCategoryMatchText()
+
+private fun String.containsCategoryName(categoryName: String): Boolean {
+    val normalizedCategory = categoryName.categoryMatchText()
+    val compactCategory = categoryName.compactCategoryMatchText()
+    if (normalizedCategory.isBlank() || compactCategory.isBlank()) {
+        return false
+    }
+    return Regex("(^|\\s)${Regex.escape(normalizedCategory)}(\\s|$)").containsMatchIn(this) ||
+        compactCategoryMatchText().contains(compactCategory)
 }
 
 private fun org.w3c.dom.Node.childText(tagName: String): String? =

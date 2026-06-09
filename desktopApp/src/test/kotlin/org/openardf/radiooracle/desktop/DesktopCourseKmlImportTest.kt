@@ -70,6 +70,78 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun lineStringNameMatchTakesPrecedenceOverFileNameCategoryMatch() {
+        val kmlPath = Files.createTempFile("W21 route", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithRouteName("M21"))
+        val project = EventProjectEditor.addCategory(
+            EventProjectEditor.addCategory(
+                EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+                categoryId = "cat-m21",
+                name = "M-21"
+            ),
+            categoryId = "cat-w21",
+            name = "W21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        assertEquals(listOf("cat-m21"), summary.matchedCategoryIds)
+        assertEquals(listOf("M-21"), summary.matchedCategoryNames)
+        assertNotNull(updated.raceData.categories.single { it.category.id == "cat-m21" }.category.encryptedCourseInfo)
+        assertEquals(null, updated.raceData.categories.single { it.category.id == "cat-w21" }.category.encryptedCourseInfo)
+    }
+
+    @Test
+    fun infersSingleUnmatchedRouteCategoryFromFileName() {
+        val kmlPath = Files.createTempFile("W21 route", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithRouteName("Exported route"))
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-w21",
+            name = "W21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        assertEquals(listOf("cat-w21"), summary.matchedCategoryIds)
+        assertEquals(listOf("W21"), summary.matchedCategoryNames)
+        assertNotNull(updated.raceData.categories.single().category.encryptedCourseInfo)
+    }
+
+    @Test
+    fun appliesSingleUnmatchedRouteToSelectedCategoryOverride() {
+        val kmlPath = Files.createTempFile("route-export", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithRouteName("Exported route"))
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-w21",
+            name = "W21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            categoryOverrideId = "cat-w21",
+            elevationProvider = { null }
+        )
+
+        assertEquals(listOf("cat-w21"), summary.matchedCategoryIds)
+        assertEquals(1, summary.importedCategoryCount)
+        assertNotNull(updated.raceData.categories.single().category.encryptedCourseInfo)
+    }
+
+    @Test
     fun importsBeaconByVisibleLabelInsteadOfCrypticToken() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithBeacon())
@@ -655,6 +727,9 @@ class DesktopCourseKmlImportTest {
     }
 
     private fun sampleKml(): String =
+        sampleKmlWithRouteName("M21")
+
+    private fun sampleKmlWithRouteName(routeName: String): String =
         """
         <?xml version="1.0" encoding="UTF-8"?>
         <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -668,7 +743,7 @@ class DesktopCourseKmlImportTest {
               <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
             </Placemark>
             <Placemark>
-              <name>M21</name>
+              <name>$routeName</name>
               <LineString>
                 <coordinates>
                   -95.0000,39.0000,0
