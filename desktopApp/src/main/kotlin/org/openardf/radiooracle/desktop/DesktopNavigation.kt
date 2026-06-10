@@ -205,10 +205,18 @@ object DesktopNavigation {
                     workflow,
                     listOf(
                         item("setup.controls.define", "Define Controls", workflow, DesktopSection.Controls),
-                        item(
+                        group(
                             "setup.controls.course-analysis",
                             "Course Analyzer",
                             workflow,
+                            listOf(
+                                action(
+                                    "setup.controls.course-analysis.import-kml-kmz",
+                                    "Import Controls KML/KMZ...",
+                                    workflow,
+                                    DesktopNavAction.ImportCourseKmlKmz
+                                )
+                            ),
                             DesktopSection.CourseAnalysis
                         ),
                         item(
@@ -230,7 +238,7 @@ object DesktopNavigation {
                                 ),
                                 action(
                                     "setup.controls.import-kml-kmz",
-                                    "Import Controls/Route KML/KMZ...",
+                                    "Import Controls KML/KMZ...",
                                     workflow,
                                     DesktopNavAction.ImportCourseKmlKmz
                                 ),
@@ -253,7 +261,7 @@ object DesktopNavigation {
                     listOf(
                         item(
                             "setup.categories.protected-course-order",
-                            "Protected Course Order",
+                            "Course Order",
                             workflow,
                             DesktopSection.ProtectedCourseOrder
                         ),

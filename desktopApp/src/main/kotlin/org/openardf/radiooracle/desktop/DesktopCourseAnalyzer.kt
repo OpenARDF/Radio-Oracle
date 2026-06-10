@@ -183,7 +183,7 @@ enum class DesktopCourseMetricStatus {
 }
 
 /**
- * Builds the desktop Course Analyzer report from protected course geometry and category controls.
+ * Builds the desktop Course Analyzer report from stored course geometry and category controls.
  *
  * The analyzer intentionally separates the course-setter-supplied route from the independently
  * calculated candidate. Both use the same measurement policy: effective length when complete
@@ -292,13 +292,13 @@ object DesktopCourseAnalyzer {
         val missing = mutableListOf<String>()
 
         if (protectedCourseInfo == null) {
-            missing += "Protected route data is locked or has not been imported for ${category.name}."
+            missing += "Route data is locked by the course password or has not been imported for ${category.name}."
         }
         val route = protectedCourseInfo?.route.orEmpty().map {
             CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters)
         }
         if (route.size < 2) {
-            missing += "Protected route geometry with start and finish points is missing."
+            missing += "Route geometry with start and finish points is missing."
         }
         val hasMissingRouteElevations = route.any { it.elevationMeters == null }
         if (hasMissingRouteElevations) {
@@ -318,7 +318,7 @@ object DesktopCourseAnalyzer {
             }
             if (courseInfo.controlPoints.any { it.elevationMeters == null }) {
                 hasMissingProtectedControlElevations = true
-                missing += "Protected control point elevations are missing or incomplete."
+                missing += "Control location elevations are missing or incomplete."
             }
         }
         val hasMissingElevationData = route.size >= 2 &&
@@ -335,10 +335,10 @@ object DesktopCourseAnalyzer {
         if (missingCoordinateControls.isNotEmpty()) {
             DesktopDebugLog.warn(
                 "CourseAnalysis",
-                "Missing coordinates category=${category.name}: " +
+                    "Missing coordinates category=${category.name}: " +
                     "controls=${missingCoordinateControls.joinToString { it.control.publicDisplayLabel() }}; " +
-                    "assigned=${assignedControls.size} protectedControlPoints=${protectedCourseInfo?.controlPoints?.size ?: 0} " +
-                    "protectedCourseObjects=${protectedCourseInfo?.courseObjects?.size ?: 0} " +
+                    "assigned=${assignedControls.size} controlLocationPoints=${protectedCourseInfo?.controlPoints?.size ?: 0} " +
+                    "courseObjects=${protectedCourseInfo?.courseObjects?.size ?: 0} " +
                     "tokenMatches=${protectedCoordinateLookup.pointsByToken.size} " +
                     "singleBeacon=${protectedCoordinateLookup.singleBeaconPoint != null} " +
                     "singleSpectator=${protectedCoordinateLookup.singleSpectatorPoint != null}"
@@ -377,7 +377,7 @@ object DesktopCourseAnalyzer {
                     val ids = ProtectedIdealOrderRules.resolveControlIds(idealOrder, assignedControls)
                     ids.mapNotNull { id -> assignedControls.firstOrNull { it.id == id } }
                 }.getOrElse { error ->
-                    missing += "Protected ideal order could not be resolved: ${error.message ?: error::class.simpleName}."
+                    missing += "Stored ideal order could not be resolved: ${error.message ?: error::class.simpleName}."
                     emptyList()
                 }
             }

@@ -313,7 +313,7 @@ class DesktopNavigationTest {
         ).state
         val protectedCourseOrderState = DesktopNavigation.selectItem(
             categoriesState,
-            DesktopNavigation.currentItems(categoriesState).first { it.label == "Protected Course Order" }
+            DesktopNavigation.currentItems(categoriesState).first { it.label == "Course Order" }
         ).state
 
         assertTrue(
@@ -559,18 +559,26 @@ class DesktopNavigationTest {
             controlItems.map { it.label }
         )
         assertEquals(
-            listOf("Protected Course Order", "Import Categories CSV...", "Export Categories CSV..."),
+            listOf("Course Order", "Import Categories CSV...", "Export Categories CSV..."),
             categoryItems.map { it.label }
         )
         assertEquals(DesktopSection.Controls, controlItems.first { it.label == "Define Controls" }.section)
         assertEquals(DesktopSection.CourseAnalysis, controlItems.first { it.label == "Course Analyzer" }.section)
+        assertEquals(
+            listOf("Import Controls KML/KMZ..."),
+            controlItems.first { it.label == "Course Analyzer" }.children.map { it.label }
+        )
+        assertEquals(
+            DesktopNavAction.ImportCourseKmlKmz,
+            controlItems.first { it.label == "Course Analyzer" }.children.single().action
+        )
         assertEquals(DesktopSection.ElevationCache, controlItems.first { it.label == "Elevation Data" }.section)
         assertEquals(DesktopSection.ControlsImportExport, controlItems.first { it.label == "Import/Export" }.section)
         assertEquals(
-            listOf("Import Controls CSV...", "Import Controls/Route KML/KMZ...", "Export Controls CSV..."),
+            listOf("Import Controls CSV...", "Import Controls KML/KMZ...", "Export Controls CSV..."),
             controlItems.first { it.label == "Import/Export" }.children.map { it.label }
         )
-        assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Protected Course Order" }.section)
+        assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Course Order" }.section)
         assertEquals(
             listOf("Competitors", "Import Competitors CSV...", "Import EventReg Website...", "Export Competitors CSV..."),
             competitorItems.map { it.label }

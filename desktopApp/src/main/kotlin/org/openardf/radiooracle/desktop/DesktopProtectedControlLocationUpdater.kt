@@ -3,7 +3,7 @@ package org.openardf.radiooracle.desktop
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 
-/** Applies password-protected control location edits across affected stored course payloads. */
+/** Applies course-password control location edits across affected stored course payloads. */
 object DesktopProtectedControlLocationUpdater {
     fun applyControlLocation(
         projectFile: EventProjectFile,
@@ -16,7 +16,7 @@ object DesktopProtectedControlLocationUpdater {
     ): DesktopProtectedControlLocationUpdateResult {
         val trimmedPassword = password.trim()
         require(trimmedPassword.isNotEmpty()) {
-            "Protected course password is required."
+            "Course password is required."
         }
         val latitude = parseLatitude(latitudeText)
         val longitude = parseLongitude(longitudeText)
@@ -45,7 +45,7 @@ object DesktopProtectedControlLocationUpdater {
     ): DesktopProtectedControlLocationUpdateResult {
         val trimmedPassword = password.trim()
         require(trimmedPassword.isNotEmpty()) {
-            "Protected course password is required."
+            "Course password is required."
         }
         val uniqueUpdates = updates.distinctBy { it.controlId }
         require(uniqueUpdates.isNotEmpty()) {

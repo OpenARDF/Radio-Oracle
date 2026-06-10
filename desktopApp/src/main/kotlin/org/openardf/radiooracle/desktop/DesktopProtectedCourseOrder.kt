@@ -58,11 +58,11 @@ object DesktopProtectedCourseOrder {
 
         val fields = encryptedValue.split(":")
         require(fields.size == 6 && fields[0] == PREFIX && fields[1] == KDF) {
-            "Unsupported protected course order format."
+            "Unsupported course order format."
         }
 
         val iterations = fields[2].toIntOrNull()
-            ?: throw IllegalArgumentException("Invalid protected course order format.")
+            ?: throw IllegalArgumentException("Invalid course order format.")
         val salt = decoder.decode(fields[3])
         val nonce = decoder.decode(fields[4])
         val encrypted = decoder.decode(fields[5])
@@ -71,7 +71,7 @@ object DesktopProtectedCourseOrder {
             cipher.init(Cipher.DECRYPT_MODE, secretKey(trimmedPassword, salt, iterations), GCMParameterSpec(TAG_BITS, nonce))
             cipher.doFinal(encrypted).decodeToString()
         }.getOrElse {
-            throw IllegalArgumentException("Password did not unlock protected course order.")
+            throw IllegalArgumentException("Password did not unlock course order.")
         }
     }
 

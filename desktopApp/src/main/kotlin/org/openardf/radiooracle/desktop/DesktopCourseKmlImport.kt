@@ -365,7 +365,7 @@ object DesktopCourseKmlImporter {
         categories.forEach { target ->
             DesktopDebugLog.info(
                 "CourseElevation",
-                "Fetch plan category=${target.categoryName}: routeMissing=${target.missingRouteElevationCount()} courseObjectMissing=${target.missingCourseObjectElevationCount()} protectedControlMissing=${target.missingProtectedControlElevationCount()} totalRequested=${target.missingElevationCount()}"
+                "Fetch plan category=${target.categoryName}: routeMissing=${target.missingRouteElevationCount()} courseObjectMissing=${target.missingCourseObjectElevationCount()} controlLocationMissing=${target.missingProtectedControlElevationCount()} totalRequested=${target.missingElevationCount()}"
             )
         }
         DesktopDebugLog.info(
@@ -375,7 +375,7 @@ object DesktopCourseKmlImporter {
         if (totalPointCount == 0) {
             DesktopDebugLog.warn(
                 "CourseElevation",
-                "Fetch requested with no missing route, course-object, or protected-control elevation points."
+                "Fetch requested with no missing route, course-object, or control-location elevation points."
             )
         }
 
@@ -538,7 +538,7 @@ object DesktopCourseKmlImporter {
             )
             DesktopDebugLog.info(
                 "CourseElevation",
-                "Fetch category complete category=${target.categoryName}: routeFetched=$routeFetched courseObjectFetched=$courseObjectFetched protectedControlFetched=$controlFetched remainingRouteMissing=${elevatedRoute.count { it.elevationMeters == null }} remainingCourseObjectMissing=${elevatedCourseObjects.count { it.elevationMeters == null }} remainingProtectedControlMissing=${updatedCourseInfo.controlPoints.count { it.elevationMeters == null }}"
+                "Fetch category complete category=${target.categoryName}: routeFetched=$routeFetched courseObjectFetched=$courseObjectFetched controlLocationFetched=$controlFetched remainingRouteMissing=${elevatedRoute.count { it.elevationMeters == null }} remainingCourseObjectMissing=${elevatedCourseObjects.count { it.elevationMeters == null }} remainingControlLocationMissing=${updatedCourseInfo.controlPoints.count { it.elevationMeters == null }}"
             )
         }
 
@@ -800,7 +800,7 @@ object DesktopCourseKmlImporter {
     ): Double? {
         // Project each imported control onto the preferred route. Controls outside
         // the tolerance are omitted so unrelated map placemarks do not become part
-        // of the protected ideal order.
+        // of the stored ideal order.
         var distanceBeforeSegment = 0.0
         var bestDistance = Double.MAX_VALUE
         var bestAlongDistance = 0.0

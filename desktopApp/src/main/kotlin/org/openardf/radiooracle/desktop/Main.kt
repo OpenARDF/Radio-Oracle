@@ -210,7 +210,7 @@ private val CategoryTableColumnHints = mapOf(
 
 private val ProtectedCourseOrderTableColumns = listOf(
     FixedTableColumn("Category", 120.dp),
-    FixedTableColumn("Protected ideal order", 360.dp)
+    FixedTableColumn("Stored ideal order", 360.dp)
 )
 private val ProtectedIdealOrderPickerWidth = 76.dp
 private val ProtectedIdealOrderTextFieldWidth =
@@ -443,7 +443,7 @@ fun main(args: Array<String>) = application {
             protectedIdealOrderByCategoryId = emptyMap()
             protectedCourseInfoByCategoryId = emptyMap()
             if (wasUnlocked) {
-                projectStatusText = "Protected course order locked."
+                projectStatusText = "Course order locked."
             }
         }
 
@@ -980,7 +980,7 @@ fun main(args: Array<String>) = application {
             val currentProject = projectSession.currentProject ?: return false
             val trimmedPassword = password.trim()
             if (trimmedPassword.isEmpty()) {
-                projectStatusText = "Protected course order password cannot be blank."
+                projectStatusText = "Course password cannot be blank."
                 return false
             }
 
@@ -994,7 +994,7 @@ fun main(args: Array<String>) = application {
                     }
                 }
             }.getOrElse { error ->
-                projectStatusText = error.message ?: "Protected course order unlock failed."
+                projectStatusText = error.message ?: "Course order unlock failed."
                 return false
             }
             val decryptedCourseInfo = runCatching {
@@ -1004,30 +1004,30 @@ fun main(args: Array<String>) = application {
                     }
                 }.toMap()
             }.getOrElse { error ->
-                projectStatusText = error.message ?: "Protected course data unlock failed."
+                projectStatusText = error.message ?: "Course data unlock failed."
                 return false
             }
 
             protectedCoursePassword = trimmedPassword
             protectedIdealOrderByCategoryId = decrypted
             protectedCourseInfoByCategoryId = decryptedCourseInfo
-            projectStatusText = "Protected course order unlocked."
+            projectStatusText = "Course order unlocked."
             return true
         }
 
         fun updateProtectedIdealOrder(categoryId: String, idealOrderText: String) {
             val password = protectedCoursePassword ?: run {
-                projectStatusText = "Unlock protected course order before editing."
+                projectStatusText = "Unlock course order before editing."
                 return
             }
             runCatching {
                 val currentProject = projectFile
-                    ?: throw IllegalStateException("Load an Event File before editing protected course order.")
+                    ?: throw IllegalStateException("Load an Event File before editing course order.")
                 val trimmedIdealOrder = idealOrderText.trim()
                 if (trimmedIdealOrder.isNotEmpty()) {
                     val assignedControls = assignedProtectedIdealOrderControls(currentProject, categoryId)
                     require(assignedControls.isNotEmpty()) {
-                        "Assign controls to this category before editing protected course order."
+                        "Assign controls to this category before editing course order."
                     }
                     ProtectedIdealOrderRules.validateAssignedToCategory(trimmedIdealOrder, assignedControls)
                 }
@@ -1064,14 +1064,14 @@ fun main(args: Array<String>) = application {
 
         fun useCalculatedCourseAnalysisRoute(application: DesktopCourseCalculatedRouteApplication): String {
             val password = protectedCoursePassword ?: run {
-                projectStatusText = "Unlock protected course order before applying calculated route."
+                projectStatusText = "Unlock course order before applying calculated route."
                 return projectStatusText
             }
             return runCatching {
                 val currentProject = projectFile
                     ?: throw IllegalStateException("Load an Event File before applying calculated route.")
                 val currentCourseInfo = protectedCourseInfoByCategoryId[application.categoryId]
-                    ?: throw IllegalStateException("Protected course data is missing for the selected category.")
+                    ?: throw IllegalStateException("Course data is missing for the selected category.")
                 val (updatedProject, updatedCourseInfo) = DesktopCourseAnalysisApplier.applyCalculatedRoute(
                     projectFile = currentProject,
                     courseInfo = currentCourseInfo,
@@ -1092,7 +1092,7 @@ fun main(args: Array<String>) = application {
 
         fun applyCourseAnalysisFoxRenumberingOnly(renumbering: DesktopCourseWaitRenumbering): String {
             val password = protectedCoursePassword ?: run {
-                projectStatusText = "Unlock protected course order before applying fox renumbering."
+                projectStatusText = "Unlock course order before applying fox renumbering."
                 return projectStatusText
             }
             return runCatching {
@@ -1106,7 +1106,7 @@ fun main(args: Array<String>) = application {
                 projectFile = projectSession.updateCurrentProject { result.projectFile }
                 syncProtectedCourseState(result.projectFile, password)
                 projectStatusText =
-                    "Applied fox renumbering to ${result.changedControlCount} controls across ${result.affectedCategoryCount} protected categories. Unsaved changes."
+                    "Applied fox renumbering to ${result.changedControlCount} controls across ${result.affectedCategoryCount} categories. Unsaved changes."
                 projectStatusText
             }.getOrElse { error ->
                 projectStatusText = "Apply fox renumbering failed: ${error.message ?: error::class.simpleName}"
@@ -1116,7 +1116,7 @@ fun main(args: Array<String>) = application {
 
         fun updateProtectedControlLocation(controlId: String, latitudeText: String, longitudeText: String): String {
             val password = protectedCoursePassword ?: run {
-                projectStatusText = "Unlock protected course order before updating control locations."
+                projectStatusText = "Unlock course order before updating control locations."
                 return projectStatusText
             }
             return runCatching {
@@ -1135,9 +1135,9 @@ fun main(args: Array<String>) = application {
                 protectedCourseInfoByCategoryId = result.courseInfoByCategoryId
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
                 projectStatusText = if (result.affectedCategoryCount > 0) {
-                    "Updated ${result.controlLabel} location in ${result.affectedCategoryCount} protected course(s). Stored route geometry invalidated. Unsaved changes."
+                    "Updated ${result.controlLabel} location in ${result.affectedCategoryCount} stored course(s). Stored route geometry invalidated. Unsaved changes."
                 } else {
-                    "Updated ${result.controlLabel} location. No protected courses referenced it. Unsaved changes."
+                    "Updated ${result.controlLabel} location. No stored courses referenced it. Unsaved changes."
                 }
                 projectStatusText
             }.getOrElse { error ->
@@ -1149,7 +1149,7 @@ fun main(args: Array<String>) = application {
         fun updateProtectedCoursePassword(oldPassword: String, newPassword: String, confirmPassword: String): Boolean {
             val currentProject = projectSession.currentProject ?: return false
             val currentPassword = protectedCoursePassword ?: run {
-                projectStatusText = "Unlock protected course order before changing its password."
+                projectStatusText = "Unlock course order before changing its password."
                 return false
             }
             val trimmedOldPassword = oldPassword.trim()
@@ -1164,7 +1164,7 @@ fun main(args: Array<String>) = application {
                 return false
             }
             if (trimmedNewPassword != trimmedConfirmPassword) {
-                projectStatusText = "New protected course passwords do not match."
+                projectStatusText = "New course passwords do not match."
                 return false
             }
 
@@ -1173,7 +1173,7 @@ fun main(args: Array<String>) = application {
                     !categoryData.category.encryptedCourseInfo.isNullOrBlank()
             }
             if (!hasEncryptedCourseProtection && trimmedOldPassword != currentPassword) {
-                projectStatusText = "Old password did not match the unlocked protected course password."
+                projectStatusText = "Old password did not match the unlocked course password."
                 return false
             }
 
@@ -1199,7 +1199,7 @@ fun main(args: Array<String>) = application {
                     }
                 }.toMap()
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
-                projectStatusText = "Protected course password updated. Unsaved changes."
+                projectStatusText = "Course password updated. Unsaved changes."
                 true
             }.getOrElse { error ->
                 projectStatusText = "Password update failed: ${error.message ?: error::class.simpleName}"
@@ -1212,7 +1212,7 @@ fun main(args: Array<String>) = application {
             if (courseKmlKmzElevationJob?.isActive == true) {
                 return
             }
-            projectStatusText = "Retrieving protected course elevations..."
+            projectStatusText = "Retrieving course elevations..."
             courseKmlKmzElevationProgress = CourseKmlKmzElevationProgressUiState(
                 sourceName = sourceName,
                 categoryName = "",
@@ -1240,11 +1240,11 @@ fun main(args: Array<String>) = application {
                     syncProtectedCourseState(updatedProject, password)
                     projectStatusText = when {
                         elevationResult.resolvedPointCount > 0 ->
-                            "Resolved ${elevationResult.resolvedPointCount} protected course elevations for ${elevationResult.categoryCount} categories (${elevationResult.cachedPointCount} cached, ${elevationResult.elevatedPointCount} downloaded). Unsaved changes."
+                            "Resolved ${elevationResult.resolvedPointCount} course elevations for ${elevationResult.categoryCount} categories (${elevationResult.cachedPointCount} cached, ${elevationResult.elevatedPointCount} downloaded). Unsaved changes."
                         elevationResult.sampledPointCount == 0 ->
-                            "No missing protected course elevations found for ${elevationResult.categoryCount} categories."
+                            "No missing course elevations found for ${elevationResult.categoryCount} categories."
                         else ->
-                            "Protected course elevation retrieval completed, but no elevation values were returned for ${elevationResult.sampledPointCount} requested points."
+                            "Course elevation retrieval completed, but no elevation values were returned for ${elevationResult.sampledPointCount} requested points."
                     }
                 }.onFailure { error ->
                     projectStatusText = if (error is CancellationException) {
@@ -1268,7 +1268,7 @@ fun main(args: Array<String>) = application {
 
         fun startCourseAnalysisElevationFetch(categoryId: String) {
             val password = protectedCoursePassword ?: run {
-                projectStatusText = "Unlock protected course order before retrieving course elevations."
+                projectStatusText = "Unlock course order before retrieving course elevations."
                 return
             }
             val categoryName = projectSession.currentProject
@@ -1283,7 +1283,7 @@ fun main(args: Array<String>) = application {
                 categoryIds = listOf(categoryId),
                 password = password
             )
-            projectStatusText = "Retrieving protected course elevations for $categoryName..."
+            projectStatusText = "Retrieving course elevations for $categoryName..."
         }
 
         fun startVenueElevationCacheDownload(
@@ -1399,9 +1399,9 @@ fun main(args: Array<String>) = application {
                         ?.let { " Updated $it control locations." }
                         .orEmpty()
                     if (review.summary.importedCategoryCount == 0 && review.summary.changedControlLocationCount > 0) {
-                        "Updated ${review.summary.changedControlLocationCount} protected control locations.$duplicateText Unsaved changes."
+                        "Updated ${review.summary.changedControlLocationCount} control locations.$duplicateText Unsaved changes."
                     } else {
-                        "Imported protected controls/route data for ${review.summary.importedCategoryCount} categories.$locationText$duplicateText Unsaved changes."
+                        "Imported controls/route data for ${review.summary.importedCategoryCount} categories.$locationText$duplicateText Unsaved changes."
                     }
                 }
             }
@@ -1413,7 +1413,7 @@ fun main(args: Array<String>) = application {
                 return
             }
             isImportingCourseKmlKmz = true
-            projectStatusText = "Importing protected controls/route KML/KMZ..."
+            projectStatusText = "Importing controls/route KML/KMZ..."
             appCoroutineScope.launch {
                 val result = runCatching {
                     withContext(Dispatchers.IO) {
@@ -1459,7 +1459,7 @@ fun main(args: Array<String>) = application {
                         pendingCourseKmlKmzImportReview = null
                         pendingCourseKmlKmzCategoryMapping = null
                         projectStatusText =
-                            "KML/KMZ import found ${summary.matchedControlPointCount} matching controls, but no protected control locations changed."
+                            "KML/KMZ import found ${summary.matchedControlPointCount} matching controls, but no control locations changed."
                     } else if (summary.isDuplicateOnly && !summary.hasDuplicateMissingElevations) {
                         pendingCourseKmlKmzImportReview = null
                         pendingCourseKmlKmzCategoryMapping = null
@@ -1499,7 +1499,7 @@ fun main(args: Array<String>) = application {
         fun chooseImportCourseKmlKmz() {
             val password = protectedCoursePassword
             if (password == null) {
-                projectStatusText = "Unlock protected course order before importing KML/KMZ controls/route data."
+                projectStatusText = "Unlock course order before importing KML/KMZ controls/route data."
                 isCourseKmlKmzUnlockDialogVisible = true
                 return
             }
@@ -2904,7 +2904,7 @@ private fun CourseKmlKmzUnlockDialog(
 
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Unlock protected course order") },
+        title = { Text("Unlock course order") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 TextField(
@@ -2916,7 +2916,7 @@ private fun CourseKmlKmzUnlockDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    text = "KML/KMZ controls/route data is stored in protected course fields.",
+                    text = "KML/KMZ controls/route data includes coordinates and route details that require the course password.",
                     fontSize = 13.sp,
                     color = Color.DarkGray
                 )
@@ -2990,7 +2990,7 @@ private fun CourseKmlKmzImportReviewDialog(
                 }
                 if (summary.changedControlLocationCount > 0) {
                     Text("Control locations to update: ${summary.changedControlLocationCount}")
-                    Text("Protected courses affected by location changes: ${summary.controlLocationAffectedCategoryCount}")
+                    Text("Stored courses affected by location changes: ${summary.controlLocationAffectedCategoryCount}")
                 }
                 if (canFetchElevations) {
                     Text(
@@ -3019,15 +3019,15 @@ private fun CourseKmlKmzImportReviewDialog(
                 }
                 Text(
                     text = if (summary.isDuplicateOnly) {
-                        "This file has the same SHA-256 hash as protected route data already stored in the Event File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Event File unchanged."
+                        "This file has the same SHA-256 hash as route data already stored in the Event File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Event File unchanged."
                     } else if (summary.hasLabelConversions && summary.importedCategoryCount == 0 && summary.changedControlLocationCount == 0) {
-                        "Keep imported data to use these KML/KMZ names as matches to existing Event File labels. Control labels and public labels are not renamed. No protected route facts or control locations will change. Cancel leaves the Event File unchanged."
+                        "Keep imported data to use these KML/KMZ names as matches to existing Event File labels. Control labels and public labels are not renamed. No route facts or control locations will change. Cancel leaves the Event File unchanged."
                     } else if (summary.importedCategoryCount == 0 && summary.changedControlLocationCount > 0) {
-                        "Keep imported data to update protected control locations. Affected protected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Cancel leaves the Event File unchanged."
+                        "Keep imported data to update control locations. Affected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Cancel leaves the Event File unchanged."
                     } else if (summary.hasLabelConversions) {
-                        "Keep imported data to use these KML/KMZ names as matches to existing Event File labels, update protected route facts, protected ideal order, and any changed protected control locations. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged."
+                        "Keep imported data to use these KML/KMZ names as matches to existing Event File labels, update route facts, ideal order, and any changed control locations. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged."
                     } else {
-                        "Keep imported data to update protected route facts, protected ideal order, and any changed protected control locations. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
+                        "Keep imported data to update route facts, ideal order, and any changed control locations. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
                     },
                     fontSize = 13.sp,
                     color = Color.DarkGray
@@ -4324,7 +4324,6 @@ private fun SectionWorkspace(
                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                 onRetrieveMissingElevations = onRetrieveMissingCourseElevations,
-                onImportControlsRouteKmlKmz = onImportControlsRouteKmlKmz,
                 onUnlock = onUnlockProtectedCourseOrder,
                 onUseCalculatedRoute = onUseCalculatedCourseAnalysisRoute,
                 onApplyFoxRenumberingOnly = onApplyCourseAnalysisFoxRenumberingOnly
@@ -6417,7 +6416,7 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
             ButtonLabel("Import Controls KML/KMZ...")
         }
         Text(
-            text = "Controls CSV files update control identity fields only: SI code, role, scoring, public label, and notes. They do not contain latitude/longitude columns and cannot update protected control locations. Control coordinates remain password-protected and are not written to public control fields.",
+            text = "Controls CSV files update control identity fields only: SI code, role, scoring, public label, and notes. They do not contain latitude/longitude columns and cannot update control locations. Control coordinates require the course password and are not written to public control fields.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -6431,13 +6430,13 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
             KmlImportInstruction("Use KML Placemark elements. Each imported Placemark must have a nonblank name.")
             KmlImportInstruction("Control points are Point placemarks. Their names must match existing Event File controls.")
             KmlImportInstruction("Control point names may use an SI code, control label, or public label.")
-            KmlImportInstruction("Matched point placemarks update protected control locations when their latitude/longitude differs from encrypted protected data.")
+            KmlImportInstruction("Matched point placemarks update control locations when their latitude/longitude differs from stored course data.")
             KmlImportInstruction("Use visible labels such as 31, M, Beacon, S, or Spectator; do not add type suffixes to SI codes.")
-            KmlImportInstruction("Routes are LineString placemarks with at least two coordinates. A KML/KMZ with point placemarks only can still update changed protected control locations.")
+            KmlImportInstruction("Routes are LineString placemarks with at least two coordinates. A KML/KMZ with point placemarks only can still update changed control locations.")
             KmlImportInstruction("Each route LineString name must match an Event File category name, such as M21.")
             KmlImportInstruction("Matching ignores case, trims leading/trailing spaces, and collapses repeated whitespace.")
             KmlImportInstruction("Coordinates are read as longitude,latitude,elevation. Elevation may be omitted.")
-            KmlImportInstruction("Controls more than 50 meters from a matched category route are not included in protected ideal order.")
+            KmlImportInstruction("Controls more than 50 meters from a matched category route are not included in the stored ideal order.")
             KmlImportInstruction("For KMZ files, the first .kml document in the archive is read.")
         }
         Text(
@@ -6571,8 +6570,8 @@ private fun VenueElevationCachePanel(
                 ButtonLabel("Use Imported Course Bounds")
             }
             Text(
-                text = importedBounds?.let { "Protected imported route/control data available." }
-                    ?: "Unlock protected course data to derive bounds from imported routes.",
+                text = importedBounds?.let { "Imported route/control data available." }
+                    ?: "Unlock course data to derive bounds from imported routes.",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
@@ -6862,24 +6861,16 @@ private fun KmlImportInstruction(text: String) {
 }
 
 @Composable
-private fun CourseAnalyzerImportGuidance(onSelectFile: () -> Unit) {
+private fun CourseAnalyzerGuidance() {
     Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Button(onClick = onSelectFile) {
-                ButtonLabel("Import Controls KML/KMZ...")
-            }
-            Text(
-                text = "Import protected control points and category routes from a file before running analysis when stored course data needs to be added or updated.",
-                color = DesktopPalette.Black,
-                fontSize = 13.sp
-            )
-        }
+        Text(
+            text = "Use Setup > Controls > Course Analyzer > Import Controls KML/KMZ... to import or update control locations and category routes before running analysis.",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
         Text(
             text = "KML/KMZ import files should contain named Placemark elements. Control locations are Point placemarks named by SI code, control label, or public label. Stored category routes are LineString placemarks named by Event File category, such as M21. Coordinates are read as longitude,latitude,elevation; elevation may be omitted. For KMZ files, the first .kml document in the archive is read.",
             color = DesktopPalette.Black,
@@ -6901,7 +6892,6 @@ private fun CourseAnalysisPanel(
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onRetrieveMissingElevations: (String) -> Unit,
-    onImportControlsRouteKmlKmz: () -> Unit,
     onUnlock: (String) -> Boolean,
     onUseCalculatedRoute: (DesktopCourseCalculatedRouteApplication) -> String,
     onApplyFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String
@@ -6920,15 +6910,23 @@ private fun CourseAnalysisPanel(
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.width(260.dp)
             )
-            Button(
-                onClick = {
-                    if (onUnlock(passwordDraft)) {
-                        passwordDraft = ""
-                    }
-                },
-                enabled = passwordDraft.isNotBlank()
+            DisabledReasonTooltip(
+                if (passwordDraft.isBlank()) {
+                    "Enter the course password to view route data and run analysis."
+                } else {
+                    null
+                }
             ) {
-                ButtonLabel("Unlock")
+                Button(
+                    onClick = {
+                        if (onUnlock(passwordDraft)) {
+                            passwordDraft = ""
+                        }
+                    },
+                    enabled = passwordDraft.isNotBlank()
+                ) {
+                    ButtonLabel("Unlock")
+                }
             }
         }
         return
@@ -6970,10 +6968,10 @@ private fun CourseAnalysisPanel(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        CourseAnalyzerImportGuidance(onSelectFile = onImportControlsRouteKmlKmz)
+        CourseAnalyzerGuidance()
         if (categories.isEmpty()) {
             Text(
-                text = "Import protected controls/route KML/KMZ data for a category before running course analysis.",
+                text = "Import controls/route KML/KMZ data for a category before running course analysis.",
                 color = DesktopPalette.Black,
                 fontSize = 14.sp
             )
@@ -6995,73 +6993,94 @@ private fun CourseAnalysisPanel(
                 },
                 modifier = Modifier.width(280.dp)
             )
-            Button(
-                onClick = {
-                    val categoryId = effectiveSelectedCategoryId ?: return@Button
-                    exportStatusText = null
-                    applyStatusText = null
-                    analyzeSelectedCourse()?.let { summary ->
-                        if (summary.missingElements.isEmpty()) {
-                            analysisResult = summary
-                        } else {
-                            pendingMissingDataResult = CourseAnalysisMissingDataPrompt(
-                                categoryId = categoryId,
-                                summary = summary
-                            )
-                        }
-                    }
+            DisabledReasonTooltip(
+                if (effectiveSelectedCategoryId == null) {
+                    "Import controls/route KML/KMZ data for a category before running analysis."
+                } else {
+                    null
                 }
             ) {
-                ButtonLabel("Analyze")
-            }
-            Button(
-                onClick = {
-                    val summary = analysisResult ?: return@Button
-                    DesktopFileDialogs.chooseExportCourseAnalysisPdf(
-                        eventName = projectFile.raceData.race.name,
-                        categoryName = summary.categoryName
-                    )?.let { path ->
-                        runCatching {
-                            val exportPaths = DesktopCourseAnalysisExports.exportPdfAndKml(path, summary)
-                            exportStatusText = "Exported ${exportPaths.pdfPath.fileName} and ${exportPaths.kmlPath.fileName}"
-                            DesktopDebugLog.info(
-                                "CourseAnalysis",
-                                "Exported analysis PDF ${exportPaths.pdfPath.fileName} and KML ${exportPaths.kmlPath.fileName}"
-                            )
-                        }.onFailure { error ->
-                            exportStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
-                            DesktopDebugLog.error("CourseAnalysis", "Analysis export failed: ${error.message ?: error::class.simpleName}")
+                Button(
+                    onClick = {
+                        val categoryId = effectiveSelectedCategoryId ?: return@Button
+                        exportStatusText = null
+                        applyStatusText = null
+                        analyzeSelectedCourse()?.let { summary ->
+                            if (summary.missingElements.isEmpty()) {
+                                analysisResult = summary
+                            } else {
+                                pendingMissingDataResult = CourseAnalysisMissingDataPrompt(
+                                    categoryId = categoryId,
+                                    summary = summary
+                                )
+                            }
                         }
-                    }
-                },
-                enabled = analysisResult != null
+                    },
+                    enabled = effectiveSelectedCategoryId != null
+                ) {
+                    ButtonLabel("Analyze")
+                }
+            }
+            DisabledReasonTooltip(
+                if (analysisResult == null) {
+                    "Run analysis before exporting."
+                } else {
+                    null
+                }
             ) {
-                ButtonLabel("Export Analysis...")
+                Button(
+                    onClick = {
+                        val summary = analysisResult ?: return@Button
+                        DesktopFileDialogs.chooseExportCourseAnalysisPdf(
+                            eventName = projectFile.raceData.race.name,
+                            categoryName = summary.categoryName
+                        )?.let { path ->
+                            runCatching {
+                                val exportPaths = DesktopCourseAnalysisExports.exportPdfAndKml(path, summary)
+                                exportStatusText = "Exported ${exportPaths.pdfPath.fileName} and ${exportPaths.kmlPath.fileName}"
+                                DesktopDebugLog.info(
+                                    "CourseAnalysis",
+                                    "Exported analysis PDF ${exportPaths.pdfPath.fileName} and KML ${exportPaths.kmlPath.fileName}"
+                                )
+                            }.onFailure { error ->
+                                exportStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                                DesktopDebugLog.error("CourseAnalysis", "Analysis export failed: ${error.message ?: error::class.simpleName}")
+                            }
+                        }
+                    },
+                    enabled = analysisResult != null
+                ) {
+                    ButtonLabel("Export Analysis...")
+                }
             }
         }
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(
-                onClick = {
-                    val application = analysisResult?.calculatedRouteApplication ?: return@Button
-                    applyStatusText = onUseCalculatedRoute(application)
-                    analysisResult = null
-                },
-                enabled = analysisResult?.calculatedRouteApplication != null
-            ) {
-                ButtonLabel("Apply Calculated Route")
+            DisabledReasonTooltip(calculatedRouteApplyDisabledReason(analysisResult)) {
+                Button(
+                    onClick = {
+                        val application = analysisResult?.calculatedRouteApplication ?: return@Button
+                        applyStatusText = onUseCalculatedRoute(application)
+                        analysisResult = null
+                    },
+                    enabled = analysisResult?.calculatedRouteApplication != null
+                ) {
+                    ButtonLabel("Apply Calculated Route")
+                }
             }
-            Button(
-                onClick = {
-                    val renumbering = analysisResult?.waitRenumbering?.takeIf { it.improvesWait } ?: return@Button
-                    applyStatusText = onApplyFoxRenumberingOnly(renumbering)
-                    analysisResult = null
-                },
-                enabled = analysisResult?.waitRenumbering?.improvesWait == true
-            ) {
-                ButtonLabel("Apply Fox Renumbering Only")
+            DisabledReasonTooltip(foxRenumberingApplyDisabledReason(analysisResult)) {
+                Button(
+                    onClick = {
+                        val renumbering = analysisResult?.waitRenumbering?.takeIf { it.improvesWait } ?: return@Button
+                        applyStatusText = onApplyFoxRenumberingOnly(renumbering)
+                        analysisResult = null
+                    },
+                    enabled = analysisResult?.waitRenumbering?.improvesWait == true
+                ) {
+                    ButtonLabel("Apply Fox Renumbering Only")
+                }
             }
         }
         applyStatusText?.let { statusText ->
@@ -7136,6 +7155,20 @@ private fun CourseAnalysisPanel(
         )
     }
 }
+
+private fun calculatedRouteApplyDisabledReason(analysisResult: DesktopCourseAnalysisSummary?): String? =
+    when {
+        analysisResult == null -> "Run analysis before applying a calculated route."
+        analysisResult.calculatedRouteApplication == null -> "No different calculated route is available to apply."
+        else -> null
+    }
+
+private fun foxRenumberingApplyDisabledReason(analysisResult: DesktopCourseAnalysisSummary?): String? =
+    when {
+        analysisResult == null -> "Run analysis before applying fox renumbering."
+        analysisResult.waitRenumbering?.improvesWait != true -> "No improved Section 1 fox renumbering is available."
+        else -> null
+    }
 
 @Composable
 private fun CourseAnalysisCategoryPicker(
@@ -8133,7 +8166,7 @@ private fun ProtectedCourseOrderPanel(
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = "Change protected course password",
+            text = "Change course password",
             color = DesktopPalette.Black,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold
@@ -8286,7 +8319,7 @@ private fun ProtectedControlLocationUpdatePanel(
         }
         selectedSummary?.let { summary ->
             Text(
-                text = "Protected courses using this control: ${summary.affectedCategoryCount}",
+                text = "Stored courses using this control: ${summary.affectedCategoryCount}",
                 color = DesktopPalette.Disconnected,
                 fontSize = 13.sp
             )
@@ -9721,7 +9754,7 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
         DesktopSection.Categories -> summary?.let { "${it.categoryCount} categories loaded." }
             ?: requiresEventFile("editing categories")
         DesktopSection.ProtectedCourseOrder -> summary?.let { "${it.categoryCount} categories loaded." }
-            ?: requiresEventFile("editing protected course order")
+            ?: requiresEventFile("editing course order")
         DesktopSection.Competitors -> summary?.let { "${it.competitorCount} competitors loaded." }
             ?: requiresEventFile("editing competitors")
         DesktopSection.StartList -> summary?.let { "Competitors sorted by drawn start time." }
@@ -9729,11 +9762,11 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
         DesktopSection.Controls -> projectFile?.let { "${it.raceData.controls.size} controls loaded." }
             ?: requiresEventFile("editing controls")
         DesktopSection.CourseAnalysis ->
-            "Analyze protected route order, effective length, climb, estimated ideal time, and Classic wait slots."
+            "Analyze stored route order, effective length, climb, estimated ideal time, and Classic wait slots."
         DesktopSection.ElevationCache ->
-            "Download venue elevation grids that can be reused for protected route and control elevation sampling."
+            "Download venue elevation grids that can be reused for stored route and control elevation sampling."
         DesktopSection.ControlsImportExport ->
-            "Import and export control definitions and protected controls/route KML/KMZ files."
+            "Import and export control definitions and controls/route KML/KMZ files."
         DesktopSection.ControlsRouteKmlImport ->
             "KML/KMZ files must include named control Point placemarks and category route LineString placemarks."
         DesktopSection.Readouts -> summary?.let { "${it.readoutCount} SI-card readouts loaded." }

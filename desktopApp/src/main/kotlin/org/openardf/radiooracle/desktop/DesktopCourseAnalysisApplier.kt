@@ -17,7 +17,7 @@ object DesktopCourseAnalysisApplier {
     ): Pair<EventProjectFile, ProtectedCourseInfo> {
         val trimmedPassword = password.trim()
         require(trimmedPassword.isNotEmpty()) {
-            "Protected course password is required."
+            "Course password is required."
         }
         require(projectFile.raceData.categories.any { it.category.id == application.categoryId }) {
             "Category was not found: ${application.categoryId}"
@@ -86,7 +86,7 @@ object DesktopCourseAnalysisApplier {
     ): DesktopCourseFoxRenumberingApplyResult {
         val trimmedPassword = password.trim()
         require(trimmedPassword.isNotEmpty()) {
-            "Protected course password is required."
+            "Course password is required."
         }
         require(renumbering.improvesWait) {
             "No improved fox renumbering was calculated."
@@ -120,13 +120,13 @@ object DesktopCourseAnalysisApplier {
                     ProtectedIdealOrderRules.resolveControlIds(idealOrderText, projectFile.raceData.controls)
                 }.getOrElse { error ->
                     throw IllegalArgumentException(
-                        "Protected ideal order could not be updated for ${categoryData.category.name}: ${error.message ?: error::class.simpleName}"
+                        "Stored ideal order could not be updated for ${categoryData.category.name}: ${error.message ?: error::class.simpleName}"
                     )
                 }
                 val updatedIdealOrderText = resolvedControlIds
                     .map { controlId ->
                         updatedControlsById[controlId]
-                            ?: throw IllegalArgumentException("Protected ideal order control could not be preserved: $controlId")
+                            ?: throw IllegalArgumentException("Stored ideal order control could not be preserved: $controlId")
                     }
                     .joinToString(" ") { it.idealOrderToken(updatedControls) }
                 encryptedIdealOrderByCategoryId[categoryData.category.id] =

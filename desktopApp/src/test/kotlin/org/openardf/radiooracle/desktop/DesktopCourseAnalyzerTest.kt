@@ -441,7 +441,7 @@ class DesktopCourseAnalyzerTest {
             protectedCourseInfo = decryptedCourseInfo,
             protectedIdealOrderText = DesktopProtectedCourseOrder.decrypt(requireNotNull(updatedCategory.encryptedIdealOrder), "test-password")
         )
-        assertTrue(updatedSummary.missingElements.none { it.contains("Protected ideal order") })
+        assertTrue(updatedSummary.missingElements.none { it.contains("Stored ideal order") })
     }
 
     @Test
@@ -586,8 +586,8 @@ class DesktopCourseAnalyzerTest {
             protectedIdealOrderText = null
         )
 
-        assertTrue(summary.missingElements.any { it.contains("Protected route data") })
-        assertTrue(summary.missingElements.any { it.contains("Protected route geometry") })
+        assertTrue(summary.missingElements.any { it.contains("Route data is locked") })
+        assertTrue(summary.missingElements.any { it.contains("Route geometry") })
         assertEquals(null, summary.providedRouteSection)
         assertEquals(null, summary.calculatedRouteSection)
         assertEquals(0, summary.calculatedRouteCount)
@@ -618,7 +618,7 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
-    fun reportsMissingProtectedControlElevations() {
+    fun reportsMissingControlLocationElevations() {
         val projectFile = projectFile(foxCount = 3)
         val protectedInfo = protectedInfo(foxCount = 3).copy(
             controlPoints = protectedInfo(foxCount = 3).controlPoints.map {
@@ -633,7 +633,7 @@ class DesktopCourseAnalyzerTest {
             protectedIdealOrderText = "31 32 33 Beacon"
         )
 
-        assertTrue(summary.missingElements.any { it.contains("Protected control point elevations") })
+        assertTrue(summary.missingElements.any { it.contains("Control location elevations") })
         assertEquals(true, summary.hasMissingElevationData)
     }
 
@@ -768,7 +768,7 @@ class DesktopCourseAnalyzerTest {
             protectedIdealOrderText = protectedInfo.idealOrder
         )
 
-        assertTrue(summary.missingElements.none { it.contains("Protected ideal order could not be resolved") })
+        assertTrue(summary.missingElements.none { it.contains("Stored ideal order could not be resolved") })
         assertEquals(listOf("S", "Fox 1", "Fox 2", "B"), summary.providedIdealOrder)
         assertTrue(summary.calculatedIdealOrder.none { it == "Fox 3" })
         assertEquals(listOf("Fox 1", "Fox 2"), summary.waitRows.map { it.controlLabel })
