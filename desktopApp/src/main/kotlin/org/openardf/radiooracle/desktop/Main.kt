@@ -1389,8 +1389,19 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun applyCourseKmlKmzImport(review: PendingCourseKmlKmzImportReview, fetchElevations: Boolean) {
-            val updatedProject = review.updatedProject
+        fun applyCourseKmlKmzImport(
+            review: PendingCourseKmlKmzImportReview,
+            fetchElevations: Boolean,
+            applyCategoryAssignments: Boolean
+        ) {
+            val updatedProject = if (applyCategoryAssignments) {
+                DesktopCourseKmlImporter.applyCategoryAssignmentUpdates(
+                    projectFile = review.updatedProject,
+                    updates = review.summary.categoryAssignmentUpdates
+                )
+            } else {
+                review.updatedProject
+            }
             projectFile = projectSession.updateCurrentProject { updatedProject }
             syncProtectedCourseState(updatedProject, review.password)
             pendingCourseKmlKmzImportReview = null
@@ -1408,13 +1419,21 @@ fun main(args: Array<String>) = application {
                         .takeIf { it > 0 }
                         ?.let { " Updated $it control locations." }
                         .orEmpty()
-                    val assignedText = review.summary.assignedCategoryControlCount
-                        .takeIf { it > 0 }
-                        ?.let { " Updated assigned controls for $it categories." }
-                        .orEmpty()
+                    val assignedText = if (applyCategoryAssignments) {
+                        review.summary.assignedCategoryControlCount
+                            .takeIf { it > 0 }
+                            ?.let { " Updated assigned controls for $it categories." }
+                            .orEmpty()
+                    } else {
+                        ""
+                    }
                     if (review.summary.importedCategoryCount == 0 && review.summary.changedControlLocationCount > 0) {
                         "Updated ${review.summary.changedControlLocationCount} control locations.$assignedText$duplicateText Unsaved changes."
-                    } else if (review.summary.importedCategoryCount == 0 && review.summary.assignedCategoryControlCount > 0) {
+                    } else if (
+                        review.summary.importedCategoryCount == 0 &&
+                        review.summary.assignedCategoryControlCount > 0 &&
+                        applyCategoryAssignments
+                    ) {
                         "Updated assigned controls for ${review.summary.assignedCategoryControlCount} categories.$duplicateText Unsaved changes."
                     } else {
                         "Imported controls/route data for ${review.summary.importedCategoryCount} categories.$locationText$assignedText$duplicateText Unsaved changes."
@@ -2230,7 +2249,9 @@ fun main(args: Array<String>) = application {
         pendingCourseKmlKmzImportReview?.let { review ->
             CourseKmlKmzImportReviewDialog(
                 review = review,
-                onKeep = { fetchElevations -> applyCourseKmlKmzImport(review, fetchElevations) },
+                onKeep = { fetchElevations, applyCategoryAssignments ->
+                    applyCourseKmlKmzImport(review, fetchElevations, applyCategoryAssignments)
+                },
                 onCancel = {
                     pendingCourseKmlKmzImportReview = null
                     projectStatusText = "Controls/route KML/KMZ import canceled. No changes applied."
@@ -2967,7 +2988,7 @@ private fun CourseKmlKmzUnlockDialog(
 @Composable
 private fun CourseKmlKmzImportReviewDialog(
     review: PendingCourseKmlKmzImportReview,
-    onKeep: (fetchElevations: Boolean) -> Unit,
+    onKeep: (fetchElevations: Boolean, applyCategoryAssignments: Boolean) -> Unit,
     onCancel: () -> Unit
 ) {
     val summary = review.summary
@@ -2977,6 +2998,9 @@ private fun CourseKmlKmzImportReviewDialog(
     val canFetchElevations = summary.matchedCategoryIds.isNotEmpty()
     var fetchElevations by remember(review.sourceName, summary.sourceSha256, summary.isDuplicateOnly) {
         mutableStateOf(canFetchElevations && summary.isDuplicateOnly && summary.hasDuplicateMissingElevations)
+    }
+    var applyCategoryAssignments by remember(review.sourceName, summary.sourceSha256) {
+        mutableStateOf(false)
     }
     AlertDialog(
         onDismissRequest = onCancel,
@@ -2998,7 +3022,22 @@ private fun CourseKmlKmzImportReviewDialog(
                     Text("Categories to update: ${summary.importedCategoryCount}")
                 }
                 if (summary.assignedCategoryControlCount > 0) {
-                    Text("Category assigned controls to update: ${summary.assignedCategoryControlCount}")
+                    Text("Category assigned controls available to copy: ${summary.assignedCategoryControlCount}")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Checkbox(
+                            checked = applyCategoryAssignments,
+                            onCheckedChange = { applyCategoryAssignments = it }
+                        )
+                        Text("Replace category assigned controls with matched KML/KMZ controls")
+                    }
+                    Text(
+                        "If selected, existing assigned controls for the matched category are replaced and stored in neutral fox-label order, not route order.",
+                        fontSize = 12.sp,
+                        color = Color.DarkGray
+                    )
                 }
                 if (summary.duplicateCategoryCount > 0) {
                     Text("Duplicate categories already imported: ${summary.duplicateCategoryCount}")
@@ -3053,18 +3092,13 @@ private fun CourseKmlKmzImportReviewDialog(
                     ) {
                         "Keep imported data to use these KML/KMZ names as matches to existing Event File labels. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Cancel leaves the Event File unchanged."
                     } else if (summary.importedCategoryCount == 0 && summary.changedControlLocationCount > 0) {
-                        val assignedPhrase = if (summary.assignedCategoryControlCount > 0) {
-                            "assigned controls and "
-                        } else {
-                            ""
-                        }
-                        "Keep imported data to update ${assignedPhrase}control locations. Affected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Cancel leaves the Event File unchanged."
+                        "Keep imported data to update control locations. Affected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
                     } else if (summary.importedCategoryCount == 0 && summary.assignedCategoryControlCount > 0) {
-                        "Keep imported data to update category assigned controls from the matched KML/KMZ control points. Cancel leaves the Event File unchanged."
+                        "Keep imported data to review matched KML/KMZ control points. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
                     } else if (summary.hasLabelConversions) {
-                        "Keep imported data to use these KML/KMZ names as matches to existing Event File labels, update assigned controls, route facts, ideal order, and any changed control locations. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged."
+                        "Keep imported data to use these KML/KMZ names as matches to existing Event File labels, update route facts, ideal order, and any changed control locations. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged."
                     } else {
-                        "Keep imported data to update assigned controls, route facts, ideal order, and any changed control locations. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
+                        "Keep imported data to update route facts, ideal order, and any changed control locations. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
                     },
                     fontSize = 13.sp,
                     color = Color.DarkGray
@@ -3072,7 +3106,7 @@ private fun CourseKmlKmzImportReviewDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onKeep(fetchElevations) }) {
+            Button(onClick = { onKeep(fetchElevations, applyCategoryAssignments) }) {
                 Text(
                     if (summary.isDuplicateOnly) {
                         "Continue"

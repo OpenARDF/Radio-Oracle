@@ -29,7 +29,7 @@ object DesktopCourseAnalysisApplier {
         val updatedControls = projectFile.raceData.controls.map { control ->
             val calculatedLabel = labelByControlId[control.id]
             if (control.type == ControlPointType.CONTROL && calculatedLabel != null) {
-                control.copy(publicLabel = calculatedLabel, latitude = null, longitude = null)
+                control.copy(latitude = null, longitude = null)
             } else if (control.latitude != null || control.longitude != null) {
                 control.copy(latitude = null, longitude = null)
             } else {
@@ -102,7 +102,7 @@ object DesktopCourseAnalysisApplier {
             val calculatedLabel = labelByControlId[control.id]
             when {
                 control.type == ControlPointType.CONTROL && calculatedLabel != null ->
-                    control.copy(publicLabel = calculatedLabel, latitude = null, longitude = null)
+                    control.copy(latitude = null, longitude = null)
                 control.latitude != null || control.longitude != null ->
                     control.copy(latitude = null, longitude = null)
                 else -> control

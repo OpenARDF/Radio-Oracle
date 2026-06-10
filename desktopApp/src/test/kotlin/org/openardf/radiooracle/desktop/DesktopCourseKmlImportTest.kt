@@ -5,6 +5,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.ControlPointType
+import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import java.nio.file.Files
@@ -49,15 +50,9 @@ class DesktopCourseKmlImportTest {
         assertTrue(summary.routeElevationPointCount > 0)
         assertEquals(0, category.lengthMeters)
         assertEquals(0, category.climbMeters)
-        assertEquals("31 32", category.controlPointsString)
-        assertEquals(listOf(31, 32), categoryData.controlPoints.map { it.siCode })
-        assertEquals(
-            listOf(
-                updated.raceData.controls.single { it.siCode == 31 }.id,
-                updated.raceData.controls.single { it.siCode == 32 }.id
-            ),
-            categoryData.controlPoints.map { it.controlId }
-        )
+        assertEquals("", category.controlPointsString)
+        assertTrue(categoryData.controlPoints.isEmpty())
+        assertEquals("31 32", summary.categoryAssignmentUpdates.single().controlPointsText)
         assertNotNull(category.encryptedIdealOrder)
         assertNotNull(category.encryptedCourseInfo)
         assertEquals("1 2", DesktopProtectedCourseOrder.decrypt(category.encryptedIdealOrder!!, "course-key"))
@@ -103,8 +98,52 @@ class DesktopCourseKmlImportTest {
 
         val categoryData = updated.raceData.categories.single()
         assertEquals(1, summary.assignedCategoryControlCount)
-        assertEquals("31 32", categoryData.category.controlPointsString)
-        assertEquals(listOf(31, 32), categoryData.controlPoints.map { it.siCode })
+        assertEquals("31 32 33", categoryData.category.controlPointsString)
+        assertEquals(listOf(31, 32, 33), categoryData.controlPoints.map { it.siCode })
+
+        val applied = DesktopCourseKmlImporter.applyCategoryAssignmentUpdates(
+            projectFile = updated,
+            updates = summary.categoryAssignmentUpdates
+        )
+        val appliedCategoryData = applied.raceData.categories.single()
+        assertEquals("31 32", appliedCategoryData.category.controlPointsString)
+        assertEquals(listOf(31, 32), appliedCategoryData.controlPoints.map { it.siCode })
+    }
+
+    @Test
+    fun categoryAssignmentApplyPreservesPublicLabelMappingAndDisplaysInPublicLabelOrder() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithClassicControlsInReversePublicLabelOrder())
+        val categoryId = "cat-m21"
+        val baseProject = EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00")
+            .withControlPublicLabel(siCode = 31, publicLabel = "Fox 5")
+            .withControlPublicLabel(siCode = 32, publicLabel = "Fox 4")
+            .withControlPublicLabel(siCode = 33, publicLabel = "Fox 3")
+            .withControlPublicLabel(siCode = 34, publicLabel = "Fox 2")
+            .withControlPublicLabel(siCode = 35, publicLabel = "Fox 1")
+            .withControlPublicLabel(siCode = 99, publicLabel = "B")
+        val project = EventProjectEditor.addCategory(
+            baseProject,
+            categoryId = categoryId,
+            name = "M21"
+        )
+        val originalPublicLabelsBySi = project.raceData.controls.associate { it.siCode to it.publicLabel }
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key"
+        )
+        val applied = DesktopCourseKmlImporter.applyCategoryAssignmentUpdates(
+            projectFile = updated,
+            updates = summary.categoryAssignmentUpdates
+        )
+
+        assertEquals(originalPublicLabelsBySi, applied.raceData.controls.associate { it.siCode to it.publicLabel })
+        val appliedCategory = applied.raceData.categories.single()
+        assertEquals(listOf(35, 34, 33, 32, 31, 99), appliedCategory.controlPoints.map { it.siCode })
+        assertEquals("35 34 33 32 31 99B", appliedCategory.category.controlPointsString)
+        assertEquals("'Fox 1' 'Fox 2' 'Fox 3' 'Fox 4' 'Fox 5' B", EventCategoryDetails.from(applied.raceData).single().controlPointsText)
     }
 
     @Test
@@ -326,7 +365,8 @@ class DesktopCourseKmlImportTest {
         assertEquals(1, duplicateSummary.matchedCategoryCount)
         assertEquals(0, duplicateSummary.importedCategoryCount)
         assertEquals(1, duplicateSummary.duplicateCategoryCount)
-        assertTrue(duplicateSummary.isDuplicateOnly)
+        assertEquals(1, duplicateSummary.assignedCategoryControlCount)
+        assertEquals(false, duplicateSummary.isDuplicateOnly)
         assertTrue(duplicateSummary.hasDuplicateMissingElevations)
         assertTrue(duplicateSummary.duplicateMissingElevationPointCount > 0)
         assertEquals(0, unexpectedElevationRequestCount)
@@ -369,8 +409,16 @@ class DesktopCourseKmlImportTest {
         assertEquals(1, summary.duplicateCategoryCount)
         assertEquals(1, summary.assignedCategoryControlCount)
         assertEquals(false, summary.isDuplicateOnly)
-        assertEquals("31 32", categoryData.category.controlPointsString)
-        assertEquals(listOf(31, 32), categoryData.controlPoints.map { it.siCode })
+        assertEquals("", categoryData.category.controlPointsString)
+        assertTrue(categoryData.controlPoints.isEmpty())
+
+        val applied = DesktopCourseKmlImporter.applyCategoryAssignmentUpdates(
+            projectFile = updated,
+            updates = summary.categoryAssignmentUpdates
+        )
+        val appliedCategoryData = applied.raceData.categories.single()
+        assertEquals("31 32", appliedCategoryData.category.controlPointsString)
+        assertEquals(listOf(31, 32), appliedCategoryData.controlPoints.map { it.siCode })
     }
 
     @Test
@@ -532,7 +580,8 @@ class DesktopCourseKmlImportTest {
         )
 
         assertEquals(elevated, duplicateProject)
-        assertTrue(duplicateSummary.isDuplicateOnly)
+        assertEquals(false, duplicateSummary.isDuplicateOnly)
+        assertEquals(1, duplicateSummary.assignedCategoryControlCount)
         assertEquals(0, duplicateSummary.importedCategoryCount)
         assertEquals(1, duplicateSummary.duplicateCategoryCount)
         assertEquals(0, duplicateSummary.duplicateMissingElevationPointCount)
@@ -855,6 +904,52 @@ class DesktopCourseKmlImportTest {
                   -95.0000,39.0000,0
                   -94.9990,39.0000,0
                   -94.9980,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleKmlWithClassicControlsInReversePublicLabelOrder(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>-94.9990,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>33</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>34</name>
+              <Point><coordinates>-94.9970,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>35</name>
+              <Point><coordinates>-94.9960,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M</name>
+              <Point><coordinates>-94.9950,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9990,39.0000,0
+                  -94.9980,39.0000,0
+                  -94.9970,39.0000,0
+                  -94.9960,39.0000,0
+                  -94.9950,39.0000,0
                 </coordinates>
               </LineString>
             </Placemark>

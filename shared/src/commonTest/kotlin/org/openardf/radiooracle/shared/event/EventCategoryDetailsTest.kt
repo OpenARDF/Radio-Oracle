@@ -96,6 +96,41 @@ class EventCategoryDetailsTest {
     }
 
     @Test
+    fun displaysAssignedControlsByPublicFoxLabelOrderBeforeSiCodeOrder() {
+        val controls = listOf(
+            EventControl("control-f1", "race", "1", 35, ControlPointType.CONTROL, publicLabel = "Fox 1"),
+            EventControl("control-f2", "race", "2", 34, ControlPointType.CONTROL, publicLabel = "Fox 2"),
+            EventControl("control-f3", "race", "3", 33, ControlPointType.CONTROL, publicLabel = "Fox 3"),
+            EventControl("control-f4", "race", "4", 32, ControlPointType.CONTROL, publicLabel = "Fox 4"),
+            EventControl("control-f5", "race", "5", 31, ControlPointType.CONTROL, publicLabel = "Fox 5"),
+            EventControl("control-m", "race", "M", 99, ControlPointType.BEACON, publicLabel = "B")
+        )
+        val categoryData = categoryData(
+            name = "M21",
+            order = 1,
+            differentProperties = false,
+            raceType = null,
+            raceBand = null,
+            timeLimitSeconds = null
+        ).copy(
+            controlPoints = listOf(
+                EventControlPoint("cp-1", "M21", 31, ControlPointType.CONTROL, 1, "control-f5"),
+                EventControlPoint("cp-2", "M21", 32, ControlPointType.CONTROL, 2, "control-f4"),
+                EventControlPoint("cp-3", "M21", 33, ControlPointType.CONTROL, 3, "control-f3"),
+                EventControlPoint("cp-4", "M21", 34, ControlPointType.CONTROL, 4, "control-f2"),
+                EventControlPoint("cp-5", "M21", 35, ControlPointType.CONTROL, 5, "control-f1"),
+                EventControlPoint("cp-6", "M21", 99, ControlPointType.BEACON, 6, "control-m")
+            ),
+            publicControlIds = listOf("control-f5", "control-f4", "control-f3", "control-f2", "control-f1", "control-m")
+        )
+        val raceData = raceData().copy(categories = listOf(categoryData), controls = controls)
+
+        val displayedText = EventCategoryDetails.from(raceData).single().controlPointsText
+
+        assertEquals("'Fox 1' 'Fox 2' 'Fox 3' 'Fox 4' 'Fox 5' B", displayedText)
+    }
+
+    @Test
     fun formatsSprintAssignedControlsWithSpectatorBetweenSlowAndFastFoxes() {
         val controls = listOf(
             EventControl("control-slow-1", "race", "1", 31, ControlPointType.CONTROL, publicLabel = "Slow 1"),

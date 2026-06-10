@@ -406,6 +406,7 @@ class DesktopCourseAnalyzerTest {
             protectedIdealOrderText = "'Fox 1' 'Fox 2' 'Fox 3' Beacon"
         )
         val application = requireNotNull(summary.calculatedRouteApplication)
+        val originalPublicLabelsByControlId = projectFile.raceData.controls.associate { it.id to it.publicLabel }
 
         val (updatedProject, updatedCourseInfo) = DesktopCourseAnalysisApplier.applyCalculatedRoute(
             projectFile = projectFile,
@@ -431,9 +432,7 @@ class DesktopCourseAnalyzerTest {
         assertEquals(application.idealOrderText, updatedCourseInfo.idealOrder)
         assertEquals(application.routePoints.size, updatedCourseInfo.route.size)
         val publicLabelsByControlId = updatedProject.raceData.controls.associate { it.id to it.publicLabel }
-        application.foxAssignments.forEach { assignment ->
-            assertEquals(assignment.calculatedLabel, publicLabelsByControlId[assignment.controlId])
-        }
+        assertEquals(originalPublicLabelsByControlId, publicLabelsByControlId)
 
         val updatedSummary = DesktopCourseAnalyzer.analyze(
             projectFile = updatedProject,
@@ -498,12 +497,11 @@ class DesktopCourseAnalyzerTest {
         val changedLabelsByControlId = renumbering.assignments
             .filter { it.suggestedSlotLabel != it.currentSlotLabel }
             .associate { it.controlId to it.suggestedSlotLabel }
+        val originalPublicLabelsByControlId = encryptedProject.raceData.controls.associate { it.id to it.publicLabel }
         assertEquals(changedLabelsByControlId.size, result.changedControlCount)
         assertEquals(2, result.affectedCategoryCount)
         val updatedPublicLabelsByControlId = result.projectFile.raceData.controls.associate { it.id to it.publicLabel }
-        changedLabelsByControlId.forEach { (controlId, expectedLabel) ->
-            assertEquals(expectedLabel, updatedPublicLabelsByControlId[controlId])
-        }
+        assertEquals(originalPublicLabelsByControlId, updatedPublicLabelsByControlId)
 
         val originalResolvedControlIds = ProtectedIdealOrderRules.resolveControlIds(
             storedIdealOrderText,

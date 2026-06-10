@@ -12,6 +12,7 @@ import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
@@ -53,13 +54,16 @@ data class DesktopCourseKmlImportSummary(
     val matchedCategoryNames: List<String>,
     val routeElevationPointCount: Int,
     val importedCategoryCount: Int,
-    val assignedCategoryControlCount: Int,
+    val categoryAssignmentUpdates: List<DesktopCourseKmlCategoryAssignmentUpdate>,
     val changedControlLocationCount: Int,
     val controlLocationAffectedCategoryCount: Int,
     val duplicateCategoryCount: Int,
     val duplicateMissingElevationPointCount: Int,
     val sourceSha256: String
 ) {
+    val assignedCategoryControlCount: Int
+        get() = categoryAssignmentUpdates.size
+
     val isDuplicateOnly: Boolean
         get() = matchedCategoryCount > 0 &&
             importedCategoryCount == 0 &&
@@ -85,6 +89,19 @@ data class DesktopCourseKmlImportSummary(
 data class DesktopCourseKmlLabelConversion(
     val importedName: String,
     val eventControlLabel: String
+)
+
+data class DesktopCourseKmlAssignedControl(
+    val controlId: String,
+    val siCode: Int,
+    val type: ControlPointType
+)
+
+data class DesktopCourseKmlCategoryAssignmentUpdate(
+    val categoryId: String,
+    val categoryName: String,
+    val controlPointsText: String,
+    val controls: List<DesktopCourseKmlAssignedControl>
 )
 
 data class DesktopRouteElevationProgress(
@@ -156,12 +173,12 @@ object DesktopCourseKmlImporter {
         }
         var matchedCategoryCount = 0
         var importedCategoryCount = 0
-        var assignedCategoryControlCount = 0
         var duplicateCategoryCount = 0
         var duplicateMissingElevationPointCount = 0
         var routeElevationPointCount = 0
         val matchedCategoryIds = mutableListOf<String>()
         val matchedCategoryNames = mutableListOf<String>()
+        val categoryAssignmentUpdates = mutableListOf<DesktopCourseKmlCategoryAssignmentUpdate>()
 
         courseData.routes.forEach { route ->
             val categoryData = routeCategoryTargets[route] ?: return@forEach
@@ -169,14 +186,11 @@ object DesktopCourseKmlImporter {
             matchedCategoryIds += categoryData.category.id
             matchedCategoryNames += categoryData.category.name
 
-            updateCategoryAssignedControls(
+            categoryAssignmentUpdate(
                 projectFile = updatedProject,
                 categoryId = categoryData.category.id,
                 controls = controls
-            ).takeIf { it != updatedProject }?.let { assignedProject ->
-                updatedProject = assignedProject
-                assignedCategoryControlCount++
-            }
+            )?.let(categoryAssignmentUpdates::add)
 
             val existingCourseInfo = categoryData.category.encryptedCourseInfo
                 ?.takeIf { it.isNotBlank() }
@@ -289,7 +303,7 @@ object DesktopCourseKmlImporter {
             matchedCategoryNames = matchedCategoryNames,
             routeElevationPointCount = routeElevationPointCount,
             importedCategoryCount = importedCategoryCount,
-            assignedCategoryControlCount = assignedCategoryControlCount,
+            categoryAssignmentUpdates = categoryAssignmentUpdates,
             changedControlLocationCount = controlLocationUpdates.size,
             controlLocationAffectedCategoryCount = locationUpdateResult?.affectedCategoryCount ?: 0,
             duplicateCategoryCount = duplicateCategoryCount,
@@ -685,6 +699,7 @@ object DesktopCourseKmlImporter {
                 CourseMatchedControl(
                     controlId = control.id,
                     label = control.idealOrderToken(),
+                    displayLabel = control.displayCourseLabel(),
                     siCode = control.siCode,
                     type = control.type,
                     point = imported.point
@@ -742,14 +757,45 @@ object DesktopCourseKmlImporter {
             }
     }
 
-    private fun updateCategoryAssignedControls(
+    fun applyCategoryAssignmentUpdates(
+        projectFile: EventProjectFile,
+        updates: List<DesktopCourseKmlCategoryAssignmentUpdate>
+    ): EventProjectFile {
+        if (updates.isEmpty()) {
+            return projectFile
+        }
+        val updatesByCategoryId = updates.associateBy { it.categoryId }
+        val categories = projectFile.raceData.categories.map { categoryData ->
+            val update = updatesByCategoryId[categoryData.category.id] ?: return@map categoryData
+            val controlPoints = update.controls.mapIndexed { index, control ->
+                EventControlPoint(
+                    id = "${update.categoryId}-kml-control-${index + 1}",
+                    categoryId = update.categoryId,
+                    controlId = control.controlId,
+                    siCode = control.siCode,
+                    type = control.type,
+                    order = index + 1
+                )
+            }
+            categoryData.copy(
+                category = categoryData.category.copy(controlPointsString = update.controlPointsText),
+                controlPoints = controlPoints,
+                publicControlIds = controlPoints.map { it.controlId }
+            )
+        }
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(categories = categories)
+        )
+    }
+
+    private fun categoryAssignmentUpdate(
         projectFile: EventProjectFile,
         categoryId: String,
         controls: List<CourseMatchedControl>
-    ): EventProjectFile {
+    ): DesktopCourseKmlCategoryAssignmentUpdate? {
         val categoryData = projectFile.raceData.categories
             .firstOrNull { it.category.id == categoryId }
-            ?: return projectFile
+            ?: return null
         val raceType = categoryData.category.effectiveRaceType(projectFile.raceData.race)
         val sortedControls = controls
             .distinctBy { it.controlId }
@@ -757,28 +803,35 @@ object DesktopCourseKmlImporter {
                 compareBy<CourseMatchedControl> {
                     ControlPointRules.assignedControlSortGroup(it.siCode, it.type, raceType)
                 }
+                    .thenBy { it.displayLabel.singleEmbeddedNumber() ?: Int.MAX_VALUE }
                     .thenBy { it.siCode }
+                    .thenBy { it.displayLabel.normalizedCourseName() }
                     .thenBy { it.type.value }
             )
         val assignedControlsText = sortedControls
-            .joinToString(" ") { it.siCode.toString() }
+            .joinToString(" ") { it.assignedControlToken() }
         if (assignedControlsText.isBlank()) {
-            return projectFile
+            return null
         }
         val currentControlIds = categoryData.controlPoints
             .map { it.controlId }
             .toList()
         val nextControlIds = sortedControls.map { it.controlId }
         if (currentControlIds == nextControlIds) {
-            return projectFile
+            return null
         }
-        return EventProjectEditor.updateCategoryControlPoints(
-            projectFile = projectFile,
-            categoryId = categoryId,
-            controlPointsText = assignedControlsText
-        ) { index ->
-            "$categoryId-kml-control-${index + 1}"
-        }
+        return DesktopCourseKmlCategoryAssignmentUpdate(
+            categoryId = categoryData.category.id,
+            categoryName = categoryData.category.name,
+            controlPointsText = assignedControlsText,
+            controls = sortedControls.map { control ->
+                DesktopCourseKmlAssignedControl(
+                    controlId = control.controlId,
+                    siCode = control.siCode,
+                    type = control.type
+                )
+            }
+        )
     }
 
     private fun sameCoordinate(first: Double, second: Double): Boolean =
@@ -1114,6 +1167,7 @@ data class CourseGeoPoint(
 private data class CourseMatchedControl(
     val controlId: String,
     val label: String,
+    val displayLabel: String,
     val siCode: Int,
     val type: ControlPointType,
     val point: CourseGeoPoint
@@ -1161,6 +1215,13 @@ private fun EventControl.idealOrderToken(): String {
 
 private fun EventControl.displayCourseLabel(): String =
     publicLabel?.trim()?.takeIf { it.isNotEmpty() } ?: label
+
+private fun CourseMatchedControl.assignedControlToken(): String =
+    when (type) {
+        ControlPointType.CONTROL -> siCode.toString()
+        ControlPointType.SEPARATOR -> "$siCode${ControlPointRules.SPECTATOR_CONTROL_MARKER}"
+        ControlPointType.BEACON -> "$siCode${ControlPointRules.BEACON_CONTROL_MARKER}"
+    }
 
 private fun String.normalizedCourseName(): String =
     trim().lowercase().replace(Regex("\\s+"), " ")
