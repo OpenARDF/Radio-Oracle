@@ -98,7 +98,7 @@ object DesktopCourseAnalysisExports {
         appendLine("Stored straight-line length: ${kilometersText(result.providedStraightLineMeters)}")
         appendLine("Stored route length: ${kilometersText(result.routeLengthMeters)}")
         appendLine("Climb: ${climbText(result.climbMeters)}")
-        appendLine("Effective length: ${kilometersText(result.effectiveLengthMeters)}")
+        appendLine("Effective length: ${summaryMetricValue(result, "Effective length", kilometersText(result.effectiveLengthMeters))}")
         appendLine("Estimated ideal time: ${secondsText(result.estimatedIdealSeconds)}")
         appendLine()
         appendLine("Goodness metrics")
@@ -146,6 +146,13 @@ object DesktopCourseAnalysisExports {
             }
         }
     }
+
+    private fun summaryMetricValue(
+        result: DesktopCourseAnalysisSummary,
+        label: String,
+        fallback: String
+    ): String =
+        result.metrics.firstOrNull { it.label == label }?.value ?: fallback
 
     private fun StringBuilder.appendRuleChecks(ruleChecks: List<DesktopCourseGoodnessMetric>) {
         if (ruleChecks.isEmpty()) {

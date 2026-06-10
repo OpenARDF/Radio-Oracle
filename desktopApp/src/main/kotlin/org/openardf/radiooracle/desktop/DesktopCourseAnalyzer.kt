@@ -1833,6 +1833,15 @@ object DesktopCourseAnalyzer {
                     )
                 )
             } else {
+                if (categoryKey != null && !categoryNameContainsRuleKey(categoryName, categoryKey)) {
+                    add(
+                        DesktopCourseGoodnessMetric(
+                            "$routeLabel USA category name",
+                            "Using $categoryKey rules for category \"$categoryName\" (USA rules table names this category $categoryKey)",
+                            DesktopCourseMetricStatus.Warning
+                        )
+                    )
+                }
                 add(
                     DesktopCourseGoodnessMetric(
                         "$routeLabel fox count",
@@ -2002,12 +2011,17 @@ object DesktopCourseAnalyzer {
         point?.let { LabeledCoursePoint(control.analysisRouteLabel(), it) }
 
     private fun categoryRuleKey(categoryName: String): String? {
-        val rawKey = Regex("""\b[WMD]\d{2}\b""")
+        val rawKey = Regex("""\b[WMD][\s_-]*\d{2}\b""")
             .find(categoryName.uppercase())
             ?.value
             ?: return null
-        return if (rawKey.startsWith("D")) "W${rawKey.drop(1)}" else rawKey
+        val compactKey = rawKey.filter { it.isLetterOrDigit() }
+        return if (compactKey.startsWith("D")) "W${compactKey.drop(1)}" else compactKey
     }
+
+    private fun categoryNameContainsRuleKey(categoryName: String, categoryKey: String): Boolean =
+        Regex("""\b${Regex.escape(categoryKey)}\b""")
+            .containsMatchIn(categoryName.uppercase())
 
     private fun goodnessMetrics(
         raceType: RaceType,

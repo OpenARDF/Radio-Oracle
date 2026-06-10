@@ -7307,7 +7307,11 @@ private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
         CourseAnalysisRow("Stored straight-line length", kilometersText(result.providedStraightLineMeters))
         CourseAnalysisRow("Stored route length", kilometersText(result.routeLengthMeters))
         CourseAnalysisRow("Climb", climbText(result.climbMeters))
-        CourseAnalysisRow("Effective length", kilometersText(result.effectiveLengthMeters))
+        CourseAnalysisRow(
+            "Effective length",
+            result.metrics.firstOrNull { it.label == "Effective length" }?.value
+                ?: kilometersText(result.effectiveLengthMeters)
+        )
         CourseAnalysisRow("Estimated ideal time", secondsText(result.estimatedIdealSeconds))
     }
 }

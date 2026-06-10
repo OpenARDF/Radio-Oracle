@@ -172,8 +172,35 @@ class DesktopCourseAnalyzerTest {
         val reportText = DesktopCourseAnalysisExports.reportText(summary)
         assertTrue(reportText.contains("Rules applied: USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026"))
         assertEquals(1, Regex("Rules applied: USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026").findAll(reportText).count())
+        assertTrue(reportText.contains("Effective length: 5.00 km (required 9-12 km)"))
         assertTrue(reportText.contains("RULE VIOLATION: Stored route fox count"))
         assertTrue(reportText.contains("RULE VIOLATION: Stored route course length"))
+    }
+
+    @Test
+    fun acceptsCloseUsaRulesCategoryNameMatchWithWarning() {
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 5, categoryName = "M-21"),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo(foxCount = 5),
+            protectedIdealOrderText = "31 32 33 34 35 Beacon"
+        )
+
+        val sectionChecks = requireNotNull(summary.providedRouteSection).ruleChecks
+        assertTrue(sectionChecks.any {
+            it.label == "Stored route USA category name" &&
+                it.value.contains("Using M21 rules for category \"M-21\"") &&
+                it.status == DesktopCourseMetricStatus.Warning
+        })
+        assertTrue(sectionChecks.any {
+            it.label == "Stored route fox count" &&
+                it.value == "5 foxes (required 5 for M21)" &&
+                it.status == DesktopCourseMetricStatus.Good
+        })
+        assertTrue(summary.metrics.any {
+            it.label == "Effective length" &&
+                it.value.contains("(required 9-12 km)")
+        })
     }
 
     @Test
@@ -746,6 +773,7 @@ class DesktopCourseAnalyzerTest {
         publicLabels: List<String>? = null,
         siCodes: List<Int>? = null,
         raceType: RaceType = RaceType.CLASSIC,
+        categoryName: String = "M21",
         assignControls: Boolean = true
     ): EventProjectFile {
         val controls = (1..foxCount).map { number ->
@@ -769,7 +797,7 @@ class DesktopCourseAnalyzerTest {
         val category = EventCategory(
             id = CATEGORY_ID,
             raceId = RACE_ID,
-            name = "M21",
+            name = categoryName,
             isMan = true,
             maxAge = 21,
             lengthMeters = 0,
