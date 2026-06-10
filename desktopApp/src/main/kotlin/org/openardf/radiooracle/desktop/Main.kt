@@ -81,8 +81,10 @@ import org.openardf.radiooracle.desktop.usb.DesktopSportIdentReadoutService
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
 import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
 import org.openardf.radiooracle.shared.course.ControlPointRules
+import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventCompetitorDetails
 import org.openardf.radiooracle.shared.event.EventControl
@@ -292,7 +294,7 @@ private val ControlTableColumns = listOf(
 
 private val ControlTableColumnHints = mapOf(
     "SI code" to "Physical SPORTident control code recorded by the station. Category control lists can refer to this code, the generated control label, or the Public label.",
-    "Role" to "How this station is interpreted for scoring. Radio-o Fox controls score 1 point; Beacon and Spectator are mandatory zero-point punches.",
+    "Role" to "How this station is interpreted for scoring. Radio-o Fox controls score 1 point; Beacon is a required zero-point punch. Sprint Spectator is optional for a course, but when assigned it is a required zero-point loop-transition punch in addition to the Beacon.",
     "Public label" to "Optional public-facing name used on tickets, readout displays, course lists, and exported results. Short labels can also be typed in category Controls fields.",
     "Notes" to "Private organizer notes for this logical control."
 )
@@ -318,7 +320,7 @@ fun main(args: Array<String>) = application {
         var hasUnsavedChanges by remember { mutableStateOf(projectSession.hasUnsavedChanges) }
         var newEventDraftProject by remember { mutableStateOf<EventProjectFile?>(null) }
         var pendingDirtyProjectAction by remember { mutableStateOf<PendingDirtyProjectAction?>(null) }
-        var pendingAssignedControlsWarning by remember { mutableStateOf<EventAssignedControlWarning?>(null) }
+        var pendingAssignedControlsWarning by remember { mutableStateOf<PendingAssignedControlsWarning?>(null) }
         var assignedControlsWarningJob by remember { mutableStateOf<Job?>(null) }
         var isNationalStartListDefaultsDialogVisible by remember { mutableStateOf(false) }
         var pendingReadoutEdit by remember { mutableStateOf<DesktopReadoutEditDraft?>(null) }
@@ -423,7 +425,10 @@ fun main(args: Array<String>) = application {
             pendingAssignedControlsWarning = null
         }
 
-        fun scheduleAssignedControlsWarning(warning: EventAssignedControlWarning?) {
+        fun scheduleAssignedControlsWarning(
+            warning: EventAssignedControlWarning?,
+            previousControlPointsText: String? = null
+        ) {
             assignedControlsWarningJob?.cancel()
             assignedControlsWarningJob = null
             if (warning == null) {
@@ -432,7 +437,10 @@ fun main(args: Array<String>) = application {
             }
             assignedControlsWarningJob = appCoroutineScope.launch {
                 delay(700L)
-                pendingAssignedControlsWarning = warning
+                pendingAssignedControlsWarning = PendingAssignedControlsWarning(
+                    warning = warning,
+                    previousControlPointsText = previousControlPointsText
+                )
                 assignedControlsWarningJob = null
             }
         }
@@ -1477,6 +1485,9 @@ fun main(args: Array<String>) = application {
                             password = password,
                             categoryOptions = categoryOptions,
                             matchedControlPointCount = summary.matchedControlPointCount,
+                            matchedFoxCount = summary.matchedFoxCount,
+                            matchedBeaconCount = summary.matchedBeaconCount,
+                            matchedSpectatorCount = summary.matchedSpectatorCount,
                             controlPointCount = summary.controlPointCount,
                             labelConversions = summary.labelConversions
                         )
@@ -2168,10 +2179,33 @@ fun main(args: Array<String>) = application {
                 onDismiss = { pendingSiModeWarning = null }
             )
         }
-        pendingAssignedControlsWarning?.let { warning ->
+        pendingAssignedControlsWarning?.let { pendingWarning ->
             AssignedControlsWarningDialog(
-                warning = warning,
-                onDismiss = { pendingAssignedControlsWarning = null }
+                warning = pendingWarning.warning,
+                canRestore = pendingWarning.previousControlPointsText != null,
+                onKeep = { pendingAssignedControlsWarning = null },
+                onRestore = {
+                    val warning = pendingWarning.warning
+                    val previousText = pendingWarning.previousControlPointsText
+                    pendingAssignedControlsWarning = null
+                    if (previousText != null) {
+                        runCatching {
+                            projectFile = projectSession.updateCurrentProject { currentProject ->
+                                EventProjectEditor.updateCategoryControlPoints(
+                                    currentProject,
+                                    warning.categoryId,
+                                    previousText
+                                ) {
+                                    UUID.randomUUID().toString()
+                                }
+                            }
+                            hasUnsavedChanges = projectSession.hasUnsavedChanges
+                            projectStatusText = "Assigned controls restored. Unsaved changes."
+                        }.onFailure { error ->
+                            projectStatusText = "Could not restore assigned controls: ${categoryControlPointErrorText(error)}"
+                        }
+                    }
+                }
             )
         }
         if (isNationalStartListDefaultsDialogVisible) {
@@ -2427,6 +2461,12 @@ fun main(args: Array<String>) = application {
             },
             onUpdateCategoryControlPoints = { categoryId, controlPointsText, shouldCheckRequiredControls ->
                 runCatching {
+                    val previousControlPointsText = projectSession.currentProject
+                        ?.raceData
+                        ?.categories
+                        ?.firstOrNull { it.category.id == categoryId }
+                        ?.restorableControlPointsText()
+                        ?.takeIf { it.isNotBlank() }
                     val updatedProject = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.updateCategoryControlPoints(
                             currentProject,
@@ -2440,8 +2480,11 @@ fun main(args: Array<String>) = application {
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
                     if (shouldCheckRequiredControls) {
+                        val warning = EventAssignedControlWarnings.forCategory(updatedProject.raceData, categoryId)
                         scheduleAssignedControlsWarning(
-                            EventAssignedControlWarnings.forCategory(updatedProject.raceData, categoryId)
+                            warning = warning,
+                            previousControlPointsText = previousControlPointsText
+                                ?.takeIf { warning?.isClearingAllAssignments == true && controlPointsText.isBlank() }
                         )
                     }
                 }.onFailure { error ->
@@ -2985,6 +3028,39 @@ private fun CourseKmlKmzUnlockDialog(
     )
 }
 
+private fun courseControlMatchSummary(
+    foxCount: Int,
+    beaconCount: Int,
+    spectatorCount: Int
+): String {
+    val parts = buildList {
+        if (foxCount > 0) {
+            add("$foxCount ${if (foxCount == 1) "fox" else "foxes"}")
+        }
+        if (beaconCount > 0) {
+            add(if (beaconCount == 1) "Beacon" else "$beaconCount beacons")
+        }
+        if (spectatorCount > 0) {
+            add(if (spectatorCount == 1) "Spectator" else "$spectatorCount spectators")
+        }
+    }
+    val nonEmptyParts = parts.ifEmpty { listOf("none") }
+    return when (nonEmptyParts.size) {
+        1 -> nonEmptyParts.single()
+        2 -> nonEmptyParts.joinToString(" and ")
+        else -> nonEmptyParts.dropLast(1).joinToString(", ") + ", and " + nonEmptyParts.last()
+    }
+}
+
+@Suppress("DEPRECATION")
+private fun EventCategoryData.restorableControlPointsText(): String =
+    category.controlPointsString.takeIf { it.isNotBlank() }
+        ?: ControlPointRules.formatControlPoints(
+            controlPoints.map { controlPoint ->
+                ControlPointDefinition(controlPoint.siCode, controlPoint.type, controlPoint.order)
+            }
+        )
+
 @Composable
 private fun CourseKmlKmzImportReviewDialog(
     review: PendingCourseKmlKmzImportReview,
@@ -3042,7 +3118,7 @@ private fun CourseKmlKmzImportReviewDialog(
                 if (summary.duplicateCategoryCount > 0) {
                     Text("Duplicate categories already imported: ${summary.duplicateCategoryCount}")
                 }
-                Text("Matched controls: ${summary.matchedControlPointCount} of ${summary.controlPointCount} point placemarks")
+                Text("Matched course controls: ${courseControlMatchSummary(summary.matchedFoxCount, summary.matchedBeaconCount, summary.matchedSpectatorCount)}")
                 if (summary.labelConversions.isNotEmpty()) {
                     Text("Imported control names to treat as existing Event File labels:")
                     summary.labelConversions.take(8).forEach { conversion ->
@@ -3147,7 +3223,7 @@ private fun CourseKmlKmzCategoryMappingDialog(
                     onCategorySelected = { selectedCategoryId = it },
                     modifier = Modifier.width(280.dp)
                 )
-                Text("Matched controls: ${mapping.matchedControlPointCount} of ${mapping.controlPointCount} point placemarks")
+                Text("Matched course controls: ${courseControlMatchSummary(mapping.matchedFoxCount, mapping.matchedBeaconCount, mapping.matchedSpectatorCount)}")
                 if (mapping.labelConversions.isNotEmpty()) {
                     Text("Imported control names to treat as existing Event File labels:")
                     mapping.labelConversions.take(8).forEach { conversion ->
@@ -3324,32 +3400,48 @@ private fun UnsavedSubmenuChangesDialog(
 @Composable
 private fun AssignedControlsWarningDialog(
     warning: EventAssignedControlWarning,
-    onDismiss: () -> Unit
+    canRestore: Boolean,
+    onKeep: () -> Unit,
+    onRestore: () -> Unit
 ) {
     val missingLines = buildList {
-        if (warning.missingBeaconLabels.isNotEmpty()) {
-            add("Beacon: ${warning.missingBeaconLabels.joinToString(", ")}")
+        if (warning.hasNoAssignedFoxes) {
+            add("No fox controls are assigned.")
         }
-        if (warning.missingSpectatorLabels.isNotEmpty()) {
-            add("Spectator: ${warning.missingSpectatorLabels.joinToString(", ")}")
+        if (warning.missingBeaconLabels.isNotEmpty()) {
+            add("Missing beacon: ${warning.missingBeaconLabels.joinToString(", ")}")
         }
     }.joinToString("\n")
+    val message = if (warning.isClearingAllAssignments) {
+        "All foxes and required finish controls are being removed from ${warning.categoryName}.\n\n" +
+            "This category will not have a valid course unless assignments are restored or replaced.\n\n" +
+            missingLines
+        } else {
+        "Category ${warning.categoryName} has incomplete assigned controls:\n" +
+            "$missingLines\n\n" +
+            "A valid radio-orienteering category should include at least one fox and a beacon. " +
+            "Sprint spectator controls are optional; when assigned they require a beacon, and when no spectator is assigned the finish beacon is also used as the slow-to-fast loop transition."
+    }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = if (canRestore) onRestore else onKeep,
         title = { Text("Assigned Controls warning") },
         text = {
-            Text(
-                "Category ${warning.categoryName} is missing required control assignments:\n" +
-                    "$missingLines\n\n" +
-                    "Every category should include each defined beacon. " +
-                    "Sprint categories should also include each defined spectator."
-            )
+            Text(message)
         },
         confirmButton = {
-            Button(onClick = onDismiss) {
-                Text("OK")
+            Button(onClick = onKeep) {
+                Text(if (canRestore) "Remove All" else "OK")
             }
+        },
+        dismissButton = if (canRestore) {
+            {
+                Button(onClick = onRestore) {
+                    Text("Restore")
+                }
+            }
+        } else {
+            {}
         }
     )
 }
@@ -3513,6 +3605,11 @@ private sealed interface DesktopPendingNavigation {
     data class Item(val itemId: String) : DesktopPendingNavigation
 }
 
+private data class PendingAssignedControlsWarning(
+    val warning: EventAssignedControlWarning,
+    val previousControlPointsText: String?
+)
+
 private data class PendingCourseKmlKmzImportReview(
     val sourceName: String,
     val updatedProject: EventProjectFile,
@@ -3526,6 +3623,9 @@ private data class PendingCourseKmlKmzCategoryMapping(
     val password: String,
     val categoryOptions: List<Pair<String, String>>,
     val matchedControlPointCount: Int,
+    val matchedFoxCount: Int,
+    val matchedBeaconCount: Int,
+    val matchedSpectatorCount: Int,
     val controlPointCount: Int,
     val labelConversions: List<DesktopCourseKmlLabelConversion>
 )

@@ -309,7 +309,7 @@ object DesktopCourseAnalyzer {
         protectedCourseInfo?.let { courseInfo ->
             when {
                 courseInfo.courseObjects.isEmpty() -> {
-                    missing += "Course object points are missing for start, finish, controls, beacon, or spectator."
+                    missing += "Course object points are missing for start, finish, controls, beacon, or spectator if assigned."
                 }
                 courseInfo.courseObjects.any { it.elevationMeters == null } -> {
                     hasMissingCourseObjectElevations = true
@@ -532,7 +532,7 @@ object DesktopCourseAnalyzer {
             if (calculatedRouteMatchesStored) {
                 DesktopCourseAnalysisSection(
                     title = "Section 2: Calculated ideal route",
-                    explanation = "The analyzer calculated an ideal route from the start, finish, controls, beacon, and spectator if used. The calculated ideal route matches the stored ideal route, so no separate calculated-route leg, wait, elevation-profile, or map analysis is repeated in this section. Section 3 still summarizes the route comparison.",
+                    explanation = "The analyzer calculated an ideal route from the start, finish, controls, beacon, and spectator if assigned. The calculated ideal route matches the stored ideal route, so no separate calculated-route leg, wait, elevation-profile, or map analysis is repeated in this section. Section 3 still summarizes the route comparison.",
                     routeOrder = listOf("Calculated ideal route matches stored ideal route"),
                     routeOrderLabel = "Result",
                     summaryOnly = true,
@@ -997,40 +997,45 @@ object DesktopCourseAnalyzer {
         elevationLookup: (CourseGeoPoint) -> Double?,
         missing: MutableList<String>
     ): CalculatedRoute? {
-        val spectatorPoint = spectator?.point
-        if (spectator == null || spectatorPoint == null) {
-            missing += "Sprint loop route calculation requires a spectator control; falling back to whole-course route calculation."
-            val controlsToPermute = foxes
-            return if (controlsToPermute.size <= MAX_PERMUTATION_CONTROLS) {
-                shortestPermutation(start, finish, controlsToPermute, beacon, elevationLookup)
-            } else {
-                heuristicRoute(start, finish, controlsToPermute, beacon, elevationLookup, "non-exhaustive whole-course Sprint fallback")
-            }
+        if (beacon == null || beacon.point == null) {
+            missing += "Sprint loop route calculation requires a beacon control; a spectator cannot replace the beacon."
+            return null
+        }
+        val transitionControl = spectator ?: beacon
+        val transitionPoint = transitionControl.point
+        if (transitionPoint == null) {
+            missing += "Sprint loop route calculation requires a spectator or the beacon as the transition control."
+            return null
         }
         val slowFoxes = foxes.filterNot { it.control.isSprintFastFox() }
         val fastFoxes = foxes.filter { it.control.isSprintFastFox() }
         val firstLoop = boundedLoopRoute(
             start = start,
-            finish = spectatorPoint,
+            finish = transitionPoint,
             controls = slowFoxes,
             elevationLookup = elevationLookup,
             note = "Sprint first loop"
         )
         val secondLoop = boundedLoopRoute(
-            start = spectatorPoint,
+            start = transitionPoint,
             finish = finish,
             controls = fastFoxes,
             beacon = beacon,
             elevationLookup = elevationLookup,
             note = "Sprint fast loop"
         )
-        val controls = firstLoop.controls + spectator + secondLoop.controls
+        val controls = firstLoop.controls + transitionControl + secondLoop.controls
         val routePoints = listOf(start) + controls.mapNotNull { it.point } + finish
+        val transitionText = if (spectator != null) {
+            "the assigned spectator"
+        } else {
+            "the beacon as the slow-to-fast transition"
+        }
         return CalculatedRoute(
             controls = controls,
             distanceMeters = routePoints.straightLineMeters(),
             routeCount = firstLoop.routeCount + secondLoop.routeCount,
-            calculationNote = "Sprint route calculated as separate first and fast loops; each loop used no more than $MAX_SPRINT_LOOP_PERMUTATIONS permutations."
+            calculationNote = "Sprint route calculated as separate first and fast loops using $transitionText; each loop used no more than $MAX_SPRINT_LOOP_PERMUTATIONS permutations."
         )
     }
 

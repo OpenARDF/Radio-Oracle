@@ -3,15 +3,16 @@ package org.openardf.radiooracle.shared.event
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceType
 
-/** Warning shown when a category omits required zero-point radio-o controls. */
+/** Warning shown when a category omits required radio-o course controls. */
 data class EventAssignedControlWarning(
     val categoryId: String,
     val categoryName: String,
-    val missingBeaconLabels: List<String>,
-    val missingSpectatorLabels: List<String>
+    val hasNoAssignedFoxes: Boolean,
+    val isClearingAllAssignments: Boolean,
+    val missingBeaconLabels: List<String>
 ) {
     val hasWarnings: Boolean =
-        missingBeaconLabels.isNotEmpty() || missingSpectatorLabels.isNotEmpty()
+        hasNoAssignedFoxes || missingBeaconLabels.isNotEmpty()
 }
 
 /** Computes non-fatal Assigned Controls warnings for desktop setup workflows. */
@@ -21,26 +22,27 @@ object EventAssignedControlWarnings {
             ?: return null
         val raceType = categoryData.category.effectiveRaceType(raceData.race)
         val assignedControls = categoryData.controlPoints
+        val hasNoAssignedFoxes = raceType != RaceType.ORIENTEERING &&
+            assignedControls.none { it.type == ControlPointType.CONTROL }
+        val isClearingAllAssignments = assignedControls.isEmpty()
 
-        val missingBeaconLabels = raceData.controls
-            .filter { it.type == ControlPointType.BEACON }
-            .filterNot { control -> assignedControls.any { it.matches(control) } }
-            .map { it.displayLabel() }
-
-        val missingSpectatorLabels = if (raceType == RaceType.SPRINT) {
-            raceData.controls
-                .filter { it.type == ControlPointType.SEPARATOR }
+        val requiredBeacons = raceData.controls.filter { it.type == ControlPointType.BEACON }
+        val missingBeaconLabels = if (raceType == RaceType.ORIENTEERING) {
+            emptyList()
+        } else if (requiredBeacons.isEmpty()) {
+            listOf("Beacon").takeUnless { assignedControls.any { it.type == ControlPointType.BEACON } }.orEmpty()
+        } else {
+            requiredBeacons
                 .filterNot { control -> assignedControls.any { it.matches(control) } }
                 .map { it.displayLabel() }
-        } else {
-            emptyList()
         }
 
         return EventAssignedControlWarning(
             categoryId = categoryId,
             categoryName = categoryData.category.name,
-            missingBeaconLabels = missingBeaconLabels,
-            missingSpectatorLabels = missingSpectatorLabels
+            hasNoAssignedFoxes = hasNoAssignedFoxes,
+            isClearingAllAssignments = isClearingAllAssignments,
+            missingBeaconLabels = missingBeaconLabels
         ).takeIf { it.hasWarnings }
     }
 

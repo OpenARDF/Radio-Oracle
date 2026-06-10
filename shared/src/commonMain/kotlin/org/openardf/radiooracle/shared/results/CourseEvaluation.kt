@@ -66,9 +66,13 @@ object CourseEvaluator {
         val separators = controlPoints.withIndex()
             .filter { it.value.type == ControlPointType.SEPARATOR }
             .map { it.value.siCode to it.index }
+        val beacon = controlPoints.lastOrNull { it.type == ControlPointType.BEACON }
 
         var missingRequiredControl = false
         val points = if (separators.isNotEmpty()) {
+            if (beacon == null) {
+                missingRequiredControl = true
+            }
             var total = 0
             var prevPunchSep = 0
             var prevControlSep = 0
@@ -100,6 +104,10 @@ object CourseEvaluator {
             )
             missingRequiredControl = missingRequiredControl || finalLoop.missingRequiredControl
             total + finalLoop.points
+        } else if (beacon != null) {
+            evaluateSprintWithBeaconTransition(punches, controlPoints, statuses, beacon).also {
+                missingRequiredControl = it.missingRequiredControl
+            }.points
         } else {
             val loop = evaluateLoopInto(
                 punches,
@@ -113,6 +121,43 @@ object CourseEvaluator {
         }
 
         return CourseEvaluation(points, statusForRadioO(controlPoints, missingRequiredControl), statuses)
+    }
+
+    private fun evaluateSprintWithBeaconTransition(
+        punches: List<EvaluationPunch>,
+        controlPoints: List<EvaluationControlPoint>,
+        statuses: MutableList<PunchStatus>,
+        beacon: EvaluationControlPoint
+    ): LoopEvaluation {
+        val foxes = controlPoints.filter { it.type == ControlPointType.CONTROL }
+        val slowLoopControls = foxes.filterNot { it.isSprintFastFox() } + beacon
+        val fastLoopControls = foxes.filter { it.isSprintFastFox() } + beacon
+        if (slowLoopControls.size == 1 || fastLoopControls.size == 1) {
+            return evaluateLoopWithControls(punches, statuses, punches.indices, controlPoints)
+        }
+        val transitionPunchIndex = punches.indexOfFirst { it.siCode == beacon.siCode }
+        if (transitionPunchIndex < 0) {
+            return evaluateLoopWithControls(punches, statuses, punches.indices, slowLoopControls).copy(
+                missingRequiredControl = true
+            )
+        }
+        val firstLoop = evaluateLoopWithControls(
+            punches,
+            statuses,
+            punchRange = 0..transitionPunchIndex,
+            loopControls = slowLoopControls
+        )
+        val finalLoop = evaluateLoopWithControls(
+            punches,
+            statuses,
+            punchRange = (transitionPunchIndex + 1)..punches.lastIndex,
+            loopControls = fastLoopControls
+        )
+        return LoopEvaluation(
+            points = firstLoop.points + finalLoop.points,
+            statuses = statuses,
+            missingRequiredControl = firstLoop.missingRequiredControl || finalLoop.missingRequiredControl
+        )
     }
 
     private fun evaluateOrienteering(
@@ -160,6 +205,15 @@ object CourseEvaluator {
         controlRange: IntRange
     ): LoopEvaluation {
         val loopControls = controlRange.map { controlPoints[it] }
+        return evaluateLoopWithControls(punches, statuses, punchRange, loopControls)
+    }
+
+    private fun evaluateLoopWithControls(
+        punches: List<EvaluationPunch>,
+        statuses: MutableList<PunchStatus>,
+        punchRange: IntRange,
+        loopControls: List<EvaluationControlPoint>
+    ): LoopEvaluation {
         val controlsByCode = loopControls.groupBy { it.siCode }
         val takenScored = mutableSetOf<Int>()
         val fulfilledRequired = mutableSetOf<Int>()
@@ -235,4 +289,7 @@ object CourseEvaluator {
 
     private val EvaluationControlPoint.effectiveScored: Boolean
         get() = type == ControlPointType.CONTROL || scored
+
+    private fun EvaluationControlPoint.isSprintFastFox(): Boolean =
+        type == ControlPointType.CONTROL && siCode >= 40
 }

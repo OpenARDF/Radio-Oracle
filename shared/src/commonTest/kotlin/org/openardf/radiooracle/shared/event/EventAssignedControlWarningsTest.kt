@@ -21,26 +21,65 @@ class EventAssignedControlWarningsTest {
         )
 
         assertEquals(listOf("Beacon"), warning?.missingBeaconLabels)
-        assertEquals(emptyList(), warning?.missingSpectatorLabels)
+        assertEquals(false, warning?.hasNoAssignedFoxes)
+        assertEquals(false, warning?.isClearingAllAssignments)
     }
 
     @Test
-    fun warnsWhenDefinedSpectatorIsMissingFromSprintCategory() {
+    fun doesNotRequireDefinedSpectatorForSprintCategory() {
         val warning = EventAssignedControlWarnings.forCategory(
             raceData(
                 raceType = RaceType.SPRINT,
                 controls = listOf(spectator(), beacon()),
-                categoryControlPoints = listOf(controlPoint("cp-99", "control-m", 99, ControlPointType.BEACON))
+                categoryControlPoints = listOf(
+                    controlPoint("cp-31", "control-31", 31, ControlPointType.CONTROL),
+                    controlPoint("cp-99", "control-m", 99, ControlPointType.BEACON)
+                )
             ),
             "cat-1"
         )
 
-        assertEquals(emptyList(), warning?.missingBeaconLabels)
-        assertEquals(listOf("Spectator"), warning?.missingSpectatorLabels)
+        assertNull(warning)
     }
 
     @Test
-    fun ignoresDefinedSpectatorForClassicCategory() {
+    fun warnsWhenSprintCategoryHasSpectatorButNoBeacon() {
+        val warning = EventAssignedControlWarnings.forCategory(
+            raceData(
+                raceType = RaceType.SPRINT,
+                controls = listOf(spectator(), beacon()),
+                categoryControlPoints = listOf(
+                    controlPoint("cp-31", "control-31", 31, ControlPointType.CONTROL),
+                    controlPoint("cp-s", "control-s", 46, ControlPointType.SEPARATOR)
+                )
+            ),
+            "cat-1"
+        )
+
+        assertEquals(false, warning?.hasNoAssignedFoxes)
+        assertEquals(listOf("Beacon"), warning?.missingBeaconLabels)
+    }
+
+    @Test
+    fun warnsWhenRadioOCategoryHasNoDefinedOrAssignedBeacon() {
+        val warning = EventAssignedControlWarnings.forCategory(
+            raceData(
+                raceType = RaceType.SPRINT,
+                controls = listOf(spectator()),
+                categoryControlPoints = listOf(
+                    controlPoint("cp-31", "control-31", 31, ControlPointType.CONTROL),
+                    controlPoint("cp-s", "control-s", 46, ControlPointType.SEPARATOR)
+                )
+            ),
+            "cat-1"
+        )
+
+        assertEquals(false, warning?.hasNoAssignedFoxes)
+        assertEquals(listOf("Beacon"), warning?.missingBeaconLabels)
+    }
+
+    @Test
+    fun warnsWhenClassicCategoryHasBeaconButNoFoxes() {
         val warning = EventAssignedControlWarnings.forCategory(
             raceData(
                 raceType = RaceType.CLASSIC,
@@ -50,24 +89,24 @@ class EventAssignedControlWarningsTest {
             "cat-1"
         )
 
-        assertNull(warning)
+        assertEquals(true, warning?.hasNoAssignedFoxes)
+        assertEquals(emptyList(), warning?.missingBeaconLabels)
     }
 
     @Test
-    fun acceptsRequiredControlsAssignedByLegacySiCodeAndRole() {
+    fun warnsWhenAllAssignmentsAreCleared() {
         val warning = EventAssignedControlWarnings.forCategory(
             raceData(
                 raceType = RaceType.SPRINT,
                 controls = listOf(spectator(), beacon()),
-                categoryControlPoints = listOf(
-                    controlPoint("cp-s", "", 46, ControlPointType.SEPARATOR),
-                    controlPoint("cp-m", "", 99, ControlPointType.BEACON)
-                )
+                categoryControlPoints = emptyList()
             ),
             "cat-1"
         )
 
-        assertNull(warning)
+        assertEquals(true, warning?.hasNoAssignedFoxes)
+        assertEquals(true, warning?.isClearingAllAssignments)
+        assertEquals(listOf("Beacon"), warning?.missingBeaconLabels)
     }
 
     private fun raceData(

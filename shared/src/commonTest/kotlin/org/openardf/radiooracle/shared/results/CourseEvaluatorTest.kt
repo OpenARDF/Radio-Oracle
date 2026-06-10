@@ -106,19 +106,67 @@ class CourseEvaluatorTest {
     }
 
     @Test
-    fun missingSprintSpectatorIsDnfAndDoesNotAddPoints() {
+    fun sprintWithoutSpectatorUsesBeaconAsLoopTransitionAndFinish() {
         val evaluation = CourseEvaluator.evaluate(
             RaceType.SPRINT,
-            punches = punches(31, 32, 36),
+            punches = punches(31, 32, 36, 41, 42, 36),
             controlPoints = controls(
                 31 to ControlPointType.CONTROL,
                 32 to ControlPointType.CONTROL,
-                40 to ControlPointType.SEPARATOR,
+                41 to ControlPointType.CONTROL,
+                42 to ControlPointType.CONTROL,
                 36 to ControlPointType.BEACON
             )
         )
 
-        assertEquals(2, evaluation.points)
+        assertEquals(4, evaluation.points)
+        assertEquals(ResultStatus.OK, evaluation.resultStatus)
+        assertEquals(
+            listOf(
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.VALID
+            ),
+            evaluation.punchStatuses
+        )
+    }
+
+    @Test
+    fun sprintWithoutSpectatorRequiresSecondBeaconAtFinish() {
+        val evaluation = CourseEvaluator.evaluate(
+            RaceType.SPRINT,
+            punches = punches(31, 32, 36, 41, 42),
+            controlPoints = controls(
+                31 to ControlPointType.CONTROL,
+                32 to ControlPointType.CONTROL,
+                41 to ControlPointType.CONTROL,
+                42 to ControlPointType.CONTROL,
+                36 to ControlPointType.BEACON
+            )
+        )
+
+        assertEquals(4, evaluation.points)
+        assertEquals(ResultStatus.DID_NOT_FINISH, evaluation.resultStatus)
+    }
+
+    @Test
+    fun sprintWithSpectatorStillRequiresBeacon() {
+        val evaluation = CourseEvaluator.evaluate(
+            RaceType.SPRINT,
+            punches = punches(31, 32, 46, 41, 42),
+            controlPoints = controls(
+                31 to ControlPointType.CONTROL,
+                32 to ControlPointType.CONTROL,
+                46 to ControlPointType.SEPARATOR,
+                41 to ControlPointType.CONTROL,
+                42 to ControlPointType.CONTROL
+            )
+        )
+
+        assertEquals(4, evaluation.points)
         assertEquals(ResultStatus.DID_NOT_FINISH, evaluation.resultStatus)
     }
 

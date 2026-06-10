@@ -96,8 +96,8 @@ object EventControlCatalog {
      *
      * Legacy mandatory=true is preserved as "not scored" because that was the
      * user-facing intent of the old label. Other controls use the role default:
-     * ordinary controls are foxes, while Beacon and Spectator are mandatory
-     * zero-point controls.
+     * ordinary controls are foxes, while Beacon and assigned Spectator controls
+     * are zero-point controls.
      */
     fun migrateLegacyControlScoring(projectFile: EventProjectFile): EventProjectFile =
         projectFile.copy(

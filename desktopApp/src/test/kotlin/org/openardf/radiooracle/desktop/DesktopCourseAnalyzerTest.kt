@@ -227,6 +227,35 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun calculatesSprintRouteUsingBeaconTransitionWhenNoSpectatorIsAssigned() {
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = sprintProjectFile(includeSpectator = false),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = sprintProtectedInfo(includeSpectator = false),
+            protectedIdealOrderText = "2 1 Beacon F2 F1 Beacon"
+        )
+
+        val section = requireNotNull(summary.calculatedRouteSection)
+        assertEquals(4, summary.calculatedRouteCount)
+        assertEquals(listOf("S", "1", "2", "B", "F1", "F2", "B"), section.routeOrder)
+        assertTrue(section.explanation.contains("using the beacon as the slow-to-fast transition"))
+    }
+
+    @Test
+    fun doesNotCalculateSprintRouteWithSpectatorButNoBeacon() {
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = sprintProjectFile(includeBeacon = false),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = sprintProtectedInfo(includeBeacon = false),
+            protectedIdealOrderText = "2 1 Spectator F2 F1"
+        )
+
+        assertEquals(null, summary.calculatedRouteSection)
+        assertEquals(0, summary.calculatedRouteCount)
+        assertTrue(summary.missingElements.any { it.contains("a spectator cannot replace the beacon") })
+    }
+
+    @Test
     fun usesNonExhaustiveFoxoringRouteFallbackAboveSixFoxes() {
         val summary = DesktopCourseAnalyzer.analyze(
             projectFile = projectFile(foxCount = 7, raceType = RaceType.FOXORING),
@@ -922,14 +951,14 @@ class DesktopCourseAnalyzerTest {
         )
     }
 
-    private fun sprintProjectFile(): EventProjectFile {
-        val controls = listOf(
+    private fun sprintProjectFile(includeSpectator: Boolean = true, includeBeacon: Boolean = true): EventProjectFile {
+        val controls = listOfNotNull(
             EventControl("control-slow-1", RACE_ID, "1", 31, ControlPointType.CONTROL, publicLabel = "1"),
             EventControl("control-slow-2", RACE_ID, "2", 32, ControlPointType.CONTROL, publicLabel = "2"),
             EventControl("control-fast-1", RACE_ID, "F1", 41, ControlPointType.CONTROL, publicLabel = "F1"),
             EventControl("control-fast-2", RACE_ID, "F2", 42, ControlPointType.CONTROL, publicLabel = "F2"),
-            EventControl("control-spectator", RACE_ID, "Spectator", 46, ControlPointType.SEPARATOR, publicLabel = "Spectator"),
-            EventControl("control-beacon", RACE_ID, "Beacon", 99, ControlPointType.BEACON, publicLabel = "Beacon")
+            EventControl("control-spectator", RACE_ID, "Spectator", 46, ControlPointType.SEPARATOR, publicLabel = "Spectator").takeIf { includeSpectator },
+            EventControl("control-beacon", RACE_ID, "Beacon", 99, ControlPointType.BEACON, publicLabel = "Beacon").takeIf { includeBeacon }
         )
         val category = EventCategory(
             id = CATEGORY_ID,
@@ -982,7 +1011,7 @@ class DesktopCourseAnalyzerTest {
         )
     }
 
-    private fun sprintProtectedInfo(): ProtectedCourseInfo {
+    private fun sprintProtectedInfo(includeSpectator: Boolean = true, includeBeacon: Boolean = true): ProtectedCourseInfo {
         val route = (0..7).map { index ->
             ProtectedCourseRoutePoint(
                 latitude = 39.0,
@@ -990,16 +1019,20 @@ class DesktopCourseAnalyzerTest {
                 elevationMeters = 100.0
             )
         }
-        val controls = listOf(
+        val controls = listOfNotNull(
             ProtectedCourseControlPoint("control-slow-1", "1", 39.0, -94.99, ControlPointType.CONTROL, 100.0),
             ProtectedCourseControlPoint("control-slow-2", "2", 39.0, -94.98, ControlPointType.CONTROL, 100.0),
-            ProtectedCourseControlPoint("control-spectator", "Spectator", 39.0, -94.9605, ControlPointType.SEPARATOR, 100.0),
+            ProtectedCourseControlPoint("control-spectator", "Spectator", 39.0, -94.9605, ControlPointType.SEPARATOR, 100.0).takeIf { includeSpectator },
             ProtectedCourseControlPoint("control-fast-1", "F1", 39.0, -94.96, ControlPointType.CONTROL, 100.0),
             ProtectedCourseControlPoint("control-fast-2", "F2", 39.0, -94.95, ControlPointType.CONTROL, 100.0),
-            ProtectedCourseControlPoint("control-beacon", "Beacon", 39.0, -94.94, ControlPointType.BEACON, 100.0)
+            ProtectedCourseControlPoint("control-beacon", "Beacon", 39.0, -94.94, ControlPointType.BEACON, 100.0).takeIf { includeBeacon }
         )
         return ProtectedCourseInfo(
-            idealOrder = "1 2 Spectator F1 F2 Beacon",
+            idealOrder = when {
+                includeSpectator && includeBeacon -> "1 2 Spectator F1 F2 Beacon"
+                includeSpectator -> "1 2 Spectator F1 F2"
+                else -> "1 2 Beacon F1 F2 Beacon"
+            },
             lengthMeters = 7_000,
             climbMeters = 0,
             sourceName = "sprint-test.kml",
