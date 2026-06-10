@@ -43,12 +43,21 @@ class DesktopCourseKmlImportTest {
         assertEquals(listOf("M21"), summary.matchedCategoryNames)
         assertEquals(2, summary.matchedControlPointCount)
         assertEquals(1, summary.importedCategoryCount)
+        assertEquals(1, summary.assignedCategoryControlCount)
         assertEquals(0, summary.changedControlLocationCount)
         assertEquals(0, summary.duplicateCategoryCount)
         assertTrue(summary.routeElevationPointCount > 0)
         assertEquals(0, category.lengthMeters)
         assertEquals(0, category.climbMeters)
-        assertTrue(categoryData.controlPoints.isEmpty())
+        assertEquals("31 32", category.controlPointsString)
+        assertEquals(listOf(31, 32), categoryData.controlPoints.map { it.siCode })
+        assertEquals(
+            listOf(
+                updated.raceData.controls.single { it.siCode == 31 }.id,
+                updated.raceData.controls.single { it.siCode == 32 }.id
+            ),
+            categoryData.controlPoints.map { it.controlId }
+        )
         assertNotNull(category.encryptedIdealOrder)
         assertNotNull(category.encryptedCourseInfo)
         assertEquals("1 2", DesktopProtectedCourseOrder.decrypt(category.encryptedIdealOrder!!, "course-key"))
@@ -67,6 +76,35 @@ class DesktopCourseKmlImportTest {
         assertEquals(listOf("Start", "1", "2", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
         assertTrue(protectedCourseInfo.courseObjects.all { it.elevationMeters != null })
         assertTrue(updated.raceData.controls.all { it.latitude == null && it.longitude == null })
+    }
+
+    @Test
+    fun importReplacesExistingCategoryAssignmentsWithImportedControls() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithReversedControlPlacemarkOrder())
+        val categoryId = "cat-m21"
+        val project = EventProjectEditor.updateCategoryControlPoints(
+            projectFile = EventProjectEditor.addCategory(
+                EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+                categoryId = categoryId,
+                name = "M21"
+            ),
+            categoryId = categoryId,
+            controlPointsText = "32 33 31"
+        ) { index ->
+            "$categoryId-existing-control-${index + 1}"
+        }
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key"
+        )
+
+        val categoryData = updated.raceData.categories.single()
+        assertEquals(1, summary.assignedCategoryControlCount)
+        assertEquals("31 32", categoryData.category.controlPointsString)
+        assertEquals(listOf(31, 32), categoryData.controlPoints.map { it.siCode })
     }
 
     @Test
@@ -292,6 +330,47 @@ class DesktopCourseKmlImportTest {
         assertTrue(duplicateSummary.hasDuplicateMissingElevations)
         assertTrue(duplicateSummary.duplicateMissingElevationPointCount > 0)
         assertEquals(0, unexpectedElevationRequestCount)
+    }
+
+    @Test
+    fun duplicateImportedRouteStillRepairsMissingCategoryAssignedControls() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKml())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+        val (imported, _) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key"
+        )
+        val legacyImported = imported.copy(
+            raceData = imported.raceData.copy(
+                categories = imported.raceData.categories.map { categoryData ->
+                    categoryData.copy(
+                        category = categoryData.category.copy(controlPointsString = ""),
+                        controlPoints = emptyList(),
+                        publicControlIds = emptyList()
+                    )
+                }
+            )
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = legacyImported,
+            password = "course-key"
+        )
+
+        val categoryData = updated.raceData.categories.single()
+        assertEquals(0, summary.importedCategoryCount)
+        assertEquals(1, summary.duplicateCategoryCount)
+        assertEquals(1, summary.assignedCategoryControlCount)
+        assertEquals(false, summary.isDuplicateOnly)
+        assertEquals("31 32", categoryData.category.controlPointsString)
+        assertEquals(listOf(31, 32), categoryData.controlPoints.map { it.siCode })
     }
 
     @Test
@@ -744,6 +823,33 @@ class DesktopCourseKmlImportTest {
             </Placemark>
             <Placemark>
               <name>$routeName</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9990,39.0000,0
+                  -94.9980,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleKmlWithReversedControlPlacemarkOrder(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
               <LineString>
                 <coordinates>
                   -95.0000,39.0000,0

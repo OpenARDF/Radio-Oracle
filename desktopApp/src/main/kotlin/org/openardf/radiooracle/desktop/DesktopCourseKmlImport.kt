@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventCategoryData
@@ -52,6 +53,7 @@ data class DesktopCourseKmlImportSummary(
     val matchedCategoryNames: List<String>,
     val routeElevationPointCount: Int,
     val importedCategoryCount: Int,
+    val assignedCategoryControlCount: Int,
     val changedControlLocationCount: Int,
     val controlLocationAffectedCategoryCount: Int,
     val duplicateCategoryCount: Int,
@@ -61,6 +63,7 @@ data class DesktopCourseKmlImportSummary(
     val isDuplicateOnly: Boolean
         get() = matchedCategoryCount > 0 &&
             importedCategoryCount == 0 &&
+            assignedCategoryControlCount == 0 &&
             changedControlLocationCount == 0 &&
             duplicateCategoryCount == matchedCategoryCount
 
@@ -70,6 +73,7 @@ data class DesktopCourseKmlImportSummary(
     val isControlLocationNoOp: Boolean
         get() = matchedCategoryCount == 0 &&
             importedCategoryCount == 0 &&
+            assignedCategoryControlCount == 0 &&
             duplicateCategoryCount == 0 &&
             changedControlLocationCount == 0 &&
             matchedControlPointCount > 0
@@ -152,6 +156,7 @@ object DesktopCourseKmlImporter {
         }
         var matchedCategoryCount = 0
         var importedCategoryCount = 0
+        var assignedCategoryControlCount = 0
         var duplicateCategoryCount = 0
         var duplicateMissingElevationPointCount = 0
         var routeElevationPointCount = 0
@@ -163,6 +168,15 @@ object DesktopCourseKmlImporter {
             matchedCategoryCount++
             matchedCategoryIds += categoryData.category.id
             matchedCategoryNames += categoryData.category.name
+
+            updateCategoryAssignedControls(
+                projectFile = updatedProject,
+                categoryId = categoryData.category.id,
+                controls = controls
+            ).takeIf { it != updatedProject }?.let { assignedProject ->
+                updatedProject = assignedProject
+                assignedCategoryControlCount++
+            }
 
             val existingCourseInfo = categoryData.category.encryptedCourseInfo
                 ?.takeIf { it.isNotBlank() }
@@ -224,9 +238,9 @@ object DesktopCourseKmlImporter {
                 "CourseKml",
                 "Import matched category=${categoryData.category.name}: route=${route.name} sampledRoutePoints=${sampledRoute.size} idealOrder='${idealOrder.ifBlank { "none" }}' controls=${controlPoints.size} courseObjects=${courseObjects.size} routeElevations=${sampledRoute.count { it.elevationMeters != null }} controlElevations=${controlPoints.count { it.elevationMeters != null }}"
             )
-            // Route-derived course facts are competition-sensitive. Store them only in the
-            // encrypted category payload; do not copy them into public length, climb, or
-            // category-control fields that exports and result pages can read without a key.
+            // Route-derived length and climb facts are competition-sensitive. Store them only in
+            // the encrypted category payload; assigned controls are updated separately from the
+            // matched KML/KMZ point placemarks.
             val protectedCourseInfo = ProtectedCourseInfo(
                 idealOrder = idealOrder,
                 lengthMeters = routeLengthMeters(sampledRoute).roundToInt(),
@@ -275,6 +289,7 @@ object DesktopCourseKmlImporter {
             matchedCategoryNames = matchedCategoryNames,
             routeElevationPointCount = routeElevationPointCount,
             importedCategoryCount = importedCategoryCount,
+            assignedCategoryControlCount = assignedCategoryControlCount,
             changedControlLocationCount = controlLocationUpdates.size,
             controlLocationAffectedCategoryCount = locationUpdateResult?.affectedCategoryCount ?: 0,
             duplicateCategoryCount = duplicateCategoryCount,
@@ -283,7 +298,7 @@ object DesktopCourseKmlImporter {
         )
         DesktopDebugLog.info(
             "CourseKml",
-            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} changedControlLocations=${summary.changedControlLocationCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} labelConversions=${summary.labelConversions.size} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
+            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} assignedCategoryControls=${summary.assignedCategoryControlCount} changedControlLocations=${summary.changedControlLocationCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} labelConversions=${summary.labelConversions.size} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
         )
         return updatedProject to summary
     }
@@ -725,6 +740,45 @@ object DesktopCourseKmlImporter {
                     null
                 }
             }
+    }
+
+    private fun updateCategoryAssignedControls(
+        projectFile: EventProjectFile,
+        categoryId: String,
+        controls: List<CourseMatchedControl>
+    ): EventProjectFile {
+        val categoryData = projectFile.raceData.categories
+            .firstOrNull { it.category.id == categoryId }
+            ?: return projectFile
+        val raceType = categoryData.category.effectiveRaceType(projectFile.raceData.race)
+        val sortedControls = controls
+            .distinctBy { it.controlId }
+            .sortedWith(
+                compareBy<CourseMatchedControl> {
+                    ControlPointRules.assignedControlSortGroup(it.siCode, it.type, raceType)
+                }
+                    .thenBy { it.siCode }
+                    .thenBy { it.type.value }
+            )
+        val assignedControlsText = sortedControls
+            .joinToString(" ") { it.siCode.toString() }
+        if (assignedControlsText.isBlank()) {
+            return projectFile
+        }
+        val currentControlIds = categoryData.controlPoints
+            .map { it.controlId }
+            .toList()
+        val nextControlIds = sortedControls.map { it.controlId }
+        if (currentControlIds == nextControlIds) {
+            return projectFile
+        }
+        return EventProjectEditor.updateCategoryControlPoints(
+            projectFile = projectFile,
+            categoryId = categoryId,
+            controlPointsText = assignedControlsText
+        ) { index ->
+            "$categoryId-kml-control-${index + 1}"
+        }
     }
 
     private fun sameCoordinate(first: Double, second: Double): Boolean =

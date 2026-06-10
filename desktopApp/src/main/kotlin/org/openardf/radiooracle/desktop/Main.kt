@@ -1408,10 +1408,16 @@ fun main(args: Array<String>) = application {
                         .takeIf { it > 0 }
                         ?.let { " Updated $it control locations." }
                         .orEmpty()
+                    val assignedText = review.summary.assignedCategoryControlCount
+                        .takeIf { it > 0 }
+                        ?.let { " Updated assigned controls for $it categories." }
+                        .orEmpty()
                     if (review.summary.importedCategoryCount == 0 && review.summary.changedControlLocationCount > 0) {
-                        "Updated ${review.summary.changedControlLocationCount} control locations.$duplicateText Unsaved changes."
+                        "Updated ${review.summary.changedControlLocationCount} control locations.$assignedText$duplicateText Unsaved changes."
+                    } else if (review.summary.importedCategoryCount == 0 && review.summary.assignedCategoryControlCount > 0) {
+                        "Updated assigned controls for ${review.summary.assignedCategoryControlCount} categories.$duplicateText Unsaved changes."
                     } else {
-                        "Imported controls/route data for ${review.summary.importedCategoryCount} categories.$locationText$duplicateText Unsaved changes."
+                        "Imported controls/route data for ${review.summary.importedCategoryCount} categories.$locationText$assignedText$duplicateText Unsaved changes."
                     }
                 }
             }
@@ -2991,6 +2997,9 @@ private fun CourseKmlKmzImportReviewDialog(
                 if (summary.importedCategoryCount > 0) {
                     Text("Categories to update: ${summary.importedCategoryCount}")
                 }
+                if (summary.assignedCategoryControlCount > 0) {
+                    Text("Category assigned controls to update: ${summary.assignedCategoryControlCount}")
+                }
                 if (summary.duplicateCategoryCount > 0) {
                     Text("Duplicate categories already imported: ${summary.duplicateCategoryCount}")
                 }
@@ -3036,14 +3045,26 @@ private fun CourseKmlKmzImportReviewDialog(
                 Text(
                     text = if (summary.isDuplicateOnly) {
                         "This file has the same SHA-256 hash as route data already stored in the Event File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Event File unchanged."
-                    } else if (summary.hasLabelConversions && summary.importedCategoryCount == 0 && summary.changedControlLocationCount == 0) {
-                        "Keep imported data to use these KML/KMZ names as matches to existing Event File labels. Control labels and public labels are not renamed. No route facts or control locations will change. Cancel leaves the Event File unchanged."
+                    } else if (
+                        summary.hasLabelConversions &&
+                        summary.importedCategoryCount == 0 &&
+                        summary.assignedCategoryControlCount == 0 &&
+                        summary.changedControlLocationCount == 0
+                    ) {
+                        "Keep imported data to use these KML/KMZ names as matches to existing Event File labels. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Cancel leaves the Event File unchanged."
                     } else if (summary.importedCategoryCount == 0 && summary.changedControlLocationCount > 0) {
-                        "Keep imported data to update control locations. Affected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Cancel leaves the Event File unchanged."
+                        val assignedPhrase = if (summary.assignedCategoryControlCount > 0) {
+                            "assigned controls and "
+                        } else {
+                            ""
+                        }
+                        "Keep imported data to update ${assignedPhrase}control locations. Affected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Cancel leaves the Event File unchanged."
+                    } else if (summary.importedCategoryCount == 0 && summary.assignedCategoryControlCount > 0) {
+                        "Keep imported data to update category assigned controls from the matched KML/KMZ control points. Cancel leaves the Event File unchanged."
                     } else if (summary.hasLabelConversions) {
-                        "Keep imported data to use these KML/KMZ names as matches to existing Event File labels, update route facts, ideal order, and any changed control locations. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged."
+                        "Keep imported data to use these KML/KMZ names as matches to existing Event File labels, update assigned controls, route facts, ideal order, and any changed control locations. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged."
                     } else {
-                        "Keep imported data to update route facts, ideal order, and any changed control locations. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
+                        "Keep imported data to update assigned controls, route facts, ideal order, and any changed control locations. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
                     },
                     fontSize = 13.sp,
                     color = Color.DarkGray
