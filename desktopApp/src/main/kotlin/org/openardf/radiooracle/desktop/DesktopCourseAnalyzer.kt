@@ -954,9 +954,9 @@ object DesktopCourseAnalyzer {
         calculatedSection: DesktopCourseAnalysisSection?
     ): String =
         if (providedSection != null && calculatedSection != null) {
-            "This summary compares the stored route with the independently calculated candidate, including rule checks against $USA_RULES_DOCUMENT_LABEL, their primary distance metric, route order, estimated time, wait-time optimization, elevation profiles, and 2D point depictions."
+            "This summary compares the stored route with the independently calculated candidate, including checks against the cited USA rules document, their primary distance metric, route order, estimated time, wait-time optimization, elevation profiles, and 2D point depictions."
         } else {
-            "This summary reports rule checks against $USA_RULES_DOCUMENT_LABEL and the independently calculated route candidate because no stored ideal route was available for Section 1."
+            "This summary reports checks against the cited USA rules document and the independently calculated route candidate because no stored ideal route was available for Section 1."
         }
 
     private fun calculatedRouteCandidate(
@@ -1827,7 +1827,7 @@ object DesktopCourseAnalyzer {
                 add(
                     DesktopCourseGoodnessMetric(
                         "$routeLabel USA category requirements",
-                        "Unknown for category ${categoryKey ?: categoryName}",
+                        "Unknown (category ${categoryKey ?: categoryName} is not in the cited USA rules table)",
                         DesktopCourseMetricStatus.Unknown
                     )
                 )
@@ -1835,7 +1835,7 @@ object DesktopCourseAnalyzer {
                 add(
                     DesktopCourseGoodnessMetric(
                         "$routeLabel fox count",
-                        "$foxCount foxes; required ${requirement.controlRangeText()} for ${categoryKey ?: categoryName}",
+                        "$foxCount foxes (required ${requirement.controlRangeText()} for ${categoryKey ?: categoryName})",
                         if (foxCount in requirement.minControls..requirement.maxControls) DesktopCourseMetricStatus.Good else DesktopCourseMetricStatus.Warning
                     )
                 )
@@ -1843,8 +1843,8 @@ object DesktopCourseAnalyzer {
                     RaceType.SPRINT -> add(
                         DesktopCourseGoodnessMetric(
                             "$routeLabel Sprint target time",
-                            estimatedSeconds?.let { "${compactDurationText(it)}; target approximately ${compactDurationText(SPRINT_TARGET_SECONDS)}" }
-                                ?: "Unknown; target approximately ${compactDurationText(SPRINT_TARGET_SECONDS)}",
+                            estimatedSeconds?.let { "${compactDurationText(it)} (target approximately ${compactDurationText(SPRINT_TARGET_SECONDS)})" }
+                                ?: "Unknown (target approximately ${compactDurationText(SPRINT_TARGET_SECONDS)})",
                             when {
                                 estimatedSeconds == null -> DesktopCourseMetricStatus.Unknown
                                 abs(estimatedSeconds - SPRINT_TARGET_SECONDS) <= SPRINT_TARGET_SECONDS * 0.15 -> DesktopCourseMetricStatus.Good
@@ -1856,8 +1856,8 @@ object DesktopCourseAnalyzer {
                         DesktopCourseGoodnessMetric(
                             "$routeLabel course length",
                             comparisonLengthMeters?.let {
-                                "${twoDecimals(it / 1000.0)} km $measurementLabel; required ${requirement.lengthRangeText()}"
-                            } ?: "Unknown; required ${requirement.lengthRangeText()}",
+                                "${twoDecimals(it / 1000.0)} km $measurementLabel (required ${requirement.lengthRangeText()})"
+                            } ?: "Unknown (required ${requirement.lengthRangeText()})",
                             when {
                                 comparisonLengthMeters == null -> DesktopCourseMetricStatus.Unknown
                                 comparisonLengthMeters in requirement.minLengthMeters..requirement.maxLengthMeters -> DesktopCourseMetricStatus.Good
@@ -1909,14 +1909,14 @@ object DesktopCourseAnalyzer {
         distances: List<Pair<String, Double>>
     ): DesktopCourseGoodnessMetric {
         if (distances.isEmpty()) {
-            return DesktopCourseGoodnessMetric(label, "Unknown; required at least $requiredMeters m", DesktopCourseMetricStatus.Unknown)
+            return DesktopCourseGoodnessMetric(label, "Unknown (required at least $requiredMeters m)", DesktopCourseMetricStatus.Unknown)
         }
         val shortest = distances.minBy { it.second }
         val status = if (shortest.second + 0.5 >= requiredMeters) DesktopCourseMetricStatus.Good else DesktopCourseMetricStatus.Warning
         val prefix = if (status == DesktopCourseMetricStatus.Good) "OK" else "Violation"
         return DesktopCourseGoodnessMetric(
             label = label,
-            value = "$prefix: ${shortest.first} ${shortest.second.roundToInt()} m; required at least $requiredMeters m",
+            value = "$prefix: ${shortest.first} ${shortest.second.roundToInt()} m (required at least $requiredMeters m)",
             status = status
         )
     }
@@ -2402,13 +2402,13 @@ private data class CourseRuleRequirement(
         if (minControls == maxControls) minControls.toString() else "$minControls-$maxControls"
 
     fun lengthRangeText(): String =
-        "${lengthText(minLengthMeters)}-${lengthText(maxLengthMeters)}"
+        "${lengthValueText(minLengthMeters)}-${lengthValueText(maxLengthMeters)} km"
 
-    private fun lengthText(meters: Int): String =
+    private fun lengthValueText(meters: Int): String =
         if (meters % 1000 == 0) {
-            "${meters / 1000} km"
+            "${meters / 1000}"
         } else {
-            "${meters / 1000}.${(meters % 1000).toString().padStart(3, '0').trimEnd('0')} km"
+            "${meters / 1000}.${(meters % 1000).toString().padStart(3, '0').trimEnd('0')}"
         }
 }
 

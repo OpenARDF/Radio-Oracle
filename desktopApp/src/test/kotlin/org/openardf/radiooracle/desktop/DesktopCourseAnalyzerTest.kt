@@ -156,9 +156,13 @@ class DesktopCourseAnalyzerTest {
         assertTrue(sectionChecks.any { it.label == "Stored route fox count" && it.status == DesktopCourseMetricStatus.Warning })
         assertTrue(sectionChecks.any { it.label == "Stored route course length" && it.status == DesktopCourseMetricStatus.Warning })
         assertTrue(sectionChecks.any { it.label == "Classic start spacing" && it.status == DesktopCourseMetricStatus.Good })
+        assertTrue(sectionChecks.any { it.label == "Stored route fox count" && it.value == "3 foxes (required 5 for M21)" })
+        assertTrue(sectionChecks.any { it.label == "Stored route course length" && it.value.contains("(required 9-12 km)") })
+        assertTrue(sectionChecks.any { it.label == "Classic start spacing" && it.value.contains("(required at least 750 m)") })
 
         val reportText = DesktopCourseAnalysisExports.reportText(summary)
         assertTrue(reportText.contains("Rules applied: USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026"))
+        assertEquals(1, Regex("Rules applied: USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026").findAll(reportText).count())
         assertTrue(reportText.contains("RULE VIOLATION: Stored route fox count"))
         assertTrue(reportText.contains("RULE VIOLATION: Stored route course length"))
     }

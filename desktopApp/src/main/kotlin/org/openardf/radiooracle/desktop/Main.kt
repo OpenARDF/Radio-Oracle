@@ -7169,6 +7169,11 @@ private fun CourseAnalysisResultView(result: DesktopCourseAnalysisSummary?) {
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
+            Text(
+                text = "Rules applied: ${result.rulesDocumentLabel}",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
             result.providedRouteSection?.let { section ->
                 CourseAnalysisSectionView(section, includeRenumbering = true)
             }
@@ -7277,7 +7282,6 @@ private fun CourseAnalysisSummarySection(result: DesktopCourseAnalysisSummary) {
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
-        CourseAnalysisRow("Rules applied", result.rulesDocumentLabel)
         CourseAnalysisDetailRows(result)
         CourseAnalysisMetricRows(result.metrics)
         CourseAnalysisProfileComparison(result.profileComparison, result.elevationCacheNotes)

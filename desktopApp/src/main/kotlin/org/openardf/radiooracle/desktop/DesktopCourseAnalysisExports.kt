@@ -84,7 +84,6 @@ object DesktopCourseAnalysisExports {
     private fun StringBuilder.appendSummary(result: DesktopCourseAnalysisSummary) {
         appendLine("Section 3: Summary")
         appendWrapped(result.summaryExplanation)
-        appendLine("Rules applied: ${result.rulesDocumentLabel}")
         appendLine("Routes compared: ${result.calculatedRouteCount}")
         appendLine("Calculated ideal route (calculated fox numbering): ${result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
         appendLine("Stored ideal route: ${result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
