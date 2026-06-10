@@ -205,6 +205,12 @@ object DesktopNavigation {
                     workflow,
                     listOf(
                         item("setup.controls.define", "Define Controls", workflow, DesktopSection.Controls),
+                        item(
+                            "setup.controls.elevation-cache",
+                            "Elevation Data",
+                            workflow,
+                            DesktopSection.ElevationCache
+                        ),
                         group(
                             "setup.controls.course-analysis",
                             "Course Analyzer",
@@ -218,12 +224,6 @@ object DesktopNavigation {
                                 )
                             ),
                             DesktopSection.CourseAnalysis
-                        ),
-                        item(
-                            "setup.controls.elevation-cache",
-                            "Elevation Data",
-                            workflow,
-                            DesktopSection.ElevationCache
                         ),
                         group(
                             "setup.controls.import-export",

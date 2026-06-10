@@ -4180,7 +4180,7 @@ private fun DisabledReasonTooltip(reason: String?, content: @Composable () -> Un
                     )
                 }
             },
-            delayMillis = 350
+            delayMillis = 2350
         ) {
             content()
         }
@@ -9339,7 +9339,7 @@ private fun FixedDetailHeaderCell(column: FixedTableColumn, tooltipText: String?
                     )
                 }
             },
-            delayMillis = 350
+            delayMillis = 2350
         ) {
             header()
         }

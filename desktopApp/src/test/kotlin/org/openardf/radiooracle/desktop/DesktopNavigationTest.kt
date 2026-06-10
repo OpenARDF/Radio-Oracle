@@ -552,8 +552,8 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "Define Controls",
-                "Course Analyzer",
                 "Elevation Data",
+                "Course Analyzer",
                 "Import/Export"
             ),
             controlItems.map { it.label }
@@ -718,7 +718,7 @@ class DesktopNavigationTest {
 
         assertEquals("Setup > Controls", DesktopNavigation.breadcrumb(backState))
         assertEquals(
-            listOf("Define Controls", "Course Analyzer", "Elevation Data", "Import/Export"),
+            listOf("Define Controls", "Elevation Data", "Course Analyzer", "Import/Export"),
             DesktopNavigation.currentItems(backState).map { it.label }
         )
     }
