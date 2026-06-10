@@ -1148,17 +1148,9 @@ fun main(args: Array<String>) = application {
 
         fun updateProtectedCoursePassword(oldPassword: String, newPassword: String, confirmPassword: String): Boolean {
             val currentProject = projectSession.currentProject ?: return false
-            val currentPassword = protectedCoursePassword ?: run {
-                projectStatusText = "Unlock course order before changing its password."
-                return false
-            }
             val trimmedOldPassword = oldPassword.trim()
             val trimmedNewPassword = newPassword.trim()
             val trimmedConfirmPassword = confirmPassword.trim()
-            if (trimmedOldPassword.isEmpty()) {
-                projectStatusText = "Old password cannot be blank."
-                return false
-            }
             if (trimmedNewPassword.isEmpty()) {
                 projectStatusText = "New password cannot be blank."
                 return false
@@ -1172,17 +1164,31 @@ fun main(args: Array<String>) = application {
                 !categoryData.category.encryptedIdealOrder.isNullOrBlank() ||
                     !categoryData.category.encryptedCourseInfo.isNullOrBlank()
             }
-            if (!hasEncryptedCourseProtection && trimmedOldPassword != currentPassword) {
-                projectStatusText = "Old password did not match the unlocked course password."
+            if (hasEncryptedCourseProtection && trimmedOldPassword.isEmpty()) {
+                projectStatusText = "Old password cannot be blank."
                 return false
             }
 
             return runCatching {
-                val updatedProject = DesktopProtectedCourseOrder.reencryptProjectCourseProtection(
-                    currentProject,
-                    oldPassword = trimmedOldPassword,
-                    newPassword = trimmedNewPassword
-                )
+                val updatedProject = if (hasEncryptedCourseProtection) {
+                    DesktopProtectedCourseOrder.reencryptProjectCourseProtection(
+                        currentProject,
+                        oldPassword = trimmedOldPassword,
+                        newPassword = trimmedNewPassword
+                    )
+                } else {
+                    currentProject.copy(
+                        raceData = currentProject.raceData.copy(
+                            categories = currentProject.raceData.categories.map { categoryData ->
+                                categoryData.copy(
+                                    category = categoryData.category.copy(
+                                        encryptedIdealOrder = DesktopProtectedCourseOrder.encrypt("", trimmedNewPassword)
+                                    )
+                                )
+                            }
+                        )
+                    )
+                }
                 projectFile = projectSession.updateCurrentProject { updatedProject }
                 protectedCoursePassword = trimmedNewPassword
                 protectedIdealOrderByCategoryId = updatedProject.raceData.categories.associate { categoryData ->
@@ -1199,7 +1205,11 @@ fun main(args: Array<String>) = application {
                     }
                 }.toMap()
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
-                projectStatusText = "Course password updated. Unsaved changes."
+                projectStatusText = if (hasEncryptedCourseProtection) {
+                    "Course password updated. Unsaved changes."
+                } else {
+                    "Course password set. Unsaved changes."
+                }
                 true
             }.getOrElse { error ->
                 projectStatusText = "Password update failed: ${error.message ?: error::class.simpleName}"
@@ -4314,8 +4324,7 @@ private fun SectionWorkspace(
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                 onUnlock = onUnlockProtectedCourseOrder,
                 onUpdateIdealOrder = onUpdateProtectedIdealOrder,
-                onUpdateControlLocation = onUpdateProtectedControlLocation,
-                onUpdatePassword = onUpdateProtectedCoursePassword
+                onUpdateControlLocation = onUpdateProtectedControlLocation
             )
         }
         if (section == DesktopSection.Competitors && projectFile != null) {
@@ -4463,8 +4472,11 @@ private fun SectionWorkspace(
         }
         if (section == DesktopSection.Settings) {
             AppSettingsPanel(
+                projectFile = projectFile,
                 diagnostics = DesktopProjectDiagnostics.from(projectFile),
-                printerDiagnostics = printerDiagnostics
+                printerDiagnostics = printerDiagnostics,
+                isCourseDataUnlocked = isProtectedCourseOrderUnlocked,
+                onUpdateCoursePassword = onUpdateProtectedCoursePassword
             )
         }
         Box(
@@ -4669,10 +4681,18 @@ private fun DisplaySettingsPanel(
 /** Shows application-level status and desktop-beta scope. */
 @Composable
 private fun AppSettingsPanel(
+    projectFile: EventProjectFile?,
     diagnostics: DesktopProjectDiagnostics,
-    printerDiagnostics: DesktopPrinterDiagnostics
+    printerDiagnostics: DesktopPrinterDiagnostics,
+    isCourseDataUnlocked: Boolean,
+    onUpdateCoursePassword: (String, String, String) -> Boolean
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        CoursePasswordSettingsPanel(
+            projectFile = projectFile,
+            isCourseDataUnlocked = isCourseDataUnlocked,
+            onUpdateCoursePassword = onUpdateCoursePassword
+        )
         DetailRow("Printer", printerDiagnostics.readinessText)
         DetailRow(
             "Detected printers",
@@ -4693,6 +4713,110 @@ private fun AppSettingsPanel(
         }
     }
 }
+
+@Composable
+private fun CoursePasswordSettingsPanel(
+    projectFile: EventProjectFile?,
+    isCourseDataUnlocked: Boolean,
+    onUpdateCoursePassword: (String, String, String) -> Boolean
+) {
+    val hasCoursePassword = remember(projectFile) { projectFile?.hasCoursePasswordSet() == true }
+    var oldPasswordDraft by remember(projectFile?.raceData?.race?.id, hasCoursePassword) { mutableStateOf("") }
+    var newPasswordDraft by remember(projectFile?.raceData?.race?.id, hasCoursePassword) { mutableStateOf("") }
+    var confirmPasswordDraft by remember(projectFile?.raceData?.race?.id, hasCoursePassword) { mutableStateOf("") }
+    val canSubmit = newPasswordDraft.isNotBlank() &&
+        confirmPasswordDraft.isNotBlank() &&
+        (!hasCoursePassword || oldPasswordDraft.isNotBlank())
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = if (hasCoursePassword) "Reset course password" else "Set course password",
+            color = DesktopPalette.Black,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = when {
+                projectFile == null ->
+                    "Open or create an Event File before setting a course password."
+                hasCoursePassword ->
+                    "Resetting the course password requires the current password. Course data is ${if (isCourseDataUnlocked) "currently unlocked" else "currently locked"}."
+                else ->
+                    "Set a course password before importing route data or editing stored course order. Accessing course data can still create a password when none exists."
+            },
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (hasCoursePassword) {
+                TextField(
+                    value = oldPasswordDraft,
+                    onValueChange = { oldPasswordDraft = it },
+                    label = { Text("Current password") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.width(190.dp)
+                )
+            }
+            TextField(
+                value = newPasswordDraft,
+                onValueChange = { newPasswordDraft = it },
+                label = { Text(if (hasCoursePassword) "New password" else "Password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                enabled = projectFile != null,
+                modifier = Modifier.width(190.dp)
+            )
+            TextField(
+                value = confirmPasswordDraft,
+                onValueChange = { confirmPasswordDraft = it },
+                label = { Text("Confirm") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                enabled = projectFile != null,
+                modifier = Modifier.width(190.dp)
+            )
+            DisabledReasonTooltip(coursePasswordSubmitDisabledReason(projectFile, hasCoursePassword, oldPasswordDraft, newPasswordDraft, confirmPasswordDraft)) {
+                Button(
+                    onClick = {
+                        if (onUpdateCoursePassword(oldPasswordDraft, newPasswordDraft, confirmPasswordDraft)) {
+                            oldPasswordDraft = ""
+                            newPasswordDraft = ""
+                            confirmPasswordDraft = ""
+                        }
+                    },
+                    enabled = projectFile != null && canSubmit
+                ) {
+                    ButtonLabel(if (hasCoursePassword) "Reset Password" else "Set Password")
+                }
+            }
+        }
+    }
+}
+
+private fun EventProjectFile.hasCoursePasswordSet(): Boolean =
+    raceData.categories.any { categoryData ->
+        !categoryData.category.encryptedIdealOrder.isNullOrBlank() ||
+            !categoryData.category.encryptedCourseInfo.isNullOrBlank()
+    }
+
+private fun coursePasswordSubmitDisabledReason(
+    projectFile: EventProjectFile?,
+    hasCoursePassword: Boolean,
+    oldPassword: String,
+    newPassword: String,
+    confirmPassword: String
+): String? =
+    when {
+        projectFile == null -> "Open or create an Event File before setting a course password."
+        hasCoursePassword && oldPassword.isBlank() -> "Enter the current course password before resetting it."
+        newPassword.isBlank() -> "Enter a new course password."
+        confirmPassword.isBlank() -> "Confirm the new course password."
+        else -> null
+    }
 
 @Composable
 private fun ReadoutDuplicatePolicyPicker(
@@ -8175,13 +8299,9 @@ private fun ProtectedCourseOrderPanel(
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onUnlock: (String) -> Boolean,
     onUpdateIdealOrder: (String, String) -> Unit,
-    onUpdateControlLocation: (String, String, String) -> String,
-    onUpdatePassword: (String, String, String) -> Boolean
+    onUpdateControlLocation: (String, String, String) -> String
 ) {
     var passwordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
-    var oldPasswordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
-    var newPasswordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
-    var confirmPasswordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
     var locationStatusText by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf<String?>(null) }
 
     if (!isUnlocked) {
@@ -8222,55 +8342,6 @@ private fun ProtectedCourseOrderPanel(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "Change course password",
-            color = DesktopPalette.Black,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextField(
-                value = oldPasswordDraft,
-                onValueChange = { oldPasswordDraft = it },
-                label = { Text("Old password") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.width(190.dp)
-            )
-            TextField(
-                value = newPasswordDraft,
-                onValueChange = { newPasswordDraft = it },
-                label = { Text("New password") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.width(190.dp)
-            )
-            TextField(
-                value = confirmPasswordDraft,
-                onValueChange = { confirmPasswordDraft = it },
-                label = { Text("Confirm new") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.width(190.dp)
-            )
-            Button(
-                onClick = {
-                    if (onUpdatePassword(oldPasswordDraft, newPasswordDraft, confirmPasswordDraft)) {
-                        oldPasswordDraft = ""
-                        newPasswordDraft = ""
-                        confirmPasswordDraft = ""
-                    }
-                },
-                enabled = oldPasswordDraft.isNotBlank() &&
-                    newPasswordDraft.isNotBlank() &&
-                    confirmPasswordDraft.isNotBlank()
-            ) {
-                ButtonLabel("Update Password")
-            }
-        }
         ProtectedControlLocationUpdatePanel(
             projectFile = projectFile,
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
