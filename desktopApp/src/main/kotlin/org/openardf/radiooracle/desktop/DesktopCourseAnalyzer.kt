@@ -1884,7 +1884,7 @@ object DesktopCourseAnalyzer {
         val pairChecks = spacing.pairCheckedPoints(foxes, spectator, beacon)
         return listOf(
             spacingMetric(
-                label = "${spacing.formatLabel} start spacing",
+                label = "${spacing.formatLabel} minimum start spacing",
                 requiredMeters = spacing.startMinMeters,
                 distances = startChecks.mapNotNull { point ->
                     val startPoint = start ?: return@mapNotNull null
@@ -1892,7 +1892,7 @@ object DesktopCourseAnalyzer {
                 }
             ),
             spacingMetric(
-                label = "${spacing.formatLabel} transmitter spacing",
+                label = "${spacing.formatLabel} minimum transmitter spacing",
                 requiredMeters = spacing.pairMinMeters,
                 distances = pairChecks.flatMapIndexed { index, first ->
                     pairChecks.drop(index + 1).map { second ->
@@ -1914,9 +1914,14 @@ object DesktopCourseAnalyzer {
         val shortest = distances.minBy { it.second }
         val status = if (shortest.second + 0.5 >= requiredMeters) DesktopCourseMetricStatus.Good else DesktopCourseMetricStatus.Warning
         val prefix = if (status == DesktopCourseMetricStatus.Good) "OK" else "Violation"
+        val comparedItem = if (label.contains("transmitter", ignoreCase = true)) {
+            "closest pair"
+        } else {
+            "nearest checked point"
+        }
         return DesktopCourseGoodnessMetric(
             label = label,
-            value = "$prefix: ${shortest.first} ${shortest.second.roundToInt()} m (required at least $requiredMeters m)",
+            value = "$prefix: $comparedItem ${shortest.first} ${shortest.second.roundToInt()} m (required at least $requiredMeters m)",
             status = status
         )
     }

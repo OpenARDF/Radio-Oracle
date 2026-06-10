@@ -179,6 +179,23 @@ tasks.named("compileKotlin") {
     dependsOn(tasks.named("generateDesktopBuildInfo"))
 }
 
+tasks.matching { task ->
+    task.name in [
+            "createDistributable",
+            "packageDistributionForCurrentOS",
+            "runDistributable"
+    ]
+}.configureEach {
+    dependsOn(tasks.named("jar"))
+    outputs.upToDateWhen { false }
+}
+
+tasks.matching { task ->
+    task.name == "packageDistributionForCurrentOS"
+}.configureEach {
+    dependsOn("createDistributable")
+}
+
 tasks.register("verifyDesktopDistributable") {
     group = "distribution"
     description = "Verifies that the local Compose Desktop app image exists."

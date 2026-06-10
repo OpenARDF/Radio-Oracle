@@ -155,10 +155,11 @@ class DesktopCourseAnalyzerTest {
         assertEquals("USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026", summary.rulesDocumentLabel)
         assertTrue(sectionChecks.any { it.label == "Stored route fox count" && it.status == DesktopCourseMetricStatus.Warning })
         assertTrue(sectionChecks.any { it.label == "Stored route course length" && it.status == DesktopCourseMetricStatus.Warning })
-        assertTrue(sectionChecks.any { it.label == "Classic start spacing" && it.status == DesktopCourseMetricStatus.Good })
+        assertTrue(sectionChecks.any { it.label == "Classic minimum start spacing" && it.status == DesktopCourseMetricStatus.Good })
         assertTrue(sectionChecks.any { it.label == "Stored route fox count" && it.value == "3 foxes (required 5 for M21)" })
         assertTrue(sectionChecks.any { it.label == "Stored route course length" && it.value.contains("(required 9-12 km)") })
-        assertTrue(sectionChecks.any { it.label == "Classic start spacing" && it.value.contains("(required at least 750 m)") })
+        assertTrue(sectionChecks.any { it.label == "Classic minimum start spacing" && it.value.contains("nearest checked point") && it.value.contains("(required at least 750 m)") })
+        assertTrue(sectionChecks.any { it.label == "Classic minimum transmitter spacing" && it.value.contains("closest pair") })
 
         val reportText = DesktopCourseAnalysisExports.reportText(summary)
         assertTrue(reportText.contains("Rules applied: USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026"))
@@ -181,7 +182,7 @@ class DesktopCourseAnalyzerTest {
         assertEquals(listOf("S", "1", "2", "Spectator", "F1", "F2", "B"), section.routeOrder)
         assertTrue(section.explanation.contains("Sprint route calculated as separate first and fast loops"))
         assertTrue(section.ruleChecks.any { it.label == "Calculated route Sprint target time" })
-        assertTrue(section.ruleChecks.any { it.label == "Sprint transmitter spacing" && it.value.contains("F1-Spectator") })
+        assertTrue(section.ruleChecks.any { it.label == "Sprint minimum transmitter spacing" && it.value.contains("closest pair F1-Spectator") })
     }
 
     @Test
