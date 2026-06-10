@@ -7214,11 +7214,13 @@ private fun CourseAnalysisSectionView(section: DesktopCourseAnalysisSection, inc
         section.secondaryRouteOrderLabel?.let { label ->
             CourseAnalysisRow(label, section.secondaryRouteOrder.joinToString(" -> ").ifBlank { "Unknown" })
         }
-        CourseAnalysisRow(section.comparisonLengthLabel, kilometersText(section.comparisonLengthMeters))
+        CourseAnalysisRow(section.comparisonLengthLabel, sectionComparisonLengthText(section))
         CourseAnalysisRow("Horizontal length", kilometersText(section.straightLineMeters))
         CourseAnalysisRow("Route length", kilometersText(section.routeLengthMeters))
         CourseAnalysisRow("Climb", climbText(section.climbMeters))
-        CourseAnalysisRow("Effective length", kilometersText(section.effectiveLengthMeters))
+        if (section.comparisonLengthLabel != "Effective length") {
+            CourseAnalysisRow("Effective length", kilometersText(section.effectiveLengthMeters))
+        }
         CourseAnalysisRow("Estimated ideal time", secondsText(section.estimatedIdealSeconds))
         CourseAnalysisTimingBreakdown(section.legRows, section.estimatedIdealSeconds)
         CourseAnalysisLegRows("Leg analysis", section.legRows)
@@ -7293,17 +7295,22 @@ private fun CourseAnalysisSummarySection(result: DesktopCourseAnalysisSummary) {
 private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         CourseAnalysisRow("Routes compared", result.calculatedRouteCount.toString())
-        CourseAnalysisRow("Calculated ideal route (calculated fox numbering)", result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
-        CourseAnalysisRow("Stored ideal route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
-        CourseAnalysisRow(
-            "Order comparison",
-            when (result.idealOrderMatches) {
-                true -> "Agrees"
-                false -> "Differs"
-                null -> "Unknown"
-            }
-        )
-        CourseAnalysisRow("Calculated straight-line length", kilometersText(result.calculatedStraightLineMeters))
+        if (result.idealOrderMatches == true) {
+            CourseAnalysisRow("Stored ideal route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
+            CourseAnalysisRow("Order comparison", "Stored and calculated routes match")
+        } else {
+            CourseAnalysisRow("Calculated ideal route (calculated fox numbering)", result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
+            CourseAnalysisRow("Stored ideal route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
+            CourseAnalysisRow(
+                "Order comparison",
+                when (result.idealOrderMatches) {
+                    true -> "Agrees"
+                    false -> "Differs"
+                    null -> "Unknown"
+                }
+            )
+            CourseAnalysisRow("Calculated straight-line length", kilometersText(result.calculatedStraightLineMeters))
+        }
         CourseAnalysisRow("Stored straight-line length", kilometersText(result.providedStraightLineMeters))
         CourseAnalysisRow("Stored route length", kilometersText(result.routeLengthMeters))
         CourseAnalysisRow("Climb", climbText(result.climbMeters))
@@ -7592,6 +7599,13 @@ private fun CourseAnalysisMetricRows(metrics: List<DesktopCourseGoodnessMetric>)
         }
     }
 }
+
+private fun sectionComparisonLengthText(section: DesktopCourseAnalysisSection): String =
+    section.ruleChecks
+        .firstOrNull { it.label.endsWith("course length") }
+        ?.value
+        ?.replace("${section.comparisonLengthLabel} ", "")
+        ?: kilometersText(section.comparisonLengthMeters)
 
 @Composable
 private fun CourseAnalysisRuleCheckRows(ruleChecks: List<DesktopCourseGoodnessMetric>) {

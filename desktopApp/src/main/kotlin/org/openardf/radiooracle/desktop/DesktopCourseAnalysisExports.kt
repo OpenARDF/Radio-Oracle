@@ -60,11 +60,13 @@ object DesktopCourseAnalysisExports {
         section.secondaryRouteOrderLabel?.let { label ->
             appendLine("$label: ${section.secondaryRouteOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
         }
-        appendLine("${section.comparisonLengthLabel}: ${kilometersText(section.comparisonLengthMeters)}")
+        appendLine("${section.comparisonLengthLabel}: ${sectionComparisonLengthText(section)}")
         appendLine("Horizontal length: ${kilometersText(section.straightLineMeters)}")
         appendLine("Route length: ${kilometersText(section.routeLengthMeters)}")
         appendLine("Climb: ${climbText(section.climbMeters)}")
-        appendLine("Effective length: ${kilometersText(section.effectiveLengthMeters)}")
+        if (section.comparisonLengthLabel != "Effective length") {
+            appendLine("Effective length: ${kilometersText(section.effectiveLengthMeters)}")
+        }
         appendLine("Estimated ideal time: ${secondsText(section.estimatedIdealSeconds)}")
         appendTimingBreakdown(section.legRows, section.estimatedIdealSeconds)
         appendLegRows(section.legRows)
@@ -85,16 +87,21 @@ object DesktopCourseAnalysisExports {
         appendLine("Section 3: Summary")
         appendWrapped(result.summaryExplanation)
         appendLine("Routes compared: ${result.calculatedRouteCount}")
-        appendLine("Calculated ideal route (calculated fox numbering): ${result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
-        appendLine("Stored ideal route: ${result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
-        appendLine(
-            "Order comparison: " + when (result.idealOrderMatches) {
-                true -> "Agrees"
-                false -> "Differs"
-                null -> "Unknown"
-            }
-        )
-        appendLine("Calculated straight-line length: ${kilometersText(result.calculatedStraightLineMeters)}")
+        if (result.idealOrderMatches == true) {
+            appendLine("Stored ideal route: ${result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
+            appendLine("Order comparison: Stored and calculated routes match")
+        } else {
+            appendLine("Calculated ideal route (calculated fox numbering): ${result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
+            appendLine("Stored ideal route: ${result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
+            appendLine(
+                "Order comparison: " + when (result.idealOrderMatches) {
+                    false -> "Differs"
+                    null -> "Unknown"
+                    true -> "Agrees"
+                }
+            )
+            appendLine("Calculated straight-line length: ${kilometersText(result.calculatedStraightLineMeters)}")
+        }
         appendLine("Stored straight-line length: ${kilometersText(result.providedStraightLineMeters)}")
         appendLine("Stored route length: ${kilometersText(result.routeLengthMeters)}")
         appendLine("Climb: ${climbText(result.climbMeters)}")
@@ -153,6 +160,14 @@ object DesktopCourseAnalysisExports {
         fallback: String
     ): String =
         result.metrics.firstOrNull { it.label == label }?.value ?: fallback
+
+    private fun sectionComparisonLengthText(section: DesktopCourseAnalysisSection): String {
+        val ruleValue = section.ruleChecks
+            .firstOrNull { it.label.endsWith("course length") }
+            ?.value
+            ?.replace("${section.comparisonLengthLabel} ", "")
+        return ruleValue ?: kilometersText(section.comparisonLengthMeters)
+    }
 
     private fun StringBuilder.appendRuleChecks(ruleChecks: List<DesktopCourseGoodnessMetric>) {
         if (ruleChecks.isEmpty()) {

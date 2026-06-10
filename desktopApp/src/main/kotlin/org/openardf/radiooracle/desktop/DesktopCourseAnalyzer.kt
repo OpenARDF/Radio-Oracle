@@ -2068,7 +2068,9 @@ object DesktopCourseAnalyzer {
             } else {
                 null
             }
-            val climbMetric = if (calculatedClimbPercent != null && calculatedRouteLengthMeters != null && calculatedRouteClimbMeters != null) {
+            val climbMetric = if (idealOrderMatches == true && storedClimbPercent != null && routeLengthMeters != null && climbMeters != null) {
+                Triple(storedClimbPercent, routeLengthMeters, climbMeters)
+            } else if (calculatedClimbPercent != null && calculatedRouteLengthMeters != null && calculatedRouteClimbMeters != null) {
                 Triple(calculatedClimbPercent, calculatedRouteLengthMeters, calculatedRouteClimbMeters)
             } else if (storedClimbPercent != null && routeLengthMeters != null && climbMeters != null) {
                 Triple(storedClimbPercent, routeLengthMeters, climbMeters)

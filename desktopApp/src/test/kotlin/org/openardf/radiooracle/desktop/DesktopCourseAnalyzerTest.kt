@@ -124,6 +124,12 @@ class DesktopCourseAnalyzerTest {
                     it.status == DesktopCourseMetricStatus.Good
             }
         )
+        val reportText = DesktopCourseAnalysisExports.reportText(summary)
+        assertTrue(reportText.contains("Order comparison: Stored and calculated routes match"))
+        assertFalse(reportText.contains("Calculated ideal route (calculated fox numbering):"))
+        assertFalse(reportText.contains("Calculated straight-line length:"))
+        assertFalse(reportText.contains("Effective length: 5.00 km\n"))
+        assertTrue(reportText.contains("Effective length: 5.00 km (required 9-12 km)"))
     }
 
     @Test
