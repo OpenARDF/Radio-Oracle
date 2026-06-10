@@ -2221,6 +2221,12 @@ fun main(args: Array<String>) = application {
                 }
             )
         }
+        if (isImportingCourseKmlKmz) {
+            IndeterminateProgressDialog(
+                title = "Importing controls/route KML/KMZ",
+                message = "Reading and reviewing the selected file. This can take a while for large KML/KMZ files."
+            )
+        }
         courseKmlKmzElevationProgress?.let { progress ->
             CourseKmlKmzElevationProgressDialog(
                 progress = progress,
@@ -3106,6 +3112,29 @@ private fun CourseKmlKmzCategoryMappingDialog(
                 Text("Cancel")
             }
         }
+    )
+}
+
+@Composable
+private fun IndeterminateProgressDialog(
+    title: String,
+    message: String
+) {
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Text(
+                    text = message,
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = {}
     )
 }
 
@@ -6951,18 +6980,20 @@ private fun CourseAnalysisPanel(
     }
     var exportStatusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
     var applyStatusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
+    var isAnalyzing by remember(projectFile.raceData.race.id) { mutableStateOf(false) }
+    val analysisScope = rememberCoroutineScope()
 
-    fun analyzeSelectedCourse(): DesktopCourseAnalysisSummary? {
-        val categoryId = effectiveSelectedCategoryId ?: return null
-        return DesktopCourseAnalyzer.analyze(
-            projectFile = projectFile,
-            categoryId = categoryId,
-            protectedCourseInfo = protectedCourseInfoByCategoryId[categoryId],
-            protectedIdealOrderText = protectedIdealOrderByCategoryId[categoryId],
-            elevationLookup = DesktopVenueElevationCache::elevationMeters,
-            elevationCacheNotes = DesktopVenueElevationCache::analysisSourceNotes
-        )
-    }
+    suspend fun analyzeSelectedCourse(categoryId: String): DesktopCourseAnalysisSummary =
+        withContext(Dispatchers.Default) {
+            DesktopCourseAnalyzer.analyze(
+                projectFile = projectFile,
+                categoryId = categoryId,
+                protectedCourseInfo = protectedCourseInfoByCategoryId[categoryId],
+                protectedIdealOrderText = protectedIdealOrderByCategoryId[categoryId],
+                elevationLookup = DesktopVenueElevationCache::elevationMeters,
+                elevationCacheNotes = DesktopVenueElevationCache::analysisSourceNotes
+            )
+        }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -6994,38 +7025,50 @@ private fun CourseAnalysisPanel(
                 modifier = Modifier.width(280.dp)
             )
             DisabledReasonTooltip(
-                if (effectiveSelectedCategoryId == null) {
-                    "Import controls/route KML/KMZ data for a category before running analysis."
-                } else {
-                    null
+                when {
+                    isAnalyzing -> "Course analysis is already running."
+                    effectiveSelectedCategoryId == null ->
+                        "Import controls/route KML/KMZ data for a category before running analysis."
+                    else -> null
                 }
             ) {
                 Button(
                     onClick = {
                         val categoryId = effectiveSelectedCategoryId ?: return@Button
+                        if (isAnalyzing) return@Button
+                        isAnalyzing = true
                         exportStatusText = null
                         applyStatusText = null
-                        analyzeSelectedCourse()?.let { summary ->
-                            if (summary.missingElements.isEmpty()) {
-                                analysisResult = summary
-                            } else {
-                                pendingMissingDataResult = CourseAnalysisMissingDataPrompt(
-                                    categoryId = categoryId,
-                                    summary = summary
-                                )
+                        pendingMissingDataResult = null
+                        analysisScope.launch {
+                            try {
+                                val summary = analyzeSelectedCourse(categoryId)
+                                if (summary.missingElements.isEmpty()) {
+                                    analysisResult = summary
+                                } else {
+                                    pendingMissingDataResult = CourseAnalysisMissingDataPrompt(
+                                        categoryId = categoryId,
+                                        summary = summary
+                                    )
+                                }
+                            } catch (error: Throwable) {
+                                exportStatusText = "Analysis failed: ${error.message ?: error::class.simpleName}"
+                                DesktopDebugLog.error("CourseAnalysis", "Analysis failed: ${error.message ?: error::class.simpleName}")
+                            } finally {
+                                isAnalyzing = false
                             }
                         }
                     },
-                    enabled = effectiveSelectedCategoryId != null
+                    enabled = effectiveSelectedCategoryId != null && !isAnalyzing
                 ) {
                     ButtonLabel("Analyze")
                 }
             }
             DisabledReasonTooltip(
-                if (analysisResult == null) {
-                    "Run analysis before exporting."
-                } else {
-                    null
+                when {
+                    isAnalyzing -> "Wait for course analysis to finish before exporting."
+                    analysisResult == null -> "Run analysis before exporting."
+                    else -> null
                 }
             ) {
                 Button(
@@ -7048,7 +7091,7 @@ private fun CourseAnalysisPanel(
                             }
                         }
                     },
-                    enabled = analysisResult != null
+                    enabled = analysisResult != null && !isAnalyzing
                 ) {
                     ButtonLabel("Export Analysis...")
                 }
@@ -7058,30 +7101,36 @@ private fun CourseAnalysisPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            DisabledReasonTooltip(calculatedRouteApplyDisabledReason(analysisResult)) {
+            DisabledReasonTooltip(calculatedRouteApplyDisabledReason(analysisResult, isAnalyzing)) {
                 Button(
                     onClick = {
                         val application = analysisResult?.calculatedRouteApplication ?: return@Button
                         applyStatusText = onUseCalculatedRoute(application)
                         analysisResult = null
                     },
-                    enabled = analysisResult?.calculatedRouteApplication != null
+                    enabled = analysisResult?.calculatedRouteApplication != null && !isAnalyzing
                 ) {
                     ButtonLabel("Apply Calculated Route")
                 }
             }
-            DisabledReasonTooltip(foxRenumberingApplyDisabledReason(analysisResult)) {
+            DisabledReasonTooltip(foxRenumberingApplyDisabledReason(analysisResult, isAnalyzing)) {
                 Button(
                     onClick = {
                         val renumbering = analysisResult?.waitRenumbering?.takeIf { it.improvesWait } ?: return@Button
                         applyStatusText = onApplyFoxRenumberingOnly(renumbering)
                         analysisResult = null
                     },
-                    enabled = analysisResult?.waitRenumbering?.improvesWait == true
+                    enabled = analysisResult?.waitRenumbering?.improvesWait == true && !isAnalyzing
                 ) {
                     ButtonLabel("Apply Fox Renumbering Only")
                 }
             }
+        }
+        if (isAnalyzing) {
+            IndeterminateProgressDialog(
+                title = "Analyzing course",
+                message = "Calculating route metrics, wait times, rule checks, and report graphics."
+            )
         }
         applyStatusText?.let { statusText ->
             Text(
@@ -7156,15 +7205,23 @@ private fun CourseAnalysisPanel(
     }
 }
 
-private fun calculatedRouteApplyDisabledReason(analysisResult: DesktopCourseAnalysisSummary?): String? =
+private fun calculatedRouteApplyDisabledReason(
+    analysisResult: DesktopCourseAnalysisSummary?,
+    isAnalyzing: Boolean
+): String? =
     when {
+        isAnalyzing -> "Wait for course analysis to finish before applying a calculated route."
         analysisResult == null -> "Run analysis before applying a calculated route."
         analysisResult.calculatedRouteApplication == null -> "No different calculated route is available to apply."
         else -> null
     }
 
-private fun foxRenumberingApplyDisabledReason(analysisResult: DesktopCourseAnalysisSummary?): String? =
+private fun foxRenumberingApplyDisabledReason(
+    analysisResult: DesktopCourseAnalysisSummary?,
+    isAnalyzing: Boolean
+): String? =
     when {
+        isAnalyzing -> "Wait for course analysis to finish before applying fox renumbering."
         analysisResult == null -> "Run analysis before applying fox renumbering."
         analysisResult.waitRenumbering?.improvesWait != true -> "No improved Section 1 fox renumbering is available."
         else -> null
