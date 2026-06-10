@@ -6862,6 +6862,39 @@ private fun KmlImportInstruction(text: String) {
 }
 
 @Composable
+private fun CourseAnalyzerImportGuidance(onSelectFile: () -> Unit) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(onClick = onSelectFile) {
+                ButtonLabel("Import Controls KML/KMZ...")
+            }
+            Text(
+                text = "Import protected control points and category routes from a file before running analysis when stored course data needs to be added or updated.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        }
+        Text(
+            text = "KML/KMZ import files should contain named Placemark elements. Control locations are Point placemarks named by SI code, control label, or public label. Stored category routes are LineString placemarks named by Event File category, such as M21. Coordinates are read as longitude,latitude,elevation; elevation may be omitted. For KMZ files, the first .kml document in the archive is read.",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            KmlImportInstruction("Choose a category, then Analyze to compare the stored route with the calculated route candidate.")
+            KmlImportInstruction("Export Analysis writes the displayed analysis plus route/control data for external review.")
+            KmlImportInstruction("Apply Calculated Route replaces stored route and numbering data when the calculated route is available.")
+            KmlImportInstruction("Apply Fox Renumbering Only applies the Section 1 wait-time renumbering when an improvement is available.")
+        }
+    }
+}
+
+@Composable
 private fun CourseAnalysisPanel(
     projectFile: EventProjectFile,
     isUnlocked: Boolean,
@@ -6937,19 +6970,7 @@ private fun CourseAnalysisPanel(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Button(onClick = onImportControlsRouteKmlKmz) {
-                ButtonLabel("Import Controls/Route KML/KMZ...")
-            }
-            Text(
-                text = "Import a category route before running analysis.",
-                color = DesktopPalette.Black,
-                fontSize = 13.sp
-            )
-        }
+        CourseAnalyzerImportGuidance(onSelectFile = onImportControlsRouteKmlKmz)
         if (categories.isEmpty()) {
             Text(
                 text = "Import protected controls/route KML/KMZ data for a category before running course analysis.",
