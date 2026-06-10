@@ -7150,7 +7150,6 @@ private fun CourseAnalysisPanel(
             )
             DisabledReasonTooltip(
                 when {
-                    isAnalyzing -> "Course analysis is already running."
                     effectiveSelectedCategoryId == null ->
                         "Import controls/route KML/KMZ data for a category before running analysis."
                     else -> null
@@ -7190,7 +7189,7 @@ private fun CourseAnalysisPanel(
             }
             DisabledReasonTooltip(
                 when {
-                    isAnalyzing -> "Wait for course analysis to finish before exporting."
+                    isAnalyzing -> null
                     analysisResult == null -> "Run analysis before exporting."
                     else -> null
                 }
@@ -7225,7 +7224,7 @@ private fun CourseAnalysisPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            DisabledReasonTooltip(calculatedRouteApplyDisabledReason(analysisResult, isAnalyzing)) {
+            DisabledReasonTooltip(if (isAnalyzing) null else calculatedRouteApplyDisabledReason(analysisResult)) {
                 Button(
                     onClick = {
                         val application = analysisResult?.calculatedRouteApplication ?: return@Button
@@ -7237,7 +7236,7 @@ private fun CourseAnalysisPanel(
                     ButtonLabel("Apply Calculated Route")
                 }
             }
-            DisabledReasonTooltip(foxRenumberingApplyDisabledReason(analysisResult, isAnalyzing)) {
+            DisabledReasonTooltip(if (isAnalyzing) null else foxRenumberingApplyDisabledReason(analysisResult)) {
                 Button(
                     onClick = {
                         val renumbering = analysisResult?.waitRenumbering?.takeIf { it.improvesWait } ?: return@Button
@@ -7329,23 +7328,15 @@ private fun CourseAnalysisPanel(
     }
 }
 
-private fun calculatedRouteApplyDisabledReason(
-    analysisResult: DesktopCourseAnalysisSummary?,
-    isAnalyzing: Boolean
-): String? =
+private fun calculatedRouteApplyDisabledReason(analysisResult: DesktopCourseAnalysisSummary?): String? =
     when {
-        isAnalyzing -> "Wait for course analysis to finish before applying a calculated route."
         analysisResult == null -> "Run analysis before applying a calculated route."
         analysisResult.calculatedRouteApplication == null -> "No different calculated route is available to apply."
         else -> null
     }
 
-private fun foxRenumberingApplyDisabledReason(
-    analysisResult: DesktopCourseAnalysisSummary?,
-    isAnalyzing: Boolean
-): String? =
+private fun foxRenumberingApplyDisabledReason(analysisResult: DesktopCourseAnalysisSummary?): String? =
     when {
-        isAnalyzing -> "Wait for course analysis to finish before applying fox renumbering."
         analysisResult == null -> "Run analysis before applying fox renumbering."
         analysisResult.waitRenumbering?.improvesWait != true -> "No improved Section 1 fox renumbering is available."
         else -> null
