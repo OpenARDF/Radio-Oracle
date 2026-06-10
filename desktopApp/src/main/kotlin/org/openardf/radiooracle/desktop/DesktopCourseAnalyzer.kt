@@ -20,6 +20,7 @@ import kotlin.math.roundToInt
 
 data class DesktopCourseAnalysisSummary(
     val categoryName: String,
+    val rulesDocumentLabel: String,
     val providedRouteSection: DesktopCourseAnalysisSection?,
     val calculatedRouteSection: DesktopCourseAnalysisSection?,
     val summaryExplanation: String,
@@ -66,6 +67,7 @@ data class DesktopCourseAnalysisSection(
     val legRows: List<DesktopCourseLegRow>,
     val waitRows: List<DesktopCourseWaitRow>,
     val waitRenumbering: DesktopCourseWaitRenumbering?,
+    val ruleChecks: List<DesktopCourseGoodnessMetric> = emptyList(),
     val elevationProfile: List<DesktopCourseElevationProfilePoint>,
     val routeMap: DesktopCourseRouteMap?
 )
@@ -203,6 +205,7 @@ enum class DesktopCourseMetricStatus {
  * baseline by category age or gender and does not model fatigue across the course.
  */
 object DesktopCourseAnalyzer {
+    private const val USA_RULES_DOCUMENT_LABEL = "USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026"
     private const val CLASSIC_TRANSMIT_CYCLE_SECONDS = 300
     private const val CLASSIC_TRANSMIT_SLOT_SECONDS = 60
     private const val CLASSIC_CONTROL_FIND_PUNCH_SECONDS = 30
@@ -213,6 +216,8 @@ object DesktopCourseAnalyzer {
     private const val SPRINT_FLAT_SPEED_MPS = 4.2
     private const val FOXORING_FLAT_SPEED_MPS = 3.4
     private const val MAX_PERMUTATION_CONTROLS = 8
+    private const val FOXORING_EXHAUSTIVE_CONTROLS = 6
+    private const val MAX_SPRINT_LOOP_PERMUTATIONS = 120
     private const val CALCULATED_ROUTE_SAMPLE_METERS = 25.0
     private const val ELEVATION_CACHE_RESOLUTION_NOTE =
         "Elevation Cache resolution is the local sample-grid spacing; USGS 3DEP source DEM resolution varies, so a 3 m cache does not guarantee 3 m source terrain data everywhere."
@@ -222,6 +227,46 @@ object DesktopCourseAnalyzer {
         "Estimated times use an elite-competitor baseline pace by race format: 4:38 min/km for Classic-style courses (3.6 m/s), 3:58 min/km for Sprint (4.2 m/s), and 4:54 min/km for Foxoring (3.4 m/s). When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not modeled, and the current model is not yet adjusted by category age or gender."
     private const val CLASSIC_WAIT_TIMING_NOTE =
         "For Classic-style fox controls, timing assumes the competitor waits if the fox is off the air, then spends 30 seconds finding and punching before departing for the next leg; that delay affects later arrival phases."
+    private val classicCategoryRequirements = mapOf(
+        "W19" to CourseRuleRequirement(4, 4, 6_000, 8_000),
+        "W21" to CourseRuleRequirement(4, 4, 7_000, 9_000),
+        "W35" to CourseRuleRequirement(4, 5, 6_000, 8_000),
+        "W45" to CourseRuleRequirement(3, 4, 5_000, 7_000),
+        "W55" to CourseRuleRequirement(3, 4, 4_000, 6_000),
+        "W65" to CourseRuleRequirement(3, 4, 4_000, 6_000),
+        "W75" to CourseRuleRequirement(2, 4, 3_000, 5_000),
+        "M19" to CourseRuleRequirement(4, 4, 8_000, 10_000),
+        "M21" to CourseRuleRequirement(5, 5, 9_000, 12_000),
+        "M40" to CourseRuleRequirement(4, 4, 8_000, 10_000),
+        "M50" to CourseRuleRequirement(4, 5, 6_000, 8_000),
+        "M60" to CourseRuleRequirement(3, 4, 5_000, 7_000),
+        "M70" to CourseRuleRequirement(3, 4, 4_000, 6_000),
+        "M80" to CourseRuleRequirement(2, 4, 3_000, 5_000)
+    )
+    private val youthClassicCategoryRequirements = mapOf(
+        "W12" to CourseRuleRequirement(3, 3, 2_000, 3_000),
+        "W14" to CourseRuleRequirement(4, 4, 2_500, 3_000),
+        "W16" to CourseRuleRequirement(5, 5, 3_500, 4_000),
+        "M12" to CourseRuleRequirement(3, 3, 2_000, 3_000),
+        "M14" to CourseRuleRequirement(4, 4, 2_500, 3_000),
+        "M16" to CourseRuleRequirement(5, 5, 3_500, 4_000)
+    )
+    private val foxoringCategoryRequirements = mapOf(
+        "W19" to CourseRuleRequirement(5, 8, 4_000, 6_000),
+        "W21" to CourseRuleRequirement(6, 10, 5_000, 7_000),
+        "W35" to CourseRuleRequirement(5, 8, 4_000, 6_000),
+        "W45" to CourseRuleRequirement(4, 7, 4_000, 6_000),
+        "W55" to CourseRuleRequirement(4, 7, 3_000, 5_000),
+        "W65" to CourseRuleRequirement(4, 7, 3_000, 5_000),
+        "W75" to CourseRuleRequirement(4, 7, 3_000, 4_000),
+        "M19" to CourseRuleRequirement(6, 8, 6_000, 8_000),
+        "M21" to CourseRuleRequirement(8, 10, 7_000, 9_000),
+        "M40" to CourseRuleRequirement(6, 8, 6_000, 8_000),
+        "M50" to CourseRuleRequirement(5, 8, 5_000, 7_000),
+        "M60" to CourseRuleRequirement(5, 8, 4_000, 6_000),
+        "M70" to CourseRuleRequirement(4, 7, 3_000, 5_000),
+        "M80" to CourseRuleRequirement(4, 7, 3_000, 4_000)
+    )
 
     fun analyze(
         projectFile: EventProjectFile,
@@ -315,20 +360,16 @@ object DesktopCourseAnalyzer {
             .firstOrNull { it.control.type == ControlPointType.SEPARATOR && it.point != null }
         val beacon = controlsWithPoints
             .firstOrNull { it.control.type == ControlPointType.BEACON && it.point != null }
-        val calculatedRoutePermutationPoints = foxes + listOfNotNull(spectator)
-        val calculatedRoute = if (
-            start != null &&
-            finish != null &&
-            foxes.isNotEmpty() &&
-            calculatedRoutePermutationPoints.size <= MAX_PERMUTATION_CONTROLS
-        ) {
-            shortestPermutation(start, finish, calculatedRoutePermutationPoints, beacon, elevationLookup)
-        } else {
-            if (calculatedRoutePermutationPoints.size > MAX_PERMUTATION_CONTROLS) {
-                missing += "Too many course controls for exhaustive route calculation: ${calculatedRoutePermutationPoints.size}."
-            }
-            null
-        }
+        val calculatedRoute = calculatedRouteCandidate(
+            raceType = raceType,
+            start = start,
+            finish = finish,
+            foxes = foxes,
+            spectator = spectator,
+            beacon = beacon,
+            elevationLookup = elevationLookup,
+            missing = missing
+        )
 
         val providedControls = idealOrderText
             ?.let { idealOrder ->
@@ -453,6 +494,36 @@ object DesktopCourseAnalyzer {
                 elevationLookup = elevationLookup
             )
         }
+        val spacingRuleChecks = coursePointRuleChecks(
+            raceType = raceType,
+            categoryName = category.name,
+            start = start,
+            foxes = foxes,
+            spectator = spectator,
+            beacon = beacon
+        )
+        val providedRuleChecks = providedRouteAnalysis?.let { analysis ->
+            routeRuleChecks(
+                routeLabel = "Stored route",
+                raceType = raceType,
+                categoryName = category.name,
+                foxCount = foxes.size,
+                comparisonLengthMeters = analysis.comparisonLengthMeters.roundToInt(),
+                measurementLabel = analysis.measurementLabel,
+                estimatedSeconds = analysis.estimatedSeconds.roundToInt()
+            ) + spacingRuleChecks
+        }.orEmpty()
+        val calculatedRuleChecks = calculatedRouteAnalysis?.let { analysis ->
+            routeRuleChecks(
+                routeLabel = "Calculated route",
+                raceType = raceType,
+                categoryName = category.name,
+                foxCount = foxes.size,
+                comparisonLengthMeters = analysis.comparisonLengthMeters.roundToInt(),
+                measurementLabel = analysis.measurementLabel,
+                estimatedSeconds = analysis.estimatedSeconds.roundToInt()
+            ) + spacingRuleChecks
+        }.orEmpty()
         val calculatedSection = calculatedRoute?.let { routeCandidate ->
             val optimizedAssignments = calculatedWaitRenumbering
                 ?.takeIf { raceType == RaceType.CLASSIC || raceType == RaceType.SHORT }
@@ -475,6 +546,7 @@ object DesktopCourseAnalyzer {
                     legRows = emptyList(),
                     waitRows = emptyList(),
                     waitRenumbering = null,
+                    ruleChecks = calculatedRuleChecks,
                     elevationProfile = emptyList(),
                     routeMap = null
                 )
@@ -484,6 +556,7 @@ object DesktopCourseAnalyzer {
                     explanation = calculatedSectionExplanation(
                         analysis = calculatedRouteAnalysis,
                         routeCount = routeCandidate.routeCount,
+                        routeCalculationNote = routeCandidate.calculationNote,
                         providedAssignments = waitRenumbering?.assignments.orEmpty(),
                         calculatedAssignments = optimizedAssignments
                     ),
@@ -501,6 +574,7 @@ object DesktopCourseAnalyzer {
                     legRows = calculatedLegRows,
                     waitRows = calculatedWaitRows,
                     waitRenumbering = calculatedWaitRenumbering,
+                    ruleChecks = calculatedRuleChecks,
                     elevationProfile = calculatedRouteAnalysis?.elevationProfile.orEmpty(),
                     routeMap = routeMap(
                         title = "Calculated route (calculated fox numbering)",
@@ -527,6 +601,7 @@ object DesktopCourseAnalyzer {
                 legRows = providedLegRows,
                 waitRows = waitRows,
                 waitRenumbering = waitRenumbering,
+                ruleChecks = providedRuleChecks,
                 elevationProfile = analysis.elevationProfile,
                 routeMap = routeMap(
                     title = "Stored route",
@@ -553,7 +628,8 @@ object DesktopCourseAnalyzer {
             estimatedIdealSeconds = estimatedIdealSeconds,
             waitRows = waitRows,
             idealOrderMatches = idealOrderMatches
-        )
+        ) + (providedRuleChecks + calculatedRuleChecks)
+            .distinctBy { "${it.label}:${it.value}" }
         val profileComparison = buildList {
             providedSection?.let {
                 add(
@@ -642,6 +718,7 @@ object DesktopCourseAnalyzer {
 
         return DesktopCourseAnalysisSummary(
             categoryName = category.name,
+            rulesDocumentLabel = USA_RULES_DOCUMENT_LABEL,
             providedRouteSection = providedSection,
             calculatedRouteSection = calculatedSection,
             summaryExplanation = summaryExplanation(providedSection, calculatedSection),
@@ -833,6 +910,7 @@ object DesktopCourseAnalyzer {
     private fun calculatedSectionExplanation(
         analysis: RouteAnalysis?,
         routeCount: Int,
+        routeCalculationNote: String?,
         providedAssignments: List<DesktopCourseWaitRenumberingAssignment>,
         calculatedAssignments: List<DesktopCourseWaitRenumberingAssignment>
     ): String {
@@ -843,8 +921,13 @@ object DesktopCourseAnalyzer {
             "Elevation data was incomplete along the calculated straight-line legs, so straight-line horizontal distance was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
         }
         val assignmentText = assignmentDifferenceText(providedAssignments, calculatedAssignments)
-        return "This section calculates an independent ideal route by comparing $routeCount possible orders of the foxes and any spectator point, with the beacon last before the finish. " +
-            "The shortest candidate by $measurement is selected. $elevationText $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE Large differences in estimated ideal time can come from fox wait-time optimization as well as route length; compare the movement, wait, and find/punch timing breakdown rows. $MAP_KNOWLEDGE_LIMITATION_NOTE $assignmentText"
+        val routeCalculationText = routeCalculationNote?.let { " $it" }.orEmpty()
+        val opening = if (routeCalculationNote == null) {
+            "This section calculates an independent ideal route by comparing $routeCount possible orders of the foxes and any spectator point, with the beacon last before the finish."
+        } else {
+            "This section calculates an independent ideal route using the format-specific route search noted below; $routeCount route candidate order(s) were evaluated or generated."
+        }
+        return "$opening The shortest candidate by $measurement is selected.$routeCalculationText $elevationText $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE Large differences in estimated ideal time can come from fox wait-time optimization as well as route length; compare the movement, wait, and find/punch timing breakdown rows. $MAP_KNOWLEDGE_LIMITATION_NOTE $assignmentText"
     }
 
     private fun assignmentDifferenceText(
@@ -871,10 +954,121 @@ object DesktopCourseAnalyzer {
         calculatedSection: DesktopCourseAnalysisSection?
     ): String =
         if (providedSection != null && calculatedSection != null) {
-            "This summary compares the stored route with the independently calculated candidate, including their primary distance metric, route order, estimated time, wait-time optimization, elevation profiles, and 2D point depictions."
+            "This summary compares the stored route with the independently calculated candidate, including rule checks against $USA_RULES_DOCUMENT_LABEL, their primary distance metric, route order, estimated time, wait-time optimization, elevation profiles, and 2D point depictions."
         } else {
-            "This summary reports the independently calculated route candidate because no stored ideal route was available for Section 1."
+            "This summary reports rule checks against $USA_RULES_DOCUMENT_LABEL and the independently calculated route candidate because no stored ideal route was available for Section 1."
         }
+
+    private fun calculatedRouteCandidate(
+        raceType: RaceType,
+        start: CourseGeoPoint?,
+        finish: CourseGeoPoint?,
+        foxes: List<ControlAnalysisPoint>,
+        spectator: ControlAnalysisPoint?,
+        beacon: ControlAnalysisPoint?,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        missing: MutableList<String>
+    ): CalculatedRoute? {
+        if (start == null || finish == null || foxes.isEmpty()) {
+            return null
+        }
+        return when (raceType) {
+            RaceType.SPRINT -> sprintCalculatedRoute(start, finish, foxes, spectator, beacon, elevationLookup, missing)
+            RaceType.FOXORING -> foxoringCalculatedRoute(start, finish, foxes, beacon, elevationLookup)
+            else -> {
+                val controlsToPermute = foxes + listOfNotNull(spectator)
+                if (controlsToPermute.size <= MAX_PERMUTATION_CONTROLS) {
+                    shortestPermutation(start, finish, controlsToPermute, beacon, elevationLookup)
+                } else {
+                    missing += "Too many course controls for exhaustive route calculation: ${controlsToPermute.size}."
+                    null
+                }
+            }
+        }
+    }
+
+    private fun sprintCalculatedRoute(
+        start: CourseGeoPoint,
+        finish: CourseGeoPoint,
+        foxes: List<ControlAnalysisPoint>,
+        spectator: ControlAnalysisPoint?,
+        beacon: ControlAnalysisPoint?,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        missing: MutableList<String>
+    ): CalculatedRoute? {
+        val spectatorPoint = spectator?.point
+        if (spectator == null || spectatorPoint == null) {
+            missing += "Sprint loop route calculation requires a spectator control; falling back to whole-course route calculation."
+            val controlsToPermute = foxes
+            return if (controlsToPermute.size <= MAX_PERMUTATION_CONTROLS) {
+                shortestPermutation(start, finish, controlsToPermute, beacon, elevationLookup)
+            } else {
+                heuristicRoute(start, finish, controlsToPermute, beacon, elevationLookup, "non-exhaustive whole-course Sprint fallback")
+            }
+        }
+        val slowFoxes = foxes.filterNot { it.control.isSprintFastFox() }
+        val fastFoxes = foxes.filter { it.control.isSprintFastFox() }
+        val firstLoop = boundedLoopRoute(
+            start = start,
+            finish = spectatorPoint,
+            controls = slowFoxes,
+            elevationLookup = elevationLookup,
+            note = "Sprint first loop"
+        )
+        val secondLoop = boundedLoopRoute(
+            start = spectatorPoint,
+            finish = finish,
+            controls = fastFoxes,
+            beacon = beacon,
+            elevationLookup = elevationLookup,
+            note = "Sprint fast loop"
+        )
+        val controls = firstLoop.controls + spectator + secondLoop.controls
+        val routePoints = listOf(start) + controls.mapNotNull { it.point } + finish
+        return CalculatedRoute(
+            controls = controls,
+            distanceMeters = routePoints.straightLineMeters(),
+            routeCount = firstLoop.routeCount + secondLoop.routeCount,
+            calculationNote = "Sprint route calculated as separate first and fast loops; each loop used no more than $MAX_SPRINT_LOOP_PERMUTATIONS permutations."
+        )
+    }
+
+    private fun foxoringCalculatedRoute(
+        start: CourseGeoPoint,
+        finish: CourseGeoPoint,
+        foxes: List<ControlAnalysisPoint>,
+        beacon: ControlAnalysisPoint?,
+        elevationLookup: (CourseGeoPoint) -> Double?
+    ): CalculatedRoute {
+        return if (foxes.size <= FOXORING_EXHAUSTIVE_CONTROLS) {
+            shortestPermutation(start, finish, foxes, beacon, elevationLookup)
+        } else {
+            heuristicRoute(
+                start = start,
+                finish = finish,
+                controlsToPermute = foxes,
+                beacon = beacon,
+                elevationLookup = elevationLookup,
+                calculationNote = "Foxoring route uses non-exhaustive nearest-neighbor plus 2-opt because more than $FOXORING_EXHAUSTIVE_CONTROLS foxes are assigned."
+            )
+        }
+    }
+
+    private fun boundedLoopRoute(
+        start: CourseGeoPoint,
+        finish: CourseGeoPoint,
+        controls: List<ControlAnalysisPoint>,
+        beacon: ControlAnalysisPoint? = null,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        note: String
+    ): CalculatedRoute {
+        val exactCount = factorial(controls.size)
+        return if (exactCount <= MAX_SPRINT_LOOP_PERMUTATIONS) {
+            shortestPermutation(start, finish, controls, beacon, elevationLookup).copy(calculationNote = "$note exact")
+        } else {
+            heuristicRoute(start, finish, controls, beacon, elevationLookup, "$note non-exhaustive fallback")
+        }
+    }
 
     private fun shortestPermutation(
         start: CourseGeoPoint,
@@ -908,6 +1102,78 @@ object DesktopCourseAnalyzer {
             }
         }
         return CalculatedRoute(bestControls, bestHorizontalDistance, routeCount)
+    }
+
+    private fun heuristicRoute(
+        start: CourseGeoPoint,
+        finish: CourseGeoPoint,
+        controlsToPermute: List<ControlAnalysisPoint>,
+        beacon: ControlAnalysisPoint?,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        calculationNote: String
+    ): CalculatedRoute {
+        val ordered = nearestNeighborOrder(start, controlsToPermute)
+        val improved = twoOptOrder(start, finish, ordered, beacon, elevationLookup)
+        val controls = if (beacon != null) improved + beacon else improved
+        val points = listOf(start) + controls.mapNotNull { it.point } + finish
+        return CalculatedRoute(
+            controls = controls,
+            distanceMeters = points.straightLineMeters(),
+            routeCount = 1,
+            calculationNote = calculationNote
+        )
+    }
+
+    private fun nearestNeighborOrder(start: CourseGeoPoint, controls: List<ControlAnalysisPoint>): List<ControlAnalysisPoint> {
+        val remaining = controls.toMutableList()
+        val ordered = mutableListOf<ControlAnalysisPoint>()
+        var current = start
+        while (remaining.isNotEmpty()) {
+            val next = remaining.minBy { it.point?.distanceMetersTo(current) ?: Double.POSITIVE_INFINITY }
+            ordered += next
+            remaining -= next
+            current = next.point ?: current
+        }
+        return ordered
+    }
+
+    private fun twoOptOrder(
+        start: CourseGeoPoint,
+        finish: CourseGeoPoint,
+        controls: List<ControlAnalysisPoint>,
+        beacon: ControlAnalysisPoint?,
+        elevationLookup: (CourseGeoPoint) -> Double?
+    ): List<ControlAnalysisPoint> {
+        if (controls.size < 4) {
+            return controls
+        }
+        var best = controls
+        var improved = true
+        while (improved) {
+            improved = false
+            for (i in 0 until best.lastIndex) {
+                for (k in i + 1..best.lastIndex) {
+                    val candidate = best.take(i) + best.subList(i, k + 1).asReversed() + best.drop(k + 1)
+                    if (routeComparisonLength(start, finish, candidate, beacon, elevationLookup) < routeComparisonLength(start, finish, best, beacon, elevationLookup)) {
+                        best = candidate
+                        improved = true
+                    }
+                }
+            }
+        }
+        return best
+    }
+
+    private fun routeComparisonLength(
+        start: CourseGeoPoint,
+        finish: CourseGeoPoint,
+        controls: List<ControlAnalysisPoint>,
+        beacon: ControlAnalysisPoint?,
+        elevationLookup: (CourseGeoPoint) -> Double?
+    ): Double {
+        val allControls = if (beacon != null) controls + beacon else controls
+        val sampled = sampledCalculatedRoutePoints(start, allControls, finish, elevationLookup)
+        return effectiveLengthMetersOrNull(sampled) ?: (listOf(start) + allControls.mapNotNull { it.point } + finish).straightLineMeters()
     }
 
     private fun routeGeometryTiming(
@@ -1476,6 +1742,13 @@ object DesktopCourseAnalyzer {
         }
     }
 
+    private fun EventControl.isSprintFastFox(): Boolean =
+        type == ControlPointType.CONTROL &&
+            (siCode in 41..45 || label.trim().uppercase().startsWith("F") || publicLabel.orEmpty().trim().uppercase().startsWith("F"))
+
+    private fun factorial(value: Int): Int =
+        if (value <= 1) 1 else (2..value).fold(1) { acc, next -> acc * next }
+
     private fun waitRenumbering(
         providedControls: List<EventControl>,
         timingForSlots: (Map<String, RenumberingSlot>) -> RouteTimingAnalysis
@@ -1536,6 +1809,196 @@ object DesktopCourseAnalyzer {
         return waitRows
             .filter { it.controlId in foxIds }
             .sumOf { it.waitSeconds }
+    }
+
+    private fun routeRuleChecks(
+        routeLabel: String,
+        raceType: RaceType,
+        categoryName: String,
+        foxCount: Int,
+        comparisonLengthMeters: Int?,
+        measurementLabel: String,
+        estimatedSeconds: Int?
+    ): List<DesktopCourseGoodnessMetric> {
+        val requirement = categoryRequirement(categoryName, raceType)
+        val categoryKey = categoryRuleKey(categoryName)
+        return buildList {
+            if (requirement == null) {
+                add(
+                    DesktopCourseGoodnessMetric(
+                        "$routeLabel USA category requirements",
+                        "Unknown for category ${categoryKey ?: categoryName}",
+                        DesktopCourseMetricStatus.Unknown
+                    )
+                )
+            } else {
+                add(
+                    DesktopCourseGoodnessMetric(
+                        "$routeLabel fox count",
+                        "$foxCount foxes; required ${requirement.controlRangeText()} for ${categoryKey ?: categoryName}",
+                        if (foxCount in requirement.minControls..requirement.maxControls) DesktopCourseMetricStatus.Good else DesktopCourseMetricStatus.Warning
+                    )
+                )
+                when (raceType) {
+                    RaceType.SPRINT -> add(
+                        DesktopCourseGoodnessMetric(
+                            "$routeLabel Sprint target time",
+                            estimatedSeconds?.let { "${compactDurationText(it)}; target approximately ${compactDurationText(SPRINT_TARGET_SECONDS)}" }
+                                ?: "Unknown; target approximately ${compactDurationText(SPRINT_TARGET_SECONDS)}",
+                            when {
+                                estimatedSeconds == null -> DesktopCourseMetricStatus.Unknown
+                                abs(estimatedSeconds - SPRINT_TARGET_SECONDS) <= SPRINT_TARGET_SECONDS * 0.15 -> DesktopCourseMetricStatus.Good
+                                else -> DesktopCourseMetricStatus.Warning
+                            }
+                        )
+                    )
+                    RaceType.CLASSIC, RaceType.SHORT, RaceType.FOXORING -> add(
+                        DesktopCourseGoodnessMetric(
+                            "$routeLabel course length",
+                            comparisonLengthMeters?.let {
+                                "${twoDecimals(it / 1000.0)} km $measurementLabel; required ${requirement.lengthRangeText()}"
+                            } ?: "Unknown; required ${requirement.lengthRangeText()}",
+                            when {
+                                comparisonLengthMeters == null -> DesktopCourseMetricStatus.Unknown
+                                comparisonLengthMeters in requirement.minLengthMeters..requirement.maxLengthMeters -> DesktopCourseMetricStatus.Good
+                                else -> DesktopCourseMetricStatus.Warning
+                            }
+                        )
+                    )
+                    RaceType.ORIENTEERING -> Unit
+                }
+            }
+        }
+    }
+
+    private fun coursePointRuleChecks(
+        raceType: RaceType,
+        categoryName: String,
+        start: CourseGeoPoint?,
+        foxes: List<ControlAnalysisPoint>,
+        spectator: ControlAnalysisPoint?,
+        beacon: ControlAnalysisPoint?
+    ): List<DesktopCourseGoodnessMetric> {
+        val spacing = spacingRuleSet(raceType, categoryName) ?: return emptyList()
+        val startChecks = spacing.startCheckedPoints(foxes, beacon)
+        val pairChecks = spacing.pairCheckedPoints(foxes, spectator, beacon)
+        return listOf(
+            spacingMetric(
+                label = "${spacing.formatLabel} start spacing",
+                requiredMeters = spacing.startMinMeters,
+                distances = startChecks.mapNotNull { point ->
+                    val startPoint = start ?: return@mapNotNull null
+                    point.label to startPoint.distanceMetersTo(point.point)
+                }
+            ),
+            spacingMetric(
+                label = "${spacing.formatLabel} transmitter spacing",
+                requiredMeters = spacing.pairMinMeters,
+                distances = pairChecks.flatMapIndexed { index, first ->
+                    pairChecks.drop(index + 1).map { second ->
+                        "${first.label}-${second.label}" to first.point.distanceMetersTo(second.point)
+                    }
+                }
+            )
+        )
+    }
+
+    private fun spacingMetric(
+        label: String,
+        requiredMeters: Int,
+        distances: List<Pair<String, Double>>
+    ): DesktopCourseGoodnessMetric {
+        if (distances.isEmpty()) {
+            return DesktopCourseGoodnessMetric(label, "Unknown; required at least $requiredMeters m", DesktopCourseMetricStatus.Unknown)
+        }
+        val shortest = distances.minBy { it.second }
+        val status = if (shortest.second + 0.5 >= requiredMeters) DesktopCourseMetricStatus.Good else DesktopCourseMetricStatus.Warning
+        val prefix = if (status == DesktopCourseMetricStatus.Good) "OK" else "Violation"
+        return DesktopCourseGoodnessMetric(
+            label = label,
+            value = "$prefix: ${shortest.first} ${shortest.second.roundToInt()} m; required at least $requiredMeters m",
+            status = status
+        )
+    }
+
+    private fun categoryRequirement(categoryName: String, raceType: RaceType): CourseRuleRequirement? {
+        val key = categoryRuleKey(categoryName) ?: return null
+        return when (raceType) {
+            RaceType.FOXORING -> foxoringCategoryRequirements[key]
+            RaceType.SPRINT -> classicCategoryRequirements[key]?.let {
+                it.copy(minControls = it.minControls * 2, maxControls = it.maxControls * 2)
+            }
+            RaceType.CLASSIC, RaceType.SHORT -> youthClassicCategoryRequirements[key] ?: classicCategoryRequirements[key]
+            RaceType.ORIENTEERING -> null
+        }
+    }
+
+    private fun spacingRuleSet(raceType: RaceType, categoryName: String): CourseSpacingRuleSet? {
+        val key = categoryRuleKey(categoryName)
+        return when (raceType) {
+            RaceType.SPRINT -> CourseSpacingRuleSet(
+                "Sprint",
+                100,
+                100,
+                includeBeaconInStartCheck = false,
+                includeSpectatorInPairCheck = true,
+                includeBeaconInPairCheck = true
+            )
+            RaceType.FOXORING -> CourseSpacingRuleSet(
+                "Foxoring",
+                250,
+                250,
+                includeBeaconInStartCheck = true,
+                includeSpectatorInPairCheck = false,
+                includeBeaconInPairCheck = true
+            )
+            RaceType.CLASSIC, RaceType.SHORT -> CourseSpacingRuleSet(
+                formatLabel = if (key in youthClassicCategoryRequirements) "Youth Classic" else "Classic",
+                startMinMeters = if (key in youthClassicCategoryRequirements) 500 else 750,
+                pairMinMeters = 400,
+                includeBeaconInStartCheck = true,
+                includeSpectatorInPairCheck = false,
+                includeBeaconInPairCheck = true
+            )
+            RaceType.ORIENTEERING -> null
+        }
+    }
+
+    private fun CourseSpacingRuleSet.startCheckedPoints(
+        foxes: List<ControlAnalysisPoint>,
+        beacon: ControlAnalysisPoint?
+    ): List<LabeledCoursePoint> =
+        buildList {
+            foxes.mapNotNullTo(this) { it.labeledPoint() }
+            if (includeBeaconInStartCheck) {
+                beacon?.labeledPoint()?.let(::add)
+            }
+        }
+
+    private fun CourseSpacingRuleSet.pairCheckedPoints(
+        foxes: List<ControlAnalysisPoint>,
+        spectator: ControlAnalysisPoint?,
+        beacon: ControlAnalysisPoint?
+    ): List<LabeledCoursePoint> =
+        buildList {
+            foxes.mapNotNullTo(this) { it.labeledPoint() }
+            if (includeSpectatorInPairCheck) {
+                spectator?.labeledPoint()?.let(::add)
+            }
+            if (includeBeaconInPairCheck) {
+                beacon?.labeledPoint()?.let(::add)
+            }
+        }
+
+    private fun ControlAnalysisPoint.labeledPoint(): LabeledCoursePoint? =
+        point?.let { LabeledCoursePoint(control.analysisRouteLabel(), it) }
+
+    private fun categoryRuleKey(categoryName: String): String? {
+        val rawKey = Regex("""\b[WMD]\d{2}\b""")
+            .find(categoryName.uppercase())
+            ?.value
+            ?: return null
+        return if (rawKey.startsWith("D")) "W${rawKey.drop(1)}" else rawKey
     }
 
     private fun goodnessMetrics(
@@ -1925,7 +2388,42 @@ private data class RouteMapSourcePoint(
 private data class CalculatedRoute(
     val controls: List<ControlAnalysisPoint>,
     val distanceMeters: Double,
-    val routeCount: Int
+    val routeCount: Int,
+    val calculationNote: String? = null
+)
+
+private data class CourseRuleRequirement(
+    val minControls: Int,
+    val maxControls: Int,
+    val minLengthMeters: Int,
+    val maxLengthMeters: Int
+) {
+    fun controlRangeText(): String =
+        if (minControls == maxControls) minControls.toString() else "$minControls-$maxControls"
+
+    fun lengthRangeText(): String =
+        "${lengthText(minLengthMeters)}-${lengthText(maxLengthMeters)}"
+
+    private fun lengthText(meters: Int): String =
+        if (meters % 1000 == 0) {
+            "${meters / 1000} km"
+        } else {
+            "${meters / 1000}.${(meters % 1000).toString().padStart(3, '0').trimEnd('0')} km"
+        }
+}
+
+private data class CourseSpacingRuleSet(
+    val formatLabel: String,
+    val startMinMeters: Int,
+    val pairMinMeters: Int,
+    val includeBeaconInStartCheck: Boolean,
+    val includeSpectatorInPairCheck: Boolean,
+    val includeBeaconInPairCheck: Boolean
+)
+
+private data class LabeledCoursePoint(
+    val label: String,
+    val point: CourseGeoPoint
 )
 
 private data class RenumberingFox(

@@ -7202,6 +7202,7 @@ private fun CourseAnalysisSectionView(section: DesktopCourseAnalysisSection, inc
             fontSize = 13.sp
         )
         CourseAnalysisRow(section.routeOrderLabel, section.routeOrder.joinToString(" -> ").ifBlank { "Unknown" })
+        CourseAnalysisRuleCheckRows(section.ruleChecks)
         if (section.summaryOnly) {
             return@Column
         }
@@ -7276,6 +7277,7 @@ private fun CourseAnalysisSummarySection(result: DesktopCourseAnalysisSummary) {
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
+        CourseAnalysisRow("Rules applied", result.rulesDocumentLabel)
         CourseAnalysisDetailRows(result)
         CourseAnalysisMetricRows(result.metrics)
         CourseAnalysisProfileComparison(result.profileComparison, result.elevationCacheNotes)
@@ -7574,6 +7576,32 @@ private fun CourseAnalysisMetricRows(metrics: List<DesktopCourseGoodnessMetric>)
                 label = metric.label,
                 value = metric.value,
                 valueColor = when (metric.status) {
+                    DesktopCourseMetricStatus.Good -> DesktopPalette.Connected
+                    DesktopCourseMetricStatus.Warning -> DesktopPalette.Error
+                    DesktopCourseMetricStatus.Unknown -> DesktopPalette.Disconnected
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CourseAnalysisRuleCheckRows(ruleChecks: List<DesktopCourseGoodnessMetric>) {
+    if (ruleChecks.isEmpty()) {
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "USA rules checks",
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        ruleChecks.forEach { check ->
+            CourseAnalysisRow(
+                label = check.label,
+                value = check.value,
+                valueColor = when (check.status) {
                     DesktopCourseMetricStatus.Good -> DesktopPalette.Connected
                     DesktopCourseMetricStatus.Warning -> DesktopPalette.Error
                     DesktopCourseMetricStatus.Unknown -> DesktopPalette.Disconnected

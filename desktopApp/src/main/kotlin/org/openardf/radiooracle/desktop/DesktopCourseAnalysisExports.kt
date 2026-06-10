@@ -31,6 +31,7 @@ object DesktopCourseAnalysisExports {
         buildString {
             appendLine("Course Analyzer")
             appendLine("Category: ${result.categoryName}")
+            appendLine("Rules applied: ${result.rulesDocumentLabel}")
             appendLine()
             result.providedRouteSection?.let { section ->
                 appendSection(section, includeRenumbering = true)
@@ -52,6 +53,7 @@ object DesktopCourseAnalysisExports {
         appendLine(section.title)
         appendWrapped(section.explanation)
         appendLine("${section.routeOrderLabel}: ${section.routeOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
+        appendRuleChecks(section.ruleChecks)
         if (section.summaryOnly) {
             return
         }
@@ -82,6 +84,7 @@ object DesktopCourseAnalysisExports {
     private fun StringBuilder.appendSummary(result: DesktopCourseAnalysisSummary) {
         appendLine("Section 3: Summary")
         appendWrapped(result.summaryExplanation)
+        appendLine("Rules applied: ${result.rulesDocumentLabel}")
         appendLine("Routes compared: ${result.calculatedRouteCount}")
         appendLine("Calculated ideal route (calculated fox numbering): ${result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
         appendLine("Stored ideal route: ${result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
@@ -142,6 +145,18 @@ object DesktopCourseAnalysisExports {
                     appendLine("  ${point.label}: x=${twoDecimalText(point.xFraction)}, y=${twoDecimalText(point.yFraction)}, ${point.type}")
                 }
             }
+        }
+    }
+
+    private fun StringBuilder.appendRuleChecks(ruleChecks: List<DesktopCourseGoodnessMetric>) {
+        if (ruleChecks.isEmpty()) {
+            return
+        }
+        appendLine()
+        appendLine("USA rules checks")
+        ruleChecks.forEach { check ->
+            val prefix = if (check.status == DesktopCourseMetricStatus.Warning) "RULE VIOLATION: " else ""
+            appendLine("$prefix${check.label}: ${check.value} (${check.status.name})")
         }
     }
 
@@ -363,6 +378,11 @@ object DesktopCourseAnalysisExports {
             lines.forEachIndexed { index, line ->
                 if (index > 0) {
                     appendLine("T*")
+                }
+                if (line.startsWith("RULE VIOLATION:")) {
+                    appendLine("0.78 0.10 0.10 rg")
+                } else {
+                    appendLine("0 0 0 rg")
                 }
                 appendLine("(${line.toPdfText()}) Tj")
             }

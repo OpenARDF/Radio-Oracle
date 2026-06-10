@@ -143,6 +143,57 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun flagsUsaRulesViolationsInSectionChecksAndExportText() {
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 3),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo(foxCount = 3),
+            protectedIdealOrderText = "31 32 33 Beacon"
+        )
+
+        val sectionChecks = requireNotNull(summary.providedRouteSection).ruleChecks
+        assertEquals("USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026", summary.rulesDocumentLabel)
+        assertTrue(sectionChecks.any { it.label == "Stored route fox count" && it.status == DesktopCourseMetricStatus.Warning })
+        assertTrue(sectionChecks.any { it.label == "Stored route course length" && it.status == DesktopCourseMetricStatus.Warning })
+        assertTrue(sectionChecks.any { it.label == "Classic start spacing" && it.status == DesktopCourseMetricStatus.Good })
+
+        val reportText = DesktopCourseAnalysisExports.reportText(summary)
+        assertTrue(reportText.contains("Rules applied: USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026"))
+        assertTrue(reportText.contains("RULE VIOLATION: Stored route fox count"))
+        assertTrue(reportText.contains("RULE VIOLATION: Stored route course length"))
+    }
+
+    @Test
+    fun calculatesSprintRouteAsSeparateFirstAndFastLoops() {
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = sprintProjectFile(),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = sprintProtectedInfo(),
+            protectedIdealOrderText = "2 1 Spectator F2 F1 Beacon"
+        )
+
+        val section = requireNotNull(summary.calculatedRouteSection)
+        assertEquals(4, summary.calculatedRouteCount)
+        assertEquals(listOf("S", "1", "2", "Spectator", "F1", "F2", "B"), section.routeOrder)
+        assertTrue(section.explanation.contains("Sprint route calculated as separate first and fast loops"))
+        assertTrue(section.ruleChecks.any { it.label == "Calculated route Sprint target time" })
+        assertTrue(section.ruleChecks.any { it.label == "Sprint transmitter spacing" && it.value.contains("F1-Spectator") })
+    }
+
+    @Test
+    fun usesNonExhaustiveFoxoringRouteFallbackAboveSixFoxes() {
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 7, raceType = RaceType.FOXORING),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo(foxCount = 7),
+            protectedIdealOrderText = "37 36 35 34 33 32 31 Beacon"
+        )
+
+        assertEquals(1, summary.calculatedRouteCount)
+        assertTrue(requireNotNull(summary.calculatedRouteSection).explanation.contains("non-exhaustive nearest-neighbor plus 2-opt"))
+    }
+
+    @Test
     fun omitsClassicWaitAndFindPunchAllowanceForSprintAndFoxoring() {
         listOf(RaceType.SPRINT, RaceType.FOXORING).forEach { raceType ->
             val summary = DesktopCourseAnalyzer.analyze(
@@ -819,6 +870,109 @@ class DesktopCourseAnalyzerTest {
             route = route,
             controlPoints = controls,
             courseObjects = courseObjects
+        )
+    }
+
+    private fun sprintProjectFile(): EventProjectFile {
+        val controls = listOf(
+            EventControl("control-slow-1", RACE_ID, "1", 31, ControlPointType.CONTROL, publicLabel = "1"),
+            EventControl("control-slow-2", RACE_ID, "2", 32, ControlPointType.CONTROL, publicLabel = "2"),
+            EventControl("control-fast-1", RACE_ID, "F1", 41, ControlPointType.CONTROL, publicLabel = "F1"),
+            EventControl("control-fast-2", RACE_ID, "F2", 42, ControlPointType.CONTROL, publicLabel = "F2"),
+            EventControl("control-spectator", RACE_ID, "Spectator", 46, ControlPointType.SEPARATOR, publicLabel = "Spectator"),
+            EventControl("control-beacon", RACE_ID, "Beacon", 99, ControlPointType.BEACON, publicLabel = "Beacon")
+        )
+        val category = EventCategory(
+            id = CATEGORY_ID,
+            raceId = RACE_ID,
+            name = "M21",
+            isMan = true,
+            maxAge = 21,
+            lengthMeters = 0,
+            climbMeters = 0,
+            order = 1,
+            differentProperties = false,
+            raceType = null,
+            raceBand = null,
+            timeLimitSeconds = null,
+            controlPointsString = ""
+        )
+        return EventProjectFile(
+            raceData = EventRaceData(
+                race = EventRace(
+                    id = RACE_ID,
+                    name = "Sprint Test Event",
+                    apiKey = "",
+                    startDateTimeIso = "2026-06-06T09:00:00",
+                    raceType = RaceType.SPRINT,
+                    raceLevel = RaceLevel.PRACTICE,
+                    raceBand = RaceBand.M80,
+                    timeLimitSeconds = 3_600
+                ),
+                categories = listOf(
+                    EventCategoryData(
+                        category = category,
+                        controlPoints = controls.mapIndexed { index, control ->
+                            EventControlPoint(
+                                id = "cp-${control.id}",
+                                categoryId = CATEGORY_ID,
+                                siCode = control.siCode,
+                                type = control.type,
+                                order = index + 1,
+                                controlId = control.id
+                            )
+                        },
+                        competitors = emptyList()
+                    )
+                ),
+                aliases = emptyList(),
+                competitorData = emptyList(),
+                unmatchedReadoutData = emptyList(),
+                controls = controls
+            )
+        )
+    }
+
+    private fun sprintProtectedInfo(): ProtectedCourseInfo {
+        val route = (0..7).map { index ->
+            ProtectedCourseRoutePoint(
+                latitude = 39.0,
+                longitude = -95.0 + index * 0.01,
+                elevationMeters = 100.0
+            )
+        }
+        val controls = listOf(
+            ProtectedCourseControlPoint("control-slow-1", "1", 39.0, -94.99, ControlPointType.CONTROL, 100.0),
+            ProtectedCourseControlPoint("control-slow-2", "2", 39.0, -94.98, ControlPointType.CONTROL, 100.0),
+            ProtectedCourseControlPoint("control-spectator", "Spectator", 39.0, -94.9605, ControlPointType.SEPARATOR, 100.0),
+            ProtectedCourseControlPoint("control-fast-1", "F1", 39.0, -94.96, ControlPointType.CONTROL, 100.0),
+            ProtectedCourseControlPoint("control-fast-2", "F2", 39.0, -94.95, ControlPointType.CONTROL, 100.0),
+            ProtectedCourseControlPoint("control-beacon", "Beacon", 39.0, -94.94, ControlPointType.BEACON, 100.0)
+        )
+        return ProtectedCourseInfo(
+            idealOrder = "1 2 Spectator F1 F2 Beacon",
+            lengthMeters = 7_000,
+            climbMeters = 0,
+            sourceName = "sprint-test.kml",
+            sampledPointCount = route.size,
+            route = route,
+            controlPoints = controls,
+            courseObjects = listOf(
+                ProtectedCourseObjectPoint("start", "Start", ProtectedCourseObjectType.START, 39.0, -95.0, 100.0)
+            ) + controls.map { control ->
+                ProtectedCourseObjectPoint(
+                    id = control.controlId,
+                    label = control.label,
+                    type = when (control.type) {
+                        ControlPointType.CONTROL -> ProtectedCourseObjectType.CONTROL
+                        ControlPointType.BEACON -> ProtectedCourseObjectType.BEACON
+                        ControlPointType.SEPARATOR -> ProtectedCourseObjectType.SPECTATOR
+                    },
+                    latitude = control.latitude,
+                    longitude = control.longitude,
+                    elevationMeters = control.elevationMeters
+                )
+            } + ProtectedCourseObjectPoint("finish", "Finish", ProtectedCourseObjectType.FINISH, 39.0, -94.93, 100.0)
         )
     }
 
