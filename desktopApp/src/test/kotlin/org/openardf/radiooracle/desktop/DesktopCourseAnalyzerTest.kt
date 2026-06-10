@@ -111,10 +111,18 @@ class DesktopCourseAnalyzerTest {
         assertEquals(emptyList<DesktopCourseWaitRow>(), requireNotNull(summary.calculatedRouteSection).waitRows)
         assertEquals(listOf(null, null), summary.providedLegRows.takeLast(2).map { it.waitSeconds })
         assertEquals(listOf(null, null), summary.providedLegRows.takeLast(2).map { it.findPunchSeconds })
-        assertTrue(summary.metrics.any { it.label == "Effective length" && it.value == "5.00 km" })
+        assertTrue(summary.metrics.any {
+            it.label == "Effective length" &&
+                it.value == "5.00 km (required 9-12 km)" &&
+                it.status == DesktopCourseMetricStatus.Warning
+        })
         assertTrue(
             "Metrics were ${summary.metrics}",
-            summary.metrics.any { it.label == "Classic shortest-route climb limit" && it.status == DesktopCourseMetricStatus.Good }
+            summary.metrics.any {
+                it.label == "Climb percent of route length" &&
+                    it.value.contains("(limit 6.0%)") &&
+                    it.status == DesktopCourseMetricStatus.Good
+            }
         )
     }
 
@@ -155,10 +163,10 @@ class DesktopCourseAnalyzerTest {
         assertEquals("USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026", summary.rulesDocumentLabel)
         assertTrue(sectionChecks.any { it.label == "Stored route fox count" && it.status == DesktopCourseMetricStatus.Warning })
         assertTrue(sectionChecks.any { it.label == "Stored route course length" && it.status == DesktopCourseMetricStatus.Warning })
-        assertTrue(sectionChecks.any { it.label == "Classic minimum start spacing" && it.status == DesktopCourseMetricStatus.Good })
+        assertTrue(sectionChecks.any { it.label == "Classic start exclusion zone" && it.status == DesktopCourseMetricStatus.Good })
         assertTrue(sectionChecks.any { it.label == "Stored route fox count" && it.value == "3 foxes (required 5 for M21)" })
         assertTrue(sectionChecks.any { it.label == "Stored route course length" && it.value.contains("(required 9-12 km)") })
-        assertTrue(sectionChecks.any { it.label == "Classic minimum start spacing" && it.value.contains("nearest checked point") && it.value.contains("(required at least 750 m)") })
+        assertTrue(sectionChecks.any { it.label == "Classic start exclusion zone" && it.value.contains("nearest transmitter") && it.value.contains("(required at least 750 m)") })
         assertTrue(sectionChecks.any { it.label == "Classic minimum transmitter spacing" && it.value.contains("closest pair") })
 
         val reportText = DesktopCourseAnalysisExports.reportText(summary)
@@ -234,7 +242,11 @@ class DesktopCourseAnalyzerTest {
 
         assertTrue(
             "Metrics were ${summary.metrics}",
-            summary.metrics.any { it.label == "Classic shortest-route climb limit" && it.status == DesktopCourseMetricStatus.Warning }
+            summary.metrics.any {
+                it.label == "Climb percent of route length" &&
+                    it.value.contains("(limit 6.0%)") &&
+                    it.status == DesktopCourseMetricStatus.Warning
+            }
         )
     }
 

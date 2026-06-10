@@ -615,6 +615,7 @@ object DesktopCourseAnalyzer {
         }
         val metrics = goodnessMetrics(
             raceType = raceType,
+            categoryName = category.name,
             routeLengthMeters = protectedCourseInfo?.lengthMeters,
             climbMeters = protectedCourseInfo?.climbMeters,
             calculatedRouteLengthMeters = calculatedRoute?.distanceMeters?.roundToInt(),
@@ -1884,7 +1885,7 @@ object DesktopCourseAnalyzer {
         val pairChecks = spacing.pairCheckedPoints(foxes, spectator, beacon)
         return listOf(
             spacingMetric(
-                label = "${spacing.formatLabel} minimum start spacing",
+                label = "${spacing.formatLabel} start exclusion zone",
                 requiredMeters = spacing.startMinMeters,
                 distances = startChecks.mapNotNull { point ->
                     val startPoint = start ?: return@mapNotNull null
@@ -1916,6 +1917,8 @@ object DesktopCourseAnalyzer {
         val prefix = if (status == DesktopCourseMetricStatus.Good) "OK" else "Violation"
         val comparedItem = if (label.contains("transmitter", ignoreCase = true)) {
             "closest pair"
+        } else if (label.contains("start exclusion zone", ignoreCase = true)) {
+            "nearest transmitter"
         } else {
             "nearest checked point"
         }
@@ -2008,6 +2011,7 @@ object DesktopCourseAnalyzer {
 
     private fun goodnessMetrics(
         raceType: RaceType,
+        categoryName: String,
         routeLengthMeters: Int?,
         climbMeters: Int?,
         calculatedRouteLengthMeters: Int?,
@@ -2022,6 +2026,8 @@ object DesktopCourseAnalyzer {
             RaceType.FOXORING -> FOXORING_TARGET_SECONDS
             else -> CLASSIC_TARGET_SECONDS
         }
+        val lengthRequirement = categoryRequirement(categoryName, raceType)
+            ?.takeIf { raceType == RaceType.CLASSIC || raceType == RaceType.SHORT || raceType == RaceType.FOXORING }
         return buildList {
             add(
                 DesktopCourseGoodnessMetric(
@@ -2034,24 +2040,6 @@ object DesktopCourseAnalyzer {
                     }
                 )
             )
-            val climbPercent = if (routeLengthMeters != null && routeLengthMeters > 0 && climbMeters != null) {
-                climbMeters.toDouble() / routeLengthMeters.toDouble() * 100.0
-            } else {
-                null
-            }
-            add(
-                DesktopCourseGoodnessMetric(
-                    "Climb percent of route length",
-                    climbPercent?.let { "${oneDecimal(it)}%" } ?: "Unknown",
-                    if (climbPercent == null) {
-                        DesktopCourseMetricStatus.Unknown
-                    } else if (raceType == RaceType.CLASSIC && climbPercent > 6.0) {
-                        DesktopCourseMetricStatus.Warning
-                    } else {
-                        DesktopCourseMetricStatus.Good
-                    }
-                )
-            )
             val calculatedClimbPercent = if (
                 calculatedRouteLengthMeters != null &&
                 calculatedRouteLengthMeters > 0 &&
@@ -2061,27 +2049,51 @@ object DesktopCourseAnalyzer {
             } else {
                 null
             }
-            if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
-                add(
-                    DesktopCourseGoodnessMetric(
-                        "Classic shortest-route climb limit",
-                        calculatedClimbPercent?.let {
-                            val lengthKm = requireNotNull(calculatedRouteLengthMeters).toDouble() / 1000.0
-                            "${requireNotNull(calculatedRouteClimbMeters)} m / ${twoDecimals(lengthKm)} km = ${oneDecimal(it)}% (limit 6.0%)"
-                        } ?: "Unknown",
-                        when {
-                            calculatedClimbPercent == null -> DesktopCourseMetricStatus.Unknown
-                            calculatedClimbPercent <= 6.0 -> DesktopCourseMetricStatus.Good
-                            else -> DesktopCourseMetricStatus.Warning
-                        }
-                    )
-                )
+            val storedClimbPercent = if (routeLengthMeters != null && routeLengthMeters > 0 && climbMeters != null) {
+                climbMeters.toDouble() / routeLengthMeters.toDouble() * 100.0
+            } else {
+                null
             }
+            val climbMetric = if (calculatedClimbPercent != null && calculatedRouteLengthMeters != null && calculatedRouteClimbMeters != null) {
+                Triple(calculatedClimbPercent, calculatedRouteLengthMeters, calculatedRouteClimbMeters)
+            } else if (storedClimbPercent != null && routeLengthMeters != null && climbMeters != null) {
+                Triple(storedClimbPercent, routeLengthMeters, climbMeters)
+            } else {
+                null
+            }
+            val appliesClimbLimit = raceType == RaceType.CLASSIC || raceType == RaceType.SHORT
+            add(
+                DesktopCourseGoodnessMetric(
+                    "Climb percent of route length",
+                    climbMetric?.let { (percent, lengthMeters, climbValueMeters) ->
+                        val lengthKm = lengthMeters.toDouble() / 1000.0
+                        val result = "$climbValueMeters m / ${twoDecimals(lengthKm)} km = ${oneDecimal(percent)}%"
+                        if (appliesClimbLimit) "$result (limit 6.0%)" else result
+                    } ?: if (appliesClimbLimit) "Unknown (limit 6.0%)" else "Unknown",
+                    when {
+                        climbMetric == null -> DesktopCourseMetricStatus.Unknown
+                        appliesClimbLimit && climbMetric.first > 6.0 -> DesktopCourseMetricStatus.Warning
+                        else -> DesktopCourseMetricStatus.Good
+                    }
+                )
+            )
             add(
                 DesktopCourseGoodnessMetric(
                     "Effective length",
-                    effectiveLengthMeters?.let { "${twoDecimals(it / 1000.0)} km" } ?: "Unknown",
-                    if (effectiveLengthMeters == null) DesktopCourseMetricStatus.Unknown else DesktopCourseMetricStatus.Good
+                    effectiveLengthMeters?.let { effectiveLength ->
+                        val measured = "${twoDecimals(effectiveLength / 1000.0)} km"
+                        if (lengthRequirement == null) {
+                            measured
+                        } else {
+                            "$measured (required ${lengthRequirement.lengthRangeText()})"
+                        }
+                    } ?: lengthRequirement?.let { "Unknown (required ${it.lengthRangeText()})" } ?: "Unknown",
+                    when {
+                        effectiveLengthMeters == null -> DesktopCourseMetricStatus.Unknown
+                        lengthRequirement == null -> DesktopCourseMetricStatus.Good
+                        effectiveLengthMeters in lengthRequirement.minLengthMeters..lengthRequirement.maxLengthMeters -> DesktopCourseMetricStatus.Good
+                        else -> DesktopCourseMetricStatus.Warning
+                    }
                 )
             )
             val totalWait = waitRows.sumOf { it.waitSeconds }
