@@ -774,7 +774,7 @@ object DesktopNavigation {
                     ),
                     item(
                         "setup.event-file.diagnostics",
-                        "Testing",
+                        "Readiness",
                         workflow,
                         DesktopSection.EventDiagnostics,
                         requiresEventFile = false

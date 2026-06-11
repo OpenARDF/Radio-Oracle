@@ -348,6 +348,7 @@ fun main(args: Array<String>) = application {
         var protectedCoursePassword by remember { mutableStateOf<String?>(null) }
         var protectedIdealOrderByCategoryId by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
         var protectedCourseInfoByCategoryId by remember { mutableStateOf<Map<String, ProtectedCourseInfo>>(emptyMap()) }
+        var recentImportReport by remember { mutableStateOf<DesktopImportReport?>(null) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var isCourseKmlKmzUnlockDialogVisible by remember { mutableStateOf(false) }
@@ -1429,6 +1430,17 @@ fun main(args: Array<String>) = application {
             projectFile = projectSession.updateCurrentProject { updatedProject }
             syncProtectedCourseState(updatedProject, review.password)
             pendingCourseKmlKmzImportReview = null
+            recentImportReport = DesktopImportReport(
+                title = "Controls/route KML/KMZ: ${review.sourceName}",
+                lines = listOf(
+                    "${selectedSummary.importedCategoryCount} categories received stored route data.",
+                    "${selectedSummary.duplicateCategoryCount} duplicate categories skipped.",
+                    "${selectedSummary.changedControlLocationCount} control locations updated.",
+                    "${selectedSummary.categoryAssignmentUpdates.size.takeIf { applyCategoryAssignments } ?: 0} assigned-control lists replaced.",
+                    "${selectedSummary.createdCategoryNames.size} missing categories created.",
+                    "${selectedSummary.missingCategoryNames.size} category names were missing before review."
+                ) + selectedSummary.eventTypeWarnings
+            )
             if (fetchElevations) {
                 startCourseKmlKmzElevationFetch(review.copy(summary = selectedSummary))
             } else {
@@ -1773,6 +1785,16 @@ fun main(args: Array<String>) = application {
                 }
                 syncProjectState()
                 pendingCompetitorsCsvImportReview = null
+                recentImportReport = DesktopImportReport(
+                    title = "Competitors CSV: ${path.fileName}",
+                    lines = listOf(
+                        "$importedRows competitors added.",
+                        "$updatedRows competitors updated.",
+                        "$skippedRows competitors skipped.",
+                        "$deletedRows competitors removed by sync.",
+                        "${result.invalidLines.size} invalid rows skipped."
+                    ) + importWarnings
+                )
                 projectStatusText = competitorImportStatusText(
                     importedRows = importedRows,
                     updatedRows = updatedRows,
@@ -1826,6 +1848,17 @@ fun main(args: Array<String>) = application {
                 }
                 syncProjectState()
                 pendingCategoriesCsvImportReview = null
+                recentImportReport = DesktopImportReport(
+                    title = "Categories CSV: ${review.path.fileName}",
+                    lines = listOf(
+                        "$importedRows categories added.",
+                        "$updatedRows categories updated by name.",
+                        "${review.invalidLineCount} invalid rows skipped.",
+                        "${review.preview.affectedCompetitorCount} competitors are in updated categories.",
+                        "${review.preview.categoriesWithAssignedControlsReplacedCount} existing assigned-control lists replaced.",
+                        "${review.preview.categoriesWithProtectedCoursePreservedCount} protected course records preserved."
+                    ) + review.preview.eventTypeWarnings
+                )
                 projectStatusText =
                     "Imported ${review.path.fileName}: $importedRows added, $updatedRows updated, ${review.invalidLineCount} invalid."
             }.onFailure { error ->
@@ -1867,6 +1900,17 @@ fun main(args: Array<String>) = application {
                 }
                 syncProjectState()
                 pendingControlsCsvImportReview = null
+                recentImportReport = DesktopImportReport(
+                    title = "Controls CSV: ${review.path.fileName}",
+                    lines = listOf(
+                        "${review.preview.addedCount} controls added.",
+                        "${review.preview.changedCount} controls updated.",
+                        "${review.preview.unchangedCount} controls unchanged.",
+                        "${review.invalidLineCount} invalid rows skipped.",
+                        "${review.preview.affectedAssignedCategoryCount} assigned categories affected.",
+                        "${review.preview.affectedProtectedCourseCount} stored courses affected."
+                    ) + review.preview.eventTypeWarnings
+                )
                 projectStatusText = importStatusText(
                     "Imported",
                     review.rows.size,
@@ -2523,6 +2567,7 @@ fun main(args: Array<String>) = application {
             isProtectedCourseOrderUnlocked = protectedCoursePassword != null,
             protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+            recentImportReport = recentImportReport,
             onRetrieveMissingCourseElevations = ::startCourseAnalysisElevationFetch,
             onDownloadVenueElevationCache = ::startVenueElevationCacheDownload,
             onOpenVenueElevationCacheFolder = ::openVenueElevationCacheFolder,
@@ -3985,6 +4030,11 @@ private data class PendingAssignedControlsWarning(
     val previousControlPointsText: String?
 )
 
+private data class DesktopImportReport(
+    val title: String,
+    val lines: List<String>
+)
+
 private data class PendingCourseKmlKmzImportReview(
     val sourceName: String,
     val path: Path,
@@ -4151,6 +4201,7 @@ private fun RadioOManagerDesktopApp(
     isProtectedCourseOrderUnlocked: Boolean = false,
     protectedIdealOrderByCategoryId: Map<String, String> = emptyMap(),
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
+    recentImportReport: DesktopImportReport? = null,
     onRetrieveMissingCourseElevations: (String) -> Unit = {},
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit = { _, _, _, _, _, _ -> },
     onOpenVenueElevationCacheFolder: () -> Unit = {},
@@ -4332,6 +4383,7 @@ private fun RadioOManagerDesktopApp(
                                 isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
                                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                                recentImportReport = recentImportReport,
                                 onRetrieveMissingCourseElevations = onRetrieveMissingCourseElevations,
                                 onDownloadVenueElevationCache = onDownloadVenueElevationCache,
                                 onOpenVenueElevationCacheFolder = onOpenVenueElevationCacheFolder,
@@ -4811,6 +4863,7 @@ private fun SectionWorkspace(
     isProtectedCourseOrderUnlocked: Boolean,
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    recentImportReport: DesktopImportReport?,
     onRetrieveMissingCourseElevations: (String) -> Unit,
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
     onOpenVenueElevationCacheFolder: () -> Unit,
@@ -4997,6 +5050,7 @@ private fun SectionWorkspace(
                     projectFile,
                     protectedCourseInfoByCategoryId.takeIf { isProtectedCourseOrderUnlocked } ?: emptyMap()
                 ),
+                recentImportReport = recentImportReport,
                 onInsertTestControls = onInsertTestControls,
                 onInsertTestCategories = onInsertTestCategories,
                 onInsertTestCompetitors = onInsertTestCompetitors,
@@ -5065,10 +5119,11 @@ private fun SectionWorkspace(
     }
 }
 
-/** Shows read-only Event File diagnostics and desktop test tools. */
+/** Shows event readiness, read-only diagnostics, recent imports, and desktop test tools. */
 @Composable
 private fun EventDiagnosticsPanel(
     diagnostics: DesktopProjectDiagnostics,
+    recentImportReport: DesktopImportReport?,
     onInsertTestControls: () -> Unit,
     onInsertTestCategories: () -> Unit,
     onInsertTestCompetitors: () -> Unit,
@@ -5096,6 +5151,48 @@ private fun EventDiagnosticsPanel(
             )
         )
         DetailRow("Validation", diagnostics.validationState)
+        Text(
+            text = "Event Readiness",
+            color = DesktopPalette.PrimaryVariant,
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp
+        )
+        if (diagnostics.readinessIssues.isEmpty()) {
+            Text(
+                text = "No readiness issues detected.",
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        } else {
+            diagnostics.readinessIssues.forEach { issue ->
+                Text(
+                    text = issue,
+                    color = DesktopPalette.Warning,
+                    fontSize = 13.sp
+                )
+            }
+        }
+        recentImportReport?.let { report ->
+            Text(
+                text = "Recent Import",
+                color = DesktopPalette.PrimaryVariant,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
+            Text(
+                text = report.title,
+                color = DesktopPalette.Disconnected,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
+            )
+            report.lines.filter { it.isNotBlank() }.forEach { line ->
+                Text(
+                    text = line,
+                    color = DesktopPalette.Disconnected,
+                    fontSize = 13.sp
+                )
+            }
+        }
         Text(
             text = "Generated test data is inserted in stages. Categories include course assignments, competitors include test SI numbers and drawn start times, and test SI downloads use those competitors and assigned categories.",
             color = DesktopPalette.Disconnected,
@@ -5131,13 +5228,6 @@ private fun EventDiagnosticsPanel(
             Text(
                 text = issue,
                 color = DesktopPalette.Error,
-                fontSize = 13.sp
-            )
-        }
-        diagnostics.readinessIssues.forEach { issue ->
-            Text(
-                text = issue,
-                color = DesktopPalette.Warning,
                 fontSize = 13.sp
             )
         }
@@ -10536,7 +10626,7 @@ private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFil
         DesktopSection.DisplaySettings ->
             "Configure display preferences used by readouts and results."
         DesktopSection.EventDiagnostics ->
-            "Review Event File diagnostics and insert generated readout data for testing."
+            "Review event readiness, recent imports, diagnostics, and generated test data tools."
         DesktopSection.Settings -> "Application settings, hardware status, and desktop beta scope."
     }
 }

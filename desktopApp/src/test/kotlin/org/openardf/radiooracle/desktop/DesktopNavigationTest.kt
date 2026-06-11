@@ -372,7 +372,7 @@ class DesktopNavigationTest {
                 "Live Result Settings",
                 "Display Settings",
                 "App Settings",
-                "Testing"
+                "Readiness"
             ),
             eventFileActions.first { it.label == "Settings" }.children.map { it.label }
         )
