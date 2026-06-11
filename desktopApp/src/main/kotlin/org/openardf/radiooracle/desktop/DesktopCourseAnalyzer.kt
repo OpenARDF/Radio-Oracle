@@ -217,6 +217,7 @@ object DesktopCourseAnalyzer {
     private const val FOXORING_FLAT_SPEED_MPS = 3.4
     private const val MAX_PERMUTATION_CONTROLS = 8
     private const val FOXORING_EXHAUSTIVE_CONTROLS = 6
+    private const val FOXORING_ROLLING_WINDOW_CONTROLS = 5
     private const val MAX_SPRINT_LOOP_PERMUTATIONS = 120
     private const val CALCULATED_ROUTE_SAMPLE_METERS = 25.0
     private const val ELEVATION_CACHE_RESOLUTION_NOTE =
@@ -1111,13 +1112,44 @@ object DesktopCourseAnalyzer {
         return if (foxes.size <= FOXORING_EXHAUSTIVE_CONTROLS) {
             shortestPermutation(start, finish, foxes, beacon, elevationLookup)
         } else {
-            heuristicRoute(
+            /*
+             * Larger Foxoring courses cannot be exhaustively searched: 10 foxes would require
+             * 10! route orders, and 12 foxes would require 12! route orders. Instead, build two
+             * practical candidates and keep whichever is shorter under the same comparison metric
+             * used everywhere else in the analyzer:
+             *
+             * 1. Nearest-neighbor plus 2-opt: fast, broad, and good at removing obvious
+             *    crossings or backtracking.
+             * 2. Rolling five-control exhaustive windows plus final 2-opt: slower, but it gives
+             *    each local group a true exhaustive ordering before the whole route is cleaned up.
+             *
+             * The beacon is not part of the fox permutation. It remains a terminal control after
+             * all foxes and before finish, matching Foxoring course structure and the general rule
+             * that the beacon should be near the finish.
+             */
+            val nearestNeighborCandidate = heuristicRoute(
                 start = start,
                 finish = finish,
                 controlsToPermute = foxes,
                 beacon = beacon,
                 elevationLookup = elevationLookup,
-                calculationNote = "Foxoring route uses non-exhaustive nearest-neighbor plus 2-opt because more than $FOXORING_EXHAUSTIVE_CONTROLS foxes are assigned."
+                calculationNote = null
+            )
+            val rollingWindowCandidate = rollingWindowFoxoringRoute(
+                start = start,
+                finish = finish,
+                controlsToPermute = foxes,
+                beacon = beacon,
+                elevationLookup = elevationLookup
+            )
+            // Compare the two full candidates by effective length when every sampled point has
+            // elevation; otherwise compare horizontal length. This keeps Foxoring behavior aligned
+            // with Classic and Sprint route selection.
+            val best = listOf(nearestNeighborCandidate, rollingWindowCandidate)
+                .minBy { calculatedRouteComparisonLength(start, finish, it, elevationLookup) }
+            best.copy(
+                routeCount = nearestNeighborCandidate.routeCount + rollingWindowCandidate.routeCount,
+                calculationNote = "Foxoring route uses a non-exhaustive hybrid search because more than $FOXORING_EXHAUSTIVE_CONTROLS foxes are assigned: nearest-neighbor plus 2-opt is compared with a rolling $FOXORING_ROLLING_WINDOW_CONTROLS-control exhaustive-window route followed by full-route 2-opt."
             )
         }
     }
@@ -1183,7 +1215,7 @@ object DesktopCourseAnalyzer {
         controlsToPermute: List<ControlAnalysisPoint>,
         beacon: ControlAnalysisPoint?,
         elevationLookup: (CourseGeoPoint) -> Double?,
-        calculationNote: String
+        calculationNote: String?
     ): CalculatedRoute {
         // The nearest-neighbor seed is fast, and 2-opt then removes obvious crossing/ordering
         // mistakes using the same effective-length comparison as the exhaustive search.
@@ -1196,6 +1228,129 @@ object DesktopCourseAnalyzer {
             distanceMeters = points.straightLineMeters(),
             routeCount = 1,
             calculationNote = calculationNote
+        )
+    }
+
+    /**
+     * Builds the slower Foxoring candidate using a moving five-fox window.
+     *
+     * The goal is to get more local ordering quality than nearest-neighbor alone without trying all
+     * N! fox orders. Each five-fox window is exhaustively optimized from the current route anchor
+     * toward the terminal point. After the best local order is found, the first fox is committed to
+     * the route, the window slides forward by one, and the next remaining fox nearest to the last
+     * window fox is added. When all foxes have entered the rolling window, a full-route 2-opt pass
+     * is applied so earlier local decisions can still be improved by segment reversals.
+     */
+    private fun rollingWindowFoxoringRoute(
+        start: CourseGeoPoint,
+        finish: CourseGeoPoint,
+        controlsToPermute: List<ControlAnalysisPoint>,
+        beacon: ControlAnalysisPoint?,
+        elevationLookup: (CourseGeoPoint) -> Double?
+    ): CalculatedRoute {
+        if (controlsToPermute.size <= FOXORING_ROLLING_WINDOW_CONTROLS) {
+            return shortestPermutation(start, finish, controlsToPermute, beacon, elevationLookup)
+        }
+        // Use the beacon as the planning target when it exists because the final route must pass
+        // through it before finish. If there is no beacon data, fall back to finish so the heuristic
+        // still produces a candidate for partial analyses.
+        val terminalPoint = beacon?.point ?: finish
+        val remaining = controlsToPermute.toMutableList()
+        var window = initialFoxoringRollingWindow(start, finish, remaining)
+        remaining.removeAll(window.toSet())
+
+        var routeCount = 0
+        var anchor = start
+        val lockedControls = mutableListOf<ControlAnalysisPoint>()
+        var optimizedWindow = optimizedControlWindow(anchor, terminalPoint, window, elevationLookup).also {
+            routeCount += it.routeCount
+        }.controls
+
+        // Each pass locks the first control from the optimized window, slides the next four
+        // controls forward, adds the nearest remaining fox to the previous window end, and
+        // re-optimizes that five-control segment toward the beacon/finish terminal.
+        while (remaining.isNotEmpty()) {
+            val locked = optimizedWindow.firstOrNull() ?: break
+            lockedControls += locked
+            anchor = locked.point ?: anchor
+            // Greedily choose the next fox from the end of the currently optimized window, not
+            // from the just-locked fox. This makes the look-ahead window advance in the direction
+            // the local optimizer is already favoring.
+            val lastWindowPoint = optimizedWindow.lastOrNull()?.point ?: anchor
+            val next = remaining.minBy { control ->
+                control.point?.distanceMetersTo(lastWindowPoint) ?: Double.POSITIVE_INFINITY
+            }
+            remaining -= next
+            window = optimizedWindow.drop(1) + next
+            optimizedWindow = optimizedControlWindow(anchor, terminalPoint, window, elevationLookup).also {
+                routeCount += it.routeCount
+            }.controls
+        }
+
+        val rollingControls = lockedControls + optimizedWindow
+        // The rolling windows optimize local neighborhoods. A final 2-opt pass over the entire
+        // route lets the candidate remove larger backtracking/crossing patterns introduced by
+        // earlier window locks.
+        val improved = twoOptOrder(start, finish, rollingControls.distinctBy { it.control.id }, beacon, elevationLookup)
+        val controls = if (beacon != null) improved + beacon else improved
+        val points = listOf(start) + controls.mapNotNull { it.point } + finish
+        return CalculatedRoute(
+            controls = controls,
+            distanceMeters = points.straightLineMeters(),
+            routeCount = routeCount,
+            calculationNote = null
+        )
+    }
+
+    private fun initialFoxoringRollingWindow(
+        start: CourseGeoPoint,
+        finish: CourseGeoPoint,
+        controls: List<ControlAnalysisPoint>
+    ): List<ControlAnalysisPoint> {
+        val byStartDistance = controls.sortedBy { control ->
+            control.point?.distanceMetersTo(start) ?: Double.POSITIVE_INFINITY
+        }
+        // Avoid seeding the first window with foxes that are already closer to finish than start.
+        // Those controls are more likely to belong late in a Foxoring route, and including them in
+        // the first local group can lock the rolling heuristic into a finish-side detour too early.
+        val startSideControls = byStartDistance.filter { control ->
+            val point = control.point ?: return@filter false
+            point.distanceMetersTo(start) <= point.distanceMetersTo(finish)
+        }
+        val fillControls = byStartDistance.filterNot { control -> control in startSideControls }
+        // Prefer foxes that are on the start side of the course for the first rolling window. If
+        // there are fewer than five, fill from the remaining nearest foxes so sparse layouts still
+        // produce a complete optimization window.
+        return (startSideControls + fillControls)
+            .take(FOXORING_ROLLING_WINDOW_CONTROLS)
+    }
+
+    private fun optimizedControlWindow(
+        start: CourseGeoPoint,
+        finish: CourseGeoPoint,
+        controls: List<ControlAnalysisPoint>,
+        elevationLookup: (CourseGeoPoint) -> Double?
+    ): CalculatedRoute {
+        var bestControls = controls
+        var bestComparisonLength = Double.POSITIVE_INFINITY
+        var routeCount = 0
+        // A five-control window is only 5! = 120 permutations, so each local segment can be solved
+        // exactly while keeping a 10-12 fox course practical. The finish parameter is the look-ahead
+        // anchor for this window, normally the beacon location.
+        controls.permutations().forEach { permutation ->
+            routeCount++
+            val comparisonLength = routeComparisonLength(start, finish, permutation, null, elevationLookup)
+            if (comparisonLength < bestComparisonLength) {
+                bestComparisonLength = comparisonLength
+                bestControls = permutation
+            }
+        }
+        val points = listOf(start) + bestControls.mapNotNull { it.point } + finish
+        return CalculatedRoute(
+            controls = bestControls,
+            distanceMeters = points.straightLineMeters(),
+            routeCount = routeCount,
+            calculationNote = null
         )
     }
 
@@ -1249,6 +1404,16 @@ object DesktopCourseAnalyzer {
         val allControls = if (beacon != null) controls + beacon else controls
         val sampled = sampledCalculatedRoutePoints(start, allControls, finish, elevationLookup)
         return effectiveLengthMetersOrNull(sampled) ?: (listOf(start) + allControls.mapNotNull { it.point } + finish).straightLineMeters()
+    }
+
+    private fun calculatedRouteComparisonLength(
+        start: CourseGeoPoint,
+        finish: CourseGeoPoint,
+        route: CalculatedRoute,
+        elevationLookup: (CourseGeoPoint) -> Double?
+    ): Double {
+        val sampled = sampledCalculatedRoutePoints(start, route.controls, finish, elevationLookup)
+        return effectiveLengthMetersOrNull(sampled) ?: (listOf(start) + route.controls.mapNotNull { it.point } + finish).straightLineMeters()
     }
 
     private fun routeGeometryTiming(

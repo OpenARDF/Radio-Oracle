@@ -7342,6 +7342,10 @@ private fun CourseAnalysisPanel(
                         pendingMissingDataResult = null
                         analysisScope.launch {
                             try {
+                                // Let Compose paint the progress dialog before route optimization
+                                // begins; Foxoring hybrid search can otherwise make the UI appear
+                                // unresponsive on slower machines.
+                                delay(100)
                                 val summary = analyzeSelectedCourse(categoryId)
                                 if (summary.missingElements.isEmpty()) {
                                     analysisResult = summary
@@ -7429,7 +7433,7 @@ private fun CourseAnalysisPanel(
         if (isAnalyzing) {
             IndeterminateProgressDialog(
                 title = "Analyzing course",
-                message = "Calculating route metrics, wait times, rule checks, and report graphics."
+                message = "Calculating route metrics, route optimization, wait times, rule checks, and report graphics."
             )
         }
         applyStatusText?.let { statusText ->

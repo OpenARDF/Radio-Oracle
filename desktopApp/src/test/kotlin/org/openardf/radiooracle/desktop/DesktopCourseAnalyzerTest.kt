@@ -256,7 +256,7 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
-    fun usesNonExhaustiveFoxoringRouteFallbackAboveSixFoxes() {
+    fun usesHybridFoxoringRouteSearchAboveSixFoxes() {
         val summary = DesktopCourseAnalyzer.analyze(
             projectFile = projectFile(foxCount = 7, raceType = RaceType.FOXORING),
             categoryId = CATEGORY_ID,
@@ -264,8 +264,9 @@ class DesktopCourseAnalyzerTest {
             protectedIdealOrderText = "37 36 35 34 33 32 31 Beacon"
         )
 
-        assertEquals(1, summary.calculatedRouteCount)
-        assertTrue(requireNotNull(summary.calculatedRouteSection).explanation.contains("non-exhaustive nearest-neighbor plus 2-opt"))
+        assertTrue(summary.calculatedRouteCount > 1)
+        assertTrue(requireNotNull(summary.calculatedRouteSection).explanation.contains("non-exhaustive hybrid search"))
+        assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("rolling 5-control exhaustive-window"))
     }
 
     @Test
