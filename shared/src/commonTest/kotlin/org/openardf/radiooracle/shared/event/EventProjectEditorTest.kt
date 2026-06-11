@@ -816,19 +816,45 @@ class EventProjectEditorTest {
     }
 
     @Test
-    fun rejectsDuplicateCategoryImports() {
+    fun updatesExistingCategoryImportsByName() {
+        val original = projectFile(
+            categories = listOf(
+                categoryData(
+                    "cat-1",
+                    "M21",
+                    order = 7,
+                    controlSiCodes = listOf(31),
+                    encryptedIdealOrder = "encrypted-order",
+                    encryptedCourseInfo = "encrypted-course"
+                )
+            )
+        )
+
+        val outcome = EventProjectEditor.importCategoryRowsWithOutcome(
+            projectFile = original,
+            rows = listOf(categoryImportRow(name = "M21", controlPointsText = "32 90B")),
+            categoryIdFactory = { "cat-2" },
+            controlPointIdFactory = { categoryId, index -> "$categoryId-control-$index" }
+        )
+
+        assertEquals(0, outcome.importedCount)
+        assertEquals(1, outcome.updatedCount)
+        assertEquals(1, outcome.projectFile.raceData.categories.size)
+        val updated = outcome.projectFile.raceData.categories.single()
+        assertEquals("cat-1", updated.category.id)
+        assertEquals(7, updated.category.order)
+        assertEquals("32 90B", updated.category.controlPointsString)
+        assertEquals(listOf(32, 90), updated.controlPoints.map { it.siCode })
+        assertEquals("encrypted-order", updated.category.encryptedIdealOrder)
+        assertEquals("encrypted-course", updated.category.encryptedCourseInfo)
+    }
+
+    @Test
+    fun rejectsDuplicateCategoryNamesInSameImport() {
         val original = projectFile(
             categories = listOf(categoryData("cat-1", "M21"))
         )
 
-        assertFailsWith<IllegalArgumentException> {
-            EventProjectEditor.importCategoryRows(
-                projectFile = original,
-                rows = listOf(categoryImportRow(name = "M21")),
-                categoryIdFactory = { "cat-2" },
-                controlPointIdFactory = { categoryId, index -> "$categoryId-control-$index" }
-            )
-        }
         assertFailsWith<IllegalArgumentException> {
             EventProjectEditor.importCategoryRows(
                 projectFile = original,
@@ -2570,10 +2596,15 @@ class EventProjectEditorTest {
         name: String,
         order: Int = 0,
         controlSiCodes: List<Int> = emptyList(),
-        competitors: List<EventCompetitor> = emptyList()
+        competitors: List<EventCompetitor> = emptyList(),
+        encryptedIdealOrder: String? = null,
+        encryptedCourseInfo: String? = null
     ): EventCategoryData =
         EventCategoryData(
-            category = category(id, name, order),
+            category = category(id, name, order).copy(
+                encryptedIdealOrder = encryptedIdealOrder,
+                encryptedCourseInfo = encryptedCourseInfo
+            ),
             controlPoints = controlSiCodes.mapIndexed { index, siCode ->
                 EventControlPoint(
                     id = "$id-control-$index",

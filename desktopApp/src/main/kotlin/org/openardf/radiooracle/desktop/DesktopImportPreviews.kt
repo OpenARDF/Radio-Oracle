@@ -1,0 +1,132 @@
+package org.openardf.radiooracle.desktop
+
+import org.openardf.radiooracle.shared.domain.ControlPointType
+import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.files.ControlCsvImportRow
+import java.util.Locale
+
+data class DesktopControlsCsvImportPreview(
+    val addedCount: Int,
+    val changedCount: Int,
+    val unchangedCount: Int,
+    val affectedAssignedCategoryCount: Int,
+    val affectedProtectedCourseCount: Int,
+    val eventTypeWarnings: List<String>
+)
+
+object DesktopImportPreviews {
+    fun controlsCsvPreview(
+        projectFile: EventProjectFile,
+        sourceName: String,
+        rows: List<ControlCsvImportRow>,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+    ): DesktopControlsCsvImportPreview {
+        val existingByIdentity = projectFile.raceData.controls.associateBy { it.siCode to it.type }
+        val changedControlIds = mutableSetOf<String>()
+        var addedCount = 0
+        var changedCount = 0
+        var unchangedCount = 0
+
+        rows.forEach { row ->
+            val existing = existingByIdentity[row.siCode to row.type]
+            when {
+                existing == null -> addedCount++
+                existing.scored != row.scored ||
+                    existing.publicLabel.orEmpty() != row.publicLabel ||
+                    existing.notes.orEmpty() != row.notes -> {
+                    changedCount++
+                    changedControlIds += existing.id
+                }
+                else -> unchangedCount++
+            }
+        }
+
+        return DesktopControlsCsvImportPreview(
+            addedCount = addedCount,
+            changedCount = changedCount,
+            unchangedCount = unchangedCount,
+            affectedAssignedCategoryCount = assignedCategoryUseCount(projectFile, changedControlIds),
+            affectedProtectedCourseCount = protectedCourseUseCount(protectedCourseInfoByCategoryId, changedControlIds),
+            eventTypeWarnings = eventTypeWarnings(
+                eventRaceType = projectFile.raceData.race.raceType,
+                sourceName = sourceName,
+                clues = rows.flatMap { listOf(it.publicLabel, it.notes, it.type.name) },
+                controlCount = rows.size,
+                controlTypes = rows.map { it.type }
+            )
+        )
+    }
+
+    fun eventTypeWarnings(
+        eventRaceType: RaceType,
+        sourceName: String,
+        clues: List<String>,
+        controlCount: Int? = null,
+        controlTypes: List<ControlPointType> = emptyList()
+    ): List<String> {
+        val inferredTypes = inferredRaceTypes(sourceName, clues, controlCount, controlTypes)
+            .filterNot { it == eventRaceType }
+        if (inferredTypes.isEmpty()) {
+            return emptyList()
+        }
+        val eventTypeText = eventRaceType.name.lowercase().replaceFirstChar { it.titlecase(Locale.US) }
+        return inferredTypes.distinct().map { inferredType ->
+            val importTypeText = inferredType.name.lowercase().replaceFirstChar { it.titlecase(Locale.US) }
+            "Import data suggests $importTypeText, but the Event File is $eventTypeText."
+        }
+    }
+
+    fun assignedCategoryUseCount(projectFile: EventProjectFile, controlIds: Set<String>): Int {
+        if (controlIds.isEmpty()) return 0
+        return projectFile.raceData.categories.count { categoryData ->
+            categoryData.controlPoints.any { it.controlId in controlIds } ||
+                categoryData.publicControlIds.any { it in controlIds }
+        }
+    }
+
+    fun protectedCourseUseCount(
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+        controlIds: Set<String>
+    ): Int {
+        if (controlIds.isEmpty()) return 0
+        return protectedCourseInfoByCategoryId.values.count { courseInfo ->
+            courseInfo.controlPoints.any { it.controlId in controlIds } ||
+                courseInfo.courseObjects.any { it.id in controlIds }
+        }
+    }
+
+    private fun inferredRaceTypes(
+        sourceName: String,
+        clues: List<String>,
+        controlCount: Int?,
+        controlTypes: List<ControlPointType>
+    ): List<RaceType> {
+        val haystack = (listOf(sourceName) + clues)
+            .joinToString(" ")
+            .lowercase()
+        return buildList {
+            if (haystack.contains("sprint") || Regex("""\b[1-5]f\b""").containsMatchIn(haystack)) {
+                add(RaceType.SPRINT)
+            }
+            if (haystack.contains("foxoring") || haystack.contains("fox-o") || haystack.contains("fox o")) {
+                add(RaceType.FOXORING)
+            }
+            if (haystack.contains("classic")) {
+                add(RaceType.CLASSIC)
+            }
+            if (haystack.contains("orienteering")) {
+                add(RaceType.ORIENTEERING)
+            }
+            if (
+                controlCount != null &&
+                controlCount > 6 &&
+                controlTypes.count { it == ControlPointType.CONTROL } > 5 &&
+                controlTypes.any { it == ControlPointType.BEACON || it == ControlPointType.SEPARATOR }
+            ) {
+                add(RaceType.SPRINT)
+            }
+        }
+    }
+}

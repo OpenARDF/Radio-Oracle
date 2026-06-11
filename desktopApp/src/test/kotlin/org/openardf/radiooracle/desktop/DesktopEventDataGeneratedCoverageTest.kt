@@ -75,14 +75,14 @@ class DesktopEventDataGeneratedCoverageTest {
         assertEquals(RaceType.FOXORING, imported.category("FOX-M21").category.raceType)
         assertTrue(imported.raceData.controls.any { it.siCode == 40 && it.type == ControlPointType.CONTROL })
 
-        assertFails("duplicate category names should be rejected") {
-            EventProjectEditor.importCategoryRows(
-                projectFile = imported,
-                rows = result.rows.take(1),
-                categoryIdFactory = idFactory("dup-cat"),
-                controlPointIdFactory = { categoryId, index -> "$categoryId-cp-$index" }
-            )
-        }
+        val reimported = EventProjectEditor.importCategoryRows(
+            projectFile = imported,
+            rows = result.rows.take(1),
+            categoryIdFactory = idFactory("dup-cat"),
+            controlPointIdFactory = { categoryId, index -> "$categoryId-cp-$index" }
+        )
+        assertEquals(imported.raceData.categories.map { it.category.id }, reimported.raceData.categories.map { it.category.id })
+        assertEquals(listOf(31, 32, 33, 34, 35, 99), reimported.assignedSiCodes("M21"))
         scenarios++
         return scenarios
     }

@@ -118,6 +118,7 @@ import org.openardf.radiooracle.shared.event.defaultScored
 import org.openardf.radiooracle.shared.event.defaultTimeLimitMinutes
 import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
 import org.openardf.radiooracle.shared.event.toDisplayLabel
+import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
@@ -351,6 +352,7 @@ fun main(args: Array<String>) = application {
         var isCourseKmlKmzUnlockDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzImportReview by remember { mutableStateOf<PendingCourseKmlKmzImportReview?>(null) }
         var pendingCourseKmlKmzCategoryMapping by remember { mutableStateOf<PendingCourseKmlKmzCategoryMapping?>(null) }
+        var pendingControlsCsvImportReview by remember { mutableStateOf<PendingControlsCsvImportReview?>(null) }
         var courseKmlKmzElevationProgress by remember { mutableStateOf<CourseKmlKmzElevationProgressUiState?>(null) }
         var courseKmlKmzElevationJob by remember { mutableStateOf<Job?>(null) }
         var venueElevationCacheProgress by remember { mutableStateOf<VenueElevationCacheProgressUiState?>(null) }
@@ -1787,16 +1789,22 @@ fun main(args: Array<String>) = application {
                 runCatching {
                     lockProtectedCourseOrder()
                     val result = EventCsvImports.parseAndroidCategoryRows(Files.readString(path))
+                    var importedRows = 0
+                    var updatedRows = 0
                     projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.importCategoryRows(
+                        val outcome = EventProjectEditor.importCategoryRowsWithOutcome(
                             projectFile = currentProject,
                             rows = result.rows,
                             categoryIdFactory = { UUID.randomUUID().toString() },
                             controlPointIdFactory = { _, _ -> UUID.randomUUID().toString() }
                         )
+                        importedRows = outcome.importedCount
+                        updatedRows = outcome.updatedCount
+                        outcome.projectFile
                     }
                     syncProjectState()
-                    projectStatusText = importStatusText("Imported", result.rows.size, result.invalidLines.size, path.fileName.toString())
+                    projectStatusText =
+                        "Imported ${path.fileName}: $importedRows added, $updatedRows updated, ${result.invalidLines.size} invalid."
                 }.onFailure { error ->
                     projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
                 }
@@ -1806,19 +1814,45 @@ fun main(args: Array<String>) = application {
         fun importControlsCsv() {
             DesktopFileDialogs.chooseImportCsv("Import Controls CSV")?.let { path ->
                 runCatching {
+                    val currentProject = requireNotNull(projectSession.currentProject)
                     val result = EventCsvImports.parseControlRows(Files.readString(path))
-                    projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.importControlRows(
-                            currentProject,
-                            result.rows,
-                            controlIdFactory = { UUID.randomUUID().toString() }
+                    pendingControlsCsvImportReview = PendingControlsCsvImportReview(
+                        path = path,
+                        rows = result.rows,
+                        invalidLineCount = result.invalidLines.size,
+                        preview = DesktopImportPreviews.controlsCsvPreview(
+                            projectFile = currentProject,
+                            sourceName = path.fileName.toString(),
+                            rows = result.rows,
+                            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
                         )
-                    }
-                    syncProjectState()
-                    projectStatusText = importStatusText("Imported", result.rows.size, result.invalidLines.size, path.fileName.toString())
+                    )
+                    projectStatusText = "Review controls CSV import before applying it."
                 }.onFailure { error ->
                     projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
                 }
+            }
+        }
+
+        fun applyControlsCsvImport(review: PendingControlsCsvImportReview) {
+            runCatching {
+                projectFile = projectSession.updateCurrentProject { currentProject ->
+                    EventProjectEditor.importControlRows(
+                        currentProject,
+                        review.rows,
+                        controlIdFactory = { UUID.randomUUID().toString() }
+                    )
+                }
+                syncProjectState()
+                pendingControlsCsvImportReview = null
+                projectStatusText = importStatusText(
+                    "Imported",
+                    review.rows.size,
+                    review.invalidLineCount,
+                    review.path.fileName.toString()
+                )
+            }.onFailure { error ->
+                projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
             }
         }
 
@@ -2371,6 +2405,16 @@ fun main(args: Array<String>) = application {
                 }
             )
         }
+        pendingControlsCsvImportReview?.let { review ->
+            ControlsCsvImportReviewDialog(
+                review = review,
+                onImport = { applyControlsCsvImport(review) },
+                onCancel = {
+                    pendingControlsCsvImportReview = null
+                    projectStatusText = "Controls CSV import canceled. No changes applied."
+                }
+            )
+        }
         pendingCompetitorsCsvImportReview?.let { review ->
             CompetitorCsvImportOptionsDialog(
                 fileName = review.path.fileName.toString(),
@@ -2572,7 +2616,7 @@ fun main(args: Array<String>) = application {
                         EventProjectEditor.addCategory(currentProject, UUID.randomUUID().toString(), name)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    projectStatusText = "Unsaved changes."
+                    projectStatusText = "Created category without course data. Add assigned controls or import KML/KMZ course data before Race Ops."
                 }
                 result.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
@@ -2889,11 +2933,33 @@ fun main(args: Array<String>) = application {
             },
             onUpdateControl = { controlId, label, siCode, type, scored, publicLabel, notes ->
                 runCatching {
+                    var affectedAssignedCategories = 0
+                    var affectedProtectedCourses = 0
+                    var identityChanged = false
                     projectFile = projectSession.updateCurrentProject { currentProject ->
+                        val existingControl = currentProject.raceData.controls.firstOrNull { it.id == controlId }
+                        identityChanged = existingControl?.let { control ->
+                            control.siCode.toString() != siCode.trim() ||
+                                control.type != type ||
+                                control.publicLabel.orEmpty() != publicLabel.trim() ||
+                                control.label != label.trim()
+                        } == true
+                        if (identityChanged) {
+                            val controlIds = setOf(controlId)
+                            affectedAssignedCategories = DesktopImportPreviews.assignedCategoryUseCount(currentProject, controlIds)
+                            affectedProtectedCourses = DesktopImportPreviews.protectedCourseUseCount(
+                                protectedCourseInfoByCategoryId,
+                                controlIds
+                            )
+                        }
                         EventProjectEditor.updateControl(currentProject, controlId, label, siCode, type, scored, publicLabel, notes)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    projectStatusText = "Unsaved changes."
+                    projectStatusText = if (identityChanged) {
+                        "Control identity updated. This control is used by $affectedAssignedCategories assigned categor${if (affectedAssignedCategories == 1) "y" else "ies"} and $affectedProtectedCourses stored course${if (affectedProtectedCourses == 1) "" else "s"}."
+                    } else {
+                        "Unsaved changes."
+                    }
                 }.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
@@ -2922,6 +2988,13 @@ fun main(args: Array<String>) = application {
             },
             onRemoveControl = { controlId ->
                 runCatching {
+                    val protectedUseCount = DesktopImportPreviews.protectedCourseUseCount(
+                        protectedCourseInfoByCategoryId,
+                        setOf(controlId)
+                    )
+                    require(protectedUseCount == 0) {
+                        "Control is used by $protectedUseCount stored course${if (protectedUseCount == 1) "" else "s"}. Remove or reimport course data before deleting this control."
+                    }
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.removeControl(currentProject, controlId)
                     }
@@ -3163,6 +3236,13 @@ private fun CourseKmlKmzImportReviewDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("File: ${review.sourceName}")
+                selectedSummary.eventTypeWarnings.forEach { warning ->
+                    Text(
+                        text = warning,
+                        color = DesktopPalette.Error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 Text("Matched categories: ${selectedSummary.matchedCategoryCount} of ${selectedSummary.routeCount} route placemarks")
                 Text("Categories: $categoriesText")
                 if (summary.missingCategoryNames.isNotEmpty()) {
@@ -3288,6 +3368,66 @@ private fun CourseKmlKmzImportReviewDialog(
         dismissButton = {
             Button(onClick = onCancel) {
                 Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun ControlsCsvImportReviewDialog(
+    review: PendingControlsCsvImportReview,
+    onImport: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val preview = review.preview
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Review controls CSV import") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("File: ${review.path.fileName}")
+                preview.eventTypeWarnings.forEach { warning ->
+                    Text(
+                        text = warning,
+                        color = DesktopPalette.Error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text("Controls to add: ${preview.addedCount}")
+                Text("Controls to update: ${preview.changedCount}")
+                Text("Unchanged controls: ${preview.unchangedCount}")
+                if (review.invalidLineCount > 0) {
+                    Text(
+                        text = "Invalid rows skipped: ${review.invalidLineCount}",
+                        color = DesktopPalette.Error
+                    )
+                }
+                if (preview.affectedAssignedCategoryCount > 0 || preview.affectedProtectedCourseCount > 0) {
+                    Text(
+                        text = "Changed controls are already used by ${preview.affectedAssignedCategoryCount} assigned categor${if (preview.affectedAssignedCategoryCount == 1) "y" else "ies"} and ${preview.affectedProtectedCourseCount} stored course${if (preview.affectedProtectedCourseCount == 1) "" else "s"}.",
+                        color = DesktopPalette.Error
+                    )
+                }
+                Text(
+                    "This import adds new controls and updates matching controls by SI code and type. It does not delete controls missing from the CSV.",
+                    fontSize = 12.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onImport) {
+                ButtonLabel("Import Controls")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                ButtonLabel("Cancel")
             }
         }
     )
@@ -3754,6 +3894,13 @@ private data class CourseKmlKmzImportPreview(
 private data class PendingCompetitorsCsvImportReview(
     val path: Path,
     val missingCategoryNames: List<String>
+)
+
+private data class PendingControlsCsvImportReview(
+    val path: Path,
+    val rows: List<ControlCsvImportRow>,
+    val invalidLineCount: Int,
+    val preview: DesktopControlsCsvImportPreview
 )
 
 private data class PendingCourseKmlKmzCategoryMapping(
@@ -4728,7 +4875,10 @@ private fun SectionWorkspace(
         }
         if (section == DesktopSection.EventDiagnostics) {
             EventDiagnosticsPanel(
-                diagnostics = DesktopProjectDiagnostics.from(projectFile),
+                diagnostics = DesktopProjectDiagnostics.from(
+                    projectFile,
+                    protectedCourseInfoByCategoryId.takeIf { isProtectedCourseOrderUnlocked } ?: emptyMap()
+                ),
                 onInsertTestControls = onInsertTestControls,
                 onInsertTestCategories = onInsertTestCategories,
                 onInsertTestCompetitors = onInsertTestCompetitors,
@@ -4747,7 +4897,10 @@ private fun SectionWorkspace(
         }
         if (section == DesktopSection.LiveResultSettings) {
             LiveResultSettingsPanel(
-                diagnostics = DesktopProjectDiagnostics.from(projectFile),
+                diagnostics = DesktopProjectDiagnostics.from(
+                    projectFile,
+                    protectedCourseInfoByCategoryId.takeIf { isProtectedCourseOrderUnlocked } ?: emptyMap()
+                ),
                 isSendingLiveResults = isSendingLiveResults,
                 isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
                 localResultServerUrl = localResultServerUrl,
@@ -4767,7 +4920,10 @@ private fun SectionWorkspace(
         if (section == DesktopSection.Settings) {
             AppSettingsPanel(
                 projectFile = projectFile,
-                diagnostics = DesktopProjectDiagnostics.from(projectFile),
+                diagnostics = DesktopProjectDiagnostics.from(
+                    projectFile,
+                    protectedCourseInfoByCategoryId.takeIf { isProtectedCourseOrderUnlocked } ?: emptyMap()
+                ),
                 printerDiagnostics = printerDiagnostics,
                 isCourseDataUnlocked = isProtectedCourseOrderUnlocked,
                 onUpdateCoursePassword = onUpdateProtectedCoursePassword
@@ -4857,6 +5013,13 @@ private fun EventDiagnosticsPanel(
             Text(
                 text = issue,
                 color = DesktopPalette.Error,
+                fontSize = 13.sp
+            )
+        }
+        diagnostics.readinessIssues.forEach { issue ->
+            Text(
+                text = issue,
+                color = DesktopPalette.Warning,
                 fontSize = 13.sp
             )
         }

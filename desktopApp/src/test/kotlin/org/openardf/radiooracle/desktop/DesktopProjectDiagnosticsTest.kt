@@ -50,6 +50,7 @@ class DesktopProjectDiagnosticsTest {
             diagnostics.liveResultPlanText
         )
         assertTrue(diagnostics.validationIssues.isEmpty())
+        assertTrue(diagnostics.readinessIssues.isEmpty())
     }
 
     @Test
@@ -78,7 +79,7 @@ class DesktopProjectDiagnosticsTest {
             )
         )
 
-        assertEquals("1 validation issue", diagnostics.validationState)
+        assertEquals("1 validation issue; 1 readiness issue", diagnostics.validationState)
         assertTrue(
             diagnostics.validationIssues.any {
                 it.contains("Invalid control points for M21") &&
@@ -87,10 +88,32 @@ class DesktopProjectDiagnosticsTest {
         )
     }
 
+    @Test
+    fun reportsCategoryWithCompetitorsButNoCourseData() {
+        val category = categoryData(name = "M21", controlPointsString = "")
+        val diagnostics = DesktopProjectDiagnostics.from(
+            projectFile(categories = listOf(category), competitorCategory = category.category)
+        )
+
+        assertTrue(diagnostics.validationState.contains("1 readiness issue"))
+        assertTrue(diagnostics.readinessIssues.any { it.contains("M21") && it.contains("competitor") && it.contains("no course data") })
+    }
+
+    @Test
+    fun reportsCategoryWithCourseDataButNoCompetitors() {
+        val diagnostics = DesktopProjectDiagnostics.from(
+            projectFile(categories = listOf(categoryData(name = "W21", controlPointsString = "31 32")))
+        )
+
+        assertTrue(diagnostics.validationState.contains("1 readiness issue"))
+        assertTrue(diagnostics.readinessIssues.any { it.contains("W21") && it.contains("course data but no competitors") })
+    }
+
     private fun projectFile(
         raceName: String = "Diagnostics Race",
         categories: List<EventCategoryData> = emptyList(),
-        readout: EventResult? = null
+        readout: EventResult? = null,
+        competitorCategory: EventCategory? = null
     ): EventProjectFile {
         val race = EventRace(
             id = "race",
@@ -105,7 +128,7 @@ class DesktopProjectDiagnosticsTest {
         val competitor = EventCompetitor(
             id = "competitor",
             raceId = race.id,
-            categoryId = null,
+            categoryId = competitorCategory?.id,
             firstName = "Test",
             lastName = "Runner",
             club = "",
@@ -125,7 +148,7 @@ class DesktopProjectDiagnosticsTest {
                 aliases = emptyList(),
                 competitorData = listOf(
                     EventCompetitorData(
-                        competitorCategory = EventCompetitorCategory(competitor, null),
+                        competitorCategory = EventCompetitorCategory(competitor, competitorCategory),
                         readoutData = readout?.let { EventReadoutData(it, emptyList()) }
                     )
                 ),

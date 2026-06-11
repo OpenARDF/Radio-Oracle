@@ -38,6 +38,13 @@ data class CompetitorCsvImportOutcome(
     val warnings: List<String>
 )
 
+data class CategoryCsvImportOutcome(
+    val projectFile: EventProjectFile,
+    val importedCount: Int,
+    val updatedCount: Int,
+    val warnings: List<String> = emptyList()
+)
+
 /** Shared Event File editing helpers used by desktop and future non-Android flows. */
 object EventProjectEditor {
     /** Returns a copy of the Event File with a validated race name. */
@@ -1060,21 +1067,46 @@ object EventProjectEditor {
         )
     }
 
-    /** Appends parsed Android-format category CSV rows, including course control points. */
+    /** Upserts parsed Android-format category CSV rows, including course control points. */
     fun importCategoryRows(
         projectFile: EventProjectFile,
         rows: List<CategoryCsvImportRow>,
         categoryIdFactory: () -> String,
         controlPointIdFactory: (String, Int) -> String
-    ): EventProjectFile {
-        var nextCategoryOrder = (projectFile.raceData.categories.maxOfOrNull { it.category.order } ?: -1) + 1
-        val categoryNames = projectFile.raceData.categories.mapTo(mutableSetOf()) { it.category.name }
-        val importedCategories = rows.map { row ->
-            require(categoryNames.add(row.name)) {
-                "Category name must be unique."
-            }
+    ): EventProjectFile =
+        importCategoryRowsWithOutcome(
+            projectFile = projectFile,
+            rows = rows,
+            categoryIdFactory = categoryIdFactory,
+            controlPointIdFactory = controlPointIdFactory
+        ).projectFile
 
-            val categoryId = categoryIdFactory()
+    fun importCategoryRowsWithOutcome(
+        projectFile: EventProjectFile,
+        rows: List<CategoryCsvImportRow>,
+        categoryIdFactory: () -> String,
+        controlPointIdFactory: (String, Int) -> String
+    ): CategoryCsvImportOutcome {
+        val duplicateImportNames = rows
+            .groupBy { it.name }
+            .filterValues { it.size > 1 }
+            .keys
+        require(duplicateImportNames.isEmpty()) {
+            "Duplicate category names in import: ${duplicateImportNames.joinToString()}."
+        }
+
+        var nextCategoryOrder = (projectFile.raceData.categories.maxOfOrNull { it.category.order } ?: -1) + 1
+        val categories = projectFile.raceData.categories.toMutableList()
+        val importedControls = mutableListOf<EventControl>()
+        var importedCount = 0
+        var updatedCount = 0
+
+        rows.forEach { row ->
+            val existingIndex = categories.indexOfFirst { it.category.name == row.name }
+            val existingCategoryData = existingIndex.takeIf { it >= 0 }?.let(categories::get)
+            val categoryId = existingCategoryData?.category?.id ?: categoryIdFactory()
+            val categoryOrder = existingCategoryData?.category?.order ?: nextCategoryOrder++
+
             val category = EventCategory(
                 id = categoryId,
                 raceId = projectFile.raceData.race.id,
@@ -1083,13 +1115,14 @@ object EventProjectEditor {
                 maxAge = row.maxAge,
                 lengthMeters = row.lengthMeters,
                 climbMeters = row.climbMeters,
-                order = nextCategoryOrder++,
+                order = categoryOrder,
                 differentProperties = !row.followsRacePresets,
                 raceType = row.raceType,
                 raceBand = row.raceBand,
                 timeLimitSeconds = row.timeLimitMinutes?.times(60),
                 controlPointsString = "",
-                encryptedIdealOrder = row.encryptedIdealOrder
+                encryptedIdealOrder = row.encryptedIdealOrder ?: existingCategoryData?.category?.encryptedIdealOrder,
+                encryptedCourseInfo = existingCategoryData?.category?.encryptedCourseInfo
             )
             val definitions = ControlPointRules.parseAssignedControlPoints(
                 input = row.controlPointsText,
@@ -1106,17 +1139,14 @@ object EventProjectEditor {
                     order = definition.order
                 )
             }
-
-            EventCategoryData(
+            val updatedCategoryData = EventCategoryData(
                 category = category.copy(controlPointsString = ControlPointRules.formatControlPoints(definitions)),
                 controlPoints = controlPoints,
-                competitors = emptyList(),
-                publicControlIds = controlPoints
-                    .map { it.controlId }
+                competitors = existingCategoryData?.competitors ?: emptyList(),
+                publicControlIds = controlPoints.map { it.controlId }
             )
-        }
-        val importedControls = importedCategories.flatMap { categoryData ->
-            categoryData.controlPoints.map { controlPoint ->
+
+            importedControls += updatedCategoryData.controlPoints.map { controlPoint ->
                 EventControl(
                     id = controlPoint.controlId,
                     raceId = projectFile.raceData.race.id,
@@ -1129,13 +1159,25 @@ object EventProjectEditor {
                     type = controlPoint.type
                 )
             }
+
+            if (existingIndex >= 0) {
+                categories[existingIndex] = updatedCategoryData
+                updatedCount++
+            } else {
+                categories += updatedCategoryData
+                importedCount++
+            }
         }
 
-        return projectFile.copy(
-            raceData = projectFile.raceData.copy(
-                categories = projectFile.raceData.categories + importedCategories,
-                controls = EventControlCatalog.mergeControls(projectFile.raceData.controls, importedControls)
-            )
+        return CategoryCsvImportOutcome(
+            projectFile = projectFile.copy(
+                raceData = projectFile.raceData.copy(
+                    categories = categories,
+                    controls = EventControlCatalog.mergeControls(projectFile.raceData.controls, importedControls)
+                )
+            ),
+            importedCount = importedCount,
+            updatedCount = updatedCount
         )
     }
 

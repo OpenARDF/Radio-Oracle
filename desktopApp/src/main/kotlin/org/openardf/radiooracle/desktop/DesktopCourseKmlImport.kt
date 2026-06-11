@@ -74,6 +74,7 @@ data class DesktopCourseKmlImportSummary(
     val duplicateMissingElevationPointCount: Int,
     val missingCategoryNames: List<String>,
     val createdCategoryNames: List<String>,
+    val eventTypeWarnings: List<String>,
     val sourceSha256: String
 ) {
     val assignedCategoryControlCount: Int
@@ -380,6 +381,13 @@ object DesktopCourseKmlImporter {
             duplicateMissingElevationPointCount = duplicateMissingElevationPointCount,
             missingCategoryNames = missingCategoryNames,
             createdCategoryNames = createdCategoryNames,
+            eventTypeWarnings = DesktopImportPreviews.eventTypeWarnings(
+                eventRaceType = projectFile.raceData.race.raceType,
+                sourceName = path.fileName.toString(),
+                clues = courseData.routes.map { it.name } + courseData.controls.map { it.name },
+                controlCount = courseData.controls.size,
+                controlTypes = controls.map { it.type }
+            ),
             sourceSha256 = sourceSha256
         )
         DesktopDebugLog.info(
