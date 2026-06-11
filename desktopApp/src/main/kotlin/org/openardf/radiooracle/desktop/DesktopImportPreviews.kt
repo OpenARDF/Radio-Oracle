@@ -4,8 +4,18 @@ import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 import java.util.Locale
+
+data class DesktopCategoryCsvImportPreview(
+    val addedCount: Int,
+    val updatedCount: Int,
+    val affectedCompetitorCount: Int,
+    val categoriesWithProtectedCoursePreservedCount: Int,
+    val categoriesWithAssignedControlsReplacedCount: Int,
+    val eventTypeWarnings: List<String>
+)
 
 data class DesktopControlsCsvImportPreview(
     val addedCount: Int,
@@ -17,6 +27,58 @@ data class DesktopControlsCsvImportPreview(
 )
 
 object DesktopImportPreviews {
+    fun categoryCsvPreview(
+        projectFile: EventProjectFile,
+        sourceName: String,
+        rows: List<CategoryCsvImportRow>
+    ): DesktopCategoryCsvImportPreview {
+        val existingByName = projectFile.raceData.categories.associateBy { it.category.name }
+        val competitorCountsByCategoryId = projectFile.raceData.competitorData
+            .mapNotNull { data -> data.competitorCategory.competitor.categoryId ?: data.competitorCategory.category?.id }
+            .groupingBy { it }
+            .eachCount()
+        var addedCount = 0
+        var updatedCount = 0
+        var affectedCompetitorCount = 0
+        var categoriesWithProtectedCoursePreservedCount = 0
+        var categoriesWithAssignedControlsReplacedCount = 0
+
+        rows.forEach { row ->
+            val existing = existingByName[row.name]
+            if (existing == null) {
+                addedCount++
+            } else {
+                updatedCount++
+                affectedCompetitorCount += competitorCountsByCategoryId[existing.category.id] ?: 0
+                if (existing.category.encryptedCourseInfo?.isNotBlank() == true ||
+                    existing.category.encryptedIdealOrder?.isNotBlank() == true
+                ) {
+                    categoriesWithProtectedCoursePreservedCount++
+                }
+                if (existing.controlPoints.isNotEmpty() || existing.category.controlPointsString.isNotBlank()) {
+                    categoriesWithAssignedControlsReplacedCount++
+                }
+            }
+        }
+
+        return DesktopCategoryCsvImportPreview(
+            addedCount = addedCount,
+            updatedCount = updatedCount,
+            affectedCompetitorCount = affectedCompetitorCount,
+            categoriesWithProtectedCoursePreservedCount = categoriesWithProtectedCoursePreservedCount,
+            categoriesWithAssignedControlsReplacedCount = categoriesWithAssignedControlsReplacedCount,
+            eventTypeWarnings = eventTypeWarnings(
+                eventRaceType = projectFile.raceData.race.raceType,
+                sourceName = sourceName,
+                clues = rows.flatMap { row ->
+                    listOfNotNull(row.name, row.raceType?.name, row.raceBand?.name, row.controlPointsText)
+                },
+                controlCount = null,
+                controlTypes = emptyList()
+            )
+        )
+    }
+
     fun controlsCsvPreview(
         projectFile: EventProjectFile,
         sourceName: String,

@@ -16,9 +16,51 @@ import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 
 class DesktopImportPreviewsTest {
+    @Test
+    fun previewsCategoryCsvUpdatesAndPreservedProtectedCourseData() {
+        val preview = DesktopImportPreviews.categoryCsvPreview(
+            projectFile = projectFile(includeCompetitor = true, encryptedCourseInfo = "encrypted-course"),
+            sourceName = "sprint-categories.csv",
+            rows = listOf(
+                CategoryCsvImportRow(
+                    name = "M21",
+                    isMan = true,
+                    maxAge = 99,
+                    lengthMeters = 2_200,
+                    climbMeters = 40,
+                    followsRacePresets = false,
+                    raceType = RaceType.SPRINT,
+                    timeLimitMinutes = 90,
+                    raceBand = RaceBand.M80,
+                    controlPointsText = "31 32 99B"
+                ),
+                CategoryCsvImportRow(
+                    name = "W21",
+                    isMan = false,
+                    maxAge = 99,
+                    lengthMeters = 2_000,
+                    climbMeters = 35,
+                    followsRacePresets = true,
+                    raceType = null,
+                    timeLimitMinutes = null,
+                    raceBand = null,
+                    controlPointsText = "31 32"
+                )
+            )
+        )
+
+        assertEquals(1, preview.addedCount)
+        assertEquals(1, preview.updatedCount)
+        assertEquals(1, preview.affectedCompetitorCount)
+        assertEquals(1, preview.categoriesWithAssignedControlsReplacedCount)
+        assertEquals(1, preview.categoriesWithProtectedCoursePreservedCount)
+        assertTrue(preview.eventTypeWarnings.any { it.contains("Sprint") && it.contains("Classic") })
+    }
+
     @Test
     fun previewsControlsCsvChangesAndAffectedCourses() {
         val preview = DesktopImportPreviews.controlsCsvPreview(
@@ -50,7 +92,10 @@ class DesktopImportPreviewsTest {
         assertTrue(preview.eventTypeWarnings.any { it.contains("Sprint") && it.contains("Classic") })
     }
 
-    private fun projectFile(): EventProjectFile {
+    private fun projectFile(
+        includeCompetitor: Boolean = false,
+        encryptedCourseInfo: String? = null
+    ): EventProjectFile {
         val race = EventRace(
             id = "race",
             name = "Preview Race",
@@ -75,6 +120,8 @@ class DesktopImportPreviewsTest {
             raceBand = null,
             timeLimitSeconds = null,
             controlPointsString = "31"
+        ).copy(
+            encryptedCourseInfo = encryptedCourseInfo
         )
         val control = EventControl(
             id = "control-31",
@@ -106,7 +153,33 @@ class DesktopImportPreviewsTest {
                     )
                 ),
                 aliases = emptyList(),
-                competitorData = emptyList(),
+                competitorData = if (includeCompetitor) {
+                    listOf(
+                        org.openardf.radiooracle.shared.event.EventCompetitorData(
+                            competitorCategory = org.openardf.radiooracle.shared.event.EventCompetitorCategory(
+                                competitor = org.openardf.radiooracle.shared.event.EventCompetitor(
+                                    id = "competitor",
+                                    raceId = race.id,
+                                    categoryId = category.id,
+                                    firstName = "Alice",
+                                    lastName = "Runner",
+                                    club = "",
+                                    index = "",
+                                    isMan = true,
+                                    birthYear = null,
+                                    siNumber = null,
+                                    siRent = false,
+                                    startNumber = 1,
+                                    drawnStartTimeSeconds = null
+                                ),
+                                category = category
+                            ),
+                            readoutData = null
+                        )
+                    )
+                } else {
+                    emptyList()
+                },
                 unmatchedReadoutData = emptyList(),
                 controls = listOf(control)
             )

@@ -118,6 +118,7 @@ import org.openardf.radiooracle.shared.event.defaultScored
 import org.openardf.radiooracle.shared.event.defaultTimeLimitMinutes
 import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
 import org.openardf.radiooracle.shared.event.toDisplayLabel
+import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.domain.ControlPointType
@@ -352,6 +353,7 @@ fun main(args: Array<String>) = application {
         var isCourseKmlKmzUnlockDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzImportReview by remember { mutableStateOf<PendingCourseKmlKmzImportReview?>(null) }
         var pendingCourseKmlKmzCategoryMapping by remember { mutableStateOf<PendingCourseKmlKmzCategoryMapping?>(null) }
+        var pendingCategoriesCsvImportReview by remember { mutableStateOf<PendingCategoriesCsvImportReview?>(null) }
         var pendingControlsCsvImportReview by remember { mutableStateOf<PendingControlsCsvImportReview?>(null) }
         var courseKmlKmzElevationProgress by remember { mutableStateOf<CourseKmlKmzElevationProgressUiState?>(null) }
         var courseKmlKmzElevationJob by remember { mutableStateOf<Job?>(null) }
@@ -1787,27 +1789,47 @@ fun main(args: Array<String>) = application {
         fun importCategoriesCsv() {
             DesktopFileDialogs.chooseImportCsv("Import Categories CSV")?.let { path ->
                 runCatching {
-                    lockProtectedCourseOrder()
+                    val currentProject = requireNotNull(projectSession.currentProject)
                     val result = EventCsvImports.parseAndroidCategoryRows(Files.readString(path))
-                    var importedRows = 0
-                    var updatedRows = 0
-                    projectFile = projectSession.updateCurrentProject { currentProject ->
-                        val outcome = EventProjectEditor.importCategoryRowsWithOutcome(
+                    pendingCategoriesCsvImportReview = PendingCategoriesCsvImportReview(
+                        path = path,
+                        rows = result.rows,
+                        invalidLineCount = result.invalidLines.size,
+                        preview = DesktopImportPreviews.categoryCsvPreview(
                             projectFile = currentProject,
-                            rows = result.rows,
-                            categoryIdFactory = { UUID.randomUUID().toString() },
-                            controlPointIdFactory = { _, _ -> UUID.randomUUID().toString() }
+                            sourceName = path.fileName.toString(),
+                            rows = result.rows
                         )
-                        importedRows = outcome.importedCount
-                        updatedRows = outcome.updatedCount
-                        outcome.projectFile
-                    }
-                    syncProjectState()
-                    projectStatusText =
-                        "Imported ${path.fileName}: $importedRows added, $updatedRows updated, ${result.invalidLines.size} invalid."
+                    )
+                    projectStatusText = "Review categories CSV import before applying it."
                 }.onFailure { error ->
                     projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
                 }
+            }
+        }
+
+        fun applyCategoriesCsvImport(review: PendingCategoriesCsvImportReview) {
+            runCatching {
+                lockProtectedCourseOrder()
+                var importedRows = 0
+                var updatedRows = 0
+                projectFile = projectSession.updateCurrentProject { currentProject ->
+                    val outcome = EventProjectEditor.importCategoryRowsWithOutcome(
+                        projectFile = currentProject,
+                        rows = review.rows,
+                        categoryIdFactory = { UUID.randomUUID().toString() },
+                        controlPointIdFactory = { _, _ -> UUID.randomUUID().toString() }
+                    )
+                    importedRows = outcome.importedCount
+                    updatedRows = outcome.updatedCount
+                    outcome.projectFile
+                }
+                syncProjectState()
+                pendingCategoriesCsvImportReview = null
+                projectStatusText =
+                    "Imported ${review.path.fileName}: $importedRows added, $updatedRows updated, ${review.invalidLineCount} invalid."
+            }.onFailure { error ->
+                projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
             }
         }
 
@@ -2405,6 +2427,16 @@ fun main(args: Array<String>) = application {
                 }
             )
         }
+        pendingCategoriesCsvImportReview?.let { review ->
+            CategoriesCsvImportReviewDialog(
+                review = review,
+                onImport = { applyCategoriesCsvImport(review) },
+                onCancel = {
+                    pendingCategoriesCsvImportReview = null
+                    projectStatusText = "Categories CSV import canceled. No changes applied."
+                }
+            )
+        }
         pendingControlsCsvImportReview?.let { review ->
             ControlsCsvImportReviewDialog(
                 review = review,
@@ -2563,6 +2595,7 @@ fun main(args: Array<String>) = application {
             },
             onUpdateCategoryControlPoints = { categoryId, controlPointsText, shouldCheckRequiredControls ->
                 runCatching {
+                    var lockedCourseWarning = ""
                     val previousControlPointsText = projectSession.currentProject
                         ?.raceData
                         ?.categories
@@ -2570,6 +2603,7 @@ fun main(args: Array<String>) = application {
                         ?.restorableControlPointsText()
                         ?.takeIf { it.isNotBlank() }
                     val updatedProject = projectSession.updateCurrentProject { currentProject ->
+                        lockedCourseWarning = currentProject.lockedCategoryCourseWarning(categoryId, protectedCoursePassword != null)
                         EventProjectEditor.updateCategoryControlPoints(
                             currentProject,
                             categoryId,
@@ -2580,7 +2614,7 @@ fun main(args: Array<String>) = application {
                     }
                     projectFile = updatedProject
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    projectStatusText = "Unsaved changes."
+                    projectStatusText = "Unsaved changes.$lockedCourseWarning"
                     if (shouldCheckRequiredControls) {
                         val warning = EventAssignedControlWarnings.forCategory(updatedProject.raceData, categoryId)
                         scheduleAssignedControlsWarning(
@@ -2596,7 +2630,9 @@ fun main(args: Array<String>) = application {
             },
             onUpdateCategoryPhysicalStats = { categoryId, lengthMeters, climbMeters ->
                 runCatching {
+                    var lockedCourseWarning = ""
                     projectFile = projectSession.updateCurrentProject { currentProject ->
+                        lockedCourseWarning = currentProject.lockedCategoryCourseWarning(categoryId, protectedCoursePassword != null)
                         EventProjectEditor.updateCategoryPhysicalStats(
                             currentProject,
                             categoryId,
@@ -2605,7 +2641,7 @@ fun main(args: Array<String>) = application {
                         )
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    projectStatusText = "Unsaved changes."
+                    projectStatusText = "Unsaved changes.$lockedCourseWarning"
                 }.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
@@ -2625,6 +2661,10 @@ fun main(args: Array<String>) = application {
             },
             onRemoveCategory = { categoryId, deleteCompetitors ->
                 runCatching {
+                    val currentProject = requireNotNull(projectSession.currentProject)
+                    require(!currentProject.categoryHasLockedProtectedCourseData(categoryId, protectedCoursePassword != null)) {
+                        "Category has locked protected course data. Unlock course data before deleting it."
+                    }
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.removeCategory(currentProject, categoryId, deleteCompetitors)
                     }
@@ -2936,6 +2976,7 @@ fun main(args: Array<String>) = application {
                     var affectedAssignedCategories = 0
                     var affectedProtectedCourses = 0
                     var identityChanged = false
+                    var lockedCourseWarning = ""
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         val existingControl = currentProject.raceData.controls.firstOrNull { it.id == controlId }
                         identityChanged = existingControl?.let { control ->
@@ -2951,12 +2992,13 @@ fun main(args: Array<String>) = application {
                                 protectedCourseInfoByCategoryId,
                                 controlIds
                             )
+                            lockedCourseWarning = currentProject.lockedProtectedCourseWarning(protectedCoursePassword != null)
                         }
                         EventProjectEditor.updateControl(currentProject, controlId, label, siCode, type, scored, publicLabel, notes)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = if (identityChanged) {
-                        "Control identity updated. This control is used by $affectedAssignedCategories assigned categor${if (affectedAssignedCategories == 1) "y" else "ies"} and $affectedProtectedCourses stored course${if (affectedProtectedCourses == 1) "" else "s"}."
+                        "Control identity updated. This control is used by $affectedAssignedCategories assigned categor${if (affectedAssignedCategories == 1) "y" else "ies"} and $affectedProtectedCourses stored course${if (affectedProtectedCourses == 1) "" else "s"}.$lockedCourseWarning"
                     } else {
                         "Unsaved changes."
                     }
@@ -2988,6 +3030,10 @@ fun main(args: Array<String>) = application {
             },
             onRemoveControl = { controlId ->
                 runCatching {
+                    val currentProject = requireNotNull(projectSession.currentProject)
+                    require(!currentProject.hasLockedProtectedCourseData(protectedCoursePassword != null)) {
+                        "Course data is locked. Unlock course data before deleting controls so protected route references can be checked."
+                    }
                     val protectedUseCount = DesktopImportPreviews.protectedCourseUseCount(
                         protectedCourseInfoByCategoryId,
                         setOf(controlId)
@@ -3368,6 +3414,71 @@ private fun CourseKmlKmzImportReviewDialog(
         dismissButton = {
             Button(onClick = onCancel) {
                 Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun CategoriesCsvImportReviewDialog(
+    review: PendingCategoriesCsvImportReview,
+    onImport: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val preview = review.preview
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Review categories CSV import") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 380.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("File: ${review.path.fileName}")
+                preview.eventTypeWarnings.forEach { warning ->
+                    Text(
+                        text = warning,
+                        color = DesktopPalette.Error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text("Categories to add: ${preview.addedCount}")
+                Text("Categories to update: ${preview.updatedCount}")
+                if (review.invalidLineCount > 0) {
+                    Text(
+                        text = "Invalid rows skipped: ${review.invalidLineCount}",
+                        color = DesktopPalette.Error
+                    )
+                }
+                if (preview.affectedCompetitorCount > 0) {
+                    Text("Updated categories currently include ${preview.affectedCompetitorCount} competitor${if (preview.affectedCompetitorCount == 1) "" else "s"}.")
+                }
+                if (preview.categoriesWithAssignedControlsReplacedCount > 0) {
+                    Text(
+                        text = "Assigned controls will be replaced for ${preview.categoriesWithAssignedControlsReplacedCount} existing categor${if (preview.categoriesWithAssignedControlsReplacedCount == 1) "y" else "ies"}.",
+                        color = DesktopPalette.Warning
+                    )
+                }
+                if (preview.categoriesWithProtectedCoursePreservedCount > 0) {
+                    Text("Protected KML/KMZ course data will be preserved for ${preview.categoriesWithProtectedCoursePreservedCount} updated categor${if (preview.categoriesWithProtectedCoursePreservedCount == 1) "y" else "ies"}.")
+                }
+                Text(
+                    "This import updates existing categories by name and appends new names. It does not delete categories missing from the CSV.",
+                    fontSize = 12.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onImport) {
+                ButtonLabel("Import Categories")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                ButtonLabel("Cancel")
             }
         }
     )
@@ -3894,6 +4005,13 @@ private data class CourseKmlKmzImportPreview(
 private data class PendingCompetitorsCsvImportReview(
     val path: Path,
     val missingCategoryNames: List<String>
+)
+
+private data class PendingCategoriesCsvImportReview(
+    val path: Path,
+    val rows: List<CategoryCsvImportRow>,
+    val invalidLineCount: Int,
+    val preview: DesktopCategoryCsvImportPreview
 )
 
 private data class PendingControlsCsvImportReview(
@@ -9920,6 +10038,36 @@ private fun selectedProtectedIdealOrderControlIds(
     runCatching {
         ProtectedIdealOrderRules.resolveControlIds(idealOrderText, controls).toSet()
     }.getOrDefault(emptySet())
+
+private fun EventProjectFile.hasLockedProtectedCourseData(isProtectedCourseOrderUnlocked: Boolean): Boolean =
+    !isProtectedCourseOrderUnlocked &&
+        raceData.categories.any { it.category.encryptedCourseInfo?.isNotBlank() == true }
+
+private fun EventProjectFile.categoryHasLockedProtectedCourseData(
+    categoryId: String,
+    isProtectedCourseOrderUnlocked: Boolean
+): Boolean =
+    !isProtectedCourseOrderUnlocked &&
+        raceData.categories.any {
+            it.category.id == categoryId && it.category.encryptedCourseInfo?.isNotBlank() == true
+        }
+
+private fun EventProjectFile.lockedProtectedCourseWarning(isProtectedCourseOrderUnlocked: Boolean): String =
+    if (hasLockedProtectedCourseData(isProtectedCourseOrderUnlocked)) {
+        " Course data is locked; unlock it to run full protected-route safety checks."
+    } else {
+        ""
+    }
+
+private fun EventProjectFile.lockedCategoryCourseWarning(
+    categoryId: String,
+    isProtectedCourseOrderUnlocked: Boolean
+): String =
+    if (categoryHasLockedProtectedCourseData(categoryId, isProtectedCourseOrderUnlocked)) {
+        " This category has locked protected course data; unlock it to compare stored route data."
+    } else {
+        ""
+    }
 
 private fun protectedControlLocationSummaries(
     projectFile: EventProjectFile,
