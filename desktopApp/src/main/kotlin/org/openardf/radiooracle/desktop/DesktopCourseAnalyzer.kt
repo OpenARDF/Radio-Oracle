@@ -511,7 +511,7 @@ object DesktopCourseAnalyzer {
                 foxCount = foxes.size,
                 comparisonLengthMeters = analysis.comparisonLengthMeters.roundToInt(),
                 measurementLabel = analysis.measurementLabel,
-                estimatedSeconds = analysis.estimatedSeconds.roundToInt()
+                estimatedSeconds = analysis.estimatedSeconds?.roundToInt()
             ) + spacingRuleChecks
         }.orEmpty()
         val calculatedRuleChecks = calculatedRouteAnalysis?.let { analysis ->
@@ -522,7 +522,7 @@ object DesktopCourseAnalyzer {
                 foxCount = foxes.size,
                 comparisonLengthMeters = analysis.comparisonLengthMeters.roundToInt(),
                 measurementLabel = analysis.measurementLabel,
-                estimatedSeconds = analysis.estimatedSeconds.roundToInt()
+                estimatedSeconds = analysis.estimatedSeconds?.roundToInt()
             ) + spacingRuleChecks
         }.orEmpty()
         val calculatedSection = calculatedRoute?.let { routeCandidate ->
@@ -599,7 +599,7 @@ object DesktopCourseAnalyzer {
                 routeLengthMeters = analysis.routeLengthMeters.roundToInt(),
                 climbMeters = analysis.climbMeters?.roundToInt(),
                 effectiveLengthMeters = analysis.effectiveLengthMeters?.roundToInt(),
-                estimatedIdealSeconds = analysis.estimatedSeconds.roundToInt(),
+                estimatedIdealSeconds = analysis.estimatedSeconds?.roundToInt(),
                 legRows = providedLegRows,
                 waitRows = waitRows,
                 waitRenumbering = waitRenumbering,
@@ -914,7 +914,7 @@ object DesktopCourseAnalyzer {
             straightLineMeters = providedRoutePoints.takeIf { it.size >= 2 }?.straightLineMeters(),
             climbMeters = climbMeters,
             effectiveLengthMeters = effectiveLengthMeters,
-            estimatedSeconds = requireNotNull(timing.totalSeconds),
+            estimatedSeconds = timing.totalSeconds,
             elevationProfile = elevationProfile(route),
             arrivalSecondsByControlId = timing.arrivalSecondsByControlId
         )
@@ -955,7 +955,7 @@ object DesktopCourseAnalyzer {
             straightLineMeters = routeLengthMeters,
             climbMeters = climbMeters,
             effectiveLengthMeters = effectiveLengthMeters,
-            estimatedSeconds = requireNotNull(timing.totalSeconds),
+            estimatedSeconds = timing.totalSeconds,
             elevationProfile = elevationProfile(points),
             arrivalSecondsByControlId = timing.arrivalSecondsByControlId
         )
@@ -2491,7 +2491,7 @@ private data class RouteAnalysis(
     val straightLineMeters: Double?,
     val climbMeters: Double?,
     val effectiveLengthMeters: Double?,
-    val estimatedSeconds: Double,
+    val estimatedSeconds: Double?,
     val elevationProfile: List<DesktopCourseElevationProfilePoint>,
     val arrivalSecondsByControlId: Map<String, Int>
 )
