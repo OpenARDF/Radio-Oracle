@@ -349,6 +349,7 @@ fun main(args: Array<String>) = application {
         var protectedIdealOrderByCategoryId by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
         var protectedCourseInfoByCategoryId by remember { mutableStateOf<Map<String, ProtectedCourseInfo>>(emptyMap()) }
         var recentImportReport by remember { mutableStateOf<DesktopImportReport?>(null) }
+        var recentImportCheckpoint by remember { mutableStateOf<DesktopImportCheckpoint?>(null) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var isCourseKmlKmzUnlockDialogVisible by remember { mutableStateOf(false) }
@@ -407,6 +408,35 @@ fun main(args: Array<String>) = application {
         fun syncProjectState() {
             projectFile = projectSession.currentProject
             hasUnsavedChanges = projectSession.hasUnsavedChanges
+        }
+
+        fun checkpointBeforeImport(title: String) {
+            val currentProject = projectSession.currentProject ?: return
+            recentImportCheckpoint = DesktopImportCheckpoint(
+                title = title,
+                projectFile = currentProject,
+                protectedCoursePassword = protectedCoursePassword,
+                protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
+            )
+        }
+
+        fun restoreRecentImportCheckpoint() {
+            val checkpoint = recentImportCheckpoint ?: return
+            runCatching {
+                projectFile = projectSession.updateCurrentProject { checkpoint.projectFile }
+                protectedCoursePassword = checkpoint.protectedCoursePassword
+                protectedIdealOrderByCategoryId = checkpoint.protectedIdealOrderByCategoryId
+                protectedCourseInfoByCategoryId = checkpoint.protectedCourseInfoByCategoryId
+                syncProjectState()
+                recentImportReport = DesktopImportReport(
+                    title = "Restored ${checkpoint.title}",
+                    lines = listOf("The Event File was restored to the in-memory checkpoint captured before that import.")
+                )
+                projectStatusText = "Restored checkpoint from before ${checkpoint.title}. Unsaved changes."
+            }.onFailure { error ->
+                projectStatusText = "Restore failed: ${error.message ?: error::class.simpleName}"
+            }
         }
 
         fun isDefaultUnsavedNewEventFileDraft(): Boolean =
@@ -572,14 +602,21 @@ fun main(args: Array<String>) = application {
             if (isDownloadingSiReadout || isContinuousSiReadoutActive || isReadingCompetitorSiCard) {
                 return
             }
-            if (projectSession.currentProject == null) {
+            val currentProject = projectSession.currentProject
+            if (currentProject == null) {
                 projectStatusText = "Open or create an Event File before downloading SI cards."
                 DesktopDebugLog.warn("SI", "Single SI download requested with no Event File open")
                 return
             }
+            val preflightWarning = raceOpsPreflightWarning(
+                currentProject,
+                protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                protectedCoursePassword != null
+            )
             isDownloadingSiReadout = true
             siDownloadStatusText = "Waiting for SI card; keep it seated until the read finishes."
-            projectStatusText = "Waiting for SI card..."
+            projectStatusText = preflightWarning ?: "Waiting for SI card..."
+            preflightWarning?.let { DesktopDebugLog.warn("Readiness", it) }
             DesktopDebugLog.info("SI", "Single SI download started")
             appCoroutineScope.launch {
                 val downloadResult = runCatching {
@@ -733,16 +770,23 @@ fun main(args: Array<String>) = application {
             if (isDownloadingSiReadout || isContinuousSiReadoutActive || isReadingCompetitorSiCard) {
                 return
             }
-            if (projectSession.currentProject == null) {
+            val currentProject = projectSession.currentProject
+            if (currentProject == null) {
                 projectStatusText = "Open or create an Event File before downloading SI cards."
                 DesktopDebugLog.warn("SI", "Continuous SI readout requested with no Event File open")
                 return
             }
+            val preflightWarning = raceOpsPreflightWarning(
+                currentProject,
+                protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                protectedCoursePassword != null
+            )
             val stopRequested = AtomicBoolean(false)
             continuousSiReadoutStopRequested = stopRequested
             isContinuousSiReadoutActive = true
             siDownloadStatusText = "Continuous SI readout is running; insert SI cards and keep each seated until it reads."
-            projectStatusText = "Continuous SI readout running..."
+            projectStatusText = preflightWarning ?: "Continuous SI readout running..."
+            preflightWarning?.let { DesktopDebugLog.warn("Readiness", it) }
             DesktopDebugLog.info("SI", "Continuous SI readout started")
             appCoroutineScope.launch {
                 val result = runCatching {
@@ -889,9 +933,16 @@ fun main(args: Array<String>) = application {
                 }
                 return
             }
+            val preflightWarning = raceOpsPreflightWarning(
+                currentProjectForPlan,
+                protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                protectedCoursePassword != null
+            )
             isSendingLiveResults = true
             if (!automatic) {
-                projectStatusText = "Sending live results to ROBIS..."
+                projectStatusText = preflightWarning?.let { "$it Sending live results to ROBIS..." }
+                    ?: "Sending live results to ROBIS..."
+                preflightWarning?.let { DesktopDebugLog.warn("Readiness", it) }
             }
             appCoroutineScope.launch {
                 val sendResult = runCatching {
@@ -1427,6 +1478,7 @@ fun main(args: Array<String>) = application {
             } else {
                 selectedProject
             }
+            checkpointBeforeImport("controls/route KML/KMZ import ${review.sourceName}")
             projectFile = projectSession.updateCurrentProject { updatedProject }
             syncProtectedCourseState(updatedProject, review.password)
             pendingCourseKmlKmzImportReview = null
@@ -1757,6 +1809,7 @@ fun main(args: Array<String>) = application {
             runCatching {
                 val csvText = Files.readString(path)
                 val result = EventCsvImports.parseAndroidCompetitorRows(csvText)
+                checkpointBeforeImport("competitors CSV import ${path.fileName}")
                 var importWarnings = emptyList<String>()
                 var importedRows = 0
                 var updatedRows = 0
@@ -1833,6 +1886,7 @@ fun main(args: Array<String>) = application {
         fun applyCategoriesCsvImport(review: PendingCategoriesCsvImportReview) {
             runCatching {
                 lockProtectedCourseOrder()
+                checkpointBeforeImport("categories CSV import ${review.path.fileName}")
                 var importedRows = 0
                 var updatedRows = 0
                 projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -1891,6 +1945,7 @@ fun main(args: Array<String>) = application {
 
         fun applyControlsCsvImport(review: PendingControlsCsvImportReview) {
             runCatching {
+                checkpointBeforeImport("controls CSV import ${review.path.fileName}")
                 projectFile = projectSession.updateCurrentProject { currentProject ->
                     EventProjectEditor.importControlRows(
                         currentProject,
@@ -2563,11 +2618,13 @@ fun main(args: Array<String>) = application {
             onInsertTestCategories = ::insertTestCategories,
             onInsertTestCompetitors = ::insertTestCompetitors,
             onInsertTestSportIdentDownloads = ::insertTestSportIdentDownloads,
+            onRestoreRecentImportCheckpoint = ::restoreRecentImportCheckpoint,
             onNavAction = ::handleNavAction,
             isProtectedCourseOrderUnlocked = protectedCoursePassword != null,
             protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
             recentImportReport = recentImportReport,
+            recentImportCheckpoint = recentImportCheckpoint,
             onRetrieveMissingCourseElevations = ::startCourseAnalysisElevationFetch,
             onDownloadVenueElevationCache = ::startVenueElevationCacheDownload,
             onOpenVenueElevationCacheFolder = ::openVenueElevationCacheFolder,
@@ -4035,6 +4092,14 @@ private data class DesktopImportReport(
     val lines: List<String>
 )
 
+private data class DesktopImportCheckpoint(
+    val title: String,
+    val projectFile: EventProjectFile,
+    val protectedCoursePassword: String?,
+    val protectedIdealOrderByCategoryId: Map<String, String>,
+    val protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+)
+
 private data class PendingCourseKmlKmzImportReview(
     val sourceName: String,
     val path: Path,
@@ -4202,6 +4267,7 @@ private fun RadioOManagerDesktopApp(
     protectedIdealOrderByCategoryId: Map<String, String> = emptyMap(),
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
     recentImportReport: DesktopImportReport? = null,
+    recentImportCheckpoint: DesktopImportCheckpoint? = null,
     onRetrieveMissingCourseElevations: (String) -> Unit = {},
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit = { _, _, _, _, _, _ -> },
     onOpenVenueElevationCacheFolder: () -> Unit = {},
@@ -4222,6 +4288,7 @@ private fun RadioOManagerDesktopApp(
     onInsertTestCategories: () -> Unit = {},
     onInsertTestCompetitors: () -> Unit = {},
     onInsertTestSportIdentDownloads: () -> Unit = {},
+    onRestoreRecentImportCheckpoint: () -> Unit = {},
     onNavAction: (DesktopNavAction) -> Unit = {},
     hasDefaultUnsavedNewEventFileDraft: Boolean = false,
     hasEditedUnsavedNewEventFileDraft: Boolean = false,
@@ -4384,6 +4451,7 @@ private fun RadioOManagerDesktopApp(
                                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                                 recentImportReport = recentImportReport,
+                                recentImportCheckpoint = recentImportCheckpoint,
                                 onRetrieveMissingCourseElevations = onRetrieveMissingCourseElevations,
                                 onDownloadVenueElevationCache = onDownloadVenueElevationCache,
                                 onOpenVenueElevationCacheFolder = onOpenVenueElevationCacheFolder,
@@ -4400,6 +4468,7 @@ private fun RadioOManagerDesktopApp(
                                 onInsertTestCategories = onInsertTestCategories,
                                 onInsertTestCompetitors = onInsertTestCompetitors,
                                 onInsertTestSportIdentDownloads = onInsertTestSportIdentDownloads,
+                                onRestoreRecentImportCheckpoint = onRestoreRecentImportCheckpoint,
                                 onNavAction = onNavAction
                             )
                         }
@@ -4864,6 +4933,7 @@ private fun SectionWorkspace(
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     recentImportReport: DesktopImportReport?,
+    recentImportCheckpoint: DesktopImportCheckpoint?,
     onRetrieveMissingCourseElevations: (String) -> Unit,
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
     onOpenVenueElevationCacheFolder: () -> Unit,
@@ -4880,6 +4950,7 @@ private fun SectionWorkspace(
     onInsertTestCategories: () -> Unit,
     onInsertTestCompetitors: () -> Unit,
     onInsertTestSportIdentDownloads: () -> Unit,
+    onRestoreRecentImportCheckpoint: () -> Unit,
     onNavAction: (DesktopNavAction) -> Unit
 ) {
     Column(
@@ -5051,6 +5122,8 @@ private fun SectionWorkspace(
                     protectedCourseInfoByCategoryId.takeIf { isProtectedCourseOrderUnlocked } ?: emptyMap()
                 ),
                 recentImportReport = recentImportReport,
+                recentImportCheckpoint = recentImportCheckpoint,
+                onRestoreRecentImportCheckpoint = onRestoreRecentImportCheckpoint,
                 onInsertTestControls = onInsertTestControls,
                 onInsertTestCategories = onInsertTestCategories,
                 onInsertTestCompetitors = onInsertTestCompetitors,
@@ -5124,6 +5197,8 @@ private fun SectionWorkspace(
 private fun EventDiagnosticsPanel(
     diagnostics: DesktopProjectDiagnostics,
     recentImportReport: DesktopImportReport?,
+    recentImportCheckpoint: DesktopImportCheckpoint?,
+    onRestoreRecentImportCheckpoint: () -> Unit,
     onInsertTestControls: () -> Unit,
     onInsertTestCategories: () -> Unit,
     onInsertTestCompetitors: () -> Unit,
@@ -5190,6 +5265,16 @@ private fun EventDiagnosticsPanel(
                     text = line,
                     color = DesktopPalette.Disconnected,
                     fontSize = 13.sp
+                )
+            }
+            if (recentImportCheckpoint != null) {
+                Button(onClick = onRestoreRecentImportCheckpoint) {
+                    ButtonLabel("Restore Before Import")
+                }
+                Text(
+                    text = "Restores the in-memory Event File state captured before ${recentImportCheckpoint.title}. Save after restore if you want to keep it.",
+                    color = Color.DarkGray,
+                    fontSize = 12.sp
                 )
             }
         }
@@ -10158,6 +10243,26 @@ private fun EventProjectFile.lockedCategoryCourseWarning(
     } else {
         ""
     }
+
+private fun raceOpsPreflightWarning(
+    projectFile: EventProjectFile,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    isProtectedCourseOrderUnlocked: Boolean
+): String? {
+    val activeIssues = DesktopProjectDiagnostics.from(projectFile, protectedCourseInfoByCategoryId)
+        .readinessIssues
+        .filterNot { it.contains("has course data but no competitors") }
+        .toMutableList()
+    if (projectFile.hasLockedProtectedCourseData(isProtectedCourseOrderUnlocked)) {
+        activeIssues += "Course data is locked; unlock it to run full protected-route safety checks."
+    }
+    return activeIssues
+        .takeIf { it.isNotEmpty() }
+        ?.let { issues ->
+            val suffix = if (issues.size > 1) " ${issues.size - 1} more readiness issues." else ""
+            "Readiness warning: ${issues.first()}$suffix"
+        }
+}
 
 private fun protectedControlLocationSummaries(
     projectFile: EventProjectFile,
