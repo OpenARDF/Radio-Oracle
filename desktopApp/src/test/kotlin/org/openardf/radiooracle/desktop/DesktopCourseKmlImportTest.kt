@@ -74,6 +74,40 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun importsCategoryCourseInfoFromControlsProjectedOntoEachRoute() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithThreeCategoryRoutes())
+        val project = listOf("M21", "M50", "W65").fold(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00")
+        ) { currentProject, categoryName ->
+            EventProjectEditor.addCategory(
+                currentProject,
+                categoryId = "cat-${categoryName.lowercase()}",
+                name = categoryName
+            )
+        }
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { 100.0 }
+        )
+
+        fun protectedInfo(categoryName: String) = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single { it.category.name == categoryName }.category.encryptedCourseInfo),
+            "course-key"
+        )
+
+        assertEquals(3, summary.importedCategoryCount)
+        assertEquals(14, summary.assignedCategoryControlCount)
+        assertEquals(listOf("1", "2", "3", "4", "5", "M"), protectedInfo("M21").controlPoints.map { it.label })
+        assertEquals(listOf("1", "3", "5", "M"), protectedInfo("M50").controlPoints.map { it.label })
+        assertEquals(listOf("2", "4", "5", "M"), protectedInfo("W65").controlPoints.map { it.label })
+        assertEquals(8, protectedInfo("M50").courseObjects.size)
+    }
+
+    @Test
     fun importReplacesExistingCategoryAssignmentsWithImportedControls() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithReversedControlPlacemarkOrder())
@@ -950,6 +984,80 @@ class DesktopCourseKmlImportTest {
                   -94.9970,39.0000,0
                   -94.9960,39.0000,0
                   -94.9950,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleKmlWithThreeCategoryRoutes(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>-95.0000,39.0200,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>33</name>
+              <Point><coordinates>-94.9800,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>34</name>
+              <Point><coordinates>-94.9800,39.0200,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>35</name>
+              <Point><coordinates>-94.9600,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M</name>
+              <Point><coordinates>-94.9400,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0100,39.0000,0
+                  -95.0000,39.0000,0
+                  -95.0000,39.0200,0
+                  -94.9800,39.0000,0
+                  -94.9800,39.0200,0
+                  -94.9600,39.0000,0
+                  -94.9400,39.0000,0
+                  -94.9300,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>M50</name>
+              <LineString>
+                <coordinates>
+                  -95.0100,39.0000,0
+                  -95.0000,39.0000,0
+                  -94.9800,39.0000,0
+                  -94.9600,39.0000,0
+                  -94.9400,39.0000,0
+                  -94.9300,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>W65</name>
+              <LineString>
+                <coordinates>
+                  -95.0100,39.0200,0
+                  -95.0000,39.0200,0
+                  -94.9800,39.0200,0
+                  -94.9600,39.0000,0
+                  -94.9400,39.0000,0
+                  -94.9300,39.0000,0
                 </coordinates>
               </LineString>
             </Placemark>

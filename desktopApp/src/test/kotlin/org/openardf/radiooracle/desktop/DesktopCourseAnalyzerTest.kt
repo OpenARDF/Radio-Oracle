@@ -237,7 +237,7 @@ class DesktopCourseAnalyzerTest {
 
         val section = requireNotNull(summary.calculatedRouteSection)
         assertEquals(4, summary.calculatedRouteCount)
-        assertEquals(listOf("S", "1", "2", "B", "F1", "F2", "B"), section.routeOrder)
+        assertEquals(listOf("S", "1", "2", "B", "F2", "F1", "B"), section.routeOrder)
         assertTrue(section.explanation.contains("using the beacon as the slow-to-fast transition"))
     }
 
@@ -799,6 +799,31 @@ class DesktopCourseAnalyzerTest {
         assertEquals(listOf("S", "Fox 1", "Fox 2", "B"), summary.providedIdealOrder)
         assertTrue(summary.calculatedIdealOrder.none { it == "Fox 3" })
         assertEquals(listOf("Fox 1", "Fox 2"), summary.waitRows.map { it.controlLabel })
+    }
+
+    @Test
+    fun calculatedRouteUsesControlsFromStoredRouteInsteadOfBroaderCategoryAssignments() {
+        val baseProtectedInfo = protectedInfo(foxCount = 5)
+        val routeControlIds = setOf("control-1", "control-3", "control-5", "control-beacon")
+        val protectedInfo = baseProtectedInfo.copy(
+            idealOrder = "31 33 35 Beacon",
+            controlPoints = baseProtectedInfo.controlPoints.filter { it.controlId in routeControlIds }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 5, categoryName = "M50"),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = protectedInfo.idealOrder
+        )
+
+        val routeMap = requireNotNull(summary.routeMaps.single())
+        assertEquals(6, summary.calculatedRouteCount)
+        assertEquals(listOf("S", "31", "33", "35", "B"), summary.providedIdealOrder)
+        assertTrue(summary.calculatedIdealOrder.containsAll(listOf("31", "33", "35", "B")))
+        assertFalse(summary.calculatedIdealOrder.any { it == "32" || it == "34" })
+        assertTrue(routeMap.points.map { it.label }.containsAll(listOf("31", "32", "33", "34", "35", "B")))
+        assertEquals(listOf("S", "31", "33", "35", "B", "F"), routeMap.routeLabels)
     }
 
     private fun projectFile(

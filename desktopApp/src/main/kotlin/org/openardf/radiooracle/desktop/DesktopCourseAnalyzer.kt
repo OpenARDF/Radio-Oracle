@@ -282,11 +282,10 @@ object DesktopCourseAnalyzer {
         val idealOrderText = protectedIdealOrderText?.takeIf { it.isNotBlank() }
             ?: protectedCourseInfo?.idealOrder?.takeIf { it.isNotBlank() }
         val categoryAssignedControls = assignedControls(projectFile, categoryId)
-        val assignedControls = categoryAssignedControls.ifEmpty {
-            protectedCourseInfo
-                ?.let { protectedAssignedControls(projectFile, it, idealOrderText) }
-                .orEmpty()
-        }
+        val protectedRouteControls = protectedCourseInfo
+            ?.let { protectedAssignedControls(projectFile, it, idealOrderText) }
+            .orEmpty()
+        val assignedControls = protectedRouteControls.ifEmpty { categoryAssignedControls }
         val protectedControlPointsById = protectedCourseInfo?.controlPoints.orEmpty().associateBy { it.controlId }
         val protectedCoordinateLookup = protectedCoordinateLookup(protectedCourseInfo)
         val missing = mutableListOf<String>()
@@ -331,6 +330,8 @@ object DesktopCourseAnalyzer {
                     ?: protectedPointForControl(control, protectedCoordinateLookup)
             )
         }
+        val displayControlsWithPoints = displayControlsWithPoints(projectFile, protectedControlPointsById, protectedCoordinateLookup)
+            .ifEmpty { controlsWithPoints }
         val missingCoordinateControls = controlsWithPoints.filter { it.point == null }
         if (missingCoordinateControls.isNotEmpty()) {
             DesktopDebugLog.warn(
@@ -580,7 +581,8 @@ object DesktopCourseAnalyzer {
                         title = "Calculated route (calculated fox numbering)",
                         start = start,
                         finish = finish,
-                        controls = routeCandidate.controls,
+                        controls = displayControlsWithPoints,
+                        routeControls = routeCandidate.controls,
                         labelOverrides = calculatedLabelOverrides
                     )
                 )
@@ -607,7 +609,8 @@ object DesktopCourseAnalyzer {
                     title = "Stored route",
                     start = start,
                     finish = finish,
-                    controls = providedControls.mapNotNull { control ->
+                    controls = displayControlsWithPoints,
+                    routeControls = providedControls.mapNotNull { control ->
                         controlsWithPoints.firstOrNull { it.control.id == control.id }
                     }
                 )
@@ -788,15 +791,43 @@ object DesktopCourseAnalyzer {
             .distinctBy { it.id }
     }
 
+    private fun displayControlsWithPoints(
+        projectFile: EventProjectFile,
+        protectedControlPointsById: Map<String, ProtectedCourseControlPoint>,
+        protectedCoordinateLookup: ProtectedCoordinateLookup
+    ): List<ControlAnalysisPoint> =
+        projectFile.raceData.controls
+            .filter {
+                it.type == ControlPointType.CONTROL ||
+                    it.type == ControlPointType.SEPARATOR ||
+                    it.type == ControlPointType.BEACON
+            }
+            .map { control ->
+                ControlAnalysisPoint(
+                    control = control,
+                    point = protectedControlPointsById[control.id]?.toGeoPoint()
+                        ?: protectedPointForControl(control, protectedCoordinateLookup)
+                )
+            }
+            .filter { it.point != null }
+            .distinctBy { it.control.id }
+
     private fun protectedAssignedControls(
         projectFile: EventProjectFile,
         courseInfo: ProtectedCourseInfo,
         idealOrderText: String?
     ): List<EventControl> {
         val controlsById = projectFile.raceData.controls.associateBy { it.id }
+        val projectControls = projectFile.raceData.controls
+            .filter {
+                it.type == ControlPointType.CONTROL ||
+                    it.type == ControlPointType.SEPARATOR ||
+                    it.type == ControlPointType.BEACON
+            }
         val protectedControls = courseInfo.controlPoints
             .map { protectedControl ->
                 controlsById[protectedControl.controlId]
+                    ?: projectControls.firstOrNull { it.matchesProtectedControl(protectedControl) }
                     ?: protectedControl.toEventControl(projectFile.raceData.race.id)
             }
             .filter {
@@ -816,6 +847,37 @@ object DesktopCourseAnalyzer {
             }
             ?.takeIf { it.isNotEmpty() }
             ?: protectedControls
+    }
+
+    private fun EventControl.matchesProtectedControl(protectedControl: ProtectedCourseControlPoint): Boolean {
+        if (type != protectedControl.type) {
+            return false
+        }
+        val protectedLabel = protectedControl.label.normalizedAnalysisControlName()
+        val protectedCompactLabel = protectedControl.label.compactAnalysisControlName()
+        val protectedNumber = protectedControl.label.singleAnalysisControlNumber()
+        if (type == ControlPointType.BEACON && protectedCompactLabel in setOf("m", "beacon")) {
+            return listOf(label, publicLabel.orEmpty()).any { it.compactAnalysisControlName() in setOf("m", "beacon") }
+        }
+        if (type == ControlPointType.SEPARATOR && protectedCompactLabel in setOf("s", "spectator", "separator")) {
+            return listOf(label, publicLabel.orEmpty()).any { it.compactAnalysisControlName() in setOf("s", "spectator", "separator") }
+        }
+        return listOf(label, publicLabel.orEmpty(), siCode.toString()).any { token ->
+            token.normalizedAnalysisControlName() == protectedLabel ||
+                token.compactAnalysisControlName() == protectedCompactLabel ||
+                (protectedNumber != null && token.singleAnalysisControlNumber() == protectedNumber)
+        }
+    }
+
+    private fun String.normalizedAnalysisControlName(): String =
+        trim().lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
+
+    private fun String.compactAnalysisControlName(): String =
+        normalizedAnalysisControlName().replace(" ", "")
+
+    private fun String.singleAnalysisControlNumber(): Int? {
+        val matches = Regex("""\d+""").findAll(this).map { it.value.toInt() }.toList()
+        return matches.singleOrNull()
     }
 
     private fun ProtectedCourseControlPoint.toEventControl(raceId: String): EventControl =
@@ -1619,21 +1681,38 @@ object DesktopCourseAnalyzer {
         start: CourseGeoPoint?,
         finish: CourseGeoPoint?,
         controls: List<ControlAnalysisPoint>,
+        routeControls: List<ControlAnalysisPoint> = controls,
         labelOverrides: Map<String, String> = emptyMap()
     ): DesktopCourseRouteMap? {
+        fun labelFor(controlPoint: ControlAnalysisPoint): String =
+            labelOverrides[controlPoint.control.id] ?: controlPoint.control.analysisRouteLabel()
+        val controlsToDisplay = (controls + routeControls).distinctBy { it.control.id }
         val labeledPoints = buildList {
             start?.let { add(RouteMapSourcePoint("S", it, DesktopCourseRouteMapPointType.Start)) }
-            controls.forEach { controlPoint ->
+            controlsToDisplay.forEach { controlPoint ->
                 val point = controlPoint.point ?: return@forEach
                 add(
                     RouteMapSourcePoint(
-                        labelOverrides[controlPoint.control.id] ?: controlPoint.control.analysisRouteLabel(),
+                        labelFor(controlPoint),
                         point,
                         controlPoint.control.routeMapType()
                     )
                 )
             }
             finish?.let { add(RouteMapSourcePoint("F", it, DesktopCourseRouteMapPointType.Finish)) }
+        }
+        val routeLabels = buildList {
+            if (start != null) {
+                add("S")
+            }
+            routeControls.forEach { controlPoint ->
+                if (controlPoint.point != null) {
+                    add(labelFor(controlPoint))
+                }
+            }
+            if (finish != null) {
+                add("F")
+            }
         }
         if (labeledPoints.size < 2) {
             return null
@@ -1654,7 +1733,7 @@ object DesktopCourseAnalyzer {
                     type = source.type
                 )
             },
-            routeLabels = labeledPoints.map { it.label }
+            routeLabels = routeLabels
         )
     }
 

@@ -189,17 +189,24 @@ object DesktopCourseKmlImporter {
             matchedCategoryIds += categoryData.category.id
             matchedCategoryNames += categoryData.category.name
 
-            categoryAssignmentUpdate(
-                projectFile = updatedProject,
-                categoryId = categoryData.category.id,
-                controls = controls
-            )?.let(categoryAssignmentUpdates::add)
-
             val existingCourseInfo = categoryData.category.encryptedCourseInfo
                 ?.takeIf { it.isNotBlank() }
                 ?.let { DesktopProtectedCourseOrder.decryptCourseInfo(it, password) }
             val sameSourceCourseInfo = existingCourseInfo?.takeIf { it.sourceSha256 == sourceSha256 }
-            if (sameSourceCourseInfo != null && sameSourceCourseInfo.hasImportedLocationRecords()) {
+            val duplicateRouteControlIds = controlsOnRoute(route.points, controlsByLabel.values.toList())
+            categoryAssignmentUpdate(
+                projectFile = updatedProject,
+                categoryId = categoryData.category.id,
+                controls = duplicateRouteControlIds
+            )?.let(categoryAssignmentUpdates::add)
+            val duplicateRouteControlIdValues = duplicateRouteControlIds.map { it.controlId }
+            val storedRouteControlIds = sameSourceCourseInfo?.controlPoints.orEmpty()
+                .map { it.controlId }
+            if (
+                sameSourceCourseInfo != null &&
+                sameSourceCourseInfo.hasImportedLocationRecords() &&
+                storedRouteControlIds == duplicateRouteControlIdValues
+            ) {
                 val missingElevationCount = missingElevationCount(sameSourceCourseInfo)
                 DesktopDebugLog.info(
                     "CourseKml",
@@ -216,7 +223,9 @@ object DesktopCourseKmlImporter {
                         "hash=${sourceSha256.shortHash()} existingRoutePoints=${sameSourceCourseInfo.route.size} " +
                         "existingRouteElevations=${sameSourceCourseInfo.route.count { it.elevationMeters != null }} " +
                         "existingControlPoints=${sameSourceCourseInfo.controlPoints.size} " +
-                        "existingCourseObjects=${sameSourceCourseInfo.courseObjects.size}"
+                        "existingCourseObjects=${sameSourceCourseInfo.courseObjects.size} " +
+                        "storedRouteControls=${storedRouteControlIds.joinToString()} " +
+                        "importRouteControls=${duplicateRouteControlIdValues.joinToString()}"
                 )
             }
             val routeGeometry = route.points.map { it.copy(elevationMeters = null) }
@@ -238,10 +247,12 @@ object DesktopCourseKmlImporter {
                     )
                 }
                 ?: importedSampledRoute
-            val idealOrder = idealOrderForRoute(sampledRoute, controlsByLabel.values.toList())
-            val controlPoints = controls.map { control ->
+            val routeControls = controlsOnRoute(sampledRoute, controlsByLabel.values.toList())
+
+            val idealOrder = routeControls.joinToString(" ") { it.label }
+            val allProtectedControlPoints = controls.map { control ->
                 val elevation = sameSourceCourseInfo?.elevationFor(control) ?: elevationProvider(control.point)
-                ProtectedCourseControlPoint(
+                control.controlId to ProtectedCourseControlPoint(
                     controlId = control.controlId,
                     label = control.label,
                     latitude = control.point.latitude,
@@ -249,11 +260,12 @@ object DesktopCourseKmlImporter {
                     type = control.type,
                     elevationMeters = elevation
                 )
-            }
-            val courseObjects = courseObjectsForRoute(sampledRoute, controlPoints)
+            }.toMap()
+            val controlPoints = routeControls.mapNotNull { allProtectedControlPoints[it.controlId] }
+            val courseObjects = courseObjectsForRoute(sampledRoute, allProtectedControlPoints.values.toList())
             DesktopDebugLog.info(
                 "CourseKml",
-                "Import matched category=${categoryData.category.name}: route=${route.name} sampledRoutePoints=${sampledRoute.size} idealOrder='${idealOrder.ifBlank { "none" }}' controls=${controlPoints.size} courseObjects=${courseObjects.size} routeElevations=${sampledRoute.count { it.elevationMeters != null }} controlElevations=${controlPoints.count { it.elevationMeters != null }}"
+                "Import matched category=${categoryData.category.name}: route=${route.name} sampledRoutePoints=${sampledRoute.size} idealOrder='${idealOrder.ifBlank { "none" }}' routeControls=${controlPoints.size} visibleControls=${allProtectedControlPoints.size} courseObjects=${courseObjects.size} routeElevations=${sampledRoute.count { it.elevationMeters != null }} controlElevations=${controlPoints.count { it.elevationMeters != null }}"
             )
             // Route-derived length and climb facts are competition-sensitive. Store them only in
             // the encrypted category payload; assigned controls are updated separately from the
@@ -843,14 +855,14 @@ object DesktopCourseKmlImporter {
     private fun sameCoordinate(first: Double, second: Double): Boolean =
         kotlin.math.abs(first - second) < 0.0000001
 
-    private fun idealOrderForRoute(route: List<CourseGeoPoint>, controls: List<CourseMatchedControl>): String =
+    private fun controlsOnRoute(route: List<CourseGeoPoint>, controls: List<CourseMatchedControl>): List<CourseMatchedControl> =
         controls
             .mapNotNull { control ->
                 val alongDistance = distanceAlongRouteOrNull(route, control.point, CONTROL_ROUTE_TOLERANCE_METERS)
                 alongDistance?.let { it to control }
             }
             .sortedBy { it.first }
-            .joinToString(" ") { (_, control) -> control.label }
+            .map { it.second }
 
     private fun courseObjectsForRoute(
         route: List<CourseGeoPoint>,
