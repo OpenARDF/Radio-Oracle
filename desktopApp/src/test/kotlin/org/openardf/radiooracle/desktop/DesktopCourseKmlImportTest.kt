@@ -108,6 +108,53 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun importsSprintRoutesForAllCategoriesEmbeddedInLineStringNames() {
+        val kmlPath = Files.createTempFile("Sprint", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithSprintCategoryRouteNames())
+        val expectedCategoryNames = listOf("M21", "M50", "W35", "M60", "W55", "M16", "W19", "W75", "M70")
+        val project = (expectedCategoryNames + "W21").fold(
+            EventProjectFactory.createEmptyProject("race", "Sprint Test", "2026-06-11T09:00")
+        ) { currentProject, categoryName ->
+            EventProjectEditor.addCategory(
+                currentProject,
+                categoryId = "cat-${categoryName.lowercase()}",
+                name = categoryName
+            )
+        }
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        fun courseLength(categoryName: String): Int = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single { it.category.name == categoryName }.category.encryptedCourseInfo),
+            "course-key"
+        ).lengthMeters!!
+
+        assertEquals(4, summary.routeCount)
+        assertEquals(expectedCategoryNames.size, summary.matchedCategoryCount)
+        assertEquals(expectedCategoryNames.toSet(), summary.matchedCategoryNames.toSet())
+        assertEquals(expectedCategoryNames.size, summary.importedCategoryCount)
+        assertEquals(null, updated.raceData.categories.single { it.category.name == "W21" }.category.encryptedCourseInfo)
+
+        val sprint10Length = courseLength("M21")
+        val sprint8Length = courseLength("M50")
+        val sprint7Length = courseLength("M60")
+        val sprint6Length = courseLength("M16")
+        assertEquals(sprint8Length, courseLength("W35"))
+        assertEquals(sprint7Length, courseLength("W55"))
+        assertEquals(sprint6Length, courseLength("W19"))
+        assertEquals(sprint6Length, courseLength("W75"))
+        assertEquals(sprint6Length, courseLength("M70"))
+        assertTrue(sprint10Length < sprint8Length)
+        assertTrue(sprint8Length < sprint7Length)
+        assertTrue(sprint7Length < sprint6Length)
+    }
+
+    @Test
     fun importReplacesExistingCategoryAssignmentsWithImportedControls() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithReversedControlPlacemarkOrder())
@@ -1058,6 +1105,59 @@ class DesktopCourseKmlImportTest {
                   -94.9600,39.0000,0
                   -94.9400,39.0000,0
                   -94.9300,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleKmlWithSprintCategoryRouteNames(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Sprint 10 foxes (M21) - 2.2 km - 1,2,3,4,5,S,1F,2F,3F,4F,5F</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9980,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>Sprint 8 foxes (M50, W35) - 2.0 km - 2,3,4,5,S,1F,3F,4F,5F</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9970,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>Sprint 7 foxes (M60, W55) - 1.9 km - 1,2,4,S,2F,3F,4F,5F</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9960,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>Sprint 6 foxes (M16, W19, W75, M70) - 1.6 km - 2,4,5,S,1F,3F,5F</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9950,39.0000,0
                 </coordinates>
               </LineString>
             </Placemark>

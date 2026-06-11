@@ -195,127 +195,128 @@ object DesktopCourseKmlImporter {
         val categoryAssignmentUpdates = mutableListOf<DesktopCourseKmlCategoryAssignmentUpdate>()
 
         courseData.routes.forEach { route ->
-            val categoryData = routeCategoryTargets[route] ?: return@forEach
-            matchedCategoryCount++
-            matchedCategoryIds += categoryData.category.id
-            matchedCategoryNames += categoryData.category.name
+            routeCategoryTargets[route].orEmpty().forEach { categoryData ->
+                matchedCategoryCount++
+                matchedCategoryIds += categoryData.category.id
+                matchedCategoryNames += categoryData.category.name
 
-            val existingCourseInfo = categoryData.category.encryptedCourseInfo
-                ?.takeIf { it.isNotBlank() }
-                ?.let { DesktopProtectedCourseOrder.decryptCourseInfo(it, password) }
-            val sameSourceCourseInfo = existingCourseInfo?.takeIf { it.sourceSha256 == sourceSha256 }
-            // Build the optional public assignment update from the unsampled LineString. Sampling
-            // is only for route/elevation facts; assignment matching should reflect the controls
-            // intentionally placed near the imported category route.
-            val duplicateRouteControlIds = controlsOnRoute(route.points, controlsByLabel.values.toList())
-            categoryAssignmentUpdate(
-                projectFile = updatedProject,
-                categoryId = categoryData.category.id,
-                controls = duplicateRouteControlIds
-            )?.let(categoryAssignmentUpdates::add)
-            val duplicateRouteControlIdValues = duplicateRouteControlIds.map { it.controlId }
-            val storedRouteControlIds = sameSourceCourseInfo?.controlPoints.orEmpty()
-                .map { it.controlId }
-            if (
-                sameSourceCourseInfo != null &&
-                sameSourceCourseInfo.hasImportedLocationRecords() &&
-                storedRouteControlIds == duplicateRouteControlIdValues
-            ) {
-                val missingElevationCount = missingElevationCount(sameSourceCourseInfo)
-                DesktopDebugLog.info(
-                    "CourseKml",
-                    "Import duplicate skipped for category=${categoryData.category.name}: hash=${sourceSha256.shortHash()} missingElevationPoints=$missingElevationCount"
-                )
-                duplicateCategoryCount++
-                duplicateMissingElevationPointCount += missingElevationCount
-                return@forEach
-            }
-            if (sameSourceCourseInfo != null) {
-                DesktopDebugLog.info(
-                    "CourseKml",
-                    "Import duplicate hash will be reprocessed for category=${categoryData.category.name}: " +
-                        "hash=${sourceSha256.shortHash()} existingRoutePoints=${sameSourceCourseInfo.route.size} " +
-                        "existingRouteElevations=${sameSourceCourseInfo.route.count { it.elevationMeters != null }} " +
-                        "existingControlPoints=${sameSourceCourseInfo.controlPoints.size} " +
-                        "existingCourseObjects=${sameSourceCourseInfo.courseObjects.size} " +
-                        "storedRouteControls=${storedRouteControlIds.joinToString()} " +
-                        "importRouteControls=${duplicateRouteControlIdValues.joinToString()}"
-                )
-            }
-            val routeGeometry = route.points.map { it.copy(elevationMeters = null) }
-            val importedSampledRoute = sampledRoute(routeGeometry, ROUTE_SAMPLE_METERS).map { point ->
-                val elevation = elevationProvider(point)
-                if (elevation != null) {
-                    routeElevationPointCount++
+                val existingCourseInfo = categoryData.category.encryptedCourseInfo
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { DesktopProtectedCourseOrder.decryptCourseInfo(it, password) }
+                val sameSourceCourseInfo = existingCourseInfo?.takeIf { it.sourceSha256 == sourceSha256 }
+                // Build the optional public assignment update from the unsampled LineString. Sampling
+                // is only for route/elevation facts; assignment matching should reflect the controls
+                // intentionally placed near the imported category route.
+                val duplicateRouteControlIds = controlsOnRoute(route.points, controlsByLabel.values.toList())
+                categoryAssignmentUpdate(
+                    projectFile = updatedProject,
+                    categoryId = categoryData.category.id,
+                    controls = duplicateRouteControlIds
+                )?.let(categoryAssignmentUpdates::add)
+                val duplicateRouteControlIdValues = duplicateRouteControlIds.map { it.controlId }
+                val storedRouteControlIds = sameSourceCourseInfo?.controlPoints.orEmpty()
+                    .map { it.controlId }
+                if (
+                    sameSourceCourseInfo != null &&
+                    sameSourceCourseInfo.hasImportedLocationRecords() &&
+                    storedRouteControlIds == duplicateRouteControlIdValues
+                ) {
+                    val missingElevationCount = missingElevationCount(sameSourceCourseInfo)
+                    DesktopDebugLog.info(
+                        "CourseKml",
+                        "Import duplicate skipped for category=${categoryData.category.name}: hash=${sourceSha256.shortHash()} missingElevationPoints=$missingElevationCount"
+                    )
+                    duplicateCategoryCount++
+                    duplicateMissingElevationPointCount += missingElevationCount
+                    return@forEach
                 }
-                point.copy(elevationMeters = elevation)
-            }
-            val sampledRoute = sameSourceCourseInfo
-                ?.route
-                ?.takeIf { points -> points.isNotEmpty() && points.any { it.elevationMeters != null } }
-                ?.map { point ->
-                    CourseGeoPoint(
-                        latitude = point.latitude,
-                        longitude = point.longitude,
-                        elevationMeters = point.elevationMeters
+                if (sameSourceCourseInfo != null) {
+                    DesktopDebugLog.info(
+                        "CourseKml",
+                        "Import duplicate hash will be reprocessed for category=${categoryData.category.name}: " +
+                            "hash=${sourceSha256.shortHash()} existingRoutePoints=${sameSourceCourseInfo.route.size} " +
+                            "existingRouteElevations=${sameSourceCourseInfo.route.count { it.elevationMeters != null }} " +
+                            "existingControlPoints=${sameSourceCourseInfo.controlPoints.size} " +
+                            "existingCourseObjects=${sameSourceCourseInfo.courseObjects.size} " +
+                            "storedRouteControls=${storedRouteControlIds.joinToString()} " +
+                            "importRouteControls=${duplicateRouteControlIdValues.joinToString()}"
                     )
                 }
-                ?: importedSampledRoute
-            val routeControls = controlsOnRoute(sampledRoute, controlsByLabel.values.toList())
+                val routeGeometry = route.points.map { it.copy(elevationMeters = null) }
+                val importedSampledRoute = sampledRoute(routeGeometry, ROUTE_SAMPLE_METERS).map { point ->
+                    val elevation = elevationProvider(point)
+                    if (elevation != null) {
+                        routeElevationPointCount++
+                    }
+                    point.copy(elevationMeters = elevation)
+                }
+                val sampledRoute = sameSourceCourseInfo
+                    ?.route
+                    ?.takeIf { points -> points.isNotEmpty() && points.any { it.elevationMeters != null } }
+                    ?.map { point ->
+                        CourseGeoPoint(
+                            latitude = point.latitude,
+                            longitude = point.longitude,
+                            elevationMeters = point.elevationMeters
+                        )
+                    }
+                    ?: importedSampledRoute
+                val routeControls = controlsOnRoute(sampledRoute, controlsByLabel.values.toList())
 
-            val idealOrder = routeControls.joinToString(" ") { it.label }
-            val allProtectedControlPoints = controls.map { control ->
-                val elevation = sameSourceCourseInfo?.elevationFor(control) ?: elevationProvider(control.point)
-                control.controlId to ProtectedCourseControlPoint(
-                    controlId = control.controlId,
-                    label = control.label,
-                    latitude = control.point.latitude,
-                    longitude = control.point.longitude,
-                    type = control.type,
-                    elevationMeters = elevation
-                )
-            }.toMap()
-            val controlPoints = routeControls.mapNotNull { allProtectedControlPoints[it.controlId] }
-            val courseObjects = courseObjectsForRoute(sampledRoute, allProtectedControlPoints.values.toList())
-            DesktopDebugLog.info(
-                "CourseKml",
-                "Import matched category=${categoryData.category.name}: route=${route.name} sampledRoutePoints=${sampledRoute.size} idealOrder='${idealOrder.ifBlank { "none" }}' routeControls=${controlPoints.size} visibleControls=${allProtectedControlPoints.size} courseObjects=${courseObjects.size} routeElevations=${sampledRoute.count { it.elevationMeters != null }} controlElevations=${controlPoints.count { it.elevationMeters != null }}"
-            )
-            // Route-derived length and climb facts are competition-sensitive. Store them only in
-            // the encrypted category payload; assigned controls are updated separately from the
-            // matched KML/KMZ point placemarks.
-            val protectedCourseInfo = ProtectedCourseInfo(
-                idealOrder = idealOrder,
-                lengthMeters = routeLengthMeters(sampledRoute).roundToInt(),
-                climbMeters = climbMetersOrNull(sampledRoute),
-                sourceName = path.fileName.toString(),
-                sourceSha256 = sourceSha256,
-                sampledPointCount = sampledRoute.size,
-                route = sampledRoute.map { point ->
-                    ProtectedCourseRoutePoint(
-                        latitude = point.latitude,
-                        longitude = point.longitude,
-                        elevationMeters = point.elevationMeters
+                val idealOrder = routeControls.joinToString(" ") { it.label }
+                val allProtectedControlPoints = controls.map { control ->
+                    val elevation = sameSourceCourseInfo?.elevationFor(control) ?: elevationProvider(control.point)
+                    control.controlId to ProtectedCourseControlPoint(
+                        controlId = control.controlId,
+                        label = control.label,
+                        latitude = control.point.latitude,
+                        longitude = control.point.longitude,
+                        type = control.type,
+                        elevationMeters = elevation
                     )
-                },
-                controlPoints = controlPoints,
-                courseObjects = courseObjects
-            )
-            val encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(protectedCourseInfo, password)
-            val encryptedIdealOrder = idealOrder.takeIf { it.isNotBlank() }?.let {
-                DesktopProtectedCourseOrder.encrypt(it, password)
+                }.toMap()
+                val controlPoints = routeControls.mapNotNull { allProtectedControlPoints[it.controlId] }
+                val courseObjects = courseObjectsForRoute(sampledRoute, allProtectedControlPoints.values.toList())
+                DesktopDebugLog.info(
+                    "CourseKml",
+                    "Import matched category=${categoryData.category.name}: route=${route.name} sampledRoutePoints=${sampledRoute.size} idealOrder='${idealOrder.ifBlank { "none" }}' routeControls=${controlPoints.size} visibleControls=${allProtectedControlPoints.size} courseObjects=${courseObjects.size} routeElevations=${sampledRoute.count { it.elevationMeters != null }} controlElevations=${controlPoints.count { it.elevationMeters != null }}"
+                )
+                // Route-derived length and climb facts are competition-sensitive. Store them only in
+                // the encrypted category payload; assigned controls are updated separately from the
+                // matched KML/KMZ point placemarks.
+                val protectedCourseInfo = ProtectedCourseInfo(
+                    idealOrder = idealOrder,
+                    lengthMeters = routeLengthMeters(sampledRoute).roundToInt(),
+                    climbMeters = climbMetersOrNull(sampledRoute),
+                    sourceName = path.fileName.toString(),
+                    sourceSha256 = sourceSha256,
+                    sampledPointCount = sampledRoute.size,
+                    route = sampledRoute.map { point ->
+                        ProtectedCourseRoutePoint(
+                            latitude = point.latitude,
+                            longitude = point.longitude,
+                            elevationMeters = point.elevationMeters
+                        )
+                    },
+                    controlPoints = controlPoints,
+                    courseObjects = courseObjects
+                )
+                val encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(protectedCourseInfo, password)
+                val encryptedIdealOrder = idealOrder.takeIf { it.isNotBlank() }?.let {
+                    DesktopProtectedCourseOrder.encrypt(it, password)
+                }
+                updatedProject = EventProjectEditor.updateCategoryEncryptedCourseInfo(
+                    updatedProject,
+                    categoryData.category.id,
+                    encryptedCourseInfo
+                )
+                updatedProject = EventProjectEditor.updateCategoryEncryptedIdealOrder(
+                    updatedProject,
+                    categoryData.category.id,
+                    encryptedIdealOrder
+                )
+                importedCategoryCount++
             }
-            updatedProject = EventProjectEditor.updateCategoryEncryptedCourseInfo(
-                updatedProject,
-                categoryData.category.id,
-                encryptedCourseInfo
-            )
-            updatedProject = EventProjectEditor.updateCategoryEncryptedIdealOrder(
-                updatedProject,
-                categoryData.category.id,
-                encryptedIdealOrder
-            )
-            importedCategoryCount++
         }
 
         require(matchedCategoryCount > 0 || controls.isNotEmpty()) {
@@ -354,15 +355,23 @@ object DesktopCourseKmlImporter {
         categories: List<EventCategoryData>,
         sourceName: String,
         categoryOverrideId: String?
-    ): Map<CourseRoute, EventCategoryData> {
-        val targets = mutableMapOf<CourseRoute, EventCategoryData>()
+    ): Map<CourseRoute, List<EventCategoryData>> {
+        val targets = mutableMapOf<CourseRoute, List<EventCategoryData>>()
         val usedCategoryIds = mutableSetOf<String>()
         routes.forEach { route ->
-            val categoryData = categories.firstOrNull { categoryData ->
+            val exactCategoryData = categories.firstOrNull { categoryData ->
                 categoryData.category.name.matchesCategoryRouteName(route.name)
-            } ?: return@forEach
-            targets[route] = categoryData
-            usedCategoryIds += categoryData.category.id
+            }
+            val matchedCategories = exactCategoryData
+                ?.let(::listOf)
+                ?: categories.filter { categoryData ->
+                    route.name.containsEmbeddedCategoryName(categoryData.category.name)
+                }
+            if (matchedCategories.isEmpty()) {
+                return@forEach
+            }
+            targets[route] = matchedCategories
+            usedCategoryIds += matchedCategories.map { it.category.id }
         }
 
         val unmatchedRoutes = routes.filterNot { it in targets }
@@ -371,7 +380,7 @@ object DesktopCourseKmlImporter {
                 ?: categoryOverrideId
                     ?.let { id -> categories.firstOrNull { categoryData -> categoryData.category.id == id } }
             if (inferredCategory != null && inferredCategory.category.id !in usedCategoryIds) {
-                targets[unmatchedRoutes.single()] = inferredCategory
+                targets[unmatchedRoutes.single()] = listOf(inferredCategory)
             }
         }
         return targets
@@ -1284,6 +1293,29 @@ private fun String.compactCategoryMatchText(): String =
 private fun String.matchesCategoryRouteName(importedRouteName: String): Boolean =
     categoryMatchText() == importedRouteName.categoryMatchText() ||
         compactCategoryMatchText() == importedRouteName.compactCategoryMatchText()
+
+private fun String.containsEmbeddedCategoryName(categoryName: String): Boolean {
+    val categoryToken = categoryName.ardfCategoryToken() ?: return parentheticalSegments()
+        .any { segment -> segment.containsCategoryName(categoryName) }
+    return categoryToken in ardfCategoryTokens()
+}
+
+private fun String.ardfCategoryToken(): String? =
+    Regex("^\\s*([mw])\\s*[-_ ]?\\s*(\\d{1,3})\\s*$", RegexOption.IGNORE_CASE)
+        .matchEntire(this)
+        ?.let { match -> "${match.groupValues[1]}${match.groupValues[2]}".lowercase() }
+
+private fun String.ardfCategoryTokens(): Set<String> =
+    Regex("(?i)(^|[^a-z0-9])([mw])\\s*[-_ ]?\\s*(\\d{1,3})(?=$|[^a-z0-9])")
+        .findAll(this)
+        .map { match -> "${match.groupValues[2]}${match.groupValues[3]}".lowercase() }
+        .toSet()
+
+private fun String.parentheticalSegments(): List<String> =
+    Regex("\\(([^)]*)\\)")
+        .findAll(this)
+        .map { match -> match.groupValues[1] }
+        .toList()
 
 private fun String.containsCategoryName(categoryName: String): Boolean {
     val normalizedCategory = categoryName.categoryMatchText()
