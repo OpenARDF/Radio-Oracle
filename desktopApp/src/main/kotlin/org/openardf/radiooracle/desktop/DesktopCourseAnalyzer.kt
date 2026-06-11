@@ -292,7 +292,7 @@ object DesktopCourseAnalyzer {
         val missing = mutableListOf<String>()
 
         if (protectedCourseInfo == null) {
-            missing += "Route data is locked by the course password or has not been imported for ${category.name}."
+            missing += "Route data is locked by the Event Password or has not been imported for ${category.name}."
         }
         val route = protectedCourseInfo?.route.orEmpty().map {
             CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters)

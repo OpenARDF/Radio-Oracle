@@ -12,6 +12,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -451,7 +452,7 @@ fun main(args: Array<String>) = application {
             protectedIdealOrderByCategoryId = emptyMap()
             protectedCourseInfoByCategoryId = emptyMap()
             if (wasUnlocked) {
-                projectStatusText = "Course order locked."
+                projectStatusText = "Event Password lock applied."
             }
         }
 
@@ -988,7 +989,7 @@ fun main(args: Array<String>) = application {
             val currentProject = projectSession.currentProject ?: return false
             val trimmedPassword = password.trim()
             if (trimmedPassword.isEmpty()) {
-                projectStatusText = "Course password cannot be blank."
+                projectStatusText = "Event Password cannot be blank."
                 return false
             }
 
@@ -1160,11 +1161,11 @@ fun main(args: Array<String>) = application {
             val trimmedNewPassword = newPassword.trim()
             val trimmedConfirmPassword = confirmPassword.trim()
             if (trimmedNewPassword.isEmpty()) {
-                projectStatusText = "New password cannot be blank."
+                projectStatusText = "New Event Password cannot be blank."
                 return false
             }
             if (trimmedNewPassword != trimmedConfirmPassword) {
-                projectStatusText = "New course passwords do not match."
+                projectStatusText = "New Event Passwords do not match."
                 return false
             }
 
@@ -1173,7 +1174,7 @@ fun main(args: Array<String>) = application {
                     !categoryData.category.encryptedCourseInfo.isNullOrBlank()
             }
             if (hasEncryptedCourseProtection && trimmedOldPassword.isEmpty()) {
-                projectStatusText = "Old password cannot be blank."
+                projectStatusText = "Current Event Password cannot be blank."
                 return false
             }
 
@@ -1214,13 +1215,13 @@ fun main(args: Array<String>) = application {
                 }.toMap()
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
                 projectStatusText = if (hasEncryptedCourseProtection) {
-                    "Course password updated. Unsaved changes."
+                    "Event Password updated. Unsaved changes."
                 } else {
-                    "Course password set. Unsaved changes."
+                    "Event Password set. Unsaved changes."
                 }
                 true
             }.getOrElse { error ->
-                projectStatusText = "Password update failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Event Password update failed: ${error.message ?: error::class.simpleName}"
                 false
             }
         }
@@ -1428,7 +1429,7 @@ fun main(args: Array<String>) = application {
                         ?.let { " Updated $it control locations." }
                         .orEmpty()
                     val assignedText = if (applyCategoryAssignments) {
-                        review.summary.assignedCategoryControlCount
+                        review.summary.categoryAssignmentUpdates.size
                             .takeIf { it > 0 }
                             ?.let { " Updated assigned controls for $it categories." }
                             .orEmpty()
@@ -1442,7 +1443,7 @@ fun main(args: Array<String>) = application {
                         review.summary.assignedCategoryControlCount > 0 &&
                         applyCategoryAssignments
                     ) {
-                        "Updated assigned controls for ${review.summary.assignedCategoryControlCount} categories.$duplicateText Unsaved changes."
+                        "Updated assigned controls for ${review.summary.categoryAssignmentUpdates.size} categories.$duplicateText Unsaved changes."
                     } else {
                         "Imported controls/route data for ${review.summary.importedCategoryCount} categories.$locationText$assignedText$duplicateText Unsaved changes."
                     }
@@ -3002,7 +3003,7 @@ private fun CourseKmlKmzUnlockDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    text = "KML/KMZ controls/route data includes coordinates and route details that require the course password.",
+                    text = "KML/KMZ controls/route data includes coordinates and route details that require the Event Password.",
                     fontSize = 13.sp,
                     color = Color.DarkGray
                 )
@@ -3090,7 +3091,12 @@ private fun CourseKmlKmzImportReviewDialog(
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text("File: ${review.sourceName}")
                 Text("Matched categories: ${summary.matchedCategoryCount} of ${summary.routeCount} route placemarks")
                 Text("Categories: $categoriesText")
@@ -3098,7 +3104,7 @@ private fun CourseKmlKmzImportReviewDialog(
                     Text("Categories to update: ${summary.importedCategoryCount}")
                 }
                 if (summary.assignedCategoryControlCount > 0) {
-                    Text("Category assigned controls available to copy: ${summary.assignedCategoryControlCount}")
+                    Text("Category assigned control points available to copy: ${summary.assignedCategoryControlCount}")
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -3135,9 +3141,9 @@ private fun CourseKmlKmzImportReviewDialog(
                 if (canFetchElevations) {
                     Text(
                         if (summary.duplicateMissingElevationPointCount > 0) {
-                            "Missing duplicate-file elevations: ${summary.duplicateMissingElevationPointCount} course points"
+                            "Stored route elevations missing: ${summary.duplicateMissingElevationPointCount} course points"
                         } else {
-                            "Course elevations: not retrieved"
+                            "Imported route elevations: not stored yet"
                         }
                     )
                     Row(
@@ -3150,9 +3156,9 @@ private fun CourseKmlKmzImportReviewDialog(
                         )
                         Text(
                             if (summary.isDuplicateOnly) {
-                                "Retrieve missing course elevations"
+                                "Fetch missing elevations for the stored route"
                             } else {
-                                "Retrieve missing course elevations after keeping imported data"
+                                "Fetch missing elevations for the imported route after keeping it"
                             }
                         )
                     }
@@ -4843,29 +4849,51 @@ private fun AppSettingsPanel(
     onUpdateCoursePassword: (String, String, String) -> Boolean
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        CoursePasswordSettingsPanel(
-            projectFile = projectFile,
-            isCourseDataUnlocked = isCourseDataUnlocked,
-            onUpdateCoursePassword = onUpdateCoursePassword
-        )
-        DetailRow("Printer", printerDiagnostics.readinessText)
-        DetailRow(
-            "Detected printers",
-            printerDiagnostics.detectedPrinterNames.joinToString().ifBlank { "None" }
-        )
+        AppSettingsSection("Printer information") {
+            DetailRow("Printer", printerDiagnostics.readinessText)
+            DetailRow(
+                "Detected printers",
+                printerDiagnostics.detectedPrinterNames.joinToString().ifBlank { "None" }
+            )
+        }
+        AppSettingsSection(if (projectFile?.hasCoursePasswordSet() == true) "Reset Event Password" else "Set Event Password") {
+            CoursePasswordSettingsPanel(
+                projectFile = projectFile,
+                isCourseDataUnlocked = isCourseDataUnlocked,
+                onUpdateCoursePassword = onUpdateCoursePassword
+            )
+        }
+        AppSettingsSection("Desktop beta scope") {
+            diagnostics.betaLimitations.forEach { limitation ->
+                Text(
+                    text = limitation,
+                    color = DesktopPalette.Black,
+                    fontSize = 13.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppSettingsSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, DesktopPalette.LightGrey)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         Text(
-            text = "Desktop beta scope",
+            text = title,
             color = DesktopPalette.Disconnected,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold
         )
-        diagnostics.betaLimitations.forEach { limitation ->
-            Text(
-                text = limitation,
-                color = DesktopPalette.Black,
-                fontSize = 13.sp
-            )
-        }
+        content()
     }
 }
 
@@ -4885,19 +4913,13 @@ private fun CoursePasswordSettingsPanel(
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = if (hasCoursePassword) "Reset course password" else "Set course password",
-            color = DesktopPalette.Black,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
             text = when {
                 projectFile == null ->
-                    "Open or create an Event File before setting a course password."
+                    "Open or create an Event File before setting an Event Password."
                 hasCoursePassword ->
-                    "Resetting the course password requires the current password. Course data is ${if (isCourseDataUnlocked) "currently unlocked" else "currently locked"}."
+                    "Resetting the Event Password requires the current Event Password. Sensitive Event File data is ${if (isCourseDataUnlocked) "currently unlocked" else "currently locked"}."
                 else ->
-                    "Set a course password before importing route data or editing stored course order. Accessing course data can still create a password when none exists."
+                    "Set an Event Password before importing route data or editing stored course order. Accessing sensitive data can still create an Event Password when none exists."
             },
             color = DesktopPalette.Black,
             fontSize = 13.sp
@@ -4910,7 +4932,7 @@ private fun CoursePasswordSettingsPanel(
                 TextField(
                     value = oldPasswordDraft,
                     onValueChange = { oldPasswordDraft = it },
-                    label = { Text("Current password") },
+                    label = { Text("Current Event Password") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.width(190.dp)
@@ -4919,7 +4941,7 @@ private fun CoursePasswordSettingsPanel(
             TextField(
                 value = newPasswordDraft,
                 onValueChange = { newPasswordDraft = it },
-                label = { Text(if (hasCoursePassword) "New password" else "Password") },
+                label = { Text(if (hasCoursePassword) "New Event Password" else "Event Password") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 enabled = projectFile != null,
@@ -4945,7 +4967,7 @@ private fun CoursePasswordSettingsPanel(
                     },
                     enabled = projectFile != null && canSubmit
                 ) {
-                    ButtonLabel(if (hasCoursePassword) "Reset Password" else "Set Password")
+                    ButtonLabel(if (hasCoursePassword) "Reset Event Password" else "Set Event Password")
                 }
             }
         }
@@ -4966,10 +4988,10 @@ private fun coursePasswordSubmitDisabledReason(
     confirmPassword: String
 ): String? =
     when {
-        projectFile == null -> "Open or create an Event File before setting a course password."
-        hasCoursePassword && oldPassword.isBlank() -> "Enter the current course password before resetting it."
-        newPassword.isBlank() -> "Enter a new course password."
-        confirmPassword.isBlank() -> "Confirm the new course password."
+        projectFile == null -> "Open or create an Event File before setting an Event Password."
+        hasCoursePassword && oldPassword.isBlank() -> "Enter the current Event Password before resetting it."
+        newPassword.isBlank() -> "Enter a new Event Password."
+        confirmPassword.isBlank() -> "Confirm the new Event Password."
         else -> null
     }
 
@@ -6724,7 +6746,7 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
             ButtonLabel("Import Controls KML/KMZ...")
         }
         Text(
-            text = "Controls CSV files update control identity fields only: SI code, role, scoring, public label, and notes. They do not contain latitude/longitude columns and cannot update control locations. Control coordinates require the course password and are not written to public control fields.",
+            text = "Controls CSV files update control identity fields only: SI code, role, scoring, public label, and notes. They do not contain latitude/longitude columns and cannot update control locations. Control coordinates require the Event Password and are not written to public control fields.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -7220,7 +7242,7 @@ private fun CourseAnalysisPanel(
             )
             DisabledReasonTooltip(
                 if (passwordDraft.isBlank()) {
-                    "Enter the course password to view route data and run analysis."
+                    "Enter the Event Password to view route data and run analysis."
                 } else {
                     null
                 }

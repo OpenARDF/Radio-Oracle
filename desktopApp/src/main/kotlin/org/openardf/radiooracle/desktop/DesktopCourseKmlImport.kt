@@ -65,7 +65,7 @@ data class DesktopCourseKmlImportSummary(
     val sourceSha256: String
 ) {
     val assignedCategoryControlCount: Int
-        get() = categoryAssignmentUpdates.size
+        get() = categoryAssignmentUpdates.sumOf { it.controls.size }
 
     val isDuplicateOnly: Boolean
         get() = matchedCategoryCount > 0 &&
