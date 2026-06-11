@@ -286,6 +286,36 @@ Goal: add platform-specific capabilities after the event-admin beta is stable.
   target Bluetooth printer hardware.
 - Add non-ROBis live result providers after their network/result-service logic
   is isolated from Android WorkManager.
+- Add a post-beta Competition View that treats a championship as a higher-level
+  aggregate of multiple events.
+- Persist lightweight competition definitions that group existing Event Files
+  without duplicating their core event data. The competition definition should
+  at minimum record which events belong to the championship, their intended
+  order, scoring/eligibility rules, and any operator-approved competitor
+  matching overrides across days.
+- Keep current event flows as the default single-event behavior so the existing
+  menu structure and menu complexity do not grow by default.
+- Introduce an opt-in competition context (for example a competition selector and
+  dedicated competition dashboard) that displays results and fairness analysis
+  across all events in the series.
+- Reuse and extend the existing multi-day `Balance from CSVs` workflow as the
+  first competition-aware start fairness input rather than creating a separate
+  competing balancing path immediately.
+- Add explicit cross-event competitor identity and reconciliation support so the
+  app can confidently match the same person across days even when SI numbers,
+  start numbers, categories, or registration details are incomplete or change.
+- Add cross-event start-slot fairness diagnostics and balancing suggestions to avoid
+  repeated starts in the same 1/3rd segment across all days in a multi-day
+  championship.
+- Add competition scoring calculations for overall standings, with configurable
+  championship point/placement rules, category scope, eligibility, absent-result
+  handling, and tie-break behavior.
+- Add exports for championship outputs (overall standings, per-event contributions,
+  and start-slot fairness traces) as derived outputs over linked event data plus
+  lightweight competition metadata, not as a duplicate copy of per-event storage.
+- Add simple acceptance criteria that the competition view remains additive: all
+  existing event-scoped operations keep behavior unchanged when no competition
+  context is selected.
 
 Milestone: each platform feature lands behind shared tests plus platform smoke
 tests without regressing Android.
