@@ -1943,15 +1943,43 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun applyControlsCsvImport(review: PendingControlsCsvImportReview) {
+        fun applyControlsCsvImport(review: PendingControlsCsvImportReview, syncMissingControls: Boolean) {
             runCatching {
                 checkpointBeforeImport("controls CSV import ${review.path.fileName}")
+                var deletedMissingControls = 0
+                var skippedMissingControls = 0
                 projectFile = projectSession.updateCurrentProject { currentProject ->
-                    EventProjectEditor.importControlRows(
+                    require(!syncMissingControls || !currentProject.hasLockedProtectedCourseData(protectedCoursePassword != null)) {
+                        "Course data is locked. Unlock course data before synchronizing control deletions."
+                    }
+                    val importedIdentities = review.rows.mapTo(mutableSetOf()) { it.siCode to it.type }
+                    val missingExistingControls = currentProject.raceData.controls
+                        .filterNot { it.siCode to it.type in importedIdentities }
+                    val usedControlIds = currentProject.raceData.categories
+                        .flatMap { it.controlPoints.map { controlPoint -> controlPoint.controlId } + it.publicControlIds }
+                        .toSet() +
+                        protectedCourseInfoByCategoryId.values.flatMap { courseInfo ->
+                            courseInfo.controlPoints.map { it.controlId } + courseInfo.courseObjects.map { it.id }
+                        }
+                    val removableMissingControlIds = if (syncMissingControls) {
+                        missingExistingControls.map { it.id }.filterNot { it in usedControlIds }
+                    } else {
+                        emptyList()
+                    }
+                    skippedMissingControls = if (syncMissingControls) {
+                        missingExistingControls.size - removableMissingControlIds.size
+                    } else {
+                        0
+                    }
+                    deletedMissingControls = removableMissingControlIds.size
+                    val importedProject = EventProjectEditor.importControlRows(
                         currentProject,
                         review.rows,
                         controlIdFactory = { UUID.randomUUID().toString() }
                     )
+                    removableMissingControlIds.fold(importedProject) { project, controlId ->
+                        EventProjectEditor.removeControl(project, controlId)
+                    }
                 }
                 syncProjectState()
                 pendingControlsCsvImportReview = null
@@ -1964,7 +1992,16 @@ fun main(args: Array<String>) = application {
                         "${review.invalidLineCount} invalid rows skipped.",
                         "${review.preview.affectedAssignedCategoryCount} assigned categories affected.",
                         "${review.preview.affectedProtectedCourseCount} stored courses affected."
-                    ) + review.preview.eventTypeWarnings
+                    ) + (
+                        if (syncMissingControls) {
+                            listOf(
+                                "$deletedMissingControls controls missing from the CSV removed.",
+                                "$skippedMissingControls missing controls kept because they are used."
+                            )
+                        } else {
+                            listOf("${review.preview.missingExistingCount} existing controls were missing from the CSV and kept.")
+                        }
+                        ) + review.preview.eventTypeWarnings
                 )
                 projectStatusText = importStatusText(
                     "Imported",
@@ -2539,7 +2576,7 @@ fun main(args: Array<String>) = application {
         pendingControlsCsvImportReview?.let { review ->
             ControlsCsvImportReviewDialog(
                 review = review,
-                onImport = { applyControlsCsvImport(review) },
+                onImport = { syncMissingControls -> applyControlsCsvImport(review, syncMissingControls) },
                 onCancel = {
                     pendingControlsCsvImportReview = null
                     projectStatusText = "Controls CSV import canceled. No changes applied."
@@ -3589,10 +3626,11 @@ private fun CategoriesCsvImportReviewDialog(
 @Composable
 private fun ControlsCsvImportReviewDialog(
     review: PendingControlsCsvImportReview,
-    onImport: () -> Unit,
+    onImport: (syncMissingControls: Boolean) -> Unit,
     onCancel: () -> Unit
 ) {
     val preview = review.preview
+    var syncMissingControls by remember(review.path, preview.missingExistingCount) { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Review controls CSV import") },
@@ -3614,6 +3652,26 @@ private fun ControlsCsvImportReviewDialog(
                 Text("Controls to add: ${preview.addedCount}")
                 Text("Controls to update: ${preview.changedCount}")
                 Text("Unchanged controls: ${preview.unchangedCount}")
+                if (preview.missingExistingCount > 0) {
+                    Text("Existing controls missing from CSV: ${preview.missingExistingCount}")
+                    Text("Unused missing controls that can be removed: ${preview.removableMissingCount}")
+                    if (preview.usedMissingCount > 0) {
+                        Text(
+                            text = "Missing controls kept because they are used: ${preview.usedMissingCount}",
+                            color = DesktopPalette.Warning
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Checkbox(
+                            checked = syncMissingControls,
+                            onCheckedChange = { syncMissingControls = it }
+                        )
+                        Text("Remove unused existing controls missing from the CSV")
+                    }
+                }
                 if (review.invalidLineCount > 0) {
                     Text(
                         text = "Invalid rows skipped: ${review.invalidLineCount}",
@@ -3627,14 +3685,14 @@ private fun ControlsCsvImportReviewDialog(
                     )
                 }
                 Text(
-                    "This import adds new controls and updates matching controls by SI code and type. It does not delete controls missing from the CSV.",
+                    "This import adds new controls and updates matching controls by SI code and type. Missing controls are deleted only when the sync checkbox is selected and the control is unused.",
                     fontSize = 12.sp,
                     color = Color.DarkGray
                 )
             }
         },
         confirmButton = {
-            Button(onClick = onImport) {
+            Button(onClick = { onImport(syncMissingControls) }) {
                 ButtonLabel("Import Controls")
             }
         },

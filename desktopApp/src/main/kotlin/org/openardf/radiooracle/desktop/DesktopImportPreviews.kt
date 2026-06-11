@@ -21,6 +21,9 @@ data class DesktopControlsCsvImportPreview(
     val addedCount: Int,
     val changedCount: Int,
     val unchangedCount: Int,
+    val missingExistingCount: Int,
+    val removableMissingCount: Int,
+    val usedMissingCount: Int,
     val affectedAssignedCategoryCount: Int,
     val affectedProtectedCourseCount: Int,
     val eventTypeWarnings: List<String>
@@ -104,11 +107,21 @@ object DesktopImportPreviews {
                 else -> unchangedCount++
             }
         }
+        val importedIdentities = rows.mapTo(mutableSetOf()) { it.siCode to it.type }
+        val missingExistingControls = projectFile.raceData.controls.filterNot { it.siCode to it.type in importedIdentities }
+        val missingExistingIds = missingExistingControls.mapTo(mutableSetOf()) { it.id }
+        val usedMissingIds = missingExistingIds.filterTo(mutableSetOf()) { controlId ->
+            assignedCategoryUseCount(projectFile, setOf(controlId)) > 0 ||
+                protectedCourseUseCount(protectedCourseInfoByCategoryId, setOf(controlId)) > 0
+        }
 
         return DesktopControlsCsvImportPreview(
             addedCount = addedCount,
             changedCount = changedCount,
             unchangedCount = unchangedCount,
+            missingExistingCount = missingExistingControls.size,
+            removableMissingCount = missingExistingIds.size - usedMissingIds.size,
+            usedMissingCount = usedMissingIds.size,
             affectedAssignedCategoryCount = assignedCategoryUseCount(projectFile, changedControlIds),
             affectedProtectedCourseCount = protectedCourseUseCount(protectedCourseInfoByCategoryId, changedControlIds),
             eventTypeWarnings = eventTypeWarnings(

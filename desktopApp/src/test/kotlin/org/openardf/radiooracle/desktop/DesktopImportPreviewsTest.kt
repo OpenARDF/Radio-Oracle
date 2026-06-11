@@ -87,14 +87,35 @@ class DesktopImportPreviewsTest {
         assertEquals(1, preview.addedCount)
         assertEquals(1, preview.changedCount)
         assertEquals(0, preview.unchangedCount)
+        assertEquals(0, preview.missingExistingCount)
+        assertEquals(0, preview.removableMissingCount)
+        assertEquals(0, preview.usedMissingCount)
         assertEquals(1, preview.affectedAssignedCategoryCount)
         assertEquals(1, preview.affectedProtectedCourseCount)
         assertTrue(preview.eventTypeWarnings.any { it.contains("Sprint") && it.contains("Classic") })
     }
 
+    @Test
+    fun previewsControlsCsvMissingExistingControlsForOptionalSync() {
+        val preview = DesktopImportPreviews.controlsCsvPreview(
+            projectFile = projectFile(extraUnusedControl = true),
+            sourceName = "classic-controls.csv",
+            rows = listOf(
+                ControlCsvImportRow(31, ControlPointType.CONTROL, scored = true, publicLabel = "F1", notes = "old")
+            ),
+            protectedCourseInfoByCategoryId = emptyMap()
+        )
+
+        assertEquals(1, preview.unchangedCount)
+        assertEquals(1, preview.missingExistingCount)
+        assertEquals(1, preview.removableMissingCount)
+        assertEquals(0, preview.usedMissingCount)
+    }
+
     private fun projectFile(
         includeCompetitor: Boolean = false,
-        encryptedCourseInfo: String? = null
+        encryptedCourseInfo: String? = null,
+        extraUnusedControl: Boolean = false
     ): EventProjectFile {
         val race = EventRace(
             id = "race",
@@ -181,7 +202,19 @@ class DesktopImportPreviewsTest {
                     emptyList()
                 },
                 unmatchedReadoutData = emptyList(),
-                controls = listOf(control)
+                controls = listOf(control) + if (extraUnusedControl) {
+                    listOf(
+                        EventControl(
+                            id = "control-99",
+                            raceId = race.id,
+                            label = "99",
+                            siCode = 99,
+                            type = ControlPointType.CONTROL
+                        )
+                    )
+                } else {
+                    emptyList()
+                }
             )
         )
     }
