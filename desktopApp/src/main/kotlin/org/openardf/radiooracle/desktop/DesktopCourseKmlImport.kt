@@ -44,6 +44,14 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
+/**
+ * Operator-facing summary of a controls/route KML/KMZ import.
+ *
+ * Route geometry and ideal-order facts are written immediately into the encrypted category payload,
+ * while category assigned controls are reported as a separate pending update. The UI applies those
+ * assignments only after explicit confirmation because they replace the public category assignment
+ * list.
+ */
 data class DesktopCourseKmlImportSummary(
     val matchedCategoryCount: Int,
     val routeCount: Int,
@@ -122,6 +130,9 @@ data class DesktopRouteElevationResult(
 )
 
 object DesktopCourseKmlImporter {
+    // Imported LineStrings are used both for protected route facts and for finding nearby control
+    // points. These constants keep route sampling dense enough for elevation graphs without
+    // treating every small coordinate wobble as a different course.
     private const val ROUTE_SAMPLE_METERS = 25.0
     private const val USGS_3DEP_SAMPLE_METERS = 10.0
     private const val CONTROL_ROUTE_TOLERANCE_METERS = 50.0
@@ -193,6 +204,9 @@ object DesktopCourseKmlImporter {
                 ?.takeIf { it.isNotBlank() }
                 ?.let { DesktopProtectedCourseOrder.decryptCourseInfo(it, password) }
             val sameSourceCourseInfo = existingCourseInfo?.takeIf { it.sourceSha256 == sourceSha256 }
+            // Build the optional public assignment update from the unsampled LineString. Sampling
+            // is only for route/elevation facts; assignment matching should reflect the controls
+            // intentionally placed near the imported category route.
             val duplicateRouteControlIds = controlsOnRoute(route.points, controlsByLabel.values.toList())
             categoryAssignmentUpdate(
                 projectFile = updatedProject,
@@ -785,6 +799,8 @@ object DesktopCourseKmlImporter {
         val updatesByCategoryId = updates.associateBy { it.categoryId }
         val categories = projectFile.raceData.categories.map { categoryData ->
             val update = updatesByCategoryId[categoryData.category.id] ?: return@map categoryData
+            // Replace, rather than merge, so an imported route cannot leave stale assigned foxes
+            // behind. The update list was already sorted into neutral control order.
             val controlPoints = update.controls.mapIndexed { index, control ->
                 EventControlPoint(
                     id = "${update.categoryId}-kml-control-${index + 1}",
@@ -815,6 +831,9 @@ object DesktopCourseKmlImporter {
             .firstOrNull { it.category.id == categoryId }
             ?: return null
         val raceType = categoryData.category.effectiveRaceType(projectFile.raceData.race)
+        // Category assignments are public course requirements, not ideal route advice. Always sort
+        // them by normal fox/beacon/spectator order even when the LineString itself is in ideal
+        // traversal order.
         val sortedControls = controls
             .distinctBy { it.controlId }
             .sortedWith(
@@ -858,6 +877,8 @@ object DesktopCourseKmlImporter {
     private fun controlsOnRoute(route: List<CourseGeoPoint>, controls: List<CourseMatchedControl>): List<CourseMatchedControl> =
         controls
             .mapNotNull { control ->
+                // A route drawn through or very near a point counts as using that control. The
+                // tolerance absorbs KML drawing imprecision but still excludes unrelated controls.
                 val alongDistance = distanceAlongRouteOrNull(route, control.point, CONTROL_ROUTE_TOLERANCE_METERS)
                 alongDistance?.let { it to control }
             }

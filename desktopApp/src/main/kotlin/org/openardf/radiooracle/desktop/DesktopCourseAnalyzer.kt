@@ -1131,6 +1131,9 @@ object DesktopCourseAnalyzer {
         note: String
     ): CalculatedRoute {
         val exactCount = factorial(controls.size)
+        // Sprint loops are optimized separately to keep the search bounded. Above the permutation
+        // cap, fall back to the same effective-length-aware heuristic used for larger foxoring
+        // control sets.
         return if (exactCount <= MAX_SPRINT_LOOP_PERMUTATIONS) {
             shortestPermutation(start, finish, controls, beacon, elevationLookup).copy(calculationNote = "$note exact")
         } else {
@@ -1162,6 +1165,8 @@ object DesktopCourseAnalyzer {
                 elevationLookup = elevationLookup,
                 legSampleCache = legSampleCache
             )
+            // Effective length decides the winner only when every sampled point has elevation.
+            // Otherwise the calculated-route search intentionally falls back to horizontal length.
             val comparisonLength = effectiveLengthMetersOrNull(sampledPoints) ?: horizontalDistance
             if (comparisonLength < bestComparisonLength) {
                 bestComparisonLength = comparisonLength
@@ -1180,6 +1185,8 @@ object DesktopCourseAnalyzer {
         elevationLookup: (CourseGeoPoint) -> Double?,
         calculationNote: String
     ): CalculatedRoute {
+        // The nearest-neighbor seed is fast, and 2-opt then removes obvious crossing/ordering
+        // mistakes using the same effective-length comparison as the exhaustive search.
         val ordered = nearestNeighborOrder(start, controlsToPermute)
         val improved = twoOptOrder(start, finish, ordered, beacon, elevationLookup)
         val controls = if (beacon != null) improved + beacon else improved
@@ -1288,6 +1295,8 @@ object DesktopCourseAnalyzer {
             val service = to.control?.let { control ->
                 controlServiceTiming(control, arrivalSeconds, raceType, slotOverrides[control.id])
             } ?: ControlServiceTiming.None
+            // Service time is part of the course clock. If a Classic fox is off the air, waiting
+            // and the find/punch allowance delay all later legs and may change later waits.
             if (arrivalSeconds != null && to.control != null) {
                 arrivalSecondsByControlId[to.control.id] = arrivalSeconds.roundToInt()
             }
@@ -1744,6 +1753,8 @@ object DesktopCourseAnalyzer {
         } else {
             0.0
         }
+        // Do not also apply a separate gradient-speed model here. Effective length is the elevation
+        // compensation: horizontal distance plus ten times positive climb, divided by format pace.
         val movementMeters = horizontal + 10.0 * climb
         val flatSpeed = when (raceType) {
             RaceType.SPRINT -> SPRINT_FLAT_SPEED_MPS
@@ -1767,6 +1778,8 @@ object DesktopCourseAnalyzer {
         val slotLabel = slotOverride?.slotLabel ?: classicSlotLabel(control)
         val roundedArrival = arrivalSeconds.roundToInt()
         val waitSeconds = waitSecondsForClassicSlot(slotIndex, roundedArrival)
+        // The competitor can reach the vicinity before a fox transmits, but the next leg starts
+        // only after the fox is on the air and the fixed Classic find/punch allowance is complete.
         return ControlServiceTiming(
             waitSeconds = waitSeconds,
             findPunchSeconds = CLASSIC_CONTROL_FIND_PUNCH_SECONDS,

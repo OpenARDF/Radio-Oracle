@@ -28,6 +28,12 @@ import org.openardf.radiooracle.shared.files.CompetitorCsvImportProfile
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import java.nio.file.Files
 
+/**
+ * Broad generated coverage for event-data flows that are hard to exercise manually:
+ * category imports, KML-derived assigned controls, competitor imports, start-list drawing, and
+ * Race Ops readiness. The scenarios are intentionally compact but cover both valid data and common
+ * operator mistakes.
+ */
 class DesktopEventDataGeneratedCoverageTest {
     @Test
     fun generatedCategoryCompetitorAndStartListScenariosDoNotBreak() {
@@ -118,6 +124,8 @@ class DesktopEventDataGeneratedCoverageTest {
             .withCategory("M50")
             .withCategory("W65")
         val kmlPath = Files.createTempFile("radio-oracle-category-assignment", ".kml")
+        // Keep skipped controls well outside each shorter route's 50 m matching corridor. That
+        // makes failures point to assignment logic instead of accidental collinear geometry.
         Files.writeString(
             kmlPath,
             """
@@ -407,6 +415,8 @@ class DesktopEventDataGeneratedCoverageTest {
     private fun EventProjectFile.assignedSiCodes(categoryName: String): List<Int> {
         val controlsById = raceData.controls.associateBy { it.id }
         return category(categoryName).controlPoints.map { controlPoint ->
+            // Resolve through controlId, matching the current event model, so the test catches
+            // stale legacy SI-code-only assignment behavior.
             requireNotNull(controlsById[controlPoint.controlId]) {
                 "Assigned control ${controlPoint.controlId} is missing from controls."
             }.siCode
