@@ -109,6 +109,24 @@ class ArdfJsonExportsTest {
     }
 
     @Test
+    fun omitsCategoriesWithoutCompetitorsFromArdfCategoryDefinitions() {
+        val base = raceData()
+        val emptyCategory = category().copy(id = "empty", name = "W21", isMan = false, order = 2)
+        val document = ArdfJsonExports.eventDocument(
+            "Test Event",
+            base.copy(
+                categories = base.categories + EventCategoryData(
+                    category = emptyCategory,
+                    controlPoints = emptyList(),
+                    competitors = emptyList()
+                )
+            )
+        )
+
+        assertEquals(listOf("M21"), document.races.single().categories.map { it.categoryName })
+    }
+
+    @Test
     fun exportsDisqualifiedResultStatus() {
         val raceData = raceData(resultStatus = ResultStatus.DISQUALIFIED)
 

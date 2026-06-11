@@ -9,8 +9,9 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.domain.ControlPointType
-import org.openardf.radiooracle.shared.event.EventCategorySort
+import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventProjectEditor
@@ -32,6 +33,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
 import java.time.Duration
+import java.util.UUID
 import java.util.zip.ZipInputStream
 import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilderFactory
@@ -70,6 +72,8 @@ data class DesktopCourseKmlImportSummary(
     val controlLocationAffectedCategoryCount: Int,
     val duplicateCategoryCount: Int,
     val duplicateMissingElevationPointCount: Int,
+    val missingCategoryNames: List<String>,
+    val createdCategoryNames: List<String>,
     val sourceSha256: String
 ) {
     val assignedCategoryControlCount: Int
@@ -144,7 +148,9 @@ object DesktopCourseKmlImporter {
         projectFile: EventProjectFile,
         password: String,
         categoryOverrideId: String? = null,
-        elevationProvider: (CourseGeoPoint) -> Double? = { point -> DesktopVenueElevationCache.elevationMeters(point) }
+        elevationProvider: (CourseGeoPoint) -> Double? = { point -> DesktopVenueElevationCache.elevationMeters(point) },
+        createMissingCategories: Boolean = false,
+        missingCategoryIdFactory: (String) -> String = { UUID.randomUUID().toString() }
     ): Pair<EventProjectFile, DesktopCourseKmlImportSummary> {
         val sourceSha256 = fileSha256(path)
         val courseData = parse(path)
@@ -152,11 +158,42 @@ object DesktopCourseKmlImporter {
             "CourseKml",
             "Import parsed ${path.fileName}: hash=${sourceSha256.shortHash()} pointPlacemarks=${courseData.controls.size} routePlacemarks=${courseData.routes.size}"
         )
-        val matchedControlResult = matchedControls(courseData.controls, projectFile.raceData.controls)
+        val missingCategoryNames = missingRouteCategoryNames(courseData.routes, projectFile.raceData.categories)
+        val createdCategoryNames = if (createMissingCategories) missingCategoryNames else emptyList()
+        val projectWithMissingCategories = if (createdCategoryNames.isEmpty()) {
+            projectFile
+        } else {
+            projectFile.copy(
+                raceData = projectFile.raceData.copy(
+                    categories = projectFile.raceData.categories + createdCategoryNames.mapIndexed { index, name ->
+                        EventCategoryData(
+                            category = EventCategory(
+                                id = missingCategoryIdFactory(name),
+                                raceId = projectFile.raceData.race.id,
+                                name = name,
+                                isMan = name.trim().uppercase().startsWith("M"),
+                                maxAge = name.filter(Char::isDigit).takeIf { it.isNotBlank() }?.toIntOrNull(),
+                                lengthMeters = 0,
+                                climbMeters = 0,
+                                order = (projectFile.raceData.categories.maxOfOrNull { it.category.order } ?: -1) + index + 1,
+                                differentProperties = false,
+                                raceType = null,
+                                raceBand = null,
+                                timeLimitSeconds = null,
+                                controlPointsString = ""
+                            ),
+                            controlPoints = emptyList(),
+                            competitors = emptyList()
+                        )
+                    }
+                )
+            )
+        }
+        val matchedControlResult = matchedControls(courseData.controls, projectWithMissingCategories.raceData.controls)
         val controls = matchedControlResult.controls
         val controlsByLabel = controls.associateBy { it.label.normalizedCourseName() }
-        val categories = projectFile.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
-        val courseInfoByCategoryId = projectFile.raceData.categories.mapNotNull { categoryData ->
+        val categories = projectWithMissingCategories.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
+        val courseInfoByCategoryId = projectWithMissingCategories.raceData.categories.mapNotNull { categoryData ->
             categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
                 categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
             }
@@ -173,7 +210,7 @@ object DesktopCourseKmlImporter {
         )
         val locationUpdateResult = controlLocationUpdates.takeIf { it.isNotEmpty() }?.let { updates ->
             DesktopProtectedControlLocationUpdater.applyControlLocations(
-                projectFile = projectFile,
+                projectFile = projectWithMissingCategories,
                 courseInfoByCategoryId = courseInfoByCategoryId,
                 updates = updates,
                 password = password,
@@ -181,7 +218,7 @@ object DesktopCourseKmlImporter {
                 invalidateAllReferencedProtectedCourses = false
             )
         }
-        var updatedProject = projectFile
+        var updatedProject = projectWithMissingCategories
         locationUpdateResult?.let { result ->
             updatedProject = result.projectFile
         }
@@ -341,6 +378,8 @@ object DesktopCourseKmlImporter {
             controlLocationAffectedCategoryCount = locationUpdateResult?.affectedCategoryCount ?: 0,
             duplicateCategoryCount = duplicateCategoryCount,
             duplicateMissingElevationPointCount = duplicateMissingElevationPointCount,
+            missingCategoryNames = missingCategoryNames,
+            createdCategoryNames = createdCategoryNames,
             sourceSha256 = sourceSha256
         )
         DesktopDebugLog.info(
@@ -348,6 +387,17 @@ object DesktopCourseKmlImporter {
             "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} assignedCategoryControls=${summary.assignedCategoryControlCount} changedControlLocations=${summary.changedControlLocationCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} labelConversions=${summary.labelConversions.size} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
         )
         return updatedProject to summary
+    }
+
+    private fun missingRouteCategoryNames(
+        routes: List<CourseRoute>,
+        categories: List<EventCategoryData>
+    ): List<String> {
+        val existingNames = categories.mapTo(mutableSetOf()) { it.category.name.categoryMatchText() }
+        return routes
+            .flatMap { route -> route.name.listedCategoryNames() }
+            .distinctBy { it.categoryMatchText() }
+            .filterNot { it.categoryMatchText() in existingNames }
     }
 
     private fun routeCategoryTargets(
@@ -1294,6 +1344,21 @@ private fun String.matchesCategoryRouteName(importedRouteName: String): Boolean 
     categoryMatchText() == importedRouteName.categoryMatchText() ||
         compactCategoryMatchText() == importedRouteName.compactCategoryMatchText()
 
+private fun String.listedCategoryNames(): List<String> {
+    ardfCategoryToken()?.let { return listOf(it.displayCategoryName()) }
+    val parentheticalNames = parentheticalSegments()
+        .flatMap { segment -> segment.split(',') }
+        .map { it.trim() }
+        .filter { it.isNotBlank() && it.any(Char::isLetter) }
+        .map { part -> part.ardfCategoryToken()?.displayCategoryName() ?: part }
+    if (parentheticalNames.isNotEmpty()) {
+        return parentheticalNames.distinctBy { it.categoryMatchText() }
+    }
+    return ardfCategoryTokens()
+        .map { it.displayCategoryName() }
+        .distinctBy { it.categoryMatchText() }
+}
+
 private fun String.containsEmbeddedCategoryName(categoryName: String): Boolean {
     val categoryToken = categoryName.ardfCategoryToken() ?: return parentheticalSegments()
         .any { segment -> segment.containsCategoryName(categoryName) }
@@ -1310,6 +1375,9 @@ private fun String.ardfCategoryTokens(): Set<String> =
         .findAll(this)
         .map { match -> "${match.groupValues[2]}${match.groupValues[3]}".lowercase() }
         .toSet()
+
+private fun String.displayCategoryName(): String =
+    take(1).uppercase() + drop(1)
 
 private fun String.parentheticalSegments(): List<String> =
     Regex("\\(([^)]*)\\)")

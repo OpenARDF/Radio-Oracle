@@ -282,3 +282,31 @@ data class EventRaceData(
     val controls: List<EventControl> = emptyList(),
     val startDrawSettings: StartDrawSettings? = null
 )
+
+/**
+ * Returns category ids that are associated with competitors for operational
+ * race surfaces. Course-only categories, such as categories created from KML/KMZ
+ * before competitors are imported, are intentionally omitted.
+ */
+fun EventRaceData.associatedCategoryIds(includeResultCategoryIds: Boolean = true): Set<String> =
+    competitorData
+        .flatMap { data ->
+            buildList {
+                data.competitorCategory.category?.id?.let(::add)
+                data.competitorCategory.competitor.categoryId?.let(::add)
+                if (includeResultCategoryIds) {
+                    data.readoutData?.result?.categoryId?.let(::add)
+                }
+            }
+        }
+        .toSet()
+
+/**
+ * Returns categories that should participate in race operations, start/result
+ * exports, and live displays. Setup/course editors should continue to use the
+ * raw category list so imported course-only categories remain editable.
+ */
+fun EventRaceData.competitionCategories(includeResultCategoryIds: Boolean = true): List<EventCategoryData> {
+    val categoryIds = associatedCategoryIds(includeResultCategoryIds)
+    return categories.filter { it.category.id in categoryIds }
+}

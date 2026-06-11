@@ -886,6 +886,38 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun importsCompetitorRowsWithoutCreatingMissingCategoriesWhenDisabled() {
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21"))
+        )
+
+        val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
+            projectFile = original,
+            rows = listOf(
+                competitorImportRow(
+                    firstName = "Anna",
+                    lastName = "Berg",
+                    categoryName = "W21",
+                    startNumber = 1,
+                    index = "T003"
+                )
+            ),
+            competitorIdFactory = { "comp-1" },
+            categoryIdFactory = { "cat-2" },
+            createMissingCategories = false
+        )
+
+        assertEquals(listOf("M21"), outcome.projectFile.raceData.categories.map { it.category.name })
+        val imported = outcome.projectFile.raceData.competitorData.single().competitorCategory
+        assertEquals(null, imported.competitor.categoryId)
+        assertEquals(null, imported.category)
+        assertEquals(
+            listOf("Line 1: category 'W21' does not exist; competitor Berg Anna was imported without a category."),
+            outcome.warnings
+        )
+    }
+
+    @Test
     fun importsCompetitorRowsWithoutCategory() {
         val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
             projectFile = projectFile(categories = listOf(categoryData("cat-1", "M21"))),

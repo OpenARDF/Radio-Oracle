@@ -21,6 +21,7 @@ import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.competitionCategories
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
@@ -67,7 +68,7 @@ object ArdfJsonExports {
             raceLevel = race.raceLevel.name,
             raceTimeLimit = race.timeLimitSeconds.toMinutes(),
             raceApiKey = race.apiKey.takeIf { it.isNotBlank() },
-            categories = categories
+            categories = competitionCategories()
                 .sortedWith(compareBy({ it.category.order }, { it.category.name }))
                 .map { it.toArdfCategory(race, controlsById, protectedCourseInfoByCategoryId) },
             aliases = FinalResultJsonExports.androidAliases(this)

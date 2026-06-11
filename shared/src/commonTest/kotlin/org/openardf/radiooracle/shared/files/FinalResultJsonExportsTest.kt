@@ -122,6 +122,23 @@ class FinalResultJsonExportsTest {
     }
 
     @Test
+    fun omitsCategoriesWithoutCompetitorsFromFinalResultCategoryDefinitions() {
+        val base = raceData()
+        val emptyCategory = category().copy(id = "empty", name = "W21", isMan = false, order = 2)
+        val document = FinalResultJsonExports.resultDocument(
+            base.copy(
+                categories = base.categories + EventCategoryData(
+                    category = emptyCategory,
+                    controlPoints = emptyList(),
+                    competitors = emptyList()
+                )
+            )
+        )
+
+        assertEquals(listOf("M21"), document.categories.map { it.categoryName })
+    }
+
+    @Test
     fun exportsGlobalControlsAsAndroidAliasesAndPunchLabels() {
         val document = Json.parseToJsonElement(
             FinalResultJsonExports.results(

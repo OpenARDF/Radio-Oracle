@@ -20,6 +20,7 @@ import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.competitionCategories
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
@@ -44,7 +45,7 @@ object FinalResultJsonExports {
     ): FinalResultsJson {
         val controlsById = raceData.controls.associateBy { it.id }
         return FinalResultsJson(
-            categories = raceData.categories
+            categories = raceData.competitionCategories()
                 .map { it.toFinalCategory(controlsById, protectedCourseInfoByCategoryId) },
             aliases = androidAliases(raceData),
             competitors = raceData.competitorData

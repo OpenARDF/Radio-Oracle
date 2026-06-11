@@ -1,5 +1,6 @@
 package org.openardf.radiooracle.desktop
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceBand
@@ -52,6 +53,17 @@ class DesktopLocalResultServerTest {
         assertTrue(json.contains(""""name":"M21""""))
         assertTrue(json.contains(""""competitor_count":1"""))
         assertTrue(json.contains(""""result_count":1"""))
+    }
+
+    @Test
+    fun categoryJsonOmitsCategoriesWithoutCompetitors() {
+        val server = DesktopLocalResultServer(projectSupplier = { projectFileWithEmptyCategory() })
+
+        val json = server.categoriesJson()
+
+        assertTrue(json.contains(""""category_count":1"""))
+        assertTrue(json.contains(""""name":"M21""""))
+        assertFalse(json.contains(""""name":"W21""""))
     }
 
     @Test
@@ -321,6 +333,25 @@ class DesktopLocalResultServerTest {
                     )
                 ),
                 unmatchedReadoutData = emptyList()
+            )
+        )
+    }
+
+    private fun projectFileWithEmptyCategory(): EventProjectFile {
+        val projectFile = projectFile()
+        val emptyCategory = projectFile.raceData.categories.single().category.copy(
+            id = "empty-category",
+            name = "W21",
+            isMan = false,
+            order = 2
+        )
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                categories = projectFile.raceData.categories + EventCategoryData(
+                    category = emptyCategory,
+                    controlPoints = emptyList(),
+                    competitors = emptyList()
+                )
             )
         )
     }

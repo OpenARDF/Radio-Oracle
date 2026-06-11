@@ -6,6 +6,7 @@ import org.openardf.radiooracle.shared.event.EventInForestDetails
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.EventStartListDetails
+import org.openardf.radiooracle.shared.event.competitionCategories
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
@@ -127,14 +128,15 @@ class DesktopLocalResultServer(
         val projectFile = projectSupplier()
             ?: return """{"project_open":false,"race_name":"","categories":[]}"""
         val raceData = projectFile.raceData
+        val categories = raceData.competitionCategories(includeResultCategoryIds = false)
 
         return buildString {
             append("""{"project_open":true""")
             append(""","race_name":""")
             appendJsonString(raceData.race.name)
-            append(""","category_count":${raceData.categories.size}""")
+            append(""","category_count":${categories.size}""")
             append(""","categories":[""")
-            raceData.categories
+            categories
                 .sortedWith(compareBy({ it.category.order }, { it.category.name }))
                 .forEachIndexed { index, categoryData ->
                     if (index > 0) append(',')
@@ -279,7 +281,7 @@ class DesktopLocalResultServer(
             append("</h1>")
             appendLocalNavigation()
             append("<table><thead><tr><th>Category</th><th>Competitors</th><th>Results</th></tr></thead><tbody>")
-            raceData?.categories
+            raceData?.competitionCategories(includeResultCategoryIds = false)
                 ?.sortedWith(compareBy({ it.category.order }, { it.category.name }))
                 ?.forEach { categoryData ->
                     val categoryId = categoryData.category.id

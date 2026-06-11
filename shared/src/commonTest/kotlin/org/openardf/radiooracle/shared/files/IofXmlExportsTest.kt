@@ -61,6 +61,19 @@ class IofXmlExportsTest {
     }
 
     @Test
+    fun omitsCategoriesWithoutCompetitorsFromIofStartAndResultLists() {
+        val startXml = IofXmlExports.startList(raceData())
+        val resultXml = IofXmlExports.resultList(raceData(includeReadout = true))
+
+        assertEquals(1, Regex("<ClassStart>").findAll(startXml).count())
+        assertEquals(1, Regex("<ClassResult>").findAll(resultXml).count())
+        assertTrue(startXml.contains("<Name>M21</Name>"))
+        assertTrue(resultXml.contains("<Name>M21</Name>"))
+        assertFalse(startXml.contains("<Name>W21</Name>"))
+        assertFalse(resultXml.contains("<Name>W21</Name>"))
+    }
+
+    @Test
     fun explicitProtectedStartListExportDoesNotFallBackToPublicCourseStats() {
         val xml = IofXmlExports.startList(
             raceData(),

@@ -416,9 +416,6 @@ object DesktopCourseAnalyzer {
         )
         val providedLegRows = providedTiming.legRows
         val waitRows = providedTiming.waitRows
-        if (waitRows.isEmpty() && providedControls.any { it.type == ControlPointType.CONTROL } && raceType != RaceType.CLASSIC && raceType != RaceType.SHORT) {
-            missing += "Transmit-slot wait analysis is currently implemented for Classic-style five-minute cycles only."
-        }
         if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
             providedControls
                 .filter { it.type == ControlPointType.CONTROL && classicSlotIndex(it) == null }
@@ -496,6 +493,11 @@ object DesktopCourseAnalyzer {
                 elevationLookup = elevationLookup
             )
         }
+        val calculatedRouteAnalysisForChecks = if (calculatedRouteMatchesStored) {
+            providedRouteAnalysis
+        } else {
+            calculatedRouteAnalysis
+        }
         val spacingRuleChecks = coursePointRuleChecks(
             raceType = raceType,
             categoryName = category.name,
@@ -515,7 +517,7 @@ object DesktopCourseAnalyzer {
                 estimatedSeconds = analysis.estimatedSeconds?.roundToInt()
             ) + spacingRuleChecks
         }.orEmpty()
-        val calculatedRuleChecks = calculatedRouteAnalysis?.let { analysis ->
+        val calculatedRuleChecks = calculatedRouteAnalysisForChecks?.let { analysis ->
             routeRuleChecks(
                 routeLabel = "Calculated route",
                 raceType = raceType,

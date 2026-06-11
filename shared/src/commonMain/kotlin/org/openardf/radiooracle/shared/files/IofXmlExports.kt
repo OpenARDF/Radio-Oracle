@@ -7,6 +7,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.competitionCategories
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.results.IofResultStatus
@@ -29,7 +30,7 @@ object IofXmlExports {
             append("""<StartList xmlns="$IOF_NAMESPACE" iofVersion="3.0" creator="${creator.xmlEscaped()}">""")
             append('\n')
             appendEvent(raceData, raceStart)
-            raceData.categories
+            raceData.competitionCategories(includeResultCategoryIds = false)
                 .sortedWith(compareBy({ it.category.order }, { it.category.name }))
                 .forEach { categoryData ->
                     appendClassStart(
@@ -54,7 +55,7 @@ object IofXmlExports {
             append("""<ResultList xmlns="$IOF_NAMESPACE" iofVersion="3.0" creator="${creator.xmlEscaped()}" status="Complete">""")
             append('\n')
             appendEvent(raceData, raceStart)
-            raceData.categories
+            raceData.competitionCategories()
                 .sortedWith(compareBy({ it.category.order }, { it.category.name }))
                 .forEach { categoryData ->
                     appendClassResult(categoryData, placedByCategory[categoryData.category.id] ?: emptyList(), raceStart)

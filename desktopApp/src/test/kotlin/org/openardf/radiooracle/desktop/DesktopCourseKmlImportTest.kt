@@ -155,6 +155,56 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun optionallyCreatesMissingCategoriesListedInSprintRouteNames() {
+        val kmlPath = Files.createTempFile("Sprint", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithSprintCategoryRouteNames())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Sprint Test", "2026-06-11T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+        val expectedMissingCategoryNames = listOf("M50", "W35", "M60", "W55", "M16", "W19", "W75", "M70")
+
+        val (withoutCreatedCategories, withoutCreatedSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+        val (withCreatedCategories, withCreatedSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null },
+            createMissingCategories = true,
+            missingCategoryIdFactory = { name -> "cat-${name.lowercase()}" }
+        )
+
+        assertEquals(expectedMissingCategoryNames, withoutCreatedSummary.missingCategoryNames)
+        assertEquals(emptyList<String>(), withoutCreatedSummary.createdCategoryNames)
+        assertEquals(listOf("M21"), withoutCreatedCategories.raceData.categories.map { it.category.name })
+        assertEquals(1, withoutCreatedSummary.importedCategoryCount)
+
+        assertEquals(expectedMissingCategoryNames, withCreatedSummary.missingCategoryNames)
+        assertEquals(expectedMissingCategoryNames, withCreatedSummary.createdCategoryNames)
+        assertEquals(
+            listOf("M21") + expectedMissingCategoryNames,
+            withCreatedCategories.raceData.categories.map { it.category.name }
+        )
+        assertEquals(9, withCreatedSummary.importedCategoryCount)
+        assertNotNull(
+            withCreatedCategories.raceData.categories
+                .single { it.category.name == "W35" }
+                .category.encryptedCourseInfo
+        )
+        assertNotNull(
+            withCreatedCategories.raceData.categories
+                .single { it.category.name == "M70" }
+                .category.encryptedCourseInfo
+        )
+    }
+
+    @Test
     fun importReplacesExistingCategoryAssignmentsWithImportedControls() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithReversedControlPlacemarkOrder())

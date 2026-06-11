@@ -360,7 +360,7 @@ fun main(args: Array<String>) = application {
         var isImportingEventRegWebsite by remember { mutableStateOf(false) }
         var isImportingEventRegCompetitorCsvs by remember { mutableStateOf(false) }
         var isImportingCourseKmlKmz by remember { mutableStateOf(false) }
-        var pendingCompetitorsCsvImportPath by remember { mutableStateOf<Path?>(null) }
+        var pendingCompetitorsCsvImportReview by remember { mutableStateOf<PendingCompetitorsCsvImportReview?>(null) }
         var syncCompetitorsCsvImport by remember { mutableStateOf(false) }
         val siPortMutex = remember { Mutex() }
 
@@ -1401,51 +1401,66 @@ fun main(args: Array<String>) = application {
         fun applyCourseKmlKmzImport(
             review: PendingCourseKmlKmzImportReview,
             fetchElevations: Boolean,
-            applyCategoryAssignments: Boolean
+            applyCategoryAssignments: Boolean,
+            createMissingCategories: Boolean
         ) {
-            val updatedProject = if (applyCategoryAssignments) {
-                DesktopCourseKmlImporter.applyCategoryAssignmentUpdates(
-                    projectFile = review.updatedProject,
-                    updates = review.summary.categoryAssignmentUpdates
-                )
+            val selectedSummary = if (createMissingCategories) {
+                review.createdMissingCategorySummary ?: review.summary
+            } else {
+                review.summary
+            }
+            val selectedProject = if (createMissingCategories) {
+                review.createdMissingCategoryProject ?: review.updatedProject
             } else {
                 review.updatedProject
+            }
+            val updatedProject = if (applyCategoryAssignments) {
+                DesktopCourseKmlImporter.applyCategoryAssignmentUpdates(
+                    projectFile = selectedProject,
+                    updates = selectedSummary.categoryAssignmentUpdates
+                )
+            } else {
+                selectedProject
             }
             projectFile = projectSession.updateCurrentProject { updatedProject }
             syncProtectedCourseState(updatedProject, review.password)
             pendingCourseKmlKmzImportReview = null
             if (fetchElevations) {
-                startCourseKmlKmzElevationFetch(review)
+                startCourseKmlKmzElevationFetch(review.copy(summary = selectedSummary))
             } else {
-                projectStatusText = if (review.summary.isDuplicateOnly) {
+                projectStatusText = if (selectedSummary.isDuplicateOnly) {
                     "Duplicate controls/route KML/KMZ request: identical file already imported. No route data reloaded."
                 } else {
-                    val duplicateText = review.summary.duplicateCategoryCount
+                    val duplicateText = selectedSummary.duplicateCategoryCount
                         .takeIf { it > 0 }
                         ?.let { " $it duplicate categories skipped." }
                         .orEmpty()
-                    val locationText = review.summary.changedControlLocationCount
+                    val locationText = selectedSummary.changedControlLocationCount
                         .takeIf { it > 0 }
                         ?.let { " Updated $it control locations." }
                         .orEmpty()
+                    val createdText = selectedSummary.createdCategoryNames
+                        .takeIf { it.isNotEmpty() }
+                        ?.let { " Created ${it.size} categories without competitors." }
+                        .orEmpty()
                     val assignedText = if (applyCategoryAssignments) {
-                        review.summary.categoryAssignmentUpdates.size
+                        selectedSummary.categoryAssignmentUpdates.size
                             .takeIf { it > 0 }
                             ?.let { " Updated assigned controls for $it categories." }
                             .orEmpty()
                     } else {
                         ""
                     }
-                    if (review.summary.importedCategoryCount == 0 && review.summary.changedControlLocationCount > 0) {
-                        "Updated ${review.summary.changedControlLocationCount} control locations.$assignedText$duplicateText Unsaved changes."
+                    if (selectedSummary.importedCategoryCount == 0 && selectedSummary.changedControlLocationCount > 0) {
+                        "Updated ${selectedSummary.changedControlLocationCount} control locations.$assignedText$duplicateText$createdText Unsaved changes."
                     } else if (
-                        review.summary.importedCategoryCount == 0 &&
-                        review.summary.assignedCategoryControlCount > 0 &&
+                        selectedSummary.importedCategoryCount == 0 &&
+                        selectedSummary.assignedCategoryControlCount > 0 &&
                         applyCategoryAssignments
                     ) {
-                        "Updated assigned controls for ${review.summary.categoryAssignmentUpdates.size} categories.$duplicateText Unsaved changes."
+                        "Updated assigned controls for ${selectedSummary.categoryAssignmentUpdates.size} categories.$duplicateText$createdText Unsaved changes."
                     } else {
-                        "Imported controls/route data for ${review.summary.importedCategoryCount} categories.$locationText$assignedText$duplicateText Unsaved changes."
+                        "Imported controls/route data for ${selectedSummary.importedCategoryCount} categories.$locationText$assignedText$duplicateText$createdText Unsaved changes."
                     }
                 }
             }
@@ -1461,15 +1476,34 @@ fun main(args: Array<String>) = application {
             appCoroutineScope.launch {
                 val result = runCatching {
                     withContext(Dispatchers.IO) {
-                        DesktopCourseKmlImporter.importProtectedCourseInfo(
+                        val preview = DesktopCourseKmlImporter.importProtectedCourseInfo(
                             path = path,
                             projectFile = currentProject,
                             password = password,
                             categoryOverrideId = categoryOverrideId
                         )
+                        val createdPreview = preview.second.missingCategoryNames
+                            .takeIf { it.isNotEmpty() }
+                            ?.let {
+                                DesktopCourseKmlImporter.importProtectedCourseInfo(
+                                    path = path,
+                                    projectFile = currentProject,
+                                    password = password,
+                                    categoryOverrideId = categoryOverrideId,
+                                    createMissingCategories = true
+                                )
+                            }
+                        CourseKmlKmzImportPreview(
+                            updatedProject = preview.first,
+                            summary = preview.second,
+                            createdMissingCategoryProject = createdPreview?.first,
+                            createdMissingCategorySummary = createdPreview?.second
+                        )
                     }
                 }
-                result.onSuccess { (updatedProject, summary) ->
+                result.onSuccess { preview ->
+                    val updatedProject = preview.updatedProject
+                    val summary = preview.summary
                     val categoryOptions = currentProject.raceData.categories
                         .sortedWith(EventCategorySort.byDisplayName)
                         .map { it.category.id to it.category.name }
@@ -1496,7 +1530,8 @@ fun main(args: Array<String>) = application {
                     } else if (
                         summary.routeCount > 0 &&
                         summary.matchedCategoryCount == 0 &&
-                        categoryOptions.isEmpty()
+                        categoryOptions.isEmpty() &&
+                        summary.missingCategoryNames.isEmpty()
                     ) {
                         pendingCourseKmlKmzImportReview = null
                         pendingCourseKmlKmzCategoryMapping = null
@@ -1516,8 +1551,11 @@ fun main(args: Array<String>) = application {
                         pendingCourseKmlKmzCategoryMapping = null
                         pendingCourseKmlKmzImportReview = PendingCourseKmlKmzImportReview(
                             sourceName = path.fileName.toString(),
+                            path = path,
                             updatedProject = updatedProject,
                             summary = summary,
+                            createdMissingCategoryProject = preview.createdMissingCategoryProject,
+                            createdMissingCategorySummary = preview.createdMissingCategorySummary,
                             password = password
                         )
                         projectStatusText = if (summary.isDuplicateOnly) {
@@ -1684,12 +1722,22 @@ fun main(args: Array<String>) = application {
 
         fun importCompetitorsCsv() {
             DesktopFileDialogs.chooseImportCsv("Import Competitors CSV")?.let { path ->
-                pendingCompetitorsCsvImportPath = path
-                syncCompetitorsCsvImport = false
+                runCatching {
+                    pendingCompetitorsCsvImportReview = PendingCompetitorsCsvImportReview(
+                        path = path,
+                        missingCategoryNames = missingCompetitorCategoryNames(
+                            path = path,
+                            projectFile = requireNotNull(projectSession.currentProject)
+                        )
+                    )
+                    syncCompetitorsCsvImport = false
+                }.onFailure { error ->
+                    projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+                }
             }
         }
 
-        fun importCompetitorsCsv(path: Path, synchronizeToCsv: Boolean) {
+        fun importCompetitorsCsv(path: Path, synchronizeToCsv: Boolean, createMissingCategories: Boolean) {
             runCatching {
                 val csvText = Files.readString(path)
                 val result = EventCsvImports.parseAndroidCompetitorRows(csvText)
@@ -1709,7 +1757,8 @@ fun main(args: Array<String>) = application {
                         } else {
                             CompetitorCsvImportDuplicatePolicy.SKIP_EXISTING_BY_IMPORT_KEY
                         },
-                        deleteMissingByImportKey = synchronizeToCsv
+                        deleteMissingByImportKey = synchronizeToCsv,
+                        createMissingCategories = createMissingCategories
                     )
                     importWarnings = outcome.warnings
                     importedRows = outcome.importedCount
@@ -1719,7 +1768,7 @@ fun main(args: Array<String>) = application {
                     outcome.projectFile
                 }
                 syncProjectState()
-                pendingCompetitorsCsvImportPath = null
+                pendingCompetitorsCsvImportReview = null
                 projectStatusText = competitorImportStatusText(
                     importedRows = importedRows,
                     updatedRows = updatedRows,
@@ -2284,8 +2333,13 @@ fun main(args: Array<String>) = application {
         pendingCourseKmlKmzImportReview?.let { review ->
             CourseKmlKmzImportReviewDialog(
                 review = review,
-                onKeep = { fetchElevations, applyCategoryAssignments ->
-                    applyCourseKmlKmzImport(review, fetchElevations, applyCategoryAssignments)
+                onKeep = { fetchElevations, applyCategoryAssignments, createMissingCategories ->
+                    applyCourseKmlKmzImport(
+                        review = review,
+                        fetchElevations = fetchElevations,
+                        applyCategoryAssignments = applyCategoryAssignments,
+                        createMissingCategories = createMissingCategories
+                    )
                 },
                 onCancel = {
                     pendingCourseKmlKmzImportReview = null
@@ -2317,13 +2371,16 @@ fun main(args: Array<String>) = application {
                 }
             )
         }
-        pendingCompetitorsCsvImportPath?.let { importPath ->
+        pendingCompetitorsCsvImportReview?.let { review ->
             CompetitorCsvImportOptionsDialog(
-                fileName = importPath.fileName.toString(),
+                fileName = review.path.fileName.toString(),
+                missingCategoryNames = review.missingCategoryNames,
                 synchronizeToCsv = syncCompetitorsCsvImport,
                 onSynchronizeToCsvChange = { syncCompetitorsCsvImport = it },
-                onImport = { importCompetitorsCsv(importPath, syncCompetitorsCsvImport) },
-                onCancel = { pendingCompetitorsCsvImportPath = null }
+                onImport = { createMissingCategories ->
+                    importCompetitorsCsv(review.path, syncCompetitorsCsvImport, createMissingCategories)
+                },
+                onCancel = { pendingCompetitorsCsvImportReview = null }
             )
         }
         pendingReadoutEdit?.let { draft ->
@@ -3065,16 +3122,24 @@ private fun EventCategoryData.restorableControlPointsText(): String =
 @Composable
 private fun CourseKmlKmzImportReviewDialog(
     review: PendingCourseKmlKmzImportReview,
-    onKeep: (fetchElevations: Boolean, applyCategoryAssignments: Boolean) -> Unit,
+    onKeep: (fetchElevations: Boolean, applyCategoryAssignments: Boolean, createMissingCategories: Boolean) -> Unit,
     onCancel: () -> Unit
 ) {
     val summary = review.summary
-    val categoriesText = summary.matchedCategoryNames
+    var createMissingCategories by remember(review.sourceName, summary.sourceSha256, summary.missingCategoryNames) {
+        mutableStateOf(summary.missingCategoryNames.isNotEmpty())
+    }
+    val selectedSummary = if (createMissingCategories) {
+        review.createdMissingCategorySummary ?: summary
+    } else {
+        summary
+    }
+    val categoriesText = selectedSummary.matchedCategoryNames
         .ifEmpty { listOf("None") }
         .joinToString()
-    val canFetchElevations = summary.matchedCategoryIds.isNotEmpty()
-    var fetchElevations by remember(review.sourceName, summary.sourceSha256, summary.isDuplicateOnly) {
-        mutableStateOf(canFetchElevations && summary.isDuplicateOnly && summary.hasDuplicateMissingElevations)
+    val canFetchElevations = selectedSummary.matchedCategoryIds.isNotEmpty()
+    var fetchElevations by remember(review.sourceName, selectedSummary.sourceSha256, selectedSummary.isDuplicateOnly) {
+        mutableStateOf(canFetchElevations && selectedSummary.isDuplicateOnly && selectedSummary.hasDuplicateMissingElevations)
     }
     var applyCategoryAssignments by remember(review.sourceName, summary.sourceSha256) {
         mutableStateOf(false)
@@ -3098,13 +3163,35 @@ private fun CourseKmlKmzImportReviewDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("File: ${review.sourceName}")
-                Text("Matched categories: ${summary.matchedCategoryCount} of ${summary.routeCount} route placemarks")
+                Text("Matched categories: ${selectedSummary.matchedCategoryCount} of ${selectedSummary.routeCount} route placemarks")
                 Text("Categories: $categoriesText")
-                if (summary.importedCategoryCount > 0) {
-                    Text("Categories to update: ${summary.importedCategoryCount}")
+                if (summary.missingCategoryNames.isNotEmpty()) {
+                    Text("Categories listed in KML/KMZ but not in the Event File: ${summary.missingCategoryNames.joinToString()}")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Checkbox(
+                            checked = createMissingCategories,
+                            onCheckedChange = { createMissingCategories = it }
+                        )
+                        Text("Create missing categories and save their course data")
+                    }
+                    Text(
+                        text = if (createMissingCategories) {
+                            "Created categories will be saved without competitors. Competitors imported later with the same category names will use this stored course data."
+                        } else {
+                            "Missing categories will be left out of this import. Add those categories or reimport the KML/KMZ later to store their course data."
+                        },
+                        fontSize = 12.sp,
+                        color = Color.DarkGray
+                    )
                 }
-                if (summary.assignedCategoryControlCount > 0) {
-                    Text("Category assigned control points available to copy: ${summary.assignedCategoryControlCount}")
+                if (selectedSummary.importedCategoryCount > 0) {
+                    Text("Categories to update: ${selectedSummary.importedCategoryCount}")
+                }
+                if (selectedSummary.assignedCategoryControlCount > 0) {
+                    Text("Category assigned control points available to copy: ${selectedSummary.assignedCategoryControlCount}")
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -3121,27 +3208,27 @@ private fun CourseKmlKmzImportReviewDialog(
                         color = Color.DarkGray
                     )
                 }
-                if (summary.duplicateCategoryCount > 0) {
-                    Text("Duplicate categories already imported: ${summary.duplicateCategoryCount}")
+                if (selectedSummary.duplicateCategoryCount > 0) {
+                    Text("Duplicate categories already imported: ${selectedSummary.duplicateCategoryCount}")
                 }
-                Text("Matched course controls: ${courseControlMatchSummary(summary.matchedFoxCount, summary.matchedBeaconCount, summary.matchedSpectatorCount)}")
-                if (summary.labelConversions.isNotEmpty()) {
+                Text("Matched course controls: ${courseControlMatchSummary(selectedSummary.matchedFoxCount, selectedSummary.matchedBeaconCount, selectedSummary.matchedSpectatorCount)}")
+                if (selectedSummary.labelConversions.isNotEmpty()) {
                     Text("Imported control names to treat as existing Event File labels:")
-                    summary.labelConversions.take(8).forEach { conversion ->
+                    selectedSummary.labelConversions.take(8).forEach { conversion ->
                         Text("${conversion.importedName} -> ${conversion.eventControlLabel}")
                     }
-                    if (summary.labelConversions.size > 8) {
-                        Text("Additional likely name matches: ${summary.labelConversions.size - 8}")
+                    if (selectedSummary.labelConversions.size > 8) {
+                        Text("Additional likely name matches: ${selectedSummary.labelConversions.size - 8}")
                     }
                 }
-                if (summary.changedControlLocationCount > 0) {
-                    Text("Control locations to update: ${summary.changedControlLocationCount}")
-                    Text("Stored courses affected by location changes: ${summary.controlLocationAffectedCategoryCount}")
+                if (selectedSummary.changedControlLocationCount > 0) {
+                    Text("Control locations to update: ${selectedSummary.changedControlLocationCount}")
+                    Text("Stored courses affected by location changes: ${selectedSummary.controlLocationAffectedCategoryCount}")
                 }
                 if (canFetchElevations) {
                     Text(
-                        if (summary.duplicateMissingElevationPointCount > 0) {
-                            "Stored route elevations missing: ${summary.duplicateMissingElevationPointCount} course points"
+                        if (selectedSummary.duplicateMissingElevationPointCount > 0) {
+                            "Stored route elevations missing: ${selectedSummary.duplicateMissingElevationPointCount} course points"
                         } else {
                             "Imported route elevations: not stored yet"
                         }
@@ -3155,7 +3242,7 @@ private fun CourseKmlKmzImportReviewDialog(
                             onCheckedChange = { fetchElevations = it }
                         )
                         Text(
-                            if (summary.isDuplicateOnly) {
+                            if (selectedSummary.isDuplicateOnly) {
                                 "Fetch missing elevations for the stored route"
                             } else {
                                 "Fetch missing elevations for the imported route after keeping it"
@@ -3164,20 +3251,20 @@ private fun CourseKmlKmzImportReviewDialog(
                     }
                 }
                 Text(
-                    text = if (summary.isDuplicateOnly) {
+                    text = if (selectedSummary.isDuplicateOnly) {
                         "This file has the same SHA-256 hash as route data already stored in the Event File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Event File unchanged."
                     } else if (
-                        summary.hasLabelConversions &&
-                        summary.importedCategoryCount == 0 &&
-                        summary.assignedCategoryControlCount == 0 &&
-                        summary.changedControlLocationCount == 0
+                        selectedSummary.hasLabelConversions &&
+                        selectedSummary.importedCategoryCount == 0 &&
+                        selectedSummary.assignedCategoryControlCount == 0 &&
+                        selectedSummary.changedControlLocationCount == 0
                     ) {
                         "Keep imported data to use these KML/KMZ names as matches to existing Event File labels. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Cancel leaves the Event File unchanged."
-                    } else if (summary.importedCategoryCount == 0 && summary.changedControlLocationCount > 0) {
+                    } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.changedControlLocationCount > 0) {
                         "Keep imported data to update control locations. Affected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
-                    } else if (summary.importedCategoryCount == 0 && summary.assignedCategoryControlCount > 0) {
+                    } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.assignedCategoryControlCount > 0) {
                         "Keep imported data to review matched KML/KMZ control points. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
-                    } else if (summary.hasLabelConversions) {
+                    } else if (selectedSummary.hasLabelConversions) {
                         "Keep imported data to use these KML/KMZ names as matches to existing Event File labels, update route facts, ideal order, and any changed control locations. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged."
                     } else {
                         "Keep imported data to update route facts, ideal order, and any changed control locations. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
@@ -3188,9 +3275,9 @@ private fun CourseKmlKmzImportReviewDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onKeep(fetchElevations, applyCategoryAssignments) }) {
+            Button(onClick = { onKeep(fetchElevations, applyCategoryAssignments, createMissingCategories) }) {
                 Text(
-                    if (summary.isDuplicateOnly) {
+                    if (selectedSummary.isDuplicateOnly) {
                         "Continue"
                     } else {
                         "Keep Imported Data"
@@ -3533,11 +3620,15 @@ private fun EventRegImportDialog(
 @Composable
 private fun CompetitorCsvImportOptionsDialog(
     fileName: String,
+    missingCategoryNames: List<String>,
     synchronizeToCsv: Boolean,
     onSynchronizeToCsvChange: (Boolean) -> Unit,
-    onImport: () -> Unit,
+    onImport: (createMissingCategories: Boolean) -> Unit,
     onCancel: () -> Unit
 ) {
+    var createMissingCategories by remember(fileName, missingCategoryNames) {
+        mutableStateOf(missingCategoryNames.isNotEmpty())
+    }
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Import Competitors CSV") },
@@ -3568,10 +3659,37 @@ private fun CompetitorCsvImportOptionsDialog(
                     fontSize = 13.sp,
                     color = Color.DarkGray
                 )
+                if (missingCategoryNames.isNotEmpty()) {
+                    Text(
+                        text = "New categories in CSV: ${missingCategoryNames.joinToString()}",
+                        fontSize = 13.sp,
+                        color = DesktopPalette.Black
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = createMissingCategories,
+                            onCheckedChange = { createMissingCategories = it }
+                        )
+                        Text(
+                            text = "Create missing categories",
+                            fontSize = 13.sp,
+                            color = DesktopPalette.Black
+                        )
+                    }
+                    Text(
+                        text = if (createMissingCategories) {
+                            "Created categories will not have course data unless route data was imported for them separately. Review Course Analyzer and add course data before the event."
+                        } else {
+                            "Competitors in these categories will be imported without a category assignment."
+                        },
+                        fontSize = 13.sp,
+                        color = Color.DarkGray
+                    )
+                }
             }
         },
         confirmButton = {
-            Button(onClick = onImport) {
+            Button(onClick = { onImport(createMissingCategories) }) {
                 Text("Import")
             }
         },
@@ -3618,9 +3736,24 @@ private data class PendingAssignedControlsWarning(
 
 private data class PendingCourseKmlKmzImportReview(
     val sourceName: String,
+    val path: Path,
     val updatedProject: EventProjectFile,
     val summary: DesktopCourseKmlImportSummary,
+    val createdMissingCategoryProject: EventProjectFile?,
+    val createdMissingCategorySummary: DesktopCourseKmlImportSummary?,
     val password: String
+)
+
+private data class CourseKmlKmzImportPreview(
+    val updatedProject: EventProjectFile,
+    val summary: DesktopCourseKmlImportSummary,
+    val createdMissingCategoryProject: EventProjectFile?,
+    val createdMissingCategorySummary: DesktopCourseKmlImportSummary?
+)
+
+private data class PendingCompetitorsCsvImportReview(
+    val path: Path,
+    val missingCategoryNames: List<String>
 )
 
 private data class PendingCourseKmlKmzCategoryMapping(
@@ -9771,6 +9904,16 @@ private fun importStatusText(action: String, importedRows: Int, invalidRows: Int
     } else {
         "$action $importedRows rows from $fileName; skipped $invalidRows invalid rows."
     }
+
+private fun missingCompetitorCategoryNames(path: Path, projectFile: EventProjectFile): List<String> {
+    val result = EventCsvImports.parseAndroidCompetitorRows(Files.readString(path))
+    val existingCategoryNames = projectFile.raceData.categories.mapTo(mutableSetOf()) { it.category.name }
+    return result.rows
+        .map { row -> row.categoryName.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
+        .filterNot { it in existingCategoryNames }
+}
 
 private fun startListDrawStatusText(details: EventStartListDetails): String {
     val scheduledText = "${details.scheduledCount} scheduled"

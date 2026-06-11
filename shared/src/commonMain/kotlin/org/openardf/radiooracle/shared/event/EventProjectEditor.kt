@@ -1159,7 +1159,8 @@ object EventProjectEditor {
         competitorIdFactory: () -> String,
         categoryIdFactory: () -> String,
         duplicatePolicy: CompetitorCsvImportDuplicatePolicy = CompetitorCsvImportDuplicatePolicy.REJECT_DUPLICATES,
-        deleteMissingByImportKey: Boolean = false
+        deleteMissingByImportKey: Boolean = false,
+        createMissingCategories: Boolean = true
     ): CompetitorCsvImportOutcome {
         var categories = projectFile.raceData.categories
         val competitors = projectFile.raceData.competitorData.toMutableList()
@@ -1185,8 +1186,8 @@ object EventProjectEditor {
                 warnings += "Line ${rowIndex + 1}: competitor ${row.lastName} ${row.firstName} has no category."
             }
             val category = row.categoryName.takeIf { it.isNotEmpty() }?.let { categoryName ->
-                categories.firstOrNull { it.category.name == categoryName }?.category
-                    ?: EventCategory(
+                categories.firstOrNull { it.category.name == categoryName }?.category ?: if (createMissingCategories) {
+                    EventCategory(
                         id = categoryIdFactory(),
                         raceId = projectFile.raceData.race.id,
                         name = categoryName,
@@ -1208,6 +1209,10 @@ object EventProjectEditor {
                             competitors = emptyList()
                         )
                     }
+                } else {
+                    warnings += "Line ${rowIndex + 1}: category '$categoryName' does not exist; competitor ${row.lastName} ${row.firstName} was imported without a category."
+                    null
+                }
             }
 
             val startNumber = row.startNumber ?: if (existingPosition >= 0) {

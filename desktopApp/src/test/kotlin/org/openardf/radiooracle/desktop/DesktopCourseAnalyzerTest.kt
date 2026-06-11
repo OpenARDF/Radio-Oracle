@@ -227,6 +227,48 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun matchingSprintCalculatedRouteUsesStoredRouteTimingForTargetTimeChecks() {
+        val protectedInfo = sprintProtectedInfo().copy(
+            route = listOf(
+                ProtectedCourseRoutePoint(39.0, -95.0, 100.0),
+                ProtectedCourseRoutePoint(39.0, -94.99, 100.0),
+                ProtectedCourseRoutePoint(39.015, -94.985, 100.0),
+                ProtectedCourseRoutePoint(39.0, -94.98, 100.0),
+                ProtectedCourseRoutePoint(39.015, -94.97025, 100.0),
+                ProtectedCourseRoutePoint(39.0, -94.9605, 100.0),
+                ProtectedCourseRoutePoint(39.015, -94.96025, 100.0),
+                ProtectedCourseRoutePoint(39.0, -94.96, 100.0),
+                ProtectedCourseRoutePoint(39.015, -94.955, 100.0),
+                ProtectedCourseRoutePoint(39.0, -94.95, 100.0),
+                ProtectedCourseRoutePoint(39.015, -94.945, 100.0),
+                ProtectedCourseRoutePoint(39.0, -94.94, 100.0),
+                ProtectedCourseRoutePoint(39.015, -94.935, 100.0),
+                ProtectedCourseRoutePoint(39.0, -94.93, 100.0)
+            )
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = sprintProjectFile(),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "1 2 Spectator F1 F2 Beacon"
+        )
+
+        assertEquals(true, summary.idealOrderMatches)
+        assertEquals(emptyList<DesktopCourseLegRow>(), summary.calculatedLegRows)
+        val storedTargetTime = requireNotNull(summary.providedRouteSection)
+            .ruleChecks
+            .single { it.label == "Stored route Sprint target time" }
+            .value
+        val calculatedTargetTime = requireNotNull(summary.calculatedRouteSection)
+            .ruleChecks
+            .single { it.label == "Calculated route Sprint target time" }
+            .value
+        assertEquals(storedTargetTime, calculatedTargetTime)
+        assertFalse(storedTargetTime.startsWith("Unknown"))
+    }
+
+    @Test
     fun calculatesSprintRouteUsingBeaconTransitionWhenNoSpectatorIsAssigned() {
         val summary = DesktopCourseAnalyzer.analyze(
             projectFile = sprintProjectFile(includeSpectator = false),
@@ -284,6 +326,10 @@ class DesktopCourseAnalyzerTest {
             assertEquals("raceType=$raceType", emptyList<DesktopCourseWaitRow>(), summary.calculatedRouteSection?.waitRows)
             assertTrue("raceType=$raceType", summary.providedLegRows.all { it.waitSeconds == null && it.findPunchSeconds == null })
             assertTrue("raceType=$raceType", summary.calculatedLegRows.all { it.waitSeconds == null && it.findPunchSeconds == null })
+            assertFalse(
+                "raceType=$raceType missing=${summary.missingElements}",
+                summary.missingElements.any { it.contains("Transmit-slot wait analysis") }
+            )
         }
     }
 
