@@ -138,6 +138,7 @@ import java.nio.file.Path
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.YearMonth
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
@@ -350,6 +351,7 @@ fun main(args: Array<String>) = application {
         var protectedCourseInfoByCategoryId by remember { mutableStateOf<Map<String, ProtectedCourseInfo>>(emptyMap()) }
         var recentImportReport by remember { mutableStateOf<DesktopImportReport?>(null) }
         var recentImportCheckpoint by remember { mutableStateOf<DesktopImportCheckpoint?>(null) }
+        var recentActivityLog by remember { mutableStateOf<List<String>>(emptyList()) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var isCourseKmlKmzUnlockDialogVisible by remember { mutableStateOf(false) }
@@ -410,6 +412,11 @@ fun main(args: Array<String>) = application {
             hasUnsavedChanges = projectSession.hasUnsavedChanges
         }
 
+        fun recordActivity(message: String) {
+            val timestamp = LocalTime.now().withNano(0).toString()
+            recentActivityLog = (listOf("$timestamp - $message") + recentActivityLog).take(12)
+        }
+
         fun checkpointBeforeImport(title: String) {
             val currentProject = projectSession.currentProject ?: return
             recentImportCheckpoint = DesktopImportCheckpoint(
@@ -433,6 +440,7 @@ fun main(args: Array<String>) = application {
                     title = "Restored ${checkpoint.title}",
                     lines = listOf("The Event File was restored to the in-memory checkpoint captured before that import.")
                 )
+                recordActivity("Restored checkpoint before ${checkpoint.title}.")
                 projectStatusText = "Restored checkpoint from before ${checkpoint.title}. Unsaved changes."
             }.onFailure { error ->
                 projectStatusText = "Restore failed: ${error.message ?: error::class.simpleName}"
@@ -630,6 +638,7 @@ fun main(args: Array<String>) = application {
                     runCatching {
                         when (appendSportIdentDownload(download)) {
                             DesktopSportIdentAppendOutcome.Added -> {
+                                recordActivity("Downloaded SI card ${download.readout.siNumber}.")
                                 projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
                                 DesktopDebugLog.info("SI", "Downloaded SI card ${download.readout.siNumber}")
                             }
@@ -641,10 +650,12 @@ fun main(args: Array<String>) = application {
                                 }
                             }
                             DesktopSportIdentAppendOutcome.DuplicateReplaced -> {
+                                recordActivity("Replaced SI readout ${download.readout.siNumber}.")
                                 projectStatusText = "Replaced existing readout for SI card ${download.readout.siNumber}."
                                 DesktopDebugLog.info("SI", "Duplicate SI card ${download.readout.siNumber} replaced")
                             }
                             DesktopSportIdentAppendOutcome.DuplicateCreatedNew -> {
+                                recordActivity("Stored duplicate SI readout ${download.readout.siNumber}.")
                                 projectStatusText = "Created new duplicate readout for SI card ${download.readout.siNumber}."
                                 DesktopDebugLog.info("SI", "Duplicate SI card ${download.readout.siNumber} stored as new readout")
                             }
@@ -800,6 +811,7 @@ fun main(args: Array<String>) = application {
                                             when (appendSportIdentDownload(download)) {
                                                 DesktopSportIdentAppendOutcome.Added -> {
                                                     projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
+                                                    recordActivity("Downloaded SI card ${download.readout.siNumber}.")
                                                     DesktopDebugLog.info("SI", "Downloaded SI card ${download.readout.siNumber}")
                                                     siDownloadStatusText =
                                                         "Continuous SI readout running; waiting for the next card."
@@ -820,6 +832,7 @@ fun main(args: Array<String>) = application {
                                                 DesktopSportIdentAppendOutcome.DuplicateReplaced -> {
                                                     projectStatusText =
                                                         "Replaced existing readout for SI card ${download.readout.siNumber}."
+                                                    recordActivity("Replaced SI readout ${download.readout.siNumber}.")
                                                     DesktopDebugLog.info(
                                                         "SI",
                                                         "Duplicate SI card ${download.readout.siNumber} replaced"
@@ -830,6 +843,7 @@ fun main(args: Array<String>) = application {
                                                 DesktopSportIdentAppendOutcome.DuplicateCreatedNew -> {
                                                     projectStatusText =
                                                         "Created new duplicate readout for SI card ${download.readout.siNumber}."
+                                                    recordActivity("Stored duplicate SI readout ${download.readout.siNumber}.")
                                                     DesktopDebugLog.info(
                                                         "SI",
                                                         "Duplicate SI card ${download.readout.siNumber} stored as new readout"
@@ -957,6 +971,7 @@ fun main(args: Array<String>) = application {
                 sendResult.onSuccess { result ->
                     projectFile = projectSession.updateCurrentProject { result.projectFile }
                     syncProjectState()
+                    recordActivity("Sent ${result.sentCount} live results to ROBIS.")
                     projectStatusText = "Sent ${result.sentCount} live result${if (result.sentCount == 1) "" else "s"} to ROBIS."
                 }.onFailure { error ->
                     projectStatusText = "ROBIS send failed: ${error.message ?: error::class.simpleName}"
@@ -1482,6 +1497,7 @@ fun main(args: Array<String>) = application {
             projectFile = projectSession.updateCurrentProject { updatedProject }
             syncProtectedCourseState(updatedProject, review.password)
             pendingCourseKmlKmzImportReview = null
+            recordActivity("Applied controls/route KML/KMZ import ${review.sourceName}.")
             recentImportReport = DesktopImportReport(
                 title = "Controls/route KML/KMZ: ${review.sourceName}",
                 lines = listOf(
@@ -1491,7 +1507,8 @@ fun main(args: Array<String>) = application {
                     "${selectedSummary.categoryAssignmentUpdates.size.takeIf { applyCategoryAssignments } ?: 0} assigned-control lists replaced.",
                     "${selectedSummary.createdCategoryNames.size} missing categories created.",
                     "${selectedSummary.missingCategoryNames.size} category names were missing before review."
-                ) + selectedSummary.eventTypeWarnings
+                ) + listOf(updatedProject.resultImpactWarning("Course data changed").trim()).filter { it.isNotBlank() } +
+                    selectedSummary.eventTypeWarnings
             )
             if (fetchElevations) {
                 startCourseKmlKmzElevationFetch(review.copy(summary = selectedSummary))
@@ -1838,6 +1855,7 @@ fun main(args: Array<String>) = application {
                 }
                 syncProjectState()
                 pendingCompetitorsCsvImportReview = null
+                recordActivity("Applied competitors CSV import ${path.fileName}.")
                 recentImportReport = DesktopImportReport(
                     title = "Competitors CSV: ${path.fileName}",
                     lines = listOf(
@@ -1902,6 +1920,7 @@ fun main(args: Array<String>) = application {
                 }
                 syncProjectState()
                 pendingCategoriesCsvImportReview = null
+                recordActivity("Applied categories CSV import ${review.path.fileName}.")
                 recentImportReport = DesktopImportReport(
                     title = "Categories CSV: ${review.path.fileName}",
                     lines = listOf(
@@ -1911,7 +1930,8 @@ fun main(args: Array<String>) = application {
                         "${review.preview.affectedCompetitorCount} competitors are in updated categories.",
                         "${review.preview.categoriesWithAssignedControlsReplacedCount} existing assigned-control lists replaced.",
                         "${review.preview.categoriesWithProtectedCoursePreservedCount} protected course records preserved."
-                    ) + review.preview.eventTypeWarnings
+                    ) + listOf(projectFile?.resultImpactWarning("Category course data changed")?.trim().orEmpty()).filter { it.isNotBlank() } +
+                        review.preview.eventTypeWarnings
                 )
                 projectStatusText =
                     "Imported ${review.path.fileName}: $importedRows added, $updatedRows updated, ${review.invalidLineCount} invalid."
@@ -1983,6 +2003,7 @@ fun main(args: Array<String>) = application {
                 }
                 syncProjectState()
                 pendingControlsCsvImportReview = null
+                recordActivity("Applied controls CSV import ${review.path.fileName}.")
                 recentImportReport = DesktopImportReport(
                     title = "Controls CSV: ${review.path.fileName}",
                     lines = listOf(
@@ -2001,7 +2022,8 @@ fun main(args: Array<String>) = application {
                         } else {
                             listOf("${review.preview.missingExistingCount} existing controls were missing from the CSV and kept.")
                         }
-                        ) + review.preview.eventTypeWarnings
+                        ) + listOf(projectFile?.resultImpactWarning("Control definitions changed")?.trim().orEmpty()).filter { it.isNotBlank() } +
+                        review.preview.eventTypeWarnings
                 )
                 projectStatusText = importStatusText(
                     "Imported",
@@ -2662,6 +2684,7 @@ fun main(args: Array<String>) = application {
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
             recentImportReport = recentImportReport,
             recentImportCheckpoint = recentImportCheckpoint,
+            recentActivityLog = recentActivityLog,
             onRetrieveMissingCourseElevations = ::startCourseAnalysisElevationFetch,
             onDownloadVenueElevationCache = ::startVenueElevationCacheDownload,
             onOpenVenueElevationCacheFolder = ::openVenueElevationCacheFolder,
@@ -2753,7 +2776,8 @@ fun main(args: Array<String>) = application {
                     }
                     projectFile = updatedProject
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    projectStatusText = "Unsaved changes.$lockedCourseWarning"
+                    recordActivity("Updated category assigned controls.")
+                    projectStatusText = "Unsaved changes.$lockedCourseWarning${updatedProject.resultImpactWarning("Category course data changed")}"
                     if (shouldCheckRequiredControls) {
                         val warning = EventAssignedControlWarnings.forCategory(updatedProject.raceData, categoryId)
                         scheduleAssignedControlsWarning(
@@ -2780,6 +2804,7 @@ fun main(args: Array<String>) = application {
                         )
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    recordActivity("Updated category length/climb.")
                     projectStatusText = "Unsaved changes.$lockedCourseWarning"
                 }.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
@@ -2808,6 +2833,7 @@ fun main(args: Array<String>) = application {
                         EventProjectEditor.removeCategory(currentProject, categoryId, deleteCompetitors)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    recordActivity("Removed category.")
                     projectStatusText = "Unsaved changes."
                 }.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
@@ -3137,8 +3163,11 @@ fun main(args: Array<String>) = application {
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = if (identityChanged) {
-                        "Control identity updated. This control is used by $affectedAssignedCategories assigned categor${if (affectedAssignedCategories == 1) "y" else "ies"} and $affectedProtectedCourses stored course${if (affectedProtectedCourses == 1) "" else "s"}.$lockedCourseWarning"
+                        recordActivity("Updated control identity.")
+                        val impactWarning = projectFile?.resultImpactWarning("Control identity changed") ?: ""
+                        "Control identity updated. This control is used by $affectedAssignedCategories assigned categor${if (affectedAssignedCategories == 1) "y" else "ies"} and $affectedProtectedCourses stored course${if (affectedProtectedCourses == 1) "" else "s"}.$lockedCourseWarning$impactWarning"
                     } else {
+                        recordActivity("Updated control details.")
                         "Unsaved changes."
                     }
                 }.onFailure { error ->
@@ -3184,6 +3213,7 @@ fun main(args: Array<String>) = application {
                         EventProjectEditor.removeControl(currentProject, controlId)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    recordActivity("Removed control.")
                     projectStatusText = "Unsaved changes."
                 }.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
@@ -4326,6 +4356,7 @@ private fun RadioOManagerDesktopApp(
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
     recentImportReport: DesktopImportReport? = null,
     recentImportCheckpoint: DesktopImportCheckpoint? = null,
+    recentActivityLog: List<String> = emptyList(),
     onRetrieveMissingCourseElevations: (String) -> Unit = {},
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit = { _, _, _, _, _, _ -> },
     onOpenVenueElevationCacheFolder: () -> Unit = {},
@@ -4510,6 +4541,7 @@ private fun RadioOManagerDesktopApp(
                                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                                 recentImportReport = recentImportReport,
                                 recentImportCheckpoint = recentImportCheckpoint,
+                                recentActivityLog = recentActivityLog,
                                 onRetrieveMissingCourseElevations = onRetrieveMissingCourseElevations,
                                 onDownloadVenueElevationCache = onDownloadVenueElevationCache,
                                 onOpenVenueElevationCacheFolder = onOpenVenueElevationCacheFolder,
@@ -4992,6 +5024,7 @@ private fun SectionWorkspace(
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     recentImportReport: DesktopImportReport?,
     recentImportCheckpoint: DesktopImportCheckpoint?,
+    recentActivityLog: List<String>,
     onRetrieveMissingCourseElevations: (String) -> Unit,
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
     onOpenVenueElevationCacheFolder: () -> Unit,
@@ -5181,6 +5214,7 @@ private fun SectionWorkspace(
                 ),
                 recentImportReport = recentImportReport,
                 recentImportCheckpoint = recentImportCheckpoint,
+                recentActivityLog = recentActivityLog,
                 onRestoreRecentImportCheckpoint = onRestoreRecentImportCheckpoint,
                 onInsertTestControls = onInsertTestControls,
                 onInsertTestCategories = onInsertTestCategories,
@@ -5256,6 +5290,7 @@ private fun EventDiagnosticsPanel(
     diagnostics: DesktopProjectDiagnostics,
     recentImportReport: DesktopImportReport?,
     recentImportCheckpoint: DesktopImportCheckpoint?,
+    recentActivityLog: List<String>,
     onRestoreRecentImportCheckpoint: () -> Unit,
     onInsertTestControls: () -> Unit,
     onInsertTestCategories: () -> Unit,
@@ -5333,6 +5368,21 @@ private fun EventDiagnosticsPanel(
                     text = "Restores the in-memory Event File state captured before ${recentImportCheckpoint.title}. Save after restore if you want to keep it.",
                     color = Color.DarkGray,
                     fontSize = 12.sp
+                )
+            }
+        }
+        if (recentActivityLog.isNotEmpty()) {
+            Text(
+                text = "Recent Activity",
+                color = DesktopPalette.PrimaryVariant,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
+            recentActivityLog.forEach { line ->
+                Text(
+                    text = line,
+                    color = DesktopPalette.Disconnected,
+                    fontSize = 13.sp
                 )
             }
         }
@@ -10298,6 +10348,16 @@ private fun EventProjectFile.lockedCategoryCourseWarning(
 ): String =
     if (categoryHasLockedProtectedCourseData(categoryId, isProtectedCourseOrderUnlocked)) {
         " This category has locked protected course data; unlock it to compare stored route data."
+    } else {
+        ""
+    }
+
+private fun EventProjectFile.hasRecordedReadoutsOrResults(): Boolean =
+    raceData.competitorData.any { it.readoutData != null } || raceData.unmatchedReadoutData.isNotEmpty()
+
+private fun EventProjectFile.resultImpactWarning(action: String): String =
+    if (hasRecordedReadoutsOrResults()) {
+        " $action after readouts exist; review or recalculate affected results."
     } else {
         ""
     }
