@@ -51,6 +51,21 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun readinessSummaryCommandReportsReadinessJson() {
+        val directory = Files.createTempDirectory("radio-oracle-automation")
+        val path = directory.resolve("Automation Event.json")
+        DesktopProjectFiles.write(path, projectFile("Automation Event"))
+
+        val result = runAutomation("readiness-summary", path.toString())
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"readiness-summary\""))
+        assertTrue(result.stdout.contains("\"raceName\":\"Automation Event\""))
+        assertTrue(result.stdout.contains("\"validationIssueCount\":0"))
+        assertTrue(result.stdout.contains("\"readinessIssueCount\":0"))
+    }
+
+    @Test
     fun importAndroidEventFileCommandWritesDesktopEventFile() {
         val directory = Files.createTempDirectory("radio-oracle-automation")
         val androidPath = directory.resolve("Android Event.ardfjs")

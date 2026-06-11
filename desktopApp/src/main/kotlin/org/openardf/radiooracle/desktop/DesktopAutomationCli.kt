@@ -96,6 +96,7 @@ object DesktopAutomationCli {
             "import-android-event-file" -> importAndroidEventFile(commandArgs, out, err)
             "export-android-event-file" -> exportAndroidEventFile(commandArgs, out, err)
             "import-competitors-csv" -> importCompetitorsCsv(commandArgs, out, err)
+            "readiness-summary" -> readinessSummary(commandArgs, out, err)
             "nav-select" -> navSelect(commandArgs, out, err)
             "si-status" -> siStatus(commandArgs, out, err, serialPortProvider)
             "printer-status" -> printerStatus(commandArgs, out, err, printerDiagnostics)
@@ -252,6 +253,46 @@ object DesktopAutomationCli {
         }.getOrElse { error ->
             err.println("Failed to import Competitors CSV: ${error.message ?: error::class.simpleName}")
             66
+        }
+    }
+
+    private fun readinessSummary(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val pathText = args.firstOrNull { !it.startsWith("--") }
+        if (pathText.isNullOrBlank()) {
+            err.println("readiness-summary requires an Event File path.")
+            return 64
+        }
+        val requireReady = "--require-ready" in args
+        return runCatching {
+            val path = Path.of(pathText)
+            val projectFile = DesktopProjectFiles.read(path)
+            val diagnostics = DesktopProjectDiagnostics.from(projectFile)
+            val lockedProtectedCourseCount = projectFile.raceData.categories.count {
+                it.category.encryptedCourseInfo?.isNotBlank() == true
+            }
+            val activeReadinessIssues = diagnostics.readinessIssues
+                .filterNot { it.contains("has course data but no competitors") }
+            out.println(
+                jsonObject(
+                    "command" to "readiness-summary",
+                    "path" to path.toAbsolutePath().normalize().toString(),
+                    "raceName" to projectFile.raceData.race.name,
+                    "validationIssueCount" to diagnostics.validationIssues.size,
+                    "readinessIssueCount" to diagnostics.readinessIssues.size,
+                    "activeReadinessIssueCount" to activeReadinessIssues.size,
+                    "lockedProtectedCourseCount" to lockedProtectedCourseCount,
+                    "validationIssues" to diagnostics.validationIssues,
+                    "readinessIssues" to diagnostics.readinessIssues
+                )
+            )
+            if (requireReady && (diagnostics.validationIssues.isNotEmpty() || activeReadinessIssues.isNotEmpty())) {
+                69
+            } else {
+                0
+            }
+        }.getOrElse { error ->
+            err.println("Readiness summary failed: ${error.message ?: error::class.simpleName}")
+            65
         }
     }
 
@@ -481,6 +522,8 @@ object DesktopAutomationCli {
                                           Export a desktop Event File as an Android Event File.
           import-competitors-csv <event-path> <csv-path>
                                           Import competitors CSV into an Event File.
+          readiness-summary [--require-ready] <event-path>
+                                          Print validation and readiness issues as JSON.
           nav-select [--default-draft|--draft] <path>
                                           Simulate menu selection, using > between labels. Supports < Back.
           si-status [--require] [--port]  Probe attached SI station state.
