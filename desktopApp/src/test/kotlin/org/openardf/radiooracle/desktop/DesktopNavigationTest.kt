@@ -43,8 +43,10 @@ class DesktopNavigationTest {
 
     @Test
     fun featureSettingsUseSpecificSections() {
-        val raceSiSettings = DesktopNavigation.rootItems(DesktopWorkflow.RaceOps)
-            .first { it.label == "SI Readout" }
+        val setupSiSettings = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
+            .first { it.label == "Event File" }
+            .children
+            .first { it.label == "Settings" }
             .children
             .first { it.label == "SI Readout Settings" }
         val resultsLiveSettings = DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport)
@@ -52,7 +54,7 @@ class DesktopNavigationTest {
             .children
             .first { it.label == "Live Result Settings" }
 
-        assertEquals(DesktopSection.SiReadoutSettings, raceSiSettings.section)
+        assertEquals(DesktopSection.SiReadoutSettings, setupSiSettings.section)
         assertEquals(DesktopSection.LiveResultSettings, resultsLiveSettings.section)
     }
 
@@ -133,6 +135,27 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun menuIndicatorsAndEllipsesFollowNavigationSemantics() {
+        val items = DesktopWorkflow.entries.flatMap { workflow -> flatten(DesktopNavigation.rootItems(workflow)) }
+
+        items.forEach { item ->
+            assertEquals("Wrong menu indicator state for ${item.id}", item.action == null, DesktopNavigation.showsMenuIndicator(item))
+            assertFalse("Stored labels should not include rendered indicator for ${item.id}", item.label.contains(">"))
+            if (item.children.isNotEmpty()) {
+                assertFalse("Submenu labels should not use ellipses for ${item.id}", item.label.contains("..."))
+            }
+        }
+        assertTrue(
+            DesktopNavigation.showsMenuIndicator(
+                DesktopNavigation.rootItems(DesktopWorkflow.Setup)
+                    .first { it.label == "Controls" }
+                    .children
+                    .first { it.label == "Elevation Data" }
+            )
+        )
+    }
+
+    @Test
     fun backFromFirstLevelSubmenuReturnsToWorkflowHome() {
         val eventFile = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
             .first { it.label == "Event File" }
@@ -142,6 +165,36 @@ class DesktopNavigationTest {
         assertEquals(DesktopSection.WorkflowHome, state.selectedSection)
         assertEquals("setup.home", state.selectedItemId)
         assertEquals("Setup", DesktopNavigation.breadcrumb(state))
+    }
+
+    @Test
+    fun backFromRootLeafScreensReturnsToWorkflowHome() {
+        val cases = listOf(
+            DesktopWorkflow.ResultsExport to "Results",
+            DesktopWorkflow.RaceOps to "Readouts",
+            DesktopWorkflow.RaceOps to "In Forest",
+            DesktopWorkflow.RaceOps to "Unmatched Readouts",
+            DesktopWorkflow.RaceOps to "Finish Tickets"
+        )
+
+        cases.forEach { (workflow, label) ->
+            val workflowState = DesktopNavState().switchWorkflow(workflow)
+            val selectedState = DesktopNavigation.selectItem(
+                workflowState,
+                DesktopNavigation.rootItems(workflow).first { it.label == label }
+            ).state
+
+            assertTrue("Expected Back for $label", DesktopNavigation.canGoBack(selectedState))
+            assertEquals(emptyList<String>(), DesktopNavigation.currentItems(selectedState).map { it.label })
+            assertEquals(workflowState, selectedState.back())
+        }
+    }
+
+    @Test
+    fun workflowHomeDoesNotShowBack() {
+        DesktopWorkflow.entries.forEach { workflow ->
+            assertFalse(DesktopNavigation.canGoBack(DesktopNavState().switchWorkflow(workflow)))
+        }
     }
 
     @Test
@@ -843,10 +896,10 @@ class DesktopNavigationTest {
             .children
 
         assertEquals(DesktopSection.Settings, helpActions.first { it.label == "Beta Scope" }.section)
-        assertEquals(DesktopNavAction.ShowDebugLogHelp, helpActions.first { it.label == "Logs" }.action)
-        assertEquals(DesktopNavAction.ShowAbout, helpActions.first { it.label == "About Radio-Oracle" }.action)
-        assertFalse(helpActions.first { it.label == "Logs" }.requiresEventFile)
-        assertFalse(helpActions.first { it.label == "About Radio-Oracle" }.requiresEventFile)
+        assertEquals(DesktopNavAction.ShowDebugLogHelp, helpActions.first { it.label == "Logs..." }.action)
+        assertEquals(DesktopNavAction.ShowAbout, helpActions.first { it.label == "About Radio-Oracle..." }.action)
+        assertFalse(helpActions.first { it.label == "Logs..." }.requiresEventFile)
+        assertFalse(helpActions.first { it.label == "About Radio-Oracle..." }.requiresEventFile)
     }
 
     @Test
@@ -861,12 +914,12 @@ class DesktopNavigationTest {
                     selectedSection = DesktopSection.Settings,
                     selectedItemId = "settings.app"
                 )
-            ).first { it.label == "About Radio-Oracle" })
+            ).first { it.label == "About Radio-Oracle..." })
 
         assertEquals(DesktopSection.Settings, state.selectedSection)
         assertEquals("settings.about", state.selectedItemId)
-        assertEquals("About Radio-Oracle", DesktopNavigation.selectedLabel(state))
-        assertEquals("Help/About/App Settings > Help > About Radio-Oracle", DesktopNavigation.breadcrumb(state))
+        assertEquals("About Radio-Oracle...", DesktopNavigation.selectedLabel(state))
+        assertEquals("Help/About/App Settings > Help > About Radio-Oracle...", DesktopNavigation.breadcrumb(state))
     }
 
     private fun flatten(items: List<DesktopNavItem>): List<DesktopNavItem> =

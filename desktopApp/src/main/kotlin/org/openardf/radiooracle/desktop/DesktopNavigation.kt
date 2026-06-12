@@ -157,7 +157,14 @@ data class DesktopNavState(
 
     fun back(): DesktopNavState {
         if (submenuStack.isEmpty()) {
-            return this
+            return if (selectedItemId == DesktopNavigation.defaultItemId(workflow)) {
+                this
+            } else {
+                copy(
+                    selectedSection = DesktopNavigation.defaultSection(workflow),
+                    selectedItemId = DesktopNavigation.defaultItemId(workflow)
+                )
+            }
         }
         val activeMenuItems = DesktopNavigation.menuItemsForStack(workflow, submenuStack)
         if (
@@ -359,14 +366,7 @@ object DesktopNavigation {
                     listOf(
                         action("race.download-si", "Download SI Card", workflow, DesktopNavAction.DownloadSiCard),
                         action("race.start-continuous", "Start Continuous SI", workflow, DesktopNavAction.StartContinuousSiReadout),
-                        action("race.stop-continuous", "Stop Continuous SI", workflow, DesktopNavAction.StopContinuousSiReadout),
-                        item(
-                            "race.si-settings",
-                            "SI Readout Settings",
-                            workflow,
-                            DesktopSection.SiReadoutSettings,
-                            requiresEventFile = false
-                        )
+                        action("race.stop-continuous", "Stop Continuous SI", workflow, DesktopNavAction.StopContinuousSiReadout)
                     )
                 ),
                 item("race.in-forest", "In Forest", workflow, DesktopSection.InForest),
@@ -440,7 +440,7 @@ object DesktopNavigation {
                         item("settings.beta-scope", "Beta Scope", workflow, DesktopSection.Settings, requiresEventFile = false),
                         action(
                             "settings.logs",
-                            "Logs",
+                            "Logs...",
                             workflow,
                             DesktopNavAction.ShowDebugLogHelp,
                             requiresEventFile = false,
@@ -448,7 +448,7 @@ object DesktopNavigation {
                         ),
                         action(
                             "settings.about",
-                            "About Radio-Oracle",
+                            "About Radio-Oracle...",
                             workflow,
                             DesktopNavAction.ShowAbout,
                             requiresEventFile = false,
@@ -465,6 +465,12 @@ object DesktopNavigation {
         val selectedLeaf = activeMenuItems.firstOrNull { it.id == state.selectedItemId && it.children.isEmpty() }
         return selectedLeaf?.children ?: activeMenuItems
     }
+
+    fun canGoBack(state: DesktopNavState): Boolean =
+        state.submenuStack.isNotEmpty() || state.selectedItemId != defaultItemId(state.workflow)
+
+    fun showsMenuIndicator(item: DesktopNavItem): Boolean =
+        item.action == null
 
     fun menuItemsForStack(workflow: DesktopWorkflow, submenuStack: List<String>): List<DesktopNavItem> =
         submenuStack.fold(roots.getValue(workflow)) { items, id ->
@@ -808,15 +814,13 @@ object DesktopNavigation {
         "race.readouts" to
             "Use Readouts to download, review, match, edit, remove, print, and manually add SI-card readouts during race operations.",
         "race.si-readout" to
-            "Use SI Readout to start or stop card downloads and adjust readout behavior while competitors finish.",
+            "Use SI Readout to download one SI card or run continuous card downloads while competitors finish.",
         "race.download-si" to
             "Use Download SI Card to read one SI card from an attached READOUT or SI MASTER station.",
         "race.start-continuous" to
             "Use Start Continuous SI to keep the reader waiting for successive cards during finish operations.",
         "race.stop-continuous" to
             "Use Stop Continuous SI to end continuous readout after the current card wait finishes.",
-        "race.si-settings" to
-            "Use SI Readout Settings to choose duplicate-card handling, alert sounds, and test readout tools used by Race Ops.",
         "race.in-forest" to
             "Use In Forest to monitor started competitors who do not yet have finish readouts.",
         "race.unmatched" to

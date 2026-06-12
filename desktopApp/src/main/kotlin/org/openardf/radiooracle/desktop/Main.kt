@@ -4999,7 +4999,7 @@ private fun NavigationRail(
                             }
                         ) {
                             Text(
-                                text = if (item.children.isEmpty()) item.label else "${item.label} >",
+                                text = if (DesktopNavigation.showsMenuIndicator(item)) "${item.label} >" else item.label,
                                 fontSize = 13.sp,
                                 lineHeight = 15.sp,
                                 maxLines = 2,
@@ -5039,7 +5039,7 @@ private fun NavigationRail(
                     )
                 }
             }
-            if (navState.submenuStack.isNotEmpty()) {
+            if (DesktopNavigation.canGoBack(navState)) {
                 Button(
                     onClick = onBack,
                     modifier = Modifier
@@ -5425,13 +5425,6 @@ private fun SectionWorkspace(
                 refreshToken = elevationCacheRefreshToken,
                 onDownloadCache = onDownloadVenueElevationCache,
                 onOpenCacheFolder = onOpenVenueElevationCacheFolder
-            )
-        }
-        if (section == DesktopSection.ControlsImportExport && projectFile != null) {
-            ControlsImportExportPanel(
-                isActionEnabled = isNavActionEnabled,
-                onAction = onNavAction,
-                onImportControlsRouteKmlKmz = onImportControlsRouteKmlKmz
             )
         }
         if (section == DesktopSection.ControlsRouteKmlImport && projectFile != null) {
@@ -7691,34 +7684,6 @@ private fun ControlDetailsPanel(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ControlsImportExportPanel(
-    isActionEnabled: (DesktopNavAction) -> Boolean,
-    onAction: (DesktopNavAction) -> Unit,
-    onImportControlsRouteKmlKmz: () -> Unit
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(
-                onClick = { onAction(DesktopNavAction.ImportControlsCsv) },
-                enabled = isActionEnabled(DesktopNavAction.ImportControlsCsv)
-            ) {
-                ButtonLabel("Import Controls CSV...")
-            }
-            Button(
-                onClick = { onAction(DesktopNavAction.ExportControlsCsv) },
-                enabled = isActionEnabled(DesktopNavAction.ExportControlsCsv)
-            ) {
-                ButtonLabel("Export Controls CSV...")
-            }
-        }
-        ControlsRouteKmlImportPanel(onSelectFile = onImportControlsRouteKmlKmz)
     }
 }
 
