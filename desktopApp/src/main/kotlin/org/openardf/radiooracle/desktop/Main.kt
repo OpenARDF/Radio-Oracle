@@ -10766,7 +10766,7 @@ private fun DesktopRaceFormatPicker(
 ) {
     EnumPicker(
         selectedValue = selectedRaceFormat,
-        values = DesktopRaceFormat.entries,
+        values = DesktopRaceFormat.selectableEntries,
         label = { it.label },
         onValueSelected = onRaceFormatSelected,
         modifier = modifier

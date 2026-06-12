@@ -284,6 +284,11 @@ Goal: add platform-specific capabilities after the event-admin beta is stable.
 - Add desktop printing behind a platform print interface.
 - Validate and harden Android Bluetooth ESC/POS printing before beta against the
   target Bluetooth printer hardware.
+- Remove the legacy `Short` race type from Android race/category pickers after
+  Android has a visible, tested way to set a Classic-style event's start
+  interval to two minutes. Keep import/read compatibility for old files that
+  still contain `RaceType.SHORT`, but avoid presenting it as a normal event
+  format once the interval setting covers the practical use case.
 - Add non-ROBis live result providers after their network/result-service logic
   is isolated from Android WorkManager.
 - Add a post-beta Competition View that treats a championship as a higher-level
