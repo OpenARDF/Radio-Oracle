@@ -10174,7 +10174,7 @@ private fun courseAnalysisSpeedModelText(speedModel: DesktopCourseSpeedModel): S
 
 private fun courseAnalysisSpeedFactorExplanation(speedModel: DesktopCourseSpeedModel): String =
     "Assumed running speed equals race-format baseline speed x category multiplier x event speed factor. " +
-        "The category multipliers below are built-in model assumptions and are not individually adjustable. " +
+        "${speedModel.categoryFactorSourceLabel}: ${speedModel.categoryFactorExplanation} " +
         "The event speed factor is adjustable, saved in the Event File, and applies to every category; the current event factor is x${twoDecimalText(speedModel.compensationFactor)}."
 
 private fun secondsText(value: Int?): String =

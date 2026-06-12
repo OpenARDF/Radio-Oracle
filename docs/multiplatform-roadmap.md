@@ -321,6 +321,16 @@ Goal: add platform-specific capabilities after the event-admin beta is stable.
 - Add simple acceptance criteria that the competition view remains additive: all
   existing event-scoped operations keep behavior unchanged when no competition
   context is selected.
+- Add map-informed Course Analyzer speed modeling after the app can ingest or
+  reference course-relevant map data. The current analyzer should treat category
+  age/gender speed factors as a named provisional input table, not as a final
+  source of truth, so future timing calculations can combine category factors
+  with per-leg course-condition factors such as vegetation, runnability,
+  elevation gain/loss, barriers, water, out-of-bounds constraints, and other
+  map-derived impediments. Preserve the current event-wide speed factor as the
+  operator's coarse adjustment for unusual conditions, but make the long-term
+  model capable of explaining each leg's adjusted speed assumptions in the
+  analyzer report.
 
 Milestone: each platform feature lands behind shared tests plus platform smoke
 tests without regressing Android.

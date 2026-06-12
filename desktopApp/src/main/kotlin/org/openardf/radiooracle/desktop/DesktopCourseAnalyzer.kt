@@ -138,12 +138,9 @@ data class DesktopCourseSpeedModel(
     val categorySpeedMultiplier: Double,
     val compensationFactor: Double,
     val effectiveSpeedMetersPerSecond: Double,
-    val categoryModelLabel: String
-)
-
-data class DesktopCourseCategorySpeedFactor(
-    val categoryCodes: List<String>,
-    val multiplier: Double
+    val categoryModelLabel: String,
+    val categoryFactorSourceLabel: String,
+    val categoryFactorExplanation: String
 )
 
 enum class DesktopCourseRouteMapPointType {
@@ -246,26 +243,7 @@ object DesktopCourseAnalyzer {
         "Estimated times use an elite-competitor baseline pace by race format, then apply a category age/gender multiplier and the event-wide Course Analyzer speed factor. When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not modeled."
     private const val CLASSIC_WAIT_TIMING_NOTE =
         "For Classic-style fox controls, timing assumes the competitor waits if the fox is off the air, then spends 30 seconds finding and punching before departing for the next leg; that delay affects later arrival phases."
-    private val CATEGORY_SPEED_FACTORS = listOf(
-        DesktopCourseCategorySpeedFactor(listOf("M21"), 1.00),
-        DesktopCourseCategorySpeedFactor(listOf("M19", "M40"), 0.95),
-        DesktopCourseCategorySpeedFactor(listOf("M50"), 0.86),
-        DesktopCourseCategorySpeedFactor(listOf("M60"), 0.76),
-        DesktopCourseCategorySpeedFactor(listOf("M70"), 0.65),
-        DesktopCourseCategorySpeedFactor(listOf("M80"), 0.55),
-        DesktopCourseCategorySpeedFactor(listOf("M16"), 0.80),
-        DesktopCourseCategorySpeedFactor(listOf("M14"), 0.65),
-        DesktopCourseCategorySpeedFactor(listOf("M12"), 0.55),
-        DesktopCourseCategorySpeedFactor(listOf("W21"), 0.88),
-        DesktopCourseCategorySpeedFactor(listOf("W19", "W35"), 0.84),
-        DesktopCourseCategorySpeedFactor(listOf("W45"), 0.74),
-        DesktopCourseCategorySpeedFactor(listOf("W55"), 0.64),
-        DesktopCourseCategorySpeedFactor(listOf("W65"), 0.55),
-        DesktopCourseCategorySpeedFactor(listOf("W75"), 0.47),
-        DesktopCourseCategorySpeedFactor(listOf("W16"), 0.72),
-        DesktopCourseCategorySpeedFactor(listOf("W14"), 0.60),
-        DesktopCourseCategorySpeedFactor(listOf("W12"), 0.52)
-    )
+    private val CATEGORY_SPEED_FACTOR_TABLE = DesktopCourseSpeedFactors.provisionalCategoryTable
     private val classicCategoryRequirements = mapOf(
         "W19" to CourseRuleRequirement(4, 4, 6_000, 8_000),
         "W21" to CourseRuleRequirement(4, 4, 7_000, 9_000),
@@ -778,7 +756,7 @@ object DesktopCourseAnalyzer {
             categoryName = category.name,
             rulesDocumentLabel = USA_RULES_DOCUMENT_LABEL,
             speedModel = speedModel,
-            categorySpeedFactors = CATEGORY_SPEED_FACTORS,
+            categorySpeedFactors = CATEGORY_SPEED_FACTOR_TABLE.categoryFactors,
             providedRouteSection = providedSection,
             calculatedRouteSection = calculatedSection,
             summaryExplanation = summaryExplanation(providedSection, calculatedSection, waitRenumbering, speedModel),
@@ -2365,7 +2343,7 @@ object DesktopCourseAnalyzer {
             else -> CLASSIC_FLAT_SPEED_MPS
         }
         val categoryKey = categoryRuleKey(categoryName)
-        val categoryMultiplier = categorySpeedMultiplier(categoryKey)
+        val categoryMultiplier = CATEGORY_SPEED_FACTOR_TABLE.categoryMultiplier(categoryKey)
         val boundedFactor = compensationFactor
             .takeIf { it.isFinite() }
             ?.coerceIn(0.25, 2.0)
@@ -2377,15 +2355,11 @@ object DesktopCourseAnalyzer {
             categorySpeedMultiplier = categoryMultiplier,
             compensationFactor = boundedFactor,
             effectiveSpeedMetersPerSecond = effectiveSpeed,
-            categoryModelLabel = categoryKey ?: "unmatched category"
+            categoryModelLabel = categoryKey ?: "unmatched category",
+            categoryFactorSourceLabel = CATEGORY_SPEED_FACTOR_TABLE.sourceLabel,
+            categoryFactorExplanation = CATEGORY_SPEED_FACTOR_TABLE.explanation
         )
     }
-
-    private fun categorySpeedMultiplier(categoryKey: String?): Double =
-        CATEGORY_SPEED_FACTORS
-            .firstOrNull { factor -> categoryKey in factor.categoryCodes }
-            ?.multiplier
-            ?: 1.00
 
     private fun categoryNameContainsRuleKey(categoryName: String, categoryKey: String): Boolean =
         Regex("""\b${Regex.escape(categoryKey)}\b""")
