@@ -66,6 +66,32 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun navAvailabilityReportsDisabledMenuLongClickOverrides() {
+        val result = runAutomation("nav-availability")
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"nav-availability\""))
+        assertTrue(result.stdout.contains("\"label\":\"Categories\""))
+        assertTrue(result.stdout.contains("\"longClickOverride\":true"))
+        assertTrue(result.stdout.contains("Long-click for 3 seconds to explore this menu."))
+    }
+
+    @Test
+    fun recalculateResultsCommandReportsCounts() {
+        val directory = Files.createTempDirectory("radio-oracle-automation")
+        val path = directory.resolve("Automation Event.json")
+        DesktopProjectFiles.write(path, projectFile("Automation Event"))
+
+        val result = runAutomation("recalculate-results", "--write", path.toString())
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"recalculate-results\""))
+        assertTrue(result.stdout.contains("\"write\":true"))
+        assertTrue(result.stdout.contains("\"recalculatedCount\":0"))
+        assertTrue(result.stdout.contains("\"changedCount\":0"))
+    }
+
+    @Test
     fun importAndroidEventFileCommandWritesDesktopEventFile() {
         val directory = Files.createTempDirectory("radio-oracle-automation")
         val androidPath = directory.resolve("Android Event.ardfjs")

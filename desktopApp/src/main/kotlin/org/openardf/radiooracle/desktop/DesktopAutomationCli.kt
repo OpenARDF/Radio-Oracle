@@ -97,6 +97,8 @@ object DesktopAutomationCli {
             "export-android-event-file" -> exportAndroidEventFile(commandArgs, out, err)
             "import-competitors-csv" -> importCompetitorsCsv(commandArgs, out, err)
             "readiness-summary" -> readinessSummary(commandArgs, out, err)
+            "recalculate-results" -> recalculateResults(commandArgs, out, err)
+            "nav-availability" -> navAvailability(commandArgs, out, err)
             "nav-select" -> navSelect(commandArgs, out, err)
             "si-status" -> siStatus(commandArgs, out, err, serialPortProvider)
             "printer-status" -> printerStatus(commandArgs, out, err, printerDiagnostics)
@@ -105,6 +107,71 @@ object DesktopAutomationCli {
                 err.println(helpText())
                 64
             }
+        }
+    }
+
+    private fun recalculateResults(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val pathText = args.firstOrNull { !it.startsWith("--") }
+        if (pathText.isNullOrBlank()) {
+            err.println("recalculate-results requires an Event File path.")
+            return 64
+        }
+        val writeChanges = "--write" in args
+        return runCatching {
+            val path = Path.of(pathText)
+            val projectFile = DesktopProjectFiles.read(path)
+            val outcome = EventProjectEditor.recalculateResults(projectFile)
+            if (writeChanges) {
+                DesktopProjectFiles.write(path, outcome.projectFile)
+            }
+            out.println(
+                jsonObject(
+                    "command" to "recalculate-results",
+                    "path" to path.toAbsolutePath().normalize().toString(),
+                    "write" to writeChanges,
+                    "recalculatedCount" to outcome.recalculatedCount,
+                    "changedCount" to outcome.changedCount,
+                    "skippedStatusOnlyCount" to outcome.skippedStatusOnlyCount
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Result recalculation failed: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
+    private fun navAvailability(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val pathText = args.firstOrNull { !it.startsWith("--") }
+        return runCatching {
+            val projectFile = pathText?.let { DesktopProjectFiles.read(Path.of(it)) }
+            val readiness = DesktopNavigationReadiness.from(projectFile)
+            val items = DesktopWorkflow.entries.flatMap { workflow ->
+                DesktopNavigation.rootItems(workflow).map { item ->
+                    val enabled = DesktopNavigation.isItemEnabled(item, readiness)
+                    val longClickOverride = DesktopNavigation.canLongClickOverrideDisabledMenu(item, readiness)
+                    mapOf(
+                        "workflow" to workflow.label,
+                        "label" to item.label,
+                        "enabled" to enabled,
+                        "longClickOverride" to longClickOverride,
+                        "disabledReason" to DesktopNavigation.disabledItemReasonWithMenuOverrideHint(item, readiness)
+                    )
+                }
+            }
+            out.println(
+                jsonObject(
+                    "command" to "nav-availability",
+                    "eventFile" to pathText,
+                    "hasEventFile" to readiness.hasEventFile,
+                    "longClickOverrideCount" to items.count { it["longClickOverride"] == true },
+                    "items" to items
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Navigation availability failed: ${error.message ?: error::class.simpleName}")
+            66
         }
     }
 
@@ -524,6 +591,9 @@ object DesktopAutomationCli {
                                           Import competitors CSV into an Event File.
           readiness-summary [--require-ready] <event-path>
                                           Print validation and readiness issues as JSON.
+          recalculate-results [--write] <event-path>
+                                          Re-evaluate stored readouts against current courses.
+          nav-availability [event-path]   Print enabled/disabled menu state and long-click overrides.
           nav-select [--default-draft|--draft] <path>
                                           Simulate menu selection, using > between labels. Supports < Back.
           si-status [--require] [--port]  Probe attached SI station state.
@@ -541,6 +611,9 @@ object DesktopAutomationCli {
             is Boolean -> value.toString()
             is Number -> value.toString()
             is Iterable<*> -> value.joinToString(prefix = "[", postfix = "]") { jsonValue(it) }
+            is Map<*, *> -> value.entries.joinToString(prefix = "{", postfix = "}") { entry ->
+                "${jsonString(entry.key.toString())}:${jsonValue(entry.value)}"
+            }
             else -> jsonString(value.toString())
         }
 
