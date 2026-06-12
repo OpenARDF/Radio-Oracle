@@ -5019,17 +5019,12 @@ private fun WorkflowBar(
                                 width = if (isSelected) 2.dp else 1.dp,
                                 color = if (isSelected) DesktopPalette.Black else DesktopPalette.LightGrey
                             ),
-                        colors = if (isSelected) {
-                            ButtonDefaults.buttonColors(
-                                backgroundColor = DesktopPalette.PrimaryVariant,
-                                contentColor = DesktopPalette.White
-                            )
-                        } else {
-                            ButtonDefaults.buttonColors(
-                                backgroundColor = DesktopPalette.White,
-                                contentColor = DesktopPalette.Black
-                            )
-                        }
+                        colors = ButtonDefaults.buttonColors(
+                            backgroundColor = DesktopPalette.PrimaryVariant,
+                            contentColor = DesktopPalette.White,
+                            disabledBackgroundColor = DesktopPalette.LightGrey,
+                            disabledContentColor = DesktopPalette.Disconnected
+                        )
                     ) {
                         Text(
                             text = workflow.shortLabel,
