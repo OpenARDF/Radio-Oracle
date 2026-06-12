@@ -8,7 +8,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.HorizontalScrollbar
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.TooltipArea
-import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -60,13 +59,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.MenuBar
@@ -4839,6 +4840,14 @@ private fun Modifier.disabledMenuLongClickOverride(
         }
     }
 
+private fun Modifier.nonMeasuringOverlay(): Modifier =
+    layout { measurable, constraints ->
+        val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+        layout(0, 0) {
+            placeable.place(0, 0)
+        }
+    }
+
 /** Shows workflow-specific navigation with optional submenu replacement. */
 @Composable
 private fun NavigationRail(
@@ -5019,17 +5028,61 @@ private fun WorkflowBar(
 }
 
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
 private fun DisabledReasonTooltip(reason: String?, content: @Composable () -> Unit) {
     if (reason == null) {
         content()
     } else {
-        TooltipArea(
-            tooltip = {
+        var isHovered by remember { mutableStateOf(false) }
+        var isPressed by remember { mutableStateOf(false) }
+        var isVisible by remember { mutableStateOf(false) }
+
+        LaunchedEffect(reason, isHovered, isPressed) {
+            isVisible = false
+            if (isHovered && !isPressed) {
+                delay(2350)
+                if (isHovered && !isPressed) {
+                    isVisible = true
+                }
+            }
+        }
+
+        Box(
+            modifier = Modifier.pointerInput(reason) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        when (event.type) {
+                            PointerEventType.Enter,
+                            PointerEventType.Move -> {
+                                isHovered = true
+                            }
+                            PointerEventType.Exit -> {
+                                isHovered = false
+                                isPressed = false
+                                isVisible = false
+                            }
+                            PointerEventType.Press -> {
+                                isPressed = true
+                                isVisible = false
+                            }
+                            PointerEventType.Release -> {
+                                isPressed = false
+                            }
+                        }
+                    }
+                }
+            }
+        ) {
+            content()
+            if (isVisible) {
                 Surface(
                     color = DesktopPalette.PrimaryVariant,
                     contentColor = DesktopPalette.White,
-                    elevation = 4.dp
+                    elevation = 4.dp,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .offset(y = 16.dp)
+                        .nonMeasuringOverlay()
                 ) {
                     Text(
                         text = reason,
@@ -5037,15 +5090,7 @@ private fun DisabledReasonTooltip(reason: String?, content: @Composable () -> Un
                         fontSize = 12.sp
                     )
                 }
-            },
-            delayMillis = 2350,
-            tooltipPlacement = TooltipPlacement.ComponentRect(
-                anchor = Alignment.TopCenter,
-                alignment = Alignment.BottomCenter,
-                offset = DpOffset(0.dp, (-8).dp)
-            )
-        ) {
-            content()
+            }
         }
     }
 }
