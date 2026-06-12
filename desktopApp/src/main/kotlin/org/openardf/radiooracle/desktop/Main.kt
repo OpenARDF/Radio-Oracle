@@ -6505,7 +6505,7 @@ private fun EventDiagnosticsPanel(
             diagnostics.readinessIssues.forEach { issue ->
                 Text(
                     text = issue,
-                    color = DesktopPalette.Warning,
+                    color = DesktopPalette.Error,
                     fontSize = 13.sp
                 )
             }
