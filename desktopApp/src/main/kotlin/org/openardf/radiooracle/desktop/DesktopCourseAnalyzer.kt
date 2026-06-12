@@ -728,7 +728,7 @@ object DesktopCourseAnalyzer {
             rulesDocumentLabel = USA_RULES_DOCUMENT_LABEL,
             providedRouteSection = providedSection,
             calculatedRouteSection = calculatedSection,
-            summaryExplanation = summaryExplanation(providedSection, calculatedSection),
+            summaryExplanation = summaryExplanation(providedSection, calculatedSection, waitRenumbering),
             profileComparison = profileComparison,
             elevationCacheNotes = elevationCacheNotes(profileRoutePoints),
             routeMaps = routeMaps,
@@ -1017,13 +1017,24 @@ object DesktopCourseAnalyzer {
 
     private fun summaryExplanation(
         providedSection: DesktopCourseAnalysisSection?,
-        calculatedSection: DesktopCourseAnalysisSection?
-    ): String =
-        if (providedSection != null && calculatedSection != null) {
+        calculatedSection: DesktopCourseAnalysisSection?,
+        waitRenumbering: DesktopCourseWaitRenumbering?
+    ): String {
+        val waitImprovementText = waitRenumbering
+            ?.takeIf { it.improvesWait }
+            ?.let { renumbering ->
+                val improvementSeconds = (renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)
+                    .coerceAtLeast(0)
+                " Section 1 identifies a fox-renumbering option that may reduce stored-route wait time by ${compactDurationText(improvementSeconds)}; see Section 1 for the assignment details."
+            }
+            .orEmpty()
+        val baseText = if (providedSection != null && calculatedSection != null) {
             "This summary compares the stored route with the independently calculated candidate, including checks against the cited USA rules document, their primary distance metric, route order, estimated time, wait-time optimization, elevation profiles, and 2D point depictions."
         } else {
             "This summary reports checks against the cited USA rules document and the independently calculated route candidate because no stored ideal route was available for Section 1."
         }
+        return baseText + waitImprovementText
+    }
 
     private fun calculatedRouteCandidate(
         raceType: RaceType,

@@ -428,6 +428,8 @@ class DesktopCourseAnalyzerTest {
         assertEquals(listOf("31", "32", "33"), renumbering.assignments.map { it.controlLabel })
         assertEquals(listOf("31", "32", "33"), renumbering.assignments.map { it.currentSlotLabel })
         assertTrue(renumbering.assignments.map { it.suggestedSlotLabel } != renumbering.assignments.map { it.currentSlotLabel })
+        assertTrue(summary.summaryExplanation.contains("may reduce stored-route wait time"))
+        assertTrue(summary.summaryExplanation.contains("see Section 1 for the assignment details"))
     }
 
     @Test
