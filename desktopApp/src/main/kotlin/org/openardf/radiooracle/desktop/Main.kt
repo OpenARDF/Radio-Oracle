@@ -10414,7 +10414,6 @@ private fun RaceDetailsPanel(
                 eventFileNameDraft = it
                 hasEventFileNameDraftChanged = true
             },
-            singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
                 .onFocusChanged { focusState ->
@@ -10424,8 +10423,10 @@ private fun RaceDetailsPanel(
                     wasEventFileNameFocused = focusState.isFocused
                 }
                 .onPreviewKeyEvent { event ->
-                    if (event.type == KeyEventType.KeyUp && event.key == Key.Enter) {
-                        commitEventFileNameDraft()
+                    if (event.key == Key.Enter) {
+                        if (event.type == KeyEventType.KeyUp) {
+                            commitEventFileNameDraft()
+                        }
                         true
                     } else {
                         false
