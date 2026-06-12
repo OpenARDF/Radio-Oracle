@@ -247,19 +247,19 @@ object DesktopCourseKmlImporter {
                 // is only for route/elevation facts; assignment matching should reflect the controls
                 // intentionally placed near the imported category route.
                 val raceType = categoryData.category.effectiveRaceType(updatedProject.raceData.race)
-                val explicitRouteControls = if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
+                val routeLineControls = controlsOnRoute(route.points, controlsByLabel.values.toList())
+                val explicitAssignmentControls = if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
                     controlsFromExplicitClassicRouteOrder(route.name, controls)
                 } else {
                     null
                 }
-                val duplicateRouteControlIds = explicitRouteControls
-                    ?: controlsOnRoute(route.points, controlsByLabel.values.toList())
+                val assignmentControls = routeLineControls.ifEmpty { explicitAssignmentControls.orEmpty() }
                 categoryAssignmentUpdate(
                     projectFile = updatedProject,
                     categoryId = categoryData.category.id,
-                    controls = duplicateRouteControlIds
+                    controls = assignmentControls
                 )?.let(categoryAssignmentUpdates::add)
-                val duplicateRouteControlIdValues = duplicateRouteControlIds.map { it.controlId }
+                val duplicateRouteControlIdValues = routeLineControls.map { it.controlId }
                 val storedRouteControlIds = sameSourceCourseInfo?.controlPoints.orEmpty()
                     .map { it.controlId }
                 if (
@@ -307,8 +307,7 @@ object DesktopCourseKmlImporter {
                         )
                     }
                     ?: importedSampledRoute
-                val routeControls = explicitRouteControls
-                    ?: controlsOnRoute(sampledRoute, controlsByLabel.values.toList())
+                val routeControls = controlsOnRoute(sampledRoute, controlsByLabel.values.toList())
 
                 val idealOrder = routeControls.joinToString(" ") { it.label }
                 val allProtectedControlPoints = controls.map { control ->

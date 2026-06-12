@@ -409,7 +409,7 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
-    fun importsClassic80PrefixedFoxNamesAndExplicitRouteOrder() {
+    fun importsClassic80PrefixedFoxNamesUsingLineStringRouteOrder() {
         val kmlPath = Files.createTempFile("80m Classic 2025", ".kml")
         Files.writeString(kmlPath, sampleClassic80KmlWithPrefixedFoxNames())
         val baseProject = EventProjectFactory.createEmptyProject("race", "Classic 80m Test", "2026-06-12T09:00")
@@ -440,9 +440,9 @@ class DesktopCourseKmlImportTest {
         assertEquals(5, summary.matchedControlPointCount)
         assertEquals(5, summary.assignedCategoryControlCount)
         assertEquals("131 132 133 134 135", summary.categoryAssignmentUpdates.single().controlPointsText)
-        assertEquals("Fox1 Fox2 Fox3 Fox4 Fox5", DesktopProtectedCourseOrder.decrypt(category.encryptedIdealOrder!!, "course-key"))
-        assertEquals("Fox1 Fox2 Fox3 Fox4 Fox5", protectedCourseInfo.idealOrder)
-        assertEquals(listOf("Fox1", "Fox2", "Fox3", "Fox4", "Fox5"), protectedCourseInfo.controlPoints.map { it.label })
+        assertEquals("Fox2 Fox4 Fox3 Fox5 Fox1", DesktopProtectedCourseOrder.decrypt(category.encryptedIdealOrder!!, "course-key"))
+        assertEquals("Fox2 Fox4 Fox3 Fox5 Fox1", protectedCourseInfo.idealOrder)
+        assertEquals(listOf("Fox2", "Fox4", "Fox3", "Fox5", "Fox1"), protectedCourseInfo.controlPoints.map { it.label })
         assertEquals(
             listOf("Classic 80 Fox 1", "Classic 80 Fox 2", "Classic 80 Fox 3", "Classic 80 Fox 4", "Classic 80 Fox 5"),
             summary.labelConversions.map { it.importedName }
@@ -1348,11 +1348,11 @@ class DesktopCourseKmlImportTest {
             </Placemark>
             <Placemark>
               <name>Classic 80 Fox 1</name>
-              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+              <Point><coordinates>-94.9600,39.0000,0</coordinates></Point>
             </Placemark>
             <Placemark>
               <name>Classic 80 Fox 2</name>
-              <Point><coordinates>-94.9900,39.0000,0</coordinates></Point>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
             </Placemark>
             <Placemark>
               <name>Classic 80 Fox 3</name>
@@ -1360,17 +1360,22 @@ class DesktopCourseKmlImportTest {
             </Placemark>
             <Placemark>
               <name>Classic 80 Fox 4</name>
-              <Point><coordinates>-94.9700,39.0000,0</coordinates></Point>
+              <Point><coordinates>-94.9900,39.0000,0</coordinates></Point>
             </Placemark>
             <Placemark>
               <name>Classic 80 Fox 5</name>
-              <Point><coordinates>-94.9600,39.0000,0</coordinates></Point>
+              <Point><coordinates>-94.9700,39.0000,0</coordinates></Point>
             </Placemark>
             <Placemark>
               <name>80m 5 foxes 8.5 km (M21) - 1,2,3,4,5</name>
               <LineString>
                 <coordinates>
                   -95.0100,39.0100,0
+                  -95.0000,39.0000,0
+                  -94.9900,39.0000,0
+                  -94.9800,39.0000,0
+                  -94.9700,39.0000,0
+                  -94.9600,39.0000,0
                   -94.9300,39.0100,0
                 </coordinates>
               </LineString>
