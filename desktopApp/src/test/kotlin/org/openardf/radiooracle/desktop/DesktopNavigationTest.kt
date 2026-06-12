@@ -712,9 +712,9 @@ class DesktopNavigationTest {
         assertEquals(DesktopSection.ControlsImportExport, controlItems.first { it.label == "Import/Export" }.section)
         assertEquals(
             listOf(
-                "Import Controls KML/KMZ...",
                 "Import Controls CSV...",
                 "Export Controls CSV...",
+                "Import Controls KML/KMZ...",
                 "Export Controls KML/KMZ..."
             ),
             controlItems.first { it.label == "Import/Export" }.children.map { it.label }

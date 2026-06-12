@@ -257,12 +257,6 @@ object DesktopNavigation {
                             workflow,
                             listOf(
                                 action(
-                                    "setup.controls.import-kml-kmz",
-                                    "Import Controls KML/KMZ...",
-                                    workflow,
-                                    DesktopNavAction.ImportCourseKmlKmz
-                                ),
-                                action(
                                     "setup.controls.import-controls",
                                     "Import Controls CSV...",
                                     workflow,
@@ -273,6 +267,12 @@ object DesktopNavigation {
                                     "Export Controls CSV...",
                                     workflow,
                                     DesktopNavAction.ExportControlsCsv
+                                ),
+                                action(
+                                    "setup.controls.import-kml-kmz",
+                                    "Import Controls KML/KMZ...",
+                                    workflow,
+                                    DesktopNavAction.ImportCourseKmlKmz
                                 ),
                                 action(
                                     "setup.controls.export-kml-kmz",
