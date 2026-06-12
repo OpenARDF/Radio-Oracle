@@ -725,11 +725,183 @@ object DesktopNavigation {
                 state.selectedSection.label
             }
 
+    fun selectedDescription(state: DesktopNavState): String {
+        val item = allItems(state.workflow).firstOrNull { it.id == state.selectedItemId }
+        return item?.let { itemDescriptions[it.id] }
+            ?: workflowDescriptions.getValue(state.workflow)
+    }
+
     private fun allItems(workflow: DesktopWorkflow): List<DesktopNavItem> {
         fun flatten(items: List<DesktopNavItem>): List<DesktopNavItem> =
             items + items.flatMap { flatten(it.children) }
         return flatten(roots.getValue(workflow))
     }
+
+    private val workflowDescriptions: Map<DesktopWorkflow, String> = mapOf(
+        DesktopWorkflow.Setup to
+            "Use Setup to create or open an Event File, define controls and courses, maintain categories and competitors, and draw or import the start list before competition operations begin.",
+        DesktopWorkflow.RaceOps to
+            "Use Race Ops during competition to download SI cards, monitor active competitors, review unmatched readouts, and print finish tickets after setup data is complete.",
+        DesktopWorkflow.ResultsExport to
+            "Use Results/File Export after readouts are available to review scored results, run local or ROBIS live result publishing, and export final result files.",
+        DesktopWorkflow.SettingsHelp to
+            "Use Settings for app preferences, hardware-related options, logs, beta-scope information, and about information that is not tied to one event workflow."
+    )
+
+    private val itemDescriptions: Map<String, String> = mapOf(
+        "setup.event-file" to
+            "Use Event File to create, open, import, save, close, and inspect event files, including settings and readiness tools that affect the whole event.",
+        "setup.controls" to
+            "Use Controls to define transmitters, starts, finishes, spectators, and related elevation or course-analysis data before categories and courses are finalized.",
+        "setup.controls.define" to
+            "Use Define Controls to edit the control catalog, public labels, SI codes, roles, locations, and control metadata used by courses and readouts.",
+        "setup.controls.elevation-cache" to
+            "Use Elevation Data to prepare or inspect venue elevation caches used for stored course routes, climb estimates, and course-analysis calculations.",
+        "setup.controls.course-analysis" to
+            "Use Course Analyzer to inspect stored course routes, ideal routes, climb, distance, time estimates, and classic wait-slot behavior.",
+        "setup.controls.course-analysis.import-kml-kmz" to
+            "Use Import Controls KML/KMZ to bring in control placemarks and category route lines for course analysis and category course assignments.",
+        "setup.controls.import-export" to
+            "Use Import/Export to synchronize control CSV files and controls/route KML/KMZ files with the current Event File.",
+        "setup.controls.import-controls" to
+            "Use Import Controls CSV to review and apply additions or updates to the event control catalog.",
+        "setup.controls.import-kml-kmz" to
+            "Use Import Controls KML/KMZ to import control locations and category route geometry from mapping files.",
+        "setup.controls.export-controls" to
+            "Use Export Controls CSV to write the current control catalog for review, backup, or editing outside the app.",
+        "setup.categories" to
+            "Use Categories to create, import, export, and maintain competition classes, assigned controls, course metadata, and protected course order data.",
+        "setup.categories.protected-course-order" to
+            "Use Course Order to unlock and review protected ideal routes and course-location data that may affect scoring and analysis.",
+        "setup.categories.import" to
+            "Use Import Categories CSV to review and apply late category additions or corrections without replacing unrelated event data.",
+        "setup.categories.export" to
+            "Use Export Categories CSV to write the current category list and course fields for review, backup, or external editing.",
+        "setup.competitors" to
+            "Use Competitors to add, import, export, edit, and assign competitors to categories before drawing starts or running race operations.",
+        "setup.competitors.view" to
+            "Use Competitors to maintain names, bibs, SI cards, categories, club identity, birth years, and start-related competitor fields.",
+        "setup.competitors.import" to
+            "Use Import Competitors CSV to append or update competitor lists while preserving existing event setup data.",
+        "setup.competitors.import-eventreg" to
+            "Use Import EventReg Website to bring competitor data from EventReg exports into the current Event File.",
+        "setup.competitors.export" to
+            "Use Export Competitors CSV to write the current competitor list for review, backup, or external editing.",
+        "setup.start-list" to
+            "Use Start List to import, draw, balance, review, and export competitor start times once categories and assignments are ready.",
+        "setup.start-list.view" to
+            "Use Start List to review drawn start times, start-list settings, and scheduling status for competitors.",
+        "setup.start-list.import" to
+            "Use Import Starts CSV to apply externally prepared start times to the competitors in this Event File.",
+        "setup.start-list.exports" to
+            "Use Exports to write start lists in formats useful for starts, category checks, ROBIS, and IOF-compatible workflows.",
+        "setup.start-list.export-csv" to
+            "Use Export Starts CSV to write the complete start list as a general-purpose CSV file.",
+        "setup.start-list.export-category" to
+            "Use Export Starts by Category CSV to write start lists grouped by competition category.",
+        "setup.start-list.export-minute" to
+            "Use Export Starts by Minute CSV to write a minute-by-minute start-board view.",
+        "setup.start-list.export-robis" to
+            "Use Export ROBIS Start List CSV to generate a start-list file for ROBIS workflows.",
+        "setup.start-list.export-iof" to
+            "Use Export IOF Start List XML to write an IOF-compatible start-list file.",
+        "race.readouts" to
+            "Use Readouts to download, review, match, edit, remove, print, and manually add SI-card readouts during race operations.",
+        "race.si-readout" to
+            "Use SI Readout to start or stop card downloads and adjust readout behavior while competitors finish.",
+        "race.download-si" to
+            "Use Download SI Card to read one SI card from an attached READOUT or SI MASTER station.",
+        "race.start-continuous" to
+            "Use Start Continuous SI to keep the reader waiting for successive cards during finish operations.",
+        "race.stop-continuous" to
+            "Use Stop Continuous SI to end continuous readout after the current card wait finishes.",
+        "race.si-settings" to
+            "Use SI Readout Settings to choose duplicate-card handling, alert sounds, and test readout tools used by Race Ops.",
+        "race.in-forest" to
+            "Use In Forest to monitor started competitors who do not yet have finish readouts.",
+        "race.unmatched" to
+            "Use Unmatched Readouts to review SI-card readouts that are not yet assigned to competitors.",
+        "race.finish-tickets" to
+            "Use Finish Tickets to preview and print competitor finish tickets from available readout and result data.",
+        "results.results" to
+            "Use Results to review scored competitor results, adjust manual readout status, and inspect result details after readouts are matched.",
+        "results.live" to
+            "Use Live Results to run local result display tools and send eligible live results to ROBIS.",
+        "results.start-display" to
+            "Use Start Display to launch the local result display service for spectators or officials.",
+        "results.stop-display" to
+            "Use Stop Display to shut down the local result display service.",
+        "results.send-robis" to
+            "Use Send ROBIS to send unsent matched live results to the configured ROBIS endpoint.",
+        "results.live-settings" to
+            "Use Live Result Settings to configure ROBIS sending, background sending, and the local result display service.",
+        "results.exports" to
+            "Use Exports to write result, readout, event-copy, JSON, XML, and ARDF-compatible files after race data is available.",
+        "results.exports.result-files" to
+            "Use Result Files to export scored results and readouts in CSV, TXT, HTML, and ARDFEvent-compatible formats.",
+        "results.export-csv" to
+            "Use Export Results CSV to write scored results as a spreadsheet-friendly file.",
+        "results.export-ardfevent" to
+            "Use Export ARDFEvent Results CSV to write results for ARDFEvent-compatible consumers.",
+        "results.export-text" to
+            "Use Export Results TXT to write a plain-text results report.",
+        "results.export-html" to
+            "Use Export Results HTML to write a browser-readable results report.",
+        "results.export-readouts" to
+            "Use Export Readouts CSV to write downloaded and unmatched readout records for review or backup.",
+        "results.exports-json-xml" to
+            "Use JSON/XML to export live/final result payloads and standards-oriented result files.",
+        "results.export-live-json" to
+            "Use Export Live Results JSON to write the current live-results payload.",
+        "results.export-final-json" to
+            "Use Export Final Results JSON to write a final-results JSON payload.",
+        "results.export-iof" to
+            "Use Export IOF Result List XML to write an IOF-compatible result-list file.",
+        "results.export-ardf-json" to
+            "Use Export ARDF JSON to write ARDF-oriented event and result data.",
+        "results.export-copy" to
+            "Use Export Event File Copy to save a copy of the complete Event File without changing the current working file.",
+        "settings.app" to
+            "Use App Settings to review desktop app settings, readiness information, and event-level support options.",
+        "settings.hardware" to
+            "Use Hardware Preferences to review printer and hardware-related desktop settings.",
+        "settings.help" to
+            "Use Help to view beta-scope notes, desktop logs, and application information.",
+        "settings.beta-scope" to
+            "Use Beta Scope to review what this desktop beta is intended to support and where caution is still needed.",
+        "settings.logs" to
+            "Use Logs to find the desktop debug-log location and related diagnostic information.",
+        "settings.about" to
+            "Use About Radio-Oracle to view the app version, project identity, and maintainer information.",
+        "setup.event-file.new" to
+            "Use New Event File to create a fresh event setup draft.",
+        "setup.event-file.open" to
+            "Use Load File to open an existing Radio-Oracle Event File.",
+        "setup.event-file.import-android" to
+            "Use Import Android Event File to bring in an Android race backup as a desktop Event File.",
+        "setup.event-file.import-eventreg" to
+            "Use Import EventReg Website to create event files from EventReg website exports.",
+        "setup.event-file.export-android" to
+            "Use Export Android Event File to write a backup JSON file for Android compatibility.",
+        "setup.event-file.settings" to
+            "Use Settings to adjust event-related readout, live result, display, app, and readiness options.",
+        "setup.event-file.si-settings" to
+            "Use SI Readout Settings to configure SI-card download behavior used during Race Ops.",
+        "setup.event-file.live-settings" to
+            "Use Live Result Settings to configure ROBIS and local result-display behavior.",
+        "setup.event-file.display-settings" to
+            "Use Display Settings to configure readout and result display preferences.",
+        "setup.event-file.app-settings" to
+            "Use App Settings to review app-level settings, hardware status, and event password options.",
+        "setup.event-file.diagnostics" to
+            "Use Readiness to inspect event consistency, recent imports, generated test data tools, and diagnostics.",
+        "setup.event-file.save" to
+            "Use Save Event to write the current Event File to its existing path.",
+        "setup.event-file.save-as" to
+            "Use Save Event As to choose a new path for the current Event File.",
+        "setup.event-file.close" to
+            "Use Close Event File to close the active event after handling any unsaved changes."
+    )
 
     private fun eventFileActions(workflow: DesktopWorkflow): List<DesktopNavItem> =
         listOf(

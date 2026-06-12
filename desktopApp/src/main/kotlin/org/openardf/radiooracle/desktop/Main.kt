@@ -4618,6 +4618,7 @@ private fun RadioOManagerDesktopApp(
                                 section = navState.selectedSection,
                                 title = DesktopNavigation.selectedLabel(navState),
                                 breadcrumb = DesktopNavigation.breadcrumb(navState),
+                                menuDescription = DesktopNavigation.selectedDescription(navState),
                                 projectFile = projectFile,
                                 projectStatusText = projectStatusText,
                                 siReaderState = siReaderState,
@@ -5238,6 +5239,7 @@ private fun SectionWorkspace(
     section: DesktopSection,
     title: String,
     breadcrumb: String,
+    menuDescription: String,
     projectFile: EventProjectFile?,
     projectStatusText: String,
     siReaderState: DesktopSiReaderUiState,
@@ -5339,7 +5341,7 @@ private fun SectionWorkspace(
             color = DesktopPalette.Black
         )
         Text(
-            text = sectionSummary(section, projectFile),
+            text = menuDescription,
             color = DesktopPalette.Black,
             fontSize = 14.sp
         )
@@ -11094,52 +11096,6 @@ private fun bytesText(bytes: Long): String =
 
 private fun oneDecimal(value: Double): String =
     (value * 10.0).roundToInt().let { "${it / 10}.${abs(it % 10)}" }
-
-/** Provides section-specific content summaries without introducing editing behavior. */
-private fun sectionSummary(section: DesktopSection, projectFile: EventProjectFile?): String {
-    val summary = projectFile?.let(EventProjectSummary::from)
-    fun requiresEventFile(action: String): String =
-        "Open or create an Event File before $action."
-    return when (section) {
-        DesktopSection.WorkflowHome -> "Workflow overview for event setup, race operations, results, exports, and app support."
-        DesktopSection.EventFile -> summary?.let { "Event File open: ${it.raceName}" }
-            ?: "Create a new Event File or open an existing one to begin."
-        DesktopSection.Races -> summary?.raceName ?: "Create a new Event File or open an existing one to begin."
-        DesktopSection.Categories -> summary?.let { "${it.categoryCount} categories loaded." }
-            ?: requiresEventFile("editing categories")
-        DesktopSection.ProtectedCourseOrder -> summary?.let { "${it.categoryCount} categories loaded." }
-            ?: requiresEventFile("editing course order")
-        DesktopSection.Competitors -> summary?.let { "${it.competitorCount} competitors loaded." }
-            ?: requiresEventFile("editing competitors")
-        DesktopSection.StartList -> summary?.let { "Competitors sorted by drawn start time." }
-            ?: requiresEventFile("working with the start list")
-        DesktopSection.Controls -> projectFile?.let { "${it.raceData.controls.size} controls loaded." }
-            ?: requiresEventFile("editing controls")
-        DesktopSection.CourseAnalysis ->
-            "Analyze stored route order, effective length, climb, estimated ideal time, and Classic wait slots."
-        DesktopSection.ElevationCache ->
-            "Download venue elevation grids that can be reused for stored route and control elevation sampling."
-        DesktopSection.ControlsImportExport ->
-            "Import and export control definitions and controls/route KML/KMZ files."
-        DesktopSection.ControlsRouteKmlImport ->
-            "KML/KMZ files must include named control Point placemarks and category route LineString placemarks."
-        DesktopSection.Readouts -> summary?.let { "${it.readoutCount} SI-card readouts loaded." }
-            ?: requiresEventFile("working with SI-card readouts")
-        DesktopSection.SiReadoutSettings ->
-            "Configure SI-card readout behavior used by Race Ops."
-        DesktopSection.InForest -> summary?.let { "Started competitors without readouts." }
-            ?: requiresEventFile("reviewing competitors in the forest")
-        DesktopSection.Results -> summary?.let { "${it.resultCount} results loaded." }
-            ?: requiresEventFile("viewing results")
-        DesktopSection.LiveResultSettings ->
-            "Configure local result display and ROBIS live result sending."
-        DesktopSection.DisplaySettings ->
-            "Configure display preferences used by readouts and results."
-        DesktopSection.EventDiagnostics ->
-            "Review event readiness, recent imports, diagnostics, and generated test data tools."
-        DesktopSection.Settings -> "Application settings, hardware status, and desktop beta scope."
-    }
-}
 
 private fun desktopRaceElapsedSeconds(startDateTimeIso: String, tick: Long): Long {
     return runCatching {

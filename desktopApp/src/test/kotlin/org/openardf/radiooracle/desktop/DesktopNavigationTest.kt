@@ -109,6 +109,27 @@ class DesktopNavigationTest {
         assertEquals("setup.home", state.selectedItemId)
         assertEquals("Setup", DesktopNavigation.selectedLabel(state))
         assertEquals("Setup", DesktopNavigation.breadcrumb(state))
+        assertTrue(DesktopNavigation.selectedDescription(state).contains("create or open an Event File"))
+    }
+
+    @Test
+    fun describesWorkflowHomesAndNavigationDestinations() {
+        DesktopWorkflow.entries.forEach { workflow ->
+            val workflowState = DesktopNavState().switchWorkflow(workflow)
+            val workflowDescription = DesktopNavigation.selectedDescription(workflowState)
+
+            assertTrue("Missing description for ${workflow.name}", workflowDescription.length > 40)
+            flatten(DesktopNavigation.rootItems(workflow)).forEach { item ->
+                val itemState = workflowState.copy(
+                    selectedSection = item.section ?: workflowState.selectedSection,
+                    selectedItemId = item.id
+                )
+                val itemDescription = DesktopNavigation.selectedDescription(itemState)
+
+                assertTrue("Missing description for ${item.id}", itemDescription.length > 40)
+                assertFalse("Generic workflow description used for ${item.id}", itemDescription == workflowDescription)
+            }
+        }
     }
 
     @Test
