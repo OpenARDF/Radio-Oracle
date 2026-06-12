@@ -1512,7 +1512,7 @@ private const val FEET_TO_METERS = 0.3048
 private const val US_SURVEY_FOOT_TO_METERS = 1200.0 / 3937.0
 private const val GDAL_SAMPLE_PROGRESS_INTERVAL = 5_000
 
-private data class DesktopGdalElevationUnits(
+internal data class DesktopGdalElevationUnits(
     val label: String,
     val valueMultiplier: Double
 ) {
@@ -1521,7 +1521,58 @@ private data class DesktopGdalElevationUnits(
             ""
         } else {
             " ($label to meters)"
-        }
+    }
+}
+
+internal fun desktopGdalElevationUnitsFromInfo(
+    output: String,
+    rasterPath: String = ""
+): DesktopGdalElevationUnits {
+    Regex("""(?m)^\s*Unit Type:\s*(.+?)\s*$""")
+        .find(output)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.trim()
+        ?.let(::desktopGdalElevationUnitsFromUnitText)
+        ?.let { return it }
+
+    val lowerOutput = output.lowercase(Locale.US)
+    val lowerPath = rasterPath.lowercase(Locale.US)
+    val hasUsSurveyFootCrs =
+        lowerOutput.contains("projcrs[\"") &&
+            (lowerOutput.contains("(ftus)") || lowerOutput.contains("us survey foot") || lowerOutput.contains("\"ftus\""))
+    val hasFootCrs =
+        lowerOutput.contains("projcrs[\"") &&
+            (hasUsSurveyFootCrs || lowerOutput.contains("(ft)") || lowerOutput.contains("foot") || lowerOutput.contains("feet"))
+    val pathSuggestsUsSurveyFoot =
+        lowerPath.contains("ftus") || lowerPath.contains("us_survey")
+    val pathSuggestsFoot =
+        pathSuggestsUsSurveyFoot ||
+            Regex("""(?i)(^|[/\\_.\-\s])\d{1,2}\s*ft($|[/\\_.\-\s])""").containsMatchIn(rasterPath) ||
+            Regex("""(?i)(^|[/\\_.\-\s])ft($|[/\\_.\-\s])""").containsMatchIn(rasterPath)
+
+    return when {
+        hasUsSurveyFootCrs || pathSuggestsUsSurveyFoot ->
+            DesktopGdalElevationUnits("US survey foot (inferred)", US_SURVEY_FOOT_TO_METERS)
+        hasFootCrs || pathSuggestsFoot ->
+            DesktopGdalElevationUnits("foot (inferred)", FEET_TO_METERS)
+        else ->
+            DesktopGdalElevationUnits("unspecified", 1.0)
+    }
+}
+
+private fun desktopGdalElevationUnitsFromUnitText(unitText: String): DesktopGdalElevationUnits {
+    val unit = unitText.trim().lowercase(Locale.US)
+    return when {
+        unit.contains("us survey foot") || unit == "ftus" ->
+            DesktopGdalElevationUnits("US survey foot", US_SURVEY_FOOT_TO_METERS)
+        unit.contains("foot") || unit.contains("feet") || unit == "ft" ->
+            DesktopGdalElevationUnits("foot", FEET_TO_METERS)
+        unit.contains("metre") || unit.contains("meter") || unit == "m" ->
+            DesktopGdalElevationUnits("meter", 1.0)
+        else ->
+            DesktopGdalElevationUnits(unit, 1.0)
+    }
 }
 
 private fun metersPerDegreeLongitude(latitude: Double): Double =
@@ -1626,23 +1677,7 @@ private class DesktopGdalTools(
 
     suspend fun elevationUnits(rasterPath: String): DesktopGdalElevationUnits {
         val output = processOutput(listOf(gdalInfo.toString(), rasterPath))
-        val unit = Regex("""(?m)^\s*Unit Type:\s*(.+?)\s*$""")
-            .find(output)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.trim()
-            ?.lowercase(Locale.US)
-            ?: return DesktopGdalElevationUnits("unspecified", 1.0)
-        return when {
-            unit.contains("us survey foot") || unit == "ftus" ->
-                DesktopGdalElevationUnits("US survey foot", US_SURVEY_FOOT_TO_METERS)
-            unit.contains("foot") || unit.contains("feet") || unit == "ft" ->
-                DesktopGdalElevationUnits("foot", FEET_TO_METERS)
-            unit.contains("metre") || unit.contains("meter") || unit == "m" ->
-                DesktopGdalElevationUnits("meter", 1.0)
-            else ->
-                DesktopGdalElevationUnits(unit, 1.0)
-        }
+        return desktopGdalElevationUnitsFromInfo(output, rasterPath)
     }
 
     fun runCommand(command: List<String>) {

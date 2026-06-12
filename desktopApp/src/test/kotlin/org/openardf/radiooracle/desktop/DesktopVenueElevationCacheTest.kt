@@ -7,6 +7,73 @@ import java.nio.file.Path
 
 class DesktopVenueElevationCacheTest {
     @Test
+    fun detectsExplicitGdalFootUnits() {
+        val units = desktopGdalElevationUnitsFromInfo(
+            """
+            Band 1 Block=128x128 Type=Float32, ColorInterp=Gray
+              Unit Type: US survey foot
+            """.trimIndent()
+        )
+
+        assertEquals("US survey foot", units.label)
+        assertEquals(1200.0 / 3937.0, units.valueMultiplier, 0.0000001)
+    }
+
+    @Test
+    fun keepsExplicitGdalMeterUnitsWhenFilenameMentionsFeet() {
+        val units = desktopGdalElevationUnitsFromInfo(
+            """
+            Coordinate System is:
+            PROJCRS["NAD83(2011) / North Carolina (ftUS)",
+                CS[Cartesian,2],
+                    AXIS["easting",east,
+                        LENGTHUNIT["US survey foot",0.304800609601219]]]
+            Band 1 Block=128x128 Type=Float32, ColorInterp=Gray
+              Unit Type: metre
+            """.trimIndent(),
+            "/vsizip//Downloads/Stanly_2016_QL1_03ft_CountywideRaster.zip/Stanly_Ground_3ft.tif"
+        )
+
+        assertEquals("meter", units.label)
+        assertEquals(1.0, units.valueMultiplier, 0.0)
+    }
+
+    @Test
+    fun infersUsSurveyFeetFromProjectedCrsWhenBandUnitIsMissing() {
+        val units = desktopGdalElevationUnitsFromInfo(
+            """
+            Coordinate System is:
+            PROJCRS["NAD83(2011) / North Carolina (ftUS)",
+                CS[Cartesian,2],
+                    AXIS["easting",east,
+                        LENGTHUNIT["US survey foot",0.304800609601219]],
+                    AXIS["northing",north,
+                        LENGTHUNIT["US survey foot",0.304800609601219]]]
+            Band 1 Block=128x128 Type=Float32, ColorInterp=Gray
+            """.trimIndent(),
+            "/vsizip//Downloads/Stanly_2016_QL1_03ft_CountywideRaster.zip/Stanly_Ground_3ft.tif"
+        )
+
+        assertEquals("US survey foot (inferred)", units.label)
+        assertEquals(1200.0 / 3937.0, units.valueMultiplier, 0.0000001)
+    }
+
+    @Test
+    fun infersFeetFromRasterFilenameWhenMetadataIsSilent() {
+        val units = desktopGdalElevationUnitsFromInfo(
+            """
+            Coordinate System is:
+            GEOGCRS["WGS 84"]
+            Band 1 Block=128x128 Type=Float32, ColorInterp=Gray
+            """.trimIndent(),
+            "/Downloads/local/venue_3ft_dem.tif"
+        )
+
+        assertEquals("foot (inferred)", units.label)
+        assertEquals(0.3048, units.valueMultiplier, 0.0000001)
+    }
+
+    @Test
     fun prefersLidarDtmCacheOverFinerUsgsCache() {
         withTemporaryUserHome { home ->
             val cacheDirectory = home
