@@ -2679,7 +2679,7 @@ fun main(args: Array<String>) = application {
         MenuBar {
             Menu("File") {
                 Item("New Event File", onClick = ::requestNewEventFile)
-                Item("Load File...", onClick = ::chooseOpenEventFile)
+                Item("Load Event File...", onClick = ::chooseOpenEventFile)
                 Item("Import EventReg Website...", onClick = ::showEventRegImportDialog)
                 Item(
                     "Save Event",

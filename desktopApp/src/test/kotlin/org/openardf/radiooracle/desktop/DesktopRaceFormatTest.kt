@@ -40,4 +40,11 @@ class DesktopRaceFormatTest {
         assertFalse(DesktopRaceFormat.LegacyShort.selectable)
         assertFalse(DesktopRaceFormat.LegacyShort in DesktopRaceFormat.selectableEntries)
     }
+
+    @Test
+    fun orienteeringCanDisplayExistingFilesButIsNotSelectableForNewEventFiles() {
+        assertEquals(DesktopRaceFormat.Orienteering, DesktopRaceFormat.from(RaceType.ORIENTEERING, RaceBand.NONE))
+        assertFalse(DesktopRaceFormat.Orienteering.selectable)
+        assertFalse(DesktopRaceFormat.Orienteering in DesktopRaceFormat.selectableEntries)
+    }
 }

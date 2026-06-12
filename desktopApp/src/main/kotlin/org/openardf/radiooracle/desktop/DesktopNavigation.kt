@@ -962,7 +962,7 @@ object DesktopNavigation {
             ),
             action(
                 "setup.event-file.open",
-                "Load File...",
+                "Load Event File...",
                 workflow,
                 DesktopNavAction.OpenEventFile,
                 requiresEventFile = false

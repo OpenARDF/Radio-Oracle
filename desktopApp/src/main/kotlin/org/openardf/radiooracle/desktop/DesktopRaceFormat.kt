@@ -15,7 +15,7 @@ enum class DesktopRaceFormat(
     LegacyShort("Legacy Short", RaceType.SHORT, RaceBand.M80, selectable = false),
     Sprint("Sprint", RaceType.SPRINT, RaceBand.NONE),
     Foxoring("Foxoring", RaceType.FOXORING, RaceBand.COMBINED),
-    Orienteering("Orienteering", RaceType.ORIENTEERING, RaceBand.NONE);
+    Orienteering("Orienteering", RaceType.ORIENTEERING, RaceBand.NONE, selectable = false);
 
     companion object {
         val selectableEntries: List<DesktopRaceFormat> = entries.filter { it.selectable }

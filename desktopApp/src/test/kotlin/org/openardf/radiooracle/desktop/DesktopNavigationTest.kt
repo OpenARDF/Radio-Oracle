@@ -250,7 +250,7 @@ class DesktopNavigationTest {
         assertEquals(listOf("setup.event-file"), selection.state.submenuStack)
         assertEquals(DesktopSection.Races, selection.state.selectedSection)
         assertEquals("setup.event-file.open", selection.state.selectedItemId)
-        assertEquals("Setup > Event File > Load File...", DesktopNavigation.breadcrumb(selection.state))
+        assertEquals("Setup > Event File > Load Event File...", DesktopNavigation.breadcrumb(selection.state))
         assertEquals(emptyList<String>(), DesktopNavigation.currentItems(selection.state).map { it.label })
     }
 
@@ -277,7 +277,7 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "New Event File",
-                "Load File...",
+                "Load Event File...",
                 "Import Android Event File...",
                 "Import EventReg Website...",
                 "Export Android Event File...",
@@ -427,7 +427,7 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "New Event File",
-                "Load File...",
+                "Load Event File...",
                 "Import Android Event File...",
                 "Import EventReg Website...",
                 "Export Android Event File...",
@@ -637,7 +637,7 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "New Event File",
-                "Load File...",
+                "Load Event File...",
                 "Import Android Event File...",
                 "Import EventReg Website...",
                 "Export Android Event File...",
@@ -837,7 +837,7 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "New Event File",
-                "Load File...",
+                "Load Event File...",
                 "Import Android Event File...",
                 "Import EventReg Website...",
                 "Export Android Event File...",
