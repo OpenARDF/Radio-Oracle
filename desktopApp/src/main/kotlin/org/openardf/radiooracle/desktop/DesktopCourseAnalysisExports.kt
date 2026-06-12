@@ -106,6 +106,7 @@ object DesktopCourseAnalysisExports {
         appendLine("Stored route length: ${kilometersText(result.routeLengthMeters)}")
         appendLine("Climb: ${climbText(result.climbMeters)}")
         appendLine("Effective length: ${summaryMetricValue(result, "Effective length", kilometersText(result.effectiveLengthMeters))}")
+        appendLine("Speed model: ${speedModelText(result.speedModel)}")
         appendLine("Estimated ideal time: ${secondsText(result.estimatedIdealSeconds)}")
         appendLine()
         appendLine("Goodness metrics")
@@ -160,6 +161,11 @@ object DesktopCourseAnalysisExports {
         fallback: String
     ): String =
         result.metrics.firstOrNull { it.label == label }?.value ?: fallback
+
+    private fun speedModelText(speedModel: DesktopCourseSpeedModel): String =
+        "${twoDecimalText(speedModel.effectiveSpeedMetersPerSecond)} m/s; " +
+            "${speedModel.categoryModelLabel} x${twoDecimalText(speedModel.categorySpeedMultiplier)}, " +
+            "event x${twoDecimalText(speedModel.compensationFactor)}"
 
     private fun sectionComparisonLengthText(section: DesktopCourseAnalysisSection): String {
         val ruleValue = section.ruleChecks

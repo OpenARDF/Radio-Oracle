@@ -21,6 +21,7 @@ import kotlin.math.roundToInt
 data class DesktopCourseAnalysisSummary(
     val categoryName: String,
     val rulesDocumentLabel: String,
+    val speedModel: DesktopCourseSpeedModel,
     val providedRouteSection: DesktopCourseAnalysisSection?,
     val calculatedRouteSection: DesktopCourseAnalysisSection?,
     val summaryExplanation: String,
@@ -130,6 +131,14 @@ data class DesktopCourseCalculatedFoxAssignment(
     val calculatedLabel: String
 )
 
+data class DesktopCourseSpeedModel(
+    val formatSpeedMetersPerSecond: Double,
+    val categorySpeedMultiplier: Double,
+    val compensationFactor: Double,
+    val effectiveSpeedMetersPerSecond: Double,
+    val categoryModelLabel: String
+)
+
 enum class DesktopCourseRouteMapPointType {
     Start,
     Finish,
@@ -201,9 +210,9 @@ enum class DesktopCourseMetricStatus {
  * lakes, uncrossable watercourses, fences, cliffs, and other navigation barriers are not modeled,
  * so route order and wait-time estimates remain advisory.
  *
- * Estimated times use an elite-competitor baseline pace by race format and convert each leg to
- * effective length when elevation is available. The current implementation does not yet tune that
- * baseline by category age or gender and does not model fatigue across the course.
+ * Estimated times use an elite-competitor baseline pace by race format, category age/gender speed
+ * adjustments, and the event-wide compensation factor, then convert each leg to effective length
+ * when elevation is available. The model does not currently account for fatigue across the course.
  */
 object DesktopCourseAnalyzer {
     private const val USA_RULES_DOCUMENT_LABEL = "USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026"
@@ -216,6 +225,7 @@ object DesktopCourseAnalyzer {
     private const val CLASSIC_FLAT_SPEED_MPS = 3.6
     private const val SPRINT_FLAT_SPEED_MPS = 4.2
     private const val FOXORING_FLAT_SPEED_MPS = 3.4
+    private const val MIN_EFFECTIVE_SPEED_MPS = 0.25
     private const val MAX_PERMUTATION_CONTROLS = 8
     private const val FOXORING_EXHAUSTIVE_CONTROLS = 6
     private const val FOXORING_ROLLING_WINDOW_CONTROLS = 5
@@ -226,7 +236,7 @@ object DesktopCourseAnalyzer {
     private const val MAP_KNOWLEDGE_LIMITATION_NOTE =
         "The analyzer does not currently know map passability, so out-of-bounds areas, dense vegetation, water, uncrossable features, and other impediments can make the true on-foot route and wait timing differ from this estimate."
     private const val SPEED_MODEL_NOTE =
-        "Estimated times use an elite-competitor baseline pace by race format: 4:38 min/km for Classic-style courses (3.6 m/s), 3:58 min/km for Sprint (4.2 m/s), and 4:54 min/km for Foxoring (3.4 m/s). When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not modeled, and the current model is not yet adjusted by category age or gender."
+        "Estimated times use an elite-competitor baseline pace by race format, then apply a category age/gender multiplier and the event-wide Course Analyzer speed factor. When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not modeled."
     private const val CLASSIC_WAIT_TIMING_NOTE =
         "For Classic-style fox controls, timing assumes the competitor waits if the fox is off the air, then spends 30 seconds finding and punching before departing for the next leg; that delay affects later arrival phases."
     private val classicCategoryRequirements = mapOf(
@@ -281,6 +291,11 @@ object DesktopCourseAnalyzer {
         val categoryData = projectFile.raceData.categories.first { it.category.id == categoryId }
         val category = categoryData.category
         val raceType = category.effectiveRaceType(projectFile.raceData.race)
+        val speedModel = speedModel(
+            raceType = raceType,
+            categoryName = category.name,
+            compensationFactor = projectFile.raceData.race.courseAnalyzerSpeedCompensationFactor
+        )
         val idealOrderText = protectedIdealOrderText?.takeIf { it.isNotBlank() }
             ?: protectedCourseInfo?.idealOrder?.takeIf { it.isNotBlank() }
         val categoryAssignedControls = assignedControls(projectFile, categoryId)
@@ -413,7 +428,8 @@ object DesktopCourseAnalyzer {
             route = route,
             controls = providedControls,
             controlsWithPoints = controlsWithPoints,
-            raceType = raceType
+            raceType = raceType,
+            speedModel = speedModel
         )
         val providedLegRows = providedTiming.legRows
         val waitRows = providedTiming.waitRows
@@ -431,6 +447,7 @@ object DesktopCourseAnalyzer {
                     controls = providedControls,
                     controlsWithPoints = controlsWithPoints,
                     raceType = raceType,
+                    speedModel = speedModel,
                     slotOverrides = slotOverrides
                 )
             }
@@ -458,6 +475,7 @@ object DesktopCourseAnalyzer {
                         controls = routeCandidate.controls,
                         finish = finish,
                         raceType = raceType,
+                        speedModel = speedModel,
                         slotOverrides = slotOverrides,
                         elevationLookup = elevationLookup
                     )
@@ -478,6 +496,7 @@ object DesktopCourseAnalyzer {
                 controls = routeCandidate.controls,
                 finish = finish,
                 raceType = raceType,
+                speedModel = speedModel,
                 slotOverrides = calculatedSlotOverrides,
                 labelOverrides = calculatedLabelOverrides,
                 elevationLookup = elevationLookup
@@ -728,6 +747,7 @@ object DesktopCourseAnalyzer {
         return DesktopCourseAnalysisSummary(
             categoryName = category.name,
             rulesDocumentLabel = USA_RULES_DOCUMENT_LABEL,
+            speedModel = speedModel,
             providedRouteSection = providedSection,
             calculatedRouteSection = calculatedSection,
             summaryExplanation = summaryExplanation(providedSection, calculatedSection, waitRenumbering),
@@ -1436,6 +1456,7 @@ object DesktopCourseAnalyzer {
         controls: List<EventControl>,
         controlsWithPoints: List<ControlAnalysisPoint>,
         raceType: RaceType,
+        speedModel: DesktopCourseSpeedModel,
         slotOverrides: Map<String, RenumberingSlot> = emptyMap()
     ): RouteTimingAnalysis {
         if (route.size < 2) {
@@ -1464,7 +1485,7 @@ object DesktopCourseAnalyzer {
             val movementSeconds = if (from.routeIndex == to.routeIndex) {
                 0.0
             } else {
-                estimatedIdealSecondsDouble(segment, raceType)
+                estimatedIdealSecondsDouble(segment, speedModel)
             }
             val startSeconds = cumulativeSeconds
             val arrivalSeconds = if (startSeconds != null && movementSeconds != null) {
@@ -1514,6 +1535,7 @@ object DesktopCourseAnalyzer {
         controls: List<ControlAnalysisPoint>,
         finish: CourseGeoPoint?,
         raceType: RaceType,
+        speedModel: DesktopCourseSpeedModel,
         slotOverrides: Map<String, RenumberingSlot> = emptyMap(),
         labelOverrides: Map<String, String> = emptyMap(),
         elevationLookup: (CourseGeoPoint) -> Double? = { null }
@@ -1544,7 +1566,7 @@ object DesktopCourseAnalyzer {
         stops.zipWithNext().forEach { (from, to) ->
             val legPoints = sampledLegPoints(from.point, to.point, elevationLookup)
             val lengthMeters = legPoints.straightLineMeters().roundToInt()
-            val movementSeconds = estimatedIdealSecondsDouble(legPoints, raceType) ?: 0.0
+            val movementSeconds = estimatedIdealSecondsDouble(legPoints, speedModel) ?: 0.0
             val startSeconds = cumulativeSeconds
             val arrivalSeconds = if (startSeconds != null) {
                 startSeconds + movementSeconds
@@ -1676,12 +1698,12 @@ object DesktopCourseAnalyzer {
     private fun eventControlRouteLabels(controls: List<EventControl>): List<String> =
         listOf("S") + controls.map { it.analysisRouteLabel() }
 
-    private fun estimatedIdealSecondsDouble(route: List<CourseGeoPoint>, raceType: RaceType): Double? {
+    private fun estimatedIdealSecondsDouble(route: List<CourseGeoPoint>, speedModel: DesktopCourseSpeedModel): Double? {
         if (route.size < 2) {
             return null
         }
         return route.zipWithNext()
-            .sumOf { (start, end) -> segmentSeconds(start, end, raceType) }
+            .sumOf { (start, end) -> segmentSeconds(start, end, speedModel) }
     }
 
     private fun elevationProfile(route: List<CourseGeoPoint>): List<DesktopCourseElevationProfilePoint> {
@@ -1926,7 +1948,7 @@ object DesktopCourseAnalyzer {
         )
     }
 
-    private fun segmentSeconds(start: CourseGeoPoint, end: CourseGeoPoint, raceType: RaceType): Double {
+    private fun segmentSeconds(start: CourseGeoPoint, end: CourseGeoPoint, speedModel: DesktopCourseSpeedModel): Double {
         val horizontal = max(1.0, start.distanceMetersTo(end))
         val climb = if (start.elevationMeters != null && end.elevationMeters != null) {
             max(0.0, requireNotNull(end.elevationMeters) - requireNotNull(start.elevationMeters))
@@ -1936,12 +1958,7 @@ object DesktopCourseAnalyzer {
         // Do not also apply a separate gradient-speed model here. Effective length is the elevation
         // compensation: horizontal distance plus ten times positive climb, divided by format pace.
         val movementMeters = horizontal + 10.0 * climb
-        val flatSpeed = when (raceType) {
-            RaceType.SPRINT -> SPRINT_FLAT_SPEED_MPS
-            RaceType.FOXORING -> FOXORING_FLAT_SPEED_MPS
-            else -> CLASSIC_FLAT_SPEED_MPS
-        }
-        return movementMeters / flatSpeed
+        return movementMeters / speedModel.effectiveSpeedMetersPerSecond
     }
 
     private fun controlServiceTiming(
@@ -2299,6 +2316,56 @@ object DesktopCourseAnalyzer {
         val compactKey = rawKey.filter { it.isLetterOrDigit() }
         return if (compactKey.startsWith("D")) "W${compactKey.drop(1)}" else compactKey
     }
+
+    private fun speedModel(
+        raceType: RaceType,
+        categoryName: String,
+        compensationFactor: Double
+    ): DesktopCourseSpeedModel {
+        val formatSpeed = when (raceType) {
+            RaceType.SPRINT -> SPRINT_FLAT_SPEED_MPS
+            RaceType.FOXORING -> FOXORING_FLAT_SPEED_MPS
+            else -> CLASSIC_FLAT_SPEED_MPS
+        }
+        val categoryKey = categoryRuleKey(categoryName)
+        val categoryMultiplier = categorySpeedMultiplier(categoryKey)
+        val boundedFactor = compensationFactor
+            .takeIf { it.isFinite() }
+            ?.coerceIn(0.25, 2.0)
+            ?: 1.0
+        val effectiveSpeed = (formatSpeed * categoryMultiplier * boundedFactor)
+            .coerceAtLeast(MIN_EFFECTIVE_SPEED_MPS)
+        return DesktopCourseSpeedModel(
+            formatSpeedMetersPerSecond = formatSpeed,
+            categorySpeedMultiplier = categoryMultiplier,
+            compensationFactor = boundedFactor,
+            effectiveSpeedMetersPerSecond = effectiveSpeed,
+            categoryModelLabel = categoryKey ?: "unmatched category"
+        )
+    }
+
+    private fun categorySpeedMultiplier(categoryKey: String?): Double =
+        when (categoryKey) {
+            "M21" -> 1.00
+            "M19", "M40" -> 0.95
+            "M50" -> 0.86
+            "M60" -> 0.76
+            "M70" -> 0.65
+            "M80" -> 0.55
+            "M16" -> 0.80
+            "M14" -> 0.65
+            "M12" -> 0.55
+            "W21" -> 0.88
+            "W19", "W35" -> 0.84
+            "W45" -> 0.74
+            "W55" -> 0.64
+            "W65" -> 0.55
+            "W75" -> 0.47
+            "W16" -> 0.72
+            "W14" -> 0.60
+            "W12" -> 0.52
+            else -> 1.00
+        }
 
     private fun categoryNameContainsRuleKey(categoryName: String, categoryKey: String): Boolean =
         Regex("""\b${Regex.escape(categoryKey)}\b""")

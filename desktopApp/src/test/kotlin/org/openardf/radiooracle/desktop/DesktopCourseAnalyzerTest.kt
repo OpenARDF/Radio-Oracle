@@ -83,8 +83,10 @@ class DesktopCourseAnalyzerTest {
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("effective length"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("does not guarantee 3 m source terrain data"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("does not currently know map passability"))
-        assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("4:38 min/km for Classic-style courses (3.6 m/s)"))
-        assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("not yet adjusted by category age or gender"))
+        assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("category age/gender multiplier"))
+        assertEquals("M21", summary.speedModel.categoryModelLabel)
+        assertEquals(1.0, summary.speedModel.categorySpeedMultiplier, 0.001)
+        assertEquals(1.0, summary.speedModel.compensationFactor, 0.001)
         assertEquals(1, summary.profileComparison.size)
         assertEquals(listOf("31", "32", "33"), summary.profileComparison.first { it.title == "Stored route" }.markers.map { it.label })
         assertEquals(1, summary.routeMaps.size)
@@ -130,6 +132,42 @@ class DesktopCourseAnalyzerTest {
         assertFalse(reportText.contains("Calculated straight-line length:"))
         assertFalse(reportText.contains("Effective length: 5.00 km\n"))
         assertTrue(reportText.contains("Effective length: 5.00 km (required 9-12 km)"))
+        assertTrue(reportText.contains("Speed model:"))
+    }
+
+    @Test
+    fun estimatedTimeUsesCategorySpeedAndEventCompensationFactor() {
+        val m21Summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 3, categoryName = "M21"),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo(foxCount = 3),
+            protectedIdealOrderText = "31 32 33 Beacon"
+        )
+        val w75Summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 3, categoryName = "W75"),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo(foxCount = 3),
+            protectedIdealOrderText = "31 32 33 Beacon"
+        )
+        val slowW75Project = projectFile(foxCount = 3, categoryName = "W75").let { project ->
+            project.copy(
+                raceData = project.raceData.copy(
+                    race = project.raceData.race.copy(courseAnalyzerSpeedCompensationFactor = 0.80)
+                )
+            )
+        }
+        val slowW75Summary = DesktopCourseAnalyzer.analyze(
+            projectFile = slowW75Project,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo(foxCount = 3),
+            protectedIdealOrderText = "31 32 33 Beacon"
+        )
+
+        assertTrue(requireNotNull(w75Summary.estimatedIdealSeconds) > requireNotNull(m21Summary.estimatedIdealSeconds))
+        assertTrue(requireNotNull(slowW75Summary.estimatedIdealSeconds) > requireNotNull(w75Summary.estimatedIdealSeconds))
+        assertEquals("W75", w75Summary.speedModel.categoryModelLabel)
+        assertEquals(0.47, w75Summary.speedModel.categorySpeedMultiplier, 0.001)
+        assertEquals(0.80, slowW75Summary.speedModel.compensationFactor, 0.001)
     }
 
     @Test

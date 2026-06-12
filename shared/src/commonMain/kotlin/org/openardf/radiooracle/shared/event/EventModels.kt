@@ -19,7 +19,8 @@ data class EventRace(
     val raceType: RaceType,
     val raceLevel: RaceLevel,
     val raceBand: RaceBand,
-    val timeLimitSeconds: Long
+    val timeLimitSeconds: Long,
+    val courseAnalyzerSpeedCompensationFactor: Double = 1.0
 )
 
 /** Portable category definition, including optional category-level race overrides. */

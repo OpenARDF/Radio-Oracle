@@ -38,7 +38,18 @@ class EventProjectFileTest {
 
         assertTrue(encoded.contains("\"schemaVersion\": 3"))
         assertTrue(encoded.contains("\"appName\": \"Radio-Oracle\""))
+        assertTrue(encoded.contains("\"courseAnalyzerSpeedCompensationFactor\": 1.0"))
         assertEquals(original, decoded)
+    }
+
+    @Test
+    fun defaultsMissingCourseAnalyzerSpeedFactorForOlderEventFiles() {
+        val encoded = EventProjectFileJson.encode(EventProjectFile(raceData = raceData()))
+            .replace(Regex(""",\n\s+"courseAnalyzerSpeedCompensationFactor": 1\.0"""), "")
+
+        val decoded = EventProjectFileJson.decode(encoded)
+
+        assertEquals(1.0, decoded.raceData.race.courseAnalyzerSpeedCompensationFactor)
     }
 
     @Test

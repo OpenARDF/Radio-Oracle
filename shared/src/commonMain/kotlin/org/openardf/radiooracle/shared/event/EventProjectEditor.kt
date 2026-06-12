@@ -112,6 +112,25 @@ object EventProjectEditor {
         )
     }
 
+    /** Returns a copy of the Event File with the event-wide Course Analyzer speed factor changed. */
+    fun updateCourseAnalyzerSpeedCompensationFactor(
+        projectFile: EventProjectFile,
+        factor: Double
+    ): EventProjectFile {
+        require(factor.isFinite()) {
+            "Course Analyzer speed factor must be a number."
+        }
+        require(factor in 0.25..2.0) {
+            "Course Analyzer speed factor must be between 0.25 and 2.00."
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                race = projectFile.raceData.race.copy(courseAnalyzerSpeedCompensationFactor = factor)
+            )
+        )
+    }
+
     /** Returns a copy of the Event File with one validated category name changed. */
     fun renameCategory(
         projectFile: EventProjectFile,

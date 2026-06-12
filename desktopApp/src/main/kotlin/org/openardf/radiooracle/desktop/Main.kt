@@ -1466,6 +1466,20 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun updateCourseAnalyzerSpeedFactor(factor: Double): String =
+            runCatching {
+                projectFile ?: throw IllegalStateException("Load an Event File before updating Course Analyzer speed.")
+                projectFile = projectSession.updateCurrentProject { project ->
+                    EventProjectEditor.updateCourseAnalyzerSpeedCompensationFactor(project, factor)
+                }
+                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                projectStatusText = "Course Analyzer speed factor updated. Unsaved changes."
+                projectStatusText
+            }.getOrElse { error ->
+                projectStatusText = "Speed factor update failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText
+            }
+
         fun updateProtectedControlLocation(controlId: String, latitudeText: String, longitudeText: String): String {
             val password = protectedCoursePassword ?: run {
                 projectStatusText = "Unlock course order before updating control locations."
@@ -3177,6 +3191,7 @@ fun main(args: Array<String>) = application {
             onUpdateProtectedIdealOrder = ::updateProtectedIdealOrder,
             onUseCalculatedCourseAnalysisRoute = ::useCalculatedCourseAnalysisRoute,
             onApplyCourseAnalysisFoxRenumberingOnly = ::applyCourseAnalysisFoxRenumberingOnly,
+            onUpdateCourseAnalyzerSpeedFactor = ::updateCourseAnalyzerSpeedFactor,
             onReadCompetitorSiCardForAddRow = ::readCompetitorSiCardForAddRow,
             onUpdateProtectedControlLocation = ::updateProtectedControlLocation,
             onUpdateProtectedCoursePassword = ::updateProtectedCoursePassword,
@@ -5260,6 +5275,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateProtectedIdealOrder: (String, String) -> Unit = { _, _ -> },
     onUseCalculatedCourseAnalysisRoute: (DesktopCourseCalculatedRouteApplication) -> String = { "" },
     onApplyCourseAnalysisFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String = { "" },
+    onUpdateCourseAnalyzerSpeedFactor: (Double) -> String = { "" },
     onReadCompetitorSiCardForAddRow: suspend () -> DesktopCompetitorSiCardDraft = {
         error("SI card reader is not configured.")
     },
@@ -5473,6 +5489,7 @@ private fun RadioOManagerDesktopApp(
                                     onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
                                     onUseCalculatedCourseAnalysisRoute = onUseCalculatedCourseAnalysisRoute,
                                     onApplyCourseAnalysisFoxRenumberingOnly = onApplyCourseAnalysisFoxRenumberingOnly,
+                                    onUpdateCourseAnalyzerSpeedFactor = onUpdateCourseAnalyzerSpeedFactor,
                                     onReadCompetitorSiCardForAddRow = onReadCompetitorSiCardForAddRow,
                                     onUpdateProtectedControlLocation = onUpdateProtectedControlLocation,
                                     onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword,
@@ -6170,6 +6187,7 @@ private fun SectionWorkspace(
     onUpdateProtectedIdealOrder: (String, String) -> Unit,
     onUseCalculatedCourseAnalysisRoute: (DesktopCourseCalculatedRouteApplication) -> String,
     onApplyCourseAnalysisFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String,
+    onUpdateCourseAnalyzerSpeedFactor: (Double) -> String,
     onReadCompetitorSiCardForAddRow: suspend () -> DesktopCompetitorSiCardDraft,
     onUpdateProtectedControlLocation: (String, String, String) -> String,
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean,
@@ -6278,7 +6296,8 @@ private fun SectionWorkspace(
                 onRetrieveMissingElevations = onRetrieveMissingCourseElevations,
                 onUnlock = onUnlockProtectedCourseOrder,
                 onUseCalculatedRoute = onUseCalculatedCourseAnalysisRoute,
-                onApplyFoxRenumberingOnly = onApplyCourseAnalysisFoxRenumberingOnly
+                onApplyFoxRenumberingOnly = onApplyCourseAnalysisFoxRenumberingOnly,
+                onUpdateSpeedFactor = onUpdateCourseAnalyzerSpeedFactor
             )
         }
         if (section == DesktopSection.ElevationCache && projectFile != null) {
@@ -9142,7 +9161,8 @@ private fun CourseAnalysisPanel(
     onRetrieveMissingElevations: (String) -> Unit,
     onUnlock: (String) -> Boolean,
     onUseCalculatedRoute: (DesktopCourseCalculatedRouteApplication) -> String,
-    onApplyFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String
+    onApplyFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String,
+    onUpdateSpeedFactor: (Double) -> String
 ) {
     var passwordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
     if (!isUnlocked) {
@@ -9202,8 +9222,32 @@ private fun CourseAnalysisPanel(
     }
     var exportStatusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
     var applyStatusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
+    var speedStatusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
     var isAnalyzing by remember(projectFile.raceData.race.id) { mutableStateOf(false) }
     val analysisScope = rememberCoroutineScope()
+    var speedFactorDraft by remember(
+        projectFile.raceData.race.id,
+        projectFile.raceData.race.courseAnalyzerSpeedCompensationFactor
+    ) {
+        mutableStateOf(twoDecimalText(projectFile.raceData.race.courseAnalyzerSpeedCompensationFactor))
+    }
+    var speedFactorFocused by remember(projectFile.raceData.race.id) { mutableStateOf(false) }
+
+    fun applySpeedFactorDraft() {
+        val factor = speedFactorDraft.trim().toDoubleOrNull()
+        if (factor == null) {
+            speedStatusText = "Speed factor must be a number from 0.25 to 2.00."
+            return
+        }
+        val currentFactor = projectFile.raceData.race.courseAnalyzerSpeedCompensationFactor
+        if (abs(factor - currentFactor) < 0.0001) {
+            speedFactorDraft = twoDecimalText(currentFactor)
+            return
+        }
+        speedStatusText = onUpdateSpeedFactor(factor)
+        analysisResult = null
+        pendingMissingDataResult = null
+    }
 
     suspend fun analyzeSelectedCourse(categoryId: String): DesktopCourseAnalysisSummary =
         withContext(Dispatchers.Default) {
@@ -9245,6 +9289,24 @@ private fun CourseAnalysisPanel(
                     applyStatusText = null
                 },
                 modifier = Modifier.width(280.dp)
+            )
+            TextField(
+                value = speedFactorDraft,
+                onValueChange = {
+                    speedFactorDraft = it
+                    speedStatusText = null
+                },
+                label = { Text("Speed factor") },
+                singleLine = true,
+                modifier = Modifier
+                    .width(126.dp)
+                    .onFocusChanged { state ->
+                        if (speedFactorFocused && !state.isFocused) {
+                            applySpeedFactorDraft()
+                        }
+                        speedFactorFocused = state.isFocused
+                    }
+                    .commitOnEnter(::applySpeedFactorDraft)
             )
             DisabledReasonTooltip(
                 when {
@@ -9375,6 +9437,18 @@ private fun CourseAnalysisPanel(
                 fontSize = 13.sp
             )
         }
+        Text(
+            text = speedStatusText
+                ?: "Speed factor is event-wide: 1.00 normal, below 1.00 slower conditions, above 1.00 faster conditions.",
+            color = if (speedStatusText?.contains("failed", ignoreCase = true) == true ||
+                speedStatusText?.contains("must be", ignoreCase = true) == true
+            ) {
+                DesktopPalette.Error
+            } else {
+                DesktopPalette.Disconnected
+            },
+            fontSize = 13.sp
+        )
         CourseAnalysisResultView(analysisResult)
     }
 
@@ -9647,6 +9721,7 @@ private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
             result.metrics.firstOrNull { it.label == "Effective length" }?.value
                 ?: kilometersText(result.effectiveLengthMeters)
         )
+        CourseAnalysisRow("Speed model", courseAnalysisSpeedModelText(result.speedModel))
         CourseAnalysisRow("Estimated ideal time", secondsText(result.estimatedIdealSeconds))
     }
 }
@@ -10063,6 +10138,11 @@ private fun signedMetersText(value: Double): String =
 
 private fun climbText(value: Int?): String =
     value?.let { "$it m" } ?: "Unknown"
+
+private fun courseAnalysisSpeedModelText(speedModel: DesktopCourseSpeedModel): String =
+    "${twoDecimalText(speedModel.effectiveSpeedMetersPerSecond)} m/s; " +
+        "${speedModel.categoryModelLabel} x${twoDecimalText(speedModel.categorySpeedMultiplier)}, " +
+        "event x${twoDecimalText(speedModel.compensationFactor)}"
 
 private fun secondsText(value: Int?): String =
     value?.let(::compactSecondsText) ?: "Unknown"
