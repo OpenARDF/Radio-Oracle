@@ -10364,7 +10364,7 @@ private fun RaceDetailsPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             DateTimePickerField(
-                label = "Start date/time",
+                label = "Event start date/time",
                 value = startDateTimeDraft,
                 onValueChange = {
                     startDateTimeDraft = it
@@ -10373,6 +10373,11 @@ private fun RaceDetailsPanel(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+        Text(
+            text = "Used for Race Ops elapsed time, in-forest status, finish/result timestamps, and exports. Set this to the event's actual start, not the file creation time.",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -10488,7 +10493,7 @@ private fun DateTimePickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Pick start date/time") },
+        title = { Text("Pick event start date/time") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 CalendarMonthPicker(
