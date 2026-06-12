@@ -32,6 +32,8 @@ enum class DesktopNavAction {
     ImportControlsCsv,
     ImportCompetitorsCsv,
     ImportStartsCsv,
+    DeleteAllCategoryAssignedControls,
+    DeleteAllCategories,
     ExportEventFileCopy,
     ExportCategoriesCsv,
     ExportControlsCsv,
@@ -291,6 +293,18 @@ object DesktopNavigation {
                             "Import Categories CSV...",
                             workflow,
                             DesktopNavAction.ImportCategoriesCsv
+                        ),
+                        action(
+                            "setup.categories.delete-all-assigned-controls",
+                            "Delete All Assigned Controls...",
+                            workflow,
+                            DesktopNavAction.DeleteAllCategoryAssignedControls
+                        ),
+                        action(
+                            "setup.categories.delete-all-categories",
+                            "Delete All Categories...",
+                            workflow,
+                            DesktopNavAction.DeleteAllCategories
                         ),
                         action(
                             "setup.categories.export",
@@ -799,6 +813,10 @@ object DesktopNavigation {
             "Use Course Order to unlock and review protected ideal routes and course-location data that may affect scoring and analysis.",
         "setup.categories.import" to
             "Use Import Categories CSV to review and apply late category additions or corrections without replacing unrelated event data.",
+        "setup.categories.delete-all-assigned-controls" to
+            "Use Delete All Assigned Controls to clear every category course, length, climb, and protected course field while keeping category names and competitors.",
+        "setup.categories.delete-all-categories" to
+            "Use Delete All Categories to remove every category name and course assignment while keeping competitor records uncategorized.",
         "setup.categories.export" to
             "Use Export Categories CSV to write the current category list and course fields for review, backup, or external editing.",
         "setup.competitors" to

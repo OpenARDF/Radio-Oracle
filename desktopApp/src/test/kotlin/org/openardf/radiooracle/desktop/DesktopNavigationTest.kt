@@ -675,7 +675,13 @@ class DesktopNavigationTest {
             controlItems.map { it.label }
         )
         assertEquals(
-            listOf("Course Order", "Import Categories CSV...", "Export Categories CSV..."),
+            listOf(
+                "Course Order",
+                "Import Categories CSV...",
+                "Delete All Assigned Controls...",
+                "Delete All Categories...",
+                "Export Categories CSV..."
+            ),
             categoryItems.map { it.label }
         )
         assertEquals(DesktopSection.Controls, controlItems.first { it.label == "Define Controls" }.section)
@@ -713,6 +719,14 @@ class DesktopNavigationTest {
             competitorItems.map { it.label }
         )
         assertEquals(DesktopNavAction.ImportCategoriesCsv, categoryItems.first { it.label == "Import Categories CSV..." }.action)
+        assertEquals(
+            DesktopNavAction.DeleteAllCategoryAssignedControls,
+            categoryItems.first { it.label == "Delete All Assigned Controls..." }.action
+        )
+        assertEquals(
+            DesktopNavAction.DeleteAllCategories,
+            categoryItems.first { it.label == "Delete All Categories..." }.action
+        )
         assertEquals(DesktopNavAction.ExportCategoriesCsv, categoryItems.first { it.label == "Export Categories CSV..." }.action)
         assertEquals(DesktopNavAction.ImportCompetitorsCsv, competitorItems.first { it.label == "Import Competitors CSV..." }.action)
         assertEquals(DesktopNavAction.ImportEventRegCompetitorsCsv, competitorItems.first { it.label == "Import EventReg Website..." }.action)

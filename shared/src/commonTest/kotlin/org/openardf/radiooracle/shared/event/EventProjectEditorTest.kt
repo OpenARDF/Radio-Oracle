@@ -214,6 +214,56 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun removesAllAssignedCategoryControlsButKeepsCategoryNamesAndCompetitors() {
+        val category1 = categoryData(
+            "cat-1",
+            "M21",
+            controlSiCodes = listOf(31, 32),
+            encryptedIdealOrder = "encrypted-order",
+            encryptedCourseInfo = "encrypted-course"
+        ).let { data ->
+            data.copy(category = data.category.copy(lengthMeters = 4500, climbMeters = 120))
+        }
+        val category2 = categoryData("cat-2", "W21", controlSiCodes = listOf(31)).let { data ->
+            data.copy(category = data.category.copy(lengthMeters = 3900, climbMeters = 80))
+        }
+        val original = projectFile(
+            categories = listOf(category1, category2),
+            competitors = listOf(competitorData("comp-1", "Alice", "Runner", category = category("cat-1", "M21")))
+        )
+
+        val updated = EventProjectEditor.removeAllAssignedCategoryControls(original)
+
+        assertEquals(listOf("M21", "W21"), updated.raceData.categories.map { it.category.name })
+        assertTrue(updated.raceData.categories.all { it.controlPoints.isEmpty() })
+        assertTrue(updated.raceData.categories.all { it.publicControlIds.isEmpty() })
+        assertTrue(updated.raceData.categories.all { it.category.controlPointsString.isBlank() })
+        assertTrue(updated.raceData.categories.all { it.category.lengthMeters == 0 })
+        assertTrue(updated.raceData.categories.all { it.category.climbMeters == 0 })
+        assertTrue(updated.raceData.categories.all { it.category.encryptedIdealOrder == null })
+        assertTrue(updated.raceData.categories.all { it.category.encryptedCourseInfo == null })
+        assertEquals("cat-1", updated.raceData.competitorData.single().competitorCategory.competitor.categoryId)
+    }
+
+    @Test
+    fun removesAllCategoriesAndClearsCompetitorCategoryAssignments() {
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21"), categoryData("cat-2", "W21")),
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", category = category("cat-1", "M21")),
+                competitorData("comp-2", "Bob", "Racer", category = category("cat-2", "W21"))
+            )
+        )
+
+        val updated = EventProjectEditor.removeAllCategories(original)
+
+        assertTrue(updated.raceData.categories.isEmpty())
+        assertEquals(listOf("comp-1", "comp-2"), updated.raceData.competitorData.map { it.competitorCategory.competitor.id })
+        assertTrue(updated.raceData.competitorData.all { it.competitorCategory.competitor.categoryId == null })
+        assertTrue(updated.raceData.competitorData.all { it.competitorCategory.category == null })
+    }
+
+    @Test
     fun updatesCategoryControlPointsUsingSharedValidationRules() {
         val original = projectFile(categories = listOf(categoryData("cat-1", "M21")))
 

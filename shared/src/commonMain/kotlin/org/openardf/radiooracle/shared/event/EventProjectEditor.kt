@@ -249,6 +249,45 @@ object EventProjectEditor {
         )
     }
 
+    /** Clears all category course fields while keeping category names and competitor assignments. */
+    fun removeAllAssignedCategoryControls(projectFile: EventProjectFile): EventProjectFile {
+        val categories = projectFile.raceData.categories.map { data ->
+            data.copy(
+                category = data.category.copy(
+                    lengthMeters = 0,
+                    climbMeters = 0,
+                    controlPointsString = "",
+                    encryptedIdealOrder = null,
+                    encryptedCourseInfo = null
+                ),
+                controlPoints = emptyList(),
+                publicControlIds = emptyList()
+            )
+        }
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(categories = categories)
+        )
+    }
+
+    /** Removes all category names and course data while keeping competitors uncategorized. */
+    fun removeAllCategories(projectFile: EventProjectFile): EventProjectFile {
+        val competitorData = projectFile.raceData.competitorData.map { data ->
+            val competitorCategory = data.competitorCategory
+            data.copy(
+                competitorCategory = competitorCategory.copy(
+                    competitor = competitorCategory.competitor.copy(categoryId = null),
+                    category = null
+                )
+            )
+        }
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                categories = emptyList(),
+                competitorData = competitorData
+            )
+        )
+    }
+
     /** Returns a copy of the Event File with a category course parsed from a control-point string. */
     fun updateCategoryControlPoints(
         projectFile: EventProjectFile,

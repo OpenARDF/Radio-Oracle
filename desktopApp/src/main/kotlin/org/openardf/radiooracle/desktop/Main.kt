@@ -382,6 +382,7 @@ fun main(args: Array<String>) = application {
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzUnlockAction by remember { mutableStateOf<CourseKmlKmzUnlockAction?>(null) }
         var pendingProtectedControlDeleteId by remember { mutableStateOf<String?>(null) }
+        var pendingBulkCategoryAction by remember { mutableStateOf<BulkCategoryAction?>(null) }
         var pendingCourseKmlKmzImportReview by remember { mutableStateOf<PendingCourseKmlKmzImportReview?>(null) }
         var pendingCourseKmlKmzCategoryMapping by remember { mutableStateOf<PendingCourseKmlKmzCategoryMapping?>(null) }
         var pendingCategoriesCsvImportReview by remember { mutableStateOf<PendingCategoriesCsvImportReview?>(null) }
@@ -1248,6 +1249,46 @@ fun main(args: Array<String>) = application {
             protectedCourseInfoByCategoryId = decryptedCourseInfo
             projectStatusText = "Course order unlocked."
             return true
+        }
+
+        fun applyBulkCategoryAction(action: BulkCategoryAction, password: String): Boolean {
+            val currentProject = projectSession.currentProject ?: return false
+            if (currentProject.raceData.categories.isEmpty()) {
+                projectStatusText = "No categories to update."
+                return false
+            }
+            if (currentProject.hasProtectedCategoryData()) {
+                if (!unlockProtectedCourseOrder(password)) {
+                    return false
+                }
+            }
+            return runCatching {
+                projectFile = projectSession.updateCurrentProject { project ->
+                    when (action) {
+                        BulkCategoryAction.DeleteAllAssignedControls ->
+                            EventProjectEditor.removeAllAssignedCategoryControls(project)
+                        BulkCategoryAction.DeleteAllCategories ->
+                            EventProjectEditor.removeAllCategories(project)
+                    }
+                }
+                protectedIdealOrderByCategoryId = emptyMap()
+                protectedCourseInfoByCategoryId = emptyMap()
+                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                when (action) {
+                    BulkCategoryAction.DeleteAllAssignedControls -> {
+                        recordActivity("Deleted all assigned category controls.")
+                        projectStatusText = "Deleted all assigned controls and cleared category length/climb data. Category names were kept. Unsaved changes."
+                    }
+                    BulkCategoryAction.DeleteAllCategories -> {
+                        recordActivity("Deleted all categories.")
+                        projectStatusText = "Deleted all categories and cleared category assignments from competitors. Unsaved changes."
+                    }
+                }
+                true
+            }.getOrElse { error ->
+                projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+                false
+            }
         }
 
         fun updateProtectedIdealOrder(categoryId: String, idealOrderText: String) {
@@ -2461,6 +2502,8 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportControlsCsv,
                 DesktopNavAction.ImportCompetitorsCsv,
                 DesktopNavAction.ImportStartsCsv,
+                DesktopNavAction.DeleteAllCategoryAssignedControls,
+                DesktopNavAction.DeleteAllCategories,
                 DesktopNavAction.ExportEventFileCopy,
                 DesktopNavAction.ExportCategoriesCsv,
                 DesktopNavAction.ExportControlsCsv,
@@ -2533,6 +2576,10 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
                 DesktopNavAction.ImportControlsCsv -> importControlsCsv()
                 DesktopNavAction.ImportCourseKmlKmz -> chooseImportCourseKmlKmz()
+                DesktopNavAction.DeleteAllCategoryAssignedControls ->
+                    pendingBulkCategoryAction = BulkCategoryAction.DeleteAllAssignedControls
+                DesktopNavAction.DeleteAllCategories ->
+                    pendingBulkCategoryAction = BulkCategoryAction.DeleteAllCategories
                 DesktopNavAction.ImportCompetitorsCsv -> importCompetitorsCsv()
                 DesktopNavAction.ImportStartsCsv -> importCompetitorStartsCsv()
                 DesktopNavAction.ExportEventFileCopy -> exportEventFileCopy()
@@ -2769,6 +2816,23 @@ fun main(args: Array<String>) = application {
                     }
                 },
                 onCancel = { pendingProtectedControlDeleteId = null }
+            )
+        }
+        pendingBulkCategoryAction?.let { action ->
+            val currentProject = projectSession.currentProject
+            BulkCategoryActionDialog(
+                action = action,
+                categoryCount = currentProject?.raceData?.categories?.size ?: 0,
+                hasProtectedCategoryData = currentProject?.hasProtectedCategoryData() == true,
+                onConfirm = { password ->
+                    if (applyBulkCategoryAction(action, password)) {
+                        pendingBulkCategoryAction = null
+                        true
+                    } else {
+                        false
+                    }
+                },
+                onCancel = { pendingBulkCategoryAction = null }
             )
         }
         pendingCourseKmlKmzCategoryMapping?.let { mapping ->
@@ -3645,6 +3709,68 @@ private fun CourseKmlKmzUnlockDialog(
                 enabled = passwordDraft.isNotBlank()
             ) {
                 Text(confirmLabel)
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun BulkCategoryActionDialog(
+    action: BulkCategoryAction,
+    categoryCount: Int,
+    hasProtectedCategoryData: Boolean,
+    onConfirm: (String) -> Boolean,
+    onCancel: () -> Unit
+) {
+    var passwordDraft by remember(action) { mutableStateOf("") }
+    val title = when (action) {
+        BulkCategoryAction.DeleteAllAssignedControls -> "Delete all assigned controls"
+        BulkCategoryAction.DeleteAllCategories -> "Delete all categories"
+    }
+    val description = when (action) {
+        BulkCategoryAction.DeleteAllAssignedControls ->
+            "This removes all assigned controls, beacons, category length/climb data, and protected course/order data from $categoryCount categories. Category names and competitors are kept."
+        BulkCategoryAction.DeleteAllCategories ->
+            "This removes all category names, assigned controls, category length/climb data, and protected course/order data from the Event File. Competitors are kept but become uncategorized."
+    }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(description)
+                if (hasProtectedCategoryData) {
+                    Text(
+                        text = "Because protected course data will be affected, enter the Event Password to continue.",
+                        fontSize = 13.sp,
+                        color = Color.DarkGray
+                    )
+                    TextField(
+                        value = passwordDraft,
+                        onValueChange = { passwordDraft = it },
+                        label = { Text("Event Password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (onConfirm(passwordDraft)) {
+                        passwordDraft = ""
+                    }
+                },
+                enabled = categoryCount > 0 && (!hasProtectedCategoryData || passwordDraft.isNotBlank())
+            ) {
+                Text("Delete")
             }
         },
         dismissButton = {
@@ -4589,6 +4715,11 @@ private data class PendingControlsCsvImportReview(
 private enum class CourseKmlKmzUnlockAction {
     Import,
     Export
+}
+
+private enum class BulkCategoryAction {
+    DeleteAllAssignedControls,
+    DeleteAllCategories
 }
 
 private data class PendingCourseKmlKmzCategoryMapping(
@@ -11061,6 +11192,12 @@ private fun selectedProtectedIdealOrderControlIds(
 private fun EventProjectFile.hasLockedProtectedCourseData(isProtectedCourseOrderUnlocked: Boolean): Boolean =
     !isProtectedCourseOrderUnlocked &&
         raceData.categories.any { it.category.encryptedCourseInfo?.isNotBlank() == true }
+
+private fun EventProjectFile.hasProtectedCategoryData(): Boolean =
+    raceData.categories.any {
+        it.category.encryptedIdealOrder?.isNotBlank() == true ||
+            it.category.encryptedCourseInfo?.isNotBlank() == true
+    }
 
 private fun EventProjectFile.categoryHasLockedProtectedCourseData(
     categoryId: String,
