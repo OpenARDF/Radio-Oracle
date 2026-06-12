@@ -490,6 +490,36 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun disabledMenuOverrideAppliesOnlyToDisabledMenuEntries() {
+        val setupItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
+        val categories = setupItems.first { it.label == "Categories" }
+        val eventFile = setupItems.first { it.label == "Event File" }
+        val noEvent = DesktopNavigationReadiness()
+        val eventOnly = DesktopNavigationReadiness(hasEventFile = true)
+
+        assertTrue(DesktopNavigation.canLongClickOverrideDisabledMenu(categories, noEvent))
+        assertFalse(DesktopNavigation.canLongClickOverrideDisabledMenu(eventFile, noEvent))
+        assertFalse(DesktopNavigation.canLongClickOverrideDisabledMenu(categories, eventOnly.copy(hasControls = true)))
+    }
+
+    @Test
+    fun disabledMenuOverrideHintIsNotAddedToDisabledActions() {
+        val disabledAction = flatten(DesktopNavigation.rootItems(DesktopWorkflow.Setup))
+            .first { it.action != null && it.requiresEventFile }
+        val categories = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Categories" }
+        val noEvent = DesktopNavigationReadiness()
+
+        assertEquals(
+            "Open or create an Event File first.",
+            DesktopNavigation.disabledItemReasonWithMenuOverrideHint(disabledAction, noEvent)
+        )
+        assertEquals(
+            "Open or create an Event File first. Long-click for 3 seconds to explore this menu.",
+            DesktopNavigation.disabledItemReasonWithMenuOverrideHint(categories, noEvent)
+        )
+    }
+
+    @Test
     fun disabledResultsReasonIdentifiesMissingRaceOpsData() {
         val setupComplete = DesktopNavigationReadiness(
             hasEventFile = true,

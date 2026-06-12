@@ -8,6 +8,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.HorizontalScrollbar
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,6 +59,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -74,6 +78,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.openardf.radiooracle.desktop.printing.DesktopPrinterDiagnostics
 import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinter
 import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinterSelector
@@ -4765,6 +4770,29 @@ private fun saveEventButtonColors() =
         disabledContentColor = DesktopPalette.Disconnected
     )
 
+private const val DisabledMenuOverrideHoldMillis = 3_000L
+
+private fun Modifier.disabledMenuLongClickOverride(
+    available: Boolean,
+    onOverride: () -> Unit
+): Modifier =
+    if (!available) {
+        this
+    } else {
+        pointerInput(onOverride) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false)
+                val releasedBeforeThreshold = withTimeoutOrNull(DisabledMenuOverrideHoldMillis) {
+                    waitForUpOrCancellation()
+                }
+                if (releasedBeforeThreshold == null) {
+                    onOverride()
+                    waitForUpOrCancellation()
+                }
+            }
+        }
+    }
+
 /** Shows workflow-specific navigation with optional submenu replacement. */
 @Composable
 private fun NavigationRail(
@@ -4798,30 +4826,37 @@ private fun NavigationRail(
                 val isNavigationEnabled = DesktopNavigation.isItemEnabled(item, navigationReadiness)
                 val actionEnabled = item.action?.let(isNavActionEnabled) ?: true
                 val isEnabled = isNavigationEnabled && actionEnabled
-                val disabledReason = DesktopNavigation.disabledItemReason(item, navigationReadiness)
+                val canLongClickOverride = DesktopNavigation.canLongClickOverrideDisabledMenu(item, navigationReadiness)
+                val disabledReason = DesktopNavigation.disabledItemReasonWithMenuOverrideHint(item, navigationReadiness)
                     ?: item.action?.let(disabledNavActionReason)
                 DisabledReasonTooltip(disabledReason) {
-                    Button(
-                        onClick = { onItemSelected(item) },
-                        enabled = isEnabled,
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 34.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        colors = if (item.action == DesktopNavAction.SaveEventFile) {
-                            saveEventButtonColors()
-                        } else {
-                            ButtonDefaults.buttonColors()
-                        }
+                            .disabledMenuLongClickOverride(canLongClickOverride) { onItemSelected(item) }
                     ) {
-                        Text(
-                            text = if (item.children.isEmpty()) item.label else "${item.label} >",
-                            fontSize = 13.sp,
-                            lineHeight = 15.sp,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                        )
+                        Button(
+                            onClick = { onItemSelected(item) },
+                            enabled = isEnabled,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 34.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            colors = if (item.action == DesktopNavAction.SaveEventFile) {
+                                saveEventButtonColors()
+                            } else {
+                                ButtonDefaults.buttonColors()
+                            }
+                        ) {
+                            Text(
+                                text = if (item.children.isEmpty()) item.label else "${item.label} >",
+                                fontSize = 13.sp,
+                                lineHeight = 15.sp,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
                     }
                 }
             }

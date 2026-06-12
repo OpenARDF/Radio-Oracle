@@ -563,6 +563,21 @@ object DesktopNavigation {
         }
     }
 
+    fun canLongClickOverrideDisabledMenu(item: DesktopNavItem, readiness: DesktopNavigationReadiness): Boolean =
+        item.action == null && !isItemEnabled(item, readiness)
+
+    fun disabledItemReasonWithMenuOverrideHint(
+        item: DesktopNavItem,
+        readiness: DesktopNavigationReadiness
+    ): String? {
+        val reason = disabledItemReason(item, readiness) ?: return null
+        return if (canLongClickOverrideDisabledMenu(item, readiness)) {
+            "$reason Long-click for 3 seconds to explore this menu."
+        } else {
+            reason
+        }
+    }
+
     fun primaryDisabledSummary(readiness: DesktopNavigationReadiness): String? =
         disabledWorkflowReason(DesktopWorkflow.RaceOps, readiness)
             ?: disabledWorkflowReason(DesktopWorkflow.ResultsExport, readiness)
