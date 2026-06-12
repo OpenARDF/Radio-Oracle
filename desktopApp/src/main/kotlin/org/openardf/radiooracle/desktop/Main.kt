@@ -4004,6 +4004,26 @@ private fun VenueElevationCacheProgressDialog(
 }
 
 @Composable
+private fun VenueElevationCacheListingProgressDialog() {
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Loading Elevation Data") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Text(
+                    text = "Reading cached venue elevation files...",
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = {}
+    )
+}
+
+@Composable
 private fun UnsavedSubmenuChangesDialog(
     onSave: () -> Unit,
     onDontSave: () -> Unit,
@@ -7815,7 +7835,9 @@ private fun VenueElevationCachePanel(
     val importedBounds = remember(protectedCourseInfoByCategoryId) {
         protectedCourseInfoByCategoryId.values.flatMap { it.courseGeoPoints() }.venueBoundingBoxOrNull()
     }
-    val cacheListings = remember(refreshToken) { DesktopVenueElevationCache.listings() }
+    var cacheListings by remember { mutableStateOf<List<DesktopVenueElevationCacheListing>>(emptyList()) }
+    var isLoadingCacheListings by remember { mutableStateOf(true) }
+    var cacheListingError by remember { mutableStateOf<String?>(null) }
     var venueNameDraft by remember(projectFile.raceData.race.name) {
         mutableStateOf(projectFile.raceData.race.name.ifBlank { "Venue" })
     }
@@ -7830,6 +7852,22 @@ private fun VenueElevationCachePanel(
     var spotCheckInProgress by remember { mutableStateOf<DesktopVenueElevationCacheListing?>(null) }
     var spotCheckResult by remember { mutableStateOf<DesktopVenueElevationSpotCheckSummary?>(null) }
     var spotCheckError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(refreshToken) {
+        isLoadingCacheListings = true
+        cacheListingError = null
+        runCatching {
+            withContext(Dispatchers.IO) {
+                DesktopVenueElevationCache.listings()
+            }
+        }.onSuccess { listings ->
+            cacheListings = listings
+        }.onFailure { error ->
+            cacheListings = emptyList()
+            cacheListingError = error.message ?: error::class.simpleName
+        }
+        isLoadingCacheListings = false
+    }
 
     fun startSpotCheck(
         listing: DesktopVenueElevationCacheListing,
@@ -7895,6 +7933,9 @@ private fun VenueElevationCachePanel(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
+        if (isLoadingCacheListings) {
+            VenueElevationCacheListingProgressDialog()
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(
                 onClick = { importedBounds?.let(::applyBoundingBox) },
@@ -8042,7 +8083,20 @@ private fun VenueElevationCachePanel(
                 }
             }
         }
-        if (cacheListings.isEmpty()) {
+        cacheListingError?.let { error ->
+            Text(
+                text = "Could not load cached venues: $error",
+                color = DesktopPalette.Error,
+                fontSize = 13.sp
+            )
+        }
+        if (isLoadingCacheListings) {
+            Text(
+                text = "Loading cached venues...",
+                color = DesktopPalette.Black,
+                fontSize = 14.sp
+            )
+        } else if (cacheListings.isEmpty() && cacheListingError == null) {
             Text(
                 text = "No venue elevation caches found.",
                 color = DesktopPalette.Black,
