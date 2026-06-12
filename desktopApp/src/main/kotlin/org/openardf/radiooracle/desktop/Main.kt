@@ -381,6 +381,7 @@ fun main(args: Array<String>) = application {
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzUnlockAction by remember { mutableStateOf<CourseKmlKmzUnlockAction?>(null) }
+        var pendingProtectedControlDeleteId by remember { mutableStateOf<String?>(null) }
         var pendingCourseKmlKmzImportReview by remember { mutableStateOf<PendingCourseKmlKmzImportReview?>(null) }
         var pendingCourseKmlKmzCategoryMapping by remember { mutableStateOf<PendingCourseKmlKmzCategoryMapping?>(null) }
         var pendingCategoriesCsvImportReview by remember { mutableStateOf<PendingCategoriesCsvImportReview?>(null) }
@@ -447,6 +448,46 @@ fun main(args: Array<String>) = application {
         fun recordActivity(message: String) {
             val timestamp = LocalTime.now().withNano(0).toString()
             recentActivityLog = (listOf("$timestamp - $message") + recentActivityLog).take(12)
+        }
+
+        fun deleteControlAfterProtectedRouteCheck(controlId: String, promptIfLocked: Boolean = true): Boolean {
+            val currentProject = projectSession.currentProject
+            if (currentProject == null) {
+                projectStatusText = "Edit failed: Load an Event File before deleting controls."
+                return false
+            }
+            if (currentProject.hasLockedProtectedCourseData(protectedCoursePassword != null)) {
+                val controlLabel = currentProject.raceData.controls
+                    .firstOrNull { it.id == controlId }
+                    ?.publicDisplayLabel()
+                    ?: "this control"
+                if (promptIfLocked) {
+                    pendingProtectedControlDeleteId = controlId
+                    projectStatusText = "Unlock course data to delete $controlLabel."
+                } else {
+                    projectStatusText = "Edit failed: Course data is locked. Unlock course data before deleting controls so protected route references can be checked."
+                }
+                return false
+            }
+            val result = runCatching {
+                val protectedUseCount = DesktopImportPreviews.protectedCourseUseCount(
+                    protectedCourseInfoByCategoryId,
+                    setOf(controlId)
+                )
+                require(protectedUseCount == 0) {
+                    "Control is used by $protectedUseCount stored course${if (protectedUseCount == 1) "" else "s"}. Remove or reimport course data before deleting this control."
+                }
+                projectFile = projectSession.updateCurrentProject { project ->
+                    EventProjectEditor.removeControl(project, controlId)
+                }
+                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                recordActivity("Removed control.")
+                projectStatusText = "Unsaved changes."
+            }
+            result.onFailure { error ->
+                projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+            }
+            return result.isSuccess
         }
 
         fun checkpointBeforeImport(title: String) {
@@ -2687,6 +2728,27 @@ fun main(args: Array<String>) = application {
                 onCancel = { pendingCourseKmlKmzUnlockAction = null }
             )
         }
+        pendingProtectedControlDeleteId?.let { controlId ->
+            val controlLabel = projectSession.currentProject?.raceData?.controls
+                ?.firstOrNull { it.id == controlId }
+                ?.publicDisplayLabel()
+                ?: "this control"
+            CourseKmlKmzUnlockDialog(
+                title = "Unlock course data to delete control",
+                description = "The Event File contains password-protected imported course or route data. Before deleting $controlLabel, Radio-Oracle needs the Event Password so it can check whether that control is referenced by stored course routes.",
+                confirmLabel = "Unlock and Delete",
+                onUnlock = { password ->
+                    if (unlockProtectedCourseOrder(password)) {
+                        pendingProtectedControlDeleteId = null
+                        deleteControlAfterProtectedRouteCheck(controlId, promptIfLocked = false)
+                        true
+                    } else {
+                        false
+                    }
+                },
+                onCancel = { pendingProtectedControlDeleteId = null }
+            )
+        }
         pendingCourseKmlKmzCategoryMapping?.let { mapping ->
             CourseKmlKmzCategoryMappingDialog(
                 mapping = mapping,
@@ -3362,27 +3424,7 @@ fun main(args: Array<String>) = application {
                 result.isSuccess
             },
             onRemoveControl = { controlId ->
-                runCatching {
-                    val currentProject = requireNotNull(projectSession.currentProject)
-                    require(!currentProject.hasLockedProtectedCourseData(protectedCoursePassword != null)) {
-                        "Course data is locked. Unlock course data before deleting controls so protected route references can be checked."
-                    }
-                    val protectedUseCount = DesktopImportPreviews.protectedCourseUseCount(
-                        protectedCourseInfoByCategoryId,
-                        setOf(controlId)
-                    )
-                    require(protectedUseCount == 0) {
-                        "Control is used by $protectedUseCount stored course${if (protectedUseCount == 1) "" else "s"}. Remove or reimport course data before deleting this control."
-                    }
-                    projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.removeControl(currentProject, controlId)
-                    }
-                    hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    recordActivity("Removed control.")
-                    projectStatusText = "Unsaved changes."
-                }.onFailure { error ->
-                    projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
-                }
+                deleteControlAfterProtectedRouteCheck(controlId)
             },
             onImportControlsRouteKmlKmz = ::chooseImportCourseKmlKmz,
             onSendRobisLiveResults = { sendRobisLiveResults() },
