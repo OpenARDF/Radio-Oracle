@@ -10029,6 +10029,7 @@ private fun CourseAnalysisWaitRenumbering(renumbering: DesktopCourseWaitRenumber
                     value = "${assignment.currentSlotLabel} -> ${assignment.suggestedSlotLabel}"
                 )
             }
+            CourseAnalysisWaitRows("Renumbered wait times", renumbering.suggestedWaitRows)
         }
     }
 }

@@ -428,8 +428,15 @@ class DesktopCourseAnalyzerTest {
         assertEquals(listOf("31", "32", "33"), renumbering.assignments.map { it.controlLabel })
         assertEquals(listOf("31", "32", "33"), renumbering.assignments.map { it.currentSlotLabel })
         assertTrue(renumbering.assignments.map { it.suggestedSlotLabel } != renumbering.assignments.map { it.currentSlotLabel })
+        assertEquals(renumbering.bestTotalWaitSeconds, renumbering.suggestedWaitRows.sumOf { it.waitSeconds })
+        val suggestedSlotByControlLabel = renumbering.assignments.associate { it.controlLabel to it.suggestedSlotLabel }
+        assertEquals(
+            renumbering.suggestedWaitRows.map { suggestedSlotByControlLabel[it.controlLabel] },
+            renumbering.suggestedWaitRows.map { it.slotLabel }
+        )
         assertTrue(summary.summaryExplanation.contains("may reduce stored-route wait time"))
         assertTrue(summary.summaryExplanation.contains("see Section 1 for the assignment details"))
+        assertTrue(DesktopCourseAnalysisExports.reportText(summary).contains("Renumbered wait times"))
     }
 
     @Test

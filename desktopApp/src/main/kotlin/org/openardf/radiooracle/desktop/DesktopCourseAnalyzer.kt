@@ -160,7 +160,8 @@ data class DesktopCourseWaitRenumbering(
     val currentTotalWaitSeconds: Int,
     val bestTotalWaitSeconds: Int,
     val improvesWait: Boolean,
-    val assignments: List<DesktopCourseWaitRenumberingAssignment>
+    val assignments: List<DesktopCourseWaitRenumberingAssignment>,
+    val suggestedWaitRows: List<DesktopCourseWaitRow> = emptyList()
 )
 
 data class DesktopCourseWaitRenumberingAssignment(
@@ -2041,13 +2042,16 @@ object DesktopCourseAnalyzer {
         val currentTotal = timingForSlots(emptyMap()).waitTotalFor(foxes)
         var bestTotal = Int.MAX_VALUE
         var bestSlots = emptyList<RenumberingSlot>()
+        var bestTiming = RouteTimingAnalysis.Empty
         val currentSlots = foxes.map { RenumberingSlot(it.currentSlotIndex, it.currentSlotLabel) }
         currentSlots.permutations().forEach { candidateSlots ->
             val slotOverrides = foxes.zip(candidateSlots).associate { (fox, slot) -> fox.control.id to slot }
-            val total = timingForSlots(slotOverrides).waitTotalFor(foxes)
+            val timing = timingForSlots(slotOverrides)
+            val total = timing.waitTotalFor(foxes)
             if (total < bestTotal) {
                 bestTotal = total
                 bestSlots = candidateSlots
+                bestTiming = timing
             }
         }
         if (bestSlots.isEmpty()) {
@@ -2064,7 +2068,8 @@ object DesktopCourseAnalyzer {
                     currentSlotLabel = fox.currentSlotLabel,
                     suggestedSlotLabel = slot.slotLabel
                 )
-            }
+            },
+            suggestedWaitRows = bestTiming.waitRows
         )
     }
 

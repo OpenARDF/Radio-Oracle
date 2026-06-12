@@ -314,6 +314,7 @@ object DesktopCourseAnalysisExports {
             renumbering.assignments.forEach { assignment ->
                 appendLine("${assignment.controlLabel}: ${assignment.currentSlotLabel} -> ${assignment.suggestedSlotLabel}")
             }
+            appendWaitRows("Renumbered wait times", renumbering.suggestedWaitRows)
         } else {
             appendLine("Current fox numbering is already best for ideal-route wait time.")
         }
