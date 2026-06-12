@@ -693,6 +693,14 @@ class DesktopNavigationTest {
             controlItems.first { it.label == "Course Analyzer" }.children.single().action
         )
         assertEquals(DesktopSection.ElevationCache, controlItems.first { it.label == "Elevation Data" }.section)
+        assertEquals(
+            listOf("Import Elevation Data"),
+            controlItems.first { it.label == "Elevation Data" }.children.map { it.label }
+        )
+        assertEquals(
+            DesktopSection.ElevationCacheImport,
+            controlItems.first { it.label == "Elevation Data" }.children.single().section
+        )
         assertEquals(DesktopSection.ControlsImportExport, controlItems.first { it.label == "Import/Export" }.section)
         assertEquals(
             listOf(

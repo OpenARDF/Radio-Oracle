@@ -213,10 +213,18 @@ object DesktopNavigation {
                     workflow,
                     listOf(
                         item("setup.controls.define", "Define Controls", workflow, DesktopSection.Controls),
-                        item(
+                        group(
                             "setup.controls.elevation-cache",
                             "Elevation Data",
                             workflow,
+                            listOf(
+                                item(
+                                    "setup.controls.elevation-cache.import",
+                                    "Import Elevation Data",
+                                    workflow,
+                                    DesktopSection.ElevationCacheImport
+                                )
+                            ),
                             DesktopSection.ElevationCache
                         ),
                         group(
@@ -769,7 +777,9 @@ object DesktopNavigation {
         "setup.controls.define" to
             "Use Define Controls to edit the control catalog, public labels, SI codes, roles, locations, and control metadata used by courses and readouts.",
         "setup.controls.elevation-cache" to
-            "Use Elevation Data to prepare or inspect venue elevation caches used for stored course routes, climb estimates, and course-analysis calculations.",
+            "Use Elevation Data to inspect cached venue elevation files used for stored course routes, climb estimates, and course-analysis calculations.",
+        "setup.controls.elevation-cache.import" to
+            "Use Import Elevation Data to create a venue elevation cache from online elevation services or a local raster file.",
         "setup.controls.course-analysis" to
             "Use Course Analyzer to inspect stored course routes, ideal routes, climb, distance, time estimates, and classic wait-slot behavior.",
         "setup.controls.course-analysis.import-kml-kmz" to

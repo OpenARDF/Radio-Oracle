@@ -5492,11 +5492,15 @@ private fun SectionWorkspace(
         }
         if (section == DesktopSection.ElevationCache && projectFile != null) {
             VenueElevationCachePanel(
+                refreshToken = elevationCacheRefreshToken,
+                onOpenCacheFolder = onOpenVenueElevationCacheFolder
+            )
+        }
+        if (section == DesktopSection.ElevationCacheImport && projectFile != null) {
+            VenueElevationCacheImportPanel(
                 projectFile = projectFile,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
-                refreshToken = elevationCacheRefreshToken,
-                onDownloadCache = onDownloadVenueElevationCache,
-                onOpenCacheFolder = onOpenVenueElevationCacheFolder
+                onDownloadCache = onDownloadVenueElevationCache
             )
         }
         if (section == DesktopSection.ControlsRouteKmlImport && projectFile != null) {
@@ -7826,28 +7830,12 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
 
 @Composable
 private fun VenueElevationCachePanel(
-    projectFile: EventProjectFile,
-    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     refreshToken: Int,
-    onDownloadCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
     onOpenCacheFolder: () -> Unit
 ) {
-    val importedBounds = remember(protectedCourseInfoByCategoryId) {
-        protectedCourseInfoByCategoryId.values.flatMap { it.courseGeoPoints() }.venueBoundingBoxOrNull()
-    }
     var cacheListings by remember { mutableStateOf<List<DesktopVenueElevationCacheListing>>(emptyList()) }
     var isLoadingCacheListings by remember { mutableStateOf(true) }
     var cacheListingError by remember { mutableStateOf<String?>(null) }
-    var venueNameDraft by remember(projectFile.raceData.race.name) {
-        mutableStateOf(projectFile.raceData.race.name.ifBlank { "Venue" })
-    }
-    var minLatitudeDraft by remember { mutableStateOf("") }
-    var maxLatitudeDraft by remember { mutableStateOf("") }
-    var minLongitudeDraft by remember { mutableStateOf("") }
-    var maxLongitudeDraft by remember { mutableStateOf("") }
-    var bufferMetersDraft by remember { mutableStateOf("500") }
-    var resolutionMetersDraft by remember { mutableStateOf("10") }
-    var localRasterPathDraft by remember { mutableStateOf("") }
     val spotCheckScope = rememberCoroutineScope()
     var spotCheckInProgress by remember { mutableStateOf<DesktopVenueElevationCacheListing?>(null) }
     var spotCheckResult by remember { mutableStateOf<DesktopVenueElevationSpotCheckSummary?>(null) }
@@ -7892,6 +7880,116 @@ private fun VenueElevationCachePanel(
         }
     }
 
+    Column(
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        if (isLoadingCacheListings) {
+            VenueElevationCacheListingProgressDialog()
+        }
+        Text(
+            text = "Cache folder: ${DesktopVenueElevationCache.cacheDirectory()}",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Cached venues",
+                color = DesktopPalette.Black,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (cacheListings.isNotEmpty()) {
+                Button(onClick = onOpenCacheFolder) {
+                    ButtonLabel("Open Folder")
+                }
+            }
+        }
+        cacheListingError?.let { error ->
+            Text(
+                text = "Could not load cached venues: $error",
+                color = DesktopPalette.Error,
+                fontSize = 13.sp
+            )
+        }
+        if (isLoadingCacheListings) {
+            Text(
+                text = "Loading cached venues...",
+                color = DesktopPalette.Black,
+                fontSize = 14.sp
+            )
+        } else if (cacheListings.isEmpty() && cacheListingError == null) {
+            Text(
+                text = "No venue elevation caches found.",
+                color = DesktopPalette.Black,
+                fontSize = 14.sp
+            )
+        } else {
+            cacheListings.forEach { listing ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "${listing.venueName} - ${listing.sourceName} ${listing.resolutionMeters.roundToInt()} m - ${listing.resolvedPointCount}/${listing.rowCount * listing.columnCount} points",
+                        color = DesktopPalette.Black,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${listing.path.fileName}  ${listing.createdAtIso}",
+                        color = DesktopPalette.Black,
+                        fontSize = 12.sp
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DesktopVenueElevationReferenceSource.entries.forEach { source ->
+                            Button(
+                                onClick = { startSpotCheck(listing, source) },
+                                enabled = spotCheckInProgress == null
+                            ) {
+                                ButtonLabel(
+                                    if (spotCheckInProgress?.path == listing.path) {
+                                        "Checking..."
+                                    } else {
+                                        "Spot Check ${source.label}"
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        spotCheckError?.let { error ->
+            Text(
+                text = "Spot check failed: $error",
+                color = DesktopPalette.Error,
+                fontSize = 13.sp
+            )
+        }
+        spotCheckResult?.let { result ->
+            VenueElevationSpotCheckResultPanel(result)
+        }
+    }
+}
+
+@Composable
+private fun VenueElevationCacheImportPanel(
+    projectFile: EventProjectFile,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    onDownloadCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit
+) {
+    val importedBounds = remember(protectedCourseInfoByCategoryId) {
+        protectedCourseInfoByCategoryId.values.flatMap { it.courseGeoPoints() }.venueBoundingBoxOrNull()
+    }
+    var venueNameDraft by remember(projectFile.raceData.race.name) {
+        mutableStateOf(projectFile.raceData.race.name.ifBlank { "Venue" })
+    }
+    var minLatitudeDraft by remember { mutableStateOf("") }
+    var maxLatitudeDraft by remember { mutableStateOf("") }
+    var minLongitudeDraft by remember { mutableStateOf("") }
+    var maxLongitudeDraft by remember { mutableStateOf("") }
+    var bufferMetersDraft by remember { mutableStateOf("500") }
+    var resolutionMetersDraft by remember { mutableStateOf("10") }
+    var localRasterPathDraft by remember { mutableStateOf("") }
+
     fun applyBoundingBox(bounds: DesktopVenueElevationBoundingBox) {
         minLatitudeDraft = bounds.minLatitude.decimalText()
         maxLatitudeDraft = bounds.maxLatitude.decimalText()
@@ -7933,9 +8031,6 @@ private fun VenueElevationCachePanel(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        if (isLoadingCacheListings) {
-            VenueElevationCacheListingProgressDialog()
-        }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(
                 onClick = { importedBounds?.let(::applyBoundingBox) },
@@ -8064,86 +8159,6 @@ private fun VenueElevationCachePanel(
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
-        }
-        Text(
-            text = "Cache folder: ${DesktopVenueElevationCache.cacheDirectory()}",
-            color = DesktopPalette.Black,
-            fontSize = 13.sp
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "Cached venues",
-                color = DesktopPalette.Black,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-            if (cacheListings.isNotEmpty()) {
-                Button(onClick = onOpenCacheFolder) {
-                    ButtonLabel("Open Folder")
-                }
-            }
-        }
-        cacheListingError?.let { error ->
-            Text(
-                text = "Could not load cached venues: $error",
-                color = DesktopPalette.Error,
-                fontSize = 13.sp
-            )
-        }
-        if (isLoadingCacheListings) {
-            Text(
-                text = "Loading cached venues...",
-                color = DesktopPalette.Black,
-                fontSize = 14.sp
-            )
-        } else if (cacheListings.isEmpty() && cacheListingError == null) {
-            Text(
-                text = "No venue elevation caches found.",
-                color = DesktopPalette.Black,
-                fontSize = 14.sp
-            )
-        } else {
-            cacheListings.forEach { listing ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "${listing.venueName} - ${listing.sourceName} ${listing.resolutionMeters.roundToInt()} m - ${listing.resolvedPointCount}/${listing.rowCount * listing.columnCount} points",
-                        color = DesktopPalette.Black,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "${listing.path.fileName}  ${listing.createdAtIso}",
-                        color = DesktopPalette.Black,
-                        fontSize = 12.sp
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DesktopVenueElevationReferenceSource.entries.forEach { source ->
-                            Button(
-                                onClick = { startSpotCheck(listing, source) },
-                                enabled = spotCheckInProgress == null
-                            ) {
-                                ButtonLabel(
-                                    if (spotCheckInProgress?.path == listing.path) {
-                                        "Checking..."
-                                    } else {
-                                        "Spot Check ${source.label}"
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        spotCheckError?.let { error ->
-            Text(
-                text = "Spot check failed: $error",
-                color = DesktopPalette.Error,
-                fontSize = 13.sp
-            )
-        }
-        spotCheckResult?.let { result ->
-            VenueElevationSpotCheckResultPanel(result)
         }
     }
 }
