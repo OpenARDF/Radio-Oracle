@@ -4974,8 +4974,15 @@ private fun WorkflowBar(
         DesktopWorkflow.bottomBarEntries.forEach { workflow ->
             val isSelected = workflow == selectedWorkflow
             val isEnabled = DesktopNavigation.isWorkflowEnabled(workflow, navigationReadiness)
-            Box(modifier = Modifier.weight(1f)) {
-                DisabledReasonTooltip(DesktopNavigation.disabledWorkflowReason(workflow, navigationReadiness)) {
+            val canLongClickOverride = DesktopNavigation.canLongClickOverrideDisabledWorkflow(workflow, navigationReadiness)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .disabledMenuLongClickOverride(canLongClickOverride) { onWorkflowSelected(workflow) }
+            ) {
+                DisabledReasonTooltip(
+                    DesktopNavigation.disabledWorkflowReasonWithOverrideHint(workflow, navigationReadiness)
+                ) {
                     Button(
                         onClick = { onWorkflowSelected(workflow) },
                         enabled = isEnabled,

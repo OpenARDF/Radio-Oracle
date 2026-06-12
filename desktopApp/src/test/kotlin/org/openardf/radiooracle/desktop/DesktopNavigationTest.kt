@@ -449,6 +449,22 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun disabledWorkflowOverrideHintAppliesToRaceOpsAndResults() {
+        val noEvent = DesktopNavigationReadiness()
+
+        assertTrue(DesktopNavigation.canLongClickOverrideDisabledWorkflow(DesktopWorkflow.RaceOps, noEvent))
+        assertTrue(DesktopNavigation.canLongClickOverrideDisabledWorkflow(DesktopWorkflow.ResultsExport, noEvent))
+        assertEquals(
+            "Race Ops disabled: open or create an Event File first. Long-click for 3 seconds to explore this workflow.",
+            DesktopNavigation.disabledWorkflowReasonWithOverrideHint(DesktopWorkflow.RaceOps, noEvent)
+        )
+        assertEquals(
+            "Results need at least one SI-card readout or unmatched readout. Long-click for 3 seconds to explore this workflow.",
+            DesktopNavigation.disabledWorkflowReasonWithOverrideHint(DesktopWorkflow.ResultsExport, noEvent)
+        )
+    }
+
+    @Test
     fun disabledRaceOpsReasonIdentifiesMissingDrawnStartTimes() {
         val readiness = DesktopNavigationReadiness(
             hasEventFile = true,

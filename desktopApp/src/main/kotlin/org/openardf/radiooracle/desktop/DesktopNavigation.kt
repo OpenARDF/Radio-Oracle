@@ -541,6 +541,24 @@ object DesktopNavigation {
         }
     }
 
+    fun canLongClickOverrideDisabledWorkflow(
+        workflow: DesktopWorkflow,
+        readiness: DesktopNavigationReadiness
+    ): Boolean =
+        !isWorkflowEnabled(workflow, readiness)
+
+    fun disabledWorkflowReasonWithOverrideHint(
+        workflow: DesktopWorkflow,
+        readiness: DesktopNavigationReadiness
+    ): String? {
+        val reason = disabledWorkflowReason(workflow, readiness) ?: return null
+        return if (canLongClickOverrideDisabledWorkflow(workflow, readiness)) {
+            "$reason Long-click for 3 seconds to explore this workflow."
+        } else {
+            reason
+        }
+    }
+
     fun disabledItemReason(item: DesktopNavItem, readiness: DesktopNavigationReadiness): String? {
         if (isItemEnabled(item, readiness)) {
             return null

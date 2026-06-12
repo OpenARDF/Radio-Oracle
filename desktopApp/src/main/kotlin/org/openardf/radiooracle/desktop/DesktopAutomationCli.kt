@@ -146,11 +146,24 @@ object DesktopAutomationCli {
         return runCatching {
             val projectFile = pathText?.let { DesktopProjectFiles.read(Path.of(it)) }
             val readiness = DesktopNavigationReadiness.from(projectFile)
-            val items = DesktopWorkflow.entries.flatMap { workflow ->
+            val workflowItems = DesktopWorkflow.bottomBarEntries.map { workflow ->
+                val enabled = DesktopNavigation.isWorkflowEnabled(workflow, readiness)
+                val longClickOverride = DesktopNavigation.canLongClickOverrideDisabledWorkflow(workflow, readiness)
+                mapOf(
+                    "kind" to "workflow",
+                    "workflow" to workflow.label,
+                    "label" to workflow.shortLabel,
+                    "enabled" to enabled,
+                    "longClickOverride" to longClickOverride,
+                    "disabledReason" to DesktopNavigation.disabledWorkflowReasonWithOverrideHint(workflow, readiness)
+                )
+            }
+            val menuItems = DesktopWorkflow.entries.flatMap { workflow ->
                 DesktopNavigation.rootItems(workflow).map { item ->
                     val enabled = DesktopNavigation.isItemEnabled(item, readiness)
                     val longClickOverride = DesktopNavigation.canLongClickOverrideDisabledMenu(item, readiness)
                     mapOf(
+                        "kind" to "menu",
                         "workflow" to workflow.label,
                         "label" to item.label,
                         "enabled" to enabled,
@@ -159,6 +172,7 @@ object DesktopAutomationCli {
                     )
                 }
             }
+            val items = workflowItems + menuItems
             out.println(
                 jsonObject(
                     "command" to "nav-availability",

@@ -71,6 +71,9 @@ class DesktopAutomationCliTest {
 
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"command\":\"nav-availability\""))
+        assertTrue(result.stdout.contains("\"kind\":\"workflow\""))
+        assertTrue(result.stdout.contains("\"label\":\"Race Ops\""))
+        assertTrue(result.stdout.contains("Long-click for 3 seconds to explore this workflow."))
         assertTrue(result.stdout.contains("\"label\":\"Categories\""))
         assertTrue(result.stdout.contains("\"longClickOverride\":true"))
         assertTrue(result.stdout.contains("Long-click for 3 seconds to explore this menu."))
