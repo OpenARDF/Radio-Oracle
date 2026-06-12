@@ -36,6 +36,29 @@ desktop-launch:
 
 desktop-relaunch: desktop-close desktop-package desktop-launch
 
+# Commit pending changes, push the current branch, and relaunch the packaged app.
+commit-push-launch message:
+    just commit-push {{quote(message)}}
+    just desktop-relaunch
+
+# Commit pending changes and push the current branch.
+commit-push message:
+    git diff --check
+    if [ -n "$$(git status --porcelain)" ]; then \
+        git add -A; \
+        git diff --cached --check; \
+        git status --short; \
+        git commit -m {{quote(message)}}; \
+    else \
+        echo "No changes to commit"; \
+    fi
+    git push origin "$$(git branch --show-current)"
+
+# Run the desktop test suite before committing, pushing, and relaunching.
+test-commit-push-launch message:
+    just test
+    just commit-push-launch {{quote(message)}}
+
 desktop-log:
     tail -n 120 "{{debug_log}}"
 
