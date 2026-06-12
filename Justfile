@@ -44,7 +44,7 @@ commit-push-launch message:
 # Commit pending changes and push the current branch.
 commit-push message:
     git diff --check
-    if [ -n "$$(git status --porcelain)" ]; then \
+    if [ -n "$(git status --porcelain)" ]; then \
         git add -A; \
         git diff --cached --check; \
         git status --short; \
@@ -52,7 +52,7 @@ commit-push message:
     else \
         echo "No changes to commit"; \
     fi
-    git push origin "$$(git branch --show-current)"
+    git push origin "$(git branch --show-current)"
 
 # Run the desktop test suite before committing, pushing, and relaunching.
 test-commit-push-launch message:
