@@ -635,6 +635,7 @@ object DesktopCourseAnalyzer {
             effectiveLengthMeters = protectedCourseInfo?.effectiveLengthMeters(),
             estimatedIdealSeconds = estimatedIdealSeconds,
             waitRows = waitRows,
+            waitRenumbering = waitRenumbering,
             idealOrderMatches = idealOrderMatches
         ) + (providedRuleChecks + calculatedRuleChecks)
             .distinctBy { "${it.label}:${it.value}" }
@@ -2313,6 +2314,7 @@ object DesktopCourseAnalyzer {
         effectiveLengthMeters: Int?,
         estimatedIdealSeconds: Int?,
         waitRows: List<DesktopCourseWaitRow>,
+        waitRenumbering: DesktopCourseWaitRenumbering?,
         idealOrderMatches: Boolean?
     ): List<DesktopCourseGoodnessMetric> {
         val targetSeconds = when (raceType) {
@@ -2404,6 +2406,21 @@ object DesktopCourseAnalyzer {
                     }
                 )
             )
+            waitRenumbering
+                ?.takeIf { it.improvesWait }
+                ?.let { renumbering ->
+                    add(
+                        DesktopCourseGoodnessMetric(
+                            "Total ideal-route wait time with renumbering",
+                            compactDurationText(renumbering.bestTotalWaitSeconds),
+                            if (renumbering.bestTotalWaitSeconds == 0) {
+                                DesktopCourseMetricStatus.Good
+                            } else {
+                                DesktopCourseMetricStatus.Warning
+                            }
+                        )
+                    )
+                }
             add(
                 DesktopCourseGoodnessMetric(
                     "Challenge vs target winning time",
@@ -2419,6 +2436,25 @@ object DesktopCourseAnalyzer {
                     }
                 )
             )
+            waitRenumbering
+                ?.takeIf { it.improvesWait && estimatedIdealSeconds != null }
+                ?.let { renumbering ->
+                    val improvementSeconds = (renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)
+                        .coerceAtLeast(0)
+                    val renumberedIdealSeconds = (requireNotNull(estimatedIdealSeconds) - improvementSeconds)
+                        .coerceAtLeast(0)
+                    add(
+                        DesktopCourseGoodnessMetric(
+                            "Calculated ideal finish time with renumbering",
+                            "${compactDurationText(renumberedIdealSeconds)} / ${compactDurationText(targetSeconds)}",
+                            if (abs(renumberedIdealSeconds - targetSeconds) <= targetSeconds * 0.15) {
+                                DesktopCourseMetricStatus.Good
+                            } else {
+                                DesktopCourseMetricStatus.Warning
+                            }
+                        )
+                    )
+                }
         }
     }
 

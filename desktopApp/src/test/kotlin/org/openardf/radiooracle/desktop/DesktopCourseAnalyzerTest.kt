@@ -437,6 +437,17 @@ class DesktopCourseAnalyzerTest {
         assertTrue(summary.summaryExplanation.contains("may reduce stored-route wait time"))
         assertTrue(summary.summaryExplanation.contains("see Section 1 for the assignment details"))
         assertTrue(DesktopCourseAnalysisExports.reportText(summary).contains("Renumbered wait times"))
+        val metricLabels = summary.metrics.map { it.label }
+        assertEquals(
+            metricLabels.indexOf("Total ideal-route wait time") + 1,
+            metricLabels.indexOf("Total ideal-route wait time with renumbering")
+        )
+        assertEquals(
+            metricLabels.indexOf("Challenge vs target winning time") + 1,
+            metricLabels.indexOf("Calculated ideal finish time with renumbering")
+        )
+        assertTrue(summary.metrics.first { it.label == "Total ideal-route wait time with renumbering" }.value.contains(":"))
+        assertTrue(summary.metrics.first { it.label == "Calculated ideal finish time with renumbering" }.value.contains(" / "))
     }
 
     @Test
