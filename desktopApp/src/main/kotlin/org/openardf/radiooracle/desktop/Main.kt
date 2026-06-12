@@ -470,19 +470,41 @@ fun main(args: Array<String>) = application {
                 return false
             }
             val result = runCatching {
+                val currentProjectForDelete = projectSession.currentProject
+                    ?: throw IllegalStateException("Load an Event File before deleting controls.")
                 val protectedUseCount = DesktopImportPreviews.protectedCourseUseCount(
                     protectedCourseInfoByCategoryId,
                     setOf(controlId)
                 )
-                require(protectedUseCount == 0) {
-                    "Control is used by $protectedUseCount stored course${if (protectedUseCount == 1) "" else "s"}. Remove or reimport course data before deleting this control."
+                val cleanupResult = if (protectedUseCount > 0) {
+                    val password = protectedCoursePassword
+                        ?: throw IllegalStateException("Unlock course data before deleting controls so protected route references can be checked.")
+                    DesktopProtectedCourseCleanup.removeStaleControlReferencesForDeletedControl(
+                        projectFile = currentProjectForDelete,
+                        protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                        controlId = controlId,
+                        password = password
+                    )
+                } else {
+                    DesktopProtectedCourseCleanupResult(
+                        projectFile = currentProjectForDelete,
+                        protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                        clearedCourseCount = 0,
+                        prunedCourseCount = 0
+                    )
                 }
                 projectFile = projectSession.updateCurrentProject { project ->
-                    EventProjectEditor.removeControl(project, controlId)
+                    EventProjectEditor.removeControl(cleanupResult.projectFile, controlId)
                 }
+                protectedCourseInfoByCategoryId = cleanupResult.protectedCourseInfoByCategoryId
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
                 recordActivity("Removed control.")
-                projectStatusText = "Unsaved changes."
+                val cleanedCourseCount = cleanupResult.clearedCourseCount + cleanupResult.prunedCourseCount
+                projectStatusText = if (cleanedCourseCount > 0) {
+                    "Removed control and cleaned stale protected course references from $cleanedCourseCount stored course${if (cleanedCourseCount == 1) "" else "s"}. Unsaved changes."
+                } else {
+                    "Unsaved changes."
+                }
             }
             result.onFailure { error ->
                 projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
