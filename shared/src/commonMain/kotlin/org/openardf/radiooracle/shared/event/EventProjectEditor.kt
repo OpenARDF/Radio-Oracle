@@ -45,6 +45,13 @@ data class CategoryCsvImportOutcome(
     val warnings: List<String> = emptyList()
 )
 
+data class ResultRecalculationOutcome(
+    val projectFile: EventProjectFile,
+    val recalculatedCount: Int,
+    val changedCount: Int,
+    val skippedStatusOnlyCount: Int
+)
+
 /** Shared Event File editing helpers used by desktop and future non-Android flows. */
 object EventProjectEditor {
     /** Returns a copy of the Event File with a validated race name. */
@@ -1826,6 +1833,114 @@ object EventProjectEditor {
             raceData = projectFile.raceData.copy(
                 competitorData = competitorData
             )
+        )
+    }
+
+    /** Re-evaluates stored readouts after late course, category, control, or competitor changes. */
+    fun recalculateResults(projectFile: EventProjectFile): ResultRecalculationOutcome {
+        var recalculatedCount = 0
+        var changedCount = 0
+        var skippedStatusOnlyCount = 0
+
+        fun EventReadoutData.recalculated(competitor: EventCompetitor?): EventReadoutData {
+            val hasTimingOrPunches = result.startTimeSeconds != null ||
+                result.finishTimeSeconds != null ||
+                punches.isNotEmpty()
+            if (!hasTimingOrPunches) {
+                skippedStatusOnlyCount++
+                return this
+            }
+
+            val categoryId = result.categoryId ?: competitor?.categoryId
+            val categoryData = categoryId?.let { id ->
+                projectFile.raceData.categories.firstOrNull { it.category.id == id }
+            }
+            val controlPunches = punches
+                .filter { it.punch.punchType == SIRecordType.CONTROL }
+                .map { EvaluationPunch(it.punch.siCode, SIRecordType.CONTROL) }
+            val evaluation = categoryData?.let { data ->
+                CourseEvaluator.evaluate(
+                    raceType = data.category.effectiveRaceType(projectFile.raceData.race),
+                    punches = controlPunches,
+                    controlPoints = projectFile.raceData.evaluationControlPoints(data)
+                )
+            }
+            val startSeconds = result.startTimeSeconds
+            val finishSeconds = result.finishTimeSeconds
+            val runTimeSeconds = if (startSeconds != null && finishSeconds != null) {
+                finishSeconds - startSeconds
+            } else {
+                0
+            }
+            val timeLimitSeconds = categoryData?.category?.effectiveTimeLimitSeconds(projectFile.raceData.race)
+                ?: projectFile.raceData.race.timeLimitSeconds
+            val resultStatus = when {
+                startSeconds == null || finishSeconds == null -> ResultStatus.ERROR
+                runTimeSeconds > timeLimitSeconds -> ResultStatus.OVER_TIME_LIMIT
+                evaluation != null -> evaluation.resultStatus
+                else -> ResultStatus.NO_RANKING
+            }
+            var controlIndex = 0
+            val updatedPunches = punches.map { aliasPunch ->
+                when (aliasPunch.punch.punchType) {
+                    SIRecordType.CONTROL -> {
+                        val punchStatus = evaluation?.punchStatuses?.getOrNull(controlIndex) ?: PunchStatus.UNKNOWN
+                        controlIndex++
+                        aliasPunch.copy(punch = aliasPunch.punch.copy(punchStatus = punchStatus))
+                    }
+                    SIRecordType.START,
+                    SIRecordType.FINISH -> aliasPunch.copy(
+                        punch = aliasPunch.punch.copy(punchStatus = PunchStatus.VALID)
+                    )
+                    else -> aliasPunch
+                }
+            }
+            val updatedResult = result.copy(
+                resultStatus = resultStatus,
+                points = evaluation?.points ?: 0,
+                runTimeSeconds = runTimeSeconds,
+                categoryId = categoryId,
+                sent = if (
+                    result.resultStatus != resultStatus ||
+                    result.points != (evaluation?.points ?: 0) ||
+                    result.runTimeSeconds != runTimeSeconds ||
+                    result.categoryId != categoryId ||
+                    punches != updatedPunches
+                ) {
+                    false
+                } else {
+                    result.sent
+                }
+            )
+            val updatedReadout = copy(result = updatedResult, punches = updatedPunches)
+            recalculatedCount++
+            if (updatedReadout != this) {
+                changedCount++
+            }
+            return updatedReadout
+        }
+
+        val competitorData = projectFile.raceData.competitorData.map { data ->
+            val readoutData = data.readoutData ?: return@map data
+            val competitor = data.competitorCategory.competitor
+            data.copy(readoutData = readoutData.recalculated(competitor))
+        }
+        val unmatchedReadoutData = projectFile.raceData.unmatchedReadoutData.map { readoutData ->
+            readoutData.recalculated(null)
+        }
+
+        val recalculatedProjectFile = projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                competitorData = competitorData,
+                unmatchedReadoutData = unmatchedReadoutData
+            )
+        ).withResultPlaces()
+
+        return ResultRecalculationOutcome(
+            projectFile = recalculatedProjectFile,
+            recalculatedCount = recalculatedCount,
+            changedCount = changedCount,
+            skippedStatusOnlyCount = skippedStatusOnlyCount
         )
     }
 

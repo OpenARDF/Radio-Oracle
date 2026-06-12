@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.shared.event
 
 import org.openardf.radiooracle.shared.domain.ControlPointType
+import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -1835,6 +1836,71 @@ class EventProjectEditorTest {
             listOf(2, 1, 1),
             updated.raceData.competitorData.map { it.readoutData!!.result.place }
         )
+    }
+
+    @Test
+    fun recalculatesDownloadedResultsAfterCourseChangesAndMarksChangedResultsUnsent() {
+        val originalCategory = categoryData("cat-1", "M21", controlSiCodes = listOf(31, 32))
+        val original = projectFile(
+            raceType = RaceType.ORIENTEERING,
+            categories = listOf(originalCategory),
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", siNumber = 2005010, category = originalCategory.category)
+            )
+        )
+        val withReadout = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = original,
+            resultId = "result-1",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = sportIdentReadout(siNumber = 2005010, controlCodes = listOf(31, 32)),
+            readoutDateTimeIso = "2026-05-31T12:00",
+            punchIdFactory = { index, type -> "punch-$index-${type.name}" }
+        )
+        val sent = EventProjectEditor.markReadoutsSent(withReadout, setOf("result-1"))
+        val changedCourse = sent.copy(
+            raceData = sent.raceData.copy(
+                categories = listOf(categoryData("cat-1", "M21", controlSiCodes = listOf(31, 33)))
+            )
+        )
+
+        val outcome = EventProjectEditor.recalculateResults(changedCourse)
+        val recalculated = outcome.projectFile.raceData.competitorData.single().readoutData!!
+
+        assertEquals(1, outcome.recalculatedCount)
+        assertEquals(1, outcome.changedCount)
+        assertEquals(0, outcome.skippedStatusOnlyCount)
+        assertEquals(ResultStatus.MISPUNCHED, recalculated.result.resultStatus)
+        assertEquals(1_200, recalculated.result.runTimeSeconds)
+        assertEquals(false, recalculated.result.sent)
+        assertEquals(1, recalculated.result.place)
+        assertEquals(PunchStatus.VALID, recalculated.punches.first().punch.punchStatus)
+        assertEquals(PunchStatus.VALID, recalculated.punches.last().punch.punchStatus)
+    }
+
+    @Test
+    fun recalculationPreservesStatusOnlyResults() {
+        val category = category("cat-1", "M21")
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21", controlSiCodes = listOf(31))),
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", siNumber = 2005010, category = category)
+            )
+        )
+        val withDns = EventProjectEditor.markCompetitorDidNotStart(
+            projectFile = original,
+            competitorId = "comp-1",
+            resultId = "dns-result",
+            readoutDateTimeIso = "2026-05-31T12:00"
+        )
+
+        val outcome = EventProjectEditor.recalculateResults(withDns)
+        val readout = outcome.projectFile.raceData.competitorData.single().readoutData!!
+
+        assertEquals(0, outcome.recalculatedCount)
+        assertEquals(0, outcome.changedCount)
+        assertEquals(1, outcome.skippedStatusOnlyCount)
+        assertEquals(ResultStatus.DID_NOT_START, readout.result.resultStatus)
+        assertEquals(true, readout.result.modified)
     }
 
     @Test

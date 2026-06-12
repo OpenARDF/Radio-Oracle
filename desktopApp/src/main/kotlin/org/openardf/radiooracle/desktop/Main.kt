@@ -116,6 +116,7 @@ import org.openardf.radiooracle.shared.event.EventStartListRuleSeverity
 import org.openardf.radiooracle.shared.event.EventStartListRow
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
+import org.openardf.radiooracle.shared.event.ResultRecalculationOutcome
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
 import org.openardf.radiooracle.shared.event.StartDrawStartGroupMode
@@ -464,6 +465,30 @@ fun main(args: Array<String>) = application {
                 projectStatusText = "Restored checkpoint from before ${checkpoint.title}. Unsaved changes."
             }.onFailure { error ->
                 projectStatusText = "Restore failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
+        fun recalculateResults() {
+            runCatching {
+                var outcome: ResultRecalculationOutcome? = null
+                projectFile = projectSession.updateCurrentProject { currentProject ->
+                    EventProjectEditor.recalculateResults(currentProject).also {
+                        outcome = it
+                    }.projectFile
+                }
+                syncProjectState()
+                val result = requireNotNull(outcome)
+                val skippedText = result.skippedStatusOnlyCount
+                    .takeIf { it > 0 }
+                    ?.let { " $it status-only results preserved." }
+                    .orEmpty()
+                projectStatusText =
+                    "Recalculated ${result.recalculatedCount} results; ${result.changedCount} changed.$skippedText"
+                recordActivity(projectStatusText)
+                DesktopDebugLog.info("Results", projectStatusText)
+            }.onFailure { error ->
+                projectStatusText = "Result recalculation failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("Results", projectStatusText)
             }
         }
 
@@ -2698,6 +2723,7 @@ fun main(args: Array<String>) = application {
             onInsertTestCompetitors = ::insertTestCompetitors,
             onInsertTestSportIdentDownloads = ::insertTestSportIdentDownloads,
             onRestoreRecentImportCheckpoint = ::restoreRecentImportCheckpoint,
+            onRecalculateResults = ::recalculateResults,
             onNavAction = ::handleNavAction,
             isProtectedCourseOrderUnlocked = protectedCoursePassword != null,
             protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
@@ -4399,6 +4425,7 @@ private fun RadioOManagerDesktopApp(
     onInsertTestCompetitors: () -> Unit = {},
     onInsertTestSportIdentDownloads: () -> Unit = {},
     onRestoreRecentImportCheckpoint: () -> Unit = {},
+    onRecalculateResults: () -> Unit = {},
     onNavAction: (DesktopNavAction) -> Unit = {},
     hasDefaultUnsavedNewEventFileDraft: Boolean = false,
     hasEditedUnsavedNewEventFileDraft: Boolean = false,
@@ -4563,6 +4590,7 @@ private fun RadioOManagerDesktopApp(
                                 recentImportReport = recentImportReport,
                                 recentImportCheckpoint = recentImportCheckpoint,
                                 recentActivityLog = recentActivityLog,
+                                onRecalculateResults = onRecalculateResults,
                                 onRetrieveMissingCourseElevations = onRetrieveMissingCourseElevations,
                                 onDownloadVenueElevationCache = onDownloadVenueElevationCache,
                                 onOpenVenueElevationCacheFolder = onOpenVenueElevationCacheFolder,
@@ -5093,6 +5121,7 @@ private fun SectionWorkspace(
     onInsertTestCompetitors: () -> Unit,
     onInsertTestSportIdentDownloads: () -> Unit,
     onRestoreRecentImportCheckpoint: () -> Unit,
+    onRecalculateResults: () -> Unit,
     onNavAction: (DesktopNavAction) -> Unit
 ) {
     Column(
@@ -5267,6 +5296,7 @@ private fun SectionWorkspace(
                 recentImportCheckpoint = recentImportCheckpoint,
                 recentActivityLog = recentActivityLog,
                 onRestoreRecentImportCheckpoint = onRestoreRecentImportCheckpoint,
+                onRecalculateResults = onRecalculateResults,
                 onInsertTestControls = onInsertTestControls,
                 onInsertTestCategories = onInsertTestCategories,
                 onInsertTestCompetitors = onInsertTestCompetitors,
@@ -5343,6 +5373,7 @@ private fun EventDiagnosticsPanel(
     recentImportCheckpoint: DesktopImportCheckpoint?,
     recentActivityLog: List<String>,
     onRestoreRecentImportCheckpoint: () -> Unit,
+    onRecalculateResults: () -> Unit,
     onInsertTestControls: () -> Unit,
     onInsertTestCategories: () -> Unit,
     onInsertTestCompetitors: () -> Unit,
@@ -5370,6 +5401,16 @@ private fun EventDiagnosticsPanel(
             )
         )
         DetailRow("Validation", diagnostics.validationState)
+        if (diagnostics.resultCount > 0 || diagnostics.readoutCount > 0) {
+            Button(onClick = onRecalculateResults) {
+                ButtonLabel("Recalculate Results")
+            }
+            Text(
+                text = "Re-evaluates stored readouts against the current controls, categories, and course assignments. Changed results are marked unsent for reposting.",
+                color = Color.DarkGray,
+                fontSize = 12.sp
+            )
+        }
         Text(
             text = "Event Readiness",
             color = DesktopPalette.PrimaryVariant,
