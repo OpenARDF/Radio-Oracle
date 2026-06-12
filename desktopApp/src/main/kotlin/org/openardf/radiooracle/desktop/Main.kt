@@ -4222,9 +4222,46 @@ private fun AboutRadioOracleDialog(onDismiss: () -> Unit) {
 
 private sealed interface DesktopPendingNavigation {
     data object Back : DesktopPendingNavigation
-    data class Workflow(val workflow: DesktopWorkflow) : DesktopPendingNavigation
-    data class Item(val itemId: String) : DesktopPendingNavigation
+    data class Workflow(val workflow: DesktopWorkflow, val bypassedDisabled: Boolean = false) : DesktopPendingNavigation
+    data class Item(val itemId: String, val bypassedDisabled: Boolean = false) : DesktopPendingNavigation
 }
+
+private data class BypassedDisabledNavigation(
+    val workflow: DesktopWorkflow,
+    val itemId: String?
+)
+
+private const val DisabledNavigationExplorationStatus = "Disabled menu being explored; some commands may not work until required event data is complete."
+
+private fun DesktopPendingNavigation.bypassedDisabledSelection(
+    appliedState: DesktopNavState
+): BypassedDisabledNavigation? =
+    when (this) {
+        DesktopPendingNavigation.Back -> null
+        is DesktopPendingNavigation.Workflow -> if (bypassedDisabled) {
+            BypassedDisabledNavigation(workflow = appliedState.workflow, itemId = null)
+        } else {
+            null
+        }
+        is DesktopPendingNavigation.Item -> if (bypassedDisabled) {
+            BypassedDisabledNavigation(workflow = appliedState.workflow, itemId = appliedState.selectedItemId)
+        } else {
+            null
+        }
+    }
+
+private fun BypassedDisabledNavigation.isActiveFor(
+    navState: DesktopNavState,
+    readiness: DesktopNavigationReadiness
+): Boolean =
+    when {
+        workflow != navState.workflow -> false
+        itemId == null -> !DesktopNavigation.isWorkflowEnabled(workflow, readiness)
+        itemId != navState.selectedItemId -> false
+        else -> DesktopNavigation.itemById(workflow, itemId)
+            ?.let { !DesktopNavigation.isItemEnabled(it, readiness) }
+            ?: false
+    }
 
 private data class PendingAssignedControlsWarning(
     val warning: EventAssignedControlWarning,
@@ -4456,7 +4493,10 @@ private fun RadioOManagerDesktopApp(
         var navState by remember { mutableStateOf(DesktopNavState()) }
         var pendingNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
         var pendingDirtySubmenuNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
+        var bypassedDisabledNavigation by remember { mutableStateOf<BypassedDisabledNavigation?>(null) }
         val navigationReadiness = DesktopNavigationReadiness.from(projectFile)
+        val activeBypassedDisabledNavigation = bypassedDisabledNavigation
+            ?.takeIf { it.isActiveFor(navState, navigationReadiness) }
 
         fun selectionFor(intent: DesktopPendingNavigation): Pair<DesktopNavState, DesktopNavAction?> =
             when (intent) {
@@ -4476,11 +4516,13 @@ private fun RadioOManagerDesktopApp(
             if (isProtectedCourseOrderUnlocked && DesktopNavigation.isLeavingCategoriesMenu(navState, nextState)) {
                 onLockProtectedCourseOrder()
             }
-            navState = nextState
+            var appliedState = nextState
             action?.let {
                 onNavAction(it)
-                navState = DesktopNavigation.returnToParentMenuAfterAction(nextState, it)
+                appliedState = DesktopNavigation.returnToParentMenuAfterAction(nextState, it)
             }
+            navState = appliedState
+            bypassedDisabledNavigation = intent.bypassedDisabledSelection(appliedState)
         }
 
         fun requestNavigation(intent: DesktopPendingNavigation) {
@@ -4524,16 +4566,28 @@ private fun RadioOManagerDesktopApp(
                     NavigationRail(
                         navState = navState,
                         navigationReadiness = navigationReadiness,
+                        bypassedDisabledNavigation = activeBypassedDisabledNavigation,
                         isNavActionEnabled = isNavActionEnabled,
                         disabledNavActionReason = disabledNavActionReason,
                         onBack = { requestNavigation(DesktopPendingNavigation.Back) },
                         onSaveEvent = { onNavAction(DesktopNavAction.SaveEventFile) },
-                        onItemSelected = { item ->
-                            requestNavigation(DesktopPendingNavigation.Item(item.id))
+                        onItemSelected = { item, bypassedDisabled ->
+                            requestNavigation(DesktopPendingNavigation.Item(item.id, bypassedDisabled))
                         }
                     )
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .background(
+                                    if (activeBypassedDisabledNavigation != null) {
+                                        DesktopPalette.WarningBackground
+                                    } else {
+                                        DesktopPalette.White
+                                    }
+                                )
+                        ) {
                             SectionWorkspace(
                                 workflow = navState.workflow,
                                 section = navState.selectedSection,
@@ -4624,8 +4678,9 @@ private fun RadioOManagerDesktopApp(
                         WorkflowBar(
                             selectedWorkflow = navState.workflow,
                             navigationReadiness = navigationReadiness,
-                            onWorkflowSelected = { workflow ->
-                                requestNavigation(DesktopPendingNavigation.Workflow(workflow))
+                            bypassedDisabledNavigation = activeBypassedDisabledNavigation,
+                            onWorkflowSelected = { workflow, bypassedDisabled ->
+                                requestNavigation(DesktopPendingNavigation.Workflow(workflow, bypassedDisabled))
                             }
                         )
                     }
@@ -4634,6 +4689,7 @@ private fun RadioOManagerDesktopApp(
                     projectStatusText = projectStatusText,
                     hasUnsavedChanges = hasUnsavedChanges,
                     navigationDisabledSummary = DesktopNavigation.primaryDisabledSummary(navigationReadiness),
+                    isDisabledNavigationExploration = activeBypassedDisabledNavigation != null,
                     siReaderState = siReaderState,
                     isEventFileOpen = projectFile != null,
                     isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
@@ -4824,6 +4880,15 @@ private fun saveEventButtonColors() =
         disabledContentColor = DesktopPalette.Disconnected
     )
 
+@Composable
+private fun bypassedDisabledMenuButtonColors() =
+    ButtonDefaults.buttonColors(
+        backgroundColor = DesktopPalette.Warning,
+        contentColor = DesktopPalette.Black,
+        disabledBackgroundColor = DesktopPalette.Warning,
+        disabledContentColor = DesktopPalette.Black
+    )
+
 private const val DisabledMenuOverrideHoldMillis = 3_000L
 
 private fun Modifier.disabledMenuLongClickOverride(
@@ -4863,11 +4928,12 @@ private fun Modifier.disabledMenuLongClickOverride(
 private fun NavigationRail(
     navState: DesktopNavState,
     navigationReadiness: DesktopNavigationReadiness,
+    bypassedDisabledNavigation: BypassedDisabledNavigation?,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
     disabledNavActionReason: (DesktopNavAction) -> String?,
     onBack: () -> Unit,
     onSaveEvent: () -> Unit,
-    onItemSelected: (DesktopNavItem) -> Unit
+    onItemSelected: (DesktopNavItem, Boolean) -> Unit
 ) {
     val items = DesktopNavigation.currentItems(navState)
     val navigationItems = items.filterNot { it.action == DesktopNavAction.SaveEventFile }
@@ -4892,6 +4958,8 @@ private fun NavigationRail(
                 val actionEnabled = item.action?.let(isNavActionEnabled) ?: true
                 val isEnabled = isNavigationEnabled && actionEnabled
                 val canLongClickOverride = DesktopNavigation.canLongClickOverrideDisabledMenu(item, navigationReadiness)
+                val isBypassedDisabled = bypassedDisabledNavigation?.workflow == item.workflow &&
+                    bypassedDisabledNavigation.itemId == item.id
                 val disabledReason = DesktopNavigation.disabledItemReasonWithMenuOverrideHint(item, navigationReadiness)
                     ?: item.action?.let(disabledNavActionReason)
                 DisabledReasonTooltip(
@@ -4901,19 +4969,19 @@ private fun NavigationRail(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .disabledMenuLongClickOverride(canLongClickOverride) { onItemSelected(item) }
+                            .disabledMenuLongClickOverride(canLongClickOverride) { onItemSelected(item, true) }
                     ) {
                         Button(
-                            onClick = { onItemSelected(item) },
+                            onClick = { onItemSelected(item, false) },
                             enabled = isEnabled,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 34.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            colors = if (item.action == DesktopNavAction.SaveEventFile) {
-                                saveEventButtonColors()
-                            } else {
-                                ButtonDefaults.buttonColors()
+                            colors = when {
+                                isBypassedDisabled -> bypassedDisabledMenuButtonColors()
+                                item.action == DesktopNavAction.SaveEventFile -> saveEventButtonColors()
+                                else -> ButtonDefaults.buttonColors()
                             }
                         ) {
                             Text(
@@ -4987,7 +5055,8 @@ private fun NavigationRail(
 private fun WorkflowBar(
     selectedWorkflow: DesktopWorkflow,
     navigationReadiness: DesktopNavigationReadiness,
-    onWorkflowSelected: (DesktopWorkflow) -> Unit
+    bypassedDisabledNavigation: BypassedDisabledNavigation?,
+    onWorkflowSelected: (DesktopWorkflow, Boolean) -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -5002,16 +5071,18 @@ private fun WorkflowBar(
             val isSelected = workflow == selectedWorkflow
             val isEnabled = DesktopNavigation.isWorkflowEnabled(workflow, navigationReadiness)
             val canLongClickOverride = DesktopNavigation.canLongClickOverrideDisabledWorkflow(workflow, navigationReadiness)
+            val isBypassedDisabled = bypassedDisabledNavigation?.workflow == workflow &&
+                bypassedDisabledNavigation.itemId == null
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .disabledMenuLongClickOverride(canLongClickOverride) { onWorkflowSelected(workflow) }
+                    .disabledMenuLongClickOverride(canLongClickOverride) { onWorkflowSelected(workflow, true) }
             ) {
                 DisabledReasonTooltip(
                     DesktopNavigation.disabledWorkflowReasonWithOverrideHint(workflow, navigationReadiness)
                 ) {
                     Button(
-                        onClick = { onWorkflowSelected(workflow) },
+                        onClick = { onWorkflowSelected(workflow, false) },
                         enabled = isEnabled,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -5022,8 +5093,16 @@ private fun WorkflowBar(
                         colors = ButtonDefaults.buttonColors(
                             backgroundColor = DesktopPalette.PrimaryVariant,
                             contentColor = DesktopPalette.White,
-                            disabledBackgroundColor = DesktopPalette.LightGrey,
-                            disabledContentColor = DesktopPalette.Disconnected
+                            disabledBackgroundColor = if (isBypassedDisabled) {
+                                DesktopPalette.Warning
+                            } else {
+                                DesktopPalette.LightGrey
+                            },
+                            disabledContentColor = if (isBypassedDisabled) {
+                                DesktopPalette.Black
+                            } else {
+                                DesktopPalette.Disconnected
+                            }
                         )
                     ) {
                         Text(
@@ -11082,6 +11161,7 @@ private fun StatusStrip(
     projectStatusText: String,
     hasUnsavedChanges: Boolean,
     navigationDisabledSummary: String?,
+    isDisabledNavigationExploration: Boolean,
     siReaderState: DesktopSiReaderUiState,
     isEventFileOpen: Boolean,
     isProtectedCourseOrderUnlocked: Boolean,
@@ -11092,7 +11172,7 @@ private fun StatusStrip(
     } else {
         siReaderState.severity
     }
-    val backgroundColor = if (hasUnsavedChanges) {
+    val backgroundColor = if (isDisabledNavigationExploration || hasUnsavedChanges) {
         DesktopPalette.Warning
     } else {
         when (effectiveSeverity) {
@@ -11102,7 +11182,7 @@ private fun StatusStrip(
             DesktopSiReaderSeverity.ERROR -> DesktopPalette.Error
         }
     }
-    val textColor = if (hasUnsavedChanges) {
+    val textColor = if (isDisabledNavigationExploration || hasUnsavedChanges) {
         DesktopPalette.Black
     } else {
         when (effectiveSeverity) {
@@ -11114,6 +11194,10 @@ private fun StatusStrip(
     }
     val statusText = buildString {
         append(siReaderState.statusText)
+        if (isDisabledNavigationExploration) {
+            append(" - ")
+            append(DisabledNavigationExplorationStatus)
+        }
         append(" - ")
         append(projectStatusText)
         if (hasUnsavedChanges) {

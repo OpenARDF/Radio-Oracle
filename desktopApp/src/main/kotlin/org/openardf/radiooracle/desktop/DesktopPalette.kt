@@ -20,6 +20,7 @@ object DesktopPalette {
     const val READING_ARGB = 0xFFFD8204L
     const val CONNECTED_ARGB = 0xFF0AE62FL
     const val WARNING_ARGB = 0xFFFFFF00L
+    const val WARNING_BACKGROUND_ARGB = 0xFFFFFDE7L
     const val LIGHT_GREY_ARGB = 0xFFCBC8C8L
 
     val Primary = Color(PRIMARY_ARGB)
@@ -33,6 +34,7 @@ object DesktopPalette {
     val Reading = Color(READING_ARGB)
     val Connected = Color(CONNECTED_ARGB)
     val Warning = Color(WARNING_ARGB)
+    val WarningBackground = Color(WARNING_BACKGROUND_ARGB)
     val LightGrey = Color(LIGHT_GREY_ARGB)
 }
 
