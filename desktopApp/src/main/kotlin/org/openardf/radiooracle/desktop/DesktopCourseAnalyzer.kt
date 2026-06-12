@@ -22,6 +22,7 @@ data class DesktopCourseAnalysisSummary(
     val categoryName: String,
     val rulesDocumentLabel: String,
     val speedModel: DesktopCourseSpeedModel,
+    val categorySpeedFactors: List<DesktopCourseCategorySpeedFactor>,
     val providedRouteSection: DesktopCourseAnalysisSection?,
     val calculatedRouteSection: DesktopCourseAnalysisSection?,
     val summaryExplanation: String,
@@ -140,6 +141,11 @@ data class DesktopCourseSpeedModel(
     val categoryModelLabel: String
 )
 
+data class DesktopCourseCategorySpeedFactor(
+    val categoryCodes: List<String>,
+    val multiplier: Double
+)
+
 enum class DesktopCourseRouteMapPointType {
     Start,
     Finish,
@@ -240,6 +246,26 @@ object DesktopCourseAnalyzer {
         "Estimated times use an elite-competitor baseline pace by race format, then apply a category age/gender multiplier and the event-wide Course Analyzer speed factor. When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not modeled."
     private const val CLASSIC_WAIT_TIMING_NOTE =
         "For Classic-style fox controls, timing assumes the competitor waits if the fox is off the air, then spends 30 seconds finding and punching before departing for the next leg; that delay affects later arrival phases."
+    private val CATEGORY_SPEED_FACTORS = listOf(
+        DesktopCourseCategorySpeedFactor(listOf("M21"), 1.00),
+        DesktopCourseCategorySpeedFactor(listOf("M19", "M40"), 0.95),
+        DesktopCourseCategorySpeedFactor(listOf("M50"), 0.86),
+        DesktopCourseCategorySpeedFactor(listOf("M60"), 0.76),
+        DesktopCourseCategorySpeedFactor(listOf("M70"), 0.65),
+        DesktopCourseCategorySpeedFactor(listOf("M80"), 0.55),
+        DesktopCourseCategorySpeedFactor(listOf("M16"), 0.80),
+        DesktopCourseCategorySpeedFactor(listOf("M14"), 0.65),
+        DesktopCourseCategorySpeedFactor(listOf("M12"), 0.55),
+        DesktopCourseCategorySpeedFactor(listOf("W21"), 0.88),
+        DesktopCourseCategorySpeedFactor(listOf("W19", "W35"), 0.84),
+        DesktopCourseCategorySpeedFactor(listOf("W45"), 0.74),
+        DesktopCourseCategorySpeedFactor(listOf("W55"), 0.64),
+        DesktopCourseCategorySpeedFactor(listOf("W65"), 0.55),
+        DesktopCourseCategorySpeedFactor(listOf("W75"), 0.47),
+        DesktopCourseCategorySpeedFactor(listOf("W16"), 0.72),
+        DesktopCourseCategorySpeedFactor(listOf("W14"), 0.60),
+        DesktopCourseCategorySpeedFactor(listOf("W12"), 0.52)
+    )
     private val classicCategoryRequirements = mapOf(
         "W19" to CourseRuleRequirement(4, 4, 6_000, 8_000),
         "W21" to CourseRuleRequirement(4, 4, 7_000, 9_000),
@@ -752,6 +778,7 @@ object DesktopCourseAnalyzer {
             categoryName = category.name,
             rulesDocumentLabel = USA_RULES_DOCUMENT_LABEL,
             speedModel = speedModel,
+            categorySpeedFactors = CATEGORY_SPEED_FACTORS,
             providedRouteSection = providedSection,
             calculatedRouteSection = calculatedSection,
             summaryExplanation = summaryExplanation(providedSection, calculatedSection, waitRenumbering, speedModel),
@@ -2355,27 +2382,10 @@ object DesktopCourseAnalyzer {
     }
 
     private fun categorySpeedMultiplier(categoryKey: String?): Double =
-        when (categoryKey) {
-            "M21" -> 1.00
-            "M19", "M40" -> 0.95
-            "M50" -> 0.86
-            "M60" -> 0.76
-            "M70" -> 0.65
-            "M80" -> 0.55
-            "M16" -> 0.80
-            "M14" -> 0.65
-            "M12" -> 0.55
-            "W21" -> 0.88
-            "W19", "W35" -> 0.84
-            "W45" -> 0.74
-            "W55" -> 0.64
-            "W65" -> 0.55
-            "W75" -> 0.47
-            "W16" -> 0.72
-            "W14" -> 0.60
-            "W12" -> 0.52
-            else -> 1.00
-        }
+        CATEGORY_SPEED_FACTORS
+            .firstOrNull { factor -> categoryKey in factor.categoryCodes }
+            ?.multiplier
+            ?: 1.00
 
     private fun categoryNameContainsRuleKey(categoryName: String, categoryKey: String): Boolean =
         Regex("""\b${Regex.escape(categoryKey)}\b""")

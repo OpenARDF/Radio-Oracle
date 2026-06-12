@@ -9689,10 +9689,35 @@ private fun CourseAnalysisSummarySection(result: DesktopCourseAnalysisSummary) {
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
+        CourseAnalysisSpeedFactorDetails(result)
         CourseAnalysisDetailRows(result)
         CourseAnalysisMetricRows(result.metrics)
         CourseAnalysisProfileComparison(result.profileComparison, result.elevationCacheNotes)
         CourseAnalysisRouteMaps(result.routeMaps)
+    }
+}
+
+@Composable
+private fun CourseAnalysisSpeedFactorDetails(result: DesktopCourseAnalysisSummary) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "Speed model factors",
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = courseAnalysisSpeedFactorExplanation(result.speedModel),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        result.categorySpeedFactors.forEach { factor ->
+            CourseAnalysisRow(
+                label = factor.categoryCodes.joinToString("/"),
+                value = "x${twoDecimalText(factor.multiplier)}"
+            )
+        }
+        CourseAnalysisRow("Unmatched categories", "x1.00")
     }
 }
 
@@ -10146,6 +10171,11 @@ private fun courseAnalysisSpeedModelText(speedModel: DesktopCourseSpeedModel): S
     "${twoDecimalText(speedModel.effectiveSpeedMetersPerSecond)} m/s; " +
         "${speedModel.categoryModelLabel} x${twoDecimalText(speedModel.categorySpeedMultiplier)}, " +
         "event x${twoDecimalText(speedModel.compensationFactor)}"
+
+private fun courseAnalysisSpeedFactorExplanation(speedModel: DesktopCourseSpeedModel): String =
+    "Assumed running speed equals race-format baseline speed x category multiplier x event speed factor. " +
+        "The category multipliers below are built-in model assumptions and are not individually adjustable. " +
+        "The event speed factor is adjustable, saved in the Event File, and applies to every category; the current event factor is x${twoDecimalText(speedModel.compensationFactor)}."
 
 private fun secondsText(value: Int?): String =
     value?.let(::compactSecondsText) ?: "Unknown"

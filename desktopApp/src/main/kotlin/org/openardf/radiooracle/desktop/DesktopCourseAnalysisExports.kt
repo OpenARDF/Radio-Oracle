@@ -89,6 +89,14 @@ object DesktopCourseAnalysisExports {
     private fun StringBuilder.appendSummary(result: DesktopCourseAnalysisSummary) {
         appendLine("Section 3: Summary")
         appendWrapped(result.summaryExplanation)
+        appendLine()
+        appendLine("Speed model factors")
+        appendWrapped(speedFactorExplanation(result.speedModel))
+        result.categorySpeedFactors.forEach { factor ->
+            appendLine("${factor.categoryCodes.joinToString("/")}: x${twoDecimalText(factor.multiplier)}")
+        }
+        appendLine("Unmatched categories: x1.00")
+        appendLine()
         appendLine("Routes compared: ${result.calculatedRouteCount}")
         if (result.idealOrderMatches == true) {
             appendLine("Stored ideal route: ${result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
@@ -169,6 +177,11 @@ object DesktopCourseAnalysisExports {
         "${twoDecimalText(speedModel.effectiveSpeedMetersPerSecond)} m/s; " +
             "${speedModel.categoryModelLabel} x${twoDecimalText(speedModel.categorySpeedMultiplier)}, " +
             "event x${twoDecimalText(speedModel.compensationFactor)}"
+
+    private fun speedFactorExplanation(speedModel: DesktopCourseSpeedModel): String =
+        "Assumed running speed equals race-format baseline speed x category multiplier x event speed factor. " +
+            "The category multipliers below are built-in model assumptions and are not individually adjustable. " +
+            "The event speed factor is adjustable, saved in the Event File, and applies to every category; the current event factor is x${twoDecimalText(speedModel.compensationFactor)}."
 
     private fun sectionComparisonLengthText(section: DesktopCourseAnalysisSection): String {
         val ruleValue = section.ruleChecks

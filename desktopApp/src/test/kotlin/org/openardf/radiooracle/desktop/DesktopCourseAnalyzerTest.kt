@@ -89,6 +89,8 @@ class DesktopCourseAnalyzerTest {
         assertEquals(1.0, summary.speedModel.compensationFactor, 0.001)
         assertEquals(summary.speedModel, summary.providedRouteSection?.speedModel)
         assertEquals(null, summary.calculatedRouteSection?.speedModel)
+        assertTrue(summary.categorySpeedFactors.any { it.categoryCodes == listOf("W75") && it.multiplier == 0.47 })
+        assertTrue(summary.categorySpeedFactors.any { it.categoryCodes == listOf("M19", "M40") && it.multiplier == 0.95 })
         assertTrue(summary.summaryExplanation.contains("event speed factor 1.00"))
         assertTrue(summary.summaryExplanation.contains("below 1.00 slows all category estimates"))
         assertEquals(1, summary.profileComparison.size)
@@ -137,6 +139,12 @@ class DesktopCourseAnalyzerTest {
         assertFalse(reportText.contains("Effective length: 5.00 km\n"))
         assertTrue(reportText.contains("Effective length: 5.00 km (required 9-12 km)"))
         assertTrue(reportText.contains("Assumed running speed:"))
+        assertTrue(reportText.contains("Speed model factors"))
+        assertTrue(reportText.contains("built-in model assumptions and are not individually adjustable"))
+        assertTrue(reportText.contains("event speed factor is adjustable"))
+        assertTrue(reportText.contains("M19/M40: x0.95"))
+        assertTrue(reportText.contains("W75: x0.47"))
+        assertTrue(reportText.contains("Unmatched categories: x1.00"))
     }
 
     @Test
