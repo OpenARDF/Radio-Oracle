@@ -4227,41 +4227,64 @@ private sealed interface DesktopPendingNavigation {
 }
 
 private data class BypassedDisabledNavigation(
-    val workflow: DesktopWorkflow,
+    val workflow: DesktopWorkflow?,
     val itemId: String?
 )
 
 private const val DisabledNavigationExplorationStatus = "Disabled menu being explored; some commands may not work until required event data is complete."
 
-private fun DesktopPendingNavigation.bypassedDisabledSelection(
-    appliedState: DesktopNavState
+private fun DesktopPendingNavigation.updatedBypassedDisabledNavigation(
+    previous: BypassedDisabledNavigation?,
+    appliedState: DesktopNavState,
+    readiness: DesktopNavigationReadiness
 ): BypassedDisabledNavigation? =
-    when (this) {
-        DesktopPendingNavigation.Back -> null
-        is DesktopPendingNavigation.Workflow -> if (bypassedDisabled) {
-            BypassedDisabledNavigation(workflow = appliedState.workflow, itemId = null)
-        } else {
-            null
+    run {
+        val retainedWorkflow = previous?.workflow?.takeIf { workflow ->
+            workflow == appliedState.workflow && !DesktopNavigation.isWorkflowEnabled(workflow, readiness)
         }
-        is DesktopPendingNavigation.Item -> if (bypassedDisabled) {
-            BypassedDisabledNavigation(workflow = appliedState.workflow, itemId = appliedState.selectedItemId)
-        } else {
+        val nextWorkflow = when (this) {
+            DesktopPendingNavigation.Back,
+            is DesktopPendingNavigation.Item -> retainedWorkflow
+            is DesktopPendingNavigation.Workflow -> if (
+                bypassedDisabled &&
+                !DesktopNavigation.isWorkflowEnabled(appliedState.workflow, readiness)
+            ) {
+                appliedState.workflow
+            } else {
+                null
+            }
+        }
+        val nextItemId = when (this) {
+            is DesktopPendingNavigation.Item -> appliedState.selectedItemId.takeIf {
+                bypassedDisabled && DesktopNavigation.itemById(appliedState.workflow, it)
+                    ?.let { item -> !DesktopNavigation.isItemEnabled(item, readiness) } == true
+            }
+            DesktopPendingNavigation.Back,
+            is DesktopPendingNavigation.Workflow -> null
+        }
+        if (nextWorkflow == null && nextItemId == null) {
             null
+        } else {
+            BypassedDisabledNavigation(workflow = nextWorkflow, itemId = nextItemId)
         }
     }
 
-private fun BypassedDisabledNavigation.isActiveFor(
+private fun BypassedDisabledNavigation.activeFor(
     navState: DesktopNavState,
     readiness: DesktopNavigationReadiness
-): Boolean =
-    when {
-        workflow != navState.workflow -> false
-        itemId == null -> !DesktopNavigation.isWorkflowEnabled(workflow, readiness)
-        itemId != navState.selectedItemId -> false
-        else -> DesktopNavigation.itemById(workflow, itemId)
+): BypassedDisabledNavigation? {
+    val activeWorkflow = workflow?.takeIf { it == navState.workflow && !DesktopNavigation.isWorkflowEnabled(it, readiness) }
+    val activeItemId = itemId?.takeIf {
+        it == navState.selectedItemId && DesktopNavigation.itemById(navState.workflow, it)
             ?.let { !DesktopNavigation.isItemEnabled(it, readiness) }
             ?: false
     }
+    return if (activeWorkflow == null && activeItemId == null) {
+        null
+    } else {
+        BypassedDisabledNavigation(workflow = activeWorkflow, itemId = activeItemId)
+    }
+}
 
 private data class PendingAssignedControlsWarning(
     val warning: EventAssignedControlWarning,
@@ -4496,7 +4519,7 @@ private fun RadioOManagerDesktopApp(
         var bypassedDisabledNavigation by remember { mutableStateOf<BypassedDisabledNavigation?>(null) }
         val navigationReadiness = DesktopNavigationReadiness.from(projectFile)
         val activeBypassedDisabledNavigation = bypassedDisabledNavigation
-            ?.takeIf { it.isActiveFor(navState, navigationReadiness) }
+            ?.activeFor(navState, navigationReadiness)
 
         fun selectionFor(intent: DesktopPendingNavigation): Pair<DesktopNavState, DesktopNavAction?> =
             when (intent) {
@@ -4522,7 +4545,11 @@ private fun RadioOManagerDesktopApp(
                 appliedState = DesktopNavigation.returnToParentMenuAfterAction(nextState, it)
             }
             navState = appliedState
-            bypassedDisabledNavigation = intent.bypassedDisabledSelection(appliedState)
+            bypassedDisabledNavigation = intent.updatedBypassedDisabledNavigation(
+                previous = activeBypassedDisabledNavigation,
+                appliedState = appliedState,
+                readiness = navigationReadiness
+            )
         }
 
         fun requestNavigation(intent: DesktopPendingNavigation) {
@@ -5071,8 +5098,7 @@ private fun WorkflowBar(
             val isSelected = workflow == selectedWorkflow
             val isEnabled = DesktopNavigation.isWorkflowEnabled(workflow, navigationReadiness)
             val canLongClickOverride = DesktopNavigation.canLongClickOverrideDisabledWorkflow(workflow, navigationReadiness)
-            val isBypassedDisabled = bypassedDisabledNavigation?.workflow == workflow &&
-                bypassedDisabledNavigation.itemId == null
+            val isBypassedDisabled = bypassedDisabledNavigation?.workflow == workflow
             Box(
                 modifier = Modifier
                     .weight(1f)
