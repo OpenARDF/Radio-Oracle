@@ -46,6 +46,12 @@ object DesktopProjectFilePaths {
     fun defaultProjectFileName(eventName: String): String =
         withProjectExtension(Path.of(defaultFileStem(eventName))).fileName.toString()
 
+    /** Returns the editable Event File display name without current or legacy project extensions. */
+    fun projectFileDisplayStem(fileName: String): String =
+        fileName
+            .removeSuffix(LEGACY_PROJECT_EXTENSION)
+            .removeSuffix(PROJECT_EXTENSION)
+
     fun defaultAndroidEventJsonFileName(eventName: String): String =
         withAndroidRaceBackupJsonExtension(Path.of(defaultFileStem(eventName))).fileName.toString()
 

@@ -61,6 +61,22 @@ class DesktopProjectFilePathsTest {
     }
 
     @Test
+    fun removesProjectFileExtensionsForEditableDisplay() {
+        assertEquals(
+            "Demo Event",
+            DesktopProjectFilePaths.projectFileDisplayStem("Demo Event.json")
+        )
+        assertEquals(
+            "Demo Event",
+            DesktopProjectFilePaths.projectFileDisplayStem("Demo Event.rom.json")
+        )
+        assertEquals(
+            "Demo Event",
+            DesktopProjectFilePaths.projectFileDisplayStem("Demo Event")
+        )
+    }
+
+    @Test
     fun buildsDefaultAndroidEventJsonFileNameFromEventName() {
         assertEquals(
             "Demo Event.ardfjs",

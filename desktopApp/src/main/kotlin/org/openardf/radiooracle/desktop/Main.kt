@@ -10340,7 +10340,12 @@ private fun RaceDetailsPanel(
     var eventStartPromptReason by remember { mutableStateOf("event definition") }
     val currentEventFileName = eventFilePath?.fileName?.toString()
     var eventFileNameDraft by remember(currentEventFileName, details.name) {
-        mutableStateOf(currentEventFileName ?: DesktopProjectFilePaths.defaultProjectFileName(details.name))
+        mutableStateOf(
+            currentEventFileName
+                ?.let(DesktopProjectFilePaths::projectFileDisplayStem)
+                ?: DesktopProjectFilePaths.defaultProjectFileName(details.name)
+                    .let(DesktopProjectFilePaths::projectFileDisplayStem)
+        )
     }
     var hasEventFileNameDraftChanged by remember(currentEventFileName) { mutableStateOf(false) }
     var wasEventFileNameFocused by remember { mutableStateOf(false) }
@@ -10367,18 +10372,21 @@ private fun RaceDetailsPanel(
             return
         }
         val fallbackName = currentEventFileName ?: DesktopProjectFilePaths.defaultProjectFileName(details.name)
+        val fallbackDisplayName = DesktopProjectFilePaths.projectFileDisplayStem(fallbackName)
         val normalizedFileName = eventFileNameDraft
             .takeIf { it.isNotBlank() }
             ?.let(DesktopProjectFilePaths::defaultProjectFileName)
             ?: fallbackName
         if (normalizedFileName == currentEventFileName) {
-            eventFileNameDraft = normalizedFileName
+            eventFileNameDraft = fallbackDisplayName
             hasEventFileNameDraftChanged = false
             return
         }
         hasEventFileNameDraftChanged = false
         val didSave = onUpdateEventFileName(normalizedFileName)
-        eventFileNameDraft = if (didSave) normalizedFileName else fallbackName
+        eventFileNameDraft = DesktopProjectFilePaths.projectFileDisplayStem(
+            if (didSave) normalizedFileName else fallbackName
+        )
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
