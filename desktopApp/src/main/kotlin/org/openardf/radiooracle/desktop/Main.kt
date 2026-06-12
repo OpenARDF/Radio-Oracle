@@ -4885,7 +4885,10 @@ private fun NavigationRail(
                 val canLongClickOverride = DesktopNavigation.canLongClickOverrideDisabledMenu(item, navigationReadiness)
                 val disabledReason = DesktopNavigation.disabledItemReasonWithMenuOverrideHint(item, navigationReadiness)
                     ?: item.action?.let(disabledNavActionReason)
-                DisabledReasonTooltip(disabledReason) {
+                DisabledReasonTooltip(
+                    reason = disabledReason,
+                    placement = DisabledReasonTooltipPlacement.RightOfCursor
+                ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -4923,7 +4926,10 @@ private fun NavigationRail(
                 .padding(top = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            DisabledReasonTooltip(disabledNavActionReason(DesktopNavAction.SaveEventFile)) {
+            DisabledReasonTooltip(
+                reason = disabledNavActionReason(DesktopNavAction.SaveEventFile),
+                placement = DisabledReasonTooltipPlacement.RightOfCursor
+            ) {
                 Button(
                     onClick = onSaveEvent,
                     enabled = isNavActionEnabled(DesktopNavAction.SaveEventFile),
@@ -5028,12 +5034,31 @@ private fun WorkflowBar(
     }
 }
 
+private enum class DisabledReasonTooltipPlacement {
+    AboveCursor,
+    RightOfCursor
+}
+
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
-private fun DisabledReasonTooltip(reason: String?, content: @Composable () -> Unit) {
+private fun DisabledReasonTooltip(
+    reason: String?,
+    placement: DisabledReasonTooltipPlacement = DisabledReasonTooltipPlacement.AboveCursor,
+    content: @Composable () -> Unit
+) {
     if (reason == null) {
         content()
     } else {
+        val tooltipPlacement = when (placement) {
+            DisabledReasonTooltipPlacement.AboveCursor -> TooltipPlacement.CursorPoint(
+                offset = DpOffset(0.dp, (-12).dp),
+                alignment = Alignment.BottomCenter
+            )
+            DisabledReasonTooltipPlacement.RightOfCursor -> TooltipPlacement.CursorPoint(
+                offset = DpOffset(18.dp, 0.dp),
+                alignment = Alignment.CenterStart
+            )
+        }
         TooltipArea(
             tooltip = {
                 Surface(
@@ -5049,10 +5074,7 @@ private fun DisabledReasonTooltip(reason: String?, content: @Composable () -> Un
                 }
             },
             delayMillis = 850,
-            tooltipPlacement = TooltipPlacement.CursorPoint(
-                offset = DpOffset(0.dp, (-12).dp),
-                alignment = Alignment.BottomCenter
-            )
+            tooltipPlacement = tooltipPlacement
         ) {
             content()
         }
