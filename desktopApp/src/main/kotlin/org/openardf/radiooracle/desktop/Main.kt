@@ -2810,6 +2810,7 @@ fun main(args: Array<String>) = application {
 
         RadioOManagerDesktopApp(
             projectFile = projectFile,
+            eventFilePath = projectSession.currentPath,
             projectStatusText = projectStatusText,
             hasUnsavedChanges = hasUnsavedChanges,
             siReaderState = siReaderState,
@@ -4595,6 +4596,7 @@ private data class DesktopReadoutEditDraft(
 @Composable
 private fun RadioOManagerDesktopApp(
     projectFile: EventProjectFile? = null,
+    eventFilePath: Path? = null,
     projectStatusText: String = "No Event File open.",
     hasUnsavedChanges: Boolean = false,
     siReaderState: DesktopSiReaderUiState = DesktopSiReaderUiState.disconnected(),
@@ -4806,6 +4808,7 @@ private fun RadioOManagerDesktopApp(
                                     breadcrumb = DesktopNavigation.breadcrumb(navState),
                                     menuDescription = DesktopNavigation.selectedDescription(navState),
                                     projectFile = projectFile,
+                                    eventFilePath = eventFilePath,
                                     projectStatusText = projectStatusText,
                                     siReaderState = siReaderState,
                                     onRenameRace = onRenameRace,
@@ -5502,6 +5505,7 @@ private fun SectionWorkspace(
     breadcrumb: String,
     menuDescription: String,
     projectFile: EventProjectFile?,
+    eventFilePath: Path?,
     projectStatusText: String,
     siReaderState: DesktopSiReaderUiState,
     onRenameRace: (String) -> Unit,
@@ -5612,6 +5616,7 @@ private fun SectionWorkspace(
         if (section == DesktopSection.Races && projectFile != null) {
             RaceDetailsPanel(
                 details = EventRaceDetails.from(projectFile.raceData.race),
+                eventFilePath = eventFilePath,
                 onRenameRace = onRenameRace,
                 onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
                 onUpdateRaceSettings = onUpdateRaceSettings
@@ -10303,6 +10308,7 @@ private fun CategoryDeleteButton(
 @Composable
 private fun RaceDetailsPanel(
     details: EventRaceDetails,
+    eventFilePath: Path?,
     onRenameRace: (String) -> Unit,
     onUpdateRaceStartDateTime: (String) -> Unit,
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit
@@ -10368,6 +10374,13 @@ private fun RaceDetailsPanel(
                 label = { Text("Event name") }
             )
         }
+        TextField(
+            value = eventFilePath?.fileName?.toString() ?: "Unsaved new Event File",
+            onValueChange = {},
+            readOnly = true,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Event file name") }
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
