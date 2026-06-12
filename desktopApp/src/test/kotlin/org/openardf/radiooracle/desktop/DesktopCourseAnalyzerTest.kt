@@ -87,6 +87,10 @@ class DesktopCourseAnalyzerTest {
         assertEquals("M21", summary.speedModel.categoryModelLabel)
         assertEquals(1.0, summary.speedModel.categorySpeedMultiplier, 0.001)
         assertEquals(1.0, summary.speedModel.compensationFactor, 0.001)
+        assertEquals(summary.speedModel, summary.providedRouteSection?.speedModel)
+        assertEquals(null, summary.calculatedRouteSection?.speedModel)
+        assertTrue(summary.summaryExplanation.contains("event speed factor 1.00"))
+        assertTrue(summary.summaryExplanation.contains("below 1.00 slows all category estimates"))
         assertEquals(1, summary.profileComparison.size)
         assertEquals(listOf("31", "32", "33"), summary.profileComparison.first { it.title == "Stored route" }.markers.map { it.label })
         assertEquals(1, summary.routeMaps.size)
@@ -132,7 +136,7 @@ class DesktopCourseAnalyzerTest {
         assertFalse(reportText.contains("Calculated straight-line length:"))
         assertFalse(reportText.contains("Effective length: 5.00 km\n"))
         assertTrue(reportText.contains("Effective length: 5.00 km (required 9-12 km)"))
-        assertTrue(reportText.contains("Speed model:"))
+        assertTrue(reportText.contains("Assumed running speed:"))
     }
 
     @Test

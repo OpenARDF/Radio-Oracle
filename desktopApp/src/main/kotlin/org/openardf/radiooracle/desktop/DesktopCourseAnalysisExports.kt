@@ -67,6 +67,9 @@ object DesktopCourseAnalysisExports {
         if (section.comparisonLengthLabel != "Effective length") {
             appendLine("Effective length: ${kilometersText(section.effectiveLengthMeters)}")
         }
+        section.speedModel?.let { speedModel ->
+            appendLine("Assumed running speed: ${speedModelText(speedModel)}")
+        }
         appendLine("Estimated ideal time: ${secondsText(section.estimatedIdealSeconds)}")
         appendTimingBreakdown(section.legRows, section.estimatedIdealSeconds)
         appendLegRows(section.legRows)
@@ -106,7 +109,7 @@ object DesktopCourseAnalysisExports {
         appendLine("Stored route length: ${kilometersText(result.routeLengthMeters)}")
         appendLine("Climb: ${climbText(result.climbMeters)}")
         appendLine("Effective length: ${summaryMetricValue(result, "Effective length", kilometersText(result.effectiveLengthMeters))}")
-        appendLine("Speed model: ${speedModelText(result.speedModel)}")
+        appendLine("Assumed running speed: ${speedModelText(result.speedModel)}")
         appendLine("Estimated ideal time: ${secondsText(result.estimatedIdealSeconds)}")
         appendLine()
         appendLine("Goodness metrics")

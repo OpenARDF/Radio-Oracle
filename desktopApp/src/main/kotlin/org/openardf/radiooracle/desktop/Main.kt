@@ -9623,6 +9623,9 @@ private fun CourseAnalysisSectionView(section: DesktopCourseAnalysisSection, inc
         if (section.comparisonLengthLabel != "Effective length") {
             CourseAnalysisRow("Effective length", kilometersText(section.effectiveLengthMeters))
         }
+        section.speedModel?.let { speedModel ->
+            CourseAnalysisRow("Assumed running speed", courseAnalysisSpeedModelText(speedModel))
+        }
         CourseAnalysisRow("Estimated ideal time", secondsText(section.estimatedIdealSeconds))
         CourseAnalysisTimingBreakdown(section.legRows, section.estimatedIdealSeconds)
         CourseAnalysisLegRows("Leg analysis", section.legRows)
@@ -9721,7 +9724,7 @@ private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
             result.metrics.firstOrNull { it.label == "Effective length" }?.value
                 ?: kilometersText(result.effectiveLengthMeters)
         )
-        CourseAnalysisRow("Speed model", courseAnalysisSpeedModelText(result.speedModel))
+        CourseAnalysisRow("Assumed running speed", courseAnalysisSpeedModelText(result.speedModel))
         CourseAnalysisRow("Estimated ideal time", secondsText(result.estimatedIdealSeconds))
     }
 }

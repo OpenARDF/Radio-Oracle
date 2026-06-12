@@ -65,6 +65,7 @@ data class DesktopCourseAnalysisSection(
     val climbMeters: Int?,
     val effectiveLengthMeters: Int?,
     val estimatedIdealSeconds: Int?,
+    val speedModel: DesktopCourseSpeedModel? = null,
     val legRows: List<DesktopCourseLegRow>,
     val waitRows: List<DesktopCourseWaitRow>,
     val waitRenumbering: DesktopCourseWaitRenumbering?,
@@ -567,6 +568,7 @@ object DesktopCourseAnalyzer {
                     climbMeters = null,
                     effectiveLengthMeters = null,
                     estimatedIdealSeconds = null,
+                    speedModel = null,
                     legRows = emptyList(),
                     waitRows = emptyList(),
                     waitRenumbering = null,
@@ -595,6 +597,7 @@ object DesktopCourseAnalyzer {
                     climbMeters = calculatedRouteAnalysis?.climbMeters?.roundToInt(),
                     effectiveLengthMeters = calculatedRouteAnalysis?.effectiveLengthMeters?.roundToInt(),
                     estimatedIdealSeconds = calculatedRouteAnalysis?.estimatedSeconds?.roundToInt(),
+                    speedModel = speedModel,
                     legRows = calculatedLegRows,
                     waitRows = calculatedWaitRows,
                     waitRenumbering = calculatedWaitRenumbering,
@@ -623,6 +626,7 @@ object DesktopCourseAnalyzer {
                 climbMeters = analysis.climbMeters?.roundToInt(),
                 effectiveLengthMeters = analysis.effectiveLengthMeters?.roundToInt(),
                 estimatedIdealSeconds = analysis.estimatedSeconds?.roundToInt(),
+                speedModel = speedModel,
                 legRows = providedLegRows,
                 waitRows = waitRows,
                 waitRenumbering = waitRenumbering,
@@ -750,7 +754,7 @@ object DesktopCourseAnalyzer {
             speedModel = speedModel,
             providedRouteSection = providedSection,
             calculatedRouteSection = calculatedSection,
-            summaryExplanation = summaryExplanation(providedSection, calculatedSection, waitRenumbering),
+            summaryExplanation = summaryExplanation(providedSection, calculatedSection, waitRenumbering, speedModel),
             profileComparison = profileComparison,
             elevationCacheNotes = elevationCacheNotes(profileRoutePoints),
             routeMaps = routeMaps,
@@ -1040,8 +1044,14 @@ object DesktopCourseAnalyzer {
     private fun summaryExplanation(
         providedSection: DesktopCourseAnalysisSection?,
         calculatedSection: DesktopCourseAnalysisSection?,
-        waitRenumbering: DesktopCourseWaitRenumbering?
+        waitRenumbering: DesktopCourseWaitRenumbering?,
+        speedModel: DesktopCourseSpeedModel
     ): String {
+        val speedText =
+            " Assumed running speed is ${twoDecimals(speedModel.effectiveSpeedMetersPerSecond)} m/s: " +
+                "${twoDecimals(speedModel.formatSpeedMetersPerSecond)} m/s race-format baseline x " +
+                "${speedModel.categoryModelLabel} category multiplier ${twoDecimals(speedModel.categorySpeedMultiplier)} x " +
+                "event speed factor ${twoDecimals(speedModel.compensationFactor)}. The event speed factor is the single event-wide adjustment for terrain, weather, or other conditions; below 1.00 slows all category estimates, and above 1.00 speeds them."
         val waitImprovementText = waitRenumbering
             ?.takeIf { it.improvesWait }
             ?.let { renumbering ->
@@ -1055,7 +1065,7 @@ object DesktopCourseAnalyzer {
         } else {
             "This summary reports checks against the cited USA rules document and the independently calculated route candidate because no stored ideal route was available for Section 1."
         }
-        return baseText + waitImprovementText
+        return baseText + speedText + waitImprovementText
     }
 
     private fun calculatedRouteCandidate(
