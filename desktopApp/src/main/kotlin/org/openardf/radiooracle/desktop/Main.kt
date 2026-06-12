@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.HorizontalScrollbar
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.TooltipArea
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -55,11 +57,14 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
@@ -4586,6 +4591,7 @@ private fun RadioOManagerDesktopApp(
         )
     ) {
         var navState by remember { mutableStateOf(DesktopNavState()) }
+        var isSplashVisible by remember { mutableStateOf(true) }
         var pendingNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
         var pendingDirtySubmenuNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
         var bypassedDisabledNavigation by remember { mutableStateOf<BypassedDisabledNavigation?>(null) }
@@ -4663,136 +4669,140 @@ private fun RadioOManagerDesktopApp(
             }
         }
 
-        Surface(modifier = Modifier.fillMaxSize(), color = DesktopPalette.White) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                AppTopBar(projectFile)
-                Row(modifier = Modifier.weight(1f)) {
-                    NavigationRail(
-                        navState = navState,
-                        navigationReadiness = navigationReadiness,
-                        isNavActionEnabled = isNavActionEnabled,
-                        disabledNavActionReason = disabledNavActionReason,
-                        onBack = { requestNavigation(DesktopPendingNavigation.Back) },
-                        onSaveEvent = { onNavAction(DesktopNavAction.SaveEventFile) },
-                        onItemSelected = { item, bypassedDisabled ->
-                            requestNavigation(DesktopPendingNavigation.Item(item.id, bypassedDisabled))
-                        }
-                    )
-                    Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .background(workspaceBackgroundColor)
-                        ) {
-                            SectionWorkspace(
-                                workflow = navState.workflow,
-                                section = navState.selectedSection,
-                                title = DesktopNavigation.selectedLabel(navState),
-                                breadcrumb = DesktopNavigation.breadcrumb(navState),
-                                menuDescription = DesktopNavigation.selectedDescription(navState),
-                                projectFile = projectFile,
-                                projectStatusText = projectStatusText,
-                                siReaderState = siReaderState,
-                                onRenameRace = onRenameRace,
-                                onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
-                                onUpdateRaceSettings = onUpdateRaceSettings,
-                                onRenameCategory = onRenameCategory,
-                                onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
-                                onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
-                                onAddCategory = onAddCategory,
-                                onRemoveCategory = onRemoveCategory,
-                                onRenameCompetitor = onRenameCompetitor,
-                                onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
-                                onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
-                                onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
-                                onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
-                                onUpdateStartDrawSettings = onUpdateStartDrawSettings,
-                                onDrawStartList = onDrawStartList,
-                                onDrawBalancedStartList = onDrawBalancedStartList,
-                                onAddCompetitor = onAddCompetitor,
-                                onAssignCompetitorCategory = onAssignCompetitorCategory,
-                                onRemoveCompetitor = onRemoveCompetitor,
-                                onRemoveReadout = onRemoveReadout,
-                                onUpdateReadoutStatus = onUpdateReadoutStatus,
-                                onEditReadout = onEditReadout,
-                                onAssignUnmatchedReadout = onAssignUnmatchedReadout,
-                                onDownloadSportIdentReadout = onDownloadSportIdentReadout,
-                                onStartContinuousSportIdentReadout = onStartContinuousSportIdentReadout,
-                                onStopContinuousSportIdentReadout = onStopContinuousSportIdentReadout,
-                                onPreviewFinishTicket = onPreviewFinishTicket,
-                                onPrintFinishTicket = onPrintFinishTicket,
-                                isDownloadingSiReadout = isDownloadingSiReadout,
-                                isContinuousSiReadoutActive = isContinuousSiReadoutActive,
-                                isReadingCompetitorSiCard = isReadingCompetitorSiCard,
-                                siDownloadStatusText = siDownloadStatusText,
-                                onAddManualReadout = onAddManualReadout,
-                                onUpdateControl = onUpdateControl,
-                                onAddControl = onAddControl,
-                                onRemoveControl = onRemoveControl,
-                                onImportControlsRouteKmlKmz = onImportControlsRouteKmlKmz,
-                                isSendingLiveResults = isSendingLiveResults,
-                                isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
-                                readoutDuplicatePolicy = readoutDuplicatePolicy,
-                                isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
-                                areAliasesEnabled = areAliasesEnabled,
-                                localResultServerUrl = localResultServerUrl,
-                                printerDiagnostics = printerDiagnostics,
-                                raceClockTick = raceClockTick,
-                                onSendRobisLiveResults = onSendRobisLiveResults,
-                                onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
-                                onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
-                                onSetReadoutAlertSoundEnabled = onSetReadoutAlertSoundEnabled,
-                                onSetAliasesEnabled = onSetAliasesEnabled,
-                                onStartLocalResultServer = onStartLocalResultServer,
-                                onStopLocalResultServer = onStopLocalResultServer,
-                                isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
-                                protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
-                                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
-                                recentImportReport = recentImportReport,
-                                recentImportCheckpoint = recentImportCheckpoint,
-                                recentActivityLog = recentActivityLog,
-                                onRecalculateResults = onRecalculateResults,
-                                onRetrieveMissingCourseElevations = onRetrieveMissingCourseElevations,
-                                onDownloadVenueElevationCache = onDownloadVenueElevationCache,
-                                onOpenVenueElevationCacheFolder = onOpenVenueElevationCacheFolder,
-                                elevationCacheRefreshToken = elevationCacheRefreshToken,
-                                onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
-                                onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
-                                onUseCalculatedCourseAnalysisRoute = onUseCalculatedCourseAnalysisRoute,
-                                onApplyCourseAnalysisFoxRenumberingOnly = onApplyCourseAnalysisFoxRenumberingOnly,
-                                onReadCompetitorSiCardForAddRow = onReadCompetitorSiCardForAddRow,
-                                onUpdateProtectedControlLocation = onUpdateProtectedControlLocation,
-                                onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword,
-                                isNavActionEnabled = isNavActionEnabled,
-                                onInsertTestControls = onInsertTestControls,
-                                onInsertTestCategories = onInsertTestCategories,
-                                onInsertTestCompetitors = onInsertTestCompetitors,
-                                onInsertTestSportIdentDownloads = onInsertTestSportIdentDownloads,
-                                onRestoreRecentImportCheckpoint = onRestoreRecentImportCheckpoint,
-                                onNavAction = onNavAction
-                            )
-                        }
-                        WorkflowBar(
-                            selectedWorkflow = navState.workflow,
+        if (isSplashVisible) {
+            RadioOracleSplashScreen(onDismiss = { isSplashVisible = false })
+        } else {
+            Surface(modifier = Modifier.fillMaxSize(), color = DesktopPalette.White) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    AppTopBar(projectFile)
+                    Row(modifier = Modifier.weight(1f)) {
+                        NavigationRail(
+                            navState = navState,
                             navigationReadiness = navigationReadiness,
-                            bypassedDisabledNavigation = activeBypassedDisabledNavigation,
-                            onWorkflowSelected = { workflow, bypassedDisabled ->
-                                requestNavigation(DesktopPendingNavigation.Workflow(workflow, bypassedDisabled))
+                            isNavActionEnabled = isNavActionEnabled,
+                            disabledNavActionReason = disabledNavActionReason,
+                            onBack = { requestNavigation(DesktopPendingNavigation.Back) },
+                            onSaveEvent = { onNavAction(DesktopNavAction.SaveEventFile) },
+                            onItemSelected = { item, bypassedDisabled ->
+                                requestNavigation(DesktopPendingNavigation.Item(item.id, bypassedDisabled))
                             }
                         )
+                        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .background(workspaceBackgroundColor)
+                            ) {
+                                SectionWorkspace(
+                                    workflow = navState.workflow,
+                                    section = navState.selectedSection,
+                                    title = DesktopNavigation.selectedLabel(navState),
+                                    breadcrumb = DesktopNavigation.breadcrumb(navState),
+                                    menuDescription = DesktopNavigation.selectedDescription(navState),
+                                    projectFile = projectFile,
+                                    projectStatusText = projectStatusText,
+                                    siReaderState = siReaderState,
+                                    onRenameRace = onRenameRace,
+                                    onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
+                                    onUpdateRaceSettings = onUpdateRaceSettings,
+                                    onRenameCategory = onRenameCategory,
+                                    onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
+                                    onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
+                                    onAddCategory = onAddCategory,
+                                    onRemoveCategory = onRemoveCategory,
+                                    onRenameCompetitor = onRenameCompetitor,
+                                    onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
+                                    onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
+                                    onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
+                                    onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
+                                    onUpdateStartDrawSettings = onUpdateStartDrawSettings,
+                                    onDrawStartList = onDrawStartList,
+                                    onDrawBalancedStartList = onDrawBalancedStartList,
+                                    onAddCompetitor = onAddCompetitor,
+                                    onAssignCompetitorCategory = onAssignCompetitorCategory,
+                                    onRemoveCompetitor = onRemoveCompetitor,
+                                    onRemoveReadout = onRemoveReadout,
+                                    onUpdateReadoutStatus = onUpdateReadoutStatus,
+                                    onEditReadout = onEditReadout,
+                                    onAssignUnmatchedReadout = onAssignUnmatchedReadout,
+                                    onDownloadSportIdentReadout = onDownloadSportIdentReadout,
+                                    onStartContinuousSportIdentReadout = onStartContinuousSportIdentReadout,
+                                    onStopContinuousSportIdentReadout = onStopContinuousSportIdentReadout,
+                                    onPreviewFinishTicket = onPreviewFinishTicket,
+                                    onPrintFinishTicket = onPrintFinishTicket,
+                                    isDownloadingSiReadout = isDownloadingSiReadout,
+                                    isContinuousSiReadoutActive = isContinuousSiReadoutActive,
+                                    isReadingCompetitorSiCard = isReadingCompetitorSiCard,
+                                    siDownloadStatusText = siDownloadStatusText,
+                                    onAddManualReadout = onAddManualReadout,
+                                    onUpdateControl = onUpdateControl,
+                                    onAddControl = onAddControl,
+                                    onRemoveControl = onRemoveControl,
+                                    onImportControlsRouteKmlKmz = onImportControlsRouteKmlKmz,
+                                    isSendingLiveResults = isSendingLiveResults,
+                                    isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
+                                    readoutDuplicatePolicy = readoutDuplicatePolicy,
+                                    isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
+                                    areAliasesEnabled = areAliasesEnabled,
+                                    localResultServerUrl = localResultServerUrl,
+                                    printerDiagnostics = printerDiagnostics,
+                                    raceClockTick = raceClockTick,
+                                    onSendRobisLiveResults = onSendRobisLiveResults,
+                                    onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
+                                    onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
+                                    onSetReadoutAlertSoundEnabled = onSetReadoutAlertSoundEnabled,
+                                    onSetAliasesEnabled = onSetAliasesEnabled,
+                                    onStartLocalResultServer = onStartLocalResultServer,
+                                    onStopLocalResultServer = onStopLocalResultServer,
+                                    isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
+                                    protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+                                    protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                                    recentImportReport = recentImportReport,
+                                    recentImportCheckpoint = recentImportCheckpoint,
+                                    recentActivityLog = recentActivityLog,
+                                    onRecalculateResults = onRecalculateResults,
+                                    onRetrieveMissingCourseElevations = onRetrieveMissingCourseElevations,
+                                    onDownloadVenueElevationCache = onDownloadVenueElevationCache,
+                                    onOpenVenueElevationCacheFolder = onOpenVenueElevationCacheFolder,
+                                    elevationCacheRefreshToken = elevationCacheRefreshToken,
+                                    onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
+                                    onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
+                                    onUseCalculatedCourseAnalysisRoute = onUseCalculatedCourseAnalysisRoute,
+                                    onApplyCourseAnalysisFoxRenumberingOnly = onApplyCourseAnalysisFoxRenumberingOnly,
+                                    onReadCompetitorSiCardForAddRow = onReadCompetitorSiCardForAddRow,
+                                    onUpdateProtectedControlLocation = onUpdateProtectedControlLocation,
+                                    onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword,
+                                    isNavActionEnabled = isNavActionEnabled,
+                                    onInsertTestControls = onInsertTestControls,
+                                    onInsertTestCategories = onInsertTestCategories,
+                                    onInsertTestCompetitors = onInsertTestCompetitors,
+                                    onInsertTestSportIdentDownloads = onInsertTestSportIdentDownloads,
+                                    onRestoreRecentImportCheckpoint = onRestoreRecentImportCheckpoint,
+                                    onNavAction = onNavAction
+                                )
+                            }
+                            WorkflowBar(
+                                selectedWorkflow = navState.workflow,
+                                navigationReadiness = navigationReadiness,
+                                bypassedDisabledNavigation = activeBypassedDisabledNavigation,
+                                onWorkflowSelected = { workflow, bypassedDisabled ->
+                                    requestNavigation(DesktopPendingNavigation.Workflow(workflow, bypassedDisabled))
+                                }
+                            )
+                        }
                     }
+                    StatusStrip(
+                        projectStatusText = projectStatusText,
+                        hasUnsavedChanges = hasUnsavedChanges,
+                        navigationDisabledSummary = DesktopNavigation.primaryDisabledSummary(navigationReadiness),
+                        isDisabledNavigationExploration = activeBypassedDisabledNavigation != null,
+                        siReaderState = siReaderState,
+                        isEventFileOpen = projectFile != null,
+                        isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
+                        onLockProtectedCourseOrder = onLockProtectedCourseOrder
+                    )
                 }
-                StatusStrip(
-                    projectStatusText = projectStatusText,
-                    hasUnsavedChanges = hasUnsavedChanges,
-                    navigationDisabledSummary = DesktopNavigation.primaryDisabledSummary(navigationReadiness),
-                    isDisabledNavigationExploration = activeBypassedDisabledNavigation != null,
-                    siReaderState = siReaderState,
-                    isEventFileOpen = projectFile != null,
-                    isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
-                    onLockProtectedCourseOrder = onLockProtectedCourseOrder
-                )
             }
         }
         pendingNavigation?.let { navigation ->
@@ -4856,6 +4866,80 @@ private fun AppTopBar(projectFile: EventProjectFile?) {
             overflow = TextOverflow.Ellipsis
         )
     }
+}
+
+@Composable
+@OptIn(ExperimentalComposeUiApi::class)
+private fun RadioOracleSplashScreen(onDismiss: () -> Unit) {
+    val logoBitmap = rememberRadioOracleLogoBitmap()
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .onPointerEvent(PointerEventType.Press) { onDismiss() }
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent {
+                onDismiss()
+                true
+            },
+        color = DesktopPalette.White
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(48.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Image(
+                bitmap = logoBitmap,
+                contentDescription = "Radio-Oracle logo",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .width(180.dp)
+                    .height(180.dp)
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = "Radio-Oracle",
+                fontSize = 34.sp,
+                fontWeight = FontWeight.Bold,
+                color = DesktopPalette.Black
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = "Desktop event administration for radio orienteering. Prepare Event Files, import competitors, controls, courses, and elevation data, manage SPORTident readouts, analyze courses, and publish results from one workspace.",
+                color = DesktopPalette.Black,
+                fontSize = 16.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 720.dp)
+            )
+            Spacer(modifier = Modifier.height(22.dp))
+            Text(
+                text = "Press any key or click to continue.",
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun rememberRadioOracleLogoBitmap() = remember {
+    val logoBytes = requireNotNull(
+        Thread.currentThread().contextClassLoader.getResourceAsStream("radio-oracle-logo.png")
+    ) {
+        "Radio-Oracle desktop logo resource is missing."
+    }.use { stream -> stream.readBytes() }
+    SkiaImage.makeFromEncoded(logoBytes).toComposeImageBitmap()
 }
 
 internal fun desktopTopBarEventText(projectFile: EventProjectFile?): String =
@@ -11079,54 +11163,24 @@ private fun DetailRow(label: String, value: String, valueColor: Color = DesktopP
 
 @Composable
 private fun WorkflowHomePanel(workflow: DesktopWorkflow, projectFile: EventProjectFile?) {
-    val logoBitmap = remember {
-        val logoBytes = requireNotNull(
-            Thread.currentThread().contextClassLoader.getResourceAsStream("radio-oracle-logo.png")
-        ) {
-            "Radio-Oracle desktop logo resource is missing."
-        }.use { stream -> stream.readBytes() }
-        SkiaImage.makeFromEncoded(logoBytes).toComposeImageBitmap()
-    }
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(22.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Image(
-            bitmap = logoBitmap,
-            contentDescription = "Radio-Oracle logo",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .width(128.dp)
-                .height(128.dp)
+        Text(
+            text = "Current workflow: ${workflow.label}",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
         )
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(
-                text = "Radio-Oracle",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = DesktopPalette.Black
-            )
-            Text(
-                text = "Event administration for radio orienteering: prepare the Event File, run SI-card download operations, and publish results from one desktop workspace.",
-                color = DesktopPalette.Black,
-                fontSize = 15.sp
-            )
-            Text(
-                text = "Current workflow: ${workflow.label}",
-                color = DesktopPalette.Disconnected,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = projectFile?.let { "Event File open: ${EventProjectSummary.from(it).raceName}" }
-                    ?: "Create a new Event File or open an existing one to begin.",
-                color = DesktopPalette.Disconnected,
-                fontSize = 13.sp
-            )
-        }
+        Text(
+            text = projectFile?.let { "Event File open: ${EventProjectSummary.from(it).raceName}" }
+                ?: "Create a new Event File or open an existing one to begin.",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
     }
 }
 
