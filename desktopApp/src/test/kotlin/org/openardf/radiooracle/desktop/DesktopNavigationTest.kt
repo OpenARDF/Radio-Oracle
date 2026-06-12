@@ -28,7 +28,7 @@ class DesktopNavigationTest {
             DesktopNavigation.rootItems(DesktopWorkflow.Setup).map { it.label }
         )
         assertEquals(
-            listOf("Readouts", "SI Readout", "In Forest", "Unmatched Readouts", "Finish Tickets", "Hardware Status"),
+            listOf("Readouts", "SI Readout", "In Forest", "Unmatched Readouts", "Finish Tickets"),
             DesktopNavigation.rootItems(DesktopWorkflow.RaceOps).map { it.label }
         )
         assertEquals(
@@ -640,12 +640,12 @@ class DesktopNavigationTest {
     }
 
     @Test
-    fun settingsAndHardwareRowsRemainAvailableWithoutAnOpenEventFile() {
+    fun settingsRowsRemainAvailableWithoutAnOpenEventFile() {
         val raceOpsItems = DesktopNavigation.rootItems(DesktopWorkflow.RaceOps)
         val settingsItems = DesktopNavigation.rootItems(DesktopWorkflow.SettingsHelp)
 
         assertTrue(raceOpsItems.first { it.label == "Readouts" }.requiresEventFile)
-        assertFalse(raceOpsItems.first { it.label == "Hardware Status" }.requiresEventFile)
+        assertFalse(raceOpsItems.any { it.label == "Hardware Status" })
         assertFalse(settingsItems.first { it.label == "App Settings" }.requiresEventFile)
         assertFalse(settingsItems.first { it.label == "Hardware Preferences" }.requiresEventFile)
         assertFalse(settingsItems.first { it.label == "Help" }.requiresEventFile)

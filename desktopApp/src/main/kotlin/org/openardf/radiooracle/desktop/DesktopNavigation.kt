@@ -371,8 +371,7 @@ object DesktopNavigation {
                 ),
                 item("race.in-forest", "In Forest", workflow, DesktopSection.InForest),
                 item("race.unmatched", "Unmatched Readouts", workflow, DesktopSection.Readouts),
-                item("race.finish-tickets", "Finish Tickets", workflow, DesktopSection.Readouts),
-                item("race.hardware", "Hardware Status", workflow, DesktopSection.Settings, requiresEventFile = false)
+                item("race.finish-tickets", "Finish Tickets", workflow, DesktopSection.Readouts)
             )
             DesktopWorkflow.ResultsExport -> listOf(
                 item("results.results", "Results", workflow, DesktopSection.Results),
