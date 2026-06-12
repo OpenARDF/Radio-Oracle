@@ -370,7 +370,7 @@ fun main(args: Array<String>) = application {
         var recentActivityLog by remember { mutableStateOf<List<String>>(emptyList()) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
-        var isCourseKmlKmzUnlockDialogVisible by remember { mutableStateOf(false) }
+        var pendingCourseKmlKmzUnlockAction by remember { mutableStateOf<CourseKmlKmzUnlockAction?>(null) }
         var pendingCourseKmlKmzImportReview by remember { mutableStateOf<PendingCourseKmlKmzImportReview?>(null) }
         var pendingCourseKmlKmzCategoryMapping by remember { mutableStateOf<PendingCourseKmlKmzCategoryMapping?>(null) }
         var pendingCategoriesCsvImportReview by remember { mutableStateOf<PendingCategoriesCsvImportReview?>(null) }
@@ -1725,10 +1725,35 @@ fun main(args: Array<String>) = application {
             val password = protectedCoursePassword
             if (password == null) {
                 projectStatusText = "Unlock course order before importing KML/KMZ controls/route data."
-                isCourseKmlKmzUnlockDialogVisible = true
+                pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.Import
                 return
             }
             chooseImportCourseKmlKmzUnlocked(password)
+        }
+
+        fun chooseExportCourseKmlKmzUnlocked(password: String) {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportControlsRouteKmlKmz(currentProject.raceData.race.name)?.let { target ->
+                runCatching {
+                    val summary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+                        target = target,
+                        projectFile = currentProject,
+                        password = password
+                    )
+                    syncProjectState()
+                    val formatName = summary.outputFormat.contentExtension.uppercase()
+                    projectStatusText =
+                        "Exported ${target.path.fileName} as an encrypted ZIP containing $formatName " +
+                            "with ${summary.controlCatalogCount} controls and ${summary.routeCount} routes."
+                }.onFailure { error ->
+                    projectStatusText = "Controls/route KML/KMZ export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
+        fun chooseExportCourseKmlKmz() {
+            projectStatusText = "Enter the Event Password before exporting protected controls/route KML/KMZ data."
+            pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.Export
         }
 
         fun importAndroidRaceBackupJson(path: Path) {
@@ -2333,6 +2358,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportEventFileCopy,
                 DesktopNavAction.ExportCategoriesCsv,
                 DesktopNavAction.ExportControlsCsv,
+                DesktopNavAction.ExportCourseKmlKmz,
                 DesktopNavAction.ExportCompetitorsCsv,
                 DesktopNavAction.ExportStartsCsv,
                 DesktopNavAction.ExportStartsByCategoryCsv,
@@ -2408,6 +2434,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportCategoriesCsv -> exportCategoriesCsv()
                 DesktopNavAction.ExportControlsCsv ->
                     exportCsv("Export Controls CSV", "controls", DesktopProjectFiles::exportControlsCsv)
+                DesktopNavAction.ExportCourseKmlKmz -> chooseExportCourseKmlKmz()
                 DesktopNavAction.ExportCompetitorsCsv ->
                     exportCsv("Export Competitors CSV", "competitors", DesktopProjectFiles::exportCompetitorsCsv)
                 DesktopNavAction.ExportStartsCsv ->
@@ -2571,19 +2598,36 @@ fun main(args: Array<String>) = application {
                 }
             )
         }
-        if (isCourseKmlKmzUnlockDialogVisible) {
+        pendingCourseKmlKmzUnlockAction?.let { unlockAction ->
             CourseKmlKmzUnlockDialog(
+                title = when (unlockAction) {
+                    CourseKmlKmzUnlockAction.Import -> "Unlock course order"
+                    CourseKmlKmzUnlockAction.Export -> "Export protected controls/routes"
+                },
+                description = when (unlockAction) {
+                    CourseKmlKmzUnlockAction.Import ->
+                        "KML/KMZ controls/route data includes coordinates and route details that require the Event Password."
+                    CourseKmlKmzUnlockAction.Export ->
+                        "Controls/route KML/KMZ export includes sensitive coordinates and routes. The exported file will be placed inside a password-locked ZIP."
+                },
+                confirmLabel = when (unlockAction) {
+                    CourseKmlKmzUnlockAction.Import -> "Unlock and Import"
+                    CourseKmlKmzUnlockAction.Export -> "Export"
+                },
                 onUnlock = { password ->
                     if (unlockProtectedCourseOrder(password)) {
                         val unlockedPassword = password.trim()
-                        isCourseKmlKmzUnlockDialogVisible = false
-                        chooseImportCourseKmlKmzUnlocked(unlockedPassword)
+                        pendingCourseKmlKmzUnlockAction = null
+                        when (unlockAction) {
+                            CourseKmlKmzUnlockAction.Import -> chooseImportCourseKmlKmzUnlocked(unlockedPassword)
+                            CourseKmlKmzUnlockAction.Export -> chooseExportCourseKmlKmzUnlocked(unlockedPassword)
+                        }
                         true
                     } else {
                         false
                     }
                 },
-                onCancel = { isCourseKmlKmzUnlockDialogVisible = false }
+                onCancel = { pendingCourseKmlKmzUnlockAction = null }
             )
         }
         pendingCourseKmlKmzCategoryMapping?.let { mapping ->
@@ -3385,6 +3429,9 @@ private fun UnsavedNewEventFileDialog(
 
 @Composable
 private fun CourseKmlKmzUnlockDialog(
+    title: String,
+    description: String,
+    confirmLabel: String,
     onUnlock: (String) -> Boolean,
     onCancel: () -> Unit
 ) {
@@ -3392,7 +3439,7 @@ private fun CourseKmlKmzUnlockDialog(
 
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Unlock course order") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 TextField(
@@ -3404,7 +3451,7 @@ private fun CourseKmlKmzUnlockDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    text = "KML/KMZ controls/route data includes coordinates and route details that require the Event Password.",
+                    text = description,
                     fontSize = 13.sp,
                     color = Color.DarkGray
                 )
@@ -3419,7 +3466,7 @@ private fun CourseKmlKmzUnlockDialog(
                 },
                 enabled = passwordDraft.isNotBlank()
             ) {
-                Text("Unlock and Import")
+                Text(confirmLabel)
             }
         },
         dismissButton = {
@@ -4340,6 +4387,11 @@ private data class PendingControlsCsvImportReview(
     val invalidLineCount: Int,
     val preview: DesktopControlsCsvImportPreview
 )
+
+private enum class CourseKmlKmzUnlockAction {
+    Import,
+    Export
+}
 
 private data class PendingCourseKmlKmzCategoryMapping(
     val sourceName: String,

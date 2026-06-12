@@ -6,7 +6,9 @@ import java.io.FilenameFilter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.prefs.Preferences
+import javax.swing.JFileChooser
 import javax.swing.JOptionPane
+import javax.swing.filechooser.FileNameExtensionFilter
 
 /** Event File path helpers shared by desktop file dialogs and tests. */
 object DesktopProjectFilePaths {
@@ -270,6 +272,39 @@ object DesktopFileDialogs {
         return Path.of(directory, file)
     }
 
+    fun chooseExportControlsRouteKmlKmz(eventName: String? = null): DesktopControlsRouteKmlKmzExportTarget? {
+        val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
+        val chooser = JFileChooser(directory.toFile())
+        val kmlFilter = FileNameExtensionFilter("Encrypted ZIP containing KML (*.kml.zip)", "zip")
+        val kmzFilter = FileNameExtensionFilter("Encrypted ZIP containing KMZ (*.kmz.zip)", "zip")
+        chooser.dialogTitle = "Export Controls KML/KMZ"
+        chooser.addChoosableFileFilter(kmlFilter)
+        chooser.addChoosableFileFilter(kmzFilter)
+        chooser.fileFilter = kmlFilter
+        chooser.selectedFile = directory
+            .resolve(defaultControlsRouteExportFileName(eventName, DesktopControlsRouteKmlKmzExportFormat.Kml))
+            .toFile()
+
+        if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) {
+            return null
+        }
+
+        val selectedPath = chooser.selectedFile?.toPath() ?: return null
+        val selectedName = selectedPath.fileName.toString()
+        val selectedFormat = when {
+            selectedName.endsWith(DesktopControlsRouteKmlKmzExportFormat.Kmz.zipFileSuffix, ignoreCase = true) ->
+                DesktopControlsRouteKmlKmzExportFormat.Kmz
+            selectedName.endsWith(DesktopControlsRouteKmlKmzExportFormat.Kml.zipFileSuffix, ignoreCase = true) ->
+                DesktopControlsRouteKmlKmzExportFormat.Kml
+            chooser.fileFilter == kmzFilter -> DesktopControlsRouteKmlKmzExportFormat.Kmz
+            else -> DesktopControlsRouteKmlKmzExportFormat.Kml
+        }
+        val exportPath = withControlsRouteKmlKmzZipExtension(selectedPath, selectedFormat)
+        return confirmOverwrite(exportPath)
+            ?.also(DesktopEventFileLocations::rememberEventFileDirectory)
+            ?.let { DesktopControlsRouteKmlKmzExportTarget(it, selectedFormat) }
+    }
+
     fun chooseElevationRaster(): Path? {
         val dialog = FileDialog(null as Frame?, "Select Elevation Raster", FileDialog.LOAD)
         dialog.filenameFilter = FilenameFilter { _, name ->
@@ -311,6 +346,32 @@ object DesktopFileDialogs {
         dialog.isVisible = true
 
         return dialog.files.orEmpty().map { it.toPath() }
+    }
+
+    private fun defaultControlsRouteExportFileName(
+        eventName: String?,
+        format: DesktopControlsRouteKmlKmzExportFormat
+    ): String {
+        val stem = eventName
+            ?.let { DesktopProjectFilePaths.defaultCsvFileName(it, "controls routes") }
+            ?.removeSuffix(DesktopProjectFilePaths.CSV_EXTENSION)
+            ?: "controls routes"
+        return "$stem${format.zipFileSuffix}"
+    }
+
+    private fun withControlsRouteKmlKmzZipExtension(
+        path: Path,
+        format: DesktopControlsRouteKmlKmzExportFormat
+    ): Path {
+        val fileName = path.fileName.toString()
+        if (
+            fileName.endsWith(DesktopControlsRouteKmlKmzExportFormat.Kml.zipFileSuffix, ignoreCase = true) ||
+            fileName.endsWith(DesktopControlsRouteKmlKmzExportFormat.Kmz.zipFileSuffix, ignoreCase = true)
+        ) {
+            return path
+        }
+        val stem = fileName.removeSuffix(".zip")
+        return path.resolveSibling("$stem${format.zipFileSuffix}")
     }
 
     private fun confirmOverwrite(path: Path): Path? =

@@ -18,6 +18,7 @@ dependencies {
     implementation(compose.desktop.currentOs)
     implementation(libs.jserialcomm)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.zip4j)
 
     testImplementation(libs.junit)
 }

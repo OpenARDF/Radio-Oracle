@@ -695,7 +695,12 @@ class DesktopNavigationTest {
         assertEquals(DesktopSection.ElevationCache, controlItems.first { it.label == "Elevation Data" }.section)
         assertEquals(DesktopSection.ControlsImportExport, controlItems.first { it.label == "Import/Export" }.section)
         assertEquals(
-            listOf("Import Controls CSV...", "Import Controls KML/KMZ...", "Export Controls CSV..."),
+            listOf(
+                "Import Controls KML/KMZ...",
+                "Import Controls CSV...",
+                "Export Controls CSV...",
+                "Export Controls KML/KMZ..."
+            ),
             controlItems.first { it.label == "Import/Export" }.children.map { it.label }
         )
         assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Course Order" }.section)

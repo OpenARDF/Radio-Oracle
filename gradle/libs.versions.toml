@@ -37,6 +37,7 @@ robolectric = "4.16"
 sortable-table-view = "2.8.1"
 usb-serial = "6.1.0"
 xmlunit = "2.11.0"
+zip4j = "2.11.5"
 
 [libraries]
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "androidx-appcompat" }
@@ -76,6 +77,7 @@ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectr
 sortable-table-view = { module = "com.github.ISchwarz23:SortableTableView", version.ref = "sortable-table-view" }
 usb-serial = { module = "com.github.felHR85:UsbSerial", version.ref = "usb-serial" }
 xmlunit-core = { module = "org.xmlunit:xmlunit-core", version.ref = "xmlunit" }
+zip4j = { module = "net.lingala.zip4j:zip4j", version.ref = "zip4j" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }

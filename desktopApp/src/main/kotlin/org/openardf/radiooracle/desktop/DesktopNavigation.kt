@@ -36,6 +36,7 @@ enum class DesktopNavAction {
     ExportEventFileCopy,
     ExportCategoriesCsv,
     ExportControlsCsv,
+    ExportCourseKmlKmz,
     ExportCompetitorsCsv,
     ExportStartsCsv,
     ExportStartsByCategoryCsv,
@@ -238,22 +239,28 @@ object DesktopNavigation {
                             workflow,
                             listOf(
                                 action(
-                                    "setup.controls.import-controls",
-                                    "Import Controls CSV...",
-                                    workflow,
-                                    DesktopNavAction.ImportControlsCsv
-                                ),
-                                action(
                                     "setup.controls.import-kml-kmz",
                                     "Import Controls KML/KMZ...",
                                     workflow,
                                     DesktopNavAction.ImportCourseKmlKmz
                                 ),
                                 action(
+                                    "setup.controls.import-controls",
+                                    "Import Controls CSV...",
+                                    workflow,
+                                    DesktopNavAction.ImportControlsCsv
+                                ),
+                                action(
                                     "setup.controls.export-controls",
                                     "Export Controls CSV...",
                                     workflow,
                                     DesktopNavAction.ExportControlsCsv
+                                ),
+                                action(
+                                    "setup.controls.export-kml-kmz",
+                                    "Export Controls KML/KMZ...",
+                                    workflow,
+                                    DesktopNavAction.ExportCourseKmlKmz
                                 )
                             ),
                             DesktopSection.ControlsImportExport
@@ -768,13 +775,15 @@ object DesktopNavigation {
         "setup.controls.course-analysis.import-kml-kmz" to
             "Use Import Controls KML/KMZ to bring in control placemarks and category route lines for course analysis and category course assignments.",
         "setup.controls.import-export" to
-            "Use Import/Export to synchronize control CSV files and controls/route KML/KMZ files with the current Event File.",
+            "Use Import/Export to synchronize control CSV files and protected controls/route KML/KMZ files with the current Event File.",
         "setup.controls.import-controls" to
             "Use Import Controls CSV to review and apply additions or updates to the event control catalog.",
         "setup.controls.import-kml-kmz" to
             "Use Import Controls KML/KMZ to import control locations and category route geometry from mapping files.",
         "setup.controls.export-controls" to
             "Use Export Controls CSV to write the current control catalog for review, backup, or editing outside the app.",
+        "setup.controls.export-kml-kmz" to
+            "Use Export Controls KML/KMZ to write protected control and route geometry inside a password-locked ZIP file.",
         "setup.categories" to
             "Use Categories to create, import, export, and maintain competition classes, assigned controls, course metadata, and protected course order data.",
         "setup.categories.protected-course-order" to
