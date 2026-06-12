@@ -10319,6 +10319,10 @@ private fun RaceDetailsPanel(
     var timeLimitMinutesDraft by remember(details.timeLimitMinutesText) {
         mutableStateOf(details.timeLimitMinutesText)
     }
+    var wasRaceNameFocused by remember { mutableStateOf(false) }
+    var shouldPromptForEventStartAfterNameEdit by remember { mutableStateOf(false) }
+    var isEventStartPromptVisible by remember { mutableStateOf(false) }
+    var eventStartPromptReason by remember { mutableStateOf("event definition") }
 
     fun applyRaceSettings(
         raceType: RaceType = selectedRaceType,
@@ -10332,6 +10336,11 @@ private fun RaceDetailsPanel(
         }
     }
 
+    fun promptForEventStart(reason: String) {
+        eventStartPromptReason = reason
+        isEventStartPromptVisible = true
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -10343,8 +10352,19 @@ private fun RaceDetailsPanel(
                 onValueChange = {
                     raceNameDraft = it
                     onRenameRace(it)
+                    if (it.trim().isNotEmpty() && it.trim() != details.name.trim()) {
+                        shouldPromptForEventStartAfterNameEdit = true
+                    }
                 },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .onFocusChanged { focusState ->
+                        if (wasRaceNameFocused && !focusState.isFocused && shouldPromptForEventStartAfterNameEdit) {
+                            shouldPromptForEventStartAfterNameEdit = false
+                            promptForEventStart("event name")
+                        }
+                        wasRaceNameFocused = focusState.isFocused
+                    },
                 label = { Text("Event name") }
             )
         }
@@ -10354,7 +10374,7 @@ private fun RaceDetailsPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             DateTimePickerField(
-                label = "Event start date/time",
+                label = "Event Start date/time",
                 value = startDateTimeDraft,
                 onValueChange = {
                     startDateTimeDraft = it
@@ -10376,14 +10396,19 @@ private fun RaceDetailsPanel(
             RaceTypePicker(
                 selectedRaceType,
                 {
+                    val changed = it != selectedRaceType
                     selectedRaceType = it
                     applyRaceSettings(raceType = it)
+                    if (changed) {
+                        promptForEventStart("event format")
+                    }
                 },
                 Modifier.weight(1f)
             )
             RaceLevelPicker(
                 selectedRaceLevel,
                 {
+                    val changed = it != selectedRaceLevel
                     val defaultLimitMinutes = it.defaultTimeLimitMinutes()?.toString()
                     val nextTimeLimitMinutes = defaultLimitMinutes ?: timeLimitMinutesDraft
                     selectedRaceLevel = it
@@ -10391,6 +10416,9 @@ private fun RaceDetailsPanel(
                         timeLimitMinutesDraft = nextTimeLimitMinutes
                     }
                     applyRaceSettings(raceLevel = it, timeLimitMinutes = nextTimeLimitMinutes)
+                    if (changed) {
+                        promptForEventStart("event type")
+                    }
                 },
                 Modifier.weight(1f)
             )
@@ -10412,6 +10440,20 @@ private fun RaceDetailsPanel(
                 label = { Text("Limit (min.)") }
             )
         }
+    }
+
+    if (isEventStartPromptVisible) {
+        DateTimePickerDialog(
+            initialValue = startDateTimeDraft,
+            title = "Enter Event Start date/time",
+            description = "The $eventStartPromptReason changed. Confirm or update the Event Start date/time for this event.",
+            onValueSelected = {
+                isEventStartPromptVisible = false
+                startDateTimeDraft = it
+                onUpdateRaceStartDateTime(DesktopDateTimeText.isoText(it))
+            },
+            onDismiss = { isEventStartPromptVisible = false }
+        )
     }
 }
 
@@ -10459,6 +10501,8 @@ private fun DateTimePickerField(
 @Composable
 private fun DateTimePickerDialog(
     initialValue: LocalDateTime,
+    title: String = "Pick Event Start date/time",
+    description: String? = null,
     onValueSelected: (LocalDateTime) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -10483,9 +10527,16 @@ private fun DateTimePickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Pick event start date/time") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                description?.let {
+                    Text(
+                        text = it,
+                        color = DesktopPalette.Disconnected,
+                        fontSize = 13.sp
+                    )
+                }
                 CalendarMonthPicker(
                     visibleMonth = visibleMonth,
                     selectedDate = selectedDate,
