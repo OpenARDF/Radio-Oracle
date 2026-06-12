@@ -8,6 +8,7 @@ import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
+import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import java.nio.file.Files
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -487,6 +488,10 @@ class DesktopCourseKmlImportTest {
         val fox2 = protectedCourseInfo.controlPoints.single { it.label == "Fox2" }
         assertEquals(39.0000, fox2.latitude, 0.000001)
         assertEquals(-95.0000, fox2.longitude, 0.000001)
+        val start = protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.START }
+        val finish = protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.FINISH }
+        assertEquals(-95.0100, start.longitude, 0.000001)
+        assertEquals(-94.9500, finish.longitude, 0.000001)
     }
 
     @Test
@@ -1461,13 +1466,13 @@ class DesktopCourseKmlImportTest {
               <name>2m 5 foxes 8.2 km (M21) - 1,2,3,4,5</name>
               <LineString>
                 <coordinates>
-                  -95.0100,39.0000,0
-                  -95.0000,39.0000,0
-                  -94.9900,39.0000,0
-                  -94.9800,39.0000,0
-                  -94.9700,39.0000,0
-                  -94.9600,39.0000,0
                   -94.9500,39.0000,0
+                  -94.9600,39.0000,0
+                  -94.9700,39.0000,0
+                  -94.9800,39.0000,0
+                  -94.9900,39.0000,0
+                  -95.0000,39.0000,0
+                  -95.0100,39.0000,0
                 </coordinates>
               </LineString>
             </Placemark>

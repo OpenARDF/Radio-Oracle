@@ -142,6 +142,7 @@ object DesktopCourseKmlImporter {
     private const val ROUTE_SAMPLE_METERS = 25.0
     private const val USGS_3DEP_SAMPLE_METERS = 10.0
     private const val CONTROL_ROUTE_TOLERANCE_METERS = 50.0
+    private const val ROUTE_ORIENTATION_TOLERANCE_METERS = 5.0
     private const val CLIMB_NOISE_THRESHOLD_METERS = 1.0
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -247,7 +248,8 @@ object DesktopCourseKmlImporter {
                 // is only for route/elevation facts; assignment matching should reflect the controls
                 // intentionally placed near the imported category route.
                 val raceType = categoryData.category.effectiveRaceType(updatedProject.raceData.race)
-                val routeLineControls = controlsOnRoute(route.points, controlsByLabel.values.toList())
+                val routeGeometry = orientedRoutePoints(route.points, courseData.controls)
+                val routeLineControls = controlsOnRoute(routeGeometry, controlsByLabel.values.toList())
                 val explicitAssignmentControls = if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
                     controlsFromExplicitClassicRouteOrder(route.name, controls)
                 } else {
@@ -262,10 +264,12 @@ object DesktopCourseKmlImporter {
                 val duplicateRouteControlIdValues = routeLineControls.map { it.controlId }
                 val storedRouteControlIds = sameSourceCourseInfo?.controlPoints.orEmpty()
                     .map { it.controlId }
+                val storedRouteMatchesImported = sameSourceCourseInfo?.routeMatches(routeGeometry) == true
                 if (
                     sameSourceCourseInfo != null &&
                     sameSourceCourseInfo.hasImportedLocationRecords() &&
-                    storedRouteControlIds == duplicateRouteControlIdValues
+                    storedRouteControlIds == duplicateRouteControlIdValues &&
+                    storedRouteMatchesImported
                 ) {
                     val missingElevationCount = missingElevationCount(sameSourceCourseInfo)
                     DesktopDebugLog.info(
@@ -284,11 +288,11 @@ object DesktopCourseKmlImporter {
                             "existingRouteElevations=${sameSourceCourseInfo.route.count { it.elevationMeters != null }} " +
                             "existingControlPoints=${sameSourceCourseInfo.controlPoints.size} " +
                             "existingCourseObjects=${sameSourceCourseInfo.courseObjects.size} " +
+                            "storedRouteMatchesImported=$storedRouteMatchesImported " +
                             "storedRouteControls=${storedRouteControlIds.joinToString()} " +
                             "importRouteControls=${duplicateRouteControlIdValues.joinToString()}"
                     )
                 }
-                val routeGeometry = route.points.map { it.copy(elevationMeters = null) }
                 val importedSampledRoute = sampledRoute(routeGeometry, ROUTE_SAMPLE_METERS).map { point ->
                     val elevation = elevationProvider(point)
                     if (elevation != null) {
@@ -297,6 +301,7 @@ object DesktopCourseKmlImporter {
                     point.copy(elevationMeters = elevation)
                 }
                 val sampledRoute = sameSourceCourseInfo
+                    ?.takeIf { storedRouteMatchesImported }
                     ?.route
                     ?.takeIf { points -> points.isNotEmpty() && points.any { it.elevationMeters != null } }
                     ?.map { point ->
@@ -1011,6 +1016,37 @@ object DesktopCourseKmlImporter {
     private fun sameCoordinate(first: Double, second: Double): Boolean =
         kotlin.math.abs(first - second) < 0.0000001
 
+    private fun orientedRoutePoints(
+        routePoints: List<CourseGeoPoint>,
+        importedControls: List<CourseControlPoint>
+    ): List<CourseGeoPoint> {
+        val geometry = routePoints.map { it.copy(elevationMeters = null) }
+        if (geometry.size < 2) {
+            return geometry
+        }
+        val startPoint = importedControls.firstOrNull { it.isCourseStartPoint() }?.point ?: return geometry
+        val finishPoint = importedControls.firstOrNull { it.isCourseFinishPoint() }?.point ?: return geometry
+        val asDrawnDistance = geometry.first().distanceMetersTo(startPoint) +
+            geometry.last().distanceMetersTo(finishPoint)
+        val reversedDistance = geometry.first().distanceMetersTo(finishPoint) +
+            geometry.last().distanceMetersTo(startPoint)
+        return if (reversedDistance + ROUTE_ORIENTATION_TOLERANCE_METERS < asDrawnDistance) {
+            geometry.reversed()
+        } else {
+            geometry
+        }
+    }
+
+    private fun ProtectedCourseInfo.routeMatches(routeGeometry: List<CourseGeoPoint>): Boolean {
+        if (route.isEmpty() || routeGeometry.isEmpty()) {
+            return false
+        }
+        val storedStart = CourseGeoPoint(route.first().latitude, route.first().longitude, route.first().elevationMeters)
+        val storedFinish = CourseGeoPoint(route.last().latitude, route.last().longitude, route.last().elevationMeters)
+        return storedStart.distanceMetersTo(routeGeometry.first()) <= CONTROL_ROUTE_TOLERANCE_METERS &&
+            storedFinish.distanceMetersTo(routeGeometry.last()) <= CONTROL_ROUTE_TOLERANCE_METERS
+    }
+
     private fun controlsOnRoute(route: List<CourseGeoPoint>, controls: List<CourseMatchedControl>): List<CourseMatchedControl> =
         controls
             .mapNotNull { control ->
@@ -1418,9 +1454,23 @@ private fun String.controlKeywordNumber(): Int? {
     return match?.groupValues?.getOrNull(1)?.toIntOrNull()
 }
 
-private fun String.isCourseEndpointName(): Boolean {
+private fun CourseControlPoint.isCourseStartPoint(): Boolean =
+    name.isCourseStartName()
+
+private fun CourseControlPoint.isCourseFinishPoint(): Boolean =
+    name.isCourseFinishName()
+
+private fun String.isCourseEndpointName(): Boolean =
+    isCourseStartName() || isCourseFinishName()
+
+private fun String.isCourseStartName(): Boolean {
     val normalized = categoryMatchText()
-    return Regex("""\b(start|finish)\b""").containsMatchIn(normalized)
+    return Regex("""\bstart\b""").containsMatchIn(normalized)
+}
+
+private fun String.isCourseFinishName(): Boolean {
+    val normalized = categoryMatchText()
+    return Regex("""\bfinish\b""").containsMatchIn(normalized)
 }
 
 private fun String.categoryMatchText(): String =
