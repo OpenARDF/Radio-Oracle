@@ -345,6 +345,8 @@ fun main(args: Array<String>) = application {
         var hasUnsavedChanges by remember { mutableStateOf(projectSession.hasUnsavedChanges) }
         var newEventDraftProject by remember { mutableStateOf<EventProjectFile?>(null) }
         var pendingDirtyProjectAction by remember { mutableStateOf<PendingDirtyProjectAction?>(null) }
+        var hasUnsavedEventDefinitionChanges by remember { mutableStateOf(false) }
+        var isEventDefinitionSaveDialogVisible by remember { mutableStateOf(false) }
         var pendingAssignedControlsWarning by remember { mutableStateOf<PendingAssignedControlsWarning?>(null) }
         var assignedControlsWarningJob by remember { mutableStateOf<Job?>(null) }
         var isNationalStartListDefaultsDialogVisible by remember { mutableStateOf(false) }
@@ -431,6 +433,12 @@ fun main(args: Array<String>) = application {
         fun syncProjectState() {
             projectFile = projectSession.currentProject
             hasUnsavedChanges = projectSession.hasUnsavedChanges
+        }
+
+        fun markEventDefinitionChangeIfLoaded(previousProject: EventProjectFile?, updatedProject: EventProjectFile) {
+            if (projectSession.currentPath != null && previousProject != null && updatedProject != previousProject) {
+                hasUnsavedEventDefinitionChanges = true
+            }
         }
 
         fun recordActivity(message: String) {
@@ -593,6 +601,8 @@ fun main(args: Array<String>) = application {
                 lockProtectedCourseOrder()
                 projectFile = projectSession.open(path)
                 newEventDraftProject = null
+                hasUnsavedEventDefinitionChanges = false
+                isEventDefinitionSaveDialogVisible = false
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
                 DesktopLastEventFilePreferences.rememberEventFile(path)
                 projectStatusText = "Opened ${path.fileName}"
@@ -609,6 +619,8 @@ fun main(args: Array<String>) = application {
                 lockProtectedCourseOrder()
                 projectSession.closeProject(discardUnsavedChanges)
                 newEventDraftProject = null
+                hasUnsavedEventDefinitionChanges = false
+                isEventDefinitionSaveDialogVisible = false
                 syncProjectState()
                 projectStatusText = "No Event File open."
                 DesktopDebugLog.info("EventFile", "Closed Event File")
@@ -628,6 +640,8 @@ fun main(args: Array<String>) = application {
             )
             projectSession.newProject(project)
             newEventDraftProject = project
+            hasUnsavedEventDefinitionChanges = false
+            isEventDefinitionSaveDialogVisible = false
             syncProjectState()
             projectStatusText = "New unsaved Event File."
             DesktopDebugLog.info("EventFile", "Created new unsaved Event File")
@@ -1056,7 +1070,7 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun saveCurrentProject(): Boolean {
+        fun saveCurrentProject(overwriteEventDefinitionChanges: Boolean = false): Boolean {
             if (projectSession.currentPath == null) {
                 val path = DesktopFileDialogs.chooseSaveProject(
                     projectSession.currentProject?.raceData?.race?.name
@@ -1064,6 +1078,8 @@ fun main(args: Array<String>) = application {
                 return runCatching {
                     projectSession.saveAs(path)
                     newEventDraftProject = null
+                    hasUnsavedEventDefinitionChanges = false
+                    isEventDefinitionSaveDialogVisible = false
                     syncProjectState()
                     DesktopLastEventFilePreferences.rememberEventFile(path)
                     projectStatusText = "Saved ${path.fileName}"
@@ -1073,9 +1089,22 @@ fun main(args: Array<String>) = application {
                     DesktopDebugLog.error("EventFile", "Save failed: ${error.message ?: error::class.simpleName}")
                 }.isSuccess
             }
+            if (
+                DesktopEventDefinitionSaveProtection.shouldPromptBeforeSave(
+                    currentPath = projectSession.currentPath,
+                    hasUnsavedEventDefinitionChanges = hasUnsavedEventDefinitionChanges,
+                    overwriteEventDefinitionChanges = overwriteEventDefinitionChanges
+                )
+            ) {
+                isEventDefinitionSaveDialogVisible = true
+                projectStatusText = DesktopEventDefinitionSaveProtection.statusText
+                return false
+            }
             return runCatching {
                 projectSession.save()
                 newEventDraftProject = null
+                hasUnsavedEventDefinitionChanges = false
+                isEventDefinitionSaveDialogVisible = false
                 syncProjectState()
                 projectSession.currentPath?.let(DesktopLastEventFilePreferences::rememberEventFile)
                 projectStatusText = "Saved ${projectSession.currentPath?.fileName ?: "Event File"}"
@@ -1767,6 +1796,8 @@ fun main(args: Array<String>) = application {
                 val imported = DesktopProjectFiles.importAndroidRaceBackupJson(path) { UUID.randomUUID().toString() }
                 projectFile = projectSession.newProject(imported)
                 newEventDraftProject = null
+                hasUnsavedEventDefinitionChanges = false
+                isEventDefinitionSaveDialogVisible = false
                 syncProjectState()
                 projectStatusText = "Imported ${path.fileName}"
             }.onFailure { error ->
@@ -2271,20 +2302,22 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun saveAsCurrentProject() {
-            DesktopFileDialogs.chooseSaveProject(projectSession.currentProject?.raceData?.race?.name)?.let { path ->
-                runCatching {
-                    projectSession.saveAs(path)
-                    projectFile = projectSession.currentProject
-                    hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    DesktopLastEventFilePreferences.rememberEventFile(path)
-                    projectStatusText = "Saved ${path.fileName}"
-                    DesktopDebugLog.info("EventFile", "Saved As ${path.fileName}")
-                }.onFailure { error ->
-                    projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
-                    DesktopDebugLog.error("EventFile", "Save As failed: ${error.message ?: error::class.simpleName}")
-                }
-            }
+        fun saveAsCurrentProject(): Boolean {
+            val path = DesktopFileDialogs.chooseSaveProject(projectSession.currentProject?.raceData?.race?.name)
+                ?: return false
+            return runCatching {
+                projectSession.saveAs(path)
+                projectFile = projectSession.currentProject
+                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                hasUnsavedEventDefinitionChanges = false
+                isEventDefinitionSaveDialogVisible = false
+                DesktopLastEventFilePreferences.rememberEventFile(path)
+                projectStatusText = "Saved ${path.fileName}"
+                DesktopDebugLog.info("EventFile", "Saved As ${path.fileName}")
+            }.onFailure { error ->
+                projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("EventFile", "Save As failed: ${error.message ?: error::class.simpleName}")
+            }.isSuccess
         }
 
         fun exportEventFileCopy() {
@@ -2516,11 +2549,29 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        pendingDirtyProjectAction?.let {
-            UnsavedChangesDialog(
-                onSave = { continuePendingDirtyAction(saveFirst = true) },
-                onDiscard = { continuePendingDirtyAction(saveFirst = false) },
-                onCancel = { pendingDirtyProjectAction = null }
+        if (!isEventDefinitionSaveDialogVisible) {
+            pendingDirtyProjectAction?.let {
+                UnsavedChangesDialog(
+                    onSave = { continuePendingDirtyAction(saveFirst = true) },
+                    onDiscard = { continuePendingDirtyAction(saveFirst = false) },
+                    onCancel = { pendingDirtyProjectAction = null }
+                )
+            }
+        }
+        if (isEventDefinitionSaveDialogVisible) {
+            EventDefinitionSaveDialog(
+                currentPath = projectSession.currentPath,
+                onSaveAsNew = {
+                    if (saveAsCurrentProject() && pendingDirtyProjectAction != null) {
+                        continuePendingDirtyAction(saveFirst = false)
+                    }
+                },
+                onOverwrite = {
+                    if (saveCurrentProject(overwriteEventDefinitionChanges = true) && pendingDirtyProjectAction != null) {
+                        continuePendingDirtyAction(saveFirst = false)
+                    }
+                },
+                onCancel = { isEventDefinitionSaveDialogVisible = false }
             )
         }
         pendingSiModeWarning?.let { warning ->
@@ -2760,6 +2811,7 @@ fun main(args: Array<String>) = application {
 
         RadioOManagerDesktopApp(
             projectFile = projectFile,
+            eventFilePath = projectSession.currentPath,
             projectStatusText = projectStatusText,
             hasUnsavedChanges = hasUnsavedChanges,
             siReaderState = siReaderState,
@@ -2804,9 +2856,11 @@ fun main(args: Array<String>) = application {
             onLockProtectedCourseOrder = ::lockProtectedCourseOrder,
             onRenameRace = { name ->
                 runCatching {
+                    val previousProject = projectSession.currentProject
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.renameRace(currentProject, name)
                     }
+                    projectFile?.let { markEventDefinitionChangeIfLoaded(previousProject, it) }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
                 }.onFailure { error ->
@@ -2815,9 +2869,11 @@ fun main(args: Array<String>) = application {
             },
             onUpdateRaceStartDateTime = { startDateTimeIso ->
                 runCatching {
+                    val previousProject = projectSession.currentProject
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.updateRaceStartDateTime(currentProject, startDateTimeIso)
                     }
+                    projectFile?.let { markEventDefinitionChangeIfLoaded(previousProject, it) }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
                 }.onFailure { error ->
@@ -2831,6 +2887,7 @@ fun main(args: Array<String>) = application {
                         currentProject.raceData.race.raceLevel != RaceLevel.NATIONAL &&
                         raceLevel == RaceLevel.NATIONAL &&
                         shouldOfferNationalStartListDefaults(currentProject)
+                    val previousProject = projectSession.currentProject
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.updateRaceSettings(
                             currentProject,
@@ -2840,6 +2897,7 @@ fun main(args: Array<String>) = application {
                             timeLimitMinutes
                         )
                     }
+                    projectFile?.let { markEventDefinitionChangeIfLoaded(previousProject, it) }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
                     if (shouldPromptForNationalDefaults) {
@@ -3363,7 +3421,7 @@ fun main(args: Array<String>) = application {
             },
             hasDefaultUnsavedNewEventFileDraft = isDefaultUnsavedNewEventFileDraft(),
             hasEditedUnsavedNewEventFileDraft = hasEditedUnsavedNewEventFileDraft(),
-            onSaveEventFileForNavigation = ::saveCurrentProject,
+            onSaveEventFileForNavigation = { saveCurrentProject() },
             onDiscardUnsavedNewEventFile = {
                 closeProject(discardUnsavedChanges = true)
                 newEventDraftProject = null
@@ -3383,7 +3441,11 @@ private fun UnsavedChangesDialog(
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Unsaved changes") },
-        text = { Text("Save changes before continuing?") },
+        text = {
+            Text(
+                "The current Event File has unsaved changes. Save before continuing, discard those changes, or cancel to avoid losing edits."
+            )
+        },
         confirmButton = {
             Button(onClick = onSave) {
                 Text("Save")
@@ -3392,7 +3454,52 @@ private fun UnsavedChangesDialog(
         dismissButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onDiscard) {
-                    Text("Discard")
+                    Text("Discard Changes")
+                }
+                Button(onClick = onCancel) {
+                    Text("Cancel")
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun EventDefinitionSaveDialog(
+    currentPath: Path?,
+    onSaveAsNew: () -> Unit,
+    onOverwrite: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Event definition changed") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "The Event name, start time, format, event type, band, or time limit was changed for an existing Event File."
+                )
+                Text(
+                    "These fields affect competitors, controls, courses, Race Ops, and Results. Save as a new Event File unless you intentionally want to replace the loaded file."
+                )
+                currentPath?.let { path ->
+                    Text(
+                        text = "Current file: ${path.fileName}",
+                        color = DesktopPalette.Disconnected,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onSaveAsNew) {
+                Text("Save As New Event File...")
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onOverwrite) {
+                    Text("Overwrite Current File")
                 }
                 Button(onClick = onCancel) {
                     Text("Cancel")
@@ -4490,6 +4597,7 @@ private data class DesktopReadoutEditDraft(
 @Composable
 private fun RadioOManagerDesktopApp(
     projectFile: EventProjectFile? = null,
+    eventFilePath: Path? = null,
     projectStatusText: String = "No Event File open.",
     hasUnsavedChanges: Boolean = false,
     siReaderState: DesktopSiReaderUiState = DesktopSiReaderUiState.disconnected(),
@@ -4701,6 +4809,7 @@ private fun RadioOManagerDesktopApp(
                                     breadcrumb = DesktopNavigation.breadcrumb(navState),
                                     menuDescription = DesktopNavigation.selectedDescription(navState),
                                     projectFile = projectFile,
+                                    eventFilePath = eventFilePath,
                                     projectStatusText = projectStatusText,
                                     siReaderState = siReaderState,
                                     onRenameRace = onRenameRace,
@@ -5397,6 +5506,7 @@ private fun SectionWorkspace(
     breadcrumb: String,
     menuDescription: String,
     projectFile: EventProjectFile?,
+    eventFilePath: Path?,
     projectStatusText: String,
     siReaderState: DesktopSiReaderUiState,
     onRenameRace: (String) -> Unit,
@@ -5507,6 +5617,7 @@ private fun SectionWorkspace(
         if (section == DesktopSection.Races && projectFile != null) {
             RaceDetailsPanel(
                 details = EventRaceDetails.from(projectFile.raceData.race),
+                eventFilePath = eventFilePath,
                 onRenameRace = onRenameRace,
                 onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
                 onUpdateRaceSettings = onUpdateRaceSettings
@@ -10196,6 +10307,7 @@ private fun CategoryDeleteButton(
 @Composable
 private fun RaceDetailsPanel(
     details: EventRaceDetails,
+    eventFilePath: Path?,
     onRenameRace: (String) -> Unit,
     onUpdateRaceStartDateTime: (String) -> Unit,
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit
@@ -10241,6 +10353,11 @@ private fun RaceDetailsPanel(
                 label = { Text("Event name") }
             )
         }
+        Text(
+            text = eventFilePath?.fileName?.let { "File name: $it" } ?: "File name: unsaved new Event File",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
