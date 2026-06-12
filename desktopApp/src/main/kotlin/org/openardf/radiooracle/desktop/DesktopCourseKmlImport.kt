@@ -792,6 +792,9 @@ object DesktopCourseKmlImporter {
             .filterKeys { it.isNotBlank() }
         val labelConversions = mutableListOf<DesktopCourseKmlLabelConversion>()
         val controls = importedControls.mapNotNull { imported ->
+            if (imported.name.isCourseEndpointName()) {
+                return@mapNotNull null
+            }
             val exactMatch = controlsByToken[imported.name.normalizedCourseName()]
             val match = exactMatch
                 ?: controlsByCompactToken[imported.name.compactCourseName()]
@@ -1413,6 +1416,11 @@ private fun String.controlKeywordNumber(): Int? {
         RegexOption.IGNORE_CASE
     ).find(this)
     return match?.groupValues?.getOrNull(1)?.toIntOrNull()
+}
+
+private fun String.isCourseEndpointName(): Boolean {
+    val normalized = categoryMatchText()
+    return Regex("""\b(start|finish)\b""").containsMatchIn(normalized)
 }
 
 private fun String.categoryMatchText(): String =

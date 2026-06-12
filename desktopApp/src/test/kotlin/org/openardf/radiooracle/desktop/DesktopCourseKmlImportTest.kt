@@ -450,6 +450,46 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun doesNotMatchBandNamedStartOrFinishAsNumberedFoxControls() {
+        val kmlPath = Files.createTempFile("2m Classic 2025", ".kml")
+        Files.writeString(kmlPath, sampleClassic2mKmlWithEndpointNames())
+        val baseProject = EventProjectFactory.createEmptyProject("race", "Classic 2m Test", "2026-06-12T09:00")
+            .withControlIdentity(oldSiCode = 31, newSiCode = 221, label = "221", publicLabel = "Fox1")
+            .withControlIdentity(oldSiCode = 32, newSiCode = 222, label = "222", publicLabel = "Fox2")
+            .withControlIdentity(oldSiCode = 33, newSiCode = 223, label = "223", publicLabel = "Fox3")
+            .withControlIdentity(oldSiCode = 34, newSiCode = 224, label = "224", publicLabel = "Fox4")
+            .withControlIdentity(oldSiCode = 35, newSiCode = 225, label = "225", publicLabel = "Fox5")
+        val project = EventProjectEditor.addCategory(
+            baseProject,
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { 100.0 }
+        )
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            updated.raceData.categories.single().category.encryptedCourseInfo!!,
+            "course-key"
+        )
+
+        assertEquals(5, summary.matchedControlPointCount)
+        assertEquals(
+            listOf("Classic 2m Fox 2", "Classic 2m Fox 5", "Classic 2m Fox 1", "Classic 2m Fox 4", "Classic 2m Fox 3"),
+            summary.labelConversions.map { it.importedName }
+        )
+        assertEquals("Fox2 Fox5 Fox4 Fox3 Fox1", protectedCourseInfo.idealOrder)
+        assertEquals(listOf("Fox2", "Fox5", "Fox4", "Fox3", "Fox1"), protectedCourseInfo.controlPoints.map { it.label })
+        val fox2 = protectedCourseInfo.controlPoints.single { it.label == "Fox2" }
+        assertEquals(39.0000, fox2.latitude, 0.000001)
+        assertEquals(-95.0000, fox2.longitude, 0.000001)
+    }
+
+    @Test
     fun doesNotGuessNumberBasedControlMatchWhenAmbiguous() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithAmbiguousControlNumber())
@@ -1377,6 +1417,57 @@ class DesktopCourseKmlImportTest {
                   -94.9700,39.0000,0
                   -94.9600,39.0000,0
                   -94.9300,39.0100,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleClassic2mKmlWithEndpointNames(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>Classic 2m Fox 2</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>2m Start</name>
+              <Point><coordinates>-95.0100,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>2m Finish</name>
+              <Point><coordinates>-94.9500,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Classic 2m Fox 5</name>
+              <Point><coordinates>-94.9900,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Classic 2m Fox 1</name>
+              <Point><coordinates>-94.9600,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Classic 2m Fox 4</name>
+              <Point><coordinates>-94.9800,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Classic 2m Fox 3</name>
+              <Point><coordinates>-94.9700,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>2m 5 foxes 8.2 km (M21) - 1,2,3,4,5</name>
+              <LineString>
+                <coordinates>
+                  -95.0100,39.0000,0
+                  -95.0000,39.0000,0
+                  -94.9900,39.0000,0
+                  -94.9800,39.0000,0
+                  -94.9700,39.0000,0
+                  -94.9600,39.0000,0
+                  -94.9500,39.0000,0
                 </coordinates>
               </LineString>
             </Placemark>
