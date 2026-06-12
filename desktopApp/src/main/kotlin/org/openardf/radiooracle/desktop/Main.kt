@@ -10327,9 +10327,10 @@ private fun RaceDetailsPanel(
             DesktopDateTimeText.parseIsoOrNull(details.startDateTimeIso) ?: DesktopDateTimeText.defaultStartDateTime()
         )
     }
-    var selectedRaceType by remember(details.raceType) { mutableStateOf(details.raceType) }
+    var selectedRaceFormat by remember(details.raceType, details.raceBand) {
+        mutableStateOf(DesktopRaceFormat.from(details.raceType, details.raceBand))
+    }
     var selectedRaceLevel by remember(details.raceLevel) { mutableStateOf(details.raceLevel) }
-    var selectedRaceBand by remember(details.raceBand) { mutableStateOf(details.raceBand) }
     var timeLimitMinutesDraft by remember(details.timeLimitMinutesText) {
         mutableStateOf(details.timeLimitMinutesText)
     }
@@ -10345,9 +10346,9 @@ private fun RaceDetailsPanel(
     var wasEventFileNameFocused by remember { mutableStateOf(false) }
 
     fun applyRaceSettings(
-        raceType: RaceType = selectedRaceType,
+        raceType: RaceType = selectedRaceFormat.raceType,
         raceLevel: RaceLevel = selectedRaceLevel,
-        raceBand: RaceBand = selectedRaceBand,
+        raceBand: RaceBand = selectedRaceFormat.raceBand,
         timeLimitMinutes: String = timeLimitMinutesDraft
     ) {
         val timeLimit = timeLimitMinutes.trim().toLongOrNull()
@@ -10457,12 +10458,12 @@ private fun RaceDetailsPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            RaceTypePicker(
-                selectedRaceType,
+            DesktopRaceFormatPicker(
+                selectedRaceFormat,
                 {
-                    val changed = it != selectedRaceType
-                    selectedRaceType = it
-                    applyRaceSettings(raceType = it)
+                    val changed = it != selectedRaceFormat
+                    selectedRaceFormat = it
+                    applyRaceSettings(raceType = it.raceType, raceBand = it.raceBand)
                     if (changed) {
                         promptForEventStart("event format")
                     }
@@ -10483,14 +10484,6 @@ private fun RaceDetailsPanel(
                     if (changed) {
                         promptForEventStart("event type")
                     }
-                },
-                Modifier.weight(1f)
-            )
-            RaceBandPicker(
-                selectedRaceBand,
-                {
-                    selectedRaceBand = it
-                    applyRaceSettings(raceBand = it)
                 },
                 Modifier.weight(1f)
             )
@@ -10755,18 +10748,18 @@ private fun <T> CalendarWeekRow(values: List<T>, content: @Composable (T) -> Uni
     }
 }
 
-/** Shows the race type selector using Android-compatible labels. */
+/** Shows desktop race format choices that determine both race type and band. */
 @Composable
-private fun RaceTypePicker(
-    selectedRaceType: RaceType,
-    onRaceTypeSelected: (RaceType) -> Unit,
+private fun DesktopRaceFormatPicker(
+    selectedRaceFormat: DesktopRaceFormat,
+    onRaceFormatSelected: (DesktopRaceFormat) -> Unit,
     modifier: Modifier = Modifier
 ) {
     EnumPicker(
-        selectedValue = selectedRaceType,
-        values = RaceType.entries,
-        label = RaceType::toDisplayLabel,
-        onValueSelected = onRaceTypeSelected,
+        selectedValue = selectedRaceFormat,
+        values = DesktopRaceFormat.entries,
+        label = { it.label },
+        onValueSelected = onRaceFormatSelected,
         modifier = modifier
     )
 }
@@ -10783,22 +10776,6 @@ private fun RaceLevelPicker(
         values = RaceLevel.entries,
         label = RaceLevel::toDisplayLabel,
         onValueSelected = onRaceLevelSelected,
-        modifier = modifier
-    )
-}
-
-/** Shows the race band selector using Android-compatible labels. */
-@Composable
-private fun RaceBandPicker(
-    selectedRaceBand: RaceBand,
-    onRaceBandSelected: (RaceBand) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    EnumPicker(
-        selectedValue = selectedRaceBand,
-        values = RaceBand.entries,
-        label = RaceBand::toDisplayLabel,
-        onValueSelected = onRaceBandSelected,
         modifier = modifier
     )
 }
