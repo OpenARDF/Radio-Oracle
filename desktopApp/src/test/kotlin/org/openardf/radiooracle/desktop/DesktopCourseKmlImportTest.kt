@@ -409,6 +409,47 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun importsClassic80PrefixedFoxNamesAndExplicitRouteOrder() {
+        val kmlPath = Files.createTempFile("80m Classic 2025", ".kml")
+        Files.writeString(kmlPath, sampleClassic80KmlWithPrefixedFoxNames())
+        val baseProject = EventProjectFactory.createEmptyProject("race", "Classic 80m Test", "2026-06-12T09:00")
+            .withControlIdentity(oldSiCode = 31, newSiCode = 131, label = "131", publicLabel = "Fox1")
+            .withControlIdentity(oldSiCode = 32, newSiCode = 132, label = "132", publicLabel = "Fox2")
+            .withControlIdentity(oldSiCode = 33, newSiCode = 133, label = "133", publicLabel = "Fox3")
+            .withControlIdentity(oldSiCode = 34, newSiCode = 134, label = "134", publicLabel = "Fox4")
+            .withControlIdentity(oldSiCode = 35, newSiCode = 135, label = "135", publicLabel = "Fox5")
+        val project = EventProjectEditor.addCategory(
+            baseProject,
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { 100.0 }
+        )
+
+        val category = updated.raceData.categories.single().category
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            category.encryptedCourseInfo!!,
+            "course-key"
+        )
+
+        assertEquals(5, summary.matchedControlPointCount)
+        assertEquals(5, summary.assignedCategoryControlCount)
+        assertEquals("131 132 133 134 135", summary.categoryAssignmentUpdates.single().controlPointsText)
+        assertEquals("Fox1 Fox2 Fox3 Fox4 Fox5", DesktopProtectedCourseOrder.decrypt(category.encryptedIdealOrder!!, "course-key"))
+        assertEquals("Fox1 Fox2 Fox3 Fox4 Fox5", protectedCourseInfo.idealOrder)
+        assertEquals(listOf("Fox1", "Fox2", "Fox3", "Fox4", "Fox5"), protectedCourseInfo.controlPoints.map { it.label })
+        assertEquals(
+            listOf("Classic 80 Fox 1", "Classic 80 Fox 2", "Classic 80 Fox 3", "Classic 80 Fox 4", "Classic 80 Fox 5"),
+            summary.labelConversions.map { it.importedName }
+        )
+    }
+
+    @Test
     fun doesNotGuessNumberBasedControlMatchWhenAmbiguous() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithAmbiguousControlNumber())
@@ -1292,6 +1333,52 @@ class DesktopCourseKmlImportTest {
         </kml>
         """.trimIndent()
 
+    private fun sampleClassic80KmlWithPrefixedFoxNames(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>80m Start</name>
+              <Point><coordinates>-95.0100,39.0100,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>80m Finish</name>
+              <Point><coordinates>-94.9300,39.0100,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Classic 80 Fox 1</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Classic 80 Fox 2</name>
+              <Point><coordinates>-94.9900,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Classic 80 Fox 3</name>
+              <Point><coordinates>-94.9800,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Classic 80 Fox 4</name>
+              <Point><coordinates>-94.9700,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Classic 80 Fox 5</name>
+              <Point><coordinates>-94.9600,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>80m 5 foxes 8.5 km (M21) - 1,2,3,4,5</name>
+              <LineString>
+                <coordinates>
+                  -95.0100,39.0100,0
+                  -94.9300,39.0100,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
     private fun controlsOnlyKml(longitude31: Double, longitude32: Double): String =
         """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -1319,6 +1406,25 @@ class DesktopCourseKmlImportTest {
             controlId = control.id,
             label = control.label,
             siCode = control.siCode.toString(),
+            type = control.type,
+            scored = control.scored,
+            publicLabel = publicLabel,
+            notes = control.notes.orEmpty()
+        )
+    }
+
+    private fun org.openardf.radiooracle.shared.event.EventProjectFile.withControlIdentity(
+        oldSiCode: Int,
+        newSiCode: Int,
+        label: String,
+        publicLabel: String
+    ): org.openardf.radiooracle.shared.event.EventProjectFile {
+        val control = raceData.controls.single { it.siCode == oldSiCode }
+        return EventProjectEditor.updateControl(
+            projectFile = this,
+            controlId = control.id,
+            label = label,
+            siCode = newSiCode.toString(),
             type = control.type,
             scored = control.scored,
             publicLabel = publicLabel,

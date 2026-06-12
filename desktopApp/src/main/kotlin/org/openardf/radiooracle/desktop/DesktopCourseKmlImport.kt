@@ -9,6 +9,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.domain.ControlPointType
+import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCategorySort
@@ -245,7 +246,14 @@ object DesktopCourseKmlImporter {
                 // Build the optional public assignment update from the unsampled LineString. Sampling
                 // is only for route/elevation facts; assignment matching should reflect the controls
                 // intentionally placed near the imported category route.
-                val duplicateRouteControlIds = controlsOnRoute(route.points, controlsByLabel.values.toList())
+                val raceType = categoryData.category.effectiveRaceType(updatedProject.raceData.race)
+                val explicitRouteControls = if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
+                    controlsFromExplicitClassicRouteOrder(route.name, controls)
+                } else {
+                    null
+                }
+                val duplicateRouteControlIds = explicitRouteControls
+                    ?: controlsOnRoute(route.points, controlsByLabel.values.toList())
                 categoryAssignmentUpdate(
                     projectFile = updatedProject,
                     categoryId = categoryData.category.id,
@@ -299,7 +307,8 @@ object DesktopCourseKmlImporter {
                         )
                     }
                     ?: importedSampledRoute
-                val routeControls = controlsOnRoute(sampledRoute, controlsByLabel.values.toList())
+                val routeControls = explicitRouteControls
+                    ?: controlsOnRoute(sampledRoute, controlsByLabel.values.toList())
 
                 val idealOrder = routeControls.joinToString(" ") { it.label }
                 val allProtectedControlPoints = controls.map { control ->
@@ -787,6 +796,7 @@ object DesktopCourseKmlImporter {
             val exactMatch = controlsByToken[imported.name.normalizedCourseName()]
             val match = exactMatch
                 ?: controlsByCompactToken[imported.name.compactCourseName()]
+                ?: imported.name.controlKeywordNumber()?.let { number -> controlsByNumber[number.toString()] }
                 ?: imported.name.singleEmbeddedNumber()?.let { number -> controlsByNumber[number.toString()] }
             match?.takeIf { imported.name.trim() != it.token.trim() }?.let { token ->
                 labelConversions += DesktopCourseKmlLabelConversion(
@@ -821,6 +831,64 @@ object DesktopCourseKmlImporter {
                 matches.map { it.control.id }.distinct().singleOrNull()?.let {
                     token to matches.first()
                 }
+            }
+            .toMap()
+    }
+
+    private fun controlsFromExplicitClassicRouteOrder(
+        routeName: String,
+        controls: List<CourseMatchedControl>
+    ): List<CourseMatchedControl>? {
+        val tokens = explicitClassicRouteOrderTokens(routeName)
+        if (tokens.isEmpty()) {
+            return null
+        }
+        val controlsByToken = uniqueMatchedControlsByRouteToken(controls)
+        val orderedControls = tokens.map { token ->
+            controlsByToken[token.normalizedCourseName()]
+                ?: controlsByToken[token.compactCourseName()]
+                ?: return null
+        }
+        return orderedControls.distinctBy { it.controlId }.takeIf { it.isNotEmpty() }
+    }
+
+    private fun explicitClassicRouteOrderTokens(routeName: String): List<String> {
+        val suffix = routeName.substringAfterLast('-', missingDelimiterValue = "").trim()
+        if (suffix.isBlank() || suffix == routeName || (',' !in suffix && ';' !in suffix)) {
+            return emptyList()
+        }
+        return suffix
+            .split(Regex("[,;\\s]+"))
+            .map { it.trim().trim('\'', '"') }
+            .filter { it.isNotBlank() }
+    }
+
+    private fun uniqueMatchedControlsByRouteToken(
+        controls: List<CourseMatchedControl>
+    ): Map<String, CourseMatchedControl> {
+        val tokens = controls.flatMap { control ->
+            listOfNotNull(
+                control.label,
+                control.displayLabel,
+                control.siCode.toString(),
+                control.assignedControlToken(),
+                control.label.controlKeywordNumber()?.toString(),
+                control.displayLabel.controlKeywordNumber()?.toString(),
+                control.displayLabel.singleEmbeddedNumber()?.toString()
+            )
+                .filter { it.isNotBlank() }
+                .map { token -> token.normalizedCourseName() to control } +
+                listOfNotNull(
+                    control.label.compactCourseName(),
+                    control.displayLabel.compactCourseName()
+                )
+                    .filter { it.isNotBlank() }
+                    .map { token -> token to control }
+        }
+        return tokens
+            .groupBy({ it.first }, { it.second })
+            .mapNotNull { (token, matches) ->
+                matches.map { it.controlId }.distinct().singleOrNull()?.let { token to matches.first() }
             }
             .toMap()
     }
@@ -1338,6 +1406,14 @@ private fun String.compactCourseName(): String =
 private fun String.singleEmbeddedNumber(): Int? {
     val numbers = Regex("\\d+").findAll(this).mapNotNull { it.value.toIntOrNull() }.toList()
     return numbers.singleOrNull()
+}
+
+private fun String.controlKeywordNumber(): Int? {
+    val match = Regex(
+        "\\b(?:fox|transmitter|tx|control|ctrl)\\s*#?\\s*(\\d+)\\b",
+        RegexOption.IGNORE_CASE
+    ).find(this)
+    return match?.groupValues?.getOrNull(1)?.toIntOrNull()
 }
 
 private fun String.categoryMatchText(): String =
