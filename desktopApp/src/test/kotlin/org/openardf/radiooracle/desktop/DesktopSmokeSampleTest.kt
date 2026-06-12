@@ -1,7 +1,6 @@
 package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
@@ -206,13 +205,16 @@ class DesktopSmokeSampleTest {
     }
 
     @Test
-    fun projectEditorRejectsRemovingCategoryControl() {
+    fun projectEditorRemovesDeletedControlFromCategoryAssignments() {
         val projectFile = DesktopProjectFiles.read(Path.of("..", "samples", "desktop-smoke.rom.json"))
-        val usedControlId = projectFile.raceData.categories.first().controlPoints.first().controlId
+        val category = projectFile.raceData.categories.first()
+        val usedControlId = category.controlPoints.first().controlId
 
-        assertThrows(IllegalArgumentException::class.java) {
-            EventProjectEditor.removeControl(projectFile, usedControlId)
-        }
+        val updated = EventProjectEditor.removeControl(projectFile, usedControlId)
+
+        assertTrue(updated.raceData.controls.none { it.id == usedControlId })
+        assertTrue(updated.raceData.categories.first { it.category.id == category.category.id }
+            .controlPoints.none { it.controlId == usedControlId })
     }
 
     @Test

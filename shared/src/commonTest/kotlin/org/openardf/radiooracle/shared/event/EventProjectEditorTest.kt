@@ -246,6 +246,44 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun removesAllControlsAndClearsDependentCategoryCourseData() {
+        val original = projectFile(
+            controls = listOf(
+                EventControl("control-31", "race", "F1", 31, ControlPointType.CONTROL, publicLabel = "F1"),
+                EventControl("control-32", "race", "F2", 32, ControlPointType.CONTROL, publicLabel = "F2")
+            ),
+            categories = listOf(
+                categoryData(
+                    "cat-1",
+                    "M21",
+                    controlSiCodes = listOf(31, 32),
+                    encryptedIdealOrder = "encrypted-order",
+                    encryptedCourseInfo = "encrypted-course"
+                ).let { data ->
+                    data.copy(
+                        category = data.category.copy(lengthMeters = 4500, climbMeters = 120),
+                        publicControlIds = listOf("control-31")
+                    )
+                }
+            ),
+            competitors = listOf(competitorData("comp-1", "Alice", "Runner", category = category("cat-1", "M21")))
+        )
+
+        val updated = EventProjectEditor.removeAllControls(original)
+
+        assertTrue(updated.raceData.controls.isEmpty())
+        assertEquals(listOf("M21"), updated.raceData.categories.map { it.category.name })
+        assertTrue(updated.raceData.categories.single().controlPoints.isEmpty())
+        assertTrue(updated.raceData.categories.single().publicControlIds.isEmpty())
+        assertEquals(0, updated.raceData.categories.single().category.lengthMeters)
+        assertEquals(0, updated.raceData.categories.single().category.climbMeters)
+        assertEquals("", updated.raceData.categories.single().category.controlPointsString)
+        assertEquals(null, updated.raceData.categories.single().category.encryptedIdealOrder)
+        assertEquals(null, updated.raceData.categories.single().category.encryptedCourseInfo)
+        assertEquals("cat-1", updated.raceData.competitorData.single().competitorCategory.competitor.categoryId)
+    }
+
+    @Test
     fun removesAllCategoriesAndClearsCompetitorCategoryAssignments() {
         val original = projectFile(
             categories = listOf(categoryData("cat-1", "M21"), categoryData("cat-2", "W21")),

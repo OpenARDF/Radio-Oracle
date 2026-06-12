@@ -15,23 +15,24 @@ object DesktopProtectedCourseCleanup {
             "Event Password cannot be blank."
         }
 
-        val assignedCategoryCount = DesktopImportPreviews.assignedCategoryUseCount(projectFile, setOf(controlId))
-        require(assignedCategoryCount == 0) {
-            "Control is still assigned to $assignedCategoryCount categor${if (assignedCategoryCount == 1) "y" else "ies"}."
-        }
-
         val nextCourseInfoByCategoryId = protectedCourseInfoByCategoryId.toMutableMap()
         var clearedCourseCount = 0
         var prunedCourseCount = 0
 
         val nextCategories = projectFile.raceData.categories.map { categoryData ->
             val courseInfo = protectedCourseInfoByCategoryId[categoryData.category.id]
-            if (courseInfo == null || !courseInfo.references(controlId)) {
+            val isAssignedControl = categoryData.controlPoints.any { it.controlId == controlId } ||
+                controlId in categoryData.publicControlIds
+            if (courseInfo == null) {
+                return@map categoryData
+            }
+            if (!courseInfo.references(controlId) && !isAssignedControl) {
                 return@map categoryData
             }
 
-            val hasAnyAssignedControls = categoryData.controlPoints.isNotEmpty() || categoryData.publicControlIds.isNotEmpty()
-            if (!hasAnyAssignedControls) {
+            val hasRemainingAssignedControls = categoryData.controlPoints.any { it.controlId != controlId } ||
+                categoryData.publicControlIds.any { it != controlId }
+            if (!hasRemainingAssignedControls) {
                 clearedCourseCount += 1
                 nextCourseInfoByCategoryId.remove(categoryData.category.id)
                 categoryData.copy(

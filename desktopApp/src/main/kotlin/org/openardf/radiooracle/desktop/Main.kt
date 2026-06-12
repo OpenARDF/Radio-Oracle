@@ -383,6 +383,7 @@ fun main(args: Array<String>) = application {
         var pendingCourseKmlKmzUnlockAction by remember { mutableStateOf<CourseKmlKmzUnlockAction?>(null) }
         var pendingProtectedControlDeleteId by remember { mutableStateOf<String?>(null) }
         var pendingBulkCategoryAction by remember { mutableStateOf<BulkCategoryAction?>(null) }
+        var isDeleteAllControlsDialogVisible by remember { mutableStateOf(false) }
         var isDeleteAllCompetitorsDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzImportReview by remember { mutableStateOf<PendingCourseKmlKmzImportReview?>(null) }
         var pendingCourseKmlKmzCategoryMapping by remember { mutableStateOf<PendingCourseKmlKmzCategoryMapping?>(null) }
@@ -458,7 +459,7 @@ fun main(args: Array<String>) = application {
                 projectStatusText = "Edit failed: Load an Event File before deleting controls."
                 return false
             }
-            if (currentProject.hasLockedProtectedCourseData(protectedCoursePassword != null)) {
+            if (currentProject.hasProtectedCategoryData() && protectedCoursePassword == null) {
                 val controlLabel = currentProject.raceData.controls
                     .firstOrNull { it.id == controlId }
                     ?.publicDisplayLabel()
@@ -467,20 +468,16 @@ fun main(args: Array<String>) = application {
                     pendingProtectedControlDeleteId = controlId
                     projectStatusText = "Unlock course data to delete $controlLabel."
                 } else {
-                    projectStatusText = "Edit failed: Course data is locked. Unlock course data before deleting controls so protected route references can be checked."
+                    projectStatusText = "Edit failed: Course data is locked. Unlock course data before deleting controls so protected route references can be cleaned."
                 }
                 return false
             }
             val result = runCatching {
                 val currentProjectForDelete = projectSession.currentProject
                     ?: throw IllegalStateException("Load an Event File before deleting controls.")
-                val protectedUseCount = DesktopImportPreviews.protectedCourseUseCount(
-                    protectedCourseInfoByCategoryId,
-                    setOf(controlId)
-                )
-                val cleanupResult = if (protectedUseCount > 0) {
+                val cleanupResult = if (protectedCourseInfoByCategoryId.isNotEmpty()) {
                     val password = protectedCoursePassword
-                        ?: throw IllegalStateException("Unlock course data before deleting controls so protected route references can be checked.")
+                        ?: throw IllegalStateException("Unlock course data before deleting controls so protected route references can be cleaned.")
                     DesktopProtectedCourseCleanup.removeStaleControlReferencesForDeletedControl(
                         projectFile = currentProjectForDelete,
                         protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
@@ -496,9 +493,14 @@ fun main(args: Array<String>) = application {
                     )
                 }
                 projectFile = projectSession.updateCurrentProject { project ->
-                    EventProjectEditor.removeControl(cleanupResult.projectFile, controlId)
+                    EventProjectEditor.removeControl(
+                        cleanupResult.projectFile,
+                        controlId,
+                        clearProtectedCourseData = false
+                    )
                 }
                 protectedCourseInfoByCategoryId = cleanupResult.protectedCourseInfoByCategoryId
+                protectedIdealOrderByCategoryId = emptyMap()
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
                 recordActivity("Removed control.")
                 val cleanedCourseCount = cleanupResult.clearedCourseCount + cleanupResult.prunedCourseCount
@@ -1284,6 +1286,50 @@ fun main(args: Array<String>) = application {
                         recordActivity("Deleted all categories.")
                         projectStatusText = "Deleted all categories and cleared category assignments from competitors. Unsaved changes."
                     }
+                }
+                true
+            }.getOrElse { error ->
+                projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+                false
+            }
+        }
+
+        fun deleteAllControls(password: String): Boolean {
+            val currentProject = projectSession.currentProject ?: return false
+            val affectedCategoryCount = currentProject.raceData.categories.count { categoryData ->
+                categoryData.controlPoints.isNotEmpty() ||
+                    categoryData.publicControlIds.isNotEmpty() ||
+                    categoryData.category.controlPointsString.isNotBlank() ||
+                    categoryData.category.lengthMeters != 0 ||
+                    categoryData.category.climbMeters != 0 ||
+                    categoryData.category.encryptedIdealOrder?.isNotBlank() == true ||
+                    categoryData.category.encryptedCourseInfo?.isNotBlank() == true
+            }
+            if (currentProject.raceData.controls.isEmpty() && affectedCategoryCount == 0) {
+                projectStatusText = "No controls to delete."
+                return false
+            }
+            if (currentProject.hasProtectedCategoryData()) {
+                if (!unlockProtectedCourseOrder(password)) {
+                    return false
+                }
+            }
+            return runCatching {
+                val controlCount = currentProject.raceData.controls.size
+                projectFile = projectSession.updateCurrentProject { project ->
+                    EventProjectEditor.removeAllControls(project)
+                }
+                protectedIdealOrderByCategoryId = emptyMap()
+                protectedCourseInfoByCategoryId = emptyMap()
+                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                recordActivity("Deleted all controls.")
+                projectStatusText = buildString {
+                    append("Deleted $controlCount controls.")
+                    if (affectedCategoryCount > 0) {
+                        append(" Cleared course assignments and length/climb data from $affectedCategoryCount categor")
+                        append(if (affectedCategoryCount == 1) "y." else "ies.")
+                    }
+                    append(" Unsaved changes.")
                 }
                 true
             }.getOrElse { error ->
@@ -2531,6 +2577,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportControlsCsv,
                 DesktopNavAction.ImportCompetitorsCsv,
                 DesktopNavAction.ImportStartsCsv,
+                DesktopNavAction.DeleteAllControls,
                 DesktopNavAction.DeleteAllCategoryAssignedControls,
                 DesktopNavAction.DeleteAllCategories,
                 DesktopNavAction.DeleteAllCompetitors,
@@ -2606,6 +2653,8 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
                 DesktopNavAction.ImportControlsCsv -> importControlsCsv()
                 DesktopNavAction.ImportCourseKmlKmz -> chooseImportCourseKmlKmz()
+                DesktopNavAction.DeleteAllControls ->
+                    isDeleteAllControlsDialogVisible = true
                 DesktopNavAction.DeleteAllCategoryAssignedControls ->
                     pendingBulkCategoryAction = BulkCategoryAction.DeleteAllAssignedControls
                 DesktopNavAction.DeleteAllCategories ->
@@ -2836,7 +2885,7 @@ fun main(args: Array<String>) = application {
                 ?: "this control"
             CourseKmlKmzUnlockDialog(
                 title = "Unlock course data to delete control",
-                description = "The Event File contains password-protected imported course or route data. Before deleting $controlLabel, Radio-Oracle needs the Event Password so it can check whether that control is referenced by stored course routes.",
+                description = "The Event File contains password-protected imported course or route data. Before deleting $controlLabel, Radio-Oracle needs the Event Password so it can clean any stored course references to that control.",
                 confirmLabel = "Unlock and Delete",
                 onUnlock = { password ->
                     if (unlockProtectedCourseOrder(password)) {
@@ -2848,6 +2897,31 @@ fun main(args: Array<String>) = application {
                     }
                 },
                 onCancel = { pendingProtectedControlDeleteId = null }
+            )
+        }
+        if (isDeleteAllControlsDialogVisible) {
+            val currentProject = projectSession.currentProject
+            DeleteAllControlsDialog(
+                controlCount = currentProject?.raceData?.controls?.size ?: 0,
+                affectedCategoryCount = currentProject?.raceData?.categories?.count { categoryData ->
+                    categoryData.controlPoints.isNotEmpty() ||
+                        categoryData.publicControlIds.isNotEmpty() ||
+                        categoryData.category.controlPointsString.isNotBlank() ||
+                        categoryData.category.lengthMeters != 0 ||
+                        categoryData.category.climbMeters != 0 ||
+                        categoryData.category.encryptedIdealOrder?.isNotBlank() == true ||
+                        categoryData.category.encryptedCourseInfo?.isNotBlank() == true
+                } ?: 0,
+                hasProtectedCategoryData = currentProject?.hasProtectedCategoryData() == true,
+                onConfirm = { password ->
+                    if (deleteAllControls(password)) {
+                        isDeleteAllControlsDialogVisible = false
+                        true
+                    } else {
+                        false
+                    }
+                },
+                onCancel = { isDeleteAllControlsDialogVisible = false }
             )
         }
         pendingBulkCategoryAction?.let { action ->
@@ -3723,6 +3797,11 @@ private fun CourseKmlKmzUnlockDialog(
     onCancel: () -> Unit
 ) {
     var passwordDraft by remember { mutableStateOf("") }
+    fun submitPassword() {
+        if (passwordDraft.isNotBlank() && onUnlock(passwordDraft)) {
+            passwordDraft = ""
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -3735,7 +3814,9 @@ private fun CourseKmlKmzUnlockDialog(
                     label = { Text("Password") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .commitOnEnter(::submitPassword)
                 )
                 Text(
                     text = description,
@@ -3746,11 +3827,7 @@ private fun CourseKmlKmzUnlockDialog(
         },
         confirmButton = {
             Button(
-                onClick = {
-                    if (onUnlock(passwordDraft)) {
-                        passwordDraft = ""
-                    }
-                },
+                onClick = ::submitPassword,
                 enabled = passwordDraft.isNotBlank()
             ) {
                 Text(confirmLabel)
@@ -3773,6 +3850,12 @@ private fun BulkCategoryActionDialog(
     onCancel: () -> Unit
 ) {
     var passwordDraft by remember(action) { mutableStateOf("") }
+    val canSubmit = categoryCount > 0 && (!hasProtectedCategoryData || passwordDraft.isNotBlank())
+    fun submit() {
+        if (canSubmit && onConfirm(passwordDraft)) {
+            passwordDraft = ""
+        }
+    }
     val title = when (action) {
         BulkCategoryAction.DeleteAllAssignedControls -> "Delete all assigned controls"
         BulkCategoryAction.DeleteAllCategories -> "Delete all categories"
@@ -3801,19 +3884,85 @@ private fun BulkCategoryActionDialog(
                         label = { Text("Event Password") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .commitOnEnter(::submit)
                     )
                 }
             }
         },
         confirmButton = {
             Button(
-                onClick = {
-                    if (onConfirm(passwordDraft)) {
-                        passwordDraft = ""
-                    }
-                },
-                enabled = categoryCount > 0 && (!hasProtectedCategoryData || passwordDraft.isNotBlank())
+                onClick = ::submit,
+                enabled = canSubmit
+            ) {
+                Text("Delete")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun DeleteAllControlsDialog(
+    controlCount: Int,
+    affectedCategoryCount: Int,
+    hasProtectedCategoryData: Boolean,
+    onConfirm: (String) -> Boolean,
+    onCancel: () -> Unit
+) {
+    var passwordDraft by remember { mutableStateOf("") }
+    val canSubmit = (controlCount > 0 || affectedCategoryCount > 0) &&
+        (!hasProtectedCategoryData || passwordDraft.isNotBlank())
+    fun submit() {
+        if (canSubmit && onConfirm(passwordDraft)) {
+            passwordDraft = ""
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Delete all controls") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "This removes all $controlCount controls from the Event File and clears dependent category control assignments, length, and climb data."
+                )
+                Text(
+                    text = if (affectedCategoryCount > 0) {
+                        "$affectedCategoryCount categories have course data that will be cleared."
+                    } else {
+                        "No category course assignments are currently attached to controls."
+                    },
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+                if (hasProtectedCategoryData) {
+                    Text(
+                        text = "Because protected course data will be affected, enter the Event Password to continue.",
+                        fontSize = 13.sp,
+                        color = Color.DarkGray
+                    )
+                    TextField(
+                        value = passwordDraft,
+                        onValueChange = { passwordDraft = it },
+                        label = { Text("Event Password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .commitOnEnter(::submit)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = ::submit,
+                enabled = canSubmit
             ) {
                 Text("Delete")
             }
@@ -4543,7 +4692,13 @@ private fun EventRegImportDialog(
                     enabled = !isImporting,
                     label = { Text("Registration list URL") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .commitOnEnter {
+                            if (!isImporting && url.isNotBlank()) {
+                                onImport()
+                            }
+                        }
                 )
                 Text(
                     text = if (isImporting) {
@@ -6450,6 +6605,13 @@ private fun CoursePasswordSettingsPanel(
     val canSubmit = newPasswordDraft.isNotBlank() &&
         confirmPasswordDraft.isNotBlank() &&
         (!hasCoursePassword || oldPasswordDraft.isNotBlank())
+    fun submitPasswordChange() {
+        if (projectFile != null && canSubmit && onUpdateCoursePassword(oldPasswordDraft, newPasswordDraft, confirmPasswordDraft)) {
+            oldPasswordDraft = ""
+            newPasswordDraft = ""
+            confirmPasswordDraft = ""
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -6475,7 +6637,9 @@ private fun CoursePasswordSettingsPanel(
                     label = { Text("Current Event Password") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.width(190.dp)
+                    modifier = Modifier
+                        .width(190.dp)
+                        .commitOnEnter(::submitPasswordChange)
                 )
             }
             TextField(
@@ -6485,7 +6649,9 @@ private fun CoursePasswordSettingsPanel(
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 enabled = projectFile != null,
-                modifier = Modifier.width(190.dp)
+                modifier = Modifier
+                    .width(190.dp)
+                    .commitOnEnter(::submitPasswordChange)
             )
             TextField(
                 value = confirmPasswordDraft,
@@ -6494,17 +6660,13 @@ private fun CoursePasswordSettingsPanel(
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 enabled = projectFile != null,
-                modifier = Modifier.width(190.dp)
+                modifier = Modifier
+                    .width(190.dp)
+                    .commitOnEnter(::submitPasswordChange)
             )
             DisabledReasonTooltip(coursePasswordSubmitDisabledReason(projectFile, hasCoursePassword, oldPasswordDraft, newPasswordDraft, confirmPasswordDraft)) {
                 Button(
-                    onClick = {
-                        if (onUpdateCoursePassword(oldPasswordDraft, newPasswordDraft, confirmPasswordDraft)) {
-                            oldPasswordDraft = ""
-                            newPasswordDraft = ""
-                            confirmPasswordDraft = ""
-                        }
-                    },
+                    onClick = ::submitPasswordChange,
                     enabled = projectFile != null && canSubmit
                 ) {
                     ButtonLabel(if (hasCoursePassword) "Reset Event Password" else "Set Event Password")
@@ -6912,6 +7074,29 @@ private fun ReadoutDetailsPanel(
     var ticketPreviewText by remember { mutableStateOf<String?>(null) }
     var ticketPreviewResultId by remember { mutableStateOf<String?>(null) }
     val competitorsWithoutReadouts = competitors.filterNot { it.hasReadout }
+    val canAddManualReadout = selectedCompetitorId != null ||
+        siNumberDraft.isNotBlank() ||
+        startSecondsDraft.isNotBlank() ||
+        finishSecondsDraft.isNotBlank() ||
+        controlCodesDraft.isNotBlank()
+    fun addManualReadout() {
+        val didAdd = onAddManualReadout(
+            selectedCompetitorId,
+            siNumberDraft,
+            startSecondsDraft,
+            finishSecondsDraft,
+            controlCodesDraft,
+            selectedStatus
+        )
+        if (didAdd) {
+            selectedCompetitorId = null
+            siNumberDraft = ""
+            startSecondsDraft = ""
+            finishSecondsDraft = ""
+            controlCodesDraft = ""
+            selectedStatus = ResultStatus.OK
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         LastReadoutStatusPanel(lastReadout)
@@ -6950,21 +7135,8 @@ private fun ReadoutDetailsPanel(
             verticalAlignment = Alignment.Top
         ) {
             ManualReadoutAddButton(
-                selectedCompetitorId = selectedCompetitorId,
-                siNumberDraft = siNumberDraft,
-                startSecondsDraft = startSecondsDraft,
-                finishSecondsDraft = finishSecondsDraft,
-                controlCodesDraft = controlCodesDraft,
-                selectedStatus = selectedStatus,
-                onAddManualReadout = onAddManualReadout,
-                onManualReadoutAdded = {
-                    selectedCompetitorId = null
-                    siNumberDraft = ""
-                    startSecondsDraft = ""
-                    finishSecondsDraft = ""
-                    controlCodesDraft = ""
-                    selectedStatus = ResultStatus.OK
-                },
+                canAdd = canAddManualReadout,
+                onAdd = ::addManualReadout,
                 modifier = fixedActionRailModifier().offset(y = ReadoutAddRailYOffset)
             )
             Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
@@ -6985,7 +7157,12 @@ private fun ReadoutDetailsPanel(
                         controlCodesDraft = controlCodesDraft,
                         onControlCodesChange = { controlCodesDraft = it },
                         selectedStatus = selectedStatus,
-                        onStatusSelected = { selectedStatus = it }
+                        onStatusSelected = { selectedStatus = it },
+                        onCommit = {
+                            if (canAddManualReadout) {
+                                addManualReadout()
+                            }
+                        }
                     )
                     FixedDetailHeaderRow(ReadoutTableColumns)
                 }
@@ -7069,36 +7246,14 @@ private fun LastReadoutStatusPanel(lastReadout: EventLastReadoutDetails) {
 /** Shows a compact manual readout entry row for desktop beta testing. */
 @Composable
 private fun ManualReadoutAddButton(
-    selectedCompetitorId: String?,
-    siNumberDraft: String,
-    startSecondsDraft: String,
-    finishSecondsDraft: String,
-    controlCodesDraft: String,
-    selectedStatus: ResultStatus,
-    onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean,
-    onManualReadoutAdded: () -> Unit,
+    canAdd: Boolean,
+    onAdd: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Button(
-        onClick = {
-            val didAdd = onAddManualReadout(
-                selectedCompetitorId,
-                siNumberDraft,
-                startSecondsDraft,
-                finishSecondsDraft,
-                controlCodesDraft,
-                selectedStatus
-            )
-            if (didAdd) {
-                onManualReadoutAdded()
-            }
-        },
+        onClick = onAdd,
         modifier = modifier,
-        enabled = selectedCompetitorId != null ||
-                siNumberDraft.isNotBlank() ||
-                startSecondsDraft.isNotBlank() ||
-                finishSecondsDraft.isNotBlank() ||
-                controlCodesDraft.isNotBlank()
+        enabled = canAdd
     ) {
         ButtonLabel("Add")
     }
@@ -7119,7 +7274,8 @@ private fun ManualReadoutAddRow(
     controlCodesDraft: String,
     onControlCodesChange: (String) -> Unit,
     selectedStatus: ResultStatus,
-    onStatusSelected: (ResultStatus) -> Unit
+    onStatusSelected: (ResultStatus) -> Unit,
+    onCommit: () -> Unit
 ) {
     Row(
         modifier = Modifier.width(fixedTableWidth(ReadoutTableColumns)),
@@ -7129,7 +7285,9 @@ private fun ManualReadoutAddRow(
         TextField(
             value = siNumberDraft,
             onValueChange = onSiNumberChange,
-            modifier = Modifier.width(ReadoutTableColumns[0].width),
+            modifier = Modifier
+                .width(ReadoutTableColumns[0].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("SI") }
         )
@@ -7147,21 +7305,27 @@ private fun ManualReadoutAddRow(
         TextField(
             value = startSecondsDraft,
             onValueChange = onStartSecondsChange,
-            modifier = Modifier.width(ReadoutTableColumns[3].width),
+            modifier = Modifier
+                .width(ReadoutTableColumns[3].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("Start s") }
         )
         TextField(
             value = finishSecondsDraft,
             onValueChange = onFinishSecondsChange,
-            modifier = Modifier.width(ReadoutTableColumns[4].width),
+            modifier = Modifier
+                .width(ReadoutTableColumns[4].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("Finish s") }
         )
         TextField(
             value = controlCodesDraft,
             onValueChange = onControlCodesChange,
-            modifier = Modifier.width(ReadoutTableColumns[5].width),
+            modifier = Modifier
+                .width(ReadoutTableColumns[5].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("Controls") }
         )
@@ -7378,6 +7542,18 @@ private fun ReadoutEditDialog(
             updateCompetitorCategory = false
         }
     }
+    fun saveDraft() {
+        onSave(
+            draft.copy(
+                startSeconds = startSeconds,
+                finishSeconds = finishSeconds,
+                controlPunchesText = controlPunchesText,
+                resultStatus = resultStatus,
+                categoryId = categoryId,
+                updateCompetitorCategory = updateCompetitorCategory
+            )
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -7398,13 +7574,15 @@ private fun ReadoutEditDialog(
                             }
                         },
                         modifier = Modifier.width(160.dp),
-                        enabled = !draft.isPractice
+                        enabled = !draft.isPractice,
+                        onCommit = ::saveDraft
                     )
                     LabeledTextField(
                         label = "Finish elapsed",
                         value = finishSeconds,
                         onValueChange = { finishSeconds = it },
-                        modifier = Modifier.width(160.dp)
+                        modifier = Modifier.width(160.dp),
+                        onCommit = ::saveDraft
                     )
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -7435,7 +7613,10 @@ private fun ReadoutEditDialog(
                         value = controlPunchesText,
                         onValueChange = { controlPunchesText = it },
                         singleLine = false,
-                        modifier = Modifier.width(420.dp).height(88.dp)
+                        modifier = Modifier
+                            .width(420.dp)
+                            .height(88.dp)
+                            .commitOnEnter(::saveDraft)
                     )
                     Text(
                         text = "Use one punch per line, such as Fox 1 @ 15:00. The picker inserts valid labels; typed SI codes, public labels, and control labels are also accepted.",
@@ -7473,18 +7654,7 @@ private fun ReadoutEditDialog(
         },
         confirmButton = {
             Button(
-                onClick = {
-                    onSave(
-                        draft.copy(
-                            startSeconds = startSeconds,
-                            finishSeconds = finishSeconds,
-                            controlPunchesText = controlPunchesText,
-                            resultStatus = resultStatus,
-                            categoryId = categoryId,
-                            updateCompetitorCategory = updateCompetitorCategory
-                        )
-                    )
-                }
+                onClick = ::saveDraft
             ) {
                 Text("Save")
             }
@@ -7613,6 +7783,30 @@ private fun CompetitorDetailsPanel(
     val canAddCompetitor = firstNameDraft.isNotBlank() &&
             lastNameDraft.isNotBlank() &&
             startNumberDraft.isNotBlank()
+    fun addCompetitor() {
+        val didAdd = onAddCompetitor(
+            firstNameDraft,
+            lastNameDraft,
+            clubDraft,
+            bibNumberDraft,
+            callSignDraft,
+            birthYearDraft,
+            selectedCategoryId,
+            startNumberDraft,
+            siNumberDraft
+        )
+        if (didAdd) {
+            firstNameDraft = ""
+            lastNameDraft = ""
+            clubDraft = ""
+            bibNumberDraft = ""
+            callSignDraft = ""
+            birthYearDraft = ""
+            selectedCategoryId = null
+            startNumberDraft = nextCompetitorStartNumber(competitors)
+            siNumberDraft = ""
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
@@ -7666,30 +7860,7 @@ private fun CompetitorDetailsPanel(
             verticalAlignment = Alignment.Top
         ) {
             Button(
-                onClick = {
-                    val didAdd = onAddCompetitor(
-                        firstNameDraft,
-                        lastNameDraft,
-                        clubDraft,
-                        bibNumberDraft,
-                        callSignDraft,
-                        birthYearDraft,
-                        selectedCategoryId,
-                        startNumberDraft,
-                        siNumberDraft
-                    )
-                    if (didAdd) {
-                        firstNameDraft = ""
-                        lastNameDraft = ""
-                        clubDraft = ""
-                        bibNumberDraft = ""
-                        callSignDraft = ""
-                        birthYearDraft = ""
-                        selectedCategoryId = null
-                        startNumberDraft = nextCompetitorStartNumber(competitors)
-                        siNumberDraft = ""
-                    }
-                },
+                onClick = ::addCompetitor,
                 modifier = fixedActionRailModifier(),
                 enabled = canAddCompetitor
             ) {
@@ -7719,7 +7890,12 @@ private fun CompetitorDetailsPanel(
                         startNumberDraft = startNumberDraft,
                         onStartNumberChange = { startNumberDraft = it },
                         siNumberDraft = siNumberDraft,
-                        onSiNumberChange = { siNumberDraft = it }
+                        onSiNumberChange = { siNumberDraft = it },
+                        onCommit = {
+                            if (canAddCompetitor) {
+                                addCompetitor()
+                            }
+                        }
                     )
                     FixedDetailHeaderRow(CompetitorTableColumns, CompetitorTableColumnHints)
                 }
@@ -7787,7 +7963,8 @@ private fun CompetitorAddRow(
     startNumberDraft: String,
     onStartNumberChange: (String) -> Unit,
     siNumberDraft: String,
-    onSiNumberChange: (String) -> Unit
+    onSiNumberChange: (String) -> Unit,
+    onCommit: () -> Unit
 ) {
     Row(
         modifier = Modifier.width(fixedTableWidth(CompetitorTableColumns)),
@@ -7797,42 +7974,54 @@ private fun CompetitorAddRow(
         TextField(
             value = firstNameDraft,
             onValueChange = onFirstNameChange,
-            modifier = Modifier.width(CompetitorTableColumns[0].width),
+            modifier = Modifier
+                .width(CompetitorTableColumns[0].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("First") }
         )
         TextField(
             value = lastNameDraft,
             onValueChange = onLastNameChange,
-            modifier = Modifier.width(CompetitorTableColumns[1].width),
+            modifier = Modifier
+                .width(CompetitorTableColumns[1].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("Last") }
         )
         TextField(
             value = clubDraft,
             onValueChange = onClubChange,
-            modifier = Modifier.width(CompetitorTableColumns[2].width),
+            modifier = Modifier
+                .width(CompetitorTableColumns[2].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("Club") }
         )
         TextField(
             value = bibNumberDraft,
             onValueChange = onBibNumberChange,
-            modifier = Modifier.width(CompetitorTableColumns[3].width),
+            modifier = Modifier
+                .width(CompetitorTableColumns[3].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("Bib") }
         )
         TextField(
             value = callSignDraft,
             onValueChange = onCallSignChange,
-            modifier = Modifier.width(CompetitorTableColumns[4].width),
+            modifier = Modifier
+                .width(CompetitorTableColumns[4].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("Call") }
         )
         TextField(
             value = birthYearDraft,
             onValueChange = onBirthYearChange,
-            modifier = Modifier.width(CompetitorTableColumns[5].width),
+            modifier = Modifier
+                .width(CompetitorTableColumns[5].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("Birth") }
         )
@@ -7845,7 +8034,9 @@ private fun CompetitorAddRow(
         TextField(
             value = startNumberDraft,
             onValueChange = onStartNumberChange,
-            modifier = Modifier.width(CompetitorTableColumns[7].width),
+            modifier = Modifier
+                .width(CompetitorTableColumns[7].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("Start") }
         )
@@ -7853,7 +8044,9 @@ private fun CompetitorAddRow(
         TextField(
             value = siNumberDraft,
             onValueChange = onSiNumberChange,
-            modifier = Modifier.width(CompetitorTableColumns[9].width),
+            modifier = Modifier
+                .width(CompetitorTableColumns[9].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("SI") }
         )
@@ -7944,7 +8137,8 @@ private fun CompetitorDetailRow(
                     if (!focusState.isFocused) {
                         applyPendingDrafts()
                     }
-                },
+                }
+                .commitOnEnter(::applyPendingDrafts),
             singleLine = true,
             label = { Text("First") }
         )
@@ -7957,7 +8151,8 @@ private fun CompetitorDetailRow(
                     if (!focusState.isFocused) {
                         applyPendingDrafts()
                     }
-                },
+                }
+                .commitOnEnter(::applyPendingDrafts),
             singleLine = true,
             label = { Text("Last") }
         )
@@ -7970,7 +8165,8 @@ private fun CompetitorDetailRow(
                     if (!focusState.isFocused) {
                         applyPendingDrafts()
                     }
-                },
+                }
+                .commitOnEnter(::applyPendingDrafts),
             singleLine = true,
             label = { Text("Club") }
         )
@@ -7983,7 +8179,8 @@ private fun CompetitorDetailRow(
                     if (!focusState.isFocused) {
                         applyPendingDrafts()
                     }
-                },
+                }
+                .commitOnEnter(::applyPendingDrafts),
             singleLine = true,
             label = { Text("Bib") }
         )
@@ -7996,7 +8193,8 @@ private fun CompetitorDetailRow(
                     if (!focusState.isFocused) {
                         applyPendingDrafts()
                     }
-                },
+                }
+                .commitOnEnter(::applyPendingDrafts),
             singleLine = true,
             label = { Text("Call") }
         )
@@ -8009,7 +8207,8 @@ private fun CompetitorDetailRow(
                     if (!focusState.isFocused) {
                         applyPendingDrafts()
                     }
-                },
+                }
+                .commitOnEnter(::applyPendingDrafts),
             singleLine = true,
             label = { Text("Birth") }
         )
@@ -8031,7 +8230,8 @@ private fun CompetitorDetailRow(
                     if (!focusState.isFocused) {
                         applyPendingDrafts()
                     }
-                },
+                }
+                .commitOnEnter(::applyPendingDrafts),
             singleLine = true,
             label = { Text("Start") }
         )
@@ -8044,7 +8244,8 @@ private fun CompetitorDetailRow(
                     if (!focusState.isFocused) {
                         applyPendingDrafts()
                     }
-                },
+                }
+                .commitOnEnter(::applyPendingDrafts),
             singleLine = true,
             label = { Text("mmm:ss") }
         )
@@ -8057,7 +8258,8 @@ private fun CompetitorDetailRow(
                     if (!focusState.isFocused) {
                         applyPendingDrafts()
                     }
-                },
+                }
+                .commitOnEnter(::applyPendingDrafts),
             singleLine = true,
             label = { Text("SI") }
         )
@@ -8171,6 +8373,15 @@ private fun ControlDetailsPanel(
     var typeDraft by remember { mutableStateOf(ControlPointType.CONTROL) }
     var publicLabelDraft by remember { mutableStateOf("") }
     var notesDraft by remember { mutableStateOf("") }
+    fun addControl() {
+        val didAdd = onAddControl("", siCodeDraft, typeDraft, typeDraft.defaultScored(), publicLabelDraft, notesDraft)
+        if (didAdd) {
+            siCodeDraft = ""
+            typeDraft = ControlPointType.CONTROL
+            publicLabelDraft = ""
+            notesDraft = ""
+        }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -8178,15 +8389,7 @@ private fun ControlDetailsPanel(
             verticalAlignment = Alignment.Top
         ) {
             Button(
-                onClick = {
-                    val didAdd = onAddControl("", siCodeDraft, typeDraft, typeDraft.defaultScored(), publicLabelDraft, notesDraft)
-                    if (didAdd) {
-                        siCodeDraft = ""
-                        typeDraft = ControlPointType.CONTROL
-                        publicLabelDraft = ""
-                        notesDraft = ""
-                    }
-                },
+                onClick = ::addControl,
                 modifier = fixedActionRailModifier(),
                 enabled = siCodeDraft.isNotBlank()
             ) {
@@ -8206,7 +8409,12 @@ private fun ControlDetailsPanel(
                         publicLabelDraft = publicLabelDraft,
                         onPublicLabelChange = { publicLabelDraft = it },
                         notesDraft = notesDraft,
-                        onNotesChange = { notesDraft = it }
+                        onNotesChange = { notesDraft = it },
+                        onCommit = {
+                            if (siCodeDraft.isNotBlank()) {
+                                addControl()
+                            }
+                        }
                     )
                     FixedDetailHeaderRow(ControlTableColumns, ControlTableColumnHints)
                 }
@@ -8785,6 +8993,11 @@ private fun CourseAnalysisPanel(
 ) {
     var passwordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
     if (!isUnlocked) {
+        fun unlock() {
+            if (passwordDraft.isNotBlank() && onUnlock(passwordDraft)) {
+                passwordDraft = ""
+            }
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -8795,7 +9008,9 @@ private fun CourseAnalysisPanel(
                 label = { Text("Password") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.width(260.dp)
+                modifier = Modifier
+                    .width(260.dp)
+                    .commitOnEnter(::unlock)
             )
             DisabledReasonTooltip(
                 if (passwordDraft.isBlank()) {
@@ -8805,11 +9020,7 @@ private fun CourseAnalysisPanel(
                 }
             ) {
                 Button(
-                    onClick = {
-                        if (onUnlock(passwordDraft)) {
-                            passwordDraft = ""
-                        }
-                    },
+                    onClick = ::unlock,
                     enabled = passwordDraft.isNotBlank()
                 ) {
                     ButtonLabel("Unlock")
@@ -9728,7 +9939,8 @@ private fun ControlAddRow(
     publicLabelDraft: String,
     onPublicLabelChange: (String) -> Unit,
     notesDraft: String,
-    onNotesChange: (String) -> Unit
+    onNotesChange: (String) -> Unit,
+    onCommit: () -> Unit
 ) {
     Row(
         modifier = Modifier.width(fixedTableWidth(ControlTableColumns)),
@@ -9738,7 +9950,9 @@ private fun ControlAddRow(
         TextField(
             value = siCodeDraft,
             onValueChange = onSiCodeChange,
-            modifier = Modifier.width(ControlTableColumns[0].width),
+            modifier = Modifier
+                .width(ControlTableColumns[0].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("SI code") }
         )
@@ -9751,14 +9965,18 @@ private fun ControlAddRow(
         TextField(
             value = publicLabelDraft,
             onValueChange = onPublicLabelChange,
-            modifier = Modifier.width(ControlTableColumns[2].width),
+            modifier = Modifier
+                .width(ControlTableColumns[2].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("Public label") }
         )
         TextField(
             value = notesDraft,
             onValueChange = onNotesChange,
-            modifier = Modifier.width(ControlTableColumns[3].width),
+            modifier = Modifier
+                .width(ControlTableColumns[3].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("Notes") }
         )
@@ -9827,7 +10045,8 @@ private fun ControlDetailRow(
                     if (wasFocused && !focusState.isFocused) {
                         commitSiCodeDraft()
                     }
-                },
+                }
+                .commitOnEnter(::commitSiCodeDraft),
             singleLine = true,
             label = { Text("SI code") }
         )
@@ -9950,6 +10169,12 @@ private fun CategoryDetailsPanel(
     val tableWidth = fixedTableWidth(CategoryTableColumns)
     val orderedCategories = rememberEditableRowOrder(categories) { it.id }
     var categoryNameDraft by remember { mutableStateOf("") }
+    fun addCategory() {
+        val didAdd = onAddCategory(categoryNameDraft)
+        if (didAdd) {
+            categoryNameDraft = ""
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
@@ -9958,12 +10183,7 @@ private fun CategoryDetailsPanel(
             verticalAlignment = Alignment.Top
         ) {
             Button(
-                onClick = {
-                    val didAdd = onAddCategory(categoryNameDraft)
-                    if (didAdd) {
-                        categoryNameDraft = ""
-                    }
-                },
+                onClick = ::addCategory,
                 modifier = fixedActionRailModifier(),
                 enabled = categoryNameDraft.isNotBlank()
             ) {
@@ -9976,7 +10196,12 @@ private fun CategoryDetailsPanel(
                 ) {
                     CategoryAddRow(
                         categoryNameDraft = categoryNameDraft,
-                        onCategoryNameChange = { categoryNameDraft = it }
+                        onCategoryNameChange = { categoryNameDraft = it },
+                        onCommit = {
+                            if (categoryNameDraft.isNotBlank()) {
+                                addCategory()
+                            }
+                        }
                     )
                     FixedDetailHeaderRow(CategoryTableColumns, CategoryTableColumnHints)
                 }
@@ -10034,6 +10259,11 @@ private fun ProtectedCourseOrderPanel(
     var locationStatusText by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf<String?>(null) }
 
     if (!isUnlocked) {
+        fun unlock() {
+            if (passwordDraft.isNotBlank() && onUnlock(passwordDraft)) {
+                passwordDraft = ""
+            }
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -10044,14 +10274,12 @@ private fun ProtectedCourseOrderPanel(
                 label = { Text("Password") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.width(260.dp)
+                modifier = Modifier
+                    .width(260.dp)
+                    .commitOnEnter(::unlock)
             )
             Button(
-                onClick = {
-                    if (onUnlock(passwordDraft)) {
-                        passwordDraft = ""
-                    }
-                },
+                onClick = ::unlock,
                 enabled = passwordDraft.isNotBlank()
             ) {
                 ButtonLabel("Unlock")
@@ -10129,6 +10357,12 @@ private fun ProtectedControlLocationUpdatePanel(
         parsedLatitude in -90.0..90.0 &&
         parsedLongitude != null &&
         parsedLongitude in -180.0..180.0
+    fun applyLocationUpdate() {
+        val controlId = selectedControlId ?: return
+        if (canApply) {
+            onStatusTextChange(onUpdateControlLocation(controlId, latitudeDraft, longitudeDraft))
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -10155,20 +10389,21 @@ private fun ProtectedControlLocationUpdatePanel(
                 onValueChange = { latitudeDraft = it },
                 label = { Text("Latitude") },
                 singleLine = true,
-                modifier = Modifier.width(150.dp)
+                modifier = Modifier
+                    .width(150.dp)
+                    .commitOnEnter(::applyLocationUpdate)
             )
             TextField(
                 value = longitudeDraft,
                 onValueChange = { longitudeDraft = it },
                 label = { Text("Longitude") },
                 singleLine = true,
-                modifier = Modifier.width(150.dp)
+                modifier = Modifier
+                    .width(150.dp)
+                    .commitOnEnter(::applyLocationUpdate)
             )
             Button(
-                onClick = {
-                    val controlId = selectedControlId ?: return@Button
-                    onStatusTextChange(onUpdateControlLocation(controlId, latitudeDraft, longitudeDraft))
-                },
+                onClick = ::applyLocationUpdate,
                 enabled = canApply
             ) {
                 ButtonLabel("Update Location")
@@ -10325,7 +10560,8 @@ private fun ProtectedIdealOrderEditor(
 @Composable
 private fun CategoryAddRow(
     categoryNameDraft: String,
-    onCategoryNameChange: (String) -> Unit
+    onCategoryNameChange: (String) -> Unit,
+    onCommit: () -> Unit
 ) {
     Row(
         modifier = Modifier.width(fixedTableWidth(CategoryTableColumns)),
@@ -10335,7 +10571,9 @@ private fun CategoryAddRow(
         TextField(
             value = categoryNameDraft,
             onValueChange = onCategoryNameChange,
-            modifier = Modifier.width(CategoryTableColumns[0].width),
+            modifier = Modifier
+                .width(CategoryTableColumns[0].width)
+                .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("New category") }
         )
@@ -10399,7 +10637,8 @@ private fun CategoryDetailRow(
                     if (!focusState.isFocused) {
                         applyCategoryNameDraft()
                     }
-                },
+                }
+                .commitOnEnter(::applyCategoryNameDraft),
             singleLine = true,
             label = { Text("Category") }
         )
@@ -10498,6 +10737,12 @@ private fun AssignedControlsEditor(
                 .width(232.dp)
                 .onFocusChanged { focusState ->
                     if (!focusState.isFocused && hasPendingTextEdit) {
+                        hasPendingTextEdit = false
+                        onControlPointsCommit(controlPointsDraft, true)
+                    }
+                }
+                .commitOnEnter {
+                    if (hasPendingTextEdit) {
                         hasPendingTextEdit = false
                         onControlPointsCommit(controlPointsDraft, true)
                     }
@@ -10671,6 +10916,13 @@ private fun RaceDetailsPanel(
         )
     }
 
+    fun commitRaceNameDraft() {
+        if (shouldPromptForEventStartAfterNameEdit) {
+            shouldPromptForEventStartAfterNameEdit = false
+            promptForEventStart("event name")
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -10690,11 +10942,11 @@ private fun RaceDetailsPanel(
                     .weight(1f)
                     .onFocusChanged { focusState ->
                         if (wasRaceNameFocused && !focusState.isFocused && shouldPromptForEventStartAfterNameEdit) {
-                            shouldPromptForEventStartAfterNameEdit = false
-                            promptForEventStart("event name")
+                            commitRaceNameDraft()
                         }
                         wasRaceNameFocused = focusState.isFocused
-                    },
+                    }
+                    .commitOnEnter(::commitRaceNameDraft),
                 label = { Text("Event name") }
             )
         }
@@ -10712,16 +10964,7 @@ private fun RaceDetailsPanel(
                     }
                     wasEventFileNameFocused = focusState.isFocused
                 }
-                .onPreviewKeyEvent { event ->
-                    if (event.key == Key.Enter) {
-                        if (event.type == KeyEventType.KeyUp) {
-                            commitEventFileNameDraft()
-                        }
-                        true
-                    } else {
-                        false
-                    }
-                },
+                .commitOnEnter(::commitEventFileNameDraft),
             label = { Text("Event file name") }
         )
         Row(
@@ -10872,6 +11115,9 @@ private fun DateTimePickerDialog(
         selectedDate.toString(),
         "$hourText:$minuteText:$secondText"
     )
+    fun useSelectedDateTime() {
+        selectedDateTime?.let(onValueSelected)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -10899,19 +11145,25 @@ private fun DateTimePickerDialog(
                     TextField(
                         value = hourText,
                         onValueChange = { hourText = it.take(2) },
-                        modifier = Modifier.width(64.dp),
+                        modifier = Modifier
+                            .width(64.dp)
+                            .commitOnEnter(::useSelectedDateTime),
                         label = { Text("Hour") }
                     )
                     TextField(
                         value = minuteText,
                         onValueChange = { minuteText = it.take(2) },
-                        modifier = Modifier.width(64.dp),
+                        modifier = Modifier
+                            .width(64.dp)
+                            .commitOnEnter(::useSelectedDateTime),
                         label = { Text("Min") }
                     )
                     TextField(
                         value = secondText,
                         onValueChange = { secondText = it.take(2) },
-                        modifier = Modifier.width(64.dp),
+                        modifier = Modifier
+                            .width(64.dp)
+                            .commitOnEnter(::useSelectedDateTime),
                         label = { Text("Sec") }
                     )
                 }
@@ -10945,7 +11197,7 @@ private fun DateTimePickerDialog(
         },
         confirmButton = {
             Button(
-                onClick = { selectedDateTime?.let(onValueSelected) },
+                onClick = ::useSelectedDateTime,
                 enabled = selectedDateTime != null
             ) {
                 Text("Use")
@@ -11543,6 +11795,18 @@ private fun warningStatusSuffix(warnings: List<String>): String =
                 if (warnings.size > 3) " +${warnings.size - 3} more." else ""
     }
 
+private fun Modifier.commitOnEnter(onCommit: () -> Unit): Modifier =
+    onPreviewKeyEvent { event ->
+        if (event.key == Key.Enter) {
+            if (event.type == KeyEventType.KeyUp) {
+                onCommit()
+            }
+            true
+        } else {
+            false
+        }
+    }
+
 private fun detectDesktopSiReaderState(): DesktopSiReaderUiState {
     val provider = JSerialCommDesktopSerialPortProvider
     val port = provider.listPorts().firstOrNull { it.info.matchesSportIdent() }
@@ -11685,7 +11949,8 @@ private fun LabeledTextField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    onCommit: (() -> Unit)? = null
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
         Text(
@@ -11698,7 +11963,9 @@ private fun LabeledTextField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (onCommit != null) Modifier.commitOnEnter(onCommit) else Modifier),
             enabled = enabled
         )
     }

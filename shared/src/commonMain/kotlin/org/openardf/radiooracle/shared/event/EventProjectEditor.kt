@@ -269,6 +269,14 @@ object EventProjectEditor {
         )
     }
 
+    /** Removes all global controls and clears category course fields that depend on them. */
+    fun removeAllControls(projectFile: EventProjectFile): EventProjectFile {
+        val clearedProject = removeAllAssignedCategoryControls(projectFile)
+        return clearedProject.copy(
+            raceData = clearedProject.raceData.copy(controls = emptyList())
+        )
+    }
+
     /** Removes all category names and course data while keeping competitors uncategorized. */
     fun removeAllCategories(projectFile: EventProjectFile): EventProjectFile {
         val competitorData = projectFile.raceData.competitorData.map { data ->
@@ -577,20 +585,51 @@ object EventProjectEditor {
             }
         }
 
-    /** Returns a copy of the Event File with an unused global logical control removed. */
-    fun removeControl(projectFile: EventProjectFile, controlId: String): EventProjectFile {
+    /** Returns a copy of the Event File with a global logical control and dependent category assignments removed. */
+    fun removeControl(
+        projectFile: EventProjectFile,
+        controlId: String,
+        clearProtectedCourseData: Boolean = true
+    ): EventProjectFile {
         require(projectFile.raceData.controls.any { it.id == controlId }) {
             "Control was not found: $controlId"
         }
-        require(projectFile.raceData.categories.none { categoryData ->
-            categoryData.controlPoints.any { it.controlId == controlId } ||
-                categoryData.publicControlIds.contains(controlId)
-        }) {
-            "Control is used by one or more categories."
+        val categories = projectFile.raceData.categories.map { categoryData ->
+            val remainingControlPoints = categoryData.controlPoints
+                .filterNot { it.controlId == controlId }
+                .mapIndexed { index, controlPoint -> controlPoint.copy(order = index + 1) }
+            val remainingPublicControlIds = categoryData.publicControlIds.filterNot { it == controlId }
+            val changed = remainingControlPoints.size != categoryData.controlPoints.size ||
+                remainingPublicControlIds.size != categoryData.publicControlIds.size
+            if (!changed) {
+                categoryData
+            } else {
+                val remainingControlPointsString = ControlPointRules.formatControlPoints(
+                    remainingControlPoints.map {
+                        ControlPointDefinition(it.siCode, it.type, it.order)
+                    }
+                )
+                categoryData.copy(
+                    category = categoryData.category.copy(
+                        lengthMeters = 0,
+                        climbMeters = 0,
+                        controlPointsString = remainingControlPointsString,
+                        encryptedIdealOrder = null,
+                        encryptedCourseInfo = if (clearProtectedCourseData) {
+                            null
+                        } else {
+                            categoryData.category.encryptedCourseInfo
+                        }
+                    ),
+                    controlPoints = remainingControlPoints,
+                    publicControlIds = remainingPublicControlIds
+                )
+            }
         }
         return projectFile.copy(
             raceData = projectFile.raceData.copy(
-                controls = projectFile.raceData.controls.filterNot { it.id == controlId }
+                controls = projectFile.raceData.controls.filterNot { it.id == controlId },
+                categories = categories
             )
         )
     }

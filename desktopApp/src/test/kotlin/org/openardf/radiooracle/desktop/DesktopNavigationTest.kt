@@ -670,7 +670,8 @@ class DesktopNavigationTest {
                 "Define Controls",
                 "Elevation Data",
                 "Course Analyzer",
-                "Import/Export"
+                "Import/Export",
+                "Delete All Controls..."
             ),
             controlItems.map { it.label }
         )
@@ -685,6 +686,7 @@ class DesktopNavigationTest {
             categoryItems.map { it.label }
         )
         assertEquals(DesktopSection.Controls, controlItems.first { it.label == "Define Controls" }.section)
+        assertEquals(DesktopNavAction.DeleteAllControls, controlItems.last { it.label == "Delete All Controls..." }.action)
         assertEquals(DesktopSection.CourseAnalysis, controlItems.first { it.label == "Course Analyzer" }.section)
         assertEquals(
             listOf("Import Controls KML/KMZ..."),
@@ -867,7 +869,7 @@ class DesktopNavigationTest {
 
         assertEquals("Setup > Controls", DesktopNavigation.breadcrumb(backState))
         assertEquals(
-            listOf("Define Controls", "Elevation Data", "Course Analyzer", "Import/Export"),
+            listOf("Define Controls", "Elevation Data", "Course Analyzer", "Import/Export", "Delete All Controls..."),
             DesktopNavigation.currentItems(backState).map { it.label }
         )
     }

@@ -32,6 +32,7 @@ enum class DesktopNavAction {
     ImportControlsCsv,
     ImportCompetitorsCsv,
     ImportStartsCsv,
+    DeleteAllControls,
     DeleteAllCategoryAssignedControls,
     DeleteAllCategories,
     DeleteAllCompetitors,
@@ -274,6 +275,12 @@ object DesktopNavigation {
                                 )
                             ),
                             DesktopSection.ControlsImportExport
+                        ),
+                        action(
+                            "setup.controls.delete-all",
+                            "Delete All Controls...",
+                            workflow,
+                            DesktopNavAction.DeleteAllControls
                         )
                     ),
                     DesktopSection.Controls
@@ -814,6 +821,8 @@ object DesktopNavigation {
             "Use Export Controls CSV to write the current control catalog for review, backup, or editing outside the app.",
         "setup.controls.export-kml-kmz" to
             "Use Export Controls KML/KMZ to write protected control and route geometry inside a password-locked ZIP file.",
+        "setup.controls.delete-all" to
+            "Use Delete All Controls to remove every control and clear category course assignments, length, climb, and protected course data that depends on them.",
         "setup.categories" to
             "Use Categories to create, import, export, and maintain competition classes, assigned controls, course metadata, and protected course order data.",
         "setup.categories.protected-course-order" to
