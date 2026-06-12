@@ -53,22 +53,31 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.MenuBar
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import kotlinx.coroutines.CancellationException
@@ -5048,36 +5057,91 @@ private fun DisabledReasonTooltip(
 ) {
     if (reason == null) {
         content()
+    } else if (placement == DisabledReasonTooltipPlacement.RightOfCursor) {
+        FollowCursorDisabledReasonTooltip(reason, content)
     } else {
-        val tooltipPlacement = when (placement) {
-            DisabledReasonTooltipPlacement.AboveCursor -> TooltipPlacement.CursorPoint(
+        TooltipArea(
+            tooltip = {
+                DisabledReasonTooltipContent(reason)
+            },
+            delayMillis = 850,
+            tooltipPlacement = TooltipPlacement.CursorPoint(
                 offset = DpOffset(0.dp, (-12).dp),
                 alignment = Alignment.BottomCenter
             )
-            DisabledReasonTooltipPlacement.RightOfCursor -> TooltipPlacement.CursorPoint(
-                offset = DpOffset(18.dp, 0.dp),
-                alignment = Alignment.CenterStart
-            )
-        }
-        TooltipArea(
-            tooltip = {
-                Surface(
-                    color = DesktopPalette.PrimaryVariant,
-                    contentColor = DesktopPalette.White,
-                    elevation = 4.dp
-                ) {
-                    Text(
-                        text = reason,
-                        modifier = Modifier.width(280.dp).padding(8.dp),
-                        fontSize = 12.sp
-                    )
-                }
-            },
-            delayMillis = 850,
-            tooltipPlacement = tooltipPlacement
         ) {
             content()
         }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalComposeUiApi::class)
+private fun FollowCursorDisabledReasonTooltip(
+    reason: String,
+    content: @Composable () -> Unit
+) {
+    val density = LocalDensity.current
+    var isHovering by remember { mutableStateOf(false) }
+    var showTooltip by remember { mutableStateOf(false) }
+    var pointerPosition by remember { mutableStateOf(Offset.Zero) }
+    var hostSize by remember { mutableStateOf(IntSize.Zero) }
+
+    LaunchedEffect(isHovering, reason) {
+        showTooltip = false
+        if (isHovering) {
+            delay(850)
+            if (isHovering) {
+                showTooltip = true
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .onSizeChanged { hostSize = it }
+            .onPointerEvent(PointerEventType.Enter) { event ->
+                pointerPosition = event.changes.firstOrNull()?.position ?: Offset.Zero
+                isHovering = true
+            }
+            .onPointerEvent(PointerEventType.Move) { event ->
+                pointerPosition = event.changes.firstOrNull()?.position ?: pointerPosition
+            }
+            .onPointerEvent(PointerEventType.Exit) {
+                isHovering = false
+                showTooltip = false
+            }
+    ) {
+        content()
+        if (showTooltip) {
+            val horizontalGap = with(density) { 12.dp.roundToPx() }
+            val verticalCursorOffset = with(density) { 18.dp.roundToPx() }
+            Popup(
+                alignment = Alignment.TopStart,
+                offset = IntOffset(
+                    x = max(hostSize.width + horizontalGap, pointerPosition.x.roundToInt() + horizontalGap),
+                    y = max(0, pointerPosition.y.roundToInt() - verticalCursorOffset)
+                ),
+                properties = PopupProperties(focusable = false)
+            ) {
+                DisabledReasonTooltipContent(reason)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DisabledReasonTooltipContent(reason: String) {
+    Surface(
+        color = DesktopPalette.PrimaryVariant,
+        contentColor = DesktopPalette.White,
+        elevation = 4.dp
+    ) {
+        Text(
+            text = reason,
+            modifier = Modifier.width(280.dp).padding(8.dp),
+            fontSize = 12.sp
+        )
     }
 }
 
