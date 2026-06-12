@@ -34,6 +34,7 @@ enum class DesktopNavAction {
     ImportStartsCsv,
     DeleteAllCategoryAssignedControls,
     DeleteAllCategories,
+    DeleteAllCompetitors,
     ExportEventFileCopy,
     ExportCategoriesCsv,
     ExportControlsCsv,
@@ -295,8 +296,14 @@ object DesktopNavigation {
                             DesktopNavAction.ImportCategoriesCsv
                         ),
                         action(
+                            "setup.categories.export",
+                            "Export Categories CSV...",
+                            workflow,
+                            DesktopNavAction.ExportCategoriesCsv
+                        ),
+                        action(
                             "setup.categories.delete-all-assigned-controls",
-                            "Delete All Assigned Controls...",
+                            "Delete All Control Assignments...",
                             workflow,
                             DesktopNavAction.DeleteAllCategoryAssignedControls
                         ),
@@ -306,12 +313,6 @@ object DesktopNavigation {
                             workflow,
                             DesktopNavAction.DeleteAllCategories
                         ),
-                        action(
-                            "setup.categories.export",
-                            "Export Categories CSV...",
-                            workflow,
-                            DesktopNavAction.ExportCategoriesCsv
-                        )
                     ),
                     DesktopSection.Categories
                 ),
@@ -338,6 +339,12 @@ object DesktopNavigation {
                             "Export Competitors CSV...",
                             workflow,
                             DesktopNavAction.ExportCompetitorsCsv
+                        ),
+                        action(
+                            "setup.competitors.delete-all",
+                            "Delete All Competitors...",
+                            workflow,
+                            DesktopNavAction.DeleteAllCompetitors
                         )
                     ),
                     DesktopSection.Competitors
@@ -814,7 +821,7 @@ object DesktopNavigation {
         "setup.categories.import" to
             "Use Import Categories CSV to review and apply late category additions or corrections without replacing unrelated event data.",
         "setup.categories.delete-all-assigned-controls" to
-            "Use Delete All Assigned Controls to clear every category course, length, climb, and protected course field while keeping category names and competitors.",
+            "Use Delete All Control Assignments to clear every category course, length, climb, and protected course field while keeping category names and competitors.",
         "setup.categories.delete-all-categories" to
             "Use Delete All Categories to remove every category name and course assignment while keeping competitor records uncategorized.",
         "setup.categories.export" to
@@ -829,6 +836,8 @@ object DesktopNavigation {
             "Use Import EventReg Website to bring competitor data from EventReg exports into the current Event File.",
         "setup.competitors.export" to
             "Use Export Competitors CSV to write the current competitor list for review, backup, or external editing.",
+        "setup.competitors.delete-all" to
+            "Use Delete All Competitors to remove every competitor while preserving downloaded readouts as unmatched records for review.",
         "setup.start-list" to
             "Use Start List to import, draw, balance, review, and export competitor start times once categories and assignments are ready.",
         "setup.start-list.view" to

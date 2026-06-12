@@ -383,6 +383,7 @@ fun main(args: Array<String>) = application {
         var pendingCourseKmlKmzUnlockAction by remember { mutableStateOf<CourseKmlKmzUnlockAction?>(null) }
         var pendingProtectedControlDeleteId by remember { mutableStateOf<String?>(null) }
         var pendingBulkCategoryAction by remember { mutableStateOf<BulkCategoryAction?>(null) }
+        var isDeleteAllCompetitorsDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzImportReview by remember { mutableStateOf<PendingCourseKmlKmzImportReview?>(null) }
         var pendingCourseKmlKmzCategoryMapping by remember { mutableStateOf<PendingCourseKmlKmzCategoryMapping?>(null) }
         var pendingCategoriesCsvImportReview by remember { mutableStateOf<PendingCategoriesCsvImportReview?>(null) }
@@ -1283,6 +1284,34 @@ fun main(args: Array<String>) = application {
                         recordActivity("Deleted all categories.")
                         projectStatusText = "Deleted all categories and cleared category assignments from competitors. Unsaved changes."
                     }
+                }
+                true
+            }.getOrElse { error ->
+                projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+                false
+            }
+        }
+
+        fun deleteAllCompetitors(): Boolean {
+            val currentProject = projectSession.currentProject ?: return false
+            if (currentProject.raceData.competitorData.isEmpty()) {
+                projectStatusText = "No competitors to delete."
+                return false
+            }
+            return runCatching {
+                val competitorCount = currentProject.raceData.competitorData.size
+                val readoutCount = currentProject.raceData.competitorData.count { it.readoutData != null }
+                projectFile = projectSession.updateCurrentProject { project ->
+                    EventProjectEditor.removeAllCompetitors(project)
+                }
+                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                recordActivity("Deleted all competitors.")
+                projectStatusText = buildString {
+                    append("Deleted $competitorCount competitors.")
+                    if (readoutCount > 0) {
+                        append(" Preserved $readoutCount matched readouts as unmatched readouts.")
+                    }
+                    append(" Unsaved changes.")
                 }
                 true
             }.getOrElse { error ->
@@ -2504,6 +2533,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportStartsCsv,
                 DesktopNavAction.DeleteAllCategoryAssignedControls,
                 DesktopNavAction.DeleteAllCategories,
+                DesktopNavAction.DeleteAllCompetitors,
                 DesktopNavAction.ExportEventFileCopy,
                 DesktopNavAction.ExportCategoriesCsv,
                 DesktopNavAction.ExportControlsCsv,
@@ -2580,6 +2610,8 @@ fun main(args: Array<String>) = application {
                     pendingBulkCategoryAction = BulkCategoryAction.DeleteAllAssignedControls
                 DesktopNavAction.DeleteAllCategories ->
                     pendingBulkCategoryAction = BulkCategoryAction.DeleteAllCategories
+                DesktopNavAction.DeleteAllCompetitors ->
+                    isDeleteAllCompetitorsDialogVisible = true
                 DesktopNavAction.ImportCompetitorsCsv -> importCompetitorsCsv()
                 DesktopNavAction.ImportStartsCsv -> importCompetitorStartsCsv()
                 DesktopNavAction.ExportEventFileCopy -> exportEventFileCopy()
@@ -2833,6 +2865,19 @@ fun main(args: Array<String>) = application {
                     }
                 },
                 onCancel = { pendingBulkCategoryAction = null }
+            )
+        }
+        if (isDeleteAllCompetitorsDialogVisible) {
+            val currentProject = projectSession.currentProject
+            DeleteAllCompetitorsDialog(
+                competitorCount = currentProject?.raceData?.competitorData?.size ?: 0,
+                matchedReadoutCount = currentProject?.raceData?.competitorData?.count { it.readoutData != null } ?: 0,
+                onConfirm = {
+                    if (deleteAllCompetitors()) {
+                        isDeleteAllCompetitorsDialogVisible = false
+                    }
+                },
+                onCancel = { isDeleteAllCompetitorsDialogVisible = false }
             )
         }
         pendingCourseKmlKmzCategoryMapping?.let { mapping ->
@@ -3769,6 +3814,48 @@ private fun BulkCategoryActionDialog(
                     }
                 },
                 enabled = categoryCount > 0 && (!hasProtectedCategoryData || passwordDraft.isNotBlank())
+            ) {
+                Text("Delete")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun DeleteAllCompetitorsDialog(
+    competitorCount: Int,
+    matchedReadoutCount: Int,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Delete all competitors") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "This removes all $competitorCount competitors from the Event File and clears competitor lists from categories."
+                )
+                Text(
+                    text = if (matchedReadoutCount > 0) {
+                        "$matchedReadoutCount matched readouts will be preserved as unmatched readouts for review."
+                    } else {
+                        "No matched readouts are currently attached to competitors."
+                    },
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = competitorCount > 0
             ) {
                 Text("Delete")
             }

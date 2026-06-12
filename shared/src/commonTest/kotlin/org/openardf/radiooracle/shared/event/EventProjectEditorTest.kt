@@ -264,6 +264,37 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun removesAllCompetitorsAndKeepsMatchedReadoutsAsUnmatched() {
+        val category = category("cat-1", "M21")
+        val competitor1 = competitorData(
+            "comp-1",
+            "Alice",
+            "Runner",
+            category = category,
+            readoutData = readout("result-1", "comp-1", siNumber = 1111)
+        )
+        val competitor2 = competitorData("comp-2", "Bob", "Racer", category = category)
+        val original = projectFile(
+            categories = listOf(
+                categoryData(
+                    "cat-1",
+                    "M21",
+                    competitors = listOf(competitor1.competitorCategory.competitor, competitor2.competitorCategory.competitor)
+                )
+            ),
+            competitors = listOf(competitor1, competitor2),
+            unmatchedReadouts = listOf(readout("result-2", null, siNumber = 2222))
+        )
+
+        val updated = EventProjectEditor.removeAllCompetitors(original)
+
+        assertTrue(updated.raceData.competitorData.isEmpty())
+        assertTrue(updated.raceData.categories.single().competitors.isEmpty())
+        assertEquals(listOf("result-2", "result-1"), updated.raceData.unmatchedReadoutData.map { it.result.id })
+        assertTrue(updated.raceData.unmatchedReadoutData.all { it.result.competitorId == null })
+    }
+
+    @Test
     fun updatesCategoryControlPointsUsingSharedValidationRules() {
         val original = projectFile(categories = listOf(categoryData("cat-1", "M21")))
 

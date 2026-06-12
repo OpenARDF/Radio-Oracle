@@ -678,9 +678,9 @@ class DesktopNavigationTest {
             listOf(
                 "Course Order",
                 "Import Categories CSV...",
-                "Delete All Assigned Controls...",
+                "Export Categories CSV...",
+                "Delete All Control Assignments...",
                 "Delete All Categories...",
-                "Export Categories CSV..."
             ),
             categoryItems.map { it.label }
         )
@@ -715,23 +715,30 @@ class DesktopNavigationTest {
         )
         assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Course Order" }.section)
         assertEquals(
-            listOf("Competitors", "Import Competitors CSV...", "Import EventReg Website...", "Export Competitors CSV..."),
+            listOf(
+                "Competitors",
+                "Import Competitors CSV...",
+                "Import EventReg Website...",
+                "Export Competitors CSV...",
+                "Delete All Competitors..."
+            ),
             competitorItems.map { it.label }
         )
         assertEquals(DesktopNavAction.ImportCategoriesCsv, categoryItems.first { it.label == "Import Categories CSV..." }.action)
+        assertEquals(DesktopNavAction.ExportCategoriesCsv, categoryItems.first { it.label == "Export Categories CSV..." }.action)
         assertEquals(
             DesktopNavAction.DeleteAllCategoryAssignedControls,
-            categoryItems.first { it.label == "Delete All Assigned Controls..." }.action
+            categoryItems.first { it.label == "Delete All Control Assignments..." }.action
         )
         assertEquals(
             DesktopNavAction.DeleteAllCategories,
             categoryItems.first { it.label == "Delete All Categories..." }.action
         )
-        assertEquals(DesktopNavAction.ExportCategoriesCsv, categoryItems.first { it.label == "Export Categories CSV..." }.action)
         assertEquals(DesktopNavAction.ImportCompetitorsCsv, competitorItems.first { it.label == "Import Competitors CSV..." }.action)
         assertEquals(DesktopNavAction.ImportEventRegCompetitorsCsv, competitorItems.first { it.label == "Import EventReg Website..." }.action)
         assertTrue(competitorItems.first { it.label == "Import EventReg Website..." }.requiresEventFile)
         assertEquals(DesktopNavAction.ExportCompetitorsCsv, competitorItems.first { it.label == "Export Competitors CSV..." }.action)
+        assertEquals(DesktopNavAction.DeleteAllCompetitors, competitorItems.first { it.label == "Delete All Competitors..." }.action)
         assertFalse(setupItems.any { it.label == "Imports" })
         assertFalse(setupItems.any { it.label == "Setup Exports" })
     }

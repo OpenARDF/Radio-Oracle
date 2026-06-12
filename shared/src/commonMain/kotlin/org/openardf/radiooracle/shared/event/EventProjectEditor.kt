@@ -288,6 +288,28 @@ object EventProjectEditor {
         )
     }
 
+    /**
+     * Removes all competitors while preserving downloaded readouts as unmatched data.
+     */
+    fun removeAllCompetitors(projectFile: EventProjectFile): EventProjectFile {
+        val matchedReadouts = projectFile.raceData.competitorData.mapNotNull { data ->
+            data.readoutData?.let { readoutData ->
+                readoutData.copy(result = readoutData.result.copy(competitorId = null))
+            }
+        }
+        val categories = projectFile.raceData.categories.map { categoryData ->
+            categoryData.copy(competitors = emptyList())
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                categories = categories,
+                competitorData = emptyList(),
+                unmatchedReadoutData = projectFile.raceData.unmatchedReadoutData + matchedReadouts
+            )
+        )
+    }
+
     /** Returns a copy of the Event File with a category course parsed from a control-point string. */
     fun updateCategoryControlPoints(
         projectFile: EventProjectFile,
