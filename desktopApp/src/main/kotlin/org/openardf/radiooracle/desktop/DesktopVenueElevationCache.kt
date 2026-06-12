@@ -163,6 +163,38 @@ data class DesktopVenueElevationSpotCheckRow(
     val differenceMeters: Double?
 )
 
+data class DesktopVenueElevationDemImportCandidate(
+    val displayName: String,
+    val sourcePath: Path,
+    val zipEntryName: String?,
+    val targetPath: Path,
+    val venueName: String,
+    val sourceName: String,
+    val resolutionMeters: Double,
+    val rowCount: Int,
+    val columnCount: Int,
+    val willOverwrite: Boolean
+)
+
+data class DesktopVenueElevationDemImportIssue(
+    val displayName: String,
+    val reason: String
+)
+
+data class DesktopVenueElevationDemImportReview(
+    val candidates: List<DesktopVenueElevationDemImportCandidate>,
+    val issues: List<DesktopVenueElevationDemImportIssue>
+) {
+    val importableCount: Int get() = candidates.size
+    val overwriteCount: Int get() = candidates.count { it.willOverwrite }
+}
+
+data class DesktopVenueElevationDemImportSummary(
+    val importedCount: Int,
+    val overwrittenCount: Int,
+    val targetDirectory: Path
+)
+
 object DesktopVenueElevationCache {
     private const val CACHE_VERSION = 1
     private const val DEFAULT_SOURCE_NAME = "USGS 3DEP"
@@ -261,6 +293,79 @@ object DesktopVenueElevationCache {
                 boundingBox = cache.metadata.boundingBox.toPublic()
             )
         }.sortedWith(compareBy<DesktopVenueElevationCacheListing> { it.venueName.lowercase() }.thenBy { it.resolutionMeters })
+
+    fun reviewDemFileImport(paths: List<Path>): DesktopVenueElevationDemImportReview {
+        val targetDirectory = cacheDirectory()
+        val candidates = mutableListOf<DesktopVenueElevationDemImportCandidate>()
+        val issues = mutableListOf<DesktopVenueElevationDemImportIssue>()
+        paths.forEach { path ->
+            val fileName = path.fileName?.toString().orEmpty()
+            when {
+                fileName.endsWith(".zip", ignoreCase = true) ->
+                    reviewDemZipImport(path, targetDirectory, candidates, issues)
+                fileName.endsWith(".json", ignoreCase = true) ->
+                    reviewDemJsonImport(path, null, fileName, targetDirectory, candidates, issues)
+                else ->
+                    issues += DesktopVenueElevationDemImportIssue(
+                        displayName = fileName.ifBlank { path.toString() },
+                        reason = "Only .json DEM files and .zip archives are supported."
+                    )
+            }
+        }
+        val duplicateTargets = candidates
+            .groupBy { it.targetPath.fileName.toString().lowercase(Locale.US) }
+            .filterValues { it.size > 1 }
+            .values
+            .flatten()
+            .toSet()
+        if (duplicateTargets.isNotEmpty()) {
+            duplicateTargets.forEach { candidate ->
+                issues += DesktopVenueElevationDemImportIssue(
+                    displayName = candidate.displayName,
+                    reason = "Multiple selected DEM files would import as ${candidate.targetPath.fileName}."
+                )
+            }
+        }
+        return DesktopVenueElevationDemImportReview(
+            candidates = candidates.filterNot { it in duplicateTargets }
+                .sortedWith(compareBy<DesktopVenueElevationDemImportCandidate> { it.targetPath.fileName.toString().lowercase(Locale.US) }
+                    .thenBy { it.displayName.lowercase(Locale.US) }),
+            issues = issues.sortedBy { it.displayName.lowercase(Locale.US) }
+        )
+    }
+
+    fun importReviewedDemFiles(review: DesktopVenueElevationDemImportReview): DesktopVenueElevationDemImportSummary {
+        val targetDirectory = cacheDirectory()
+        Files.createDirectories(targetDirectory)
+        var importedCount = 0
+        var overwrittenCount = 0
+        review.candidates.forEach { candidate ->
+            if (candidate.willOverwrite && Files.exists(candidate.targetPath)) {
+                overwrittenCount += 1
+            }
+            if (candidate.zipEntryName == null) {
+                if (candidate.sourcePath.toAbsolutePath().normalize() != candidate.targetPath.toAbsolutePath().normalize()) {
+                    Files.copy(candidate.sourcePath, candidate.targetPath, StandardCopyOption.REPLACE_EXISTING)
+                }
+            } else {
+                ZipFile(candidate.sourcePath.toFile()).use { zipFile ->
+                    val entry = zipFile.getEntry(candidate.zipEntryName)
+                        ?: throw IOException("${candidate.sourcePath.fileName} no longer contains ${candidate.zipEntryName}.")
+                    zipFile.getInputStream(entry).use { input ->
+                        Files.copy(input, candidate.targetPath, StandardCopyOption.REPLACE_EXISTING)
+                    }
+                }
+            }
+            importedCount += 1
+        }
+        loadedSignature = ""
+        loadedCaches = emptyList()
+        return DesktopVenueElevationDemImportSummary(
+            importedCount = importedCount,
+            overwrittenCount = overwrittenCount,
+            targetDirectory = targetDirectory
+        )
+    }
 
     fun elevationMeters(point: CourseGeoPoint): Double? =
         loadCaches()
@@ -769,6 +874,156 @@ object DesktopVenueElevationCache {
         loadedCaches = caches
         return caches
     }
+
+    private fun reviewDemZipImport(
+        path: Path,
+        targetDirectory: Path,
+        candidates: MutableList<DesktopVenueElevationDemImportCandidate>,
+        issues: MutableList<DesktopVenueElevationDemImportIssue>
+    ) {
+        runCatching {
+            var jsonEntryCount = 0
+            ZipFile(path.toFile()).use { zipFile ->
+                val entries = zipFile.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    if (entry.isDirectory || !entry.name.endsWith(".json", ignoreCase = true)) {
+                        continue
+                    }
+                    jsonEntryCount += 1
+                    val displayName = "${path.fileName}:${entry.name}"
+                    val originalName = Path.of(entry.name).fileName?.toString().orEmpty()
+                    val text = zipFile.getInputStream(entry).use { input ->
+                        input.reader(StandardCharsets.UTF_8).readText()
+                    }
+                    reviewDemJsonText(
+                        text = text,
+                        sourcePath = path,
+                        zipEntryName = entry.name,
+                        originalName = originalName,
+                        displayName = displayName,
+                        targetDirectory = targetDirectory,
+                        candidates = candidates,
+                        issues = issues
+                    )
+                }
+            }
+            if (jsonEntryCount == 0) {
+                issues += DesktopVenueElevationDemImportIssue(
+                    displayName = path.fileName.toString(),
+                    reason = "ZIP archive contains no .json DEM files."
+                )
+            }
+        }.onFailure { error ->
+            issues += DesktopVenueElevationDemImportIssue(
+                displayName = path.fileName.toString(),
+                reason = "Could not read ZIP archive: ${error.message ?: error::class.simpleName}"
+            )
+        }
+    }
+
+    private fun reviewDemJsonImport(
+        sourcePath: Path,
+        zipEntryName: String?,
+        originalName: String,
+        targetDirectory: Path,
+        candidates: MutableList<DesktopVenueElevationDemImportCandidate>,
+        issues: MutableList<DesktopVenueElevationDemImportIssue>
+    ) {
+        val displayName = sourcePath.fileName?.toString() ?: sourcePath.toString()
+        runCatching {
+            Files.readString(sourcePath)
+        }.onSuccess { text ->
+            reviewDemJsonText(
+                text = text,
+                sourcePath = sourcePath,
+                zipEntryName = zipEntryName,
+                originalName = originalName,
+                displayName = displayName,
+                targetDirectory = targetDirectory,
+                candidates = candidates,
+                issues = issues
+            )
+        }.onFailure { error ->
+            issues += DesktopVenueElevationDemImportIssue(
+                displayName = displayName,
+                reason = "Could not read file: ${error.message ?: error::class.simpleName}"
+            )
+        }
+    }
+
+    private fun reviewDemJsonText(
+        text: String,
+        sourcePath: Path,
+        zipEntryName: String?,
+        originalName: String,
+        displayName: String,
+        targetDirectory: Path,
+        candidates: MutableList<DesktopVenueElevationDemImportCandidate>,
+        issues: MutableList<DesktopVenueElevationDemImportIssue>
+    ) {
+        runCatching {
+            val targetFileName = importedDemTargetFileName(originalName)
+            val targetPath = targetDirectory.resolve(targetFileName)
+            val cacheFile = parseCacheFile(text, targetPath)
+            validateImportedDemCache(cacheFile)
+            candidates += DesktopVenueElevationDemImportCandidate(
+                displayName = displayName,
+                sourcePath = sourcePath,
+                zipEntryName = zipEntryName,
+                targetPath = targetPath,
+                venueName = cacheFile.metadata.venueName,
+                sourceName = cacheFile.metadata.sourceName,
+                resolutionMeters = cacheFile.metadata.resolutionMeters,
+                rowCount = cacheFile.metadata.rowCount,
+                columnCount = cacheFile.metadata.columnCount,
+                willOverwrite = Files.exists(targetPath)
+            )
+        }.onFailure { error ->
+            issues += DesktopVenueElevationDemImportIssue(
+                displayName = displayName,
+                reason = "Not a valid Radio-Oracle DEM cache JSON: ${error.message ?: error::class.simpleName}"
+            )
+        }
+    }
+
+    private fun importedDemTargetFileName(originalName: String): String {
+        val jsonStem = originalName
+            .substringAfterLast('/')
+            .substringAfterLast('\\')
+            .removeSuffixIgnoreCase(".json")
+            .ifBlank { "venue" }
+        val roelevStem = if (jsonStem.endsWith(".roelev", ignoreCase = true)) {
+            jsonStem
+        } else {
+            "$jsonStem.roelev"
+        }
+        return roelevStem
+            .replace(Regex("[^A-Za-z0-9._ -]"), "_")
+            .trim()
+            .ifBlank { "venue.roelev" } + ".json"
+    }
+
+    private fun validateImportedDemCache(cacheFile: DesktopVenueElevationCacheFile) {
+        val metadata = cacheFile.metadata
+        require(metadata.version == CACHE_VERSION) { "Unsupported cache version ${metadata.version}." }
+        require(metadata.venueName.isNotBlank()) { "Missing venue name." }
+        require(metadata.sourceName.isNotBlank()) { "Missing source name." }
+        require(metadata.resolutionMeters > 0.0) { "Resolution must be greater than zero." }
+        require(metadata.rowCount > 0) { "Row count must be greater than zero." }
+        require(metadata.columnCount > 0) { "Column count must be greater than zero." }
+        require(metadata.rowCount.toLong() * metadata.columnCount.toLong() == cacheFile.elevations.size.toLong()) {
+            "Elevation count ${cacheFile.elevations.size} does not match ${metadata.rowCount} x ${metadata.columnCount}."
+        }
+        metadata.boundingBox.toPublic()
+    }
+
+    private fun String.removeSuffixIgnoreCase(suffix: String): String =
+        if (endsWith(suffix, ignoreCase = true)) {
+            dropLast(suffix.length)
+        } else {
+            this
+        }
 
     private fun DesktopVenueElevationCacheEstimate.gridPoints(): List<CourseGeoPoint> =
         buildList(pointCount) {

@@ -698,12 +698,16 @@ class DesktopNavigationTest {
         )
         assertEquals(DesktopSection.ElevationCache, controlItems.first { it.label == "Elevation Data" }.section)
         assertEquals(
-            listOf("Import Elevation Data"),
+            listOf("Import Elevation Data", "Import DEM File..."),
             controlItems.first { it.label == "Elevation Data" }.children.map { it.label }
         )
         assertEquals(
             DesktopSection.ElevationCacheImport,
-            controlItems.first { it.label == "Elevation Data" }.children.single().section
+            controlItems.first { it.label == "Elevation Data" }.children.first { it.label == "Import Elevation Data" }.section
+        )
+        assertEquals(
+            DesktopNavAction.ImportDemFile,
+            controlItems.first { it.label == "Elevation Data" }.children.first { it.label == "Import DEM File..." }.action
         )
         assertEquals(DesktopSection.ControlsImportExport, controlItems.first { it.label == "Import/Export" }.section)
         assertEquals(

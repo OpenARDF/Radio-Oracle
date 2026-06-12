@@ -329,6 +329,18 @@ object DesktopFileDialogs {
         return Path.of(directory, file)
     }
 
+    fun chooseImportDemFiles(): List<Path> {
+        val dialog = FileDialog(null as Frame?, "Import DEM File", FileDialog.LOAD)
+        dialog.filenameFilter = FilenameFilter { _, name ->
+            name.endsWith(".json", ignoreCase = true) || name.endsWith(".zip", ignoreCase = true)
+        }
+        dialog.file = "*.json;*.zip"
+        dialog.isMultipleMode = true
+        dialog.isVisible = true
+
+        return dialog.files.orEmpty().map { it.toPath() }
+    }
+
     fun chooseImportAndroidRaceBackupJson(): Path? =
         chooseFile(
             "Import Android Event File",

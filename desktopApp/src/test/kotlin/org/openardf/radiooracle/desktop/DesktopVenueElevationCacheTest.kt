@@ -1,9 +1,12 @@
 package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class DesktopVenueElevationCacheTest {
     @Test
@@ -219,6 +222,94 @@ class DesktopVenueElevationCacheTest {
         }
     }
 
+    @Test
+    fun importsValidatedDemJsonFilesIntoCacheDirectory() {
+        withTemporaryUserHome { home ->
+            val sourceDirectory = home.resolve("Downloads")
+            Files.createDirectories(sourceDirectory)
+            val sourcePath = sourceDirectory.resolve("billy-bob.json")
+            writeCache(
+                path = sourcePath,
+                sourceName = "Oregon DOGAMI LiDAR DTM",
+                resolutionMeters = 3.0,
+                elevationMeters = 200.0
+            )
+
+            val review = DesktopVenueElevationCache.reviewDemFileImport(listOf(sourcePath))
+            val summary = DesktopVenueElevationCache.importReviewedDemFiles(review)
+
+            assertEquals(1, review.importableCount)
+            assertEquals(0, review.issues.size)
+            assertEquals(0, review.overwriteCount)
+            assertEquals(1, summary.importedCount)
+            assertTrue(Files.exists(summary.targetDirectory.resolve("billy-bob.roelev.json")))
+            assertEquals(listOf("Test Venue"), DesktopVenueElevationCache.listings().map { it.venueName })
+        }
+    }
+
+    @Test
+    fun importsValidDemJsonFilesFromZipAndReportsInvalidEntries() {
+        withTemporaryUserHome { home ->
+            val sourceDirectory = home.resolve("Downloads")
+            Files.createDirectories(sourceDirectory)
+            val zipPath = sourceDirectory.resolve("oregon-dem.zip")
+            ZipOutputStream(Files.newOutputStream(zipPath)).use { zip ->
+                zip.putNextEntry(ZipEntry("white-river-west.json"))
+                zip.write(cacheJson("Oregon DOGAMI LiDAR DTM", 3.0, 300.0).toByteArray())
+                zip.closeEntry()
+                zip.putNextEntry(ZipEntry("not-a-cache.json"))
+                zip.write("""{"not":"a Radio-Oracle DEM cache"}""".toByteArray())
+                zip.closeEntry()
+            }
+
+            val review = DesktopVenueElevationCache.reviewDemFileImport(listOf(zipPath))
+            val summary = DesktopVenueElevationCache.importReviewedDemFiles(review)
+
+            assertEquals(1, review.importableCount)
+            assertEquals(1, review.issues.size)
+            assertEquals(1, summary.importedCount)
+            assertTrue(Files.exists(summary.targetDirectory.resolve("white-river-west.roelev.json")))
+        }
+    }
+
+    @Test
+    fun warnsWhenImportedDemFileWouldOverwriteCachedVenueFile() {
+        withTemporaryUserHome { home ->
+            val cacheDirectory = home
+                .resolve("Library")
+                .resolve("Application Support")
+                .resolve("Radio-Oracle")
+                .resolve("elevations")
+            Files.createDirectories(cacheDirectory)
+            writeCache(
+                path = cacheDirectory.resolve("skyline.roelev.json"),
+                sourceName = "USGS 3DEP",
+                resolutionMeters = 10.0,
+                elevationMeters = 100.0
+            )
+            val sourceDirectory = home.resolve("Downloads")
+            Files.createDirectories(sourceDirectory)
+            val sourcePath = sourceDirectory.resolve("skyline.json")
+            writeCache(
+                path = sourcePath,
+                sourceName = "Oregon DOGAMI LiDAR DTM",
+                resolutionMeters = 3.0,
+                elevationMeters = 400.0
+            )
+
+            val review = DesktopVenueElevationCache.reviewDemFileImport(listOf(sourcePath))
+            val summary = DesktopVenueElevationCache.importReviewedDemFiles(review)
+
+            assertEquals(1, review.importableCount)
+            assertEquals(1, review.overwriteCount)
+            assertEquals(1, summary.overwrittenCount)
+            assertEquals(
+                listOf("Oregon DOGAMI LiDAR DTM"),
+                DesktopVenueElevationCache.listings().map { it.sourceName }
+            )
+        }
+    }
+
     private fun withTemporaryUserHome(block: (Path) -> Unit) {
         val originalHome = System.getProperty("user.home")
         val home = Files.createTempDirectory("radio-oracle-home")
@@ -239,7 +330,16 @@ class DesktopVenueElevationCacheTest {
     ) {
         Files.writeString(
             path,
-            """
+            cacheJson(sourceName, resolutionMeters, elevationMeters)
+        )
+    }
+
+    private fun cacheJson(
+        sourceName: String,
+        resolutionMeters: Double,
+        elevationMeters: Double
+    ): String =
+        """
             {
               "metadata": {
                 "version": 1,
@@ -260,6 +360,4 @@ class DesktopVenueElevationCacheTest {
               "elevations": [$elevationMeters, $elevationMeters, $elevationMeters, $elevationMeters]
             }
             """.trimIndent()
-        )
-    }
 }

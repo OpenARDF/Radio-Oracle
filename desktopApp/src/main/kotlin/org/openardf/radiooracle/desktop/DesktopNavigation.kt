@@ -32,6 +32,7 @@ enum class DesktopNavAction {
     ImportControlsCsv,
     ImportCompetitorsCsv,
     ImportStartsCsv,
+    ImportDemFile,
     DeleteAllControls,
     DeleteAllCategoryAssignedControls,
     DeleteAllCategories,
@@ -226,6 +227,12 @@ object DesktopNavigation {
                                     "Import Elevation Data",
                                     workflow,
                                     DesktopSection.ElevationCacheImport
+                                ),
+                                action(
+                                    "setup.controls.elevation-cache.import-dem",
+                                    "Import DEM File...",
+                                    workflow,
+                                    DesktopNavAction.ImportDemFile
                                 )
                             ),
                             DesktopSection.ElevationCache
@@ -807,6 +814,8 @@ object DesktopNavigation {
             "Use Elevation Data to inspect cached venue elevation files used for stored course routes, climb estimates, and course-analysis calculations.",
         "setup.controls.elevation-cache.import" to
             "Use Import Elevation Data to create a venue elevation cache from online elevation services or a local raster file.",
+        "setup.controls.elevation-cache.import-dem" to
+            "Use Import DEM File to add one or more existing Radio-Oracle DEM cache JSON files, including cache files packaged inside a ZIP archive.",
         "setup.controls.course-analysis" to
             "Use Course Analyzer to inspect stored course routes, ideal routes, climb, distance, time estimates, and classic wait-slot behavior.",
         "setup.controls.course-analysis.import-kml-kmz" to

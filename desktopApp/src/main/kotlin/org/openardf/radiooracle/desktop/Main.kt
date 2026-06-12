@@ -394,6 +394,7 @@ fun main(args: Array<String>) = application {
         var venueElevationCacheProgress by remember { mutableStateOf<VenueElevationCacheProgressUiState?>(null) }
         var venueElevationCacheJob by remember { mutableStateOf<Job?>(null) }
         var venueElevationCacheRefreshToken by remember { mutableStateOf(0) }
+        var pendingDemFileImportReview by remember { mutableStateOf<DesktopVenueElevationDemImportReview?>(null) }
         var eventRegImportUrl by remember { mutableStateOf(DesktopEventRegImportPreferences.lastRegistrationUrl()) }
         var isImportingEventRegWebsite by remember { mutableStateOf(false) }
         var isImportingEventRegCompetitorCsvs by remember { mutableStateOf(false) }
@@ -1740,6 +1741,47 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun importReviewedDemFiles(review: DesktopVenueElevationDemImportReview): Boolean =
+            runCatching {
+                val summary = DesktopVenueElevationCache.importReviewedDemFiles(review)
+                venueElevationCacheRefreshToken++
+                projectStatusText = buildString {
+                    append("Imported ${summary.importedCount} DEM cache file")
+                    append(if (summary.importedCount == 1) "" else "s")
+                    append(" to ${summary.targetDirectory}.")
+                    if (summary.overwrittenCount > 0) {
+                        append(" Overwrote ${summary.overwrittenCount} existing cached venue")
+                        append(if (summary.overwrittenCount == 1) "." else "s.")
+                    }
+                    if (review.issues.isNotEmpty()) {
+                        append(" Skipped ${review.issues.size} invalid file")
+                        append(if (review.issues.size == 1) "." else "s.")
+                    }
+                }
+                true
+            }.getOrElse { error ->
+                projectStatusText = "DEM import failed: ${error.message ?: error::class.simpleName}"
+                false
+            }
+
+        fun chooseImportDemFiles() {
+            val paths = DesktopFileDialogs.chooseImportDemFiles()
+            if (paths.isEmpty()) {
+                return
+            }
+            val review = DesktopVenueElevationCache.reviewDemFileImport(paths)
+            when {
+                review.importableCount == 0 -> {
+                    pendingDemFileImportReview = review
+                    projectStatusText = "No valid DEM cache files were selected."
+                }
+                review.overwriteCount > 0 || review.issues.isNotEmpty() ->
+                    pendingDemFileImportReview = review
+                else ->
+                    importReviewedDemFiles(review)
+            }
+        }
+
         fun applyCourseKmlKmzImport(
             review: PendingCourseKmlKmzImportReview,
             fetchElevations: Boolean,
@@ -2544,7 +2586,8 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.NewEventFile,
                 DesktopNavAction.OpenEventFile,
                 DesktopNavAction.ImportAndroidRaceBackup,
-                DesktopNavAction.ImportEventRegWebsite -> true
+                DesktopNavAction.ImportEventRegWebsite,
+                DesktopNavAction.ImportDemFile -> true
                 DesktopNavAction.ImportEventRegCompetitorsCsv -> projectFile != null
                 DesktopNavAction.ShowDebugLogHelp,
                 DesktopNavAction.ShowAbout -> true
@@ -2636,6 +2679,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.OpenEventFile,
                 DesktopNavAction.ImportAndroidRaceBackup,
                 DesktopNavAction.ImportEventRegWebsite,
+                DesktopNavAction.ImportDemFile,
                 DesktopNavAction.ShowDebugLogHelp,
                 DesktopNavAction.ShowAbout -> null
             }
@@ -2653,6 +2697,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
                 DesktopNavAction.ImportControlsCsv -> importControlsCsv()
                 DesktopNavAction.ImportCourseKmlKmz -> chooseImportCourseKmlKmz()
+                DesktopNavAction.ImportDemFile -> chooseImportDemFiles()
                 DesktopNavAction.DeleteAllControls ->
                     isDeleteAllControlsDialogVisible = true
                 DesktopNavAction.DeleteAllCategoryAssignedControls ->
@@ -3005,6 +3050,20 @@ fun main(args: Array<String>) = application {
                 onCancel = {
                     venueElevationCacheProgress = progress.copy(cancelRequested = true)
                     venueElevationCacheJob?.cancel()
+                }
+            )
+        }
+        pendingDemFileImportReview?.let { review ->
+            DemFileImportReviewDialog(
+                review = review,
+                onImport = {
+                    if (importReviewedDemFiles(review)) {
+                        pendingDemFileImportReview = null
+                    }
+                },
+                onCancel = {
+                    pendingDemFileImportReview = null
+                    projectStatusText = "DEM import canceled. No changes applied."
                 }
             )
         }
@@ -4538,6 +4597,100 @@ private fun VenueElevationCacheProgressDialog(
                 enabled = !progress.cancelRequested
             ) {
                 Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun DemFileImportReviewDialog(
+    review: DesktopVenueElevationDemImportReview,
+    onImport: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val hasImportableFiles = review.importableCount > 0
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Import DEM files") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = if (hasImportableFiles) {
+                        "Radio-Oracle found ${review.importableCount} valid DEM cache file${if (review.importableCount == 1) "" else "s"} to import."
+                    } else {
+                        "Radio-Oracle did not find any valid DEM cache files to import."
+                    },
+                    color = DesktopPalette.Black,
+                    fontSize = 14.sp
+                )
+                if (review.overwriteCount > 0) {
+                    Text(
+                        text = "${review.overwriteCount} imported file${if (review.overwriteCount == 1) "" else "s"} will overwrite existing cached venue data.",
+                        color = DesktopPalette.Warning,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                if (review.candidates.isNotEmpty()) {
+                    Text("Valid DEM files", fontWeight = FontWeight.Bold)
+                    review.candidates.take(8).forEach { candidate ->
+                        Text(
+                            text = buildString {
+                                append(candidate.targetPath.fileName)
+                                append(" - ")
+                                append(candidate.venueName)
+                                append(" ")
+                                append(candidate.resolutionMeters.roundToInt())
+                                append(" m, ")
+                                append(candidate.rowCount)
+                                append(" x ")
+                                append(candidate.columnCount)
+                                if (candidate.willOverwrite) {
+                                    append(" (overwrite)")
+                                }
+                            },
+                            color = if (candidate.willOverwrite) DesktopPalette.Warning else DesktopPalette.Black,
+                            fontSize = 12.sp
+                        )
+                    }
+                    if (review.candidates.size > 8) {
+                        Text(
+                            text = "+${review.candidates.size - 8} more valid file${if (review.candidates.size - 8 == 1) "" else "s"}",
+                            color = DesktopPalette.Black,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+                if (review.issues.isNotEmpty()) {
+                    Text("Skipped files", fontWeight = FontWeight.Bold)
+                    review.issues.take(8).forEach { issue ->
+                        Text(
+                            text = "${issue.displayName}: ${issue.reason}",
+                            color = DesktopPalette.Error,
+                            fontSize = 12.sp
+                        )
+                    }
+                    if (review.issues.size > 8) {
+                        Text(
+                            text = "+${review.issues.size - 8} more skipped file${if (review.issues.size - 8 == 1) "" else "s"}",
+                            color = DesktopPalette.Error,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onImport,
+                enabled = hasImportableFiles
+            ) {
+                Text(if (review.overwriteCount > 0) "Proceed" else "Import")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                Text(if (hasImportableFiles) "Abort" else "Close")
             }
         }
     )
