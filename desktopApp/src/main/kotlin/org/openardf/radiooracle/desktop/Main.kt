@@ -4520,6 +4520,11 @@ private fun RadioOManagerDesktopApp(
         val navigationReadiness = DesktopNavigationReadiness.from(projectFile)
         val activeBypassedDisabledNavigation = bypassedDisabledNavigation
             ?.activeFor(navState, navigationReadiness)
+        val workspaceBackgroundColor = when {
+            activeBypassedDisabledNavigation != null -> DesktopPalette.WarningBackground
+            navState.submenuStack.isNotEmpty() -> DesktopPalette.NavigationBackground
+            else -> DesktopPalette.White
+        }
 
         fun selectionFor(intent: DesktopPendingNavigation): Pair<DesktopNavState, DesktopNavAction?> =
             when (intent) {
@@ -4593,7 +4598,6 @@ private fun RadioOManagerDesktopApp(
                     NavigationRail(
                         navState = navState,
                         navigationReadiness = navigationReadiness,
-                        bypassedDisabledNavigation = activeBypassedDisabledNavigation,
                         isNavActionEnabled = isNavActionEnabled,
                         disabledNavActionReason = disabledNavActionReason,
                         onBack = { requestNavigation(DesktopPendingNavigation.Back) },
@@ -4607,13 +4611,7 @@ private fun RadioOManagerDesktopApp(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
-                                .background(
-                                    if (activeBypassedDisabledNavigation != null) {
-                                        DesktopPalette.WarningBackground
-                                    } else {
-                                        DesktopPalette.White
-                                    }
-                                )
+                                .background(workspaceBackgroundColor)
                         ) {
                             SectionWorkspace(
                                 workflow = navState.workflow,
@@ -4907,15 +4905,6 @@ private fun saveEventButtonColors() =
         disabledContentColor = DesktopPalette.Disconnected
     )
 
-@Composable
-private fun bypassedDisabledMenuButtonColors() =
-    ButtonDefaults.buttonColors(
-        backgroundColor = DesktopPalette.Warning,
-        contentColor = DesktopPalette.Black,
-        disabledBackgroundColor = DesktopPalette.Warning,
-        disabledContentColor = DesktopPalette.Black
-    )
-
 private const val DisabledMenuOverrideHoldMillis = 3_000L
 
 private fun Modifier.disabledMenuLongClickOverride(
@@ -4955,7 +4944,6 @@ private fun Modifier.disabledMenuLongClickOverride(
 private fun NavigationRail(
     navState: DesktopNavState,
     navigationReadiness: DesktopNavigationReadiness,
-    bypassedDisabledNavigation: BypassedDisabledNavigation?,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
     disabledNavActionReason: (DesktopNavAction) -> String?,
     onBack: () -> Unit,
@@ -4985,8 +4973,6 @@ private fun NavigationRail(
                 val actionEnabled = item.action?.let(isNavActionEnabled) ?: true
                 val isEnabled = isNavigationEnabled && actionEnabled
                 val canLongClickOverride = DesktopNavigation.canLongClickOverrideDisabledMenu(item, navigationReadiness)
-                val isBypassedDisabled = bypassedDisabledNavigation?.workflow == item.workflow &&
-                    bypassedDisabledNavigation.itemId == item.id
                 val disabledReason = DesktopNavigation.disabledItemReasonWithMenuOverrideHint(item, navigationReadiness)
                     ?: item.action?.let(disabledNavActionReason)
                 DisabledReasonTooltip(
@@ -5005,10 +4991,10 @@ private fun NavigationRail(
                                 .fillMaxWidth()
                                 .heightIn(min = 34.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            colors = when {
-                                isBypassedDisabled -> bypassedDisabledMenuButtonColors()
-                                item.action == DesktopNavAction.SaveEventFile -> saveEventButtonColors()
-                                else -> ButtonDefaults.buttonColors()
+                            colors = if (item.action == DesktopNavAction.SaveEventFile) {
+                                saveEventButtonColors()
+                            } else {
+                                ButtonDefaults.buttonColors()
                             }
                         ) {
                             Text(
