@@ -424,13 +424,25 @@ fun main(args: Array<String>) = application {
 
         fun checkpointBeforeImport(title: String) {
             val currentProject = projectSession.currentProject ?: return
+            val backupPath = DesktopImportBackups.writeBackup(
+                projectFile = currentProject,
+                currentEventPath = projectSession.currentPath,
+                importTitle = title
+            )
             recentImportCheckpoint = DesktopImportCheckpoint(
                 title = title,
+                backupPath = backupPath,
                 projectFile = currentProject,
                 protectedCoursePassword = protectedCoursePassword,
                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
             )
+            recordActivity("Saved persistent rollback backup ${backupPath.fileName}.")
+        }
+
+        fun withRollbackBackupLine(lines: List<String>): List<String> {
+            val backupPath = recentImportCheckpoint?.backupPath ?: return lines
+            return lines + "Rollback backup file: $backupPath"
         }
 
         fun restoreRecentImportCheckpoint() {
@@ -443,7 +455,10 @@ fun main(args: Array<String>) = application {
                 syncProjectState()
                 recentImportReport = DesktopImportReport(
                     title = "Restored ${checkpoint.title}",
-                    lines = listOf("The Event File was restored to the in-memory checkpoint captured before that import.")
+                    lines = listOf(
+                        "The Event File was restored to the in-memory checkpoint captured before that import.",
+                        "Persistent rollback backup file: ${checkpoint.backupPath}"
+                    )
                 )
                 recordActivity("Restored checkpoint before ${checkpoint.title}.")
                 projectStatusText = "Restored checkpoint from before ${checkpoint.title}. Unsaved changes."
@@ -1505,7 +1520,7 @@ fun main(args: Array<String>) = application {
             recordActivity("Applied controls/route KML/KMZ import ${review.sourceName}.")
             recentImportReport = DesktopImportReport(
                 title = "Controls/route KML/KMZ: ${review.sourceName}",
-                lines = listOf(
+                lines = withRollbackBackupLine(listOf(
                     "${selectedSummary.importedCategoryCount} categories received stored route data.",
                     "${selectedSummary.duplicateCategoryCount} duplicate categories skipped.",
                     "${selectedSummary.changedControlLocationCount} control locations updated.",
@@ -1513,7 +1528,7 @@ fun main(args: Array<String>) = application {
                     "${selectedSummary.createdCategoryNames.size} missing categories created.",
                     "${selectedSummary.missingCategoryNames.size} category names were missing before review."
                 ) + listOf(updatedProject.resultImpactWarning("Course data changed").trim()).filter { it.isNotBlank() } +
-                    selectedSummary.eventTypeWarnings
+                    selectedSummary.eventTypeWarnings)
             )
             if (fetchElevations) {
                 startCourseKmlKmzElevationFetch(review.copy(summary = selectedSummary))
@@ -1863,13 +1878,13 @@ fun main(args: Array<String>) = application {
                 recordActivity("Applied competitors CSV import ${path.fileName}.")
                 recentImportReport = DesktopImportReport(
                     title = "Competitors CSV: ${path.fileName}",
-                    lines = listOf(
+                    lines = withRollbackBackupLine(listOf(
                         "$importedRows competitors added.",
                         "$updatedRows competitors updated.",
                         "$skippedRows competitors skipped.",
                         "$deletedRows competitors removed by sync.",
                         "${result.invalidLines.size} invalid rows skipped."
-                    ) + importWarnings
+                    ) + importWarnings)
                 )
                 projectStatusText = competitorImportStatusText(
                     importedRows = importedRows,
@@ -1928,7 +1943,7 @@ fun main(args: Array<String>) = application {
                 recordActivity("Applied categories CSV import ${review.path.fileName}.")
                 recentImportReport = DesktopImportReport(
                     title = "Categories CSV: ${review.path.fileName}",
-                    lines = listOf(
+                    lines = withRollbackBackupLine(listOf(
                         "$importedRows categories added.",
                         "$updatedRows categories updated by name.",
                         "${review.invalidLineCount} invalid rows skipped.",
@@ -1936,7 +1951,7 @@ fun main(args: Array<String>) = application {
                         "${review.preview.categoriesWithAssignedControlsReplacedCount} existing assigned-control lists replaced.",
                         "${review.preview.categoriesWithProtectedCoursePreservedCount} protected course records preserved."
                     ) + listOf(projectFile?.resultImpactWarning("Category course data changed")?.trim().orEmpty()).filter { it.isNotBlank() } +
-                        review.preview.eventTypeWarnings
+                        review.preview.eventTypeWarnings)
                 )
                 projectStatusText =
                     "Imported ${review.path.fileName}: $importedRows added, $updatedRows updated, ${review.invalidLineCount} invalid."
@@ -2011,7 +2026,7 @@ fun main(args: Array<String>) = application {
                 recordActivity("Applied controls CSV import ${review.path.fileName}.")
                 recentImportReport = DesktopImportReport(
                     title = "Controls CSV: ${review.path.fileName}",
-                    lines = listOf(
+                    lines = withRollbackBackupLine(listOf(
                         "${review.preview.addedCount} controls added.",
                         "${review.preview.changedCount} controls updated.",
                         "${review.preview.unchangedCount} controls unchanged.",
@@ -2028,7 +2043,7 @@ fun main(args: Array<String>) = application {
                             listOf("${review.preview.missingExistingCount} existing controls were missing from the CSV and kept.")
                         }
                         ) + listOf(projectFile?.resultImpactWarning("Control definitions changed")?.trim().orEmpty()).filter { it.isNotBlank() } +
-                        review.preview.eventTypeWarnings
+                        review.preview.eventTypeWarnings)
                 )
                 projectStatusText = importStatusText(
                     "Imported",
@@ -4187,6 +4202,7 @@ private data class DesktopImportReport(
 
 private data class DesktopImportCheckpoint(
     val title: String,
+    val backupPath: Path,
     val projectFile: EventProjectFile,
     val protectedCoursePassword: String?,
     val protectedIdealOrderByCategoryId: Map<String, String>,
@@ -5400,7 +5416,7 @@ private fun EventDiagnosticsPanel(
                     ButtonLabel("Restore Before Import")
                 }
                 Text(
-                    text = "Restores the in-memory Event File state captured before ${recentImportCheckpoint.title}. Save after restore if you want to keep it.",
+                    text = "Restores the in-memory Event File state captured before ${recentImportCheckpoint.title}. A persistent .rom.json rollback copy was also saved at ${recentImportCheckpoint.backupPath}. Save after restore if you want to keep the in-app rollback.",
                     color = Color.DarkGray,
                     fontSize = 12.sp
                 )
