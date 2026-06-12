@@ -64,7 +64,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
@@ -2301,8 +2305,11 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun saveAsCurrentProject(): Boolean {
-            val path = DesktopFileDialogs.chooseSaveProject(projectSession.currentProject?.raceData?.race?.name)
+        fun saveAsCurrentProject(suggestedFileName: String? = null): Boolean {
+            val path = DesktopFileDialogs.chooseSaveProject(
+                raceName = projectSession.currentProject?.raceData?.race?.name,
+                suggestedFileName = suggestedFileName
+            )
                 ?: return false
             return runCatching {
                 projectSession.saveAs(path)
@@ -2384,7 +2391,6 @@ fun main(args: Array<String>) = application {
                     } else {
                         "There are no Event File changes to save."
                     }
-                DesktopNavAction.SaveEventFileAs,
                 DesktopNavAction.CloseEventFile,
                 DesktopNavAction.ImportEventRegCompetitorsCsv,
                 DesktopNavAction.ImportCategoriesCsv,
@@ -2460,7 +2466,6 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportEventRegWebsite -> showEventRegImportDialog()
                 DesktopNavAction.ImportEventRegCompetitorsCsv -> showEventRegCompetitorCsvImportDialog()
                 DesktopNavAction.SaveEventFile -> saveCurrentProject()
-                DesktopNavAction.SaveEventFileAs -> saveAsCurrentProject()
                 DesktopNavAction.CloseEventFile -> requestCloseEventFile()
                 DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
                 DesktopNavAction.ImportControlsCsv -> importControlsCsv()
@@ -2541,9 +2546,6 @@ fun main(args: Array<String>) = application {
                         saveCurrentProject()
                     }
                 )
-                Item("Save As...", enabled = projectFile != null, onClick = {
-                    saveAsCurrentProject()
-                })
                 Item("Close Event File", enabled = projectFile != null, onClick = ::requestCloseEventFile)
             }
         }
@@ -2853,6 +2855,7 @@ fun main(args: Array<String>) = application {
             onUpdateProtectedControlLocation = ::updateProtectedControlLocation,
             onUpdateProtectedCoursePassword = ::updateProtectedCoursePassword,
             onLockProtectedCourseOrder = ::lockProtectedCourseOrder,
+            onUpdateEventFileName = { fileName -> saveAsCurrentProject(fileName) },
             onRenameRace = { name ->
                 runCatching {
                     val previousProject = projectSession.currentProject
@@ -4615,6 +4618,7 @@ private fun RadioOManagerDesktopApp(
     onRenameRace: (String) -> Unit = {},
     onUpdateRaceStartDateTime: (String) -> Unit = {},
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit = { _, _, _, _ -> },
+    onUpdateEventFileName: (String) -> Boolean = { false },
     onRenameCategory: (String, String) -> Unit = { _, _ -> },
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit = { _, _, _ -> },
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit = { _, _, _ -> },
@@ -4814,6 +4818,7 @@ private fun RadioOManagerDesktopApp(
                                     onRenameRace = onRenameRace,
                                     onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
                                     onUpdateRaceSettings = onUpdateRaceSettings,
+                                    onUpdateEventFileName = onUpdateEventFileName,
                                     onRenameCategory = onRenameCategory,
                                     onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
                                     onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
@@ -5511,6 +5516,7 @@ private fun SectionWorkspace(
     onRenameRace: (String) -> Unit,
     onUpdateRaceStartDateTime: (String) -> Unit,
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
+    onUpdateEventFileName: (String) -> Boolean,
     onRenameCategory: (String, String) -> Unit,
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
@@ -5619,7 +5625,8 @@ private fun SectionWorkspace(
                 eventFilePath = eventFilePath,
                 onRenameRace = onRenameRace,
                 onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
-                onUpdateRaceSettings = onUpdateRaceSettings
+                onUpdateRaceSettings = onUpdateRaceSettings,
+                onUpdateEventFileName = onUpdateEventFileName
             )
         }
         if (section == DesktopSection.Categories && projectFile != null) {
@@ -10311,7 +10318,8 @@ private fun RaceDetailsPanel(
     eventFilePath: Path?,
     onRenameRace: (String) -> Unit,
     onUpdateRaceStartDateTime: (String) -> Unit,
-    onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit
+    onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
+    onUpdateEventFileName: (String) -> Boolean
 ) {
     var raceNameDraft by remember(details.name) { mutableStateOf(details.name) }
     var startDateTimeDraft by remember(details.startDateTimeIso) {
@@ -10329,6 +10337,12 @@ private fun RaceDetailsPanel(
     var shouldPromptForEventStartAfterNameEdit by remember { mutableStateOf(false) }
     var isEventStartPromptVisible by remember { mutableStateOf(false) }
     var eventStartPromptReason by remember { mutableStateOf("event definition") }
+    val currentEventFileName = eventFilePath?.fileName?.toString()
+    var eventFileNameDraft by remember(currentEventFileName, details.name) {
+        mutableStateOf(currentEventFileName ?: DesktopProjectFilePaths.defaultProjectFileName(details.name))
+    }
+    var hasEventFileNameDraftChanged by remember(currentEventFileName) { mutableStateOf(false) }
+    var wasEventFileNameFocused by remember { mutableStateOf(false) }
 
     fun applyRaceSettings(
         raceType: RaceType = selectedRaceType,
@@ -10345,6 +10359,25 @@ private fun RaceDetailsPanel(
     fun promptForEventStart(reason: String) {
         eventStartPromptReason = reason
         isEventStartPromptVisible = true
+    }
+
+    fun commitEventFileNameDraft() {
+        if (!hasEventFileNameDraftChanged) {
+            return
+        }
+        val fallbackName = currentEventFileName ?: DesktopProjectFilePaths.defaultProjectFileName(details.name)
+        val normalizedFileName = eventFileNameDraft
+            .takeIf { it.isNotBlank() }
+            ?.let(DesktopProjectFilePaths::defaultProjectFileName)
+            ?: fallbackName
+        if (normalizedFileName == currentEventFileName) {
+            eventFileNameDraft = normalizedFileName
+            hasEventFileNameDraftChanged = false
+            return
+        }
+        hasEventFileNameDraftChanged = false
+        val didSave = onUpdateEventFileName(normalizedFileName)
+        eventFileNameDraft = if (didSave) normalizedFileName else fallbackName
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -10375,10 +10408,28 @@ private fun RaceDetailsPanel(
             )
         }
         TextField(
-            value = eventFilePath?.fileName?.toString() ?: "Unsaved new Event File",
-            onValueChange = {},
-            readOnly = true,
-            modifier = Modifier.fillMaxWidth(),
+            value = eventFileNameDraft,
+            onValueChange = {
+                eventFileNameDraft = it
+                hasEventFileNameDraftChanged = true
+            },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focusState ->
+                    if (wasEventFileNameFocused && !focusState.isFocused) {
+                        commitEventFileNameDraft()
+                    }
+                    wasEventFileNameFocused = focusState.isFocused
+                }
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyUp && event.key == Key.Enter) {
+                        commitEventFileNameDraft()
+                        true
+                    } else {
+                        false
+                    }
+                },
             label = { Text("Event file name") }
         )
         Row(

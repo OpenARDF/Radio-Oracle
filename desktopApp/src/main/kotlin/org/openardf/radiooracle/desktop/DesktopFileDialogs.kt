@@ -179,11 +179,14 @@ object DesktopFileDialogs {
         chooseEventFile("Open Radio-Oracle Event File", FileDialog.LOAD)
 
     /** Lets the user choose a save location, returning null when cancelled. */
-    fun chooseSaveProject(raceName: String? = null): Path? =
+    fun chooseSaveProject(raceName: String? = null, suggestedFileName: String? = null): Path? =
         chooseEventFile(
             title = "Save Radio-Oracle Event File",
             mode = FileDialog.SAVE,
-            defaultFileName = raceName?.let(DesktopProjectFilePaths::defaultProjectFileName)
+            defaultFileName = suggestedFileName
+                ?.takeIf { it.isNotBlank() }
+                ?.let(DesktopProjectFilePaths::defaultProjectFileName)
+                ?: raceName?.let(DesktopProjectFilePaths::defaultProjectFileName)
         )
             ?.let(DesktopProjectFilePaths::withProjectExtension)
 

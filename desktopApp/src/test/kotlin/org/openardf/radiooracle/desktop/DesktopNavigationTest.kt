@@ -283,7 +283,6 @@ class DesktopNavigationTest {
                 "Export Android Event File...",
                 "Settings",
                 "Save Event",
-                "Save Event As...",
                 "Close Event File"
             ),
             DesktopNavigation.currentItems(completedState).map { it.label }
@@ -423,7 +422,6 @@ class DesktopNavigationTest {
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.ImportEventRegWebsite }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFile }.requiresEventFile)
-        assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFileAs }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.CloseEventFile }.requiresEventFile)
         assertFalse(eventFileActions.first { it.label == "Settings" }.requiresEventFile)
         assertEquals(
@@ -435,7 +433,6 @@ class DesktopNavigationTest {
                 "Export Android Event File...",
                 "Settings",
                 "Save Event",
-                "Save Event As...",
                 "Close Event File"
             ),
             eventFileActions.map { it.label }
@@ -646,7 +643,6 @@ class DesktopNavigationTest {
                 "Export Android Event File...",
                 "Settings",
                 "Save Event",
-                "Save Event As...",
                 "Close Event File"
             ),
             eventFileItems.map { it.label }
@@ -826,7 +822,6 @@ class DesktopNavigationTest {
                 "Export Android Event File...",
                 "Settings",
                 "Save Event",
-                "Save Event As...",
                 "Close Event File"
             ),
             DesktopNavigation.currentItems(backState).map { it.label }

@@ -26,7 +26,6 @@ enum class DesktopNavAction {
     ImportEventRegWebsite,
     ImportEventRegCompetitorsCsv,
     SaveEventFile,
-    SaveEventFileAs,
     CloseEventFile,
     ImportCategoriesCsv,
     ImportCourseKmlKmz,
@@ -920,8 +919,6 @@ object DesktopNavigation {
             "Use Readiness to inspect event consistency, recent imports, generated test data tools, and diagnostics.",
         "setup.event-file.save" to
             "Use Save Event to write the current Event File to its existing path.",
-        "setup.event-file.save-as" to
-            "Use Save Event As to choose a new path for the current Event File.",
         "setup.event-file.close" to
             "Use Close Event File to close the active event after handling any unsaved changes."
     )
@@ -1011,7 +1008,6 @@ object DesktopNavigation {
                 requiresEventFile = false
             ),
             action("setup.event-file.save", "Save Event", workflow, DesktopNavAction.SaveEventFile),
-            action("setup.event-file.save-as", "Save Event As...", workflow, DesktopNavAction.SaveEventFileAs),
             action("setup.event-file.close", "Close Event File", workflow, DesktopNavAction.CloseEventFile)
         )
 
