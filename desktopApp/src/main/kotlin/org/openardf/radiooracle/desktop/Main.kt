@@ -122,7 +122,6 @@ import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventRaceDetails
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventProjectFile
-import org.openardf.radiooracle.shared.event.EventProjectSummary
 import org.openardf.radiooracle.shared.event.EventReadoutDuplicatePolicy
 import org.openardf.radiooracle.shared.event.EventReadoutDetails
 import org.openardf.radiooracle.shared.event.EventResultDetails
@@ -2811,7 +2810,6 @@ fun main(args: Array<String>) = application {
 
         RadioOManagerDesktopApp(
             projectFile = projectFile,
-            eventFilePath = projectSession.currentPath,
             projectStatusText = projectStatusText,
             hasUnsavedChanges = hasUnsavedChanges,
             siReaderState = siReaderState,
@@ -4597,7 +4595,6 @@ private data class DesktopReadoutEditDraft(
 @Composable
 private fun RadioOManagerDesktopApp(
     projectFile: EventProjectFile? = null,
-    eventFilePath: Path? = null,
     projectStatusText: String = "No Event File open.",
     hasUnsavedChanges: Boolean = false,
     siReaderState: DesktopSiReaderUiState = DesktopSiReaderUiState.disconnected(),
@@ -4809,7 +4806,6 @@ private fun RadioOManagerDesktopApp(
                                     breadcrumb = DesktopNavigation.breadcrumb(navState),
                                     menuDescription = DesktopNavigation.selectedDescription(navState),
                                     projectFile = projectFile,
-                                    eventFilePath = eventFilePath,
                                     projectStatusText = projectStatusText,
                                     siReaderState = siReaderState,
                                     onRenameRace = onRenameRace,
@@ -5506,7 +5502,6 @@ private fun SectionWorkspace(
     breadcrumb: String,
     menuDescription: String,
     projectFile: EventProjectFile?,
-    eventFilePath: Path?,
     projectStatusText: String,
     siReaderState: DesktopSiReaderUiState,
     onRenameRace: (String) -> Unit,
@@ -5612,12 +5607,11 @@ private fun SectionWorkspace(
             fontSize = 14.sp
         )
         if (section == DesktopSection.WorkflowHome) {
-            WorkflowHomePanel(workflow, projectFile)
+            WorkflowHomePanel(workflow)
         }
         if (section == DesktopSection.Races && projectFile != null) {
             RaceDetailsPanel(
                 details = EventRaceDetails.from(projectFile.raceData.race),
-                eventFilePath = eventFilePath,
                 onRenameRace = onRenameRace,
                 onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
                 onUpdateRaceSettings = onUpdateRaceSettings
@@ -5808,21 +5802,23 @@ private fun SectionWorkspace(
                 onUpdateCoursePassword = onUpdateProtectedCoursePassword
             )
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(DesktopPalette.LightGrey)
-        )
-        Text(
-            text = if (projectFile != null) {
-                "${DesktopDateTimeText.displayIsoOrRaw(projectFile.raceData.race.startDateTimeIso)} - $projectStatusText"
-            } else {
-                projectStatusText
-            },
-            color = DesktopPalette.Disconnected,
-            fontSize = 13.sp
-        )
+        if (section != DesktopSection.WorkflowHome) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(DesktopPalette.LightGrey)
+            )
+            Text(
+                text = if (projectFile != null) {
+                    "${DesktopDateTimeText.displayIsoOrRaw(projectFile.raceData.race.startDateTimeIso)} - $projectStatusText"
+                } else {
+                    projectStatusText
+                },
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
     }
 }
 
@@ -10307,7 +10303,6 @@ private fun CategoryDeleteButton(
 @Composable
 private fun RaceDetailsPanel(
     details: EventRaceDetails,
-    eventFilePath: Path?,
     onRenameRace: (String) -> Unit,
     onUpdateRaceStartDateTime: (String) -> Unit,
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit
@@ -10353,11 +10348,6 @@ private fun RaceDetailsPanel(
                 label = { Text("Event name") }
             )
         }
-        Text(
-            text = eventFilePath?.fileName?.let { "File name: $it" } ?: "File name: unsaved new Event File",
-            color = DesktopPalette.Disconnected,
-            fontSize = 13.sp
-        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -11284,7 +11274,7 @@ private fun DetailRow(label: String, value: String, valueColor: Color = DesktopP
 }
 
 @Composable
-private fun WorkflowHomePanel(workflow: DesktopWorkflow, projectFile: EventProjectFile?) {
+private fun WorkflowHomePanel(workflow: DesktopWorkflow) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -11296,12 +11286,6 @@ private fun WorkflowHomePanel(workflow: DesktopWorkflow, projectFile: EventProje
             color = DesktopPalette.Disconnected,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = projectFile?.let { "Event File open: ${EventProjectSummary.from(it).raceName}" }
-                ?: "Create a new Event File or open an existing one to begin.",
-            color = DesktopPalette.Disconnected,
-            fontSize = 13.sp
         )
     }
 }
