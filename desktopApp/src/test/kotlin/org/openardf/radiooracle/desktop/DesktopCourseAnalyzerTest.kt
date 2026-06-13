@@ -6,16 +6,24 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.ControlPointType
+import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.event.EventAlias
+import org.openardf.radiooracle.shared.event.EventAliasPunch
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlPoint
+import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.EventReadoutData
+import org.openardf.radiooracle.shared.event.EventResult
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
@@ -554,10 +562,13 @@ class DesktopCourseAnalyzerTest {
             protectedIdealOrderText = "'Fox 1' 'Fox 2' 'Fox 3' Beacon"
         )
         val application = requireNotNull(summary.calculatedRouteApplication)
-        val originalPublicLabelsByControlId = projectFile.raceData.controls.associate { it.id to it.publicLabel }
+        val projectWithResults = projectFile.withAliasesAndUnmatchedControlReadout()
+        val originalPublicLabelsByControlId = projectWithResults.raceData.controls.associate { it.id to it.publicLabel }
+        val originalAliasesBySiCode = projectWithResults.raceData.aliases.associate { it.siCode to it.name }
+        val originalPunch = projectWithResults.raceData.unmatchedReadoutData.single().punches.single()
 
         val (updatedProject, updatedCourseInfo) = DesktopCourseAnalysisApplier.applyCalculatedRoute(
-            projectFile = projectFile,
+            projectFile = projectWithResults,
             courseInfo = protectedInfo,
             application = application,
             password = "test-password"
@@ -581,6 +592,10 @@ class DesktopCourseAnalyzerTest {
         assertEquals(application.routePoints.size, updatedCourseInfo.route.size)
         val publicLabelsByControlId = updatedProject.raceData.controls.associate { it.id to it.publicLabel }
         assertEquals(originalPublicLabelsByControlId, publicLabelsByControlId)
+        assertEquals(originalAliasesBySiCode, updatedProject.raceData.aliases.associate { it.siCode to it.name })
+        val updatedPunch = updatedProject.raceData.unmatchedReadoutData.single().punches.single()
+        assertEquals(originalPunch.punch.siCode, updatedPunch.punch.siCode)
+        assertEquals(originalPunch.alias?.name, updatedPunch.alias?.name)
 
         val updatedSummary = DesktopCourseAnalyzer.analyze(
             projectFile = updatedProject,
@@ -597,7 +612,7 @@ class DesktopCourseAnalyzerTest {
         val projectFile = projectFile(
             foxCount = 3,
             publicLabels = listOf("33", "32", "31")
-        )
+        ).withAliasesAndUnmatchedControlReadout()
         val protectedInfo = protectedInfo(foxCount = 3)
         val storedIdealOrderText = "33 32 31 Beacon"
         val summary = DesktopCourseAnalyzer.analyze(
@@ -646,10 +661,16 @@ class DesktopCourseAnalyzerTest {
             .filter { it.suggestedSlotLabel != it.currentSlotLabel }
             .associate { it.controlId to it.suggestedSlotLabel }
         val originalPublicLabelsByControlId = encryptedProject.raceData.controls.associate { it.id to it.publicLabel }
+        val originalAliasesBySiCode = encryptedProject.raceData.aliases.associate { it.siCode to it.name }
+        val originalPunch = encryptedProject.raceData.unmatchedReadoutData.single().punches.single()
         assertEquals(changedLabelsByControlId.size, result.changedControlCount)
         assertEquals(2, result.affectedCategoryCount)
         val updatedPublicLabelsByControlId = result.projectFile.raceData.controls.associate { it.id to it.publicLabel }
         assertEquals(originalPublicLabelsByControlId, updatedPublicLabelsByControlId)
+        assertEquals(originalAliasesBySiCode, result.projectFile.raceData.aliases.associate { it.siCode to it.name })
+        val updatedPunch = result.projectFile.raceData.unmatchedReadoutData.single().punches.single()
+        assertEquals(originalPunch.punch.siCode, updatedPunch.punch.siCode)
+        assertEquals(originalPunch.alias?.name, updatedPunch.alias?.name)
 
         val originalResolvedControlIds = ProtectedIdealOrderRules.resolveControlIds(
             storedIdealOrderText,
@@ -943,6 +964,65 @@ class DesktopCourseAnalyzerTest {
         assertFalse(summary.calculatedIdealOrder.any { it == "32" || it == "34" })
         assertTrue(routeMap.points.map { it.label }.containsAll(listOf("31", "32", "33", "34", "35", "B")))
         assertEquals(listOf("S", "31", "33", "35", "B", "F"), routeMap.routeLabels)
+    }
+
+    private fun EventProjectFile.withAliasesAndUnmatchedControlReadout(): EventProjectFile {
+        val controlAliases = raceData.controls
+            .filter { it.type == ControlPointType.CONTROL }
+            .map { control ->
+                EventAlias(
+                    id = "alias-${control.id}",
+                    raceId = control.raceId,
+                    siCode = control.siCode,
+                    name = control.publicLabel ?: control.label
+                )
+            }
+        val firstControl = raceData.controls.first { it.type == ControlPointType.CONTROL }
+        val firstAlias = controlAliases.single { it.siCode == firstControl.siCode }
+        return copy(
+            raceData = raceData.copy(
+                aliases = controlAliases,
+                unmatchedReadoutData = listOf(
+                    EventReadoutData(
+                        result = EventResult(
+                            id = "result-unmatched",
+                            raceId = RACE_ID,
+                            competitorId = null,
+                            siNumber = 123456,
+                            cardType = 0,
+                            checkTimeSeconds = null,
+                            startTimeSeconds = 0,
+                            finishTimeSeconds = 1_200,
+                            readoutDateTimeIso = "2026-06-06T09:20:00",
+                            automaticStatus = true,
+                            resultStatus = ResultStatus.OK,
+                            points = 1,
+                            runTimeSeconds = 1_200,
+                            modified = false,
+                            sent = false
+                        ),
+                        punches = listOf(
+                            EventAliasPunch(
+                                punch = EventPunch(
+                                    id = "punch-unmatched-control",
+                                    raceId = RACE_ID,
+                                    resultId = "result-unmatched",
+                                    cardNumber = 123456,
+                                    siCode = firstControl.siCode,
+                                    siTimeSeconds = 600,
+                                    originalSiTimeSeconds = 600,
+                                    punchType = SIRecordType.CONTROL,
+                                    order = 1,
+                                    punchStatus = PunchStatus.VALID,
+                                    splitSeconds = 600
+                                ),
+                                alias = firstAlias
+                            )
+                        )
+                    )
+                )
+            )
+        )
     }
 
     private fun projectFile(

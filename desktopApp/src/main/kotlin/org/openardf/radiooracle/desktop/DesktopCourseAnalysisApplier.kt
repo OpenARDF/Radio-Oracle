@@ -1,6 +1,5 @@
 package org.openardf.radiooracle.desktop
 
-import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
@@ -26,16 +25,7 @@ object DesktopCourseAnalysisApplier {
         val labelByControlId = application.foxAssignments.associate { assignment ->
             assignment.controlId to assignment.calculatedLabel
         }
-        val updatedControls = projectFile.raceData.controls.map { control ->
-            val calculatedLabel = labelByControlId[control.id]
-            if (control.type == ControlPointType.CONTROL && calculatedLabel != null) {
-                control.copy(latitude = null, longitude = null)
-            } else if (control.latitude != null || control.longitude != null) {
-                control.copy(latitude = null, longitude = null)
-            } else {
-                control
-            }
-        }
+        val updatedControls = projectFile.raceData.controls.withoutPublicCoordinates()
         val updatedCourseInfo = courseInfo.copy(
             idealOrder = application.idealOrderText,
             lengthMeters = application.routeLengthMeters,
@@ -98,16 +88,7 @@ object DesktopCourseAnalysisApplier {
             "No fox numbering changes were calculated."
         }
 
-        val updatedControls = projectFile.raceData.controls.map { control ->
-            val calculatedLabel = labelByControlId[control.id]
-            when {
-                control.type == ControlPointType.CONTROL && calculatedLabel != null ->
-                    control.copy(latitude = null, longitude = null)
-                control.latitude != null || control.longitude != null ->
-                    control.copy(latitude = null, longitude = null)
-                else -> control
-            }
-        }
+        val updatedControls = projectFile.raceData.controls.withoutPublicCoordinates()
         val updatedControlsById = updatedControls.associateBy { it.id }
 
         val updatedInfoByCategoryId = mutableMapOf<String, ProtectedCourseInfo>()
@@ -187,6 +168,15 @@ object DesktopCourseAnalysisApplier {
         )
     }
 }
+
+private fun List<EventControl>.withoutPublicCoordinates(): List<EventControl> =
+    map { control ->
+        if (control.latitude != null || control.longitude != null) {
+            control.copy(latitude = null, longitude = null)
+        } else {
+            control
+        }
+    }
 
 private fun EventControl.idealOrderToken(controls: List<EventControl>): String {
     val candidates = listOfNotNull(

@@ -5,11 +5,13 @@ import net.lingala.zip4j.model.ZipParameters
 import net.lingala.zip4j.model.enums.AesKeyStrength
 import net.lingala.zip4j.model.enums.CompressionMethod
 import net.lingala.zip4j.model.enums.EncryptionMethod
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
+import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -18,6 +20,15 @@ import java.nio.file.Path
 import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+
+private const val COURSE_CONTROL_MARKER_SCALE = 1.1
+private const val COURSE_START_FINISH_MARKER_SCALE = 1.2
+private const val COURSE_ROUTE_STYLE_LINE_WIDTH = 4
+private const val COURSE_MARKER_FUCHSIA = "ffff00ff"
+
+private const val COURSE_CONTROL_DONUT_STYLE_ID = "courseControlDoughnutStyle"
+private const val COURSE_START_STYLE_ID = "courseStartStyle"
+private const val COURSE_FINISH_STYLE_ID = "courseFinishStyle"
 
 enum class DesktopControlsRouteKmlKmzExportFormat(
     val contentExtension: String,
@@ -101,6 +112,30 @@ object DesktopControlsRouteKmlKmzExporter {
         appendLine("  <Document>")
         appendLine("    <name>${xml(projectFile.raceData.race.name)} controls and routes</name>")
         appendLine("    <open>1</open>")
+        appendLine("    <Style id=\"$COURSE_CONTROL_DONUT_STYLE_ID\">")
+        appendLine("      <IconStyle><scale>$COURSE_CONTROL_MARKER_SCALE</scale><color>$COURSE_MARKER_FUCHSIA</color>")
+        appendLine("        <Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon>")
+        appendLine("      </IconStyle>")
+        appendLine("    </Style>")
+        appendLine("    <Style id=\"$COURSE_FINISH_STYLE_ID\">")
+        appendLine("      <IconStyle><scale>$COURSE_START_FINISH_MARKER_SCALE</scale><color>$COURSE_MARKER_FUCHSIA</color>")
+        appendLine("        <Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle_highlight.png</href></Icon>")
+        appendLine("      </IconStyle>")
+        appendLine("    </Style>")
+        appendLine("    <Style id=\"$COURSE_START_STYLE_ID\">")
+        appendLine("      <IconStyle><scale>$COURSE_START_FINISH_MARKER_SCALE</scale><color>$COURSE_MARKER_FUCHSIA</color>")
+        appendLine("        <Icon><href>http://maps.google.com/mapfiles/kml/shapes/triangle.png</href></Icon>")
+        appendLine("      </IconStyle>")
+        appendLine("    </Style>")
+        projectFile.raceData.categories.forEachIndexed { categoryIndex, categoryData ->
+            val routeStyleId = courseRouteStyleId(categoryData.category.id)
+            appendLine("    <Style id=\"$routeStyleId\">")
+            appendLine("      <LineStyle>")
+            appendLine("        <color>${categoryLineColor(categoryIndex)}</color>")
+            appendLine("        <width>$COURSE_ROUTE_STYLE_LINE_WIDTH</width>")
+            appendLine("      </LineStyle>")
+            appendLine("    </Style>")
+        }
         appendLine("    <Folder>")
         appendLine("      <name>Control catalog</name>")
         projectFile.raceData.controls.forEach { control ->
@@ -116,7 +151,11 @@ object DesktopControlsRouteKmlKmzExporter {
             appendLine("        <name>${xml(category.name)}</name>")
             appendLine("        <description>${xml(courseDescription(courseInfo))}</description>")
             if (courseInfo != null) {
-                appendCourseRoutePlacemark(category.name, courseInfo)
+                appendCourseRoutePlacemark(
+                    categoryName = category.name,
+                    categoryId = category.id,
+                    courseInfo = courseInfo
+                )
                 appendCourseControlPointPlacemarks(courseInfo.controlPoints)
                 appendCourseObjectPlacemarks(courseInfo.courseObjects)
             }
@@ -150,13 +189,18 @@ object DesktopControlsRouteKmlKmzExporter {
         appendLine("      </Placemark>")
     }
 
-    private fun StringBuilder.appendCourseRoutePlacemark(categoryName: String, courseInfo: ProtectedCourseInfo) {
+    private fun StringBuilder.appendCourseRoutePlacemark(
+        categoryName: String,
+        categoryId: String,
+        courseInfo: ProtectedCourseInfo
+    ) {
         if (courseInfo.route.isEmpty()) {
             return
         }
         appendLine("        <Placemark>")
         appendLine("          <name>${xml(categoryName)} route</name>")
         appendLine("          <description>${xml(courseDescription(courseInfo))}</description>")
+        appendLine("          <styleUrl>#${courseRouteStyleId(categoryId)}</styleUrl>")
         appendLine("          <LineString>")
         appendLine("            <tessellate>1</tessellate>")
         appendLine("            <coordinates>")
@@ -182,6 +226,9 @@ object DesktopControlsRouteKmlKmzExporter {
                     "elevationMeters" to (point.elevationMeters?.let(::formatNumber) ?: "")
                 )
             )
+            controlPointStyle(point.type)?.let { styleId ->
+                appendLine("          <styleUrl>#$styleId</styleUrl>")
+            }
             appendLine("          <Point><coordinates>${coordinates(point.longitude, point.latitude, point.elevationMeters)}</coordinates></Point>")
             appendLine("        </Placemark>")
         }
@@ -201,6 +248,9 @@ object DesktopControlsRouteKmlKmzExporter {
                     "elevationMeters" to (point.elevationMeters?.let(::formatNumber) ?: "")
                 )
             )
+            courseObjectStyle(point.type)?.let { styleId ->
+                appendLine("          <styleUrl>#$styleId</styleUrl>")
+            }
             appendLine("          <Point><coordinates>${coordinates(point.longitude, point.latitude, point.elevationMeters)}</coordinates></Point>")
             appendLine("        </Placemark>")
         }
@@ -251,6 +301,51 @@ object DesktopControlsRouteKmlKmzExporter {
             control.publicLabel?.takeIf { it.isNotBlank() }?.let { add("Public label: $it") }
             control.notes?.takeIf { it.isNotBlank() }?.let { add("Notes: $it") }
         }.joinToString("; ")
+
+    private fun courseRouteStyleId(categoryId: String): String = "courseRoute-${categoryId}"
+
+    private fun controlPointStyle(type: ControlPointType): String? = when (type) {
+        ControlPointType.CONTROL,
+        ControlPointType.BEACON,
+        ControlPointType.SEPARATOR -> COURSE_CONTROL_DONUT_STYLE_ID
+        else -> null
+    }
+
+    private fun courseObjectStyle(type: ProtectedCourseObjectType): String? = when (type) {
+        ProtectedCourseObjectType.START -> COURSE_START_STYLE_ID
+        ProtectedCourseObjectType.FINISH -> COURSE_FINISH_STYLE_ID
+        ProtectedCourseObjectType.CONTROL,
+        ProtectedCourseObjectType.BEACON,
+        ProtectedCourseObjectType.SPECTATOR -> COURSE_CONTROL_DONUT_STYLE_ID
+        else -> null
+    }
+
+    private fun categoryLineColor(categoryIndex: Int): String {
+        var hue = (categoryIndex * 137.5) % 360.0
+        if (hue in 45.0..75.0) {
+            hue += 38.0
+        }
+        val saturation = 0.75
+        val value = 0.85
+        val c = value * saturation
+        val x = c * (1.0 - kotlin.math.abs((hue / 60.0) % 2.0 - 1.0))
+        val m = value - c
+        val (red, green, blue) = when {
+            hue < 60.0 -> Triple(c + m, x + m, m)
+            hue < 120.0 -> Triple(x + m, c + m, m)
+            hue < 180.0 -> Triple(m, c + m, x + m)
+            hue < 240.0 -> Triple(m, x + m, c + m)
+            hue < 300.0 -> Triple(x + m, m, c + m)
+            else -> Triple(c + m, m, x + m)
+        }
+        return String.format(
+            Locale.US,
+            "ff%02x%02x%02x",
+            (blue * 255).toInt(),
+            (green * 255).toInt(),
+            (red * 255).toInt()
+        )
+    }
 
     private fun coordinates(point: ProtectedCourseRoutePoint): String =
         coordinates(point.longitude, point.latitude, point.elevationMeters)

@@ -3,6 +3,7 @@ package org.openardf.radiooracle.desktop
 import net.lingala.zip4j.ZipFile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -10,6 +11,7 @@ import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
+import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
@@ -42,8 +44,43 @@ class DesktopControlsRouteKmlKmzExportTest {
         assertTrue(kml.contains("<name>Course Test controls and routes</name>"))
         assertTrue(kml.contains("<name>Control catalog</name>"))
         assertTrue(kml.contains("<name>M21 route</name>"))
+        assertTrue(kml.contains("<Style id=\"courseControlDoughnutStyle\">"))
+        assertTrue(kml.contains("<Style id=\"courseStartStyle\">"))
+        assertTrue(kml.contains("<Style id=\"courseFinishStyle\">"))
+        assertTrue(kml.contains("<Style id=\"courseRoute-cat-m21\">"))
+        assertTrue(kml.contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
+        assertTrue(kml.contains("<styleUrl>#courseStartStyle</styleUrl>"))
+        val routeColor = extractRouteColorByCategoryId(kml, "cat-m21")
+        assertNotEquals("ffffffff", routeColor)
+        assertNotEquals("ff00ffff", routeColor)
         assertTrue(kml.contains("-122.0001,45.0001,90"))
         assertTrue(kml.contains("<Data name=\"siCode\"><value>31</value></Data>"))
+    }
+
+    @Test
+    fun exportsDifferentCategoryColorsForAgeGenderRoutes() {
+        val output = Files.createTempFile("radio-oracle-controls-routes", ".kml.zip")
+        val project = sampleProjectWithTwoCategories("course-key")
+
+        val summary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+            target = DesktopControlsRouteKmlKmzExportTarget(output, DesktopControlsRouteKmlKmzExportFormat.Kml),
+            projectFile = project,
+            password = "course-key"
+        )
+
+        assertEquals(2, summary.categoryCount)
+        assertEquals(2, summary.routeCount)
+
+        val zip = ZipFile(output.toFile(), "course-key".toCharArray())
+        val header = zip.fileHeaders.single()
+        val kml = zip.getInputStream(header).use { it.readBytes().decodeToString() }
+        val m21Color = extractRouteColorByCategoryId(kml, "cat-m21")
+        val w65Color = extractRouteColorByCategoryId(kml, "cat-w65")
+        assertNotEquals(m21Color, w65Color)
+        assertNotEquals("ffffffff", m21Color)
+        assertNotEquals("ff00ffff", m21Color)
+        assertNotEquals("ffffffff", w65Color)
+        assertNotEquals("ff00ffff", w65Color)
     }
 
     @Test
@@ -114,6 +151,23 @@ class DesktopControlsRouteKmlKmzExportTest {
                 DesktopProtectedCourseOrder.encryptCourseInfo(sampleCourseInfo(), password)
             )
         }
+
+    private fun sampleProjectWithTwoCategories(password: String): EventProjectFile {
+        val encryptedCourse = DesktopProtectedCourseOrder.encryptCourseInfo(sampleCourseInfo(), password)
+        val withSecondCategory = EventProjectEditor.addCategory(sampleProject(password), categoryId = "cat-w65", name = "W65")
+        return EventProjectEditor.updateCategoryEncryptedCourseInfo(
+            EventProjectEditor.updateCategoryEncryptedCourseInfo(withSecondCategory, "cat-m21", encryptedCourse),
+            "cat-w65",
+            encryptedCourse
+        )
+    }
+
+    private fun extractRouteColorByCategoryId(kml: String, categoryId: String): String {
+        val routeStyleId = "courseRoute-$categoryId"
+        val colorRegex = Regex("<Style id=\"$routeStyleId\">[\\s\\S]*?<color>([0-9a-fA-F]{8})</color>")
+        val match = colorRegex.find(kml) ?: error("Missing route style for category $categoryId")
+        return match.groupValues[1].lowercase()
+    }
 
     private fun sampleCourseInfo() = ProtectedCourseInfo(
         idealOrder = "1 2",

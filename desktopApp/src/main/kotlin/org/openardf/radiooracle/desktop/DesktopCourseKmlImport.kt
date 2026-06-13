@@ -14,7 +14,6 @@ import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventControl
-import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
@@ -938,30 +937,18 @@ object DesktopCourseKmlImporter {
         if (updates.isEmpty()) {
             return projectFile
         }
-        val updatesByCategoryId = updates.associateBy { it.categoryId }
-        val categories = projectFile.raceData.categories.map { categoryData ->
-            val update = updatesByCategoryId[categoryData.category.id] ?: return@map categoryData
+        return updates.fold(projectFile) { currentProject, update ->
             // Replace, rather than merge, so an imported route cannot leave stale assigned foxes
-            // behind. The update list was already sorted into neutral control order.
-            val controlPoints = update.controls.mapIndexed { index, control ->
-                EventControlPoint(
-                    id = "${update.categoryId}-kml-control-${index + 1}",
-                    categoryId = update.categoryId,
-                    controlId = control.controlId,
-                    siCode = control.siCode,
-                    type = control.type,
-                    order = index + 1
-                )
+            // behind. The review already resolved exact stored controls and sorted them into
+            // neutral control order; the shared editor keeps derived category fields consistent.
+            EventProjectEditor.replaceCategoryAssignedControls(
+                projectFile = currentProject,
+                categoryId = update.categoryId,
+                controlIds = update.controls.map { it.controlId }
+            ) { index ->
+                "${update.categoryId}-kml-control-${index + 1}"
             }
-            categoryData.copy(
-                category = categoryData.category.copy(controlPointsString = update.controlPointsText),
-                controlPoints = controlPoints,
-                publicControlIds = controlPoints.map { it.controlId }
-            )
         }
-        return projectFile.copy(
-            raceData = projectFile.raceData.copy(categories = categories)
-        )
     }
 
     private fun categoryAssignmentUpdate(

@@ -397,6 +397,56 @@ object EventProjectEditor {
         )
     }
 
+    /** Returns a copy of the Event File with a category course replaced by exact stored control IDs. */
+    fun replaceCategoryAssignedControls(
+        projectFile: EventProjectFile,
+        categoryId: String,
+        controlIds: List<String>,
+        controlPointIdFactory: (Int) -> String
+    ): EventProjectFile {
+        val categoryData = projectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
+            ?: throw IllegalArgumentException("Category was not found: $categoryId")
+        val controlsById = projectFile.raceData.controls.associateBy { it.id }
+        val controls = controlIds.map { controlId ->
+            controlsById[controlId] ?: throw IllegalArgumentException("Control was not found: $controlId")
+        }
+        val controlPoints = controls.mapIndexed { index, control ->
+            EventControlPoint(
+                id = controlPointIdFactory(index),
+                categoryId = categoryId,
+                controlId = control.id,
+                siCode = control.siCode,
+                type = control.type,
+                order = index + 1
+            )
+        }
+        val formattedControlPoints = ControlPointRules.formatControlPoints(
+            controlPoints.map { controlPoint ->
+                ControlPointDefinition(
+                    siCode = controlPoint.siCode,
+                    type = controlPoint.type,
+                    order = controlPoint.order
+                )
+            }
+        )
+
+        val categories = projectFile.raceData.categories.map { data ->
+            if (data.category.id == categoryData.category.id) {
+                data.copy(
+                    category = data.category.copy(controlPointsString = formattedControlPoints),
+                    controlPoints = controlPoints,
+                    publicControlIds = controlPoints.map { it.controlId }
+                )
+            } else {
+                data
+            }
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(categories = categories)
+        )
+    }
+
     private fun List<EventControl>.entryTokenMap(): Map<String, EventControl> =
         flatMap { control ->
             listOfNotNull(
@@ -525,11 +575,16 @@ object EventProjectEditor {
             publicLabel = publicLabel,
             notes = notes
         )
+        val controls = projectFile.raceData.controls.mapIndexed { index, control ->
+            if (index == controlPosition) updatedControl else control
+        }
+        val categories = projectFile.raceData.categories.map { categoryData ->
+            categoryData.withUpdatedControlDefinition(updatedControl)
+        }
         return projectFile.copy(
             raceData = projectFile.raceData.copy(
-                controls = projectFile.raceData.controls.mapIndexed { index, control ->
-                    if (index == controlPosition) updatedControl else control
-                }
+                controls = controls,
+                categories = categories
             )
         )
     }
@@ -566,6 +621,37 @@ object EventProjectEditor {
             raceData = projectFile.raceData.copy(
                 controls = EventControlCatalog.mergeControls(projectFile.raceData.controls, listOf(control))
             )
+        )
+    }
+
+    private fun EventCategoryData.withUpdatedControlDefinition(control: EventControl): EventCategoryData {
+        var changed = false
+        val updatedControlPoints = controlPoints.map { controlPoint ->
+            if (controlPoint.controlId == control.id) {
+                changed = true
+                controlPoint.copy(siCode = control.siCode, type = control.type)
+            } else {
+                controlPoint
+            }
+        }
+        if (!changed) {
+            return this
+        }
+
+        // Category assignments are stored by control ID; siCode/type and the legacy
+        // text field are derived copies that must follow the definitive Controls table.
+        val updatedControlPointsText = ControlPointRules.formatControlPoints(
+            updatedControlPoints.map {
+                ControlPointDefinition(
+                    siCode = it.siCode,
+                    type = it.type,
+                    order = it.order
+                )
+            }
+        )
+        return copy(
+            category = category.copy(controlPointsString = updatedControlPointsText),
+            controlPoints = updatedControlPoints
         )
     }
 

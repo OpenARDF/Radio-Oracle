@@ -461,6 +461,36 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun replacesCategoryAssignedControlsByStoredControlIds() {
+        val control31 = EventControl("control-31", "race", "31", 31, ControlPointType.CONTROL, publicLabel = "Fox 1")
+        val control32 = EventControl("control-32", "race", "32", 32, ControlPointType.CONTROL, publicLabel = "Fox 2")
+        val beacon = EventControl("control-99", "race", "99B", 99, ControlPointType.BEACON, publicLabel = "B")
+        val original = projectFile(
+            controls = listOf(control31, control32, beacon),
+            categories = listOf(
+                categoryData("cat-1", "M21", controlSiCodes = listOf(31)).copy(
+                    publicControlIds = listOf(control31.id)
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.replaceCategoryAssignedControls(
+            original,
+            categoryId = "cat-1",
+            controlIds = listOf(control32.id, beacon.id)
+        ) { index ->
+            "replacement-$index"
+        }
+
+        val categoryData = updated.raceData.categories.single()
+        assertEquals(listOf(control32.id, beacon.id), categoryData.controlPoints.map { it.controlId })
+        assertEquals(listOf(32, 99), categoryData.controlPoints.map { it.siCode })
+        assertEquals(listOf(ControlPointType.CONTROL, ControlPointType.BEACON), categoryData.controlPoints.map { it.type })
+        assertEquals("32 99B", categoryData.category.controlPointsString)
+        assertEquals(listOf(control32.id, beacon.id), categoryData.publicControlIds)
+    }
+
+    @Test
     fun addsControlWithGeneratedLabelWhenLabelIsBlank() {
         val updated = EventProjectEditor.addControl(
             projectFile(),
@@ -531,6 +561,54 @@ class EventProjectEditorTest {
         assertEquals(99, control.siCode)
         assertEquals(ControlPointType.BEACON, control.type)
         assertEquals("Finish beacon", control.publicLabel)
+    }
+
+    @Test
+    fun updatingControlCascadesDerivedCategoryControlFields() {
+        val control = EventControl(
+            id = "control-31",
+            raceId = "race",
+            label = "31",
+            siCode = 31,
+            type = ControlPointType.CONTROL,
+            publicLabel = "Fox 1"
+        )
+        val category = categoryData("cat-1", "M21").copy(
+            category = category("cat-1", "M21").copy(controlPointsString = "31"),
+            controlPoints = listOf(
+                EventControlPoint(
+                    id = "cat-1-control-1",
+                    categoryId = "cat-1",
+                    controlId = control.id,
+                    siCode = control.siCode,
+                    type = control.type,
+                    order = 1
+                )
+            ),
+            publicControlIds = listOf(control.id)
+        )
+        val original = projectFile(
+            controls = listOf(control),
+            categories = listOf(category)
+        )
+
+        val updated = EventProjectEditor.updateControl(
+            original,
+            controlId = control.id,
+            label = "",
+            siCode = "99",
+            type = ControlPointType.BEACON,
+            scored = false,
+            publicLabel = "Beacon",
+            notes = ""
+        )
+
+        val updatedControlPoint = updated.raceData.categories.single().controlPoints.single()
+        assertEquals(control.id, updatedControlPoint.controlId)
+        assertEquals(99, updatedControlPoint.siCode)
+        assertEquals(ControlPointType.BEACON, updatedControlPoint.type)
+        assertEquals("99B", updated.raceData.categories.single().category.controlPointsString)
+        assertEquals(listOf(control.id), updated.raceData.categories.single().publicControlIds)
     }
 
     @Test
