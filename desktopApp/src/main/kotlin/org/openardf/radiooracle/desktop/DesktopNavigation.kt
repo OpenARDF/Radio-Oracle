@@ -29,6 +29,7 @@ enum class DesktopNavAction {
     CloseEventFile,
     ImportCategoriesCsv,
     ImportCourseKmlKmz,
+    ImportCourseGpx,
     ImportControlsCsv,
     ImportCompetitorsCsv,
     ImportStartsCsv,
@@ -41,6 +42,7 @@ enum class DesktopNavAction {
     ExportCategoriesCsv,
     ExportControlsCsv,
     ExportCourseKmlKmz,
+    ExportCourseGpx,
     ExportCompetitorsCsv,
     ExportStartsCsv,
     ExportStartsByCategoryCsv,
@@ -247,6 +249,12 @@ object DesktopNavigation {
                                     "Import Controls KML/KMZ...",
                                     workflow,
                                     DesktopNavAction.ImportCourseKmlKmz
+                                ),
+                                action(
+                                    "setup.controls.course-analysis.import-gpx",
+                                    "Import Controls GPX...",
+                                    workflow,
+                                    DesktopNavAction.ImportCourseGpx
                                 )
                             ),
                             DesktopSection.CourseAnalysis
@@ -279,6 +287,18 @@ object DesktopNavigation {
                                     "Export Controls KML/KMZ...",
                                     workflow,
                                     DesktopNavAction.ExportCourseKmlKmz
+                                ),
+                                action(
+                                    "setup.controls.import-gpx",
+                                    "Import Controls GPX...",
+                                    workflow,
+                                    DesktopNavAction.ImportCourseGpx
+                                ),
+                                action(
+                                    "setup.controls.export-gpx",
+                                    "Export Controls GPX...",
+                                    workflow,
+                                    DesktopNavAction.ExportCourseGpx
                                 )
                             ),
                             DesktopSection.ControlsImportExport
@@ -820,16 +840,22 @@ object DesktopNavigation {
             "Use Course Analyzer to inspect stored course routes, ideal routes, climb, distance, time estimates, and classic wait-slot behavior.",
         "setup.controls.course-analysis.import-kml-kmz" to
             "Use Import Controls KML/KMZ to bring in control placemarks and category route lines for course analysis and category course assignments.",
+        "setup.controls.course-analysis.import-gpx" to
+            "Use Import Controls GPX to bring in control waypoints and category routes for course analysis and category course assignments.",
         "setup.controls.import-export" to
-            "Use Import/Export to synchronize control CSV files and protected controls/route KML/KMZ files with the current Event File.",
+            "Use Import/Export to synchronize control CSV files and protected controls/route KML/KMZ or GPX files with the current Event File.",
         "setup.controls.import-controls" to
             "Use Import Controls CSV to review and apply additions or updates to the event control catalog.",
         "setup.controls.import-kml-kmz" to
             "Use Import Controls KML/KMZ to import control locations and category route geometry from mapping files.",
+        "setup.controls.import-gpx" to
+            "Use Import Controls GPX to import control waypoints and category route geometry from GPX files.",
         "setup.controls.export-controls" to
             "Use Export Controls CSV to write the current control catalog for review, backup, or editing outside the app.",
         "setup.controls.export-kml-kmz" to
             "Use Export Controls KML/KMZ to write protected control and route geometry inside a password-locked ZIP file.",
+        "setup.controls.export-gpx" to
+            "Use Export Controls GPX to write protected control and route geometry as standard GPX inside a password-locked ZIP file.",
         "setup.controls.delete-all" to
             "Use Delete All Controls to remove every control and clear category course assignments, length, climb, and protected course data that depends on them.",
         "setup.categories" to

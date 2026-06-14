@@ -47,7 +47,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Operator-facing summary of a controls/route KML/KMZ import.
+ * Operator-facing summary of a controls/route map import.
  *
  * Route geometry and ideal-order facts are written immediately into the encrypted category payload,
  * while category assigned controls are reported as a separate pending update. The UI applies those
@@ -158,7 +158,7 @@ object DesktopCourseKmlImporter {
         val courseData = parse(path)
         DesktopDebugLog.info(
             "CourseKml",
-            "Import parsed ${path.fileName}: hash=${sourceSha256.shortHash()} pointPlacemarks=${courseData.controls.size} routePlacemarks=${courseData.routes.size}"
+            "Import parsed ${path.fileName}: hash=${sourceSha256.shortHash()} pointControls=${courseData.controls.size} routes=${courseData.routes.size}"
         )
         val missingCategoryNames = missingRouteCategoryNames(courseData.routes, projectFile.raceData.categories)
         val createdCategoryNames = if (createMissingCategories) missingCategoryNames else emptyList()
@@ -333,7 +333,7 @@ object DesktopCourseKmlImporter {
                 )
                 // Route-derived length and climb facts are competition-sensitive. Store them only in
                 // the encrypted category payload; assigned controls are updated separately from the
-                // matched KML/KMZ point placemarks.
+                // matched map point controls.
                 val protectedCourseInfo = ProtectedCourseInfo(
                     idealOrder = idealOrder,
                     lengthMeters = routeLengthMeters(sampledRoute).roundToInt(),
@@ -370,7 +370,7 @@ object DesktopCourseKmlImporter {
         }
 
         require(matchedCategoryCount > 0 || controls.isNotEmpty()) {
-            "No KML/KMZ route names matched Event File category names, and no point placemarks matched existing controls."
+            "No route names matched Event File category names, and no point controls matched existing controls."
         }
 
         val summary = DesktopCourseKmlImportSummary(
@@ -699,12 +699,12 @@ object DesktopCourseKmlImporter {
     }
 
     fun parse(path: Path): DesktopCourseKmlData {
-        val kmlText = if (path.fileName.toString().endsWith(".kmz", ignoreCase = true)) {
-            readKmlFromKmz(path)
-        } else {
-            Files.readString(path)
+        val fileName = path.fileName.toString()
+        return when {
+            fileName.endsWith(".gpx", ignoreCase = true) -> parseGpx(Files.readString(path))
+            fileName.endsWith(".kmz", ignoreCase = true) -> parseKml(readKmlFromKmz(path))
+            else -> parseKml(Files.readString(path))
         }
-        return parseKml(kmlText)
     }
 
     private fun parseKml(kmlText: String): DesktopCourseKmlData {
@@ -740,6 +740,58 @@ object DesktopCourseKmlImporter {
             "KML/KMZ file did not contain named control point placemarks."
         }
         return DesktopCourseKmlData(controls = controls, routes = routes)
+    }
+
+    private fun parseGpx(gpxText: String): DesktopCourseKmlData {
+        val document = secureDocumentBuilderFactory()
+            .newDocumentBuilder()
+            .parse(ByteArrayInputStream(gpxText.toByteArray()))
+        val controls = mutableListOf<CourseControlPoint>()
+        document.documentElement.namedDescendants("wpt").forEach { waypoint ->
+            waypoint.toGpxPoint()?.let { point ->
+                waypoint.childText("name")?.trim()?.takeIf { it.isNotBlank() }?.let { name ->
+                    controls += CourseControlPoint(name = name, point = point)
+                }
+            }
+        }
+
+        val routes = mutableListOf<CourseRoute>()
+        document.documentElement.namedDescendants("rte").forEachIndexed { index, route ->
+            val routeName = route.childText("name")?.trim().orEmpty()
+                .ifBlank { "Route ${index + 1}" }
+            val points = route.namedDescendants("rtept").mapNotNull { routePoint ->
+                routePoint.toGpxPoint()?.also { point ->
+                    routePoint.childText("name")?.trim()?.takeIf { it.isNotBlank() }?.let { name ->
+                        controls += CourseControlPoint(name = name, point = point)
+                    }
+                }
+            }
+            if (points.size >= 2) {
+                routes += CourseRoute(name = routeName, points = points)
+            }
+        }
+        document.documentElement.namedDescendants("trk").forEachIndexed { index, track ->
+            val trackName = track.childText("name")?.trim().orEmpty()
+                .ifBlank { "Track ${index + 1}" }
+            val points = track.namedDescendants("trkpt").mapNotNull { trackPoint ->
+                trackPoint.toGpxPoint()?.also { point ->
+                    trackPoint.childText("name")?.trim()?.takeIf { it.isNotBlank() }?.let { name ->
+                        controls += CourseControlPoint(name = name, point = point)
+                    }
+                }
+            }
+            if (points.size >= 2) {
+                routes += CourseRoute(name = trackName, points = points)
+            }
+        }
+
+        val distinctControls = controls.distinctBy {
+            "${it.name.normalizedCourseName()}|${it.point.locationKey()}"
+        }
+        require(distinctControls.isNotEmpty()) {
+            "GPX file did not contain named control waypoints."
+        }
+        return DesktopCourseKmlData(controls = distinctControls, routes = routes)
     }
 
     private fun readKmlFromKmz(path: Path): String {
@@ -1532,6 +1584,22 @@ private fun org.w3c.dom.Node.firstDescendantText(parentTag: String, childTag: St
     descendants()
         .firstOrNull { it.localName == parentTag || it.nodeName == parentTag }
         ?.childText(childTag)
+
+private fun org.w3c.dom.Node.namedDescendants(tagName: String): List<org.w3c.dom.Node> =
+    descendants()
+        .filter { it.localName == tagName || it.nodeName == tagName }
+        .toList()
+
+private fun org.w3c.dom.Node.toGpxPoint(): CourseGeoPoint? {
+    val attributes = attributes ?: return null
+    val latitude = attributes.getNamedItem("lat")?.nodeValue?.toDoubleOrNull() ?: return null
+    val longitude = attributes.getNamedItem("lon")?.nodeValue?.toDoubleOrNull() ?: return null
+    return CourseGeoPoint(
+        latitude = latitude,
+        longitude = longitude,
+        elevationMeters = childText("ele")?.trim()?.toDoubleOrNull()
+    )
+}
 
 private fun org.w3c.dom.Node.descendants(): Sequence<org.w3c.dom.Node> =
     sequence {

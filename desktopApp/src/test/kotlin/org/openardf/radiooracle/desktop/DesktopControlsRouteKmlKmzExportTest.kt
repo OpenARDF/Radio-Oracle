@@ -105,6 +105,31 @@ class DesktopControlsRouteKmlKmzExportTest {
     }
 
     @Test
+    fun exportsGpxInsideEncryptedZip() {
+        val output = Files.createTempFile("radio-oracle-controls-routes", ".gpx.zip")
+        val project = sampleProject("course-key")
+
+        val summary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+            target = DesktopControlsRouteKmlKmzExportTarget(output, DesktopControlsRouteKmlKmzExportFormat.Gpx),
+            projectFile = project,
+            password = "course-key"
+        )
+
+        assertEquals(DesktopControlsRouteKmlKmzExportFormat.Gpx, summary.outputFormat)
+        val zip = ZipFile(output.toFile(), "course-key".toCharArray())
+        val header = zip.fileHeaders.single()
+        assertEquals("controls-routes.gpx", header.fileName)
+        val gpx = zip.getInputStream(header).use { it.readBytes().decodeToString() }
+        assertTrue(gpx.contains("<gpx version=\"1.1\""))
+        assertTrue(gpx.contains("<name>Course Test controls and routes</name>"))
+        assertTrue(gpx.contains("<wpt lat=\"45.0001\" lon=\"-122.0001\">"))
+        assertTrue(gpx.contains("<rte>"))
+        assertTrue(gpx.contains("<name>M21</name>"))
+        assertTrue(gpx.contains("<rtept lat=\"45.0001\" lon=\"-122.0001\">"))
+        assertTrue(gpx.contains("<type>Radio-Oracle category route</type>"))
+    }
+
+    @Test
     fun rejectsWrongEventPasswordBeforeWritingZip() {
         val output = Files.createTempFile("radio-oracle-controls-routes", ".kml.zip")
         Files.delete(output)

@@ -35,7 +35,8 @@ enum class DesktopControlsRouteKmlKmzExportFormat(
     val zipFileSuffix: String
 ) {
     Kml("kml", ".kml.zip"),
-    Kmz("kmz", ".kmz.zip")
+    Kmz("kmz", ".kmz.zip"),
+    Gpx("gpx", ".gpx.zip")
 }
 
 data class DesktopControlsRouteKmlKmzExportTarget(
@@ -63,10 +64,10 @@ object DesktopControlsRouteKmlKmzExporter {
         }
 
         val protectedCourseInfoByCategoryId = decryptProtectedCourseInfo(projectFile, trimmedPassword)
-        val kml = buildKml(projectFile, protectedCourseInfoByCategoryId)
         val entryBytes = when (target.format) {
-            DesktopControlsRouteKmlKmzExportFormat.Kml -> kml.encodeToByteArray()
-            DesktopControlsRouteKmlKmzExportFormat.Kmz -> buildKmz(kml)
+            DesktopControlsRouteKmlKmzExportFormat.Kml -> buildKml(projectFile, protectedCourseInfoByCategoryId).encodeToByteArray()
+            DesktopControlsRouteKmlKmzExportFormat.Kmz -> buildKmz(buildKml(projectFile, protectedCourseInfoByCategoryId))
+            DesktopControlsRouteKmlKmzExportFormat.Gpx -> buildGpx(projectFile, protectedCourseInfoByCategoryId).encodeToByteArray()
         }
         val entryName = "controls-routes.${target.format.contentExtension}"
 
@@ -274,9 +275,92 @@ object DesktopControlsRouteKmlKmzExporter {
         return output.toByteArray()
     }
 
+    private fun buildGpx(
+        projectFile: EventProjectFile,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+    ): String = buildString {
+        appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
+        appendLine("""<gpx version="1.1" creator="Radio-Oracle ${xml(DesktopBuildInfo.displayVersion)}" xmlns="http://www.topografix.com/GPX/1/1">""")
+        appendLine("  <metadata>")
+        appendLine("    <name>${xml(projectFile.raceData.race.name)} controls and routes</name>")
+        appendLine("    <desc>Radio-Oracle protected controls and category routes. OCAD-specific GPX extensions are not yet documented; standard GPX waypoints and routes are used.</desc>")
+        appendLine("  </metadata>")
+        projectFile.raceData.controls.forEach { control ->
+            val latitude = control.latitude
+            val longitude = control.longitude
+            if (latitude != null && longitude != null) {
+                appendGpxWaypoint(
+                    indent = "  ",
+                    tagName = "wpt",
+                    latitude = latitude,
+                    longitude = longitude,
+                    elevationMeters = null,
+                    name = control.publicLabel?.takeIf { it.isNotBlank() } ?: control.label,
+                    description = controlCatalogDescription(control),
+                    type = control.type.name
+                )
+            }
+        }
+        projectFile.raceData.categories.forEach { categoryData ->
+            val category = categoryData.category
+            val courseInfo = protectedCourseInfoByCategoryId[category.id] ?: return@forEach
+            appendLine("  <rte>")
+            appendLine("    <name>${xml(category.name)}</name>")
+            val description = courseDescription(courseInfo)
+            if (description.isNotBlank()) {
+                appendLine("    <desc>${xml(description)}</desc>")
+            }
+            appendLine("    <type>Radio-Oracle category route</type>")
+            courseInfo.route.forEach { point ->
+                appendGpxWaypoint(
+                    indent = "    ",
+                    tagName = "rtept",
+                    latitude = point.latitude,
+                    longitude = point.longitude,
+                    elevationMeters = point.elevationMeters,
+                    name = null,
+                    description = null,
+                    type = null
+                )
+            }
+            appendLine("  </rte>")
+            courseInfo.controlPoints.forEach { point ->
+                appendGpxWaypoint(
+                    indent = "  ",
+                    tagName = "wpt",
+                    latitude = point.latitude,
+                    longitude = point.longitude,
+                    elevationMeters = point.elevationMeters,
+                    name = point.label,
+                    description = "Course control ${point.label}; category ${category.name}; type ${point.type}; id ${point.controlId}",
+                    type = point.type.name
+                )
+            }
+        }
+        appendLine("</gpx>")
+    }
+
+    private fun StringBuilder.appendGpxWaypoint(
+        indent: String,
+        tagName: String,
+        latitude: Double,
+        longitude: Double,
+        elevationMeters: Double?,
+        name: String?,
+        description: String?,
+        type: String?
+    ) {
+        appendLine("$indent<$tagName lat=\"${formatNumber(latitude)}\" lon=\"${formatNumber(longitude)}\">")
+        elevationMeters?.let { appendLine("$indent  <ele>${formatNumber(it)}</ele>") }
+        name?.takeIf { it.isNotBlank() }?.let { appendLine("$indent  <name>${xml(it)}</name>") }
+        description?.takeIf { it.isNotBlank() }?.let { appendLine("$indent  <desc>${xml(it)}</desc>") }
+        type?.takeIf { it.isNotBlank() }?.let { appendLine("$indent  <type>${xml(it)}</type>") }
+        appendLine("$indent</$tagName>")
+    }
+
     private fun courseDescription(courseInfo: ProtectedCourseInfo?): String =
         if (courseInfo == null) {
-            "No protected KML/KMZ course data is stored for this category."
+            "No protected controls/route course data is stored for this category."
         } else {
             buildList {
                 if (courseInfo.idealOrder.isNotBlank()) {
@@ -308,7 +392,6 @@ object DesktopControlsRouteKmlKmzExporter {
         ControlPointType.CONTROL,
         ControlPointType.BEACON,
         ControlPointType.SEPARATOR -> COURSE_CONTROL_DONUT_STYLE_ID
-        else -> null
     }
 
     private fun courseObjectStyle(type: ProtectedCourseObjectType): String? = when (type) {
@@ -317,7 +400,6 @@ object DesktopControlsRouteKmlKmzExporter {
         ProtectedCourseObjectType.CONTROL,
         ProtectedCourseObjectType.BEACON,
         ProtectedCourseObjectType.SPECTATOR -> COURSE_CONTROL_DONUT_STYLE_ID
-        else -> null
     }
 
     private fun categoryLineColor(categoryIndex: Int): String {

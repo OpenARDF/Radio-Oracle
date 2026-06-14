@@ -281,6 +281,19 @@ object DesktopFileDialogs {
         return Path.of(directory, file)
     }
 
+    fun chooseImportGpx(): Path? {
+        val dialog = FileDialog(null as Frame?, "Import Controls GPX", FileDialog.LOAD)
+        dialog.filenameFilter = FilenameFilter { _, name ->
+            name.endsWith(".gpx", ignoreCase = true)
+        }
+        dialog.file = "*.gpx"
+        dialog.isVisible = true
+
+        val directory = dialog.directory ?: return null
+        val file = dialog.file ?: return null
+        return Path.of(directory, file)
+    }
+
     fun chooseExportControlsRouteKmlKmz(eventName: String? = null): DesktopControlsRouteKmlKmzExportTarget? {
         val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
         val chooser = JFileChooser(directory.toFile())
@@ -312,6 +325,26 @@ object DesktopFileDialogs {
         return confirmOverwrite(exportPath)
             ?.also(DesktopEventFileLocations::rememberEventFileDirectory)
             ?.let { DesktopControlsRouteKmlKmzExportTarget(it, selectedFormat) }
+    }
+
+    fun chooseExportControlsRouteGpx(eventName: String? = null): DesktopControlsRouteKmlKmzExportTarget? {
+        val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
+        val chooser = JFileChooser(directory.toFile())
+        chooser.dialogTitle = "Export Controls GPX"
+        chooser.fileFilter = FileNameExtensionFilter("Encrypted ZIP containing GPX (*.gpx.zip)", "zip")
+        chooser.selectedFile = directory
+            .resolve(defaultControlsRouteExportFileName(eventName, DesktopControlsRouteKmlKmzExportFormat.Gpx))
+            .toFile()
+
+        if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) {
+            return null
+        }
+
+        val selectedPath = chooser.selectedFile?.toPath() ?: return null
+        val exportPath = withControlsRouteKmlKmzZipExtension(selectedPath, DesktopControlsRouteKmlKmzExportFormat.Gpx)
+        return confirmOverwrite(exportPath)
+            ?.also(DesktopEventFileLocations::rememberEventFileDirectory)
+            ?.let { DesktopControlsRouteKmlKmzExportTarget(it, DesktopControlsRouteKmlKmzExportFormat.Gpx) }
     }
 
     fun chooseElevationRaster(): Path? {
@@ -387,7 +420,8 @@ object DesktopFileDialogs {
         val fileName = path.fileName.toString()
         if (
             fileName.endsWith(DesktopControlsRouteKmlKmzExportFormat.Kml.zipFileSuffix, ignoreCase = true) ||
-            fileName.endsWith(DesktopControlsRouteKmlKmzExportFormat.Kmz.zipFileSuffix, ignoreCase = true)
+            fileName.endsWith(DesktopControlsRouteKmlKmzExportFormat.Kmz.zipFileSuffix, ignoreCase = true) ||
+            fileName.endsWith(DesktopControlsRouteKmlKmzExportFormat.Gpx.zipFileSuffix, ignoreCase = true)
         ) {
             return path
         }

@@ -75,6 +75,37 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun importsGpxWaypointsAndRoutesIntoProtectedFields() {
+        val gpxPath = Files.createTempFile("radio-oracle-course", ".gpx")
+        Files.writeString(gpxPath, sampleGpx())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = gpxPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val category = updated.raceData.categories.single().category
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals(1, summary.routeCount)
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals(2, summary.matchedControlPointCount)
+        assertEquals("1 2", protectedCourseInfo.idealOrder)
+        assertEquals(gpxPath.fileName.toString(), protectedCourseInfo.sourceName)
+        assertEquals(listOf("1", "2"), protectedCourseInfo.controlPoints.map { it.label })
+        assertEquals("31 32", summary.categoryAssignmentUpdates.single().controlPointsText)
+    }
+
+    @Test
     fun importsCategoryCourseInfoFromControlsProjectedOntoEachRoute() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithThreeCategoryRoutes())
@@ -1073,6 +1104,25 @@ class DesktopCourseKmlImportTest {
 
     private fun sampleKml(): String =
         sampleKmlWithRouteName("M21")
+
+    private fun sampleGpx(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gpx version="1.1" creator="Radio-Oracle test" xmlns="http://www.topografix.com/GPX/1/1">
+          <wpt lat="39.0000" lon="-95.0000">
+            <name>31</name>
+          </wpt>
+          <wpt lat="39.0000" lon="-94.9980">
+            <name>32</name>
+          </wpt>
+          <rte>
+            <name>M21</name>
+            <rtept lat="39.0000" lon="-95.0000" />
+            <rtept lat="39.0000" lon="-94.9990" />
+            <rtept lat="39.0000" lon="-94.9980" />
+          </rte>
+        </gpx>
+        """.trimIndent()
 
     private fun sampleKmlWithRouteName(routeName: String): String =
         """

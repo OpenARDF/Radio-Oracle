@@ -689,12 +689,16 @@ class DesktopNavigationTest {
         assertEquals(DesktopNavAction.DeleteAllControls, controlItems.last { it.label == "Delete All Controls..." }.action)
         assertEquals(DesktopSection.CourseAnalysis, controlItems.first { it.label == "Course Analyzer" }.section)
         assertEquals(
-            listOf("Import Controls KML/KMZ..."),
+            listOf("Import Controls KML/KMZ...", "Import Controls GPX..."),
             controlItems.first { it.label == "Course Analyzer" }.children.map { it.label }
         )
         assertEquals(
             DesktopNavAction.ImportCourseKmlKmz,
-            controlItems.first { it.label == "Course Analyzer" }.children.single().action
+            controlItems.first { it.label == "Course Analyzer" }.children.first().action
+        )
+        assertEquals(
+            DesktopNavAction.ImportCourseGpx,
+            controlItems.first { it.label == "Course Analyzer" }.children.last().action
         )
         assertEquals(DesktopSection.ElevationCache, controlItems.first { it.label == "Elevation Data" }.section)
         assertEquals(
@@ -715,7 +719,9 @@ class DesktopNavigationTest {
                 "Import Controls CSV...",
                 "Export Controls CSV...",
                 "Import Controls KML/KMZ...",
-                "Export Controls KML/KMZ..."
+                "Export Controls KML/KMZ...",
+                "Import Controls GPX...",
+                "Export Controls GPX..."
             ),
             controlItems.first { it.label == "Import/Export" }.children.map { it.label }
         )

@@ -1802,6 +1802,7 @@ fun main(args: Array<String>) = application {
             applyCategoryAssignments: Boolean,
             createMissingCategories: Boolean
         ) {
+            val formatLabel = controlsRouteImportFormatLabel(review.sourceName)
             val selectedSummary = if (createMissingCategories) {
                 review.createdMissingCategorySummary ?: review.summary
             } else {
@@ -1820,13 +1821,13 @@ fun main(args: Array<String>) = application {
             } else {
                 selectedProject
             }
-            checkpointBeforeImport("controls/route KML/KMZ import ${review.sourceName}")
+            checkpointBeforeImport("controls/route $formatLabel import ${review.sourceName}")
             projectFile = projectSession.updateCurrentProject { updatedProject }
             syncProtectedCourseState(updatedProject, review.password)
             pendingCourseKmlKmzImportReview = null
-            recordActivity("Applied controls/route KML/KMZ import ${review.sourceName}.")
+            recordActivity("Applied controls/route $formatLabel import ${review.sourceName}.")
             recentImportReport = DesktopImportReport(
-                title = "Controls/route KML/KMZ: ${review.sourceName}",
+                title = "Controls/route $formatLabel: ${review.sourceName}",
                 lines = withRollbackBackupLine(listOf(
                     "${selectedSummary.importedCategoryCount} categories received stored route data.",
                     "${selectedSummary.duplicateCategoryCount} duplicate categories skipped.",
@@ -1841,7 +1842,7 @@ fun main(args: Array<String>) = application {
                 startCourseKmlKmzElevationFetch(review.copy(summary = selectedSummary))
             } else {
                 projectStatusText = if (selectedSummary.isDuplicateOnly) {
-                    "Duplicate controls/route KML/KMZ request: identical file already imported. No route data reloaded."
+                    "Duplicate controls/route $formatLabel request: identical file already imported. No route data reloaded."
                 } else {
                     val duplicateText = selectedSummary.duplicateCategoryCount
                         .takeIf { it > 0 }
@@ -1880,11 +1881,12 @@ fun main(args: Array<String>) = application {
 
         fun startCourseKmlKmzImport(path: Path, password: String, categoryOverrideId: String? = null) {
             val currentProject = projectSession.currentProject ?: return
+            val formatLabel = controlsRouteImportFormatLabel(path.fileName.toString())
             if (isImportingCourseKmlKmz) {
                 return
             }
             isImportingCourseKmlKmz = true
-            projectStatusText = "Importing controls/route KML/KMZ..."
+            projectStatusText = "Importing controls/route $formatLabel..."
             appCoroutineScope.launch {
                 val result = runCatching {
                     withContext(Dispatchers.IO) {
@@ -1938,7 +1940,7 @@ fun main(args: Array<String>) = application {
                             controlPointCount = summary.controlPointCount,
                             labelConversions = summary.labelConversions
                         )
-                        projectStatusText = "Choose the Event File category for this KML/KMZ route."
+                        projectStatusText = "Choose the Event File category for this $formatLabel route."
                     } else if (
                         summary.routeCount > 0 &&
                         summary.matchedCategoryCount == 0 &&
@@ -1948,17 +1950,17 @@ fun main(args: Array<String>) = application {
                         pendingCourseKmlKmzImportReview = null
                         pendingCourseKmlKmzCategoryMapping = null
                         projectStatusText =
-                            "KML/KMZ route data was not applied because the Event File has no categories."
+                            "$formatLabel route data was not applied because the Event File has no categories."
                     } else if (summary.isControlLocationNoOp && !summary.hasLabelConversions) {
                         pendingCourseKmlKmzImportReview = null
                         pendingCourseKmlKmzCategoryMapping = null
                         projectStatusText =
-                            "KML/KMZ import found ${summary.matchedControlPointCount} matching controls, but no control locations changed."
+                            "$formatLabel import found ${summary.matchedControlPointCount} matching controls, but no control locations changed."
                     } else if (summary.isDuplicateOnly && !summary.hasDuplicateMissingElevations) {
                         pendingCourseKmlKmzImportReview = null
                         pendingCourseKmlKmzCategoryMapping = null
                         projectStatusText =
-                            "Duplicate controls/route KML/KMZ request: identical file already imported and all elevations are available."
+                            "Duplicate controls/route $formatLabel request: identical file already imported and all elevations are available."
                     } else {
                         pendingCourseKmlKmzCategoryMapping = null
                         pendingCourseKmlKmzImportReview = PendingCourseKmlKmzImportReview(
@@ -1978,7 +1980,7 @@ fun main(args: Array<String>) = application {
                     }
                 }.onFailure { error ->
                     pendingCourseKmlKmzCategoryMapping = null
-                    projectStatusText = "Controls/route KML/KMZ import failed: ${error.message ?: error::class.simpleName}"
+                    projectStatusText = "Controls/route $formatLabel import failed: ${error.message ?: error::class.simpleName}"
                 }
                 isImportingCourseKmlKmz = false
             }
@@ -1993,6 +1995,15 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun chooseImportCourseGpxUnlocked(password: String) {
+            if (isImportingCourseKmlKmz) {
+                return
+            }
+            DesktopFileDialogs.chooseImportGpx()?.let { path ->
+                startCourseKmlKmzImport(path, password)
+            }
+        }
+
         fun chooseImportCourseKmlKmz() {
             val password = protectedCoursePassword
             if (password == null) {
@@ -2001,6 +2012,16 @@ fun main(args: Array<String>) = application {
                 return
             }
             chooseImportCourseKmlKmzUnlocked(password)
+        }
+
+        fun chooseImportCourseGpx() {
+            val password = protectedCoursePassword
+            if (password == null) {
+                projectStatusText = "Unlock course order before importing GPX controls/route data."
+                pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.ImportGpx
+                return
+            }
+            chooseImportCourseGpxUnlocked(password)
         }
 
         fun chooseExportCourseKmlKmzUnlocked(password: String) {
@@ -2023,9 +2044,33 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun chooseExportCourseGpxUnlocked(password: String) {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportControlsRouteGpx(currentProject.raceData.race.name)?.let { target ->
+                runCatching {
+                    val summary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+                        target = target,
+                        projectFile = currentProject,
+                        password = password
+                    )
+                    syncProjectState()
+                    projectStatusText =
+                        "Exported ${target.path.fileName} as an encrypted ZIP containing GPX " +
+                            "with ${summary.controlCatalogCount} controls and ${summary.routeCount} routes."
+                }.onFailure { error ->
+                    projectStatusText = "Controls/route GPX export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun chooseExportCourseKmlKmz() {
             projectStatusText = "Enter the Event Password before exporting protected controls/route KML/KMZ data."
             pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.Export
+        }
+
+        fun chooseExportCourseGpx() {
+            projectStatusText = "Enter the Event Password before exporting protected controls/route GPX data."
+            pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.ExportGpx
         }
 
         fun importAndroidRaceBackupJson(path: Path) {
@@ -2631,6 +2676,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportEventRegCompetitorsCsv,
                 DesktopNavAction.ImportCategoriesCsv,
                 DesktopNavAction.ImportCourseKmlKmz,
+                DesktopNavAction.ImportCourseGpx,
                 DesktopNavAction.ImportControlsCsv,
                 DesktopNavAction.ImportCompetitorsCsv,
                 DesktopNavAction.ImportStartsCsv,
@@ -2642,6 +2688,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportCategoriesCsv,
                 DesktopNavAction.ExportControlsCsv,
                 DesktopNavAction.ExportCourseKmlKmz,
+                DesktopNavAction.ExportCourseGpx,
                 DesktopNavAction.ExportCompetitorsCsv,
                 DesktopNavAction.ExportStartsCsv,
                 DesktopNavAction.ExportStartsByCategoryCsv,
@@ -2711,6 +2758,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
                 DesktopNavAction.ImportControlsCsv -> importControlsCsv()
                 DesktopNavAction.ImportCourseKmlKmz -> chooseImportCourseKmlKmz()
+                DesktopNavAction.ImportCourseGpx -> chooseImportCourseGpx()
                 DesktopNavAction.ImportDemFile -> chooseImportDemFiles()
                 DesktopNavAction.DeleteAllControls ->
                     isDeleteAllControlsDialogVisible = true
@@ -2727,6 +2775,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportControlsCsv ->
                     exportCsv("Export Controls CSV", "controls", DesktopProjectFiles::exportControlsCsv)
                 DesktopNavAction.ExportCourseKmlKmz -> chooseExportCourseKmlKmz()
+                DesktopNavAction.ExportCourseGpx -> chooseExportCourseGpx()
                 DesktopNavAction.ExportCompetitorsCsv ->
                     exportCsv("Export Competitors CSV", "competitors", DesktopProjectFiles::exportCompetitorsCsv)
                 DesktopNavAction.ExportStartsCsv ->
@@ -2909,17 +2958,25 @@ fun main(args: Array<String>) = application {
             CourseKmlKmzUnlockDialog(
                 title = when (unlockAction) {
                     CourseKmlKmzUnlockAction.Import -> "Unlock course order"
+                    CourseKmlKmzUnlockAction.ImportGpx -> "Unlock course order"
                     CourseKmlKmzUnlockAction.Export -> "Export protected controls/routes"
+                    CourseKmlKmzUnlockAction.ExportGpx -> "Export protected controls/routes"
                 },
                 description = when (unlockAction) {
                     CourseKmlKmzUnlockAction.Import ->
                         "KML/KMZ controls/route data includes coordinates and route details that require the Event Password."
+                    CourseKmlKmzUnlockAction.ImportGpx ->
+                        "GPX controls/route data includes coordinates and route details that require the Event Password."
                     CourseKmlKmzUnlockAction.Export ->
                         "Controls/route KML/KMZ export includes sensitive coordinates and routes. The exported file will be placed inside a password-locked ZIP."
+                    CourseKmlKmzUnlockAction.ExportGpx ->
+                        "Controls/route GPX export includes sensitive coordinates and routes. The exported file will be placed inside a password-locked ZIP."
                 },
                 confirmLabel = when (unlockAction) {
                     CourseKmlKmzUnlockAction.Import -> "Unlock and Import"
+                    CourseKmlKmzUnlockAction.ImportGpx -> "Unlock and Import"
                     CourseKmlKmzUnlockAction.Export -> "Export"
+                    CourseKmlKmzUnlockAction.ExportGpx -> "Export"
                 },
                 onUnlock = { password ->
                     if (unlockProtectedCourseOrder(password)) {
@@ -2927,7 +2984,9 @@ fun main(args: Array<String>) = application {
                         pendingCourseKmlKmzUnlockAction = null
                         when (unlockAction) {
                             CourseKmlKmzUnlockAction.Import -> chooseImportCourseKmlKmzUnlocked(unlockedPassword)
+                            CourseKmlKmzUnlockAction.ImportGpx -> chooseImportCourseGpxUnlocked(unlockedPassword)
                             CourseKmlKmzUnlockAction.Export -> chooseExportCourseKmlKmzUnlocked(unlockedPassword)
+                            CourseKmlKmzUnlockAction.ExportGpx -> chooseExportCourseGpxUnlocked(unlockedPassword)
                         }
                         true
                     } else {
@@ -3022,7 +3081,8 @@ fun main(args: Array<String>) = application {
                 },
                 onCancel = {
                     pendingCourseKmlKmzCategoryMapping = null
-                    projectStatusText = "Controls/route KML/KMZ import canceled. No changes applied."
+                    projectStatusText =
+                        "Controls/route ${controlsRouteImportFormatLabel(mapping.sourceName)} import canceled. No changes applied."
                 }
             )
         }
@@ -3039,14 +3099,15 @@ fun main(args: Array<String>) = application {
                 },
                 onCancel = {
                     pendingCourseKmlKmzImportReview = null
-                    projectStatusText = "Controls/route KML/KMZ import canceled. No changes applied."
+                    projectStatusText =
+                        "Controls/route ${controlsRouteImportFormatLabel(review.sourceName)} import canceled. No changes applied."
                 }
             )
         }
         if (isImportingCourseKmlKmz) {
             IndeterminateProgressDialog(
-                title = "Importing controls/route KML/KMZ",
-                message = "Reading and reviewing the selected file. This can take a while for large KML/KMZ files."
+                title = "Importing controls/route data",
+                message = "Reading and reviewing the selected file. This can take a while for large KML/KMZ or GPX files."
             )
         }
         courseKmlKmzElevationProgress?.let { progress ->
@@ -3322,7 +3383,7 @@ fun main(args: Array<String>) = application {
                         EventProjectEditor.addCategory(currentProject, UUID.randomUUID().toString(), name)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    projectStatusText = "Created category without course data. Add assigned controls or import KML/KMZ course data before Race Ops."
+                    projectStatusText = "Created category without course data. Add assigned controls or import KML/KMZ or GPX course data before Race Ops."
                 }
                 result.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
@@ -3706,6 +3767,7 @@ fun main(args: Array<String>) = application {
                 deleteControlAfterProtectedRouteCheck(controlId)
             },
             onImportControlsRouteKmlKmz = ::chooseImportCourseKmlKmz,
+            onImportControlsRouteGpx = ::chooseImportCourseGpx,
             onSendRobisLiveResults = { sendRobisLiveResults() },
             onSetBackgroundLiveResultSendingEnabled = { enabled ->
                 isBackgroundLiveResultSendingEnabled = enabled
@@ -4115,6 +4177,13 @@ private fun courseControlMatchSummary(
     }
 }
 
+private fun controlsRouteImportFormatLabel(sourceName: String): String =
+    if (sourceName.endsWith(".gpx", ignoreCase = true)) {
+        "GPX"
+    } else {
+        "KML/KMZ"
+    }
+
 @Suppress("DEPRECATION")
 private fun EventCategoryData.restorableControlPointsText(): String =
     category.controlPointsString.takeIf { it.isNotBlank() }
@@ -4131,6 +4200,7 @@ private fun CourseKmlKmzImportReviewDialog(
     onCancel: () -> Unit
 ) {
     val summary = review.summary
+    val formatLabel = controlsRouteImportFormatLabel(review.sourceName)
     var createMissingCategories by remember(review.sourceName, summary.sourceSha256, summary.missingCategoryNames) {
         mutableStateOf(summary.missingCategoryNames.isNotEmpty())
     }
@@ -4175,10 +4245,10 @@ private fun CourseKmlKmzImportReviewDialog(
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Text("Matched categories: ${selectedSummary.matchedCategoryCount} of ${selectedSummary.routeCount} route placemarks")
+                Text("Matched categories: ${selectedSummary.matchedCategoryCount} of ${selectedSummary.routeCount} routes")
                 Text("Categories: $categoriesText")
                 if (summary.missingCategoryNames.isNotEmpty()) {
-                    Text("Categories listed in KML/KMZ but not in the Event File: ${summary.missingCategoryNames.joinToString()}")
+                    Text("Categories listed in $formatLabel but not in the Event File: ${summary.missingCategoryNames.joinToString()}")
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -4193,7 +4263,7 @@ private fun CourseKmlKmzImportReviewDialog(
                         text = if (createMissingCategories) {
                             "Created categories will be saved without competitors. Competitors imported later with the same category names will use this stored course data."
                         } else {
-                            "Missing categories will be left out of this import. Add those categories or reimport the KML/KMZ later to store their course data."
+                            "Missing categories will be left out of this import. Add those categories or reimport the $formatLabel later to store their course data."
                         },
                         fontSize = 12.sp,
                         color = Color.DarkGray
@@ -4212,7 +4282,7 @@ private fun CourseKmlKmzImportReviewDialog(
                             checked = applyCategoryAssignments,
                             onCheckedChange = { applyCategoryAssignments = it }
                         )
-                        Text("Replace category assigned controls with matched KML/KMZ controls")
+                        Text("Replace category assigned controls with matched $formatLabel controls")
                     }
                     Text(
                         "If selected, existing assigned controls for the matched category are replaced and stored in neutral fox-label order, not route order.",
@@ -4271,13 +4341,13 @@ private fun CourseKmlKmzImportReviewDialog(
                         selectedSummary.assignedCategoryControlCount == 0 &&
                         selectedSummary.changedControlLocationCount == 0
                     ) {
-                        "Keep imported data to use these KML/KMZ names as matches to existing Event File labels. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Cancel leaves the Event File unchanged."
+                        "Keep imported data to use these $formatLabel names as matches to existing Event File labels. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Cancel leaves the Event File unchanged."
                     } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.changedControlLocationCount > 0) {
                         "Keep imported data to update control locations. Affected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
                     } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.assignedCategoryControlCount > 0) {
-                        "Keep imported data to review matched KML/KMZ control points. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
+                        "Keep imported data to review matched $formatLabel control points. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
                     } else if (selectedSummary.hasLabelConversions) {
-                        "Keep imported data to use these KML/KMZ names as matches to existing Event File labels, update route facts, ideal order, and any changed control locations. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged."
+                        "Keep imported data to use these $formatLabel names as matches to existing Event File labels, update route facts, ideal order, and any changed control locations. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged."
                     } else {
                         "Keep imported data to update route facts, ideal order, and any changed control locations. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
                     },
@@ -4348,7 +4418,7 @@ private fun CategoriesCsvImportReviewDialog(
                     )
                 }
                 if (preview.categoriesWithProtectedCoursePreservedCount > 0) {
-                    Text("Protected KML/KMZ course data will be preserved for ${preview.categoriesWithProtectedCoursePreservedCount} updated categor${if (preview.categoriesWithProtectedCoursePreservedCount == 1) "y" else "ies"}.")
+                    Text("Protected controls/route course data will be preserved for ${preview.categoriesWithProtectedCoursePreservedCount} updated categor${if (preview.categoriesWithProtectedCoursePreservedCount == 1) "y" else "ies"}.")
                 }
                 Text(
                     "This import updates existing categories by name and appends new names. It does not delete categories missing from the CSV.",
@@ -4457,6 +4527,7 @@ private fun CourseKmlKmzCategoryMappingDialog(
     onApply: (categoryId: String) -> Unit,
     onCancel: () -> Unit
 ) {
+    val formatLabel = controlsRouteImportFormatLabel(mapping.sourceName)
     var selectedCategoryId by remember(mapping.sourceName, mapping.categoryOptions) {
         mutableStateOf(mapping.categoryOptions.firstOrNull()?.first)
     }
@@ -4466,8 +4537,8 @@ private fun CourseKmlKmzCategoryMappingDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("File: ${mapping.sourceName}")
-                Text("No LineString name or file name matched an Event File category.")
-                Text("Choose the category this KML/KMZ route should update.")
+                Text("No route name or file name matched an Event File category.")
+                Text("Choose the category this $formatLabel route should update.")
                 CourseAnalysisCategoryPicker(
                     selectedCategoryId = selectedCategoryId,
                     categories = mapping.categoryOptions,
@@ -5124,7 +5195,9 @@ private data class PendingControlsCsvImportReview(
 
 private enum class CourseKmlKmzUnlockAction {
     Import,
-    Export
+    ImportGpx,
+    Export,
+    ExportGpx
 }
 
 private enum class BulkCategoryAction {
@@ -5254,6 +5327,7 @@ private fun RadioOManagerDesktopApp(
     onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean = { _, _, _, _, _, _ -> false },
     onRemoveControl: (String) -> Unit = {},
     onImportControlsRouteKmlKmz: () -> Unit = {},
+    onImportControlsRouteGpx: () -> Unit = {},
     onSendRobisLiveResults: () -> Unit = {},
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit = {},
     onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit = {},
@@ -5459,6 +5533,7 @@ private fun RadioOManagerDesktopApp(
                                     onAddControl = onAddControl,
                                     onRemoveControl = onRemoveControl,
                                     onImportControlsRouteKmlKmz = onImportControlsRouteKmlKmz,
+                                    onImportControlsRouteGpx = onImportControlsRouteGpx,
                                     isSendingLiveResults = isSendingLiveResults,
                                     isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
                                     readoutDuplicatePolicy = readoutDuplicatePolicy,
@@ -6158,6 +6233,7 @@ private fun SectionWorkspace(
     onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean,
     onRemoveControl: (String) -> Unit,
     onImportControlsRouteKmlKmz: () -> Unit,
+    onImportControlsRouteGpx: () -> Unit,
     isSendingLiveResults: Boolean,
     isBackgroundLiveResultSendingEnabled: Boolean,
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
@@ -6297,7 +6373,9 @@ private fun SectionWorkspace(
                 onUnlock = onUnlockProtectedCourseOrder,
                 onUseCalculatedRoute = onUseCalculatedCourseAnalysisRoute,
                 onApplyFoxRenumberingOnly = onApplyCourseAnalysisFoxRenumberingOnly,
-                onUpdateSpeedFactor = onUpdateCourseAnalyzerSpeedFactor
+                onUpdateSpeedFactor = onUpdateCourseAnalyzerSpeedFactor,
+                onImportControlsRouteKmlKmz = onImportControlsRouteKmlKmz,
+                onImportControlsRouteGpx = onImportControlsRouteGpx
             )
         }
         if (section == DesktopSection.ElevationCache && projectFile != null) {
@@ -9134,12 +9212,12 @@ private fun CourseAnalyzerGuidance() {
         modifier = Modifier.fillMaxWidth()
     ) {
         Text(
-            text = "Use Setup > Controls > Course Analyzer > Import Controls KML/KMZ... to import or update control locations and category routes before running analysis.",
+            text = "Use Setup > Controls > Course Analyzer > Import Controls KML/KMZ... or Import Controls GPX... to import or update control locations and category routes before running analysis.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
         Text(
-            text = "KML/KMZ import files should contain named Placemark elements. Control locations are Point placemarks named by SI code, control label, or public label. Stored category routes are LineString placemarks named by Event File category, such as M21. Coordinates are read as longitude,latitude,elevation; elevation may be omitted. For KMZ files, the first .kml document in the archive is read.",
+            text = "KML/KMZ import files should contain named Placemark elements. GPX import files should contain named waypoints for controls and routes or tracks named by Event File category, such as M21. GPX uses standard WGS84 latitude/longitude and meter elevations; OCAD-specific GPX extensions are placeholders until public OCAD conventions are available.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -9162,7 +9240,9 @@ private fun CourseAnalysisPanel(
     onUnlock: (String) -> Boolean,
     onUseCalculatedRoute: (DesktopCourseCalculatedRouteApplication) -> String,
     onApplyFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String,
-    onUpdateSpeedFactor: (Double) -> String
+    onUpdateSpeedFactor: (Double) -> String,
+    onImportControlsRouteKmlKmz: () -> Unit,
+    onImportControlsRouteGpx: () -> Unit
 ) {
     var passwordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
     if (!isUnlocked) {
@@ -9266,9 +9346,17 @@ private fun CourseAnalysisPanel(
         modifier = Modifier.fillMaxWidth()
     ) {
         CourseAnalyzerGuidance()
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onImportControlsRouteKmlKmz) {
+                ButtonLabel("Import Controls KML/KMZ...")
+            }
+            Button(onClick = onImportControlsRouteGpx) {
+                ButtonLabel("Import Controls GPX...")
+            }
+        }
         if (categories.isEmpty()) {
             Text(
-                text = "Import controls/route KML/KMZ data for a category before running course analysis.",
+                text = "Import controls/route KML/KMZ or GPX data for a category before running course analysis.",
                 color = DesktopPalette.Black,
                 fontSize = 14.sp
             )
@@ -9311,7 +9399,7 @@ private fun CourseAnalysisPanel(
             DisabledReasonTooltip(
                 when {
                     effectiveSelectedCategoryId == null ->
-                        "Import controls/route KML/KMZ data for a category before running analysis."
+                        "Import controls/route KML/KMZ or GPX data for a category before running analysis."
                     else -> null
                 }
             ) {
