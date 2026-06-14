@@ -157,6 +157,7 @@ import org.openardf.radiooracle.shared.time.DurationFormatter
 import org.jetbrains.skia.Image as SkiaImage
 import java.awt.Desktop
 import java.awt.Toolkit
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -369,6 +370,11 @@ fun main(args: Array<String>) = application {
         var areAliasesEnabled by remember { mutableStateOf(true) }
         var localResultServerUrl by remember { mutableStateOf<String?>(null) }
         var isAboutDialogVisible by remember { mutableStateOf(false) }
+        var isUpdateCheckingEnabled by remember {
+            mutableStateOf(DesktopAppSettingsPreferences.isUpdateCheckingEnabled())
+        }
+        var updateCheckStatus by remember { mutableStateOf<DesktopAppUpdateStatus?>(null) }
+        var appUpdateDialogStatus by remember { mutableStateOf<DesktopAppUpdateStatus?>(null) }
         var raceClockTick by remember { mutableStateOf(0L) }
         var printerDiagnostics by remember { mutableStateOf(DesktopPrinterDiagnostics.from(emptyList())) }
         var lastLoggedSiReaderStatus by remember { mutableStateOf<String?>(null) }
@@ -406,6 +412,14 @@ fun main(args: Array<String>) = application {
         LaunchedEffect(Unit) {
             DesktopDebugLog.initialize()
             DesktopDebugLog.info("App", "Desktop app started version=${DesktopBuildInfo.displayVersion}")
+            if (isUpdateCheckingEnabled) {
+                val status = DesktopAppUpdateSupport.status(currentVersion = DesktopBuildInfo.baseVersion)
+                updateCheckStatus = status
+                if (DesktopAppUpdateSupport.shouldShowAutomaticNotice(status)) {
+                    appUpdateDialogStatus = status
+                    DesktopDebugLog.info("Update", "jDeploy reported a Radio-Oracle update is available.")
+                }
+            }
         }
 
         LaunchedEffect(Unit) {
@@ -1755,6 +1769,57 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun openExternalUrl(url: String) {
+            runCatching {
+                if (!Desktop.isDesktopSupported()) {
+                    error("Opening links is not supported on this system.")
+                }
+                val desktop = Desktop.getDesktop()
+                if (!desktop.isSupported(Desktop.Action.BROWSE)) {
+                    error("Opening links is not supported on this system.")
+                }
+                desktop.browse(URI(url))
+            }.onSuccess {
+                projectStatusText = "Opened link: $url"
+            }.onFailure { error ->
+                projectStatusText = "Could not open link: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
+        fun checkForUpdates() {
+            if (!isUpdateCheckingEnabled) {
+                updateCheckStatus = null
+                projectStatusText = "Radio-Oracle update checks are disabled in App Settings."
+                return
+            }
+            val status = DesktopAppUpdateSupport.status(currentVersion = DesktopBuildInfo.baseVersion)
+            updateCheckStatus = status
+            projectStatusText = when (status.jdeployUpdatesAvailable) {
+                true -> "jDeploy reported a Radio-Oracle update is available."
+                false -> "jDeploy did not report a Radio-Oracle update at launch."
+                null -> if (status.launchedByJdeploy) {
+                    "Radio-Oracle was launched by jDeploy, but update status was not reported."
+                } else {
+                    "Radio-Oracle was not launched by jDeploy, so update status is unavailable in this run."
+                }
+            }
+            DesktopDebugLog.info("Update", projectStatusText)
+        }
+
+        fun setUpdateCheckingEnabled(enabled: Boolean) {
+            isUpdateCheckingEnabled = enabled
+            DesktopAppSettingsPreferences.setUpdateCheckingEnabled(enabled)
+            if (!enabled) {
+                updateCheckStatus = null
+                appUpdateDialogStatus = null
+            }
+            projectStatusText = if (enabled) {
+                "Radio-Oracle update checks enabled."
+            } else {
+                "Radio-Oracle update checks disabled."
+            }
+        }
+
         fun importReviewedDemFiles(review: DesktopVenueElevationDemImportReview): Boolean =
             runCatching {
                 val summary = DesktopVenueElevationCache.importReviewedDemFiles(review)
@@ -2923,7 +2988,20 @@ fun main(args: Array<String>) = application {
             )
         }
         if (isAboutDialogVisible) {
-            AboutRadioOracleDialog(onDismiss = { isAboutDialogVisible = false })
+            AboutRadioOracleDialog(
+                isUpdateCheckingEnabled = isUpdateCheckingEnabled,
+                updateCheckStatus = updateCheckStatus,
+                onCheckForUpdates = ::checkForUpdates,
+                onOpenUpdateLink = ::openExternalUrl,
+                onDismiss = { isAboutDialogVisible = false }
+            )
+        }
+        appUpdateDialogStatus?.let { status ->
+            RadioOracleUpdateDialog(
+                status = status,
+                onOpenUpdateLink = { openExternalUrl(DesktopAppUpdateSupport.updatePageUrl) },
+                onDismiss = { appUpdateDialogStatus = null }
+            )
         }
         if (isEventRegImportDialogVisible) {
             EventRegImportDialog(
@@ -3228,6 +3306,7 @@ fun main(args: Array<String>) = application {
             areAliasesEnabled = areAliasesEnabled,
             localResultServerUrl = localResultServerUrl,
             printerDiagnostics = printerDiagnostics,
+            isUpdateCheckingEnabled = isUpdateCheckingEnabled,
             raceClockTick = raceClockTick,
             isNavActionEnabled = ::isNavActionEnabled,
             disabledNavActionReason = ::disabledNavActionReason,
@@ -3256,6 +3335,7 @@ fun main(args: Array<String>) = application {
             onReadCompetitorSiCardForAddRow = ::readCompetitorSiCardForAddRow,
             onUpdateProtectedControlLocation = ::updateProtectedControlLocation,
             onUpdateProtectedCoursePassword = ::updateProtectedCoursePassword,
+            onSetUpdateCheckingEnabled = ::setUpdateCheckingEnabled,
             onLockProtectedCourseOrder = ::lockProtectedCourseOrder,
             onUpdateEventFileName = { fileName -> saveAsCurrentProject(fileName) },
             onRenameRace = { name ->
@@ -5051,7 +5131,13 @@ private fun CompetitorCsvImportOptionsDialog(
 }
 
 @Composable
-private fun AboutRadioOracleDialog(onDismiss: () -> Unit) {
+private fun AboutRadioOracleDialog(
+    isUpdateCheckingEnabled: Boolean,
+    updateCheckStatus: DesktopAppUpdateStatus?,
+    onCheckForUpdates: () -> Unit,
+    onOpenUpdateLink: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("About Radio-Oracle") },
@@ -5062,6 +5148,29 @@ private fun AboutRadioOracleDialog(onDismiss: () -> Unit) {
                 Text("Desktop event administration beta for radio orienteering events.")
                 Text("Maintained by OpenARDF.")
                 Text("GitHub: https://github.com/OpenARDF/Radio-Oracle")
+                Text(updateCheckStatusText(isUpdateCheckingEnabled, updateCheckStatus))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        enabled = isUpdateCheckingEnabled,
+                        onClick = onCheckForUpdates
+                    ) {
+                        Text("Check for Updates")
+                    }
+                    if (updateCheckStatus != null) {
+                        Button(onClick = { onOpenUpdateLink(DesktopAppUpdateSupport.updatePageUrl) }) {
+                            Text("Open Update Link")
+                        }
+                    }
+                }
+                if (updateCheckStatus != null) {
+                    SelectionContainer {
+                        Text(
+                            text = DesktopAppUpdateSupport.updatePageUrl,
+                            color = Color.DarkGray,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
@@ -5071,6 +5180,54 @@ private fun AboutRadioOracleDialog(onDismiss: () -> Unit) {
         }
     )
 }
+
+@Composable
+private fun RadioOracleUpdateDialog(
+    status: DesktopAppUpdateStatus,
+    onOpenUpdateLink: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Radio-Oracle Updates") },
+        text = {
+            SelectionContainer {
+                Text(DesktopAppUpdateSupport.dialogMessage(status))
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onOpenUpdateLink()
+                    onDismiss()
+                }
+            ) {
+                Text("Open Update Link")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onDismiss) {
+                Text("OK")
+            }
+        }
+    )
+}
+
+private fun updateCheckStatusText(
+    isUpdateCheckingEnabled: Boolean,
+    updateCheckStatus: DesktopAppUpdateStatus?
+): String =
+    when {
+        !isUpdateCheckingEnabled -> "Update checks are disabled in App Settings."
+        updateCheckStatus == null -> "Update status has not been checked."
+        updateCheckStatus.jdeployUpdatesAvailable == true ->
+            "jDeploy reported a Radio-Oracle update is available. Current version: ${updateCheckStatus.currentVersion}."
+        updateCheckStatus.jdeployUpdatesAvailable == false ->
+            "jDeploy did not report a Radio-Oracle update at launch. Current version: ${updateCheckStatus.currentVersion}."
+        updateCheckStatus.launchedByJdeploy ->
+            "Radio-Oracle was launched by jDeploy, but update status was not reported."
+        else -> "Radio-Oracle was not launched by jDeploy, so update status is not available in this run."
+    }
 
 private sealed interface DesktopPendingNavigation {
     data object Back : DesktopPendingNavigation
@@ -5292,6 +5449,7 @@ private fun RadioOManagerDesktopApp(
     areAliasesEnabled: Boolean = true,
     localResultServerUrl: String? = null,
     printerDiagnostics: DesktopPrinterDiagnostics = DesktopPrinterDiagnostics.from(emptyList()),
+    isUpdateCheckingEnabled: Boolean = true,
     raceClockTick: Long = 0L,
     onRenameRace: (String) -> Unit = {},
     onUpdateRaceStartDateTime: (String) -> Unit = {},
@@ -5355,6 +5513,7 @@ private fun RadioOManagerDesktopApp(
     },
     onUpdateProtectedControlLocation: (String, String, String) -> String = { _, _, _ -> "" },
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean = { _, _, _ -> false },
+    onSetUpdateCheckingEnabled: (Boolean) -> Unit = {},
     onLockProtectedCourseOrder: () -> Unit = {},
     isNavActionEnabled: (DesktopNavAction) -> Boolean = { false },
     disabledNavActionReason: (DesktopNavAction) -> String? = { null },
@@ -5541,6 +5700,7 @@ private fun RadioOManagerDesktopApp(
                                     areAliasesEnabled = areAliasesEnabled,
                                     localResultServerUrl = localResultServerUrl,
                                     printerDiagnostics = printerDiagnostics,
+                                    isUpdateCheckingEnabled = isUpdateCheckingEnabled,
                                     raceClockTick = raceClockTick,
                                     onSendRobisLiveResults = onSendRobisLiveResults,
                                     onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
@@ -5568,6 +5728,7 @@ private fun RadioOManagerDesktopApp(
                                     onReadCompetitorSiCardForAddRow = onReadCompetitorSiCardForAddRow,
                                     onUpdateProtectedControlLocation = onUpdateProtectedControlLocation,
                                     onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword,
+                                    onSetUpdateCheckingEnabled = onSetUpdateCheckingEnabled,
                                     isNavActionEnabled = isNavActionEnabled,
                                     onInsertTestControls = onInsertTestControls,
                                     onInsertTestCategories = onInsertTestCategories,
@@ -6241,6 +6402,7 @@ private fun SectionWorkspace(
     areAliasesEnabled: Boolean,
     localResultServerUrl: String?,
     printerDiagnostics: DesktopPrinterDiagnostics,
+    isUpdateCheckingEnabled: Boolean,
     raceClockTick: Long,
     onSendRobisLiveResults: () -> Unit,
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
@@ -6267,6 +6429,7 @@ private fun SectionWorkspace(
     onReadCompetitorSiCardForAddRow: suspend () -> DesktopCompetitorSiCardDraft,
     onUpdateProtectedControlLocation: (String, String, String) -> String,
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean,
+    onSetUpdateCheckingEnabled: (Boolean) -> Unit,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
     onInsertTestControls: () -> Unit,
     onInsertTestCategories: () -> Unit,
@@ -6497,7 +6660,9 @@ private fun SectionWorkspace(
                     protectedCourseInfoByCategoryId.takeIf { isProtectedCourseOrderUnlocked } ?: emptyMap()
                 ),
                 printerDiagnostics = printerDiagnostics,
+                isUpdateCheckingEnabled = isUpdateCheckingEnabled,
                 isCourseDataUnlocked = isProtectedCourseOrderUnlocked,
+                onSetUpdateCheckingEnabled = onSetUpdateCheckingEnabled,
                 onUpdateCoursePassword = onUpdateProtectedCoursePassword
             )
         }
@@ -6790,10 +6955,37 @@ private fun AppSettingsPanel(
     projectFile: EventProjectFile?,
     diagnostics: DesktopProjectDiagnostics,
     printerDiagnostics: DesktopPrinterDiagnostics,
+    isUpdateCheckingEnabled: Boolean,
     isCourseDataUnlocked: Boolean,
+    onSetUpdateCheckingEnabled: (Boolean) -> Unit,
     onUpdateCoursePassword: (String, String, String) -> Boolean
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        AppSettingsSection("Updates") {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Checkbox(
+                    checked = isUpdateCheckingEnabled,
+                    onCheckedChange = onSetUpdateCheckingEnabled
+                )
+                Text(
+                    text = "Check for Radio-Oracle Updates",
+                    color = DesktopPalette.Black,
+                    fontSize = 13.sp
+                )
+            }
+            Text(
+                text = if (isUpdateCheckingEnabled) {
+                    "Radio-Oracle can show jDeploy-reported app update notices and provide the update link."
+                } else {
+                    "Radio-Oracle will not show jDeploy-reported app update notices."
+                },
+                color = Color.DarkGray,
+                fontSize = 13.sp
+            )
+        }
         AppSettingsSection("Printer information") {
             DetailRow("Printer", printerDiagnostics.readinessText)
             DetailRow(
