@@ -37,6 +37,7 @@ import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Checkbox
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
@@ -4945,16 +4946,17 @@ private fun CourseKmlKmzElevationProgressDialog(
     val total = progress.totalPointCount.coerceAtLeast(1)
     val completed = progress.completedPointCount.coerceIn(0, total)
     val remaining = (total - completed).coerceAtLeast(0)
-    val fraction = completed.toFloat() / total.toFloat()
     AlertDialog(
         onDismissRequest = {},
         title = { Text("Retrieving course elevations") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                LinearProgressIndicator(
-                    progress = fraction,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator()
+                }
                 Text("$remaining of $total elevation points left to download")
             }
         },
