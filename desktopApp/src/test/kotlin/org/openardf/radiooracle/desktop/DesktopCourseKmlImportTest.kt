@@ -1134,6 +1134,46 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun fetchProtectedCourseElevationsBatchesRemoteRequests() = runBlocking {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKml())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+        val (imported, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key"
+        )
+        val batchSizes = mutableListOf<Int>()
+
+        val (updated, elevationResult) = DesktopCourseKmlImporter.fetchProtectedCourseElevations(
+            projectFile = imported,
+            categoryIds = summary.matchedCategoryIds,
+            password = "course-key",
+            batchElevationProvider = { points ->
+                batchSizes += points.size
+                points.map { 125.0 }
+            },
+            localElevationProvider = { null }
+        )
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            updated.raceData.categories.single().category.encryptedCourseInfo!!,
+            "course-key"
+        )
+
+        assertTrue(batchSizes.isNotEmpty())
+        assertTrue(batchSizes.size < elevationResult.sampledPointCount)
+        assertEquals(batchSizes.sum(), elevationResult.elevatedPointCount)
+        assertEquals(elevationResult.sampledPointCount, elevationResult.resolvedPointCount)
+        assertTrue(protectedCourseInfo.route.all { it.elevationMeters == 125.0 })
+        assertTrue(protectedCourseInfo.courseObjects.all { it.elevationMeters == 125.0 })
+        assertTrue(protectedCourseInfo.controlPoints.all { it.elevationMeters == 125.0 })
+    }
+
+    @Test
     fun fetchesOnlyMissingElevationsAndPreservesExistingValues() = runBlocking {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())

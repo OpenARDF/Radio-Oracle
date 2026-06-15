@@ -1241,6 +1241,22 @@ object DesktopVenueElevationCache {
         throw lastError ?: IllegalStateException("USGS 3DEP sample request failed.")
     }
 
+    suspend fun usgs3DepElevations(points: List<CourseGeoPoint>): List<Double?> =
+        withContext(Dispatchers.IO) {
+            if (points.isEmpty()) {
+                return@withContext emptyList()
+            }
+            val elevations = MutableList<Double?>(points.size) { null }
+            points.chunked(ARCGIS_SAMPLE_BATCH_SIZE).forEachIndexed { chunkIndex, chunk ->
+                coroutineContext.ensureActive()
+                val values = usgs3DepSamplesWithRetry(chunk, chunkIndex + 1)
+                values.forEachIndexed { index, value ->
+                    elevations[chunkIndex * ARCGIS_SAMPLE_BATCH_SIZE + index] = value
+                }
+            }
+            elevations
+        }
+
     private suspend fun oregonDogamiSamplesWithRetry(points: List<CourseGeoPoint>, batchNumber: Int): List<Double?> {
         var lastError: Throwable? = null
         repeat(ARCGIS_SAMPLE_RETRY_COUNT) { attemptIndex ->

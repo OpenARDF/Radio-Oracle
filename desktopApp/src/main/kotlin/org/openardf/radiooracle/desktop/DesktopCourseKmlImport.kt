@@ -1,9 +1,6 @@
 package org.openardf.radiooracle.desktop
 
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -22,23 +19,14 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
 import java.io.ByteArrayInputStream
-import java.net.URI
-import java.net.URLEncoder
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-import java.util.concurrent.CompletionException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
-import java.time.Duration
 import java.util.UUID
 import java.util.zip.ZipInputStream
 import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilderFactory
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.max
@@ -566,8 +554,18 @@ object DesktopCourseKmlImporter {
         projectFile: EventProjectFile,
         categoryIds: List<String>,
         password: String,
-        elevationProvider: suspend (CourseGeoPoint) -> Double? = { point ->
-            withContext(Dispatchers.IO) { usgsElevationMeters(point) }
+        elevationProvider: (suspend (CourseGeoPoint) -> Double?)? = null,
+        batchElevationProvider: suspend (List<CourseGeoPoint>) -> List<Double?> = { points ->
+            val pointProvider = elevationProvider
+            if (pointProvider == null) {
+                DesktopVenueElevationCache.usgs3DepElevations(points)
+            } else {
+                val values = mutableListOf<Double?>()
+                points.forEach { point ->
+                    values += pointProvider(point)
+                }
+                values
+            }
         },
         localElevationProvider: (CourseGeoPoint) -> Double? = { point ->
             DesktopVenueElevationCache.elevationMeters(point)
@@ -621,11 +619,6 @@ object DesktopCourseKmlImporter {
         var cachedPointCount = 0
         var updatedProject = projectFile
 
-        suspend fun resolveElevation(point: CourseGeoPoint): Pair<Double?, Boolean> {
-            localElevationProvider(point)?.let { return it to true }
-            return elevationProvider(point) to false
-        }
-
         fun emitProgress(categoryName: String) {
             onProgress(
                 DesktopRouteElevationProgress(
@@ -638,50 +631,73 @@ object DesktopCourseKmlImporter {
             )
         }
 
+        suspend fun resolveElevations(points: List<CourseGeoPoint>, categoryName: String): List<Pair<Double?, Boolean>> {
+            if (points.isEmpty()) {
+                return emptyList()
+            }
+            val resolved = MutableList<Pair<Double?, Boolean>?>(points.size) { null }
+            val remoteIndexes = mutableListOf<Int>()
+            val remotePoints = mutableListOf<CourseGeoPoint>()
+            points.forEachIndexed { index, point ->
+                kotlin.coroutines.coroutineContext.ensureActive()
+                val cachedElevation = localElevationProvider(point)
+                if (cachedElevation != null) {
+                    completedPointCount++
+                    resolvedPointCount++
+                    cachedPointCount++
+                    resolved[index] = cachedElevation to true
+                    emitProgress(categoryName)
+                } else {
+                    remoteIndexes += index
+                    remotePoints += point
+                }
+            }
+            if (remotePoints.isNotEmpty()) {
+                val remoteElevations = batchElevationProvider(remotePoints)
+                require(remoteElevations.size == remotePoints.size) {
+                    "Elevation provider returned ${remoteElevations.size} values for ${remotePoints.size} requested points."
+                }
+                remoteElevations.forEachIndexed { remoteIndex, elevation ->
+                    kotlin.coroutines.coroutineContext.ensureActive()
+                    val pointIndex = remoteIndexes[remoteIndex]
+                    completedPointCount++
+                    if (elevation != null) {
+                        resolvedPointCount++
+                        elevatedPointCount++
+                    }
+                    resolved[pointIndex] = elevation to false
+                    emitProgress(categoryName)
+                }
+            }
+            return resolved.map { it ?: (null to false) }
+        }
+
         emitProgress(categories.first().categoryName)
 
         categories.forEach { target ->
+            val routeResolutions = resolveElevations(
+                target.sampledRoute.filter { it.elevationMeters == null },
+                target.categoryName
+            ).iterator()
             val elevatedRoute = target.sampledRoute.map { point ->
-                if (point.elevationMeters != null) {
-                    return@map point
-                }
-                kotlin.coroutines.coroutineContext.ensureActive()
-                val (elevation, fromCache) = resolveElevation(point)
-                completedPointCount++
-                if (elevation != null) {
-                    resolvedPointCount++
-                    if (fromCache) {
-                        cachedPointCount++
-                    } else {
-                        elevatedPointCount++
-                    }
-                }
-                emitProgress(target.categoryName)
-                point.copy(elevationMeters = elevation)
+                point.elevationMeters?.let { return@map point }
+                point.copy(elevationMeters = routeResolutions.next().first)
             }
+            val courseObjectResolutions = resolveElevations(
+                target.courseObjects
+                    .filter { it.elevationMeters == null }
+                    .map { courseObject ->
+                        CourseGeoPoint(
+                            latitude = courseObject.latitude,
+                            longitude = courseObject.longitude,
+                            elevationMeters = null
+                        )
+                    },
+                target.categoryName
+            ).iterator()
             val elevatedCourseObjects = target.courseObjects.map { courseObject ->
-                if (courseObject.elevationMeters != null) {
-                    return@map courseObject
-                }
-                kotlin.coroutines.coroutineContext.ensureActive()
-                val resolved = resolveElevation(
-                    CourseGeoPoint(
-                        latitude = courseObject.latitude,
-                        longitude = courseObject.longitude,
-                        elevationMeters = null
-                    )
-                )
-                completedPointCount++
-                if (resolved.first != null) {
-                    resolvedPointCount++
-                    if (resolved.second) {
-                        cachedPointCount++
-                    } else {
-                        elevatedPointCount++
-                    }
-                }
-                emitProgress(target.categoryName)
-                courseObject.copy(elevationMeters = resolved.first)
+                courseObject.elevationMeters?.let { return@map courseObject }
+                courseObject.copy(elevationMeters = courseObjectResolutions.next().first)
             }
             val routeFetched = elevatedRoute.count { point ->
                 target.sampledRoute.any { original ->
@@ -698,6 +714,21 @@ object DesktopCourseKmlImporter {
             val objectElevationByControlId = elevatedCourseObjects
                 .filter { it.type == ProtectedCourseObjectType.CONTROL || it.type == ProtectedCourseObjectType.BEACON || it.type == ProtectedCourseObjectType.SPECTATOR }
                 .associateBy { it.id }
+            val controlResolutions = resolveElevations(
+                target.courseInfo.controlPoints
+                    .filter { control ->
+                        control.elevationMeters == null &&
+                            objectElevationByControlId[control.controlId]?.elevationMeters == null
+                    }
+                    .map { control ->
+                        CourseGeoPoint(
+                            latitude = control.latitude,
+                            longitude = control.longitude,
+                            elevationMeters = null
+                        )
+                    },
+                target.categoryName
+            ).iterator()
             val elevatedControlPoints = target.courseInfo.controlPoints.map { control ->
                 objectElevationByControlId[control.controlId]?.elevationMeters?.let { objectElevation ->
                     if (control.elevationMeters == null) {
@@ -710,24 +741,7 @@ object DesktopCourseKmlImporter {
                 if (control.elevationMeters != null) {
                     return@map control
                 }
-                kotlin.coroutines.coroutineContext.ensureActive()
-                val (elevation, fromCache) = resolveElevation(
-                    CourseGeoPoint(
-                        latitude = control.latitude,
-                        longitude = control.longitude,
-                        elevationMeters = null
-                    )
-                )
-                completedPointCount++
-                if (elevation != null) {
-                    resolvedPointCount++
-                    if (fromCache) {
-                        cachedPointCount++
-                    } else {
-                        elevatedPointCount++
-                    }
-                }
-                emitProgress(target.categoryName)
+                val elevation = controlResolutions.next().first
                 control.copy(elevationMeters = elevation)
             }
             val controlFetched = elevatedControlPoints.count { control ->
@@ -1386,57 +1400,6 @@ object DesktopCourseKmlImporter {
         }
         return total.roundToInt().takeIf { measuredSegmentCount > 0 }
     }
-
-    private suspend fun usgsElevationMeters(point: CourseGeoPoint): Double? {
-        val url = "https://epqs.nationalmap.gov/v1/json?x=${point.longitude.url()}&y=${point.latitude.url()}&units=Meters&wkid=4326"
-        val request = HttpRequest.newBuilder(URI(url))
-            .timeout(Duration.ofSeconds(20))
-            .header("User-Agent", "Radio-Oracle/${DesktopBuildInfo.displayVersion}")
-            .GET()
-            .build()
-        val response = sendRequest(
-            request = request,
-            responseBodyHandler = HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8),
-            client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build()
-        )
-        require(response.statusCode() in 200..299) {
-            "USGS elevation service returned HTTP ${response.statusCode()}."
-        }
-        return json.parseToJsonElement(response.body())
-            .jsonObject["value"]
-            ?.jsonPrimitive
-            ?.content
-            ?.toDoubleOrNull()
-    }
-
-    private suspend fun <T> sendRequest(
-        client: HttpClient,
-        request: HttpRequest,
-        responseBodyHandler: HttpResponse.BodyHandler<T>
-    ): HttpResponse<T> {
-        val future = client.sendAsync(request, responseBodyHandler)
-        return suspendCancellableCoroutine { continuation ->
-            continuation.invokeOnCancellation {
-                future.cancel(true)
-            }
-            future.whenComplete { response, throwable ->
-                if (!continuation.isActive) {
-                    return@whenComplete
-                }
-                if (response != null) {
-                    continuation.resume(response)
-                    return@whenComplete
-                }
-                continuation.resumeWithException((throwable as? CompletionException)?.cause ?: throwable ?: IllegalStateException("Unknown network error."))
-            }
-        }
-    }
-
-    private fun Double.url(): String =
-        URLEncoder.encode(toString(), StandardCharsets.UTF_8)
 
     private fun fileSha256(path: Path): String {
         val digest = MessageDigest.getInstance("SHA-256")
