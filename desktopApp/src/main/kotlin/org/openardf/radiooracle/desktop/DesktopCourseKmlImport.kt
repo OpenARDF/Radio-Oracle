@@ -74,6 +74,7 @@ data class DesktopCourseKmlImportSummary(
     val duplicateMissingElevationPointCount: Int,
     val missingCategoryNames: List<String>,
     val createdCategoryNames: List<String>,
+    val categoryAssumptions: List<DesktopCourseKmlCategoryAssumption>,
     val eventTypeWarnings: List<String>,
     val sourceSha256: String
 ) {
@@ -105,6 +106,11 @@ data class DesktopCourseKmlImportSummary(
 data class DesktopCourseKmlLabelConversion(
     val importedName: String,
     val eventControlLabel: String
+)
+
+data class DesktopCourseKmlCategoryAssumption(
+    val routeName: String,
+    val categoryName: String
 )
 
 data class DesktopCourseKmlAssignedControl(
@@ -143,6 +149,10 @@ object DesktopCourseKmlImporter {
     private const val CONTROL_ROUTE_TOLERANCE_METERS = 50.0
     private const val ROUTE_ORIENTATION_TOLERANCE_METERS = 5.0
     private const val CLIMB_NOISE_THRESHOLD_METERS = 1.0
+    private val CATEGORY_ASSUMPTION_SEQUENCE = listOf(
+        "M21", "M35", "M40", "M45", "M50", "M55", "M60", "M65", "M70", "M75", "M80", "M85", "M90",
+        "W21", "W35", "W40", "W45", "W50", "W55", "W60", "W65", "W70", "W75", "W80", "W85", "W90"
+    )
     private val json = Json { ignoreUnknownKeys = true }
 
     fun importProtectedCourseInfo(
@@ -160,7 +170,12 @@ object DesktopCourseKmlImporter {
             "CourseKml",
             "Import parsed ${path.fileName}: hash=${sourceSha256.shortHash()} pointControls=${courseData.controls.size} routes=${courseData.routes.size}"
         )
-        val missingCategoryNames = missingRouteCategoryNames(courseData.routes, projectFile.raceData.categories)
+        val missingCategoryNames = missingRouteCategoryNames(
+            routes = courseData.routes,
+            categories = projectFile.raceData.categories,
+            sourceName = path.fileName.toString(),
+            categoryOverrideId = categoryOverrideId
+        )
         val createdCategoryNames = if (createMissingCategories) missingCategoryNames else emptyList()
         val projectWithMissingCategories = if (createdCategoryNames.isEmpty()) {
             projectFile
@@ -234,7 +249,7 @@ object DesktopCourseKmlImporter {
         val categoryAssignmentUpdates = mutableListOf<DesktopCourseKmlCategoryAssignmentUpdate>()
 
         courseData.routes.forEach { route ->
-            routeCategoryTargets[route].orEmpty().forEach { categoryData ->
+            routeCategoryTargets.targets[route].orEmpty().forEach { categoryData ->
                 matchedCategoryCount++
                 matchedCategoryIds += categoryData.category.id
                 matchedCategoryNames += categoryData.category.name
@@ -393,6 +408,7 @@ object DesktopCourseKmlImporter {
             duplicateMissingElevationPointCount = duplicateMissingElevationPointCount,
             missingCategoryNames = missingCategoryNames,
             createdCategoryNames = createdCategoryNames,
+            categoryAssumptions = routeCategoryTargets.assumptions,
             eventTypeWarnings = DesktopImportPreviews.eventTypeWarnings(
                 eventRaceType = projectFile.raceData.race.raceType,
                 sourceName = path.fileName.toString(),
@@ -411,32 +427,38 @@ object DesktopCourseKmlImporter {
 
     private fun missingRouteCategoryNames(
         routes: List<CourseRoute>,
-        categories: List<EventCategoryData>
+        categories: List<EventCategoryData>,
+        sourceName: String,
+        categoryOverrideId: String?
     ): List<String> {
         val existingNames = categories.mapTo(mutableSetOf()) { it.category.name.categoryMatchText() }
-        return routes
-            .flatMap { route -> route.name.listedCategoryNames() }
+        val listedCategoryNames = routes.flatMap { route -> route.name.listedCategoryNames() }
+        val assumedCategoryNames = routeCategoryTargets(
+            routes = routes,
+            categories = categories,
+            sourceName = sourceName,
+            categoryOverrideId = categoryOverrideId
+        ).assumptions.map { it.categoryName }
+        return (listedCategoryNames + assumedCategoryNames)
             .distinctBy { it.categoryMatchText() }
             .filterNot { it.categoryMatchText() in existingNames }
     }
+
+    private data class RouteCategoryTargetResult(
+        val targets: Map<CourseRoute, List<EventCategoryData>>,
+        val assumptions: List<DesktopCourseKmlCategoryAssumption>
+    )
 
     private fun routeCategoryTargets(
         routes: List<CourseRoute>,
         categories: List<EventCategoryData>,
         sourceName: String,
         categoryOverrideId: String?
-    ): Map<CourseRoute, List<EventCategoryData>> {
+    ): RouteCategoryTargetResult {
         val targets = mutableMapOf<CourseRoute, List<EventCategoryData>>()
         val usedCategoryIds = mutableSetOf<String>()
         routes.forEach { route ->
-            val exactCategoryData = categories.firstOrNull { categoryData ->
-                categoryData.category.name.matchesCategoryRouteName(route.name)
-            }
-            val matchedCategories = exactCategoryData
-                ?.let(::listOf)
-                ?: categories.filter { categoryData ->
-                    route.name.containsEmbeddedCategoryName(categoryData.category.name)
-                }
+            val matchedCategories = routeMatchedCategories(route, categories)
             if (matchedCategories.isEmpty()) {
                 return@forEach
             }
@@ -451,9 +473,65 @@ object DesktopCourseKmlImporter {
                     ?.let { id -> categories.firstOrNull { categoryData -> categoryData.category.id == id } }
             if (inferredCategory != null && inferredCategory.category.id !in usedCategoryIds) {
                 targets[unmatchedRoutes.single()] = listOf(inferredCategory)
+                usedCategoryIds += inferredCategory.category.id
             }
         }
-        return targets
+        val assumptions = mutableListOf<DesktopCourseKmlCategoryAssumption>()
+        val remainingUnmatchedRoutes = routes
+            .filterNot { it in targets }
+            .filter { it.name.listedCategoryNames().isEmpty() }
+        val fallbackCategoryNames = categoryAssumptionNames(categories, usedCategoryIds, remainingUnmatchedRoutes.size)
+        remainingUnmatchedRoutes.zip(fallbackCategoryNames).forEach { (route, categoryName) ->
+            assumptions += DesktopCourseKmlCategoryAssumption(route.name, categoryName)
+            categories.firstOrNull { it.category.name.categoryMatchText() == categoryName.categoryMatchText() }
+                ?.takeIf { it.category.id !in usedCategoryIds }
+                ?.let { categoryData ->
+                    targets[route] = listOf(categoryData)
+                    usedCategoryIds += categoryData.category.id
+                }
+        }
+        return RouteCategoryTargetResult(targets, assumptions)
+    }
+
+    private fun routeMatchedCategories(
+        route: CourseRoute,
+        categories: List<EventCategoryData>
+    ): List<EventCategoryData> {
+        val exactCategoryData = categories.firstOrNull { categoryData ->
+            categoryData.category.name.matchesCategoryRouteName(route.name)
+        }
+        return exactCategoryData
+            ?.let(::listOf)
+            ?: categories.filter { categoryData ->
+                route.name.containsEmbeddedCategoryName(categoryData.category.name)
+            }
+    }
+
+    private fun categoryAssumptionNames(
+        categories: List<EventCategoryData>,
+        usedCategoryIds: Set<String>,
+        count: Int
+    ): List<String> {
+        if (count <= 0) {
+            return emptyList()
+        }
+        val usedCategoryNames = categories
+            .filter { it.category.id in usedCategoryIds }
+            .mapTo(mutableSetOf()) { it.category.name.categoryMatchText() }
+        val availableExistingNames = categories
+            .filterNot { it.category.id in usedCategoryIds }
+            .map { it.category.name }
+        val availableExistingByMatchText = availableExistingNames.associateBy { it.categoryMatchText() }
+        val orderedExistingNames = CATEGORY_ASSUMPTION_SEQUENCE.mapNotNull { fallbackName ->
+            availableExistingByMatchText[fallbackName.categoryMatchText()]
+        }
+        val otherExistingNames = availableExistingNames.filterNot { existingName ->
+            CATEGORY_ASSUMPTION_SEQUENCE.any { it.categoryMatchText() == existingName.categoryMatchText() }
+        }
+        return (listOf("M21") + orderedExistingNames + otherExistingNames + CATEGORY_ASSUMPTION_SEQUENCE)
+            .distinctBy { it.categoryMatchText() }
+            .filterNot { it.categoryMatchText() in usedCategoryNames }
+            .take(count)
     }
 
     private fun filenameMatchedCategory(

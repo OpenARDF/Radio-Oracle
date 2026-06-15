@@ -106,6 +106,63 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun assumesM21ForSingleRouteWithoutCategoryIndicator() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithRouteName("Course"))
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        assertEquals(1, summary.matchedCategoryCount)
+        assertEquals(listOf("M21"), summary.matchedCategoryNames)
+        assertEquals(listOf(DesktopCourseKmlCategoryAssumption("Course", "M21")), summary.categoryAssumptions)
+        assertNotNull(updated.raceData.categories.single { it.category.name == "M21" }.category.encryptedCourseInfo)
+    }
+
+    @Test
+    fun assumesOlderMaleThenFemaleCategoriesForMultipleRoutesWithoutCategoryIndicators() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithUnnamedRoutes(listOf("Course A", "Course B", "Course C")))
+        val project = listOf("M21", "M40", "W21").fold(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00")
+        ) { currentProject, categoryName ->
+            EventProjectEditor.addCategory(
+                currentProject,
+                categoryId = "cat-${categoryName.lowercase()}",
+                name = categoryName
+            )
+        }
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        assertEquals(3, summary.matchedCategoryCount)
+        assertEquals(listOf("M21", "M40", "W21"), summary.matchedCategoryNames)
+        assertEquals(
+            listOf(
+                DesktopCourseKmlCategoryAssumption("Course A", "M21"),
+                DesktopCourseKmlCategoryAssumption("Course B", "M40"),
+                DesktopCourseKmlCategoryAssumption("Course C", "W21")
+            ),
+            summary.categoryAssumptions
+        )
+        assertTrue(updated.raceData.categories.all { it.category.encryptedCourseInfo != null })
+    }
+
+    @Test
     fun importsCategoryCourseInfoFromControlsProjectedOntoEachRoute() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithThreeCategoryRoutes())
@@ -1150,6 +1207,42 @@ class DesktopCourseKmlImportTest {
           </Document>
         </kml>
         """.trimIndent()
+
+    private fun sampleKmlWithUnnamedRoutes(routeNames: List<String>): String {
+        val routePlacemarks = routeNames.mapIndexed { index, routeName ->
+            val start = -95.0000 + index * 0.01
+            val middle = start + 0.001
+            val finish = start + 0.002
+            """
+            <Placemark>
+              <name>$routeName</name>
+              <LineString>
+                <coordinates>
+                  $start,39.0000,0
+                  $middle,39.0000,0
+                  $finish,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            """.trimIndent()
+        }.joinToString("\n")
+        return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            $routePlacemarks
+          </Document>
+        </kml>
+        """.trimIndent().trimStart()
+    }
 
     private fun sampleKmlWithReversedControlPlacemarkOrder(): String =
         """

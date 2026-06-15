@@ -47,7 +47,8 @@ class DesktopCourseAnalyzerTest {
             protectedIdealOrderText = "35 34 33 32 31 Beacon"
         )
 
-        assertEquals(emptyList<String>(), summary.missingElements)
+        assertEquals(true, summary.hasMissingCalculatedRouteElevationData)
+        assertTrue(summary.missingElements.any { it.contains("Calculated route elevation samples are missing from the local elevation cache") })
         assertEquals(120, summary.calculatedRouteCount)
         assertEquals(listOf("S", "31", "32", "33", "34", "35", "B"), requireNotNull(summary.calculatedRouteSection).routeOrder)
         assertEquals(summary.calculatedRouteSection?.secondaryRouteOrder, summary.calculatedIdealOrder)
@@ -214,6 +215,26 @@ class DesktopCourseAnalyzerTest {
         val calculatedFoxLabels = requireNotNull(summary.calculatedRouteSection).secondaryRouteOrder.drop(1).dropLast(1)
         assertEquals(calculatedFoxLabels, calculatedProfile.markers.map { it.label })
         assertTrue(calculatedProfile.markers.all { it.distanceMeters > 0 && it.elevationMeters > 0.0 })
+    }
+
+    @Test
+    fun reportsCalculatedRouteMissingLocalElevationCacheSamples() {
+        val projectFile = projectFile(foxCount = 3)
+        val protectedInfo = protectedInfo(foxCount = 3)
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "33 32 31 Beacon"
+        )
+
+        assertEquals(false, summary.hasMissingElevationData)
+        assertEquals(true, summary.hasMissingCalculatedRouteElevationData)
+        assertTrue(summary.calculatedRouteMissingElevationPointCount > 0)
+        assertNotNull(summary.calculatedRouteElevationBoundingBox)
+        assertTrue(summary.missingElements.any { it.contains("Calculated route elevation samples are missing from the local elevation cache") })
+        assertNotNull(summary.calculatedRouteSection)
     }
 
     @Test
@@ -427,11 +448,19 @@ class DesktopCourseAnalyzerTest {
             projectFile = projectFile,
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo,
-            protectedIdealOrderText = "33 32 31 Beacon"
+            protectedIdealOrderText = "33 32 31 Beacon",
+            eventFileName = "analysis-event.rom.json",
+            analysisPerformedAtText = "Mon, Jun 15, 2026 9:30 AM"
         )
         val reportText = DesktopCourseAnalysisExports.reportText(summary)
 
         assertTrue(reportText.contains("Course Analyzer"))
+        assertTrue(reportText.contains("Event: Test Event"))
+        assertTrue(reportText.contains("Event file: analysis-event.rom.json"))
+        assertTrue(reportText.contains("Event format: Classic"))
+        assertTrue(reportText.contains("Event type: Practice"))
+        assertTrue(reportText.contains("Analyzed: Mon, Jun 15, 2026 9:30 AM"))
+        assertTrue(reportText.indexOf("Analyzed:") < reportText.indexOf("Category:"))
         assertTrue(reportText.contains("Section 2: Calculated ideal route"))
         assertTrue(reportText.contains("Route order (stored fox numbering):"))
         assertTrue(reportText.contains("Route order (calculated fox numbering):"))
@@ -443,9 +472,14 @@ class DesktopCourseAnalyzerTest {
         val exportPaths = DesktopCourseAnalysisExports.exportPdfAndKml(pdfPath, summary)
         val pdfBytes = Files.readAllBytes(pdfPath)
         assertTrue(String(pdfBytes.take(8).toByteArray()).startsWith("%PDF-1.4"))
-        assertTrue(String(pdfBytes).contains("Course Analyzer"))
-        assertTrue(String(pdfBytes).contains("Elevation Profile Graphics"))
-        assertTrue(String(pdfBytes).contains("2D Route Depiction Graphics"))
+        val pdfText = String(pdfBytes)
+        assertTrue(pdfText.contains("Course Analyzer"))
+        assertTrue(pdfText.contains("Event: Test Event"))
+        assertTrue(pdfText.contains("Event file: analysis-event.rom.json"))
+        assertTrue(pdfText.contains("Analyzed: Mon, Jun 15, 2026 9:30 AM"))
+        assertTrue(pdfText.contains("/Helvetica-Bold"))
+        assertTrue(pdfText.contains("Elevation Profile Graphics"))
+        assertTrue(pdfText.contains("2D Route Depiction Graphics"))
         assertPdfInfoCanRead(pdfPath)
         assertEquals(pdfPath, exportPaths.pdfPath)
         assertEquals(pdfPath.resolveSibling("${pdfPath.fileName.toString().removeSuffix(".pdf")}.kml"), exportPaths.kmlPath)

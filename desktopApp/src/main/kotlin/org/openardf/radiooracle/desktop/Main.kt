@@ -179,6 +179,8 @@ private val FixedGridRowHeight = 56.dp
 private val ReadoutAddRailYOffset = 10.dp
 private const val DesktopSiPollIntervalMs = 5_000L
 private const val DesktopLiveResultSendIntervalMs = 15_000L
+private const val CourseAnalysisCalculatedRouteElevationResolutionMeters = 10.0
+private const val CourseAnalysisCalculatedRouteElevationBufferMeters = 50.0
 
 private enum class DesktopSiReaderSeverity {
     DISCONNECTED,
@@ -1901,6 +1903,9 @@ fun main(args: Array<String>) = application {
                     "${selectedSummary.createdCategoryNames.size} missing categories created.",
                     "${selectedSummary.missingCategoryNames.size} category names were missing before review."
                 ) + listOf(updatedProject.resultImpactWarning("Course data changed").trim()).filter { it.isNotBlank() } +
+                    selectedSummary.categoryAssumptions.map { assumption ->
+                        "No category indication was found for route ${assumption.routeName}; assumed ${assumption.categoryName}."
+                    } +
                     selectedSummary.eventTypeWarnings)
             )
             if (fetchElevations) {
@@ -1990,6 +1995,8 @@ fun main(args: Array<String>) = application {
                         categoryOverrideId == null &&
                         summary.routeCount == 1 &&
                         summary.matchedCategoryCount == 0 &&
+                        summary.missingCategoryNames.isEmpty() &&
+                        summary.categoryAssumptions.isEmpty() &&
                         categoryOptions.isNotEmpty()
                     ) {
                         pendingCourseKmlKmzImportReview = null
@@ -4325,6 +4332,13 @@ private fun CourseKmlKmzImportReviewDialog(
                         fontWeight = FontWeight.Bold
                     )
                 }
+                selectedSummary.categoryAssumptions.forEach { assumption ->
+                    Text(
+                        text = "No category indication was found for route ${assumption.routeName}; assuming ${assumption.categoryName}.",
+                        color = DesktopPalette.Warning,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 Text("Matched categories: ${selectedSummary.matchedCategoryCount} of ${selectedSummary.routeCount} routes")
                 Text("Categories: $categoriesText")
                 if (summary.missingCategoryNames.isNotEmpty()) {
@@ -6529,10 +6543,12 @@ private fun SectionWorkspace(
         if (section == DesktopSection.CourseAnalysis && projectFile != null) {
             CourseAnalysisPanel(
                 projectFile = projectFile,
+                eventFilePath = eventFilePath,
                 isUnlocked = isProtectedCourseOrderUnlocked,
                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                 onRetrieveMissingElevations = onRetrieveMissingCourseElevations,
+                onDownloadVenueElevationCache = onDownloadVenueElevationCache,
                 onUnlock = onUnlockProtectedCourseOrder,
                 onUseCalculatedRoute = onUseCalculatedCourseAnalysisRoute,
                 onApplyFoxRenumberingOnly = onApplyCourseAnalysisFoxRenumberingOnly,
@@ -9425,10 +9441,12 @@ private fun CourseAnalyzerGuidance() {
 @Composable
 private fun CourseAnalysisPanel(
     projectFile: EventProjectFile,
+    eventFilePath: Path?,
     isUnlocked: Boolean,
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     onRetrieveMissingElevations: (String) -> Unit,
+    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
     onUnlock: (String) -> Boolean,
     onUseCalculatedRoute: (DesktopCourseCalculatedRouteApplication) -> String,
     onApplyFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String,
@@ -9528,10 +9546,28 @@ private fun CourseAnalysisPanel(
                 categoryId = categoryId,
                 protectedCourseInfo = protectedCourseInfoByCategoryId[categoryId],
                 protectedIdealOrderText = protectedIdealOrderByCategoryId[categoryId],
+                eventFileName = eventFilePath?.fileName?.toString(),
                 elevationLookup = DesktopVenueElevationCache::elevationMeters,
                 elevationCacheNotes = DesktopVenueElevationCache::analysisSourceNotes
             )
         }
+
+    fun downloadCalculatedRouteElevations(summary: DesktopCourseAnalysisSummary) {
+        val boundingBox = summary.calculatedRouteElevationBoundingBox ?: run {
+            exportStatusText = "Calculated route elevation download failed: route bounds are unavailable."
+            return
+        }
+        onDownloadVenueElevationCache(
+            "${projectFile.raceData.race.name} ${summary.categoryName} calculated route",
+            boundingBox,
+            CourseAnalysisCalculatedRouteElevationResolutionMeters,
+            CourseAnalysisCalculatedRouteElevationBufferMeters,
+            DesktopVenueElevationCacheSource.Usgs3Dep,
+            ""
+        )
+        analysisResult = null
+        pendingMissingDataResult = null
+    }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -9773,6 +9809,15 @@ private fun CourseAnalysisPanel(
                             }
                         ) {
                             ButtonLabel("Retrieve Elevations")
+                        }
+                    }
+                    if (summary.hasMissingCalculatedRouteElevationData) {
+                        Button(
+                            onClick = {
+                                downloadCalculatedRouteElevations(summary)
+                            }
+                        ) {
+                            ButtonLabel("Download Calculated Route Elevations")
                         }
                     }
                     Button(onClick = { pendingMissingDataResult = null }) {

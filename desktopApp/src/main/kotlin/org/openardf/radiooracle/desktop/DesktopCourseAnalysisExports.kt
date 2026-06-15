@@ -30,6 +30,11 @@ object DesktopCourseAnalysisExports {
     fun reportText(result: DesktopCourseAnalysisSummary): String =
         buildString {
             appendLine("Course Analyzer")
+            appendLine("Event: ${result.eventName.ifBlank { "Untitled Event" }}")
+            appendLine("Event file: ${result.eventFileName?.takeIf { it.isNotBlank() } ?: "Unsaved Event File"}")
+            appendLine("Event format: ${result.eventFormatLabel}")
+            appendLine("Event type: ${result.eventTypeLabel}")
+            appendLine("Analyzed: ${result.analysisPerformedAtText}")
             appendLine("Category: ${result.categoryName}")
             appendLine("Rules applied: ${result.rulesDocumentLabel}")
             appendLine()
@@ -357,22 +362,23 @@ object DesktopCourseAnalysisExports {
     }
 
     private fun pdfBytes(result: DesktopCourseAnalysisSummary): ByteArray {
-        val wrappedLines = reportText(result)
-            .lineSequence()
-            .flatMap { line -> wrapPdfLine(line, 100).asSequence() }
-            .toList()
-        val pageContents = wrappedLines
-            .chunked(52)
-            .ifEmpty { listOf(listOf("")) }
+        val wrappedLines = styledReportLines(result)
+            .flatMap { line ->
+                wrapPdfLine(line.text, line.style.wrapWidth).map { wrappedLine ->
+                    line.copy(text = wrappedLine)
+                }
+            }
+        val pageContents = paginatePdfLines(wrappedLines)
+            .ifEmpty { listOf(listOf(PdfTextLine("", PdfTextStyle.Body))) }
             .map(::textPageContent) + graphicsPageContents(result)
         val objects = mutableListOf<String>()
         objects += "<< /Type /Catalog /Pages 2 0 R >>"
         objects += "<< /Type /Pages /Kids ${pageContents.indices.joinToString(separator = " ", prefix = "[", postfix = "]") { "${4 + it * 2} 0 R" }} /Count ${pageContents.size} >>"
-        objects += "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+        objects += "<< /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >>"
         pageContents.forEachIndexed { index, content ->
             val pageObjectId = 4 + index * 2
             val contentObjectId = pageObjectId + 1
-            objects += "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents $contentObjectId 0 R >>"
+            objects += "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font 3 0 R >> /Contents $contentObjectId 0 R >>"
             val length = content.toByteArray(StandardCharsets.ISO_8859_1).size
             objects += "<< /Length $length >>\nstream\n$content\nendstream"
         }
@@ -398,6 +404,74 @@ object DesktopCourseAnalysisExports {
         return output.toString().toByteArray(StandardCharsets.ISO_8859_1)
     }
 
+    private data class PdfTextLine(
+        val text: String,
+        val style: PdfTextStyle
+    )
+
+    private enum class PdfTextStyle(
+        val fontName: String,
+        val fontSize: Int,
+        val lineHeight: Double,
+        val wrapWidth: Int
+    ) {
+        Title("/F2", 18, 24.0, 62),
+        SectionHeading("/F2", 14, 19.0, 78),
+        Subheading("/F2", 11, 15.0, 92),
+        Body("/F1", 10, 13.0, 100)
+    }
+
+    private fun styledReportLines(result: DesktopCourseAnalysisSummary): List<PdfTextLine> =
+        reportText(result)
+            .lineSequence()
+            .mapIndexed { index, line ->
+                PdfTextLine(
+                    text = line,
+                    style = when {
+                        index == 0 -> PdfTextStyle.Title
+                        line.startsWith("Section ") || line == "Partial analysis" -> PdfTextStyle.SectionHeading
+                        line in PdfSubheadingLabels -> PdfTextStyle.Subheading
+                        else -> PdfTextStyle.Body
+                    }
+                )
+            }
+            .toList()
+
+    private val PdfSubheadingLabels = setOf(
+        "USA rules checks",
+        "Stored-route wait-time analysis",
+        "Current wait times",
+        "Optimized wait times",
+        "Wait-time renumbering check",
+        "Renumbered wait times",
+        "Speed model factors",
+        "Goodness metrics",
+        "Elevation profiles",
+        "2D route depictions",
+        "Leg analysis"
+    )
+
+    private fun paginatePdfLines(lines: List<PdfTextLine>): List<List<PdfTextLine>> {
+        val pages = mutableListOf<List<PdfTextLine>>()
+        val currentPage = mutableListOf<PdfTextLine>()
+        var usedHeight = 0.0
+        val maxHeight = 696.0
+        lines.forEach { line ->
+            val lineHeight = if (line.text.isBlank()) 8.0 else line.style.lineHeight
+            if (currentPage.isNotEmpty() && usedHeight + lineHeight > maxHeight) {
+                pages += currentPage.toList()
+                currentPage.clear()
+                usedHeight = 0.0
+            }
+            currentPage += line
+            usedHeight += lineHeight
+        }
+        if (currentPage.isNotEmpty()) {
+            pages += currentPage.toList()
+        }
+        return pages
+    }
+
     private fun wrapPdfLine(line: String, width: Int): List<String> {
         if (line.length <= width) {
             return listOf(line)
@@ -413,24 +487,26 @@ object DesktopCourseAnalysisExports {
         return lines
     }
 
-    private fun textPageContent(lines: List<String>): String =
+    private fun textPageContent(lines: List<PdfTextLine>): String =
         buildString {
-            appendLine("BT")
-            appendLine("/F1 10 Tf")
-            appendLine("54 750 Td")
-            appendLine("13 TL")
-            lines.forEachIndexed { index, line ->
-                if (index > 0) {
-                    appendLine("T*")
+            var y = 750.0
+            lines.forEach { line ->
+                if (line.text.isBlank()) {
+                    y -= 8.0
+                    return@forEach
                 }
-                if (line.startsWith("RULE VIOLATION:")) {
+                appendLine("BT")
+                appendLine("${line.style.fontName} ${line.style.fontSize} Tf")
+                if (line.text.startsWith("RULE VIOLATION:")) {
                     appendLine("0.78 0.10 0.10 rg")
                 } else {
                     appendLine("0 0 0 rg")
                 }
-                appendLine("(${line.toPdfText()}) Tj")
+                appendLine("1 0 0 1 54 ${pdfNumber(y)} Tm")
+                appendLine("(${line.text.toPdfText()}) Tj")
+                appendLine("ET")
+                y -= line.style.lineHeight
             }
-            append("ET")
         }
 
     private fun graphicsPageContents(result: DesktopCourseAnalysisSummary): List<String> =

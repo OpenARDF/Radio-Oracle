@@ -13,12 +13,19 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
+import org.openardf.radiooracle.shared.event.toDisplayLabel
+import java.time.LocalDateTime
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.roundToInt
 
 data class DesktopCourseAnalysisSummary(
+    val eventName: String,
+    val eventFileName: String?,
+    val eventFormatLabel: String,
+    val eventTypeLabel: String,
+    val analysisPerformedAtText: String,
     val categoryName: String,
     val rulesDocumentLabel: String,
     val speedModel: DesktopCourseSpeedModel,
@@ -43,6 +50,9 @@ data class DesktopCourseAnalysisSummary(
     val effectiveLengthMeters: Int?,
     val estimatedIdealSeconds: Int?,
     val hasMissingElevationData: Boolean,
+    val hasMissingCalculatedRouteElevationData: Boolean,
+    val calculatedRouteMissingElevationPointCount: Int,
+    val calculatedRouteElevationBoundingBox: DesktopVenueElevationBoundingBox?,
     val elevationProfile: List<DesktopCourseElevationProfilePoint>,
     val providedLegRows: List<DesktopCourseLegRow>,
     val calculatedLegRows: List<DesktopCourseLegRow>,
@@ -290,6 +300,8 @@ object DesktopCourseAnalyzer {
         categoryId: String,
         protectedCourseInfo: ProtectedCourseInfo?,
         protectedIdealOrderText: String?,
+        eventFileName: String? = null,
+        analysisPerformedAtText: String = DesktopDateTimeText.displayText(LocalDateTime.now().withNano(0)),
         elevationLookup: (CourseGeoPoint) -> Double? = { null },
         elevationCacheNotes: (List<CourseGeoPoint>) -> List<String> = { emptyList() }
     ): DesktopCourseAnalysisSummary {
@@ -417,6 +429,29 @@ object DesktopCourseAnalyzer {
             providedFoxIds.isNotEmpty() && providedFoxIds == calculatedFoxIds
         }
         val calculatedRouteMatchesStored = idealOrderMatches == true
+        val calculatedRouteElevationSamplePoints = if (
+            start != null &&
+            finish != null &&
+            calculatedRoute != null &&
+            !calculatedRouteMatchesStored
+        ) {
+            sampledCalculatedRoutePoints(
+                start = start,
+                controls = calculatedRoute.controls,
+                finish = finish,
+                elevationLookup = elevationLookup
+            )
+        } else {
+            emptyList()
+        }
+        val calculatedRouteMissingElevationPointCount = calculatedRouteElevationSamplePoints.count { point ->
+            elevationLookup(point) == null
+        }
+        val hasMissingCalculatedRouteElevationData = calculatedRouteElevationSamplePoints.size >= 2 &&
+            calculatedRouteMissingElevationPointCount > 0
+        if (hasMissingCalculatedRouteElevationData) {
+            missing += "Calculated route elevation samples are missing from the local elevation cache; calculated route climb, effective length, timing, and comparison may use endpoint interpolation or horizontal straight-line distance instead of downloaded elevations along the route."
+        }
 
         val providedRoutePoints = buildList {
             start?.let(::add)
@@ -753,6 +788,11 @@ object DesktopCourseAnalyzer {
         }
 
         return DesktopCourseAnalysisSummary(
+            eventName = projectFile.raceData.race.name,
+            eventFileName = eventFileName,
+            eventFormatLabel = projectFile.raceData.race.raceType.toDisplayLabel(),
+            eventTypeLabel = projectFile.raceData.race.raceLevel.toDisplayLabel(),
+            analysisPerformedAtText = analysisPerformedAtText,
             categoryName = category.name,
             rulesDocumentLabel = USA_RULES_DOCUMENT_LABEL,
             speedModel = speedModel,
@@ -777,6 +817,9 @@ object DesktopCourseAnalyzer {
             effectiveLengthMeters = protectedCourseInfo?.effectiveLengthMeters(),
             estimatedIdealSeconds = estimatedIdealSeconds,
             hasMissingElevationData = hasMissingElevationData,
+            hasMissingCalculatedRouteElevationData = hasMissingCalculatedRouteElevationData,
+            calculatedRouteMissingElevationPointCount = calculatedRouteMissingElevationPointCount,
+            calculatedRouteElevationBoundingBox = calculatedRouteElevationSamplePoints.analysisBoundingBoxOrNull(),
             elevationProfile = elevationProfile,
             providedLegRows = providedLegRows,
             calculatedLegRows = if (calculatedRouteMatchesStored) emptyList() else calculatedLegRows,
@@ -2521,6 +2564,16 @@ object DesktopCourseAnalyzer {
 
     private fun List<CourseGeoPoint>.straightLineMeters(): Double =
         zipWithNext().sumOf { (start, end) -> start.distanceMetersTo(end) }
+
+    private fun List<CourseGeoPoint>.analysisBoundingBoxOrNull(): DesktopVenueElevationBoundingBox? =
+        takeIf { it.isNotEmpty() }?.let { points ->
+            DesktopVenueElevationBoundingBox(
+                minLatitude = points.minOf { it.latitude },
+                maxLatitude = points.maxOf { it.latitude },
+                minLongitude = points.minOf { it.longitude },
+                maxLongitude = points.maxOf { it.longitude }
+            )
+        }
 
     private fun <T> List<T>.permutations(): Sequence<List<T>> =
         sequence {
