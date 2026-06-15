@@ -86,6 +86,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -4496,173 +4497,188 @@ private fun CourseKmlKmzImportReviewDialog(
         mutableStateOf(false)
     }
     val scrollState = rememberScrollState()
-    AlertDialog(
+    Dialog(
         onDismissRequest = onCancel,
-        title = {
-            Text(
-                if (summary.isDuplicateOnly) {
-                    "Duplicate controls/route import"
-                } else {
-                    "Review controls/route import"
-                }
-            )
-        },
-        text = {
-            Box(
-                modifier = Modifier
-                    .heightIn(max = 420.dp)
-                    .clipToBounds()
+    ) {
+        Surface(
+            modifier = Modifier
+                .widthIn(min = 320.dp, max = 560.dp)
+                .heightIn(max = 640.dp),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colors.surface
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(
+                Text(
+                    if (summary.isDuplicateOnly) {
+                        "Duplicate controls/route import"
+                    } else {
+                        "Review controls/route import"
+                    },
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Box(
                     modifier = Modifier
+                        .weight(1f, fill = false)
                         .fillMaxWidth()
-                        .verticalScroll(scrollState),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .clipToBounds()
                 ) {
-                    Text("File: ${review.sourceName}")
-                    selectedSummary.eventTypeWarnings.forEach { warning ->
-                        Text(
-                            text = warning,
-                            color = DesktopPalette.Error,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    selectedSummary.categoryAssumptions.forEach { assumption ->
-                        Text(
-                            text = "No category indication was found for route ${assumption.routeName}; assuming ${assumption.categoryName}.",
-                            color = Color(0xFFC46A00),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Text("Matched categories: ${selectedSummary.matchedCategoryCount} of ${selectedSummary.routeCount} routes")
-                    Text("Categories: $categoriesText")
-                    if (summary.missingCategoryNames.isNotEmpty()) {
-                        Text("Categories listed in $formatLabel but not in the Event File: ${summary.missingCategoryNames.joinToString()}")
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Checkbox(
-                                checked = createMissingCategories,
-                                onCheckedChange = { createMissingCategories = it }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(scrollState),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("File: ${review.sourceName}")
+                        selectedSummary.eventTypeWarnings.forEach { warning ->
+                            Text(
+                                text = warning,
+                                color = DesktopPalette.Error,
+                                fontWeight = FontWeight.Bold
                             )
-                            Text("Create missing categories and save their course data")
                         }
-                        Text(
-                            text = if (createMissingCategories) {
-                                "Created categories will be saved without competitors. Competitors imported later with the same category names will use this stored course data."
-                            } else {
-                                "Missing categories will be left out of this import. Add those categories or reimport the $formatLabel later to store their course data."
-                            },
-                            fontSize = 12.sp,
-                            color = Color.DarkGray
-                        )
-                    }
-                    if (selectedSummary.importedCategoryCount > 0) {
-                        Text("Categories to update: ${selectedSummary.importedCategoryCount}")
-                    }
-                    if (selectedSummary.assignedCategoryControlCount > 0) {
-                        Text("Category assigned control points available to copy: ${selectedSummary.assignedCategoryControlCount}")
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Checkbox(
-                                checked = applyCategoryAssignments,
-                                onCheckedChange = { applyCategoryAssignments = it }
+                        selectedSummary.categoryAssumptions.forEach { assumption ->
+                            Text(
+                                text = "No category indication was found for route ${assumption.routeName}; assuming ${assumption.categoryName}.",
+                                color = Color(0xFFC46A00),
+                                fontWeight = FontWeight.Bold
                             )
-                            Text("Replace category assigned controls with matched $formatLabel controls")
                         }
-                        Text(
-                            "If selected, existing assigned controls for the matched category are replaced and stored in neutral fox-label order, not route order.",
-                            fontSize = 12.sp,
-                            color = Color.DarkGray
-                        )
-                    }
-                    if (selectedSummary.duplicateCategoryCount > 0) {
-                        Text("Duplicate categories already imported: ${selectedSummary.duplicateCategoryCount}")
-                    }
-                    Text("Matched course controls: ${courseControlMatchSummary(selectedSummary.matchedFoxCount, selectedSummary.matchedBeaconCount, selectedSummary.matchedSpectatorCount)}")
-                    if (selectedSummary.labelConversions.isNotEmpty()) {
-                        Text("Imported control names to treat as existing Event File labels:")
-                        selectedSummary.labelConversions.take(8).forEach { conversion ->
-                            Text("${conversion.importedName} -> ${conversion.eventControlLabel}")
-                        }
-                        if (selectedSummary.labelConversions.size > 8) {
-                            Text("Additional likely name matches: ${selectedSummary.labelConversions.size - 8}")
-                        }
-                    }
-                    if (selectedSummary.changedControlLocationCount > 0) {
-                        Text("Control locations to update: ${selectedSummary.changedControlLocationCount}")
-                        Text("Stored courses affected by location changes: ${selectedSummary.controlLocationAffectedCategoryCount}")
-                    }
-                    if (canFetchElevations) {
-                        Text(
-                            if (selectedSummary.isDuplicateOnly) {
-                                "Stored route/control elevations missing: $missingStoredElevationPointCount course points"
-                            } else {
-                                "Imported route/control elevations missing: $missingStoredElevationPointCount course points"
+                        Text("Matched categories: ${selectedSummary.matchedCategoryCount} of ${selectedSummary.routeCount} routes")
+                        Text("Categories: $categoriesText")
+                        if (summary.missingCategoryNames.isNotEmpty()) {
+                            Text("Categories listed in $formatLabel but not in the Event File: ${summary.missingCategoryNames.joinToString()}")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Checkbox(
+                                    checked = createMissingCategories,
+                                    onCheckedChange = { createMissingCategories = it }
+                                )
+                                Text("Create missing categories and save their course data")
                             }
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Checkbox(
-                                checked = fetchElevations,
-                                onCheckedChange = { fetchElevations = it }
+                            Text(
+                                text = if (createMissingCategories) {
+                                    "Created categories will be saved without competitors. Competitors imported later with the same category names will use this stored course data."
+                                } else {
+                                    "Missing categories will be left out of this import. Add those categories or reimport the $formatLabel later to store their course data."
+                                },
+                                fontSize = 12.sp,
+                                color = Color.DarkGray
                             )
+                        }
+                        if (selectedSummary.importedCategoryCount > 0) {
+                            Text("Categories to update: ${selectedSummary.importedCategoryCount}")
+                        }
+                        if (selectedSummary.assignedCategoryControlCount > 0) {
+                            Text("Category assigned control points available to copy: ${selectedSummary.assignedCategoryControlCount}")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Checkbox(
+                                    checked = applyCategoryAssignments,
+                                    onCheckedChange = { applyCategoryAssignments = it }
+                                )
+                                Text("Replace category assigned controls with matched $formatLabel controls")
+                            }
+                            Text(
+                                "If selected, existing assigned controls for the matched category are replaced and stored in neutral fox-label order, not route order.",
+                                fontSize = 12.sp,
+                                color = Color.DarkGray
+                            )
+                        }
+                        if (selectedSummary.duplicateCategoryCount > 0) {
+                            Text("Duplicate categories already imported: ${selectedSummary.duplicateCategoryCount}")
+                        }
+                        Text("Matched course controls: ${courseControlMatchSummary(selectedSummary.matchedFoxCount, selectedSummary.matchedBeaconCount, selectedSummary.matchedSpectatorCount)}")
+                        if (selectedSummary.labelConversions.isNotEmpty()) {
+                            Text("Imported control names to treat as existing Event File labels:")
+                            selectedSummary.labelConversions.take(8).forEach { conversion ->
+                                Text("${conversion.importedName} -> ${conversion.eventControlLabel}")
+                            }
+                            if (selectedSummary.labelConversions.size > 8) {
+                                Text("Additional likely name matches: ${selectedSummary.labelConversions.size - 8}")
+                            }
+                        }
+                        if (selectedSummary.changedControlLocationCount > 0) {
+                            Text("Control locations to update: ${selectedSummary.changedControlLocationCount}")
+                            Text("Stored courses affected by location changes: ${selectedSummary.controlLocationAffectedCategoryCount}")
+                        }
+                        if (canFetchElevations) {
                             Text(
                                 if (selectedSummary.isDuplicateOnly) {
-                                    "Download missing elevations for the stored route"
+                                    "Stored route/control elevations missing: $missingStoredElevationPointCount course points"
                                 } else {
-                                    "Download missing elevations for the imported route after keeping it"
+                                    "Imported route/control elevations missing: $missingStoredElevationPointCount course points"
                                 }
                             )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Checkbox(
+                                    checked = fetchElevations,
+                                    onCheckedChange = { fetchElevations = it }
+                                )
+                                Text(
+                                    if (selectedSummary.isDuplicateOnly) {
+                                        "Download missing elevations for the stored route"
+                                    } else {
+                                        "Download missing elevations for the imported route after keeping it"
+                                    }
+                                )
+                            }
                         }
+                        Text(
+                            text = if (selectedSummary.isDuplicateOnly) {
+                                "This file has the same SHA-256 hash as route data already stored in the Event File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Event File unchanged."
+                            } else if (
+                                selectedSummary.hasLabelConversions &&
+                                selectedSummary.importedCategoryCount == 0 &&
+                                selectedSummary.assignedCategoryControlCount == 0 &&
+                                selectedSummary.changedControlLocationCount == 0
+                            ) {
+                                "Keep imported data to use these $formatLabel names as matches to existing Event File labels. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Cancel leaves the Event File unchanged."
+                            } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.changedControlLocationCount > 0) {
+                                "Keep imported data to update control locations. Affected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
+                            } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.assignedCategoryControlCount > 0) {
+                                "Keep imported data to review matched $formatLabel control points. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
+                            } else if (selectedSummary.hasLabelConversions) {
+                                "Keep imported data to use these $formatLabel names as matches to existing Event File labels, update route facts, ideal order, and any changed control locations. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged."
+                            } else {
+                                "Keep imported data to update route facts, ideal order, and any changed control locations. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
+                            },
+                            fontSize = 13.sp,
+                            color = Color.DarkGray
+                        )
                     }
-                    Text(
-                        text = if (selectedSummary.isDuplicateOnly) {
-                            "This file has the same SHA-256 hash as route data already stored in the Event File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Event File unchanged."
-                        } else if (
-                            selectedSummary.hasLabelConversions &&
-                            selectedSummary.importedCategoryCount == 0 &&
-                            selectedSummary.assignedCategoryControlCount == 0 &&
-                            selectedSummary.changedControlLocationCount == 0
-                        ) {
-                            "Keep imported data to use these $formatLabel names as matches to existing Event File labels. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Cancel leaves the Event File unchanged."
-                        } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.changedControlLocationCount > 0) {
-                            "Keep imported data to update control locations. Affected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
-                        } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.assignedCategoryControlCount > 0) {
-                            "Keep imported data to review matched $formatLabel control points. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
-                        } else if (selectedSummary.hasLabelConversions) {
-                            "Keep imported data to use these $formatLabel names as matches to existing Event File labels, update route facts, ideal order, and any changed control locations. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged."
-                        } else {
-                            "Keep imported data to update route facts, ideal order, and any changed control locations. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
-                        },
-                        fontSize = 13.sp,
-                        color = Color.DarkGray
-                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(onClick = onCancel) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = { onKeep(fetchElevations, applyCategoryAssignments, createMissingCategories) }) {
+                        Text(
+                            if (selectedSummary.isDuplicateOnly) {
+                                "Continue"
+                            } else {
+                                "Keep Imported Data"
+                            }
+                        )
+                    }
                 }
             }
-        },
-        confirmButton = {
-            Button(onClick = { onKeep(fetchElevations, applyCategoryAssignments, createMissingCategories) }) {
-                Text(
-                    if (selectedSummary.isDuplicateOnly) {
-                        "Continue"
-                    } else {
-                        "Keep Imported Data"
-                    }
-                )
-            }
-        },
-        dismissButton = {
-            Button(onClick = onCancel) {
-                Text("Cancel")
-            }
         }
-    )
+    }
 }
 
 @Composable
