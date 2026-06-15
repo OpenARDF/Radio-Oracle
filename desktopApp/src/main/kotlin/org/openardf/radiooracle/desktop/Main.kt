@@ -170,6 +170,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlin.coroutines.coroutineContext
 
 private data class FixedTableColumn(val title: String, val width: Dp)
 
@@ -1599,20 +1600,26 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun startProtectedCourseElevationFetch(sourceName: String, categoryIds: List<String>, password: String) {
-            val currentProject = projectSession.currentProject ?: return
-            if (courseKmlKmzElevationJob?.isActive == true) {
-                return
+        suspend fun fetchProtectedCourseElevationsForAnalysis(
+            sourceName: String,
+            categoryIds: List<String>,
+            password: String,
+            allowInternetDownload: Boolean
+        ): Pair<CourseAnalysisElevationPreparationResult, DesktopRouteElevationResult> {
+            val currentProject = projectSession.currentProject ?: error("No Event File open.")
+            val currentJob = coroutineContext[Job]
+            if (courseKmlKmzElevationJob?.isActive == true && courseKmlKmzElevationJob != currentJob) {
+                error("Course elevation retrieval is already running.")
             }
-            projectStatusText = "Retrieving course elevations..."
+            courseKmlKmzElevationJob = currentJob
             courseKmlKmzElevationProgress = CourseKmlKmzElevationProgressUiState(
                 sourceName = sourceName,
                 categoryName = "",
                 completedPointCount = 0,
                 totalPointCount = 1
             )
-            courseKmlKmzElevationJob = appCoroutineScope.launch {
-                val result = runCatching {
+            return try {
+                val fetchResult = if (allowInternetDownload) {
                     DesktopCourseKmlImporter.fetchProtectedCourseElevations(
                         projectFile = currentProject,
                         categoryIds = categoryIds,
@@ -1626,18 +1633,177 @@ fun main(args: Array<String>) = application {
                             )
                         }
                     )
+                } else {
+                    DesktopCourseKmlImporter.fetchProtectedCourseElevations(
+                        projectFile = currentProject,
+                        categoryIds = categoryIds,
+                        password = password,
+                        elevationProvider = { null },
+                        onProgress = { progress ->
+                            courseKmlKmzElevationProgress = CourseKmlKmzElevationProgressUiState(
+                                sourceName = sourceName,
+                                categoryName = progress.categoryName,
+                                completedPointCount = progress.completedPointCount,
+                                totalPointCount = progress.totalPointCount
+                            )
+                        }
+                    )
                 }
-                result.onSuccess { (updatedProject, elevationResult) ->
+                val (updatedProject, elevationResult) = fetchResult
+                val shouldPersistResult = allowInternetDownload || elevationResult.resolvedPointCount > 0
+                val resultProject = if (shouldPersistResult) {
                     projectFile = projectSession.updateCurrentProject { updatedProject }
                     syncProtectedCourseState(updatedProject, password)
-                    projectStatusText = when {
-                        elevationResult.resolvedPointCount > 0 ->
-                            "Resolved ${elevationResult.resolvedPointCount} course elevations for ${elevationResult.categoryCount} categories (${elevationResult.cachedPointCount} cached, ${elevationResult.elevatedPointCount} downloaded). Unsaved changes."
-                        elevationResult.sampledPointCount == 0 ->
-                            "No missing course elevations found for ${elevationResult.categoryCount} categories."
-                        else ->
-                            "Course elevation retrieval completed, but no elevation values were returned for ${elevationResult.sampledPointCount} requested points."
+                    updatedProject
+                } else {
+                    currentProject
+                }
+                val statusText = when {
+                    elevationResult.resolvedPointCount > 0 ->
+                        "Resolved ${elevationResult.resolvedPointCount} course elevations for ${elevationResult.categoryCount} categories (${elevationResult.cachedPointCount} cached, ${elevationResult.elevatedPointCount} downloaded). Unsaved changes."
+                    elevationResult.sampledPointCount == 0 ->
+                        "No missing course elevations found for ${elevationResult.categoryCount} categories."
+                    allowInternetDownload ->
+                        "Course elevation retrieval completed, but no elevation values were returned for ${elevationResult.sampledPointCount} requested points."
+                    else ->
+                        "No missing course elevations were available in the local elevation cache."
+                }
+                projectStatusText = statusText
+                CourseAnalysisElevationPreparationResult(
+                    projectFile = resultProject,
+                    protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                    statusText = statusText
+                ) to elevationResult
+            } finally {
+                courseKmlKmzElevationProgress = null
+                if (courseKmlKmzElevationJob == currentJob) {
+                    courseKmlKmzElevationJob = null
+                }
+            }
+        }
+
+        suspend fun downloadCalculatedRouteElevationCacheForAnalysis(
+            summary: DesktopCourseAnalysisSummary
+        ): String {
+            val boundingBox = summary.calculatedRouteElevationBoundingBox
+                ?: error("Calculated route elevation download failed: route bounds are unavailable.")
+            val currentJob = coroutineContext[Job]
+            if (venueElevationCacheJob?.isActive == true && venueElevationCacheJob != currentJob) {
+                error("Elevation cache download is already running.")
+            }
+            val venueName = "${projectSession.currentProject?.raceData?.race?.name ?: "Course Analysis"} ${summary.categoryName} calculated route"
+            venueElevationCacheJob = currentJob
+            venueElevationCacheProgress = VenueElevationCacheProgressUiState(
+                venueName = venueName,
+                completedPointCount = 0,
+                totalPointCount = 1
+            )
+            return try {
+                val cacheSummary = DesktopVenueElevationCache.download(
+                    venueName = venueName,
+                    boundingBox = boundingBox,
+                    resolutionMeters = CourseAnalysisCalculatedRouteElevationResolutionMeters,
+                    bufferMeters = CourseAnalysisCalculatedRouteElevationBufferMeters,
+                    source = DesktopVenueElevationCacheSource.Usgs3Dep,
+                    sourceUrl = "",
+                    onProgress = { progress ->
+                        venueElevationCacheProgress = VenueElevationCacheProgressUiState(
+                            venueName = progress.venueName,
+                            completedPointCount = progress.completedPointCount,
+                            totalPointCount = progress.totalPointCount
+                        )
                     }
+                )
+                venueElevationCacheRefreshToken++
+                "Downloaded ${cacheSummary.sourceName} elevation cache for ${cacheSummary.venueName}: ${cacheSummary.resolvedPointCount}/${cacheSummary.pointCount} points at ${cacheSummary.resolutionMeters.roundToInt()} m."
+            } finally {
+                venueElevationCacheProgress = null
+                if (venueElevationCacheJob == currentJob) {
+                    venueElevationCacheJob = null
+                }
+            }
+        }
+
+        suspend fun resolveCachedCourseAnalysisElevations(categoryId: String): CourseAnalysisElevationPreparationResult? {
+            val password = protectedCoursePassword ?: return null
+            val categoryName = projectSession.currentProject
+                ?.raceData
+                ?.categories
+                ?.firstOrNull { it.category.id == categoryId }
+                ?.category
+                ?.name
+                ?: "Course Analysis"
+            val (preparation, result) = fetchProtectedCourseElevationsForAnalysis(
+                sourceName = "Course Analysis local cache",
+                categoryIds = listOf(categoryId),
+                password = password,
+                allowInternetDownload = false
+            )
+            return preparation.takeIf { result.resolvedPointCount > 0 }?.copy(
+                statusText = "Resolved ${result.resolvedPointCount} stored course elevations for $categoryName from the local elevation cache. Unsaved changes."
+            )
+        }
+
+        suspend fun downloadMissingCourseAnalysisElevations(
+            categoryId: String,
+            summary: DesktopCourseAnalysisSummary
+        ): CourseAnalysisElevationPreparationResult {
+            val password = protectedCoursePassword
+            var latestProject = projectSession.currentProject ?: error("No Event File open.")
+            var latestCourseInfo = protectedCourseInfoByCategoryId
+            val statusParts = mutableListOf<String>()
+            if (summary.hasMissingElevationData) {
+                if (password == null) {
+                    error("Unlock course order before downloading stored route elevations.")
+                }
+                val (preparation, result) = fetchProtectedCourseElevationsForAnalysis(
+                    sourceName = "Course Analysis internet download",
+                    categoryIds = listOf(categoryId),
+                    password = password,
+                    allowInternetDownload = true
+                )
+                latestProject = preparation.projectFile
+                latestCourseInfo = preparation.protectedCourseInfoByCategoryId
+                statusParts += when {
+                    result.resolvedPointCount > 0 ->
+                        "resolved ${result.resolvedPointCount} stored course elevations (${result.cachedPointCount} cached, ${result.elevatedPointCount} downloaded)"
+                    result.sampledPointCount == 0 ->
+                        "stored course elevations were already complete"
+                    else ->
+                        "stored course elevation download returned no values for ${result.sampledPointCount} requested points"
+                }
+            }
+            if (summary.hasMissingCalculatedRouteElevationData) {
+                statusParts += downloadCalculatedRouteElevationCacheForAnalysis(summary)
+            }
+            val statusText = if (statusParts.isEmpty()) {
+                "No missing elevation downloads were needed."
+            } else {
+                statusParts.joinToString(separator = "; ").replaceFirstChar { it.uppercase() }
+            }
+            projectStatusText = statusText
+            return CourseAnalysisElevationPreparationResult(
+                projectFile = latestProject,
+                protectedCourseInfoByCategoryId = latestCourseInfo,
+                statusText = statusText
+            )
+        }
+
+        fun startProtectedCourseElevationFetch(sourceName: String, categoryIds: List<String>, password: String) {
+            if (courseKmlKmzElevationJob?.isActive == true) {
+                return
+            }
+            projectStatusText = "Retrieving course elevations..."
+            courseKmlKmzElevationJob = appCoroutineScope.launch {
+                val result = runCatching {
+                    fetchProtectedCourseElevationsForAnalysis(
+                        sourceName = sourceName,
+                        categoryIds = categoryIds,
+                        password = password,
+                        allowInternetDownload = true
+                    )
+                }
+                result.onSuccess {
                 }.onFailure { error ->
                     projectStatusText = if (error is CancellationException) {
                         "Course elevation retrieval canceled. Imported route data kept without fetched elevations."
@@ -1645,8 +1811,6 @@ fun main(args: Array<String>) = application {
                         "Course elevation retrieval failed: ${error.message ?: error::class.simpleName}"
                     }
                 }
-                courseKmlKmzElevationProgress = null
-                courseKmlKmzElevationJob = null
             }
         }
 
@@ -1656,26 +1820,6 @@ fun main(args: Array<String>) = application {
                 categoryIds = review.summary.matchedCategoryIds,
                 password = review.password
             )
-        }
-
-        fun startCourseAnalysisElevationFetch(categoryId: String) {
-            val password = protectedCoursePassword ?: run {
-                projectStatusText = "Unlock course order before retrieving course elevations."
-                return
-            }
-            val categoryName = projectSession.currentProject
-                ?.raceData
-                ?.categories
-                ?.firstOrNull { it.category.id == categoryId }
-                ?.category
-                ?.name
-                ?: "Course Analysis"
-            startProtectedCourseElevationFetch(
-                sourceName = "Course Analysis",
-                categoryIds = listOf(categoryId),
-                password = password
-            )
-            projectStatusText = "Retrieving course elevations for $categoryName..."
         }
 
         fun startVenueElevationCacheDownload(
@@ -3330,7 +3474,8 @@ fun main(args: Array<String>) = application {
             recentImportReport = recentImportReport,
             recentImportCheckpoint = recentImportCheckpoint,
             recentActivityLog = recentActivityLog,
-            onRetrieveMissingCourseElevations = ::startCourseAnalysisElevationFetch,
+            onResolveCachedCourseAnalysisElevations = ::resolveCachedCourseAnalysisElevations,
+            onDownloadMissingCourseAnalysisElevations = ::downloadMissingCourseAnalysisElevations,
             onDownloadVenueElevationCache = ::startVenueElevationCacheDownload,
             onOpenVenueElevationCacheFolder = ::openVenueElevationCacheFolder,
             elevationCacheRefreshToken = venueElevationCacheRefreshToken,
@@ -4335,7 +4480,7 @@ private fun CourseKmlKmzImportReviewDialog(
                 selectedSummary.categoryAssumptions.forEach { assumption ->
                     Text(
                         text = "No category indication was found for route ${assumption.routeName}; assuming ${assumption.categoryName}.",
-                        color = DesktopPalette.Warning,
+                        color = Color(0xFFC46A00),
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -5394,6 +5539,12 @@ private data class CourseAnalysisMissingDataPrompt(
     val summary: DesktopCourseAnalysisSummary
 )
 
+private data class CourseAnalysisElevationPreparationResult(
+    val projectFile: EventProjectFile,
+    val protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    val statusText: String
+)
+
 private data class CourseKmlKmzElevationProgressUiState(
     val sourceName: String,
     val categoryName: String,
@@ -5513,7 +5664,8 @@ private fun RadioOManagerDesktopApp(
     recentImportReport: DesktopImportReport? = null,
     recentImportCheckpoint: DesktopImportCheckpoint? = null,
     recentActivityLog: List<String> = emptyList(),
-    onRetrieveMissingCourseElevations: (String) -> Unit = {},
+    onResolveCachedCourseAnalysisElevations: suspend (String) -> CourseAnalysisElevationPreparationResult? = { null },
+    onDownloadMissingCourseAnalysisElevations: suspend (String, DesktopCourseAnalysisSummary) -> CourseAnalysisElevationPreparationResult? = { _, _ -> null },
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit = { _, _, _, _, _, _ -> },
     onOpenVenueElevationCacheFolder: () -> Unit = {},
     elevationCacheRefreshToken: Int = 0,
@@ -5730,7 +5882,8 @@ private fun RadioOManagerDesktopApp(
                                     recentImportCheckpoint = recentImportCheckpoint,
                                     recentActivityLog = recentActivityLog,
                                     onRecalculateResults = onRecalculateResults,
-                                    onRetrieveMissingCourseElevations = onRetrieveMissingCourseElevations,
+                                    onResolveCachedCourseAnalysisElevations = onResolveCachedCourseAnalysisElevations,
+                                    onDownloadMissingCourseAnalysisElevations = onDownloadMissingCourseAnalysisElevations,
                                     onDownloadVenueElevationCache = onDownloadVenueElevationCache,
                                     onOpenVenueElevationCacheFolder = onOpenVenueElevationCacheFolder,
                                     elevationCacheRefreshToken = elevationCacheRefreshToken,
@@ -6431,7 +6584,8 @@ private fun SectionWorkspace(
     recentImportReport: DesktopImportReport?,
     recentImportCheckpoint: DesktopImportCheckpoint?,
     recentActivityLog: List<String>,
-    onRetrieveMissingCourseElevations: (String) -> Unit,
+    onResolveCachedCourseAnalysisElevations: suspend (String) -> CourseAnalysisElevationPreparationResult?,
+    onDownloadMissingCourseAnalysisElevations: suspend (String, DesktopCourseAnalysisSummary) -> CourseAnalysisElevationPreparationResult?,
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
     onOpenVenueElevationCacheFolder: () -> Unit,
     elevationCacheRefreshToken: Int,
@@ -6547,14 +6701,12 @@ private fun SectionWorkspace(
                 isUnlocked = isProtectedCourseOrderUnlocked,
                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
-                onRetrieveMissingElevations = onRetrieveMissingCourseElevations,
-                onDownloadVenueElevationCache = onDownloadVenueElevationCache,
+                onResolveCachedElevations = onResolveCachedCourseAnalysisElevations,
+                onDownloadMissingElevations = onDownloadMissingCourseAnalysisElevations,
                 onUnlock = onUnlockProtectedCourseOrder,
                 onUseCalculatedRoute = onUseCalculatedCourseAnalysisRoute,
                 onApplyFoxRenumberingOnly = onApplyCourseAnalysisFoxRenumberingOnly,
-                onUpdateSpeedFactor = onUpdateCourseAnalyzerSpeedFactor,
-                onImportControlsRouteKmlKmz = onImportControlsRouteKmlKmz,
-                onImportControlsRouteGpx = onImportControlsRouteGpx
+                onUpdateSpeedFactor = onUpdateCourseAnalyzerSpeedFactor
             )
         }
         if (section == DesktopSection.ElevationCache && projectFile != null) {
@@ -9420,7 +9572,7 @@ private fun CourseAnalyzerGuidance() {
         modifier = Modifier.fillMaxWidth()
     ) {
         Text(
-            text = "Use Setup > Controls > Course Analyzer > Import Controls KML/KMZ... or Import Controls GPX... to import or update control locations and category routes before running analysis.",
+            text = "Import controls/route KML/KMZ or GPX data for a category before running analysis.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -9435,6 +9587,11 @@ private fun CourseAnalyzerGuidance() {
             KmlImportInstruction("Apply Calculated Route replaces stored route and numbering data when the calculated route is available.")
             KmlImportInstruction("Apply Fox Renumbering Only applies the Section 1 wait-time renumbering when an improvement is available.")
         }
+        Text(
+            text = "Use the left-column menu buttons Import Controls KML/KMZ... and Import Controls GPX... to import controls/route KML/KMZ or GPX data for a category before running analysis.",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
     }
 }
 
@@ -9445,14 +9602,12 @@ private fun CourseAnalysisPanel(
     isUnlocked: Boolean,
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
-    onRetrieveMissingElevations: (String) -> Unit,
-    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
+    onResolveCachedElevations: suspend (String) -> CourseAnalysisElevationPreparationResult?,
+    onDownloadMissingElevations: suspend (String, DesktopCourseAnalysisSummary) -> CourseAnalysisElevationPreparationResult?,
     onUnlock: (String) -> Boolean,
     onUseCalculatedRoute: (DesktopCourseCalculatedRouteApplication) -> String,
     onApplyFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String,
-    onUpdateSpeedFactor: (Double) -> String,
-    onImportControlsRouteKmlKmz: () -> Unit,
-    onImportControlsRouteGpx: () -> Unit
+    onUpdateSpeedFactor: (Double) -> String
 ) {
     var passwordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
     if (!isUnlocked) {
@@ -9514,6 +9669,9 @@ private fun CourseAnalysisPanel(
     var applyStatusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
     var speedStatusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
     var isAnalyzing by remember(projectFile.raceData.race.id) { mutableStateOf(false) }
+    var analysisProgressMessage by remember(projectFile.raceData.race.id) {
+        mutableStateOf("Calculating route metrics, route optimization, wait times, rule checks, and report graphics.")
+    }
     val analysisScope = rememberCoroutineScope()
     var speedFactorDraft by remember(
         projectFile.raceData.race.id,
@@ -9539,12 +9697,16 @@ private fun CourseAnalysisPanel(
         pendingMissingDataResult = null
     }
 
-    suspend fun analyzeSelectedCourse(categoryId: String): DesktopCourseAnalysisSummary =
+    suspend fun analyzeSelectedCourse(
+        categoryId: String,
+        analysisProjectFile: EventProjectFile = projectFile,
+        analysisProtectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = protectedCourseInfoByCategoryId
+    ): DesktopCourseAnalysisSummary =
         withContext(Dispatchers.Default) {
             DesktopCourseAnalyzer.analyze(
-                projectFile = projectFile,
+                projectFile = analysisProjectFile,
                 categoryId = categoryId,
-                protectedCourseInfo = protectedCourseInfoByCategoryId[categoryId],
+                protectedCourseInfo = analysisProtectedCourseInfoByCategoryId[categoryId],
                 protectedIdealOrderText = protectedIdealOrderByCategoryId[categoryId],
                 eventFileName = eventFilePath?.fileName?.toString(),
                 elevationLookup = DesktopVenueElevationCache::elevationMeters,
@@ -9552,21 +9714,32 @@ private fun CourseAnalysisPanel(
             )
         }
 
-    fun downloadCalculatedRouteElevations(summary: DesktopCourseAnalysisSummary) {
-        val boundingBox = summary.calculatedRouteElevationBoundingBox ?: run {
-            exportStatusText = "Calculated route elevation download failed: route bounds are unavailable."
-            return
+    suspend fun analyzeWithLocalCachePreparation(categoryId: String): DesktopCourseAnalysisSummary {
+        var summary = analyzeSelectedCourse(categoryId)
+        if (summary.hasMissingElevationData) {
+            analysisProgressMessage = "Checking the local elevation cache before asking for an internet download."
+            val preparation = onResolveCachedElevations(categoryId)
+            if (preparation != null) {
+                exportStatusText = preparation.statusText
+                summary = analyzeSelectedCourse(
+                    categoryId = categoryId,
+                    analysisProjectFile = preparation.projectFile,
+                    analysisProtectedCourseInfoByCategoryId = preparation.protectedCourseInfoByCategoryId
+                )
+            }
         }
-        onDownloadVenueElevationCache(
-            "${projectFile.raceData.race.name} ${summary.categoryName} calculated route",
-            boundingBox,
-            CourseAnalysisCalculatedRouteElevationResolutionMeters,
-            CourseAnalysisCalculatedRouteElevationBufferMeters,
-            DesktopVenueElevationCacheSource.Usgs3Dep,
-            ""
-        )
-        analysisResult = null
-        pendingMissingDataResult = null
+        return summary
+    }
+
+    fun acceptAnalysisSummary(categoryId: String, summary: DesktopCourseAnalysisSummary) {
+        if (summary.missingElements.isEmpty()) {
+            analysisResult = summary
+        } else {
+            pendingMissingDataResult = CourseAnalysisMissingDataPrompt(
+                categoryId = categoryId,
+                summary = summary
+            )
+        }
     }
 
     Column(
@@ -9574,14 +9747,6 @@ private fun CourseAnalysisPanel(
         modifier = Modifier.fillMaxWidth()
     ) {
         CourseAnalyzerGuidance()
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onImportControlsRouteKmlKmz) {
-                ButtonLabel("Import Controls KML/KMZ...")
-            }
-            Button(onClick = onImportControlsRouteGpx) {
-                ButtonLabel("Import Controls GPX...")
-            }
-        }
         if (categories.isEmpty()) {
             Text(
                 text = "Import controls/route KML/KMZ or GPX data for a category before running course analysis.",
@@ -9645,15 +9810,9 @@ private fun CourseAnalysisPanel(
                                 // begins; Foxoring hybrid search can otherwise make the UI appear
                                 // unresponsive on slower machines.
                                 delay(100)
-                                val summary = analyzeSelectedCourse(categoryId)
-                                if (summary.missingElements.isEmpty()) {
-                                    analysisResult = summary
-                                } else {
-                                    pendingMissingDataResult = CourseAnalysisMissingDataPrompt(
-                                        categoryId = categoryId,
-                                        summary = summary
-                                    )
-                                }
+                                analysisProgressMessage = "Calculating route metrics, route optimization, wait times, rule checks, and report graphics."
+                                val summary = analyzeWithLocalCachePreparation(categoryId)
+                                acceptAnalysisSummary(categoryId, summary)
                             } catch (error: Throwable) {
                                 exportStatusText = "Analysis failed: ${error.message ?: error::class.simpleName}"
                                 DesktopDebugLog.error("CourseAnalysis", "Analysis failed: ${error.message ?: error::class.simpleName}")
@@ -9732,7 +9891,7 @@ private fun CourseAnalysisPanel(
         if (isAnalyzing) {
             IndeterminateProgressDialog(
                 title = "Analyzing course",
-                message = "Calculating route metrics, route optimization, wait times, rule checks, and report graphics."
+                message = analysisProgressMessage
             )
         }
         applyStatusText?.let { statusText ->
@@ -9770,11 +9929,13 @@ private fun CourseAnalysisPanel(
 
     pendingMissingDataResult?.let { prompt ->
         val summary = prompt.summary
+        val canDownloadMissingElevationData = summary.hasMissingElevationData || summary.hasMissingCalculatedRouteElevationData
+        var downloadBeforeAnalyzing by remember(prompt) { mutableStateOf(canDownloadMissingElevationData) }
         AlertDialog(
             onDismissRequest = { pendingMissingDataResult = null },
             title = { Text("Course analysis data is incomplete") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "The analyzer can continue, but the result may be partial.",
                         color = DesktopPalette.Black,
@@ -9787,39 +9948,82 @@ private fun CourseAnalysisPanel(
                             fontSize = 13.sp
                         )
                     }
+                    if (canDownloadMissingElevationData) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = downloadBeforeAnalyzing,
+                                onCheckedChange = { downloadBeforeAnalyzing = it }
+                            )
+                            Text(
+                                text = "Download missing elevation data from the internet before analyzing",
+                                color = DesktopPalette.Black,
+                                fontSize = 13.sp
+                            )
+                        }
+                        Text(
+                            text = "The app has already used any local elevation cache coverage it could find. Downloading uses internet elevation data for missing stored-route points and calculated-route cache coverage.",
+                            color = DesktopPalette.Disconnected,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        analysisResult = summary
                         pendingMissingDataResult = null
+                        if (!downloadBeforeAnalyzing || !canDownloadMissingElevationData) {
+                            analysisResult = summary
+                            return@Button
+                        }
+                        if (isAnalyzing) {
+                            return@Button
+                        }
+                        isAnalyzing = true
+                        analysisProgressMessage = "Downloading missing elevation data from the internet."
+                        analysisScope.launch {
+                            try {
+                                val preparation = onDownloadMissingElevations(prompt.categoryId, summary)
+                                if (preparation != null) {
+                                    exportStatusText = preparation.statusText
+                                }
+                                analysisProgressMessage = "Re-running analysis with the latest available elevation data."
+                                val refreshedSummary = analyzeSelectedCourse(
+                                    categoryId = prompt.categoryId,
+                                    analysisProjectFile = preparation?.projectFile ?: projectFile,
+                                    analysisProtectedCourseInfoByCategoryId = preparation?.protectedCourseInfoByCategoryId
+                                        ?: protectedCourseInfoByCategoryId
+                                )
+                                acceptAnalysisSummary(prompt.categoryId, refreshedSummary)
+                            } catch (error: Throwable) {
+                                exportStatusText = if (error is CancellationException) {
+                                    "Elevation download canceled. Analysis was not run."
+                                } else {
+                                    "Elevation download failed: ${error.message ?: error::class.simpleName}"
+                                }
+                                DesktopDebugLog.error("CourseAnalysis", "Elevation preparation failed: ${error.message ?: error::class.simpleName}")
+                            } finally {
+                                isAnalyzing = false
+                                analysisProgressMessage =
+                                    "Calculating route metrics, route optimization, wait times, rule checks, and report graphics."
+                            }
+                        }
                     }
                 ) {
-                    ButtonLabel("Proceed")
+                    ButtonLabel(
+                        if (downloadBeforeAnalyzing && canDownloadMissingElevationData) {
+                            "Download Missing Elevations"
+                        } else {
+                            "Analyze with Missing Elevations"
+                        }
+                    )
                 }
             },
             dismissButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (summary.hasMissingElevationData) {
-                        Button(
-                            onClick = {
-                                pendingMissingDataResult = null
-                                onRetrieveMissingElevations(prompt.categoryId)
-                            }
-                        ) {
-                            ButtonLabel("Retrieve Elevations")
-                        }
-                    }
-                    if (summary.hasMissingCalculatedRouteElevationData) {
-                        Button(
-                            onClick = {
-                                downloadCalculatedRouteElevations(summary)
-                            }
-                        ) {
-                            ButtonLabel("Download Calculated Route Elevations")
-                        }
-                    }
                     Button(onClick = { pendingMissingDataResult = null }) {
                         ButtonLabel("Cancel")
                     }
