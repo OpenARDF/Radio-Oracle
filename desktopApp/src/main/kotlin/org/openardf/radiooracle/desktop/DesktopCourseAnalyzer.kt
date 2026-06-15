@@ -237,12 +237,14 @@ enum class DesktopCourseMetricStatus {
 /**
  * Builds the desktop Course Analyzer report from stored course geometry and category controls.
  *
- * The analyzer intentionally separates the course-setter-supplied route from the independently
- * calculated candidate. Both use the same measurement policy: effective length when complete
- * elevation data is available, otherwise horizontal distance. Classic-style wait-time checks replay
- * the timed route to identify whether a different fox numbering can reduce waiting. A Classic fox
- * stop is modeled as arrival near the fox, wait until transmission if needed, then a fixed
- * 30-second find-and-punch allowance before departure to the next leg.
+ * The analyzer intentionally separates the imported route from the ideal route determined from
+ * the course points. The ideal route is the route from start to finish through the required
+ * controls that has the shortest effective length; it is not chosen by preference. Both imported
+ * and calculated routes use the same measurement policy: effective length when complete elevation
+ * data is available, otherwise horizontal distance. Classic-style wait-time checks replay the timed
+ * route to identify whether a different fox numbering can reduce waiting. A Classic fox stop is
+ * modeled as arrival near the fox, wait until transmission if needed, then a fixed 30-second
+ * find-and-punch allowance before departure to the next leg.
  *
  * Elevation Cache resolution is local sample-grid spacing, not a guarantee of source DEM
  * resolution. USGS 3DEP is a multi-resolution source; a dense cache may still sample coarser
@@ -250,11 +252,12 @@ enum class DesktopCourseMetricStatus {
  *
  * The analyzer does not currently import map passability. Out-of-bounds areas, dense vegetation,
  * lakes, uncrossable watercourses, fences, cliffs, and other navigation barriers are not modeled,
- * so route order and wait-time estimates remain advisory.
+ * so map data can nullify a calculated route and wait-time estimates remain advisory.
  *
  * Estimated times use an elite-competitor baseline pace by race format, category age/gender speed
  * adjustments, and the event-wide compensation factor, then convert each leg to effective length
- * when elevation is available. The model does not currently account for fatigue across the course.
+ * when elevation is available. Fatigue is not part of ideal-route selection; it can affect ideal
+ * time, but the current estimate does not apply a separate accumulated-fatigue adjustment.
  */
 object DesktopCourseAnalyzer {
     private const val USA_RULES_DOCUMENT_LABEL = "USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026"
@@ -278,7 +281,7 @@ object DesktopCourseAnalyzer {
     private const val MAP_KNOWLEDGE_LIMITATION_NOTE =
         "The analyzer does not currently know map passability, so out-of-bounds areas, dense vegetation, water, uncrossable features, and other impediments can make the true on-foot route and wait timing differ from this estimate."
     private const val SPEED_MODEL_NOTE =
-        "Estimated times use an elite-competitor baseline pace by race format, then apply a category age/gender multiplier and the event-wide Course Analyzer speed factor. When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not modeled."
+        "Estimated times use an elite-competitor baseline pace by race format, then apply a category age/gender multiplier and the event-wide Course Analyzer speed factor. When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not part of ideal-route selection; it can affect ideal time, but this estimate does not apply a separate accumulated-fatigue adjustment."
     private const val CLASSIC_WAIT_TIMING_NOTE =
         "For Classic-style fox controls, timing assumes the competitor waits if the fox is off the air, then spends 30 seconds finding and punching before departing for the next leg; that delay affects later arrival phases."
     private val CATEGORY_SPEED_FACTOR_TABLE = DesktopCourseSpeedFactors.provisionalCategoryTable
@@ -624,7 +627,7 @@ object DesktopCourseAnalyzer {
             if (calculatedRouteMatchesStored) {
                 DesktopCourseAnalysisSection(
                     title = "Section 2: Calculated ideal route",
-                    explanation = "The analyzer calculated an ideal route from the start, finish, controls, beacon, and spectator if assigned. The calculated ideal route matches the imported route, so no separate calculated-route leg, wait, elevation-profile, or map analysis is repeated in this section. Section 3 still summarizes the route comparison.",
+                    explanation = "The analyzer determined the ideal route from the start, finish, controls, beacon, and spectator if assigned. The calculated ideal route matches the imported route, so no separate calculated-route leg, wait, elevation-profile, or map analysis is repeated in this section. Section 3 still summarizes the route comparison.",
                     routeOrder = listOf("Calculated ideal route matches imported route"),
                     routeOrderLabel = "Result",
                     summaryOnly = true,
@@ -1054,10 +1057,11 @@ object DesktopCourseAnalyzer {
     }
 
     /**
-     * Section 2 constructs an independent route candidate from the known course points. Scored
-     * controls and an optional spectator are permuted exhaustively, the beacon is kept as the last
-     * radio point before the finish, and the lowest comparison metric wins. Complete point elevations
-     * switch that metric to effective length; otherwise straight-line horizontal distance is used.
+     * Section 2 determines the ideal route from the known course points when the route search is
+     * exhaustive. Scored controls and an optional spectator are permuted, the beacon is kept as the
+     * last radio point before the finish, and the shortest effective length defines the ideal route.
+     * Complete point elevations use effective length; otherwise straight-line horizontal distance is
+     * used as a fallback comparison metric.
      */
     private fun calculatedRouteAnalysis(
         start: CourseGeoPoint?,
@@ -1118,12 +1122,21 @@ object DesktopCourseAnalyzer {
         }
         val assignmentText = assignmentDifferenceText(providedAssignments, calculatedAssignments)
         val routeCalculationText = routeCalculationNote?.let { " $it" }.orEmpty()
+        val isNonExhaustiveSearch = routeCalculationNote?.contains("non-exhaustive", ignoreCase = true) == true
         val opening = if (routeCalculationNote == null) {
-            "This section calculates an independent ideal route by comparing $routeCount possible orders of the foxes and any spectator point, with the beacon last before the finish."
+            "This section determines the ideal route by comparing all $routeCount possible orders of the foxes and any spectator point, with the beacon last before the finish."
         } else {
-            "This section calculates an independent ideal route using the format-specific route search noted below; $routeCount route candidate order(s) were evaluated or generated."
+            "This section determines a route using the format-specific route search noted below; $routeCount route candidate order(s) were evaluated or generated."
         }
-        return "$opening The shortest candidate by $measurement is selected.$routeCalculationText $elevationText $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE Large differences in estimated ideal time can come from fox wait-time optimization as well as route length; compare the movement, wait, and find/punch timing breakdown rows. $MAP_KNOWLEDGE_LIMITATION_NOTE $assignmentText"
+        val routeDefinitionText = when {
+            routeCalculationNote == null ->
+                "The route with the shortest $measurement is by definition the ideal route for the course; an imported route that is longer is not ideal."
+            isNonExhaustiveSearch ->
+                "Because this search is non-exhaustive, the calculated route is advisory rather than a definitive ideal route."
+            else ->
+                "Within the stated format-specific route model, the route with the shortest $measurement is the ideal route; an imported route that is longer is not ideal."
+        }
+        return "$opening $routeDefinitionText$routeCalculationText $elevationText $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE Large differences in estimated ideal time can come from fox wait-time optimization as well as route length; compare the movement, wait, and find/punch timing breakdown rows. $MAP_KNOWLEDGE_LIMITATION_NOTE $assignmentText"
     }
 
     private fun assignmentDifferenceText(
