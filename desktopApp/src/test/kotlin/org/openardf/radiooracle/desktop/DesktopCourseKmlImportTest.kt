@@ -634,6 +634,8 @@ class DesktopCourseKmlImportTest {
             "course-key"
         )
         assertEquals(0, summary.routeElevationPointCount)
+        assertTrue(summary.missingElevationPointCount > 0)
+        assertTrue(summary.hasMissingStoredElevations)
         assertTrue(protectedCourseInfo.route.all { it.elevationMeters == null })
         assertTrue(protectedCourseInfo.courseObjects.all { it.elevationMeters == null })
         assertEquals(null, protectedCourseInfo.climbMeters)

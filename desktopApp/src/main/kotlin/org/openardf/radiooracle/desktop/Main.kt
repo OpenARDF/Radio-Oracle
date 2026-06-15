@@ -1629,7 +1629,9 @@ fun main(args: Array<String>) = application {
                                 sourceName = sourceName,
                                 categoryName = progress.categoryName,
                                 completedPointCount = progress.completedPointCount,
-                                totalPointCount = progress.totalPointCount
+                                totalPointCount = progress.totalPointCount,
+                                downloadedPointCount = progress.downloadedPointCount,
+                                cachedPointCount = progress.cachedPointCount
                             )
                         }
                     )
@@ -1644,7 +1646,9 @@ fun main(args: Array<String>) = application {
                                 sourceName = sourceName,
                                 categoryName = progress.categoryName,
                                 completedPointCount = progress.completedPointCount,
-                                totalPointCount = progress.totalPointCount
+                                totalPointCount = progress.totalPointCount,
+                                downloadedPointCount = progress.downloadedPointCount,
+                                cachedPointCount = progress.cachedPointCount
                             )
                         }
                     )
@@ -2099,34 +2103,64 @@ fun main(args: Array<String>) = application {
             if (isImportingCourseKmlKmz) {
                 return
             }
+            suspend fun buildPreview(baseProject: EventProjectFile): CourseKmlKmzImportPreview =
+                withContext(Dispatchers.IO) {
+                    val preview = DesktopCourseKmlImporter.importProtectedCourseInfo(
+                        path = path,
+                        projectFile = baseProject,
+                        password = password,
+                        categoryOverrideId = categoryOverrideId
+                    )
+                    val createdPreview = preview.second.missingCategoryNames
+                        .takeIf { it.isNotEmpty() }
+                        ?.let {
+                            DesktopCourseKmlImporter.importProtectedCourseInfo(
+                                path = path,
+                                projectFile = baseProject,
+                                password = password,
+                                categoryOverrideId = categoryOverrideId,
+                                createMissingCategories = true
+                            )
+                        }
+                    CourseKmlKmzImportPreview(
+                        updatedProject = preview.first,
+                        summary = preview.second,
+                        createdMissingCategoryProject = createdPreview?.first,
+                        createdMissingCategorySummary = createdPreview?.second
+                    )
+                }
+
+            suspend fun resolveDuplicateElevationsFromLocalCache(summary: DesktopCourseKmlImportSummary): EventProjectFile? {
+                if (!summary.hasDuplicateMissingElevations) {
+                    return null
+                }
+                val projectBeforeRepair = projectSession.currentProject ?: return null
+                val (updatedProject, elevationResult) = DesktopCourseKmlImporter.fetchProtectedCourseElevations(
+                    projectFile = projectBeforeRepair,
+                    categoryIds = summary.matchedCategoryIds,
+                    password = password,
+                    elevationProvider = { null }
+                )
+                if (elevationResult.resolvedPointCount == 0) {
+                    return null
+                }
+                projectFile = projectSession.updateCurrentProject { updatedProject }
+                syncProtectedCourseState(updatedProject, password)
+                projectStatusText =
+                    "Resolved ${elevationResult.resolvedPointCount} stored course elevations from the local elevation cache. Unsaved changes."
+                return updatedProject
+            }
+
             isImportingCourseKmlKmz = true
             projectStatusText = "Importing controls/route $formatLabel..."
             appCoroutineScope.launch {
                 val result = runCatching {
-                    withContext(Dispatchers.IO) {
-                        val preview = DesktopCourseKmlImporter.importProtectedCourseInfo(
-                            path = path,
-                            projectFile = currentProject,
-                            password = password,
-                            categoryOverrideId = categoryOverrideId
-                        )
-                        val createdPreview = preview.second.missingCategoryNames
-                            .takeIf { it.isNotEmpty() }
-                            ?.let {
-                                DesktopCourseKmlImporter.importProtectedCourseInfo(
-                                    path = path,
-                                    projectFile = currentProject,
-                                    password = password,
-                                    categoryOverrideId = categoryOverrideId,
-                                    createMissingCategories = true
-                                )
-                            }
-                        CourseKmlKmzImportPreview(
-                            updatedProject = preview.first,
-                            summary = preview.second,
-                            createdMissingCategoryProject = createdPreview?.first,
-                            createdMissingCategorySummary = createdPreview?.second
-                        )
+                    val initialPreview = buildPreview(currentProject)
+                    val repairedProject = resolveDuplicateElevationsFromLocalCache(initialPreview.summary)
+                    if (repairedProject == null) {
+                        initialPreview
+                    } else {
+                        buildPreview(repairedProject)
                     }
                 }
                 result.onSuccess { preview ->
@@ -4444,9 +4478,17 @@ private fun CourseKmlKmzImportReviewDialog(
     val categoriesText = selectedSummary.matchedCategoryNames
         .ifEmpty { listOf("None") }
         .joinToString()
-    val canFetchElevations = selectedSummary.matchedCategoryIds.isNotEmpty()
-    var fetchElevations by remember(review.sourceName, selectedSummary.sourceSha256, selectedSummary.isDuplicateOnly) {
-        mutableStateOf(canFetchElevations && selectedSummary.isDuplicateOnly && selectedSummary.hasDuplicateMissingElevations)
+    val missingStoredElevationPointCount = selectedSummary.missingElevationPointCount +
+        selectedSummary.duplicateMissingElevationPointCount
+    val canFetchElevations = selectedSummary.matchedCategoryIds.isNotEmpty() &&
+        selectedSummary.hasMissingStoredElevations
+    var fetchElevations by remember(
+        review.sourceName,
+        selectedSummary.sourceSha256,
+        selectedSummary.isDuplicateOnly,
+        missingStoredElevationPointCount
+    ) {
+        mutableStateOf(canFetchElevations)
     }
     var applyCategoryAssignments by remember(review.sourceName, summary.sourceSha256) {
         mutableStateOf(false)
@@ -4548,10 +4590,10 @@ private fun CourseKmlKmzImportReviewDialog(
                 }
                 if (canFetchElevations) {
                     Text(
-                        if (selectedSummary.duplicateMissingElevationPointCount > 0) {
-                            "Stored route elevations missing: ${selectedSummary.duplicateMissingElevationPointCount} course points"
+                        if (selectedSummary.isDuplicateOnly) {
+                            "Stored route/control elevations missing: $missingStoredElevationPointCount course points"
                         } else {
-                            "Imported route elevations: not stored yet"
+                            "Imported route/control elevations missing: $missingStoredElevationPointCount course points"
                         }
                     )
                     Row(
@@ -4564,12 +4606,17 @@ private fun CourseKmlKmzImportReviewDialog(
                         )
                         Text(
                             if (selectedSummary.isDuplicateOnly) {
-                                "Fetch missing elevations for the stored route"
+                                "Download missing elevations for the stored route"
                             } else {
-                                "Fetch missing elevations for the imported route after keeping it"
+                                "Download missing elevations for the imported route after keeping it"
                             }
                         )
                     }
+                    Text(
+                        "The progress dialog will show how many elevation points need download and how many have completed.",
+                        fontSize = 12.sp,
+                        color = Color.DarkGray
+                    )
                 }
                 Text(
                     text = if (selectedSummary.isDuplicateOnly) {
@@ -4861,12 +4908,13 @@ private fun CourseKmlKmzElevationProgressDialog(
                     progress = fraction,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text("$completed of $total course points")
+                Text("$total elevation points to download or resolve")
+                Text("Downloaded ${progress.downloadedPointCount} of $total; local cache ${progress.cachedPointCount}; completed $completed of $total")
                 Text(
                     text = if (progress.cancelRequested) {
                         "Canceling after the current elevation request finishes..."
                     } else {
-                        "Samples are fetched along route legs at the elevation data resolution."
+                        "The progress bar advances as each missing stored route/control elevation point is resolved or attempted."
                     },
                     fontSize = 13.sp,
                     color = Color.DarkGray
@@ -4903,12 +4951,12 @@ private fun VenueElevationCacheProgressDialog(
                     progress = fraction,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text("$completed of $total elevation grid points")
+                Text("$completed of $total elevation grid points downloaded")
                 Text(
                     text = if (progress.cancelRequested) {
                         "Canceling after the current elevation request finishes..."
                     } else {
-                        "The elevation grid will be reused for route and control elevations inside its bounding box."
+                        "The progress bar reflects calculated-route elevation grid points downloaded for reuse inside this bounding box."
                     },
                     fontSize = 13.sp,
                     color = Color.DarkGray
@@ -5550,6 +5598,8 @@ private data class CourseKmlKmzElevationProgressUiState(
     val categoryName: String,
     val completedPointCount: Int,
     val totalPointCount: Int,
+    val downloadedPointCount: Int = 0,
+    val cachedPointCount: Int = 0,
     val cancelRequested: Boolean = false
 )
 
@@ -9734,11 +9784,13 @@ private fun CourseAnalysisPanel(
     fun acceptAnalysisSummary(categoryId: String, summary: DesktopCourseAnalysisSummary) {
         if (summary.missingElements.isEmpty()) {
             analysisResult = summary
-        } else {
+        } else if (shouldPromptForCourseAnalysisMissingData(summary)) {
             pendingMissingDataResult = CourseAnalysisMissingDataPrompt(
                 categoryId = categoryId,
                 summary = summary
             )
+        } else {
+            analysisResult = summary
         }
     }
 
@@ -9929,7 +9981,7 @@ private fun CourseAnalysisPanel(
 
     pendingMissingDataResult?.let { prompt ->
         val summary = prompt.summary
-        val canDownloadMissingElevationData = summary.hasMissingElevationData || summary.hasMissingCalculatedRouteElevationData
+        val canDownloadMissingElevationData = shouldOfferCalculatedRouteElevationDownload(summary)
         var downloadBeforeAnalyzing by remember(prompt) { mutableStateOf(canDownloadMissingElevationData) }
         AlertDialog(
             onDismissRequest = { pendingMissingDataResult = null },
@@ -9964,7 +10016,7 @@ private fun CourseAnalysisPanel(
                             )
                         }
                         Text(
-                            text = "The app has already used any local elevation cache coverage it could find. Downloading uses internet elevation data for missing stored-route points and calculated-route cache coverage.",
+                            text = "The saved route already has elevation data. Downloading uses internet elevation data to fill the local calculated-route cache before comparison.",
                             color = DesktopPalette.Disconnected,
                             fontSize = 12.sp
                         )
@@ -10039,6 +10091,19 @@ private fun calculatedRouteApplyDisabledReason(analysisResult: DesktopCourseAnal
         analysisResult.calculatedRouteApplication == null -> "No different calculated route is available to apply."
         else -> null
     }
+
+private fun shouldPromptForCourseAnalysisMissingData(summary: DesktopCourseAnalysisSummary): Boolean =
+    shouldOfferCalculatedRouteElevationDownload(summary) ||
+        summary.missingElements.any { missing -> !missing.isCourseAnalysisElevationOnlyWarning() }
+
+private fun shouldOfferCalculatedRouteElevationDownload(summary: DesktopCourseAnalysisSummary): Boolean =
+    summary.hasMissingCalculatedRouteElevationData && !summary.hasMissingElevationData
+
+private fun String.isCourseAnalysisElevationOnlyWarning(): Boolean =
+    this == "Route elevation samples are missing or incomplete." ||
+        this == "Course object elevations are missing or incomplete." ||
+        this == "Control location elevations are missing or incomplete." ||
+        startsWith("Calculated route elevation samples are missing from the local elevation cache")
 
 private fun foxRenumberingApplyDisabledReason(analysisResult: DesktopCourseAnalysisSummary?): String? =
     when {

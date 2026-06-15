@@ -66,6 +66,7 @@ data class DesktopCourseKmlImportSummary(
     val matchedCategoryIds: List<String>,
     val matchedCategoryNames: List<String>,
     val routeElevationPointCount: Int,
+    val missingElevationPointCount: Int,
     val importedCategoryCount: Int,
     val categoryAssignmentUpdates: List<DesktopCourseKmlCategoryAssignmentUpdate>,
     val changedControlLocationCount: Int,
@@ -90,6 +91,9 @@ data class DesktopCourseKmlImportSummary(
 
     val hasDuplicateMissingElevations: Boolean
         get() = duplicateMissingElevationPointCount > 0
+
+    val hasMissingStoredElevations: Boolean
+        get() = missingElevationPointCount > 0 || duplicateMissingElevationPointCount > 0
 
     val isControlLocationNoOp: Boolean
         get() = matchedCategoryCount == 0 &&
@@ -129,7 +133,9 @@ data class DesktopCourseKmlCategoryAssignmentUpdate(
 data class DesktopRouteElevationProgress(
     val completedPointCount: Int,
     val totalPointCount: Int,
-    val categoryName: String
+    val categoryName: String,
+    val downloadedPointCount: Int = 0,
+    val cachedPointCount: Int = 0
 )
 
 data class DesktopRouteElevationResult(
@@ -244,6 +250,7 @@ object DesktopCourseKmlImporter {
         var duplicateCategoryCount = 0
         var duplicateMissingElevationPointCount = 0
         var routeElevationPointCount = 0
+        var missingElevationPointCount = 0
         val matchedCategoryIds = mutableListOf<String>()
         val matchedCategoryNames = mutableListOf<String>()
         val categoryAssignmentUpdates = mutableListOf<DesktopCourseKmlCategoryAssignmentUpdate>()
@@ -366,6 +373,7 @@ object DesktopCourseKmlImporter {
                     controlPoints = controlPoints,
                     courseObjects = courseObjects
                 )
+                missingElevationPointCount += missingElevationCount(protectedCourseInfo)
                 val encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(protectedCourseInfo, password)
                 val encryptedIdealOrder = idealOrder.takeIf { it.isNotBlank() }?.let {
                     DesktopProtectedCourseOrder.encrypt(it, password)
@@ -400,6 +408,7 @@ object DesktopCourseKmlImporter {
             matchedCategoryIds = matchedCategoryIds,
             matchedCategoryNames = matchedCategoryNames,
             routeElevationPointCount = routeElevationPointCount,
+            missingElevationPointCount = missingElevationPointCount,
             importedCategoryCount = importedCategoryCount,
             categoryAssignmentUpdates = categoryAssignmentUpdates,
             changedControlLocationCount = controlLocationUpdates.size,
@@ -420,7 +429,7 @@ object DesktopCourseKmlImporter {
         )
         DesktopDebugLog.info(
             "CourseKml",
-            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} assignedCategoryControls=${summary.assignedCategoryControlCount} changedControlLocations=${summary.changedControlLocationCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} labelConversions=${summary.labelConversions.size} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
+            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} assignedCategoryControls=${summary.assignedCategoryControlCount} changedControlLocations=${summary.changedControlLocationCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} labelConversions=${summary.labelConversions.size} missingElevationPoints=${summary.missingElevationPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
         )
         return updatedProject to summary
     }
@@ -608,13 +617,19 @@ object DesktopCourseKmlImporter {
             return elevationProvider(point) to false
         }
 
-        onProgress(
-            DesktopRouteElevationProgress(
-                completedPointCount = 0,
-                totalPointCount = totalPointCount,
-                categoryName = categories.first().categoryName
+        fun emitProgress(categoryName: String) {
+            onProgress(
+                DesktopRouteElevationProgress(
+                    completedPointCount = completedPointCount,
+                    totalPointCount = totalPointCount,
+                    categoryName = categoryName,
+                    downloadedPointCount = elevatedPointCount,
+                    cachedPointCount = cachedPointCount
+                )
             )
-        )
+        }
+
+        emitProgress(categories.first().categoryName)
 
         categories.forEach { target ->
             val elevatedRoute = target.sampledRoute.map { point ->
@@ -632,13 +647,7 @@ object DesktopCourseKmlImporter {
                         elevatedPointCount++
                     }
                 }
-                onProgress(
-                    DesktopRouteElevationProgress(
-                        completedPointCount = completedPointCount,
-                        totalPointCount = totalPointCount,
-                        categoryName = target.categoryName
-                    )
-                )
+                emitProgress(target.categoryName)
                 point.copy(elevationMeters = elevation)
             }
             val elevatedCourseObjects = target.courseObjects.map { courseObject ->
@@ -662,13 +671,7 @@ object DesktopCourseKmlImporter {
                         elevatedPointCount++
                     }
                 }
-                onProgress(
-                    DesktopRouteElevationProgress(
-                        completedPointCount = completedPointCount,
-                        totalPointCount = totalPointCount,
-                        categoryName = target.categoryName
-                    )
-                )
+                emitProgress(target.categoryName)
                 courseObject.copy(elevationMeters = resolved.first)
             }
             val routeFetched = elevatedRoute.count { point ->
@@ -691,13 +694,7 @@ object DesktopCourseKmlImporter {
                     if (control.elevationMeters == null) {
                         completedPointCount++
                         resolvedPointCount++
-                        onProgress(
-                            DesktopRouteElevationProgress(
-                                completedPointCount = completedPointCount,
-                                totalPointCount = totalPointCount,
-                                categoryName = target.categoryName
-                            )
-                        )
+                        emitProgress(target.categoryName)
                     }
                     return@map control.copy(elevationMeters = objectElevation)
                 }
@@ -721,13 +718,7 @@ object DesktopCourseKmlImporter {
                         elevatedPointCount++
                     }
                 }
-                onProgress(
-                    DesktopRouteElevationProgress(
-                        completedPointCount = completedPointCount,
-                        totalPointCount = totalPointCount,
-                        categoryName = target.categoryName
-                    )
-                )
+                emitProgress(target.categoryName)
                 control.copy(elevationMeters = elevation)
             }
             val controlFetched = elevatedControlPoints.count { control ->
@@ -1315,7 +1306,8 @@ object DesktopCourseKmlImporter {
 
     private fun missingElevationCount(courseInfo: ProtectedCourseInfo): Int =
         routeWithMissingElevationSamples(courseInfo).count { it.elevationMeters == null } +
-            courseObjectsForCourseInfo(courseInfo).count { it.elevationMeters == null }
+            courseObjectsForCourseInfo(courseInfo).count { it.elevationMeters == null } +
+            courseInfo.controlPoints.count { it.elevationMeters == null }
 
     private fun ProtectedCourseInfo.hasImportedLocationRecords(): Boolean =
         controlPoints.isNotEmpty() && courseObjects.isNotEmpty()
