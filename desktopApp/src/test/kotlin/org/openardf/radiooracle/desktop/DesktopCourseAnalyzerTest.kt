@@ -142,12 +142,17 @@ class DesktopCourseAnalyzerTest {
             }
         )
         val reportText = DesktopCourseAnalysisExports.reportText(summary)
+        assertEquals("Apply Fox Renumbering Only", summary.courseRecommendation.actionLabel)
+        assertTrue(reportText.contains("Stored\n"))
+        assertTrue(reportText.contains("Calculated\n"))
         assertTrue(reportText.contains("Order comparison: Stored and calculated routes match"))
         assertFalse(reportText.contains("Calculated ideal route (calculated fox numbering):"))
         assertFalse(reportText.contains("Calculated straight-line length:"))
-        assertFalse(reportText.contains("Effective length: 5.00 km\n"))
         assertTrue(reportText.contains("Effective length: 5.00 km (required 9-12 km)"))
-        assertTrue(reportText.contains("Assumed running speed:"))
+        assertTrue(reportText.contains("Course Recommendation"))
+        assertTrue(summary.courseRecommendation.paragraph.contains("Radio-Oracle recommends Apply Fox Renumbering Only"))
+        assertTrue(reportText.contains("Radio-Oracle recommends"))
+        assertTrue(reportText.contains("Assumed running speed equals"))
         assertTrue(reportText.contains("Speed model factors"))
         assertTrue(reportText.contains("Provisional built-in category assumptions"))
         assertTrue(reportText.contains("not a rules-derived or event-calibrated table"))
@@ -464,7 +469,11 @@ class DesktopCourseAnalyzerTest {
         assertTrue(reportText.contains("Section 2: Calculated ideal route"))
         assertTrue(reportText.contains("Route order (stored fox numbering):"))
         assertTrue(reportText.contains("Route order (calculated fox numbering):"))
-        assertTrue(reportText.contains("Calculated ideal route (calculated fox numbering):"))
+        assertTrue(reportText.contains("Stored\n"))
+        assertTrue(reportText.contains("Calculated\n"))
+        assertTrue(reportText.contains("Ideal route: S -> 33 -> 32 -> 31 -> B"))
+        assertTrue(reportText.contains("Course Recommendation"))
+        assertTrue(reportText.contains("Radio-Oracle recommends"))
         assertTrue(reportText.contains("Movement time:"))
         assertTrue(reportText.contains("(waits "))
 
@@ -478,6 +487,7 @@ class DesktopCourseAnalyzerTest {
         assertTrue(pdfText.contains("Event file: analysis-event.rom.json"))
         assertTrue(pdfText.contains("Analyzed: Mon, Jun 15, 2026 9:30 AM"))
         assertTrue(pdfText.contains("/Helvetica-Bold"))
+        assertTrue(pdfText.contains("Course Recommendation"))
         assertTrue(pdfText.contains("Elevation Profile Graphics"))
         assertTrue(pdfText.contains("2D Route Depiction Graphics"))
         assertPdfInfoCanRead(pdfPath)
@@ -530,6 +540,8 @@ class DesktopCourseAnalyzerTest {
         )
         assertTrue(summary.summaryExplanation.contains("may reduce stored-route wait time"))
         assertTrue(summary.summaryExplanation.contains("see Section 1 for the assignment details"))
+        assertEquals("Apply Calculated Route", summary.courseRecommendation.actionLabel)
+        assertTrue(summary.courseRecommendation.paragraph.contains("Radio-Oracle recommends Apply Calculated Route"))
         assertTrue(DesktopCourseAnalysisExports.reportText(summary).contains("Renumbered wait times"))
         val metricLabels = summary.metrics.map { it.label }
         assertEquals(
@@ -542,6 +554,44 @@ class DesktopCourseAnalyzerTest {
         )
         assertTrue(summary.metrics.first { it.label == "Total ideal-route wait time with renumbering" }.value.contains(":"))
         assertTrue(summary.metrics.first { it.label == "Calculated ideal finish time with renumbering" }.value.contains(" / "))
+    }
+
+    @Test
+    fun recommendsShorterCalculatedRouteEvenWhenStoredRouteBetterFitsCategoryLength() {
+        val baseInfo = protectedInfo(foxCount = 3)
+        val protectedInfo = baseInfo.copy(
+            lengthMeters = 9_000,
+            climbMeters = 0,
+            route = baseInfo.route.map { it.copy(elevationMeters = 100.0) },
+            controlPoints = baseInfo.controlPoints.map { it.copy(elevationMeters = 100.0) },
+            courseObjects = baseInfo.courseObjects.map { it.copy(elevationMeters = 100.0) }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 3),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "33 32 31 Beacon"
+        )
+
+        val storedLength = requireNotNull(summary.providedRouteSection?.comparisonLengthMeters)
+        val calculatedLength = requireNotNull(summary.calculatedRouteSection?.comparisonLengthMeters)
+        assertTrue(calculatedLength < storedLength)
+        assertTrue(
+            summary.metrics.any {
+                it.label == "Stored route course length" &&
+                    it.status == DesktopCourseMetricStatus.Good
+            }
+        )
+        assertTrue(
+            summary.metrics.any {
+                it.label == "Calculated route course length" &&
+                    it.status == DesktopCourseMetricStatus.Warning
+            }
+        )
+        assertEquals("Apply Calculated Route", summary.courseRecommendation.actionLabel)
+        assertTrue(summary.courseRecommendation.paragraph.contains("shorter than the saved route"))
+        assertTrue(summary.courseRecommendation.paragraph.contains("even if the saved route more closely matches category length guidance"))
     }
 
     @Test

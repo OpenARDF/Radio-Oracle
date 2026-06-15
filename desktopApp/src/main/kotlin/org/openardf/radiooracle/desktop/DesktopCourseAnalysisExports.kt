@@ -10,6 +10,8 @@ import kotlin.math.roundToInt
 
 /** Plain-text and PDF exports for the desktop Course Analyzer report. */
 object DesktopCourseAnalysisExports {
+    private const val PdfDividerLine = "----------------------------------------"
+
     fun exportPdfAndKml(path: Path, result: DesktopCourseAnalysisSummary): DesktopCourseAnalysisExportPaths {
         exportPdf(path, result)
         val kmlPath = kmlPathForPdf(path)
@@ -95,35 +97,26 @@ object DesktopCourseAnalysisExports {
         appendLine("Section 3: Summary")
         appendWrapped(result.summaryExplanation)
         appendLine()
+        result.summaryGroups.forEachIndexed { index, group ->
+            if (index > 0) {
+                appendLine(PdfDividerLine)
+            }
+            appendLine(group.title)
+            group.rows.forEach { row ->
+                appendLine("${row.label}: ${row.value}")
+            }
+            appendLine()
+        }
+        appendLine(PdfDividerLine)
+        appendLine("Course Recommendation")
+        appendWrapped(result.courseRecommendation.paragraph)
+        appendLine()
         appendLine("Speed model factors")
         appendWrapped(speedFactorExplanation(result.speedModel))
         result.categorySpeedFactors.forEach { factor ->
             appendLine("${factor.categoryCodes.joinToString("/")}: x${twoDecimalText(factor.multiplier)}")
         }
         appendLine("Unmatched categories: x1.00")
-        appendLine()
-        appendLine("Routes compared: ${result.calculatedRouteCount}")
-        if (result.idealOrderMatches == true) {
-            appendLine("Stored ideal route: ${result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
-            appendLine("Order comparison: Stored and calculated routes match")
-        } else {
-            appendLine("Calculated ideal route (calculated fox numbering): ${result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
-            appendLine("Stored ideal route: ${result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
-            appendLine(
-                "Order comparison: " + when (result.idealOrderMatches) {
-                    false -> "Differs"
-                    null -> "Unknown"
-                    true -> "Agrees"
-                }
-            )
-            appendLine("Calculated straight-line length: ${kilometersText(result.calculatedStraightLineMeters)}")
-        }
-        appendLine("Stored straight-line length: ${kilometersText(result.providedStraightLineMeters)}")
-        appendLine("Stored route length: ${kilometersText(result.routeLengthMeters)}")
-        appendLine("Climb: ${climbText(result.climbMeters)}")
-        appendLine("Effective length: ${summaryMetricValue(result, "Effective length", kilometersText(result.effectiveLengthMeters))}")
-        appendLine("Assumed running speed: ${speedModelText(result.speedModel)}")
-        appendLine("Estimated ideal time: ${secondsText(result.estimatedIdealSeconds)}")
         appendLine()
         appendLine("Goodness metrics")
         result.metrics.forEach { metric ->
@@ -429,6 +422,7 @@ object DesktopCourseAnalysisExports {
                     text = line,
                     style = when {
                         index == 0 -> PdfTextStyle.Title
+                        line == PdfDividerLine -> PdfTextStyle.Body
                         line.startsWith("Section ") || line == "Partial analysis" -> PdfTextStyle.SectionHeading
                         line in PdfSubheadingLabels -> PdfTextStyle.Subheading
                         else -> PdfTextStyle.Body
@@ -444,6 +438,9 @@ object DesktopCourseAnalysisExports {
         "Optimized wait times",
         "Wait-time renumbering check",
         "Renumbered wait times",
+        "Stored",
+        "Calculated",
+        "Course Recommendation",
         "Speed model factors",
         "Goodness metrics",
         "Elevation profiles",
@@ -493,6 +490,13 @@ object DesktopCourseAnalysisExports {
             lines.forEach { line ->
                 if (line.text.isBlank()) {
                     y -= 8.0
+                    return@forEach
+                }
+                if (line.text == PdfDividerLine) {
+                    appendLine("0.75 0.75 0.75 RG")
+                    appendLine("0.5 w")
+                    appendLine("54 ${pdfNumber(y - 3.0)} m 558 ${pdfNumber(y - 3.0)} l S")
+                    y -= line.style.lineHeight
                     return@forEach
                 }
                 appendLine("BT")

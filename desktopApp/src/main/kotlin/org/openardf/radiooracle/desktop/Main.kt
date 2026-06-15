@@ -37,6 +37,7 @@ import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Checkbox
+import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.LinearProgressIndicator
@@ -5761,6 +5762,12 @@ private fun RadioOManagerDesktopApp(
         var pendingNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
         var pendingDirtySubmenuNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
         var bypassedDisabledNavigation by remember { mutableStateOf<BypassedDisabledNavigation?>(null) }
+        var courseAnalysisResult by remember(projectFile?.raceData?.race?.id, protectedCourseInfoByCategoryId) {
+            mutableStateOf<DesktopCourseAnalysisSummary?>(null)
+        }
+        var courseAnalysisApplyStatusText by remember(projectFile?.raceData?.race?.id) {
+            mutableStateOf<String?>(null)
+        }
         val navigationReadiness = DesktopNavigationReadiness.from(projectFile)
         val activeBypassedDisabledNavigation = bypassedDisabledNavigation
             ?.activeFor(navState, navigationReadiness)
@@ -5847,6 +5854,21 @@ private fun RadioOManagerDesktopApp(
                             navigationReadiness = navigationReadiness,
                             isNavActionEnabled = isNavActionEnabled,
                             disabledNavActionReason = disabledNavActionReason,
+                            courseAnalysisResult = courseAnalysisResult.takeIf {
+                                navState.selectedSection == DesktopSection.CourseAnalysis
+                            },
+                            isCourseAnalysisBusy = false,
+                            onApplyCalculatedRoute = {
+                                val application = courseAnalysisResult?.calculatedRouteApplication ?: return@NavigationRail
+                                courseAnalysisApplyStatusText = onUseCalculatedCourseAnalysisRoute(application)
+                                courseAnalysisResult = null
+                            },
+                            onApplyFoxRenumberingOnly = {
+                                val renumbering = courseAnalysisResult?.waitRenumbering?.takeIf { it.improvesWait }
+                                    ?: return@NavigationRail
+                                courseAnalysisApplyStatusText = onApplyCourseAnalysisFoxRenumberingOnly(renumbering)
+                                courseAnalysisResult = null
+                            },
                             onBack = { requestNavigation(DesktopPendingNavigation.Back) },
                             onSaveEvent = { onNavAction(DesktopNavAction.SaveEventFile) },
                             onItemSelected = { item, bypassedDisabled ->
@@ -5928,6 +5950,10 @@ private fun RadioOManagerDesktopApp(
                                     isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
                                     protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                                     protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                                    courseAnalysisResult = courseAnalysisResult,
+                                    onCourseAnalysisResultChange = { courseAnalysisResult = it },
+                                    courseAnalysisApplyStatusText = courseAnalysisApplyStatusText,
+                                    onCourseAnalysisApplyStatusTextChange = { courseAnalysisApplyStatusText = it },
                                     recentImportReport = recentImportReport,
                                     recentImportCheckpoint = recentImportCheckpoint,
                                     recentActivityLog = recentActivityLog,
@@ -6276,6 +6302,10 @@ private fun NavigationRail(
     navigationReadiness: DesktopNavigationReadiness,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
     disabledNavActionReason: (DesktopNavAction) -> String?,
+    courseAnalysisResult: DesktopCourseAnalysisSummary?,
+    isCourseAnalysisBusy: Boolean,
+    onApplyCalculatedRoute: () -> Unit,
+    onApplyFoxRenumberingOnly: () -> Unit,
     onBack: () -> Unit,
     onSaveEvent: () -> Unit,
     onItemSelected: (DesktopNavItem, Boolean) -> Unit
@@ -6346,6 +6376,12 @@ private fun NavigationRail(
                 .padding(top = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            CourseAnalysisNavigationActions(
+                result = courseAnalysisResult,
+                isBusy = isCourseAnalysisBusy,
+                onApplyCalculatedRoute = onApplyCalculatedRoute,
+                onApplyFoxRenumberingOnly = onApplyFoxRenumberingOnly
+            )
             DisabledReasonTooltip(
                 reason = disabledNavActionReason(DesktopNavAction.SaveEventFile),
                 placement = DisabledReasonTooltipPlacement.RightOfCursor
@@ -6391,6 +6427,62 @@ private fun NavigationRail(
             }
         }
     }
+}
+
+@Composable
+private fun CourseAnalysisNavigationActions(
+    result: DesktopCourseAnalysisSummary?,
+    isBusy: Boolean,
+    onApplyCalculatedRoute: () -> Unit,
+    onApplyFoxRenumberingOnly: () -> Unit
+) {
+    if (result == null) {
+        return
+    }
+    Divider(color = DesktopPalette.LightGrey, modifier = Modifier.padding(bottom = 2.dp))
+    DisabledReasonTooltip(
+        reason = if (isBusy) null else calculatedRouteApplyDisabledReason(result),
+        placement = DisabledReasonTooltipPlacement.RightOfCursor
+    ) {
+        Button(
+            onClick = onApplyCalculatedRoute,
+            enabled = result.calculatedRouteApplication != null && !isBusy,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 34.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = "Apply Calculated Route",
+                fontSize = 13.sp,
+                lineHeight = 15.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+    DisabledReasonTooltip(
+        reason = if (isBusy) null else foxRenumberingApplyDisabledReason(result),
+        placement = DisabledReasonTooltipPlacement.RightOfCursor
+    ) {
+        Button(
+            onClick = onApplyFoxRenumberingOnly,
+            enabled = result.waitRenumbering?.improvesWait == true && !isBusy,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 34.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = "Apply Fox Renumbering Only",
+                fontSize = 13.sp,
+                lineHeight = 15.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+    Divider(color = DesktopPalette.LightGrey, modifier = Modifier.padding(top = 2.dp))
 }
 
 /** Keeps the primary workflow groups visible as the desktop return-to-top path. */
@@ -6631,6 +6723,10 @@ private fun SectionWorkspace(
     isProtectedCourseOrderUnlocked: Boolean,
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    courseAnalysisResult: DesktopCourseAnalysisSummary?,
+    onCourseAnalysisResultChange: (DesktopCourseAnalysisSummary?) -> Unit,
+    courseAnalysisApplyStatusText: String?,
+    onCourseAnalysisApplyStatusTextChange: (String?) -> Unit,
     recentImportReport: DesktopImportReport?,
     recentImportCheckpoint: DesktopImportCheckpoint?,
     recentActivityLog: List<String>,
@@ -6751,11 +6847,13 @@ private fun SectionWorkspace(
                 isUnlocked = isProtectedCourseOrderUnlocked,
                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                analysisResult = courseAnalysisResult,
+                onAnalysisResultChange = onCourseAnalysisResultChange,
+                applyStatusText = courseAnalysisApplyStatusText,
+                onApplyStatusTextChange = onCourseAnalysisApplyStatusTextChange,
                 onResolveCachedElevations = onResolveCachedCourseAnalysisElevations,
                 onDownloadMissingElevations = onDownloadMissingCourseAnalysisElevations,
                 onUnlock = onUnlockProtectedCourseOrder,
-                onUseCalculatedRoute = onUseCalculatedCourseAnalysisRoute,
-                onApplyFoxRenumberingOnly = onApplyCourseAnalysisFoxRenumberingOnly,
                 onUpdateSpeedFactor = onUpdateCourseAnalyzerSpeedFactor
             )
         }
@@ -9652,11 +9750,13 @@ private fun CourseAnalysisPanel(
     isUnlocked: Boolean,
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    analysisResult: DesktopCourseAnalysisSummary?,
+    onAnalysisResultChange: (DesktopCourseAnalysisSummary?) -> Unit,
+    applyStatusText: String?,
+    onApplyStatusTextChange: (String?) -> Unit,
     onResolveCachedElevations: suspend (String) -> CourseAnalysisElevationPreparationResult?,
     onDownloadMissingElevations: suspend (String, DesktopCourseAnalysisSummary) -> CourseAnalysisElevationPreparationResult?,
     onUnlock: (String) -> Boolean,
-    onUseCalculatedRoute: (DesktopCourseCalculatedRouteApplication) -> String,
-    onApplyFoxRenumberingOnly: (DesktopCourseWaitRenumbering) -> String,
     onUpdateSpeedFactor: (Double) -> String
 ) {
     var passwordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
@@ -9709,14 +9809,10 @@ private fun CourseAnalysisPanel(
     val effectiveSelectedCategoryId = selectedCategoryId
         ?.takeIf { selectedId -> categories.any { it.category.id == selectedId } }
         ?: categories.firstOrNull()?.category?.id
-    var analysisResult by remember(projectFile.raceData.race.id, protectedCourseInfoByCategoryId) {
-        mutableStateOf<DesktopCourseAnalysisSummary?>(null)
-    }
     var pendingMissingDataResult by remember(projectFile.raceData.race.id, protectedCourseInfoByCategoryId) {
         mutableStateOf<CourseAnalysisMissingDataPrompt?>(null)
     }
     var exportStatusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
-    var applyStatusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
     var speedStatusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
     var isAnalyzing by remember(projectFile.raceData.race.id) { mutableStateOf(false) }
     var analysisProgressMessage by remember(projectFile.raceData.race.id) {
@@ -9743,7 +9839,7 @@ private fun CourseAnalysisPanel(
             return
         }
         speedStatusText = onUpdateSpeedFactor(factor)
-        analysisResult = null
+        onAnalysisResultChange(null)
         pendingMissingDataResult = null
     }
 
@@ -9783,14 +9879,14 @@ private fun CourseAnalysisPanel(
 
     fun acceptAnalysisSummary(categoryId: String, summary: DesktopCourseAnalysisSummary) {
         if (summary.missingElements.isEmpty()) {
-            analysisResult = summary
+            onAnalysisResultChange(summary)
         } else if (shouldPromptForCourseAnalysisMissingData(summary)) {
             pendingMissingDataResult = CourseAnalysisMissingDataPrompt(
                 categoryId = categoryId,
                 summary = summary
             )
         } else {
-            analysisResult = summary
+            onAnalysisResultChange(summary)
         }
     }
 
@@ -9816,10 +9912,10 @@ private fun CourseAnalysisPanel(
                 categories = categories.map { it.category.id to it.category.name },
                 onCategorySelected = {
                     selectedCategoryId = it
-                    analysisResult = null
+                    onAnalysisResultChange(null)
                     pendingMissingDataResult = null
                     exportStatusText = null
-                    applyStatusText = null
+                    onApplyStatusTextChange(null)
                 },
                 modifier = Modifier.width(280.dp)
             )
@@ -9854,7 +9950,8 @@ private fun CourseAnalysisPanel(
                         if (isAnalyzing) return@Button
                         isAnalyzing = true
                         exportStatusText = null
-                        applyStatusText = null
+                        onApplyStatusTextChange(null)
+                        onAnalysisResultChange(null)
                         pendingMissingDataResult = null
                         analysisScope.launch {
                             try {
@@ -9908,35 +10005,6 @@ private fun CourseAnalysisPanel(
                     enabled = analysisResult != null && !isAnalyzing
                 ) {
                     ButtonLabel("Export Analysis...")
-                }
-            }
-        }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            DisabledReasonTooltip(if (isAnalyzing) null else calculatedRouteApplyDisabledReason(analysisResult)) {
-                Button(
-                    onClick = {
-                        val application = analysisResult?.calculatedRouteApplication ?: return@Button
-                        applyStatusText = onUseCalculatedRoute(application)
-                        analysisResult = null
-                    },
-                    enabled = analysisResult?.calculatedRouteApplication != null && !isAnalyzing
-                ) {
-                    ButtonLabel("Apply Calculated Route")
-                }
-            }
-            DisabledReasonTooltip(if (isAnalyzing) null else foxRenumberingApplyDisabledReason(analysisResult)) {
-                Button(
-                    onClick = {
-                        val renumbering = analysisResult?.waitRenumbering?.takeIf { it.improvesWait } ?: return@Button
-                        applyStatusText = onApplyFoxRenumberingOnly(renumbering)
-                        analysisResult = null
-                    },
-                    enabled = analysisResult?.waitRenumbering?.improvesWait == true && !isAnalyzing
-                ) {
-                    ButtonLabel("Apply Fox Renumbering Only")
                 }
             }
         }
@@ -10028,7 +10096,7 @@ private fun CourseAnalysisPanel(
                     onClick = {
                         pendingMissingDataResult = null
                         if (!downloadBeforeAnalyzing || !canDownloadMissingElevationData) {
-                            analysisResult = summary
+                            onAnalysisResultChange(summary)
                             return@Button
                         }
                         if (isAnalyzing) {
@@ -10283,11 +10351,43 @@ private fun CourseAnalysisSummarySection(result: DesktopCourseAnalysisSummary) {
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
+        result.summaryGroups.forEachIndexed { index, group ->
+            if (index > 0) {
+                Divider(color = DesktopPalette.LightGrey, modifier = Modifier.padding(vertical = 4.dp))
+            }
+            CourseAnalysisSummaryGroupView(group)
+        }
+        Divider(color = DesktopPalette.LightGrey, modifier = Modifier.padding(vertical = 4.dp))
+        Text(
+            text = "Course Recommendation",
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = result.courseRecommendation.paragraph,
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
         CourseAnalysisSpeedFactorDetails(result)
-        CourseAnalysisDetailRows(result)
         CourseAnalysisMetricRows(result.metrics)
         CourseAnalysisProfileComparison(result.profileComparison, result.elevationCacheNotes)
         CourseAnalysisRouteMaps(result.routeMaps)
+    }
+}
+
+@Composable
+private fun CourseAnalysisSummaryGroupView(group: DesktopCourseAnalysisSummaryGroup) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = group.title,
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        group.rows.forEach { row ->
+            CourseAnalysisRow(row.label, row.value)
+        }
     }
 }
 

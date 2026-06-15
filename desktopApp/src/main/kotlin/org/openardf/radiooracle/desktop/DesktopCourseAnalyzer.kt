@@ -33,6 +33,8 @@ data class DesktopCourseAnalysisSummary(
     val providedRouteSection: DesktopCourseAnalysisSection?,
     val calculatedRouteSection: DesktopCourseAnalysisSection?,
     val summaryExplanation: String,
+    val summaryGroups: List<DesktopCourseAnalysisSummaryGroup>,
+    val courseRecommendation: DesktopCourseRecommendation,
     val profileComparison: List<DesktopCourseElevationProfileSummary>,
     val elevationCacheNotes: List<String>,
     val routeMaps: List<DesktopCourseRouteMap>,
@@ -59,6 +61,21 @@ data class DesktopCourseAnalysisSummary(
     val waitRows: List<DesktopCourseWaitRow>,
     val waitRenumbering: DesktopCourseWaitRenumbering?,
     val metrics: List<DesktopCourseGoodnessMetric>
+)
+
+data class DesktopCourseAnalysisSummaryGroup(
+    val title: String,
+    val rows: List<DesktopCourseAnalysisSummaryRow>
+)
+
+data class DesktopCourseAnalysisSummaryRow(
+    val label: String,
+    val value: String
+)
+
+data class DesktopCourseRecommendation(
+    val actionLabel: String,
+    val paragraph: String
 )
 
 data class DesktopCourseAnalysisSection(
@@ -786,6 +803,23 @@ object DesktopCourseAnalyzer {
         } else {
             emptyList()
         }
+        val summaryGroups = summaryGroups(
+            providedSection = providedSection,
+            calculatedSection = calculatedSection,
+            calculatedRouteCount = calculatedRoute?.routeCount ?: 0,
+            calculatedIdealOrder = calculatedRouteLabels(calculatedRoute?.controls.orEmpty(), calculatedLabelOverrides),
+            providedIdealOrder = eventControlRouteLabels(providedControls),
+            idealOrderMatches = idealOrderMatches,
+            waitRenumbering = waitRenumbering,
+            effectiveLengthMetric = metrics.firstOrNull { it.label == "Effective length" }?.value
+        )
+        val courseRecommendation = courseRecommendation(
+            calculatedRouteApplication = calculatedRouteApplication,
+            providedSection = providedSection,
+            calculatedSection = calculatedSection,
+            idealOrderMatches = idealOrderMatches,
+            waitRenumbering = waitRenumbering
+        )
 
         return DesktopCourseAnalysisSummary(
             eventName = projectFile.raceData.race.name,
@@ -800,6 +834,8 @@ object DesktopCourseAnalyzer {
             providedRouteSection = providedSection,
             calculatedRouteSection = calculatedSection,
             summaryExplanation = summaryExplanation(providedSection, calculatedSection, waitRenumbering, speedModel),
+            summaryGroups = summaryGroups,
+            courseRecommendation = courseRecommendation,
             profileComparison = profileComparison,
             elevationCacheNotes = elevationCacheNotes(profileRoutePoints),
             routeMaps = routeMaps,
@@ -1115,6 +1151,135 @@ object DesktopCourseAnalyzer {
         }
         return baseText + speedText + waitImprovementText
     }
+
+    private fun summaryGroups(
+        providedSection: DesktopCourseAnalysisSection?,
+        calculatedSection: DesktopCourseAnalysisSection?,
+        calculatedRouteCount: Int,
+        calculatedIdealOrder: List<String>,
+        providedIdealOrder: List<String>,
+        idealOrderMatches: Boolean?,
+        waitRenumbering: DesktopCourseWaitRenumbering?,
+        effectiveLengthMetric: String?
+    ): List<DesktopCourseAnalysisSummaryGroup> =
+        listOf(
+            DesktopCourseAnalysisSummaryGroup(
+                title = "Stored",
+                rows = buildList {
+                    if (providedSection == null) {
+                        add(DesktopCourseAnalysisSummaryRow("Stored route", "Unavailable"))
+                    } else {
+                        add(DesktopCourseAnalysisSummaryRow("Ideal route", providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }))
+                        add(DesktopCourseAnalysisSummaryRow(providedSection.comparisonLengthLabel, summaryLengthText(providedSection.comparisonLengthMeters)))
+                        add(DesktopCourseAnalysisSummaryRow("Horizontal length", summaryLengthText(providedSection.straightLineMeters)))
+                        add(DesktopCourseAnalysisSummaryRow("Route length", summaryLengthText(providedSection.routeLengthMeters)))
+                        add(DesktopCourseAnalysisSummaryRow("Climb", summaryClimbText(providedSection.climbMeters)))
+                        add(DesktopCourseAnalysisSummaryRow("Effective length", effectiveLengthMetric ?: summaryLengthText(providedSection.effectiveLengthMeters)))
+                        add(DesktopCourseAnalysisSummaryRow("Estimated ideal time", summaryDurationText(providedSection.estimatedIdealSeconds)))
+                        val currentWaitSeconds = providedSection.waitRows.sumOf { it.waitSeconds }
+                        if (providedSection.waitRows.isNotEmpty()) {
+                            add(DesktopCourseAnalysisSummaryRow("Stored numbering wait", summaryDurationText(currentWaitSeconds)))
+                        }
+                        waitRenumbering?.takeIf { it.improvesWait }?.let { renumbering ->
+                            add(DesktopCourseAnalysisSummaryRow("Best renumbered wait", summaryDurationText(renumbering.bestTotalWaitSeconds)))
+                            add(
+                                DesktopCourseAnalysisSummaryRow(
+                                    "Renumbering improvement",
+                                    summaryDurationText(
+                                        (renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)
+                                            .coerceAtLeast(0)
+                                    )
+                                )
+                            )
+                        }
+                    }
+                }
+            ),
+            DesktopCourseAnalysisSummaryGroup(
+                title = "Calculated",
+                rows = buildList {
+                    add(DesktopCourseAnalysisSummaryRow("Routes compared", calculatedRouteCount.toString()))
+                    if (calculatedSection == null) {
+                        add(DesktopCourseAnalysisSummaryRow("Calculated route", "Unavailable"))
+                    } else {
+                        add(
+                            DesktopCourseAnalysisSummaryRow(
+                                "Order comparison",
+                                when (idealOrderMatches) {
+                                    true -> "Stored and calculated routes match"
+                                    false -> "Calculated route differs from stored route"
+                                    null -> "Unknown"
+                                }
+                            )
+                        )
+                        if (calculatedSection.summaryOnly) {
+                            add(DesktopCourseAnalysisSummaryRow("Result", calculatedSection.routeOrder.joinToString(" -> ").ifBlank { "Unknown" }))
+                        } else {
+                            add(DesktopCourseAnalysisSummaryRow("Ideal route", calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }))
+                            add(DesktopCourseAnalysisSummaryRow(calculatedSection.comparisonLengthLabel, summaryLengthText(calculatedSection.comparisonLengthMeters)))
+                            add(DesktopCourseAnalysisSummaryRow("Horizontal length", summaryLengthText(calculatedSection.straightLineMeters)))
+                            add(DesktopCourseAnalysisSummaryRow("Route length", summaryLengthText(calculatedSection.routeLengthMeters)))
+                            add(DesktopCourseAnalysisSummaryRow("Climb", summaryClimbText(calculatedSection.climbMeters)))
+                            add(DesktopCourseAnalysisSummaryRow("Effective length", summaryLengthText(calculatedSection.effectiveLengthMeters)))
+                            add(DesktopCourseAnalysisSummaryRow("Estimated ideal time", summaryDurationText(calculatedSection.estimatedIdealSeconds)))
+                            val calculatedWaitSeconds = calculatedSection.waitRows.sumOf { it.waitSeconds }
+                            if (calculatedSection.waitRows.isNotEmpty()) {
+                                add(DesktopCourseAnalysisSummaryRow("Optimized wait", summaryDurationText(calculatedWaitSeconds)))
+                            }
+                        }
+                    }
+                }
+            )
+        )
+
+    private fun courseRecommendation(
+        calculatedRouteApplication: DesktopCourseCalculatedRouteApplication?,
+        providedSection: DesktopCourseAnalysisSection?,
+        calculatedSection: DesktopCourseAnalysisSection?,
+        idealOrderMatches: Boolean?,
+        waitRenumbering: DesktopCourseWaitRenumbering?
+    ): DesktopCourseRecommendation {
+        if (calculatedRouteApplication != null) {
+            val storedLength = providedSection?.comparisonLengthMeters
+            val calculatedLength = calculatedSection?.comparisonLengthMeters
+            val shorterByMeters = if (storedLength != null && calculatedLength != null && calculatedLength < storedLength) {
+                storedLength - calculatedLength
+            } else {
+                null
+            }
+            val reason = if (shorterByMeters != null) {
+                "The calculated ideal route is ${summaryLengthText(shorterByMeters)} shorter than the saved route, so it is the better solution even if the saved route more closely matches category length guidance."
+            } else {
+                "The calculated solution differs from the saved route under the current model, so applying it will replace the stored route and numbering with the calculated candidate."
+            }
+            return DesktopCourseRecommendation(
+                actionLabel = "Apply Calculated Route",
+                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply Calculated Route. $reason"
+            )
+        }
+        val renumbering = waitRenumbering?.takeIf { it.improvesWait }
+        if (idealOrderMatches == true && renumbering != null) {
+            val improvementSeconds = (renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)
+                .coerceAtLeast(0)
+            return DesktopCourseRecommendation(
+                actionLabel = "Apply Fox Renumbering Only",
+                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply Fox Renumbering Only. The calculated route matches the saved route, but renumbering the foxes reduces modeled wait time by ${compactDurationText(improvementSeconds)}."
+            )
+        }
+        return DesktopCourseRecommendation(
+            actionLabel = "Use the saved data as is",
+            paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Use the saved data as is. The current analysis did not identify a calculated route or fox-renumbering change that should be applied."
+        )
+    }
+
+    private fun summaryLengthText(value: Int?): String =
+        value?.let { "${twoDecimals(it / 1000.0)} km" } ?: "Unknown"
+
+    private fun summaryClimbText(value: Int?): String =
+        value?.let { "$it m" } ?: "Unknown"
+
+    private fun summaryDurationText(value: Int?): String =
+        value?.let(::compactDurationText) ?: "Unknown"
 
     private fun calculatedRouteCandidate(
         raceType: RaceType,
