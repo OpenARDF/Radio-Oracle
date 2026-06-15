@@ -142,12 +142,25 @@ class DesktopCourseAnalyzerTest {
             }
         )
         assertTrue(summary.goodnessMetrics.sharedMetrics.any { it.label == "Calculated route agrees with imported route order" })
-        assertTrue(summary.goodnessMetrics.sharedMetrics.any {
+        assertFalse(summary.goodnessMetrics.sharedMetrics.any { it.label.contains("shortest possible route") })
+        val importedGoodnessMetrics = summary.goodnessMetrics.groups.single { it.title == "Imported" }.metrics
+        val calculatedGoodnessMetrics = summary.goodnessMetrics.groups.single { it.title == "Calculated" }.metrics
+        assertTrue(importedGoodnessMetrics.any {
             it.label == "Imported route is shortest possible route" &&
                 it.status == DesktopCourseMetricStatus.Good
         })
-        assertTrue(summary.goodnessMetrics.groups.single { it.title == "Imported" }.metrics.any { it.label == "Effective length" })
-        assertTrue(summary.goodnessMetrics.groups.single { it.title == "Imported" }.metrics.any { it.label == "Total ideal-route wait time" })
+        assertTrue(calculatedGoodnessMetrics.any {
+            it.label == "Calculated route is shortest possible route" &&
+                it.status == DesktopCourseMetricStatus.Good
+        })
+        assertFalse(calculatedGoodnessMetrics.any { it.label == "Calculated route agrees with imported route order" })
+        assertTrue(importedGoodnessMetrics.any { it.label == "Climb percent of route length" })
+        assertTrue(importedGoodnessMetrics.any { it.label == "Effective length" })
+        assertTrue(importedGoodnessMetrics.any { it.label == "Total ideal-route wait time" })
+        assertEquals(
+            importedGoodnessMetrics.map(::routeMetricPairingLabel),
+            calculatedGoodnessMetrics.map(::routeMetricPairingLabel)
+        )
         val reportText = DesktopCourseAnalysisExports.reportText(summary)
         assertEquals("Apply Fox Renumbering Only", summary.courseRecommendation.actionLabel)
         assertTrue(reportText.contains("Imported\n"))
@@ -597,11 +610,22 @@ class DesktopCourseAnalyzerTest {
                     it.status == DesktopCourseMetricStatus.Warning
             }
         )
-        assertTrue(summary.goodnessMetrics.sharedMetrics.any {
+        val importedGoodnessMetrics = summary.goodnessMetrics.groups.single { it.title == "Imported" }.metrics
+        val calculatedGoodnessMetrics = summary.goodnessMetrics.groups.single { it.title == "Calculated" }.metrics
+        assertTrue(importedGoodnessMetrics.any {
             it.label == "Imported route is shortest possible route" &&
                 it.status == DesktopCourseMetricStatus.Warning &&
                 it.value.contains("No:")
         })
+        assertTrue(calculatedGoodnessMetrics.any {
+            it.label == "Calculated route is shortest possible route" &&
+                it.status == DesktopCourseMetricStatus.Good &&
+                it.value.contains("Yes:")
+        })
+        assertEquals(
+            importedGoodnessMetrics.map(::routeMetricPairingLabel),
+            calculatedGoodnessMetrics.map(::routeMetricPairingLabel)
+        )
         assertEquals("Apply Calculated Route", summary.courseRecommendation.actionLabel)
         assertTrue(summary.courseRecommendation.paragraph.contains("shorter than the imported route"))
         assertTrue(summary.courseRecommendation.paragraph.contains("even if the imported route more closely matches category length guidance"))
@@ -1392,6 +1416,13 @@ class DesktopCourseAnalyzerTest {
         assertEquals(output, 0, exitCode)
         assertTrue(output, output.contains("Pages:"))
     }
+
+    private fun routeMetricPairingLabel(metric: DesktopCourseGoodnessMetric): String =
+        metric.label
+            .replace("Imported route is", "Route is")
+            .replace("Calculated route is", "Route is")
+            .replace("Imported route ", "Route ")
+            .replace("Calculated route ", "Route ")
 
     private companion object {
         const val RACE_ID = "race"

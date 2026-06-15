@@ -832,7 +832,13 @@ object DesktopCourseAnalyzer {
             idealOrderMatches = idealOrderMatches,
             waitRenumbering = waitRenumbering
         )
-        val goodnessMetrics = goodnessMetrics(metrics, calculatedSection)
+        val goodnessMetrics = goodnessMetrics(
+            metrics = metrics,
+            providedSection = providedSection,
+            calculatedSection = calculatedSection,
+            raceType = raceType,
+            categoryName = category.name
+        )
 
         return DesktopCourseAnalysisSummary(
             eventName = projectFile.raceData.race.name,
@@ -1287,23 +1293,52 @@ object DesktopCourseAnalyzer {
 
     private fun goodnessMetrics(
         metrics: List<DesktopCourseGoodnessMetric>,
-        calculatedSection: DesktopCourseAnalysisSection?
+        providedSection: DesktopCourseAnalysisSection?,
+        calculatedSection: DesktopCourseAnalysisSection?,
+        raceType: RaceType,
+        categoryName: String
     ): DesktopCourseGoodnessMetrics {
-        val calculatedRouteHasDetails = calculatedSection != null && !calculatedSection.summaryOnly
         val sharedMetrics = metrics.filter { it.isSharedGoodnessMetric() }
-        val importedMetrics = metrics.filter { metric ->
-            metric.isImportedGoodnessMetric() ||
-                metric.label == "Climb percent of route length" && !calculatedRouteHasDetails ||
-                metric.label == "Effective length" ||
-                metric.label == "Total ideal-route wait time" ||
-                metric.label == "Total ideal-route wait time with renumbering" ||
-                metric.label == "Challenge vs target winning time" ||
-                metric.label == "Imported route finish time with renumbering"
-        }
-        val calculatedMetrics = metrics.filter { metric ->
-            metric.isCalculatedGoodnessMetric() ||
-                (calculatedRouteHasDetails && metric.label == "Climb percent of route length")
-        }
+        val comparisonSection = calculatedSection
+            ?.takeUnless { it.summaryOnly }
+            ?: providedSection
+        val targetSeconds = targetSecondsFor(raceType)
+        val appliesClimbLimit = raceType == RaceType.CLASSIC || raceType == RaceType.SHORT
+        val lengthRequirement = categoryRequirement(categoryName, raceType)
+            ?.takeIf { raceType == RaceType.CLASSIC || raceType == RaceType.SHORT || raceType == RaceType.FOXORING }
+        val importedMetrics = providedSection?.let { section ->
+            routeGoodnessMetrics(
+                title = "Imported",
+                section = section,
+                shortestRouteMetric = shortestRouteMetric(
+                    label = "Imported route is shortest possible route",
+                    routeLabel = "imported",
+                    routeComparisonLengthMeters = section.comparisonLengthMeters,
+                    shortestComparisonLengthMeters = comparisonSection?.comparisonLengthMeters
+                ),
+                targetSeconds = targetSeconds,
+                appliesClimbLimit = appliesClimbLimit,
+                lengthRequirement = lengthRequirement
+            )
+        }.orEmpty()
+        val calculatedMetricSection = calculatedSection
+            ?.takeUnless { it.summaryOnly }
+            ?: providedSection
+        val calculatedMetrics = calculatedMetricSection?.let { section ->
+            routeGoodnessMetrics(
+                title = "Calculated",
+                section = section,
+                shortestRouteMetric = shortestRouteMetric(
+                    label = "Calculated route is shortest possible route",
+                    routeLabel = "calculated",
+                    routeComparisonLengthMeters = section.comparisonLengthMeters,
+                    shortestComparisonLengthMeters = comparisonSection?.comparisonLengthMeters
+                ),
+                targetSeconds = targetSeconds,
+                appliesClimbLimit = appliesClimbLimit,
+                lengthRequirement = lengthRequirement
+            )
+        }.orEmpty()
         return DesktopCourseGoodnessMetrics(
             sharedMetrics = sharedMetrics,
             groups = listOf(
@@ -1313,19 +1348,148 @@ object DesktopCourseAnalyzer {
         )
     }
 
+    private fun routeGoodnessMetrics(
+        title: String,
+        section: DesktopCourseAnalysisSection,
+        shortestRouteMetric: DesktopCourseGoodnessMetric,
+        targetSeconds: Int,
+        appliesClimbLimit: Boolean,
+        lengthRequirement: CourseRuleRequirement?
+    ): List<DesktopCourseGoodnessMetric> =
+        buildList {
+            add(shortestRouteMetric)
+            add(climbPercentMetric(section, appliesClimbLimit))
+            add(effectiveLengthMetric(section, lengthRequirement))
+            add(waitTotalMetric(section.waitRows))
+            section.waitRenumbering
+                ?.takeIf { it.improvesWait }
+                ?.let { renumbering ->
+                    add(
+                        DesktopCourseGoodnessMetric(
+                            "Total ideal-route wait time with renumbering",
+                            compactDurationText(renumbering.bestTotalWaitSeconds),
+                            if (renumbering.bestTotalWaitSeconds == 0) {
+                                DesktopCourseMetricStatus.Good
+                            } else {
+                                DesktopCourseMetricStatus.Warning
+                            }
+                        )
+                    )
+                }
+            add(challengeMetric(section.estimatedIdealSeconds, targetSeconds))
+            section.waitRenumbering
+                ?.takeIf { it.improvesWait && section.estimatedIdealSeconds != null }
+                ?.let { renumbering ->
+                    val improvementSeconds = (renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)
+                        .coerceAtLeast(0)
+                    val renumberedIdealSeconds = (requireNotNull(section.estimatedIdealSeconds) - improvementSeconds)
+                        .coerceAtLeast(0)
+                    add(
+                        DesktopCourseGoodnessMetric(
+                            "$title route finish time with renumbering",
+                            "${compactDurationText(renumberedIdealSeconds)} / ${compactDurationText(targetSeconds)}",
+                            if (abs(renumberedIdealSeconds - targetSeconds) <= targetSeconds * 0.15) {
+                                DesktopCourseMetricStatus.Good
+                            } else {
+                                DesktopCourseMetricStatus.Warning
+                            }
+                        )
+                    )
+                }
+            section.ruleChecks
+                .filterNot { it.isSharedGoodnessMetric() }
+                .forEach(::add)
+        }
+
+    private fun climbPercentMetric(section: DesktopCourseAnalysisSection, appliesClimbLimit: Boolean): DesktopCourseGoodnessMetric {
+        val routeLengthMeters = section.routeLengthMeters
+        val climbMeters = section.climbMeters
+        val percent = if (routeLengthMeters != null && routeLengthMeters > 0 && climbMeters != null) {
+            climbMeters.toDouble() / routeLengthMeters.toDouble() * 100.0
+        } else {
+            null
+        }
+        return DesktopCourseGoodnessMetric(
+            "Climb percent of route length",
+            if (percent == null || routeLengthMeters == null || climbMeters == null) {
+                if (appliesClimbLimit) "Unknown (limit 6.0%)" else "Unknown"
+            } else {
+                val lengthKm = routeLengthMeters.toDouble() / 1000.0
+                val result = "$climbMeters m / ${twoDecimals(lengthKm)} km = ${oneDecimal(percent)}%"
+                if (appliesClimbLimit) "$result (limit 6.0%)" else result
+            },
+            when {
+                percent == null -> DesktopCourseMetricStatus.Unknown
+                percent > 6.0 -> DesktopCourseMetricStatus.Warning
+                else -> DesktopCourseMetricStatus.Good
+            }
+        )
+    }
+
+    private fun effectiveLengthMetric(
+        section: DesktopCourseAnalysisSection,
+        lengthRequirement: CourseRuleRequirement?
+    ): DesktopCourseGoodnessMetric =
+        DesktopCourseGoodnessMetric(
+            "Effective length",
+            section.effectiveLengthMeters?.let { effectiveLength ->
+                val measured = "${twoDecimals(effectiveLength / 1000.0)} km"
+                if (lengthRequirement == null) {
+                    measured
+                } else {
+                    "$measured (required ${lengthRequirement.lengthRangeText()})"
+                }
+            } ?: lengthRequirement?.let { "Unknown (required ${it.lengthRangeText()})" } ?: "Unknown",
+            when {
+                section.effectiveLengthMeters == null -> DesktopCourseMetricStatus.Unknown
+                lengthRequirement == null -> DesktopCourseMetricStatus.Good
+                section.effectiveLengthMeters in lengthRequirement.minLengthMeters..lengthRequirement.maxLengthMeters ->
+                    DesktopCourseMetricStatus.Good
+                else -> DesktopCourseMetricStatus.Warning
+            }
+        )
+
+    private fun waitTotalMetric(waitRows: List<DesktopCourseWaitRow>): DesktopCourseGoodnessMetric {
+        val totalWait = waitRows.sumOf { it.waitSeconds }
+        return DesktopCourseGoodnessMetric(
+            "Total ideal-route wait time",
+            if (waitRows.isEmpty()) "Unknown" else compactDurationText(totalWait),
+            when {
+                waitRows.isEmpty() -> DesktopCourseMetricStatus.Unknown
+                totalWait == 0 -> DesktopCourseMetricStatus.Good
+                else -> DesktopCourseMetricStatus.Warning
+            }
+        )
+    }
+
+    private fun challengeMetric(estimatedIdealSeconds: Int?, targetSeconds: Int): DesktopCourseGoodnessMetric =
+        DesktopCourseGoodnessMetric(
+            "Challenge vs target winning time",
+            estimatedIdealSeconds?.let {
+                "${compactDurationText(it)} / ${compactDurationText(targetSeconds)}"
+            } ?: "Unknown",
+            if (estimatedIdealSeconds == null) {
+                DesktopCourseMetricStatus.Unknown
+            } else if (abs(estimatedIdealSeconds - targetSeconds) <= targetSeconds * 0.15) {
+                DesktopCourseMetricStatus.Good
+            } else {
+                DesktopCourseMetricStatus.Warning
+            }
+        )
+
+    private fun targetSecondsFor(raceType: RaceType): Int =
+        when (raceType) {
+            RaceType.SPRINT -> SPRINT_TARGET_SECONDS
+            RaceType.FOXORING -> FOXORING_TARGET_SECONDS
+            else -> CLASSIC_TARGET_SECONDS
+        }
+
     private fun DesktopCourseGoodnessMetric.isSharedGoodnessMetric(): Boolean =
         label.startsWith("Calculated route agrees with imported route order") ||
-            label.startsWith("Imported route is shortest possible route") ||
             label.startsWith("Classic ") ||
             label.startsWith("Youth Classic ") ||
             label.startsWith("Sprint ") ||
             label.startsWith("Foxoring ")
-
-    private fun DesktopCourseGoodnessMetric.isImportedGoodnessMetric(): Boolean =
-        label.startsWith("Imported route ")
-
-    private fun DesktopCourseGoodnessMetric.isCalculatedGoodnessMetric(): Boolean =
-        label.startsWith("Calculated route ")
 
     private fun summaryLengthText(value: Int?): String =
         value?.let { "${twoDecimals(it / 1000.0)} km" } ?: "Unknown"
@@ -2664,8 +2828,10 @@ object DesktopCourseAnalyzer {
             )
             add(
                 shortestRouteMetric(
-                    importedComparisonLengthMeters = importedComparisonLengthMeters,
-                    calculatedComparisonLengthMeters = calculatedComparisonLengthMeters
+                    label = "Imported route is shortest possible route",
+                    routeLabel = "imported",
+                    routeComparisonLengthMeters = importedComparisonLengthMeters,
+                    shortestComparisonLengthMeters = calculatedComparisonLengthMeters
                 )
             )
             val calculatedClimbPercent = if (
@@ -2791,26 +2957,28 @@ object DesktopCourseAnalyzer {
     }
 
     private fun shortestRouteMetric(
-        importedComparisonLengthMeters: Int?,
-        calculatedComparisonLengthMeters: Int?
+        label: String,
+        routeLabel: String,
+        routeComparisonLengthMeters: Int?,
+        shortestComparisonLengthMeters: Int?
     ): DesktopCourseGoodnessMetric =
         when {
-            importedComparisonLengthMeters == null || calculatedComparisonLengthMeters == null ->
+            routeComparisonLengthMeters == null || shortestComparisonLengthMeters == null ->
                 DesktopCourseGoodnessMetric(
-                    "Imported route is shortest possible route",
+                    label,
                     "Unknown",
                     DesktopCourseMetricStatus.Unknown
                 )
-            importedComparisonLengthMeters <= calculatedComparisonLengthMeters + 1 ->
+            routeComparisonLengthMeters <= shortestComparisonLengthMeters + 1 ->
                 DesktopCourseGoodnessMetric(
-                    "Imported route is shortest possible route",
-                    "Yes: imported ${twoDecimals(importedComparisonLengthMeters / 1000.0)} km; shortest ${twoDecimals(calculatedComparisonLengthMeters / 1000.0)} km",
+                    label,
+                    "Yes: $routeLabel ${twoDecimals(routeComparisonLengthMeters / 1000.0)} km; shortest ${twoDecimals(shortestComparisonLengthMeters / 1000.0)} km",
                     DesktopCourseMetricStatus.Good
                 )
             else ->
                 DesktopCourseGoodnessMetric(
-                    "Imported route is shortest possible route",
-                    "No: imported ${twoDecimals(importedComparisonLengthMeters / 1000.0)} km; shortest ${twoDecimals(calculatedComparisonLengthMeters / 1000.0)} km",
+                    label,
+                    "No: $routeLabel ${twoDecimals(routeComparisonLengthMeters / 1000.0)} km; shortest ${twoDecimals(shortestComparisonLengthMeters / 1000.0)} km",
                     DesktopCourseMetricStatus.Warning
                 )
         }
