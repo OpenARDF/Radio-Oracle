@@ -4911,15 +4911,13 @@ private fun CourseKmlKmzElevationProgressDialog(
                 )
                 Text("$total elevation points to download or resolve")
                 Text("Downloaded ${progress.downloadedPointCount} of $total; local cache ${progress.cachedPointCount}; completed $completed of $total")
-                Text(
-                    text = if (progress.cancelRequested) {
-                        "Canceling after the current elevation request finishes..."
-                    } else {
-                        "The progress bar advances as each missing stored route/control elevation point is resolved or attempted."
-                    },
-                    fontSize = 13.sp,
-                    color = Color.DarkGray
-                )
+                if (progress.cancelRequested) {
+                    Text(
+                        text = "Canceling after the current elevation request finishes...",
+                        fontSize = 13.sp,
+                        color = Color.DarkGray
+                    )
+                }
             }
         },
         confirmButton = {},
@@ -9244,7 +9242,7 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
             KmlImportInstruction("Each route LineString name must match an Event File category name, such as M21.")
             KmlImportInstruction("Matching ignores case, trims leading/trailing spaces, and collapses repeated whitespace.")
             KmlImportInstruction("Coordinates are read as longitude,latitude,elevation. Elevation may be omitted.")
-            KmlImportInstruction("Controls more than 50 meters from a matched category route are not included in the stored ideal order.")
+            KmlImportInstruction("Controls more than 50 meters from a matched category route are not included in the imported route order.")
             KmlImportInstruction("For KMZ files, the first .kml document in the archive is read.")
         }
         Text(
@@ -9730,9 +9728,9 @@ private fun CourseAnalyzerGuidance() {
             fontSize = 13.sp
         )
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            KmlImportInstruction("Choose a category, then Analyze to compare the stored route with the calculated route candidate.")
+            KmlImportInstruction("Choose a category, then Analyze to compare the imported route with the calculated route candidate.")
             KmlImportInstruction("Export Analysis writes the displayed analysis plus route/control data for external review.")
-            KmlImportInstruction("Apply Calculated Route replaces stored route and numbering data when the calculated route is available.")
+            KmlImportInstruction("Apply Calculated Route replaces imported route and numbering data when the calculated route is available.")
             KmlImportInstruction("Apply Fox Renumbering Only applies the Section 1 wait-time renumbering when an improvement is available.")
         }
         Text(
@@ -10084,7 +10082,7 @@ private fun CourseAnalysisPanel(
                             )
                         }
                         Text(
-                            text = "The saved route already has elevation data. Downloading uses internet elevation data to fill the local calculated-route cache before comparison.",
+                            text = "The imported route already has elevation data. Downloading uses internet elevation data to fill the local calculated-route cache before comparison.",
                             color = DesktopPalette.Disconnected,
                             fontSize = 12.sp
                         )
@@ -10320,13 +10318,13 @@ private fun CourseAnalysisProvidedRouteWaitAnalysis(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            text = "Stored-route wait-time analysis",
+            text = "Imported-route wait-time analysis",
             color = DesktopPalette.Black,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "This subsection estimates Classic fox arrival phases on the stored route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. It uses the same elite baseline speed and effective-length movement estimates as the route analysis. Because map passability, fatigue, and category age/gender speed differences are not modeled, barriers, slow terrain, and competitor profile can shift real arrival times and change wait-time outcomes.",
+            text = "This subsection estimates Classic fox arrival phases on the imported route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. It uses the same elite baseline speed and effective-length movement estimates as the route analysis. Because map passability, fatigue, and category age/gender speed differences are not modeled, barriers, slow terrain, and competitor profile can shift real arrival times and change wait-time outcomes.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -10370,7 +10368,7 @@ private fun CourseAnalysisSummarySection(result: DesktopCourseAnalysisSummary) {
             fontSize = 13.sp
         )
         CourseAnalysisSpeedFactorDetails(result)
-        CourseAnalysisMetricRows(result.metrics)
+        CourseAnalysisMetricRows(result.goodnessMetrics)
         CourseAnalysisProfileComparison(result.profileComparison, result.elevationCacheNotes)
         CourseAnalysisRouteMaps(result.routeMaps)
     }
@@ -10420,11 +10418,11 @@ private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         CourseAnalysisRow("Routes compared", result.calculatedRouteCount.toString())
         if (result.idealOrderMatches == true) {
-            CourseAnalysisRow("Stored ideal route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
-            CourseAnalysisRow("Order comparison", "Stored and calculated routes match")
+            CourseAnalysisRow("Imported route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
+            CourseAnalysisRow("Order comparison", "Imported and calculated routes match")
         } else {
             CourseAnalysisRow("Calculated ideal route (calculated fox numbering)", result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
-            CourseAnalysisRow("Stored ideal route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
+            CourseAnalysisRow("Imported route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
             CourseAnalysisRow(
                 "Order comparison",
                 when (result.idealOrderMatches) {
@@ -10435,8 +10433,8 @@ private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
             )
             CourseAnalysisRow("Calculated straight-line length", kilometersText(result.calculatedStraightLineMeters))
         }
-        CourseAnalysisRow("Stored straight-line length", kilometersText(result.providedStraightLineMeters))
-        CourseAnalysisRow("Stored route length", kilometersText(result.routeLengthMeters))
+        CourseAnalysisRow("Imported straight-line length", kilometersText(result.providedStraightLineMeters))
+        CourseAnalysisRow("Imported route length", kilometersText(result.routeLengthMeters))
         CourseAnalysisRow("Climb", climbText(result.climbMeters))
         CourseAnalysisRow(
             "Effective length",
@@ -10703,7 +10701,7 @@ private fun routeMapPointColor(type: DesktopCourseRouteMapPointType): Color =
     }
 
 @Composable
-private fun CourseAnalysisMetricRows(metrics: List<DesktopCourseGoodnessMetric>) {
+private fun CourseAnalysisMetricRows(goodnessMetrics: DesktopCourseGoodnessMetrics) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = "Goodness metrics",
@@ -10711,18 +10709,37 @@ private fun CourseAnalysisMetricRows(metrics: List<DesktopCourseGoodnessMetric>)
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold
         )
-        metrics.forEach { metric ->
-            CourseAnalysisRow(
-                label = metric.label,
-                value = metric.value,
-                valueColor = when (metric.status) {
-                    DesktopCourseMetricStatus.Good -> DesktopPalette.Connected
-                    DesktopCourseMetricStatus.Warning -> DesktopPalette.Error
-                    DesktopCourseMetricStatus.Unknown -> DesktopPalette.Disconnected
-                }
+        goodnessMetrics.sharedMetrics.forEach { metric ->
+            CourseAnalysisMetricRow(metric)
+        }
+        goodnessMetrics.groups.forEachIndexed { index, group ->
+            if (index > 0 || goodnessMetrics.sharedMetrics.isNotEmpty()) {
+                Divider(color = DesktopPalette.LightGrey, modifier = Modifier.padding(vertical = 4.dp))
+            }
+            Text(
+                text = group.title,
+                color = DesktopPalette.Black,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
             )
+            group.metrics.forEach { metric ->
+                CourseAnalysisMetricRow(metric)
+            }
         }
     }
+}
+
+@Composable
+private fun CourseAnalysisMetricRow(metric: DesktopCourseGoodnessMetric) {
+    CourseAnalysisRow(
+        label = metric.label,
+        value = metric.value,
+        valueColor = when (metric.status) {
+            DesktopCourseMetricStatus.Good -> DesktopPalette.Connected
+            DesktopCourseMetricStatus.Warning -> DesktopPalette.Error
+            DesktopCourseMetricStatus.Unknown -> DesktopPalette.Disconnected
+        }
+    )
 }
 
 private fun sectionComparisonLengthText(section: DesktopCourseAnalysisSection): String =
@@ -10812,7 +10829,7 @@ private fun CourseAnalysisWaitRenumbering(renumbering: DesktopCourseWaitRenumber
         )
         Text(
             text = if (renumbering.improvesWait) {
-                "Renumbering the fox transmit slots is likely to reduce wait time by ${secondsText(renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)} on this stored route."
+                "Renumbering the fox transmit slots is likely to reduce wait time by ${secondsText(renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)} on this imported route."
             } else {
                 "Current fox numbering is already best for ideal-route wait time."
             },

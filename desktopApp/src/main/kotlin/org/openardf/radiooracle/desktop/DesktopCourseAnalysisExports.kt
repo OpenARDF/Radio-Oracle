@@ -82,9 +82,9 @@ object DesktopCourseAnalysisExports {
         appendLegRows(section.legRows)
         if (includeRenumbering) {
             appendLine()
-            appendLine("Stored-route wait-time analysis")
+            appendLine("Imported-route wait-time analysis")
             appendWrapped(
-                "This subsection estimates Classic fox arrival phases on the stored route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure."
+                "This subsection estimates Classic fox arrival phases on the imported route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure."
             )
             appendWaitRows("Current wait times", section.waitRows)
             section.waitRenumbering?.let { appendWaitRenumbering(it) }
@@ -119,8 +119,17 @@ object DesktopCourseAnalysisExports {
         appendLine("Unmatched categories: x1.00")
         appendLine()
         appendLine("Goodness metrics")
-        result.metrics.forEach { metric ->
+        result.goodnessMetrics.sharedMetrics.forEach { metric ->
             appendLine("${metric.label}: ${metric.value} (${metric.status.name})")
+        }
+        result.goodnessMetrics.groups.forEachIndexed { index, group ->
+            if (index > 0 || result.goodnessMetrics.sharedMetrics.isNotEmpty()) {
+                appendLine(PdfDividerLine)
+            }
+            appendLine(group.title)
+            group.metrics.forEach { metric ->
+                appendLine("${metric.label}: ${metric.value} (${metric.status.name})")
+            }
         }
         appendLine()
         appendLine("Elevation profiles")
@@ -211,7 +220,7 @@ object DesktopCourseAnalysisExports {
             appendLine("    <Style id=\"calculatedRouteStyle\"><LineStyle><color>ff00a676</color><width>4</width></LineStyle></Style>")
             appendLine("    <Style id=\"foxStyle\"><IconStyle><scale>1.1</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle></Style>")
             result.kmlFolders.forEach { folder ->
-                val routeStyleId = if (folder.title.startsWith("Stored")) {
+                val routeStyleId = if (folder.title.startsWith("Imported")) {
                     "storedRouteStyle"
                 } else {
                     "calculatedRouteStyle"
@@ -433,12 +442,12 @@ object DesktopCourseAnalysisExports {
 
     private val PdfSubheadingLabels = setOf(
         "USA rules checks",
-        "Stored-route wait-time analysis",
+        "Imported-route wait-time analysis",
         "Current wait times",
         "Optimized wait times",
         "Wait-time renumbering check",
         "Renumbered wait times",
-        "Stored",
+        "Imported",
         "Calculated",
         "Course Recommendation",
         "Speed model factors",

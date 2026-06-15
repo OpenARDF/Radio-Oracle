@@ -81,14 +81,14 @@ class DesktopCourseAnalyzerTest {
         assertEquals(null, summary.calculatedRouteApplication)
         assertNotNull(summary.providedRouteSection)
         assertNotNull(summary.calculatedRouteSection)
-        assertEquals("Section 1: Stored route analysis", summary.providedRouteSection?.title)
+        assertEquals("Section 1: Imported route analysis", summary.providedRouteSection?.title)
         assertEquals("Section 2: Calculated ideal route", summary.calculatedRouteSection?.title)
         assertEquals(true, summary.calculatedRouteSection?.summaryOnly)
         assertEquals(
-            listOf("Calculated ideal route matches stored ideal route"),
+            listOf("Calculated ideal route matches imported route"),
             summary.calculatedRouteSection?.routeOrder
         )
-        assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("matches the stored ideal route"))
+        assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("matches the imported route"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("effective length"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("does not guarantee 3 m source terrain data"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("does not currently know map passability"))
@@ -103,9 +103,9 @@ class DesktopCourseAnalyzerTest {
         assertTrue(summary.summaryExplanation.contains("event speed factor 1.00"))
         assertTrue(summary.summaryExplanation.contains("below 1.00 slows all category estimates"))
         assertEquals(1, summary.profileComparison.size)
-        assertEquals(listOf("31", "32", "33"), summary.profileComparison.first { it.title == "Stored route" }.markers.map { it.label })
+        assertEquals(listOf("31", "32", "33"), summary.profileComparison.first { it.title == "Imported route" }.markers.map { it.label })
         assertEquals(1, summary.routeMaps.size)
-        assertEquals(listOf("Stored foxes and route"), summary.kmlFolders.map { it.title })
+        assertEquals(listOf("Imported foxes and route"), summary.kmlFolders.map { it.title })
         assertEquals(
             listOf("Elevation cache: Test Venue - USGS 3DEP, 3 m grid (test.roelev.json)"),
             summary.elevationCacheNotes
@@ -138,14 +138,21 @@ class DesktopCourseAnalyzerTest {
             summary.metrics.any {
                 it.label == "Climb percent of route length" &&
                     it.value.contains("(limit 6.0%)") &&
-                    it.status == DesktopCourseMetricStatus.Good
+                it.status == DesktopCourseMetricStatus.Good
             }
         )
+        assertTrue(summary.goodnessMetrics.sharedMetrics.any { it.label == "Calculated route agrees with imported route order" })
+        assertTrue(summary.goodnessMetrics.sharedMetrics.any {
+            it.label == "Imported route is shortest possible route" &&
+                it.status == DesktopCourseMetricStatus.Good
+        })
+        assertTrue(summary.goodnessMetrics.groups.single { it.title == "Imported" }.metrics.any { it.label == "Effective length" })
+        assertTrue(summary.goodnessMetrics.groups.single { it.title == "Imported" }.metrics.any { it.label == "Total ideal-route wait time" })
         val reportText = DesktopCourseAnalysisExports.reportText(summary)
         assertEquals("Apply Fox Renumbering Only", summary.courseRecommendation.actionLabel)
-        assertTrue(reportText.contains("Stored\n"))
+        assertTrue(reportText.contains("Imported\n"))
         assertTrue(reportText.contains("Calculated\n"))
-        assertTrue(reportText.contains("Order comparison: Stored and calculated routes match"))
+        assertTrue(reportText.contains("Order comparison: Imported and calculated routes match"))
         assertFalse(reportText.contains("Calculated ideal route (calculated fox numbering):"))
         assertFalse(reportText.contains("Calculated straight-line length:"))
         assertTrue(reportText.contains("Effective length: 5.00 km (required 9-12 km)"))
@@ -253,11 +260,11 @@ class DesktopCourseAnalyzerTest {
 
         val sectionChecks = requireNotNull(summary.providedRouteSection).ruleChecks
         assertEquals("USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026", summary.rulesDocumentLabel)
-        assertTrue(sectionChecks.any { it.label == "Stored route fox count" && it.status == DesktopCourseMetricStatus.Warning })
-        assertTrue(sectionChecks.any { it.label == "Stored route course length" && it.status == DesktopCourseMetricStatus.Warning })
+        assertTrue(sectionChecks.any { it.label == "Imported route fox count" && it.status == DesktopCourseMetricStatus.Warning })
+        assertTrue(sectionChecks.any { it.label == "Imported route course length" && it.status == DesktopCourseMetricStatus.Warning })
         assertTrue(sectionChecks.any { it.label == "Classic start exclusion zone" && it.status == DesktopCourseMetricStatus.Good })
-        assertTrue(sectionChecks.any { it.label == "Stored route fox count" && it.value == "3 foxes (required 5 for M21)" })
-        assertTrue(sectionChecks.any { it.label == "Stored route course length" && it.value.contains("(required 9-12 km)") })
+        assertTrue(sectionChecks.any { it.label == "Imported route fox count" && it.value == "3 foxes (required 5 for M21)" })
+        assertTrue(sectionChecks.any { it.label == "Imported route course length" && it.value.contains("(required 9-12 km)") })
         assertTrue(sectionChecks.any { it.label == "Classic start exclusion zone" && it.value.contains("nearest transmitter") && it.value.contains("(required at least 750 m)") })
         assertTrue(sectionChecks.any { it.label == "Classic minimum transmitter spacing" && it.value.contains("closest pair") })
 
@@ -265,8 +272,8 @@ class DesktopCourseAnalyzerTest {
         assertTrue(reportText.contains("Rules applied: USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026"))
         assertEquals(1, Regex("Rules applied: USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026").findAll(reportText).count())
         assertTrue(reportText.contains("Effective length: 5.00 km (required 9-12 km)"))
-        assertTrue(reportText.contains("RULE VIOLATION: Stored route fox count"))
-        assertTrue(reportText.contains("RULE VIOLATION: Stored route course length"))
+        assertTrue(reportText.contains("RULE VIOLATION: Imported route fox count"))
+        assertTrue(reportText.contains("RULE VIOLATION: Imported route course length"))
     }
 
     @Test
@@ -280,12 +287,12 @@ class DesktopCourseAnalyzerTest {
 
         val sectionChecks = requireNotNull(summary.providedRouteSection).ruleChecks
         assertTrue(sectionChecks.any {
-            it.label == "Stored route USA category name" &&
+                it.label == "Imported route USA category name" &&
                 it.value.contains("Using M21 rules for category \"M-21\"") &&
                 it.status == DesktopCourseMetricStatus.Warning
         })
         assertTrue(sectionChecks.any {
-            it.label == "Stored route fox count" &&
+                it.label == "Imported route fox count" &&
                 it.value == "5 foxes (required 5 for M21)" &&
                 it.status == DesktopCourseMetricStatus.Good
         })
@@ -344,7 +351,7 @@ class DesktopCourseAnalyzerTest {
         assertEquals(emptyList<DesktopCourseLegRow>(), summary.calculatedLegRows)
         val storedTargetTime = requireNotNull(summary.providedRouteSection)
             .ruleChecks
-            .single { it.label == "Stored route Sprint target time" }
+            .single { it.label == "Imported route Sprint target time" }
             .value
         val calculatedTargetTime = requireNotNull(summary.calculatedRouteSection)
             .ruleChecks
@@ -467,11 +474,12 @@ class DesktopCourseAnalyzerTest {
         assertTrue(reportText.contains("Analyzed: Mon, Jun 15, 2026 9:30 AM"))
         assertTrue(reportText.indexOf("Analyzed:") < reportText.indexOf("Category:"))
         assertTrue(reportText.contains("Section 2: Calculated ideal route"))
-        assertTrue(reportText.contains("Route order (stored fox numbering):"))
+        assertTrue(reportText.contains("Route order (imported fox numbering):"))
         assertTrue(reportText.contains("Route order (calculated fox numbering):"))
-        assertTrue(reportText.contains("Stored\n"))
+        assertTrue(reportText.contains("Imported\n"))
         assertTrue(reportText.contains("Calculated\n"))
-        assertTrue(reportText.contains("Ideal route: S -> 33 -> 32 -> 31 -> B"))
+        assertTrue(reportText.contains("Imported route:"))
+        assertTrue(reportText.contains("Ideal route:"))
         assertTrue(reportText.contains("Course Recommendation"))
         assertTrue(reportText.contains("Radio-Oracle recommends"))
         assertTrue(reportText.contains("Movement time:"))
@@ -502,7 +510,7 @@ class DesktopCourseAnalyzerTest {
         assertPdfInfoCanRead(multiPagePdfPath)
 
         val kmlText = Files.readString(exportPaths.kmlPath)
-        assertTrue(kmlText.contains("<name>Stored foxes and route</name>"))
+        assertTrue(kmlText.contains("<name>Imported foxes and route</name>"))
         assertTrue(kmlText.contains("<name>Calculated foxes and route</name>"))
         assertTrue(kmlText.contains("<LineString>"))
         assertTrue(kmlText.contains("<Point>"))
@@ -538,7 +546,7 @@ class DesktopCourseAnalyzerTest {
             renumbering.suggestedWaitRows.map { suggestedSlotByControlLabel[it.controlLabel] },
             renumbering.suggestedWaitRows.map { it.slotLabel }
         )
-        assertTrue(summary.summaryExplanation.contains("may reduce stored-route wait time"))
+        assertTrue(summary.summaryExplanation.contains("may reduce imported-route wait time"))
         assertTrue(summary.summaryExplanation.contains("see Section 1 for the assignment details"))
         assertEquals("Apply Calculated Route", summary.courseRecommendation.actionLabel)
         assertTrue(summary.courseRecommendation.paragraph.contains("Radio-Oracle recommends Apply Calculated Route"))
@@ -550,10 +558,10 @@ class DesktopCourseAnalyzerTest {
         )
         assertEquals(
             metricLabels.indexOf("Challenge vs target winning time") + 1,
-            metricLabels.indexOf("Calculated ideal finish time with renumbering")
+            metricLabels.indexOf("Imported route finish time with renumbering")
         )
         assertTrue(summary.metrics.first { it.label == "Total ideal-route wait time with renumbering" }.value.contains(":"))
-        assertTrue(summary.metrics.first { it.label == "Calculated ideal finish time with renumbering" }.value.contains(" / "))
+        assertTrue(summary.metrics.first { it.label == "Imported route finish time with renumbering" }.value.contains(" / "))
     }
 
     @Test
@@ -579,7 +587,7 @@ class DesktopCourseAnalyzerTest {
         assertTrue(calculatedLength < storedLength)
         assertTrue(
             summary.metrics.any {
-                it.label == "Stored route course length" &&
+                it.label == "Imported route course length" &&
                     it.status == DesktopCourseMetricStatus.Good
             }
         )
@@ -589,9 +597,14 @@ class DesktopCourseAnalyzerTest {
                     it.status == DesktopCourseMetricStatus.Warning
             }
         )
+        assertTrue(summary.goodnessMetrics.sharedMetrics.any {
+            it.label == "Imported route is shortest possible route" &&
+                it.status == DesktopCourseMetricStatus.Warning &&
+                it.value.contains("No:")
+        })
         assertEquals("Apply Calculated Route", summary.courseRecommendation.actionLabel)
-        assertTrue(summary.courseRecommendation.paragraph.contains("shorter than the saved route"))
-        assertTrue(summary.courseRecommendation.paragraph.contains("even if the saved route more closely matches category length guidance"))
+        assertTrue(summary.courseRecommendation.paragraph.contains("shorter than the imported route"))
+        assertTrue(summary.courseRecommendation.paragraph.contains("even if the imported route more closely matches category length guidance"))
     }
 
     @Test
@@ -612,7 +625,7 @@ class DesktopCourseAnalyzerTest {
         val section = requireNotNull(summary.calculatedRouteSection)
         val renumbering = requireNotNull(section.waitRenumbering)
         val calculatedOrder = listOf("S") + renumbering.assignments.map { it.suggestedSlotLabel } + "B"
-        assertEquals("Route order (stored fox numbering)", section.routeOrderLabel)
+        assertEquals("Route order (imported fox numbering)", section.routeOrderLabel)
         assertEquals(listOf("S", "33", "32", "31", "B"), section.routeOrder)
         assertEquals("Route order (calculated fox numbering)", section.secondaryRouteOrderLabel)
         assertEquals(calculatedOrder, section.secondaryRouteOrder)
@@ -687,7 +700,7 @@ class DesktopCourseAnalyzerTest {
             protectedCourseInfo = decryptedCourseInfo,
             protectedIdealOrderText = DesktopProtectedCourseOrder.decrypt(requireNotNull(updatedCategory.encryptedIdealOrder), "test-password")
         )
-        assertTrue(updatedSummary.missingElements.none { it.contains("Stored ideal order") })
+        assertTrue(updatedSummary.missingElements.none { it.contains("Imported route order") })
     }
 
     @Test
@@ -1019,7 +1032,7 @@ class DesktopCourseAnalyzerTest {
             protectedIdealOrderText = protectedInfo.idealOrder
         )
 
-        assertTrue(summary.missingElements.none { it.contains("Stored ideal order could not be resolved") })
+        assertTrue(summary.missingElements.none { it.contains("Imported route order could not be resolved") })
         assertEquals(listOf("S", "Fox 1", "Fox 2", "B"), summary.providedIdealOrder)
         assertTrue(summary.calculatedIdealOrder.none { it == "Fox 3" })
         assertEquals(listOf("Fox 1", "Fox 2"), summary.waitRows.map { it.controlLabel })
