@@ -680,6 +680,62 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun identicalImportedFileWithMissingElevationsDoesNotTriggerControlLocationUpdate() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKml())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+        val (imported, _) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key"
+        )
+        val importedCategory = imported.raceData.categories.single().category
+        val importedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            importedCategory.encryptedCourseInfo!!,
+            "course-key"
+        )
+        val shiftedControl = importedCourseInfo.controlPoints.first()
+        val shiftedCourseInfo = importedCourseInfo.copy(
+            controlPoints = importedCourseInfo.controlPoints.map { controlPoint ->
+                if (controlPoint.controlId == shiftedControl.controlId) {
+                    controlPoint.copy(latitude = controlPoint.latitude + 0.0001)
+                } else {
+                    controlPoint
+                }
+            },
+            courseObjects = importedCourseInfo.courseObjects.map { courseObject ->
+                if (courseObject.id == shiftedControl.controlId) {
+                    courseObject.copy(latitude = courseObject.latitude + 0.0001)
+                } else {
+                    courseObject
+                }
+            }
+        )
+        val projectWithShiftedProtectedLocation = EventProjectEditor.updateCategoryEncryptedCourseInfo(
+            imported,
+            "cat-m21",
+            DesktopProtectedCourseOrder.encryptCourseInfo(shiftedCourseInfo, "course-key")
+        )
+
+        val (duplicateProject, duplicateSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = projectWithShiftedProtectedLocation,
+            password = "course-key"
+        )
+
+        assertEquals(projectWithShiftedProtectedLocation, duplicateProject)
+        assertEquals(1, duplicateSummary.duplicateCategoryCount)
+        assertEquals(0, duplicateSummary.importedCategoryCount)
+        assertEquals(0, duplicateSummary.changedControlLocationCount)
+        assertTrue(duplicateSummary.hasDuplicateMissingElevations)
+        assertTrue(duplicateSummary.duplicateMissingElevationPointCount > 0)
+    }
+
+    @Test
     fun duplicateImportedRouteStillRepairsMissingCategoryAssignedControls() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())

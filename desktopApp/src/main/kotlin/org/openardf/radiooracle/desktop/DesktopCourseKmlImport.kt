@@ -227,9 +227,18 @@ object DesktopCourseKmlImporter {
             sourceName = path.fileName.toString(),
             categoryOverrideId = categoryOverrideId
         )
+        val sameSourceDuplicateCategoryIds = sameSourceDuplicateCategoryIds(
+            routes = courseData.routes,
+            routeCategoryTargets = routeCategoryTargets,
+            courseInfoByCategoryId = courseInfoByCategoryId,
+            sourceSha256 = sourceSha256,
+            importedControls = courseData.controls,
+            matchedControls = controlsByLabel.values.toList()
+        )
         val controlLocationUpdates = controlLocationUpdates(
             matchedControls = controls,
-            courseInfoByCategoryId = courseInfoByCategoryId
+            courseInfoByCategoryId = courseInfoByCategoryId,
+            ignoredCategoryIds = sameSourceDuplicateCategoryIds
         )
         val locationUpdateResult = controlLocationUpdates.takeIf { it.isNotEmpty() }?.let { updates ->
             DesktopProtectedControlLocationUpdater.applyControlLocations(
@@ -1022,12 +1031,16 @@ object DesktopCourseKmlImporter {
 
     private fun controlLocationUpdates(
         matchedControls: List<CourseMatchedControl>,
-        courseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+        courseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+        ignoredCategoryIds: Set<String> = emptySet()
     ): List<DesktopProtectedControlLocationUpdate> {
         return matchedControls
             .distinctBy { it.controlId }
             .mapNotNull { matchedControl ->
-                val protectedLocationDiffers = courseInfoByCategoryId.values.any { courseInfo ->
+                val protectedLocationDiffers = courseInfoByCategoryId.any { (categoryId, courseInfo) ->
+                    if (categoryId in ignoredCategoryIds) {
+                        return@any false
+                    }
                     courseInfo.controlPoints.any { controlPoint ->
                         controlPoint.controlId == matchedControl.controlId &&
                             (!sameCoordinate(controlPoint.latitude, matchedControl.point.latitude) ||
@@ -1049,6 +1062,35 @@ object DesktopCourseKmlImporter {
                     null
                 }
             }
+    }
+
+    private fun sameSourceDuplicateCategoryIds(
+        routes: List<CourseRoute>,
+        routeCategoryTargets: RouteCategoryTargetResult,
+        courseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+        sourceSha256: String,
+        importedControls: List<CourseControlPoint>,
+        matchedControls: List<CourseMatchedControl>
+    ): Set<String> {
+        val duplicateCategoryIds = linkedSetOf<String>()
+        routes.forEach { route ->
+            val routeGeometry = orientedRoutePoints(route.points, importedControls)
+            val routeLineControlIds = controlsOnRoute(routeGeometry, matchedControls).map { it.controlId }
+            routeCategoryTargets.targets[route].orEmpty().forEach { categoryData ->
+                val sameSourceCourseInfo = courseInfoByCategoryId[categoryData.category.id]
+                    ?.takeIf { it.sourceSha256 == sourceSha256 }
+                    ?: return@forEach
+                val storedRouteControlIds = sameSourceCourseInfo.controlPoints.map { it.controlId }
+                if (
+                    sameSourceCourseInfo.hasImportedLocationRecords() &&
+                    storedRouteControlIds == routeLineControlIds &&
+                    sameSourceCourseInfo.routeMatches(routeGeometry)
+                ) {
+                    duplicateCategoryIds += categoryData.category.id
+                }
+            }
+        }
+        return duplicateCategoryIds
     }
 
     fun applyCategoryAssignmentUpdates(

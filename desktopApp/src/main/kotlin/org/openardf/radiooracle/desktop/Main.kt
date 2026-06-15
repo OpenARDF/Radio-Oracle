@@ -403,6 +403,7 @@ fun main(args: Array<String>) = application {
         var pendingControlsCsvImportReview by remember { mutableStateOf<PendingControlsCsvImportReview?>(null) }
         var courseKmlKmzElevationProgress by remember { mutableStateOf<CourseKmlKmzElevationProgressUiState?>(null) }
         var courseKmlKmzElevationJob by remember { mutableStateOf<Job?>(null) }
+        var suppressNextCourseElevationCancelStatus by remember { mutableStateOf(false) }
         var venueElevationCacheProgress by remember { mutableStateOf<VenueElevationCacheProgressUiState?>(null) }
         var venueElevationCacheJob by remember { mutableStateOf<Job?>(null) }
         var venueElevationCacheRefreshToken by remember { mutableStateOf(0) }
@@ -1812,8 +1813,19 @@ fun main(args: Array<String>) = application {
                 }
                 result.onSuccess {
                 }.onFailure { error ->
+                    if (error !is CancellationException) {
+                        DesktopDebugLog.error(
+                            "CourseElevation",
+                            "Course elevation retrieval failed for $sourceName categories=${categoryIds.joinToString()}: ${error::class.simpleName}: ${error.message}"
+                        )
+                    }
                     projectStatusText = if (error is CancellationException) {
-                        "Course elevation retrieval canceled. Imported route data kept without fetched elevations."
+                        if (suppressNextCourseElevationCancelStatus) {
+                            suppressNextCourseElevationCancelStatus = false
+                            projectStatusText
+                        } else {
+                            "Course elevation retrieval canceled. Imported route data kept without fetched elevations."
+                        }
                     } else {
                         "Course elevation retrieval failed: ${error.message ?: error::class.simpleName}"
                     }
@@ -2031,13 +2043,22 @@ fun main(args: Array<String>) = application {
             } else {
                 review.updatedProject
             }
+            val isDuplicateElevationRetry = fetchElevations &&
+                selectedSummary.importedCategoryCount == 0 &&
+                selectedSummary.duplicateCategoryCount > 0 &&
+                selectedSummary.hasDuplicateMissingElevations
+            val projectToApply = if (isDuplicateElevationRetry) {
+                projectSession.currentProject ?: selectedProject
+            } else {
+                selectedProject
+            }
             val updatedProject = if (applyCategoryAssignments) {
                 DesktopCourseKmlImporter.applyCategoryAssignmentUpdates(
-                    projectFile = selectedProject,
+                    projectFile = projectToApply,
                     updates = selectedSummary.categoryAssignmentUpdates
                 )
             } else {
-                selectedProject
+                projectToApply
             }
             checkpointBeforeImport("controls/route $formatLabel import ${review.sourceName}")
             projectFile = projectSession.updateCurrentProject { updatedProject }
@@ -2105,6 +2126,15 @@ fun main(args: Array<String>) = application {
             val formatLabel = controlsRouteImportFormatLabel(path.fileName.toString())
             if (isImportingCourseKmlKmz) {
                 return
+            }
+            if (courseKmlKmzElevationJob?.isActive == true) {
+                suppressNextCourseElevationCancelStatus = true
+                courseKmlKmzElevationProgress = null
+                courseKmlKmzElevationJob?.cancel()
+                DesktopDebugLog.info(
+                    "CourseElevation",
+                    "Canceled active course elevation retrieval before controls/route $formatLabel import retry."
+                )
             }
             suspend fun buildPreview(baseProject: EventProjectFile): CourseKmlKmzImportPreview =
                 withContext(Dispatchers.IO) {
@@ -4915,11 +4945,16 @@ private fun CourseKmlKmzElevationProgressDialog(
     val total = progress.totalPointCount.coerceAtLeast(1)
     val completed = progress.completedPointCount.coerceIn(0, total)
     val remaining = (total - completed).coerceAtLeast(0)
+    val fraction = completed.toFloat() / total.toFloat()
     AlertDialog(
         onDismissRequest = {},
         title = { Text("Retrieving course elevations") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LinearProgressIndicator(
+                    progress = fraction,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Text("$remaining of $total elevation points left to download")
             }
         },
@@ -4943,11 +4978,16 @@ private fun VenueElevationCacheProgressDialog(
     val total = progress.totalPointCount.coerceAtLeast(1)
     val completed = progress.completedPointCount.coerceIn(0, total)
     val remaining = (total - completed).coerceAtLeast(0)
+    val fraction = completed.toFloat() / total.toFloat()
     AlertDialog(
         onDismissRequest = {},
         title = { Text("Creating elevation cache") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LinearProgressIndicator(
+                    progress = fraction,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Text("$remaining of $total elevation grid points left to download")
             }
         },
