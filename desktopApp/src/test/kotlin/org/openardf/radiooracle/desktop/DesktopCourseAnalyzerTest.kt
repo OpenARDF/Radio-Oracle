@@ -171,6 +171,11 @@ class DesktopCourseAnalyzerTest {
         assertTrue(reportText.contains("Effective length: 5.00 km (required 9-12 km)"))
         assertTrue(reportText.contains("Course Recommendation"))
         assertTrue(summary.courseRecommendation.paragraph.contains("Radio-Oracle recommends Apply Fox Renumbering Only"))
+        assertTrue(summary.courseRecommendation.paragraph.contains("outside the 9-12 km rules range"))
+        assertTrue(summary.courseRecommendation.paragraph.contains("honest representation of the course's overall difficulty"))
+        assertTrue(summary.waitRows.any { it.waitSeconds > 30 })
+        assertTrue(summary.courseRecommendation.paragraph.contains("current fox numbering exceed 30 seconds"))
+        assertTrue(summary.courseRecommendation.paragraph.contains("suggested fox numbering"))
         assertTrue(reportText.contains("Radio-Oracle recommends"))
         assertTrue(reportText.contains("Assumed running speed equals"))
         assertTrue(reportText.contains("Speed model factors"))
@@ -629,6 +634,12 @@ class DesktopCourseAnalyzerTest {
         assertEquals("Apply Calculated Route", summary.courseRecommendation.actionLabel)
         assertTrue(summary.courseRecommendation.paragraph.contains("shorter than the imported route"))
         assertTrue(summary.courseRecommendation.paragraph.contains("even if the imported route more closely matches category length guidance"))
+        assertTrue(summary.courseRecommendation.paragraph.contains("outside the 9-12 km rules range"))
+        assertTrue(summary.courseRecommendation.paragraph.contains("honest representation of the course's overall difficulty"))
+        assertTrue(summary.courseRecommendation.paragraph.contains("redesign the course by moving the start, finish, or foxes"))
+        assertTrue(requireNotNull(summary.calculatedRouteSection).waitRows.any { it.waitSeconds > 30 })
+        assertTrue(summary.courseRecommendation.paragraph.contains("calculated fox numbering"))
+        assertTrue(summary.courseRecommendation.paragraph.contains("reduce wait time at the affected foxes"))
     }
 
     @Test

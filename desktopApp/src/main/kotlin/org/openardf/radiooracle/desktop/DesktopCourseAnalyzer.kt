@@ -276,6 +276,7 @@ object DesktopCourseAnalyzer {
     private const val FOXORING_ROLLING_WINDOW_CONTROLS = 5
     private const val MAX_SPRINT_LOOP_PERMUTATIONS = 120
     private const val CALCULATED_ROUTE_SAMPLE_METERS = 25.0
+    private const val COURSE_RECOMMENDATION_WAIT_SECONDS = 30
     private const val ELEVATION_CACHE_RESOLUTION_NOTE =
         "Elevation Cache resolution is the local sample-grid spacing; USGS 3DEP source DEM resolution varies, so a 3 m cache does not guarantee 3 m source terrain data everywhere."
     private const val MAP_KNOWLEDGE_LIMITATION_NOTE =
@@ -832,6 +833,7 @@ object DesktopCourseAnalyzer {
             calculatedRouteApplication = calculatedRouteApplication,
             providedSection = providedSection,
             calculatedSection = calculatedSection,
+            lengthRequirement = routeLengthRequirement(category.name, raceType),
             idealOrderMatches = idealOrderMatches,
             waitRenumbering = waitRenumbering
         )
@@ -1268,6 +1270,7 @@ object DesktopCourseAnalyzer {
         calculatedRouteApplication: DesktopCourseCalculatedRouteApplication?,
         providedSection: DesktopCourseAnalysisSection?,
         calculatedSection: DesktopCourseAnalysisSection?,
+        lengthRequirement: CourseRuleRequirement?,
         idealOrderMatches: Boolean?,
         waitRenumbering: DesktopCourseWaitRenumbering?
     ): DesktopCourseRecommendation {
@@ -1284,24 +1287,125 @@ object DesktopCourseAnalyzer {
             } else {
                 "The calculated solution differs from the imported route under the current model, so applying it will replace the imported route and numbering with the calculated candidate."
             }
+            val caveats = recommendationCaveats(
+                calculatedRouteApplication = calculatedRouteApplication,
+                providedSection = providedSection,
+                calculatedSection = calculatedSection,
+                lengthRequirement = lengthRequirement,
+                idealOrderMatches = idealOrderMatches,
+                waitRenumbering = waitRenumbering
+            )
             return DesktopCourseRecommendation(
                 actionLabel = "Apply Calculated Route",
-                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply Calculated Route. $reason"
+                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply Calculated Route. $reason$caveats"
             )
         }
         val renumbering = waitRenumbering?.takeIf { it.improvesWait }
         if (idealOrderMatches == true && renumbering != null) {
             val improvementSeconds = (renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)
                 .coerceAtLeast(0)
+            val caveats = recommendationCaveats(
+                calculatedRouteApplication = calculatedRouteApplication,
+                providedSection = providedSection,
+                calculatedSection = calculatedSection,
+                lengthRequirement = lengthRequirement,
+                idealOrderMatches = idealOrderMatches,
+                waitRenumbering = waitRenumbering
+            )
             return DesktopCourseRecommendation(
                 actionLabel = "Apply Fox Renumbering Only",
-                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply Fox Renumbering Only. The calculated route matches the imported route, but renumbering the foxes reduces modeled wait time by ${compactDurationText(improvementSeconds)}."
+                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply Fox Renumbering Only. The calculated route matches the imported route, but renumbering the foxes reduces modeled wait time by ${compactDurationText(improvementSeconds)}.$caveats"
             )
         }
+        val caveats = recommendationCaveats(
+            calculatedRouteApplication = calculatedRouteApplication,
+            providedSection = providedSection,
+            calculatedSection = calculatedSection,
+            lengthRequirement = lengthRequirement,
+            idealOrderMatches = idealOrderMatches,
+            waitRenumbering = waitRenumbering
+        )
         return DesktopCourseRecommendation(
             actionLabel = "Use the imported data as is",
-            paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Use the imported data as is. The current analysis did not identify a calculated route or fox-renumbering change that should be applied."
+            paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Use the imported data as is. The current analysis did not identify a calculated route or fox-renumbering change that should be applied.$caveats"
         )
+    }
+
+    private fun recommendationCaveats(
+        calculatedRouteApplication: DesktopCourseCalculatedRouteApplication?,
+        providedSection: DesktopCourseAnalysisSection?,
+        calculatedSection: DesktopCourseAnalysisSection?,
+        lengthRequirement: CourseRuleRequirement?,
+        idealOrderMatches: Boolean?,
+        waitRenumbering: DesktopCourseWaitRenumbering?
+    ): String =
+        listOfNotNull(
+            calculatedLengthRangeCaveat(
+                calculatedSection = calculatedSection,
+                providedSection = providedSection,
+                lengthRequirement = lengthRequirement,
+                idealOrderMatches = idealOrderMatches
+            ),
+            waitTimeRecommendationCaveat(
+                calculatedRouteApplication = calculatedRouteApplication,
+                providedSection = providedSection,
+                calculatedSection = calculatedSection,
+                waitRenumbering = waitRenumbering
+            )
+        )
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(separator = " ", prefix = " ")
+            .orEmpty()
+
+    private fun calculatedLengthRangeCaveat(
+        calculatedSection: DesktopCourseAnalysisSection?,
+        providedSection: DesktopCourseAnalysisSection?,
+        idealOrderMatches: Boolean?,
+        lengthRequirement: CourseRuleRequirement?
+    ): String? {
+        val calculatedLength = calculatedSection?.comparisonLengthMeters
+            ?: providedSection?.comparisonLengthMeters?.takeIf { idealOrderMatches == true }
+            ?: return null
+        val requirement = lengthRequirement ?: return null
+        if (calculatedLength in requirement.minLengthMeters..requirement.maxLengthMeters) {
+            return null
+        }
+        val measurement = (
+            calculatedSection?.comparisonLengthLabel
+                ?: providedSection?.comparisonLengthLabel
+                ?: "comparison length"
+            ).lowercase()
+        return "Caveat: the calculated ideal route's $measurement is ${summaryLengthText(calculatedLength)}, outside the ${requirement.lengthRangeText()} rules range. The calculated ideal route is still the honest representation of the course's overall difficulty and should be used when describing the course length. The better course-design action is to redesign the course by moving the start, finish, or foxes until the calculated ideal route length falls inside the rules range for the category."
+    }
+
+    private fun waitTimeRecommendationCaveat(
+        calculatedRouteApplication: DesktopCourseCalculatedRouteApplication?,
+        providedSection: DesktopCourseAnalysisSection?,
+        calculatedSection: DesktopCourseAnalysisSection?,
+        waitRenumbering: DesktopCourseWaitRenumbering?
+    ): String? {
+        val caveats = mutableListOf<String>()
+        val currentLongWaits = providedSection?.waitRows.orEmpty().filter { it.waitSeconds > COURSE_RECOMMENDATION_WAIT_SECONDS }
+        if (calculatedRouteApplication == null && waitRenumbering?.improvesWait == true && currentLongWaits.isNotEmpty()) {
+            caveats += "One or more waits with the current fox numbering exceed $COURSE_RECOMMENDATION_WAIT_SECONDS seconds; use the suggested fox numbering to reduce avoidable waiting."
+        }
+        val bestCaseWaitRows = when {
+            calculatedRouteApplication != null -> calculatedSection?.waitRows.orEmpty()
+            waitRenumbering?.suggestedWaitRows?.isNotEmpty() == true -> waitRenumbering.suggestedWaitRows
+            calculatedSection?.waitRows?.isNotEmpty() == true -> calculatedSection.waitRows
+            else -> providedSection?.waitRows.orEmpty()
+        }
+        val bestLongWaits = bestCaseWaitRows.filter { it.waitSeconds > COURSE_RECOMMENDATION_WAIT_SECONDS }
+        if (bestLongWaits.isNotEmpty()) {
+            val longestWait = bestLongWaits.maxOf { it.waitSeconds }
+            val waitContext = if (calculatedRouteApplication != null) {
+                "The calculated ideal route, with calculated fox numbering, still has"
+            } else {
+                "Even with the best-case fox numbering, the ideal route still has"
+            }
+            caveats += "$waitContext a fox wait longer than $COURSE_RECOMMENDATION_WAIT_SECONDS seconds (longest modeled wait ${compactDurationText(longestWait)}). Explore course modifications, such as moving the locations of some foxes, to reduce wait time at the affected foxes."
+        }
+        return caveats.takeIf { it.isNotEmpty() }?.joinToString(" ")
     }
 
     private fun goodnessMetrics(
@@ -2702,6 +2806,12 @@ object DesktopCourseAnalyzer {
             RaceType.ORIENTEERING -> null
         }
     }
+
+    private fun routeLengthRequirement(categoryName: String, raceType: RaceType): CourseRuleRequirement? =
+        when (raceType) {
+            RaceType.CLASSIC, RaceType.SHORT, RaceType.FOXORING -> categoryRequirement(categoryName, raceType)
+            RaceType.SPRINT, RaceType.ORIENTEERING -> null
+        }
 
     private fun spacingRuleSet(raceType: RaceType, categoryName: String): CourseSpacingRuleSet? {
         val key = categoryRuleKey(categoryName)
