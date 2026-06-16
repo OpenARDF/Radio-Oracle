@@ -528,7 +528,7 @@ class DesktopCourseAnalyzerTest {
         assertTrue(pdfText.contains("2D Route Depiction Graphics"))
         assertPdfInfoCanRead(pdfPath)
         assertEquals(pdfPath, exportPaths.pdfPath)
-        assertEquals(pdfPath.resolveSibling("Test Event - 3 foxes - 5.0 km - M21, M50.kml"), exportPaths.kmlPath)
+        assertEquals(pdfPath.resolveSibling("Classic - 3 foxes - 3.9 km - M21, M50.kml"), exportPaths.kmlPath)
 
         val multiPagePdfPath = Files.createTempFile("course-analysis-multipage", ".pdf")
         DesktopCourseAnalysisExports.exportPdf(

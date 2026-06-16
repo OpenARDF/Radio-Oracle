@@ -292,27 +292,25 @@ object DesktopCourseAnalysisExports {
         path.resolveSibling("${courseKmlFileStem(result)}.kml")
 
     private fun courseKmlFileStem(result: DesktopCourseAnalysisSummary): String {
-        val event = fileNamePart(result.eventName.ifBlank { "Course Analysis" })
+        val format = fileNamePart(result.eventFormatLabel.ifBlank { "Course Analysis" })
         val foxCount = result.assignedFoxCount
         val foxes = "$foxCount ${if (foxCount == 1) "fox" else "foxes"}"
-        val length = exportLengthMeters(result)
+        val length = calculatedIdealRouteLengthMeters(result)
             ?.let { String.format(Locale.US, "%.1f km", it / 1000.0) }
             ?: "unknown length"
         val categories = result.sameCourseCategoryNames
             .ifEmpty { listOf(result.categoryName) }
             .joinToString(", ")
             .let(::fileNamePart)
-        return listOf(event, foxes, length, categories)
+        return listOf(format, foxes, length, categories)
             .joinToString(" - ")
     }
 
-    private fun exportLengthMeters(result: DesktopCourseAnalysisSummary): Int? =
-        result.effectiveLengthMeters
-            ?: result.providedRouteSection?.effectiveLengthMeters
-            ?: result.calculatedRouteSection?.effectiveLengthMeters
-            ?: result.routeLengthMeters
-            ?: result.providedRouteSection?.routeLengthMeters
+    private fun calculatedIdealRouteLengthMeters(result: DesktopCourseAnalysisSummary): Int? =
+        result.calculatedRouteSection?.effectiveLengthMeters
             ?: result.calculatedRouteSection?.routeLengthMeters
+            ?: result.effectiveLengthMeters
+            ?: result.routeLengthMeters
 
     private fun fileNamePart(text: String): String =
         text
