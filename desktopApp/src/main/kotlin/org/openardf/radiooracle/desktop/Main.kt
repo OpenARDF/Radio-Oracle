@@ -10085,8 +10085,7 @@ private fun CourseAnalysisPanel(
                     onClick = {
                         val summary = analysisResult ?: return@Button
                         DesktopFileDialogs.chooseExportCourseAnalysisPdf(
-                            eventName = projectFile.raceData.race.name,
-                            categoryName = summary.categoryName
+                            defaultFileName = DesktopCourseAnalysisExports.defaultPdfFileName(summary)
                         )?.let { path ->
                             runCatching {
                                 val exportPaths = DesktopCourseAnalysisExports.exportPdfAndKml(path, summary)

@@ -528,7 +528,8 @@ class DesktopCourseAnalyzerTest {
         assertTrue(pdfText.contains("2D Route Depiction Graphics"))
         assertPdfInfoCanRead(pdfPath)
         assertEquals(pdfPath, exportPaths.pdfPath)
-        assertEquals(pdfPath.resolveSibling("Classic - 3 foxes - 3.9 km - M21, M50.kml"), exportPaths.kmlPath)
+        assertEquals("Classic - 3 Foxes - 3.86 km - M21,M50.pdf", DesktopCourseAnalysisExports.defaultPdfFileName(summary))
+        assertEquals(pdfPath.resolveSibling("Classic - 3 Foxes - 3.86 km - M21,M50.kml"), exportPaths.kmlPath)
 
         val multiPagePdfPath = Files.createTempFile("course-analysis-multipage", ".pdf")
         DesktopCourseAnalysisExports.exportPdf(

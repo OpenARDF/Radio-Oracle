@@ -12,6 +12,9 @@ import kotlin.math.roundToInt
 object DesktopCourseAnalysisExports {
     private const val PdfDividerLine = "----------------------------------------"
 
+    fun defaultPdfFileName(result: DesktopCourseAnalysisSummary): String =
+        "${courseAnalysisFileStem(result)}${DesktopProjectFilePaths.PDF_EXTENSION}"
+
     fun exportPdfAndKml(path: Path, result: DesktopCourseAnalysisSummary): DesktopCourseAnalysisExportPaths {
         exportPdf(path, result)
         val kmlPath = kmlPathForPdf(path, result)
@@ -289,18 +292,18 @@ object DesktopCourseAnalysisExports {
             .replace("'", "&apos;")
 
     private fun kmlPathForPdf(path: Path, result: DesktopCourseAnalysisSummary): Path =
-        path.resolveSibling("${courseKmlFileStem(result)}.kml")
+        path.resolveSibling("${courseAnalysisFileStem(result)}.kml")
 
-    private fun courseKmlFileStem(result: DesktopCourseAnalysisSummary): String {
+    private fun courseAnalysisFileStem(result: DesktopCourseAnalysisSummary): String {
         val format = fileNamePart(result.eventFormatLabel.ifBlank { "Course Analysis" })
         val foxCount = result.assignedFoxCount
-        val foxes = "$foxCount ${if (foxCount == 1) "fox" else "foxes"}"
+        val foxes = "$foxCount ${if (foxCount == 1) "Fox" else "Foxes"}"
         val length = calculatedIdealRouteLengthMeters(result)
-            ?.let { String.format(Locale.US, "%.1f km", it / 1000.0) }
+            ?.let { String.format(Locale.US, "%.2f km", it / 1000.0) }
             ?: "unknown length"
         val categories = result.sameCourseCategoryNames
             .ifEmpty { listOf(result.categoryName) }
-            .joinToString(", ")
+            .joinToString(",")
             .let(::fileNamePart)
         return listOf(format, foxes, length, categories)
             .joinToString(" - ")
@@ -309,8 +312,6 @@ object DesktopCourseAnalysisExports {
     private fun calculatedIdealRouteLengthMeters(result: DesktopCourseAnalysisSummary): Int? =
         result.calculatedRouteSection?.effectiveLengthMeters
             ?: result.calculatedRouteSection?.routeLengthMeters
-            ?: result.effectiveLengthMeters
-            ?: result.routeLengthMeters
 
     private fun fileNamePart(text: String): String =
         text

@@ -245,14 +245,12 @@ object DesktopFileDialogs {
             ?.let(DesktopProjectFilePaths::withHtmlExtension)
             ?.let(::confirmOverwrite)
 
-    fun chooseExportCourseAnalysisPdf(eventName: String? = null, categoryName: String? = null): Path? =
+    fun chooseExportCourseAnalysisPdf(defaultFileName: String? = null): Path? =
         chooseFile(
             title = "Export Course Analysis PDF",
             mode = FileDialog.SAVE,
             extension = DesktopProjectFilePaths.PDF_EXTENSION,
-            defaultFileName = eventName?.let {
-                DesktopProjectFilePaths.defaultPdfFileName(it, listOfNotNull(categoryName, "course analysis").joinToString(" "))
-            }
+            defaultFileName = defaultFileName
         )
             ?.let(DesktopProjectFilePaths::withPdfExtension)
             ?.let(::confirmOverwrite)
