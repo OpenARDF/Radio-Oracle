@@ -570,8 +570,9 @@ class DesktopCourseAnalyzerTest {
         assertTrue(pdfText.contains("2D Route Depiction Graphics"))
         assertPdfInfoCanRead(pdfPath)
         assertEquals(pdfPath, exportPaths.pdfPath)
-        assertEquals("Classic - 3 Foxes - 3.86 km - M21,M50.pdf", DesktopCourseAnalysisExports.defaultPdfFileName(summary))
-        assertEquals(pdfPath.resolveSibling("Classic - 3 Foxes - 3.86 km - M21,M50.kml"), exportPaths.kmlPath)
+        val expectedFileStem = "Classic - 3 Foxes - 3.86 km - M21,M50"
+        assertEquals("$expectedFileStem.pdf", DesktopCourseAnalysisExports.defaultPdfFileName(summary))
+        assertEquals(pdfPath.resolveSibling("$expectedFileStem.kml"), exportPaths.kmlPath)
 
         val multiPagePdfPath = Files.createTempFile("course-analysis-multipage", ".pdf")
         DesktopCourseAnalysisExports.exportPdf(
@@ -586,8 +587,10 @@ class DesktopCourseAnalyzerTest {
         assertTrue(kmlText.contains("<LineString>"))
         assertTrue(kmlText.contains("<Point>"))
         assertTrue(kmlText.contains("<name>31</name>"))
-        assertTrue(kmlText.contains("<name>Imported route</name>"))
-        assertTrue(kmlText.contains("<name>Calculated route</name>"))
+        assertEquals(
+            List(summary.kmlFolders.size) { expectedFileStem },
+            kmlLineStringPlacemarkNames(kmlText)
+        )
         val lineStringCoordinateLines = kmlLineStringCoordinateLines(kmlText)
         assertEquals("Expected one route LineString per exported course route", summary.kmlFolders.size, lineStringCoordinateLines.size)
         assertTrue(lineStringCoordinateLines.all { it.size > 2 })
@@ -1436,6 +1439,19 @@ class DesktopCourseAnalyzerTest {
                     .map { it.trim() }
                     .filter { it.isNotEmpty() }
                     .toList()
+            }
+            .toList()
+
+    private fun kmlLineStringPlacemarkNames(kmlText: String): List<String> =
+        Regex("<Placemark>[\\s\\S]*?</Placemark>")
+            .findAll(kmlText)
+            .map { it.value }
+            .filter { it.contains("<LineString>") }
+            .mapNotNull { placemark ->
+                Regex("<name>([\\s\\S]*?)</name>")
+                    .find(placemark)
+                    ?.groupValues
+                    ?.get(1)
             }
             .toList()
 

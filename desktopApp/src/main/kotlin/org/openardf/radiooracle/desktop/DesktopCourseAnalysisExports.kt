@@ -29,7 +29,7 @@ object DesktopCourseAnalysisExports {
 
     fun exportKml(path: Path, result: DesktopCourseAnalysisSummary) {
         path.parent?.let { Files.createDirectories(it) }
-        Files.writeString(path, kmlText(result), StandardCharsets.UTF_8)
+        Files.writeString(path, kmlText(result, kmlFileStem(path)), StandardCharsets.UTF_8)
     }
 
     fun reportText(result: DesktopCourseAnalysisSummary): String =
@@ -213,12 +213,12 @@ object DesktopCourseAnalysisExports {
         }
     }
 
-    private fun kmlText(result: DesktopCourseAnalysisSummary): String =
+    private fun kmlText(result: DesktopCourseAnalysisSummary, kmlFileStem: String): String =
         buildString {
             appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
             appendLine("""<kml xmlns="http://www.opengis.net/kml/2.2">""")
             appendLine("  <Document>")
-            appendLine("    <name>${xmlText("Course Analyzer - ${result.categoryName}")}</name>")
+            appendLine("    <name>${xmlText(kmlFileStem)}</name>")
             appendLine("    <Style id=\"storedRouteStyle\"><LineStyle><color>ff0057b8</color><width>4</width></LineStyle></Style>")
             appendLine("    <Style id=\"calculatedRouteStyle\"><LineStyle><color>ff00a676</color><width>4</width></LineStyle></Style>")
             appendLine("    <Style id=\"foxStyle\"><IconStyle><scale>1.1</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle></Style>")
@@ -228,20 +228,24 @@ object DesktopCourseAnalysisExports {
                 } else {
                     "calculatedRouteStyle"
                 }
-                appendKmlFolder(folder, routeStyleId)
+                appendKmlFolder(folder, routeStyleId, kmlFileStem)
             }
             appendLine("  </Document>")
             appendLine("</kml>")
         }
 
-    private fun StringBuilder.appendKmlFolder(folder: DesktopCourseKmlExportFolder, routeStyleId: String) {
+    private fun StringBuilder.appendKmlFolder(
+        folder: DesktopCourseKmlExportFolder,
+        routeStyleId: String,
+        routeName: String
+    ) {
         appendLine("    <Folder>")
         appendLine("      <name>${xmlText(folder.title)}</name>")
         appendLine("      <open>1</open>")
         val routeCoordinates = kmlRouteCoordinates(folder)
         if (routeCoordinates.size >= 2) {
             appendLine("      <Placemark>")
-            appendLine("        <name>${xmlText(folder.routeName)}</name>")
+            appendLine("        <name>${xmlText(routeName)}</name>")
             appendLine("        <styleUrl>#$routeStyleId</styleUrl>")
             appendLine("        <LineString>")
             appendLine("          <tessellate>1</tessellate>")
@@ -291,6 +295,15 @@ object DesktopCourseAnalysisExports {
 
     private fun kmlPathForPdf(path: Path, result: DesktopCourseAnalysisSummary): Path =
         path.resolveSibling("${courseAnalysisFileStem(result)}.kml")
+
+    private fun kmlFileStem(path: Path): String {
+        val fileName = path.fileName?.toString().orEmpty()
+        return if (fileName.endsWith(".kml", ignoreCase = true)) {
+            fileName.dropLast(4)
+        } else {
+            fileName.substringBeforeLast('.', fileName)
+        }
+    }
 
     private fun courseAnalysisFileStem(result: DesktopCourseAnalysisSummary): String {
         val format = fileNamePart(result.eventFormatLabel.ifBlank { "Course Analysis" })
