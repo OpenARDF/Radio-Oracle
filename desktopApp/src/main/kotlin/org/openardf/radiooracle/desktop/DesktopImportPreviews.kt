@@ -178,14 +178,27 @@ object DesktopImportPreviews {
         controlCount: Int?,
         controlTypes: List<ControlPointType>
     ): List<RaceType> {
+        val sourceNameText = sourceName.lowercase()
         val haystack = (listOf(sourceName) + clues)
             .joinToString(" ")
             .lowercase()
+        val sourceNameSuggestsFoxoring = sourceNameText.containsFoxoringToken()
+        val foxCount = controlTypes.count { it == ControlPointType.CONTROL }
+        val hasSpectator = controlTypes.any { it == ControlPointType.SEPARATOR }
+        val exceedsSprintFoxLimit = foxCount > 10
+        val hasSprintControlShape = controlCount != null &&
+            controlCount > 6 &&
+            foxCount in 1..10 &&
+            hasSpectator
         return buildList {
-            if (haystack.contains("sprint") || Regex("""\b[1-5]f\b""").containsMatchIn(haystack)) {
+            if (
+                !sourceNameSuggestsFoxoring &&
+                !exceedsSprintFoxLimit &&
+                (haystack.contains("sprint") || hasSprintControlShape)
+            ) {
                 add(RaceType.SPRINT)
             }
-            if (haystack.contains("foxoring") || haystack.contains("fox-o") || haystack.contains("fox o")) {
+            if (haystack.containsFoxoringToken()) {
                 add(RaceType.FOXORING)
             }
             if (haystack.contains("classic")) {
@@ -194,14 +207,12 @@ object DesktopImportPreviews {
             if (haystack.contains("orienteering")) {
                 add(RaceType.ORIENTEERING)
             }
-            if (
-                controlCount != null &&
-                controlCount > 6 &&
-                controlTypes.count { it == ControlPointType.CONTROL } > 5 &&
-                controlTypes.any { it == ControlPointType.BEACON || it == ControlPointType.SEPARATOR }
-            ) {
-                add(RaceType.SPRINT)
-            }
         }
     }
+
+    private fun String.containsFoxoringToken(): Boolean =
+        contains("foxoring") ||
+            contains("fox-o") ||
+            contains("fox o") ||
+            Regex("""\bfoxo\b""").containsMatchIn(this)
 }

@@ -112,6 +112,62 @@ class DesktopImportPreviewsTest {
         assertEquals(0, preview.usedMissingCount)
     }
 
+    @Test
+    fun doesNotInferSprintFromFoxoringFastLabelControlNames() {
+        val warnings = DesktopImportPreviews.eventTypeWarnings(
+            eventRaceType = RaceType.FOXORING,
+            sourceName = "Foxoring M21.kml",
+            clues = listOf("1", "1F", "2", "2F", "3", "3F", "4", "4F", "5", "5F", "B"),
+            controlCount = 11,
+            controlTypes = List(10) { ControlPointType.CONTROL } + ControlPointType.BEACON
+        )
+
+        assertEquals(emptyList<String>(), warnings)
+    }
+
+    @Test
+    fun blocksSprintInferenceWhenFileNameSaysFoxO() {
+        val warnings = DesktopImportPreviews.eventTypeWarnings(
+            eventRaceType = RaceType.CLASSIC,
+            sourceName = "M21 Fox-O controls.kml",
+            clues = listOf("1F", "2F", "S", "B"),
+            controlCount = 8,
+            controlTypes = List(6) { ControlPointType.CONTROL } +
+                listOf(ControlPointType.SEPARATOR, ControlPointType.BEACON)
+        )
+
+        assertTrue(warnings.any { it.contains("Foxoring") && it.contains("Classic") })
+        assertTrue(warnings.none { it.contains("Sprint") })
+    }
+
+    @Test
+    fun infersSprintFromSpectatorWhenFoxCountIsInSprintRange() {
+        val warnings = DesktopImportPreviews.eventTypeWarnings(
+            eventRaceType = RaceType.CLASSIC,
+            sourceName = "M21 controls.kml",
+            clues = listOf("1", "1F", "2", "2F", "S", "B"),
+            controlCount = 8,
+            controlTypes = List(6) { ControlPointType.CONTROL } +
+                listOf(ControlPointType.SEPARATOR, ControlPointType.BEACON)
+        )
+
+        assertTrue(warnings.any { it.contains("Sprint") && it.contains("Classic") })
+    }
+
+    @Test
+    fun doesNotInferSprintWhenThereAreMoreThanTenFoxes() {
+        val warnings = DesktopImportPreviews.eventTypeWarnings(
+            eventRaceType = RaceType.CLASSIC,
+            sourceName = "Sprint M21 controls.kml",
+            clues = listOf("1", "1F", "2", "2F", "S", "B"),
+            controlCount = 13,
+            controlTypes = List(11) { ControlPointType.CONTROL } +
+                listOf(ControlPointType.SEPARATOR, ControlPointType.BEACON)
+        )
+
+        assertEquals(emptyList<String>(), warnings)
+    }
+
     private fun projectFile(
         includeCompetitor: Boolean = false,
         encryptedCourseInfo: String? = null,
