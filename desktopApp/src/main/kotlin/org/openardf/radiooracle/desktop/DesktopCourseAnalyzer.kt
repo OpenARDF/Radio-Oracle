@@ -834,6 +834,8 @@ object DesktopCourseAnalyzer {
             providedSection = providedSection,
             calculatedSection = calculatedSection,
             lengthRequirement = routeLengthRequirement(category.name, raceType),
+            categoryName = category.name,
+            calculatedIdealOrder = calculatedRouteLabels(calculatedRoute?.controls.orEmpty(), calculatedLabelOverrides),
             idealOrderMatches = idealOrderMatches,
             waitRenumbering = waitRenumbering
         )
@@ -1271,6 +1273,8 @@ object DesktopCourseAnalyzer {
         providedSection: DesktopCourseAnalysisSection?,
         calculatedSection: DesktopCourseAnalysisSection?,
         lengthRequirement: CourseRuleRequirement?,
+        categoryName: String,
+        calculatedIdealOrder: List<String>,
         idealOrderMatches: Boolean?,
         waitRenumbering: DesktopCourseWaitRenumbering?
     ): DesktopCourseRecommendation {
@@ -1282,8 +1286,15 @@ object DesktopCourseAnalyzer {
             } else {
                 null
             }
-            val reason = if (shorterByMeters != null) {
-                "The calculated ideal route is ${summaryLengthText(shorterByMeters)} shorter than the imported route, so it is the better solution even if the imported route more closely matches category length guidance."
+            val reason = if (shorterByMeters != null && calculatedLength != null) {
+                val percentLonger = if (calculatedLength > 0) {
+                    (shorterByMeters.toDouble() / calculatedLength.toDouble() * 100.0).roundToInt()
+                } else {
+                    null
+                }
+                val percentText = percentLonger?.let { " ($it%)" }.orEmpty()
+                val routeOrderText = calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }
+                "The imported route is ${summaryLengthText(shorterByMeters)}$percentText longer than the ideal route. The calculated ideal route length (${summaryLengthText(calculatedLength)}) should therefore be used as the course's effective length for $categoryName, and the ideal route order is $routeOrderText with calculated fox numbering as shown in the 2D route depiction graphic below."
             } else {
                 "The calculated solution differs from the imported route under the current model, so applying it will replace the imported route and numbering with the calculated candidate."
             }
