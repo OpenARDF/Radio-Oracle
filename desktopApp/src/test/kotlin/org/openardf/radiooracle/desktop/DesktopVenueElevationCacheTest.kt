@@ -77,6 +77,39 @@ class DesktopVenueElevationCacheTest {
     }
 
     @Test
+    fun recognizesLocalElevationSourceTypes() {
+        assertEquals(LocalElevationSourceType.GeoTiff, DesktopVenueElevationCache.desktopLocalElevationSourceType("venue.tif"))
+        assertEquals(LocalElevationSourceType.GeoTiff, DesktopVenueElevationCache.desktopLocalElevationSourceType("venue.TIFF"))
+        assertEquals(LocalElevationSourceType.GeoTiffZip, DesktopVenueElevationCache.desktopLocalElevationSourceType("venue.zip"))
+        assertEquals(LocalElevationSourceType.LasPointCloud, DesktopVenueElevationCache.desktopLocalElevationSourceType("venue.las"))
+        assertEquals(LocalElevationSourceType.LasPointCloud, DesktopVenueElevationCache.desktopLocalElevationSourceType("venue.LAZ"))
+        assertEquals(null, DesktopVenueElevationCache.desktopLocalElevationSourceType("venue.txt"))
+    }
+
+    @Test
+    fun buildsPdalPipelineForLasPointCloudRasterization() {
+        val pipeline = desktopPdalLasPointCloudRasterPipeline(
+            sourcePath = Path.of("/data/source.laz"),
+            outputRaster = Path.of("/tmp/output.tif"),
+            resolutionMeters = 2.5,
+            boundingBox = DesktopVenueElevationBoundingBox(
+                minLatitude = 44.9999,
+                maxLatitude = 45.0001,
+                minLongitude = -122.0001,
+                maxLongitude = -121.9999
+            )
+        )
+
+        assertTrue(pipeline.contains("readers.las"))
+        assertTrue(pipeline.contains("filters.reprojection"))
+        assertTrue(pipeline.contains("EPSG:3857"))
+        assertTrue(pipeline.contains("filters.crop"))
+        assertTrue(pipeline.contains("writers.gdal"))
+        assertTrue(pipeline.contains("\"resolution\":2.5"))
+        assertTrue(pipeline.contains("\"output_type\":\"idw\""))
+    }
+
+    @Test
     fun prefersLidarDtmCacheOverFinerUsgsCache() {
         withTemporaryUserHome { home ->
             val cacheDirectory = home

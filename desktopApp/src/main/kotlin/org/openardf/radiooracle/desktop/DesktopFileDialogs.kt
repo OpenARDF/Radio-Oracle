@@ -346,13 +346,15 @@ object DesktopFileDialogs {
     }
 
     fun chooseElevationRaster(): Path? {
-        val dialog = FileDialog(null as Frame?, "Select Elevation Raster", FileDialog.LOAD)
+        val dialog = FileDialog(null as Frame?, "Select Elevation Source", FileDialog.LOAD)
         dialog.filenameFilter = FilenameFilter { _, name ->
             name.endsWith(".tif", ignoreCase = true) ||
                 name.endsWith(".tiff", ignoreCase = true) ||
-                name.endsWith(".zip", ignoreCase = true)
+                name.endsWith(".zip", ignoreCase = true) ||
+                name.endsWith(".las", ignoreCase = true) ||
+                name.endsWith(".laz", ignoreCase = true)
         }
-        dialog.file = "*.tif;*.tiff;*.zip"
+        dialog.file = "*.tif;*.tiff;*.zip;*.las;*.laz"
         dialog.isVisible = true
 
         val directory = dialog.directory ?: return null

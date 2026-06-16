@@ -835,7 +835,7 @@ object DesktopNavigation {
         "setup.controls.elevation-cache" to
             "Use Elevation Data to inspect cached venue elevation files used for stored course routes, climb estimates, and course-analysis calculations.",
         "setup.controls.elevation-cache.import" to
-            "Use Import Elevation Data to create a venue elevation cache from online elevation services or a local raster file.",
+            "Use Import Elevation Data to create a venue elevation cache from online elevation services, a local raster, or a LAS/LAZ point cloud.",
         "setup.controls.elevation-cache.import-dem" to
             "Use Import DEM File to add one or more existing Radio-Oracle DEM cache JSON files, including cache files packaged inside a ZIP archive.",
         "setup.controls.course-analysis" to

@@ -1852,7 +1852,7 @@ fun main(args: Array<String>) = application {
             sourceUrl: String = ""
         ) {
             if (source == DesktopVenueElevationCacheSource.LocalLidarRaster && sourceUrl.isBlank()) {
-                projectStatusText = "Local LiDAR Raster requires a source file."
+                projectStatusText = "Local LiDAR import requires a source file."
                 return
             }
             if (venueElevationCacheJob?.isActive == true) {
@@ -9675,7 +9675,7 @@ private fun VenueElevationCacheImportPanel(
                         }
                     }
                 ) {
-                    ButtonLabel("Select Local Raster...")
+                    ButtonLabel("Select Local Source...")
                 }
                 Button(
                     onClick = {
@@ -9695,17 +9695,17 @@ private fun VenueElevationCacheImportPanel(
                         resolutionMeters > 0.0 &&
                         localRasterPathDraft.isNotBlank()
                 ) {
-                    ButtonLabel("Create Cache from Local Raster")
+                    ButtonLabel("Create Cache from Local Source")
                 }
             }
             LabeledTextField(
-                "Local raster file",
+                "Local source file",
                 localRasterPathDraft,
                 { localRasterPathDraft = it },
                 Modifier.width(640.dp)
             )
             Text(
-                text = "Use a local GeoTIFF raster (.tif/.tiff) or GeoTIFF ZIP (.zip), such as a countywide LiDAR DEM, to create a venue-sized cache without downloading elevation data.",
+                text = "Use a local GeoTIFF raster (.tif/.tiff), GeoTIFF ZIP (.zip), or LAS/LAZ point cloud (.las/.laz), such as a countywide LiDAR DEM, to create a venue-sized cache without downloading elevation data.",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
