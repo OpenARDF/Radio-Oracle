@@ -285,6 +285,7 @@ object DesktopCourseAnalyzer {
     private const val FOXORING_ROLLING_WINDOW_CONTROLS = 5
     private const val MAX_SPRINT_LOOP_PERMUTATIONS = 120
     private const val CALCULATED_ROUTE_SAMPLE_METERS = 25.0
+    private const val ROUTE_STOP_TOLERANCE_METERS = 5.0
     private const val COURSE_RECOMMENDATION_WAIT_SECONDS = 30
     private const val ELEVATION_CACHE_RESOLUTION_NOTE =
         "Elevation Cache resolution is the local sample-grid spacing; USGS 3DEP source DEM resolution varies, so a 3 m cache does not guarantee 3 m source terrain data everywhere."
@@ -357,10 +358,16 @@ object DesktopCourseAnalyzer {
         val idealOrderText = protectedIdealOrderText?.takeIf { it.isNotBlank() }
             ?: protectedCourseInfo?.idealOrder?.takeIf { it.isNotBlank() }
         val categoryAssignedControls = assignedControls(projectFile, categoryId)
+        val allProtectedControls = protectedCourseInfo
+            ?.let { protectedAssignedControls(projectFile, it, null) }
+            .orEmpty()
+        val terminalBeaconControl = allProtectedControls.firstOrNull { it.type == ControlPointType.BEACON }
+            ?: categoryAssignedControls.firstOrNull { it.type == ControlPointType.BEACON }
         val protectedRouteControls = protectedCourseInfo
             ?.let { protectedAssignedControls(projectFile, it, idealOrderText) }
             .orEmpty()
-        val assignedControls = protectedRouteControls.ifEmpty { categoryAssignedControls }
+            .withTerminalBeacon(terminalBeaconControl)
+        val assignedControls = protectedRouteControls.ifEmpty { categoryAssignedControls.withTerminalBeacon(terminalBeaconControl) }
         val sameCourseCategoryNames = sameCourseCategoryNames(projectFile, categoryId)
         val protectedControlPointsById = protectedCourseInfo?.controlPoints.orEmpty().associateBy { it.controlId }
         val protectedCoordinateLookup = protectedCoordinateLookup(protectedCourseInfo)
@@ -369,9 +376,13 @@ object DesktopCourseAnalyzer {
         if (protectedCourseInfo == null) {
             missing += "Route data is locked by the Event Password or has not been imported for ${category.name}."
         }
-        val route = protectedCourseInfo?.route.orEmpty().map {
-            CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters)
-        }
+        val courseObjectPoints = protectedCourseInfo?.courseObjects.orEmpty()
+        val route = normalizedImportedRoute(
+            protectedCourseInfo?.route.orEmpty().map {
+                CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters)
+            },
+            courseObjectPoints
+        )
         if (route.size < 2) {
             missing += "Route geometry with start and finish points is missing."
         }
@@ -425,11 +436,11 @@ object DesktopCourseAnalyzer {
             missing += "Location latitude/longitude is missing for control ${it.control.publicDisplayLabel()}."
         }
 
-        val start = route.firstOrNull() ?: protectedCourseInfo?.courseObjects
-            ?.firstOrNull { it.type == ProtectedCourseObjectType.START }
+        val start = route.firstOrNull() ?: courseObjectPoints
+            .firstOrNull { it.type == ProtectedCourseObjectType.START }
             ?.toGeoPoint()
-        val finish = route.lastOrNull() ?: protectedCourseInfo?.courseObjects
-            ?.firstOrNull { it.type == ProtectedCourseObjectType.FINISH }
+        val finish = route.lastOrNull() ?: courseObjectPoints
+            .firstOrNull { it.type == ProtectedCourseObjectType.FINISH }
             ?.toGeoPoint()
         val foxes = controlsWithPoints
             .filter { it.control.type == ControlPointType.CONTROL && it.point != null }
@@ -448,7 +459,7 @@ object DesktopCourseAnalyzer {
             missing = missing
         )
 
-        val providedControls = idealOrderText
+        val providedControlsFromOrder = idealOrderText
             ?.let { idealOrder ->
                 runCatching {
                     val ids = ProtectedIdealOrderRules.resolveControlIds(idealOrder, assignedControls)
@@ -459,6 +470,7 @@ object DesktopCourseAnalyzer {
                 }
             }
             .orEmpty()
+        val providedControls = providedControlsFromOrder.withTerminalBeacon(terminalBeaconControl)
         val providedFoxIds = providedControls
             .filter { it.type == ControlPointType.CONTROL }
             .map { it.id }
@@ -572,6 +584,9 @@ object DesktopCourseAnalyzer {
         val calculatedLabelOverrides = calculatedRoute
             ?.let { routeCandidate -> calculatedLabelOverrides(routeCandidate.controls, calculatedWaitRenumbering) }
             .orEmpty()
+        val calculatedIdealOrder = calculatedRoute
+            ?.let { routeCandidate -> calculatedRouteLabels(routeCandidate.controls, calculatedLabelOverrides, includeFinish = true) }
+            .orEmpty()
         val calculatedTiming = calculatedRoute?.let { routeCandidate ->
             straightLineTiming(
                 start = start,
@@ -667,9 +682,9 @@ object DesktopCourseAnalyzer {
                         providedAssignments = waitRenumbering?.assignments.orEmpty(),
                         calculatedAssignments = optimizedAssignments
                     ),
-                    routeOrder = calculatedRouteLabels(routeCandidate.controls),
+                    routeOrder = calculatedRouteLabels(routeCandidate.controls, includeFinish = true),
                     routeOrderLabel = "Route order (imported fox numbering)",
-                    secondaryRouteOrder = calculatedRouteLabels(routeCandidate.controls, calculatedLabelOverrides),
+                    secondaryRouteOrder = calculatedRouteLabels(routeCandidate.controls, calculatedLabelOverrides, includeFinish = true),
                     secondaryRouteOrderLabel = "Route order (calculated fox numbering)",
                     comparisonLengthMeters = calculatedRouteAnalysis?.comparisonLengthMeters?.roundToInt(),
                     comparisonLengthLabel = calculatedRouteAnalysis?.measurementLabel ?: "Unknown",
@@ -699,7 +714,7 @@ object DesktopCourseAnalyzer {
             DesktopCourseAnalysisSection(
                 title = "Section 1: Imported route analysis",
                 explanation = providedSectionExplanation(analysis),
-                routeOrder = eventControlRouteLabels(providedControls),
+                routeOrder = eventControlRouteLabels(providedControls, includeFinish = true),
                 comparisonLengthMeters = analysis.comparisonLengthMeters.roundToInt(),
                 comparisonLengthLabel = analysis.measurementLabel,
                 straightLineMeters = providedStraightLineMeters,
@@ -727,9 +742,9 @@ object DesktopCourseAnalyzer {
         val metrics = goodnessMetrics(
             raceType = raceType,
             categoryName = category.name,
-            routeLengthMeters = protectedCourseInfo?.lengthMeters,
-            climbMeters = protectedCourseInfo?.climbMeters,
-            calculatedRouteLengthMeters = calculatedRoute?.distanceMeters?.roundToInt(),
+            routeLengthMeters = providedRouteAnalysis?.routeLengthMeters?.roundToInt(),
+            climbMeters = providedRouteAnalysis?.climbMeters?.roundToInt(),
+            calculatedRouteLengthMeters = calculatedRouteAnalysis?.routeLengthMeters?.roundToInt(),
             calculatedRouteClimbMeters = calculatedRouteClimbMeters(
                 start = start,
                 controls = calculatedRoute?.controls.orEmpty(),
@@ -738,7 +753,7 @@ object DesktopCourseAnalyzer {
             ),
             importedComparisonLengthMeters = providedRouteAnalysis?.comparisonLengthMeters?.roundToInt(),
             calculatedComparisonLengthMeters = calculatedRouteAnalysisForChecks?.comparisonLengthMeters?.roundToInt(),
-            effectiveLengthMeters = protectedCourseInfo?.effectiveLengthMeters(),
+            effectiveLengthMeters = providedRouteAnalysis?.effectiveLengthMeters?.roundToInt(),
             estimatedIdealSeconds = estimatedIdealSeconds,
             waitRows = waitRows,
             waitRenumbering = waitRenumbering,
@@ -841,8 +856,8 @@ object DesktopCourseAnalyzer {
             providedSection = providedSection,
             calculatedSection = calculatedSection,
             calculatedRouteCount = calculatedRoute?.routeCount ?: 0,
-            calculatedIdealOrder = calculatedRouteLabels(calculatedRoute?.controls.orEmpty(), calculatedLabelOverrides),
-            providedIdealOrder = eventControlRouteLabels(providedControls),
+            calculatedIdealOrder = calculatedIdealOrder,
+            providedIdealOrder = eventControlRouteLabels(providedControls, includeFinish = true),
             idealOrderMatches = idealOrderMatches,
             waitRenumbering = waitRenumbering
         )
@@ -852,7 +867,7 @@ object DesktopCourseAnalyzer {
             calculatedSection = calculatedSection,
             lengthRequirement = routeLengthRequirement(category.name, raceType),
             categoryName = category.name,
-            calculatedIdealOrder = calculatedRouteLabels(calculatedRoute?.controls.orEmpty(), calculatedLabelOverrides),
+            calculatedIdealOrder = calculatedIdealOrder,
             idealOrderMatches = idealOrderMatches,
             waitRenumbering = waitRenumbering
         )
@@ -889,14 +904,14 @@ object DesktopCourseAnalyzer {
             calculatedRouteApplication = calculatedRouteApplication,
             missingElements = missing.distinct(),
             calculatedRouteCount = calculatedRoute?.routeCount ?: 0,
-            calculatedIdealOrder = calculatedRouteLabels(calculatedRoute?.controls.orEmpty(), calculatedLabelOverrides),
-            providedIdealOrder = eventControlRouteLabels(providedControls),
+            calculatedIdealOrder = calculatedIdealOrder,
+            providedIdealOrder = eventControlRouteLabels(providedControls, includeFinish = true),
             idealOrderMatches = idealOrderMatches,
             calculatedStraightLineMeters = calculatedRoute?.distanceMeters?.roundToInt(),
             providedStraightLineMeters = providedStraightLineMeters,
-            routeLengthMeters = protectedCourseInfo?.lengthMeters,
-            climbMeters = protectedCourseInfo?.climbMeters,
-            effectiveLengthMeters = protectedCourseInfo?.effectiveLengthMeters(),
+            routeLengthMeters = providedRouteAnalysis?.routeLengthMeters?.roundToInt(),
+            climbMeters = providedRouteAnalysis?.climbMeters?.roundToInt(),
+            effectiveLengthMeters = providedRouteAnalysis?.effectiveLengthMeters?.roundToInt(),
             estimatedIdealSeconds = estimatedIdealSeconds,
             hasMissingElevationData = hasMissingElevationData,
             hasMissingCalculatedRouteElevationData = hasMissingCalculatedRouteElevationData,
@@ -1062,8 +1077,8 @@ object DesktopCourseAnalyzer {
         protectedCourseInfo: ProtectedCourseInfo?,
         timing: RouteTimingAnalysis
     ): RouteAnalysis {
-        val routeLengthMeters = protectedCourseInfo?.lengthMeters?.toDouble() ?: route.straightLineMeters()
-        val climbMeters = protectedCourseInfo?.climbMeters?.toDouble() ?: climbMetersOrNull(route)
+        val routeLengthMeters = route.straightLineMeters()
+        val climbMeters = climbMetersOrNull(route)
         val hasCompleteElevation = route.all { it.elevationMeters != null } && climbMeters != null
         val effectiveLengthMeters = if (hasCompleteElevation) routeLengthMeters + 10.0 * requireNotNull(climbMeters) else null
         return RouteAnalysis(
@@ -2280,12 +2295,23 @@ object DesktopCourseAnalyzer {
 
     private fun calculatedRouteLabels(
         controls: List<ControlAnalysisPoint>,
-        labelOverrides: Map<String, String> = emptyMap()
+        labelOverrides: Map<String, String> = emptyMap(),
+        includeFinish: Boolean = false
     ): List<String> =
-        listOf("S") + controls.map { labelOverrides[it.control.id] ?: it.control.analysisRouteLabel() }
+        routeLabelsWithFinish(
+            listOf("S") + controls.map { labelOverrides[it.control.id] ?: it.control.analysisRouteLabel() },
+            includeFinish
+        )
 
-    private fun eventControlRouteLabels(controls: List<EventControl>): List<String> =
-        listOf("S") + controls.map { it.analysisRouteLabel() }
+    private fun eventControlRouteLabels(controls: List<EventControl>, includeFinish: Boolean = false): List<String> =
+        routeLabelsWithFinish(listOf("S") + controls.map { it.analysisRouteLabel() }, includeFinish)
+
+    private fun routeLabelsWithFinish(labels: List<String>, includeFinish: Boolean): List<String> =
+        if (includeFinish && labels.lastOrNull() != "F") {
+            labels + "F"
+        } else {
+            labels
+        }
 
     private fun estimatedIdealSecondsDouble(route: List<CourseGeoPoint>, speedModel: DesktopCourseSpeedModel): Double? {
         if (route.size < 2) {
@@ -2356,6 +2382,40 @@ object DesktopCourseAnalyzer {
         } else {
             categoryData.publicControlIds
         }
+
+    private fun List<EventControl>.withTerminalBeacon(beacon: EventControl?): List<EventControl> =
+        if (beacon == null || any { it.id == beacon.id }) {
+            this
+        } else {
+            this + beacon
+        }
+
+    private fun normalizedImportedRoute(
+        route: List<CourseGeoPoint>,
+        courseObjects: List<ProtectedCourseObjectPoint>
+    ): List<CourseGeoPoint> {
+        if (route.isEmpty()) {
+            return route
+        }
+        val finish = courseObjects.firstOrNull { it.type == ProtectedCourseObjectType.FINISH }?.toGeoPoint()
+        val beacon = courseObjects.firstOrNull { it.type == ProtectedCourseObjectType.BEACON }?.toGeoPoint()
+        val routeEndingAtFinish = if (finish == null || route.last().sameRouteStop(finish)) {
+            route
+        } else {
+            route + finish
+        }
+        if (beacon == null || routeEndingAtFinish.any { it.sameRouteStop(beacon) }) {
+            return routeEndingAtFinish
+        }
+        return if (routeEndingAtFinish.size == 1) {
+            listOf(beacon, routeEndingAtFinish.last())
+        } else {
+            routeEndingAtFinish.dropLast(1) + beacon + routeEndingAtFinish.last()
+        }
+    }
+
+    private fun CourseGeoPoint.sameRouteStop(other: CourseGeoPoint): Boolean =
+        distanceMetersTo(other) <= ROUTE_STOP_TOLERANCE_METERS
 
     private fun calculatedElevationMarkers(
         start: CourseGeoPoint?,

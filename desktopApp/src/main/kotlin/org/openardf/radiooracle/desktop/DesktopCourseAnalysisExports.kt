@@ -238,16 +238,17 @@ object DesktopCourseAnalysisExports {
         appendLine("    <Folder>")
         appendLine("      <name>${xmlText(folder.title)}</name>")
         appendLine("      <open>1</open>")
-        val routeSegments = kmlRouteSegments(folder)
-        routeSegments.forEach { (from, to) ->
+        val routeCoordinates = kmlRouteCoordinates(folder)
+        if (routeCoordinates.size >= 2) {
             appendLine("      <Placemark>")
-            appendLine("        <name>${xmlText("${folder.routeName} ${from.label} to ${to.label}")}</name>")
+            appendLine("        <name>${xmlText(folder.routeName)}</name>")
             appendLine("        <styleUrl>#$routeStyleId</styleUrl>")
             appendLine("        <LineString>")
             appendLine("          <tessellate>1</tessellate>")
             appendLine("          <coordinates>")
-            appendLine("            ${kmlCoordinate(from.point)}")
-            appendLine("            ${kmlCoordinate(to.point)}")
+            routeCoordinates.forEach { point ->
+                appendLine("            ${kmlCoordinate(point)}")
+            }
             appendLine("          </coordinates>")
             appendLine("        </LineString>")
             appendLine("      </Placemark>")
@@ -267,14 +268,11 @@ object DesktopCourseAnalysisExports {
         appendLine("    </Folder>")
     }
 
-    private fun kmlRouteSegments(folder: DesktopCourseKmlExportFolder): List<Pair<DesktopCourseKmlRouteStop, DesktopCourseKmlRouteStop>> =
-        if (folder.routeStops.size >= 2) {
-            folder.routeStops.zipWithNext()
-        } else {
-            folder.routePoints.zipWithNext().mapIndexed { index, (from, to) ->
-                DesktopCourseKmlRouteStop("Point ${index + 1}", from) to DesktopCourseKmlRouteStop("Point ${index + 2}", to)
-            }
-        }
+    private fun kmlRouteCoordinates(folder: DesktopCourseKmlExportFolder): List<CourseGeoPoint> =
+        folder.routeStops
+            .takeIf { it.size >= 2 }
+            ?.map { it.point }
+            ?: folder.routePoints
 
     private fun kmlCoordinate(point: CourseGeoPoint): String =
         if (point.elevationMeters != null) {
