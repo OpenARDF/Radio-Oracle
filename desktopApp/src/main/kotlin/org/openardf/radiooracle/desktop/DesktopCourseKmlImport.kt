@@ -118,6 +118,8 @@ data class DesktopCourseKmlCategoryAssignmentUpdate(
     val controls: List<DesktopCourseKmlAssignedControl>
 )
 
+class DesktopCourseKmlMissingRouteException(message: String) : IllegalArgumentException(message)
+
 data class DesktopRouteElevationProgress(
     val completedPointCount: Int,
     val totalPointCount: Int,
@@ -156,7 +158,8 @@ object DesktopCourseKmlImporter {
         categoryOverrideId: String? = null,
         elevationProvider: (CourseGeoPoint) -> Double? = { point -> DesktopVenueElevationCache.elevationMeters(point) },
         createMissingCategories: Boolean = false,
-        missingCategoryIdFactory: (String) -> String = { UUID.randomUUID().toString() }
+        missingCategoryIdFactory: (String) -> String = { UUID.randomUUID().toString() },
+        requireRoutes: Boolean = true
     ): Pair<EventProjectFile, DesktopCourseKmlImportSummary> {
         val sourceSha256 = fileSha256(path)
         val courseData = parse(path)
@@ -164,6 +167,12 @@ object DesktopCourseKmlImporter {
             "CourseKml",
             "Import parsed ${path.fileName}: hash=${sourceSha256.shortHash()} pointControls=${courseData.controls.size} routes=${courseData.routes.size}"
         )
+        if (requireRoutes && courseData.routes.isEmpty()) {
+            throw DesktopCourseKmlMissingRouteException(
+                "Course Analyzer imports require at least one route LineString or GPX route/track. " +
+                    "Import control-only files from Setup > Controls > Import/Export."
+            )
+        }
         val missingCategoryNames = missingRouteCategoryNames(
             routes = courseData.routes,
             categories = projectFile.raceData.categories,
@@ -266,7 +275,7 @@ object DesktopCourseKmlImporter {
                 // is only for route/elevation facts; assignment matching should reflect the controls
                 // intentionally placed near the imported category route.
                 val raceType = categoryData.category.effectiveRaceType(updatedProject.raceData.race)
-                val routeGeometry = orientedRoutePoints(route.points, courseData.controls)
+                val routeGeometry = normalizedRouteGeometry(route.points, courseData.controls, controlsByLabel.values.toList())
                 val routeLineControls = controlsOnRoute(routeGeometry, controlsByLabel.values.toList())
                 val explicitAssignmentControls = if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
                     controlsFromExplicitClassicRouteOrder(route.name, controls)
@@ -1088,7 +1097,7 @@ object DesktopCourseKmlImporter {
     ): Set<String> {
         val duplicateCategoryIds = linkedSetOf<String>()
         routes.forEach { route ->
-            val routeGeometry = orientedRoutePoints(route.points, importedControls)
+            val routeGeometry = normalizedRouteGeometry(route.points, importedControls, matchedControls)
             val routeLineControlIds = controlsOnRoute(routeGeometry, matchedControls).map { it.controlId }
             routeCategoryTargets.targets[route].orEmpty().forEach { categoryData ->
                 val sameSourceCourseInfo = courseInfoByCategoryId[categoryData.category.id]
@@ -1188,18 +1197,56 @@ object DesktopCourseKmlImporter {
         if (geometry.size < 2) {
             return geometry
         }
-        val startPoint = importedControls.firstOrNull { it.isCourseStartPoint() }?.point ?: return geometry
-        val finishPoint = importedControls.firstOrNull { it.isCourseFinishPoint() }?.point ?: return geometry
-        val asDrawnDistance = geometry.first().distanceMetersTo(startPoint) +
-            geometry.last().distanceMetersTo(finishPoint)
-        val reversedDistance = geometry.first().distanceMetersTo(finishPoint) +
-            geometry.last().distanceMetersTo(startPoint)
+        val startPoint = importedControls.firstOrNull { it.isCourseStartPoint() }?.point
+        val finishPoint = importedControls.firstOrNull { it.isCourseFinishPoint() }?.point
+        if (startPoint == null && finishPoint == null) {
+            return geometry
+        }
+        val asDrawnDistance = listOfNotNull(
+            startPoint?.let { geometry.first().distanceMetersTo(it) },
+            finishPoint?.let { geometry.last().distanceMetersTo(it) }
+        ).sum()
+        val reversedDistance = listOfNotNull(
+            finishPoint?.let { geometry.first().distanceMetersTo(it) },
+            startPoint?.let { geometry.last().distanceMetersTo(it) }
+        ).sum()
         return if (reversedDistance + ROUTE_ORIENTATION_TOLERANCE_METERS < asDrawnDistance) {
             geometry.reversed()
         } else {
             geometry
         }
     }
+
+    private fun normalizedRouteGeometry(
+        routePoints: List<CourseGeoPoint>,
+        importedControls: List<CourseControlPoint>,
+        matchedControls: List<CourseMatchedControl>
+    ): List<CourseGeoPoint> {
+        val oriented = orientedRoutePoints(routePoints, importedControls)
+        if (oriented.isEmpty()) {
+            return oriented
+        }
+        val explicitFinish = importedControls.firstOrNull { it.isCourseFinishPoint() }?.point
+        val finish = explicitFinish ?: oriented.last()
+        val routeEndingAtFinish = if (oriented.last().sameRoutePoint(finish)) {
+            oriented
+        } else {
+            oriented + finish.copy(elevationMeters = null)
+        }
+        val beacon = matchedControls.firstOrNull { it.type == ControlPointType.BEACON }?.point
+        if (beacon == null || routeEndingAtFinish.any { it.sameRoutePoint(beacon) }) {
+            return routeEndingAtFinish
+        }
+        val cleanBeacon = beacon.copy(elevationMeters = null)
+        return if (routeEndingAtFinish.size == 1) {
+            listOf(cleanBeacon, routeEndingAtFinish.last())
+        } else {
+            routeEndingAtFinish.dropLast(1) + cleanBeacon + routeEndingAtFinish.last()
+        }
+    }
+
+    private fun CourseGeoPoint.sameRoutePoint(other: CourseGeoPoint): Boolean =
+        distanceMetersTo(other) <= ROUTE_ORIENTATION_TOLERANCE_METERS
 
     private fun ProtectedCourseInfo.routeMatches(routeGeometry: List<CourseGeoPoint>): Boolean {
         if (route.isEmpty() || routeGeometry.isEmpty()) {

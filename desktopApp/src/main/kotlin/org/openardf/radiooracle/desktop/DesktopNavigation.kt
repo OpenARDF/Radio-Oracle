@@ -30,6 +30,8 @@ enum class DesktopNavAction {
     ImportCategoriesCsv,
     ImportCourseKmlKmz,
     ImportCourseGpx,
+    ImportControlsKmlKmz,
+    ImportControlsGpx,
     ImportControlsCsv,
     ImportCompetitorsCsv,
     ImportStartsCsv,
@@ -246,13 +248,13 @@ object DesktopNavigation {
                             listOf(
                                 action(
                                     "setup.controls.course-analysis.import-kml-kmz",
-                                    "Import Controls KML/KMZ...",
+                                    "Import Course KML/KMZ...",
                                     workflow,
                                     DesktopNavAction.ImportCourseKmlKmz
                                 ),
                                 action(
                                     "setup.controls.course-analysis.import-gpx",
-                                    "Import Controls GPX...",
+                                    "Import Course GPX...",
                                     workflow,
                                     DesktopNavAction.ImportCourseGpx
                                 )
@@ -280,7 +282,7 @@ object DesktopNavigation {
                                     "setup.controls.import-kml-kmz",
                                     "Import Controls KML/KMZ...",
                                     workflow,
-                                    DesktopNavAction.ImportCourseKmlKmz
+                                    DesktopNavAction.ImportControlsKmlKmz
                                 ),
                                 action(
                                     "setup.controls.export-kml-kmz",
@@ -292,7 +294,7 @@ object DesktopNavigation {
                                     "setup.controls.import-gpx",
                                     "Import Controls GPX...",
                                     workflow,
-                                    DesktopNavAction.ImportCourseGpx
+                                    DesktopNavAction.ImportControlsGpx
                                 ),
                                 action(
                                     "setup.controls.export-gpx",
@@ -839,9 +841,9 @@ object DesktopNavigation {
         "setup.controls.course-analysis" to
             "Use Course Analyzer to inspect stored course routes, ideal routes, climb, distance, time estimates, and classic wait-slot behavior.",
         "setup.controls.course-analysis.import-kml-kmz" to
-            "Use Import Controls KML/KMZ to bring in control placemarks and category route lines for course analysis and category course assignments.",
+            "Use Import Course KML/KMZ to bring in control placemarks and required category route lines for course analysis and category course assignments.",
         "setup.controls.course-analysis.import-gpx" to
-            "Use Import Controls GPX to bring in control waypoints and category routes for course analysis and category course assignments.",
+            "Use Import Course GPX to bring in control waypoints and required category routes or tracks for course analysis and category course assignments.",
         "setup.controls.import-export" to
             "Use Import/Export to synchronize control CSV files and protected controls/route KML/KMZ or GPX files with the current Event File.",
         "setup.controls.import-controls" to

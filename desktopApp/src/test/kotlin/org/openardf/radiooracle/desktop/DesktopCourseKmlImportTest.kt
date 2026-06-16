@@ -3,6 +3,7 @@ package org.openardf.radiooracle.desktop
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
@@ -103,6 +104,85 @@ class DesktopCourseKmlImportTest {
         assertEquals(gpxPath.fileName.toString(), protectedCourseInfo.sourceName)
         assertEquals(listOf("1", "2"), protectedCourseInfo.controlPoints.map { it.label })
         assertEquals("31 32", summary.categoryAssignmentUpdates.single().controlPointsText)
+    }
+
+    @Test
+    fun courseAnalyzerImportRejectsControlsOnlyKmlWhenRouteIsRequired() {
+        val controlsOnlyPath = Files.createTempFile("radio-oracle-controls", ".kml")
+        Files.writeString(controlsOnlyPath, controlsOnlyKml(longitude31 = -95.0000, longitude32 = -94.9980))
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        try {
+            DesktopCourseKmlImporter.importProtectedCourseInfo(
+                path = controlsOnlyPath,
+                projectFile = project,
+                password = "course-key"
+            )
+            fail("Expected controls-only KML to be rejected when route geometry is required.")
+        } catch (error: DesktopCourseKmlMissingRouteException) {
+            assertTrue(error.message.orEmpty().contains("LineString or GPX route/track"))
+            assertTrue(error.message.orEmpty().contains("Setup > Controls > Import/Export"))
+        }
+    }
+
+    @Test
+    fun importedRouteAppendsExplicitBeaconAndFinishWhenLineStringStopsAtLastFox() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithExplicitBeaconAndFinishAfterRoute())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, _) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            updated.raceData.categories.single().category.encryptedCourseInfo!!,
+            "course-key"
+        )
+        assertEquals("1 2 M", protectedCourseInfo.idealOrder)
+        assertEquals(listOf("Start", "1", "2", "M", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
+        assertEquals(-94.9960, protectedCourseInfo.route.last().longitude, 0.000001)
+        assertTrue(protectedCourseInfo.route.any { kotlin.math.abs(it.longitude - -94.9970) < 0.000001 })
+        assertTrue(protectedCourseInfo.lengthMeters!! > 250)
+    }
+
+    @Test
+    fun importedRouteKeepsLastLineStringPointAsFinishWhenNoFinishPlacemarkExists() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithBeaconAndInferredFinish())
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, _) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            updated.raceData.categories.single().category.encryptedCourseInfo!!,
+            "course-key"
+        )
+        assertEquals("1 2 M", protectedCourseInfo.idealOrder)
+        assertEquals(-94.9960, protectedCourseInfo.route.last().longitude, 0.000001)
+        assertTrue(protectedCourseInfo.route.dropLast(1).any { kotlin.math.abs(it.longitude - -94.9970) < 0.000001 })
+        assertEquals("Finish", protectedCourseInfo.courseObjects.last().label)
+        assertEquals(-94.9960, protectedCourseInfo.courseObjects.last().longitude, 0.000001)
     }
 
     @Test
@@ -806,7 +886,8 @@ class DesktopCourseKmlImportTest {
             path = controlsOnlyPath,
             projectFile = imported,
             password = "course-key",
-            elevationProvider = { 222.0 }
+            elevationProvider = { 222.0 },
+            requireRoutes = false
         )
 
         assertEquals(0, summary.routeCount)
@@ -850,7 +931,8 @@ class DesktopCourseKmlImportTest {
             path = controlsOnlyPath,
             projectFile = imported,
             password = "course-key",
-            elevationProvider = { error("Unchanged point placemarks should not fetch elevation") }
+            elevationProvider = { error("Unchanged point placemarks should not fetch elevation") },
+            requireRoutes = false
         )
 
         assertEquals(imported, updated)
@@ -1299,6 +1381,71 @@ class DesktopCourseKmlImportTest {
                   -95.0000,39.0000,0
                   -94.9990,39.0000,0
                   -94.9980,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleKmlWithExplicitBeaconAndFinishAfterRoute(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>-94.9990,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M</name>
+              <Point><coordinates>-94.9970,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Finish</name>
+              <Point><coordinates>-94.9960,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9990,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleKmlWithBeaconAndInferredFinish(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>-94.9990,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M</name>
+              <Point><coordinates>-94.9970,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9990,39.0000,0
+                  -94.9960,39.0000,0
                 </coordinates>
               </LineString>
             </Placemark>

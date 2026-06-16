@@ -14,7 +14,7 @@ object DesktopCourseAnalysisExports {
 
     fun exportPdfAndKml(path: Path, result: DesktopCourseAnalysisSummary): DesktopCourseAnalysisExportPaths {
         exportPdf(path, result)
-        val kmlPath = kmlPathForPdf(path)
+        val kmlPath = kmlPathForPdf(path, result)
         exportKml(kmlPath, result)
         return DesktopCourseAnalysisExportPaths(pdfPath = path, kmlPath = kmlPath)
     }
@@ -235,16 +235,16 @@ object DesktopCourseAnalysisExports {
         appendLine("    <Folder>")
         appendLine("      <name>${xmlText(folder.title)}</name>")
         appendLine("      <open>1</open>")
-        if (folder.routePoints.size >= 2) {
+        val routeSegments = kmlRouteSegments(folder)
+        routeSegments.forEach { (from, to) ->
             appendLine("      <Placemark>")
-            appendLine("        <name>${xmlText(folder.routeName)}</name>")
+            appendLine("        <name>${xmlText("${folder.routeName} ${from.label} to ${to.label}")}</name>")
             appendLine("        <styleUrl>#$routeStyleId</styleUrl>")
             appendLine("        <LineString>")
             appendLine("          <tessellate>1</tessellate>")
             appendLine("          <coordinates>")
-            folder.routePoints.forEach { point ->
-                appendLine("            ${kmlCoordinate(point)}")
-            }
+            appendLine("            ${kmlCoordinate(from.point)}")
+            appendLine("            ${kmlCoordinate(to.point)}")
             appendLine("          </coordinates>")
             appendLine("        </LineString>")
             appendLine("      </Placemark>")
@@ -264,6 +264,15 @@ object DesktopCourseAnalysisExports {
         appendLine("    </Folder>")
     }
 
+    private fun kmlRouteSegments(folder: DesktopCourseKmlExportFolder): List<Pair<DesktopCourseKmlRouteStop, DesktopCourseKmlRouteStop>> =
+        if (folder.routeStops.size >= 2) {
+            folder.routeStops.zipWithNext()
+        } else {
+            folder.routePoints.zipWithNext().mapIndexed { index, (from, to) ->
+                DesktopCourseKmlRouteStop("Point ${index + 1}", from) to DesktopCourseKmlRouteStop("Point ${index + 2}", to)
+            }
+        }
+
     private fun kmlCoordinate(point: CourseGeoPoint): String =
         if (point.elevationMeters != null) {
             String.format(Locale.US, "%.8f,%.8f,%.2f", point.longitude, point.latitude, point.elevationMeters)
@@ -279,15 +288,42 @@ object DesktopCourseAnalysisExports {
             .replace("\"", "&quot;")
             .replace("'", "&apos;")
 
-    private fun kmlPathForPdf(path: Path): Path {
-        val fileName = path.fileName.toString()
-        val stem = if (fileName.lowercase().endsWith(DesktopProjectFilePaths.PDF_EXTENSION)) {
-            fileName.dropLast(DesktopProjectFilePaths.PDF_EXTENSION.length)
-        } else {
-            fileName
-        }
-        return path.resolveSibling("$stem.kml")
+    private fun kmlPathForPdf(path: Path, result: DesktopCourseAnalysisSummary): Path =
+        path.resolveSibling("${courseKmlFileStem(result)}.kml")
+
+    private fun courseKmlFileStem(result: DesktopCourseAnalysisSummary): String {
+        val event = fileNamePart(result.eventName.ifBlank { "Course Analysis" })
+        val foxCount = result.assignedFoxCount
+        val foxes = "$foxCount ${if (foxCount == 1) "fox" else "foxes"}"
+        val length = exportLengthMeters(result)
+            ?.let { String.format(Locale.US, "%.1f km", it / 1000.0) }
+            ?: "unknown length"
+        val categories = result.sameCourseCategoryNames
+            .ifEmpty { listOf(result.categoryName) }
+            .joinToString(", ")
+            .let(::fileNamePart)
+        return listOf(event, foxes, length, categories)
+            .joinToString(" - ")
     }
+
+    private fun exportLengthMeters(result: DesktopCourseAnalysisSummary): Int? =
+        result.effectiveLengthMeters
+            ?: result.providedRouteSection?.effectiveLengthMeters
+            ?: result.calculatedRouteSection?.effectiveLengthMeters
+            ?: result.routeLengthMeters
+            ?: result.providedRouteSection?.routeLengthMeters
+            ?: result.calculatedRouteSection?.routeLengthMeters
+
+    private fun fileNamePart(text: String): String =
+        text
+            .trim()
+            .map { character ->
+                if (character.isISOControl() || character in """\/:*?"<>|""") ' ' else character
+            }
+            .joinToString("")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .ifBlank { "Unknown" }
 
     private fun StringBuilder.appendTimingBreakdown(legs: List<DesktopCourseLegRow>, estimatedIdealSeconds: Int?) {
         val totalSeconds = estimatedIdealSeconds ?: return

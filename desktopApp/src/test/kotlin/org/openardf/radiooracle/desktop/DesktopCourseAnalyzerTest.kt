@@ -472,8 +472,8 @@ class DesktopCourseAnalyzerTest {
 
     @Test
     fun exportsCourseAnalysisReportTextAndPdf() {
-        val projectFile = projectFile(foxCount = 3)
-        val protectedInfo = protectedInfo(foxCount = 3)
+        val projectFile = projectFile(foxCount = 3).withSameCourseCategory("cat-m50", "M50")
+        val protectedInfo = protectedInfo(foxCount = 3).withIntermediateRoutePoints()
         val summary = DesktopCourseAnalyzer.analyze(
             projectFile = projectFile,
             categoryId = CATEGORY_ID,
@@ -528,7 +528,7 @@ class DesktopCourseAnalyzerTest {
         assertTrue(pdfText.contains("2D Route Depiction Graphics"))
         assertPdfInfoCanRead(pdfPath)
         assertEquals(pdfPath, exportPaths.pdfPath)
-        assertEquals(pdfPath.resolveSibling("${pdfPath.fileName.toString().removeSuffix(".pdf")}.kml"), exportPaths.kmlPath)
+        assertEquals(pdfPath.resolveSibling("Test Event - 3 foxes - 5.0 km - M21, M50.kml"), exportPaths.kmlPath)
 
         val multiPagePdfPath = Files.createTempFile("course-analysis-multipage", ".pdf")
         DesktopCourseAnalysisExports.exportPdf(
@@ -543,6 +543,18 @@ class DesktopCourseAnalyzerTest {
         assertTrue(kmlText.contains("<LineString>"))
         assertTrue(kmlText.contains("<Point>"))
         assertTrue(kmlText.contains("<name>31</name>"))
+        assertTrue(kmlText.contains("<name>Imported route S to 31</name>"))
+        assertTrue(kmlText.contains("<name>Imported route B to F</name>"))
+        val lineStringCoordinateLines = kmlLineStringCoordinateLines(kmlText)
+        assertTrue("Expected multiple route leg LineStrings", lineStringCoordinateLines.size >= 4)
+        lineStringCoordinateLines.forEach { coordinates ->
+            assertEquals("Each exported KML route leg should contain only its two endpoints", 2, coordinates.size)
+        }
+        val lineStringCoordinates = lineStringCoordinateLines.flatten()
+        assertFalse(
+            "Intermediate imported route sample points should not be written into KML LineStrings",
+            lineStringCoordinates.any { it.startsWith("-94.99500000,") || it.startsWith("-94.98500000,") }
+        )
     }
 
     @Test
@@ -1252,6 +1264,30 @@ class DesktopCourseAnalyzerTest {
         )
     }
 
+    private fun EventProjectFile.withSameCourseCategory(categoryId: String, categoryName: String): EventProjectFile {
+        val baseCategory = raceData.categories.single()
+        val copiedCategory = baseCategory.category.copy(
+            id = categoryId,
+            name = categoryName,
+            order = baseCategory.category.order + 1
+        )
+        val copiedControlPoints = baseCategory.controlPoints.map { controlPoint ->
+            controlPoint.copy(
+                id = "${controlPoint.id}-$categoryId",
+                categoryId = categoryId
+            )
+        }
+        return copy(
+            raceData = raceData.copy(
+                categories = raceData.categories + EventCategoryData(
+                    category = copiedCategory,
+                    controlPoints = copiedControlPoints,
+                    competitors = emptyList()
+                )
+            )
+        )
+    }
+
     private fun protectedInfo(foxCount: Int): ProtectedCourseInfo {
         val routeLongitudes = (0..(foxCount + 1)).map { it * 0.01 }
         val route = routeLongitudes.mapIndexed { index, longitude ->
@@ -1319,6 +1355,37 @@ class DesktopCourseAnalyzerTest {
             courseObjects = courseObjects
         )
     }
+
+    private fun ProtectedCourseInfo.withIntermediateRoutePoints(): ProtectedCourseInfo {
+        val denseRoute = route.zipWithNext().flatMap { (from, to) ->
+            listOf(
+                from,
+                ProtectedCourseRoutePoint(
+                    latitude = (from.latitude + to.latitude) / 2.0,
+                    longitude = (from.longitude + to.longitude) / 2.0,
+                    elevationMeters = listOfNotNull(from.elevationMeters, to.elevationMeters)
+                        .takeIf { it.size == 2 }
+                        ?.average()
+                )
+            )
+        } + route.takeLast(1)
+        return copy(
+            sampledPointCount = denseRoute.size,
+            route = denseRoute
+        )
+    }
+
+    private fun kmlLineStringCoordinateLines(kmlText: String): List<List<String>> =
+        Regex("<LineString>[\\s\\S]*?<coordinates>([\\s\\S]*?)</coordinates>[\\s\\S]*?</LineString>")
+            .findAll(kmlText)
+            .map { match ->
+                match.groupValues[1]
+                    .lineSequence()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .toList()
+            }
+            .toList()
 
     private fun sprintProjectFile(includeSpectator: Boolean = true, includeBeacon: Boolean = true): EventProjectFile {
         val controls = listOfNotNull(

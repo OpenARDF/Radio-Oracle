@@ -39,7 +39,8 @@ class DesktopCourseKmlGeneratedCoverageTest {
                 projectFile = testCase.project,
                 password = PASSWORD,
                 categoryOverrideId = testCase.categoryOverrideId,
-                elevationProvider = ::syntheticElevation
+                elevationProvider = ::syntheticElevation,
+                requireRoutes = testCase.requireRoutes
             )
         }
         if (testCase.expectedImportFailure) {
@@ -162,7 +163,8 @@ class DesktopCourseKmlGeneratedCoverageTest {
             path = controlsPath,
             projectFile = importedProject,
             password = PASSWORD,
-            elevationProvider = ::syntheticElevation
+            elevationProvider = ::syntheticElevation,
+            requireRoutes = false
         )
         val updatedInfo = updatedProject.protectedInfoFor("M21")
 
@@ -324,7 +326,8 @@ class DesktopCourseKmlGeneratedCoverageTest {
             expectedMatchedCategories = 0,
             expectedImportedCategories = 0,
             expectedMatchedControls = 4,
-            categoriesToAnalyze = emptyList()
+            categoriesToAnalyze = emptyList(),
+            requireRoutes = false
         )
 
     private fun invalidCase(name: String, kmlText: String): GeneratedKmlCase =
@@ -346,7 +349,8 @@ class DesktopCourseKmlGeneratedCoverageTest {
             expectedMatchedCategories = 0,
             expectedImportedCategories = 0,
             expectedMatchedControls = 3,
-            categoriesToAnalyze = emptyList()
+            categoriesToAnalyze = emptyList(),
+            requireRoutes = false
         )
     }
 
@@ -503,6 +507,7 @@ class DesktopCourseKmlGeneratedCoverageTest {
         expectedAssignedSiCodes: Map<String, List<Int>> = emptyMap(),
         applyAssignments: Boolean = false,
         categoriesToAnalyze: List<String> = categories,
+        requireRoutes: Boolean = true,
         analysisChecks: List<(String, String, DesktopCourseAnalysisSummary) -> Unit> = emptyList(),
         verify: (EventProjectFile, DesktopCourseKmlImportSummary) -> Unit = { _, _ -> }
     ): GeneratedKmlCase {
@@ -527,6 +532,7 @@ class DesktopCourseKmlGeneratedCoverageTest {
             expectedAssignedSiCodes = expectedAssignedSiCodes,
             applyAssignments = applyAssignments,
             categoriesToAnalyze = categoriesToAnalyze,
+            requireRoutes = requireRoutes,
             analysisChecks = analysisChecks,
             verify = verify
         )
@@ -770,6 +776,7 @@ class DesktopCourseKmlGeneratedCoverageTest {
         val expectedAssignedSiCodes: Map<String, List<Int>> = emptyMap(),
         val applyAssignments: Boolean = false,
         val categoriesToAnalyze: List<String>,
+        val requireRoutes: Boolean = true,
         val analysisChecks: List<(String, String, DesktopCourseAnalysisSummary) -> Unit> = emptyList(),
         val verify: (EventProjectFile, DesktopCourseKmlImportSummary) -> Unit = { _, _ -> }
     )

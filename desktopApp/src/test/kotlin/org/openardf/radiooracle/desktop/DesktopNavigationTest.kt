@@ -689,7 +689,7 @@ class DesktopNavigationTest {
         assertEquals(DesktopNavAction.DeleteAllControls, controlItems.last { it.label == "Delete All Controls..." }.action)
         assertEquals(DesktopSection.CourseAnalysis, controlItems.first { it.label == "Course Analyzer" }.section)
         assertEquals(
-            listOf("Import Controls KML/KMZ...", "Import Controls GPX..."),
+            listOf("Import Course KML/KMZ...", "Import Course GPX..."),
             controlItems.first { it.label == "Course Analyzer" }.children.map { it.label }
         )
         assertEquals(
@@ -699,6 +699,14 @@ class DesktopNavigationTest {
         assertEquals(
             DesktopNavAction.ImportCourseGpx,
             controlItems.first { it.label == "Course Analyzer" }.children.last().action
+        )
+        assertEquals(
+            DesktopNavAction.ImportControlsKmlKmz,
+            controlItems.first { it.label == "Import/Export" }.children.first { it.label == "Import Controls KML/KMZ..." }.action
+        )
+        assertEquals(
+            DesktopNavAction.ImportControlsGpx,
+            controlItems.first { it.label == "Import/Export" }.children.first { it.label == "Import Controls GPX..." }.action
         )
         assertEquals(DesktopSection.ElevationCache, controlItems.first { it.label == "Elevation Data" }.section)
         assertEquals(

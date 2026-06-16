@@ -6,6 +6,7 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventControlPoint
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
@@ -27,6 +28,8 @@ data class DesktopCourseAnalysisSummary(
     val eventTypeLabel: String,
     val analysisPerformedAtText: String,
     val categoryName: String,
+    val sameCourseCategoryNames: List<String>,
+    val assignedFoxCount: Int,
     val rulesDocumentLabel: String,
     val speedModel: DesktopCourseSpeedModel,
     val categorySpeedFactors: List<DesktopCourseCategorySpeedFactor>,
@@ -147,7 +150,13 @@ data class DesktopCourseKmlExportFolder(
     val title: String,
     val routeName: String,
     val routePoints: List<CourseGeoPoint>,
+    val routeStops: List<DesktopCourseKmlRouteStop>,
     val foxes: List<DesktopCourseKmlExportPoint>
+)
+
+data class DesktopCourseKmlRouteStop(
+    val label: String,
+    val point: CourseGeoPoint
 )
 
 data class DesktopCourseKmlExportPoint(
@@ -352,6 +361,7 @@ object DesktopCourseAnalyzer {
             ?.let { protectedAssignedControls(projectFile, it, idealOrderText) }
             .orEmpty()
         val assignedControls = protectedRouteControls.ifEmpty { categoryAssignedControls }
+        val sameCourseCategoryNames = sameCourseCategoryNames(projectFile, categoryId)
         val protectedControlPointsById = protectedCourseInfo?.controlPoints.orEmpty().associateBy { it.controlId }
         val protectedCoordinateLookup = protectedCoordinateLookup(protectedCourseInfo)
         val missing = mutableListOf<String>()
@@ -772,6 +782,7 @@ object DesktopCourseAnalyzer {
                         title = "Imported foxes and route",
                         routeName = "Imported route",
                         routePoints = route,
+                        routeStops = providedKmlRouteStops(route, providedControls, controlsWithPoints),
                         foxes = providedKmlFoxes(providedControls, controlsWithPoints)
                     )
                 )
@@ -787,6 +798,12 @@ object DesktopCourseAnalyzer {
                                 controls = routeCandidate.controls,
                                 finish = finish,
                                 elevationLookup = elevationLookup
+                            ),
+                            routeStops = calculatedKmlRouteStops(
+                                start = start,
+                                controls = routeCandidate.controls,
+                                finish = finish,
+                                labelOverrides = calculatedLabelOverrides
                             ),
                             foxes = calculatedKmlFoxes(routeCandidate.controls, calculatedWaitRenumbering)
                         )
@@ -854,6 +871,8 @@ object DesktopCourseAnalyzer {
             eventTypeLabel = projectFile.raceData.race.raceLevel.toDisplayLabel(),
             analysisPerformedAtText = analysisPerformedAtText,
             categoryName = category.name,
+            sameCourseCategoryNames = sameCourseCategoryNames,
+            assignedFoxCount = assignedControls.count { it.type == ControlPointType.CONTROL },
             rulesDocumentLabel = USA_RULES_DOCUMENT_LABEL,
             speedModel = speedModel,
             categorySpeedFactors = CATEGORY_SPEED_FACTOR_TABLE.categoryFactors,
@@ -2315,6 +2334,29 @@ object DesktopCourseAnalyzer {
             }
     }
 
+    private fun sameCourseCategoryNames(projectFile: EventProjectFile, categoryId: String): List<String> {
+        val categoryData = projectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
+            ?: return emptyList()
+        val targetControlIds = assignedControlIds(categoryData)
+        if (targetControlIds.isEmpty()) {
+            return listOf(categoryData.category.name)
+        }
+        return projectFile.raceData.categories
+            .filter { assignedControlIds(it) == targetControlIds }
+            .sortedBy { it.category.order }
+            .map { it.category.name }
+            .ifEmpty { listOf(categoryData.category.name) }
+    }
+
+    private fun assignedControlIds(categoryData: EventCategoryData): List<String> =
+        if (categoryData.controlPoints.isNotEmpty()) {
+            categoryData.controlPoints
+                .sortedBy { it.order }
+                .map { it.controlId }
+        } else {
+            categoryData.publicControlIds
+        }
+
     private fun calculatedElevationMarkers(
         start: CourseGeoPoint?,
         controls: List<ControlAnalysisPoint>,
@@ -2372,6 +2414,46 @@ object DesktopCourseAnalyzer {
                     point = point
                 )
             }
+
+    private fun providedKmlRouteStops(
+        route: List<CourseGeoPoint>,
+        controls: List<EventControl>,
+        controlsWithPoints: List<ControlAnalysisPoint>
+    ): List<DesktopCourseKmlRouteStop> =
+        buildList {
+            route.firstOrNull()?.let { start ->
+                add(DesktopCourseKmlRouteStop("S", start))
+            }
+            controls.mapNotNull { control ->
+                val point = controlsWithPoints.firstOrNull { it.control.id == control.id }?.point ?: return@mapNotNull null
+                val routeIndex = route.indices.minByOrNull { route[it].distanceMetersTo(point) } ?: return@mapNotNull null
+                routeIndex to DesktopCourseKmlRouteStop(control.analysisRouteLabel(), point)
+            }
+                .sortedBy { it.first }
+                .map { it.second }
+                .forEach(::add)
+            route.lastOrNull()?.let { finish ->
+                add(DesktopCourseKmlRouteStop("F", finish))
+            }
+        }
+
+    private fun calculatedKmlRouteStops(
+        start: CourseGeoPoint,
+        controls: List<ControlAnalysisPoint>,
+        finish: CourseGeoPoint,
+        labelOverrides: Map<String, String>
+    ): List<DesktopCourseKmlRouteStop> =
+        buildList {
+            add(DesktopCourseKmlRouteStop("S", start))
+            controls.mapNotNull { controlPoint ->
+                val point = controlPoint.point ?: return@mapNotNull null
+                DesktopCourseKmlRouteStop(
+                    labelOverrides[controlPoint.control.id] ?: controlPoint.control.analysisRouteLabel(),
+                    point
+                )
+            }.forEach(::add)
+            add(DesktopCourseKmlRouteStop("F", finish))
+        }
 
     private fun calculatedKmlFoxes(
         controls: List<ControlAnalysisPoint>,
