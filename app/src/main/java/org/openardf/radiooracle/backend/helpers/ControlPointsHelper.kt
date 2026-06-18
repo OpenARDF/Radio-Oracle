@@ -133,22 +133,22 @@ object ControlPointsHelper {
     fun getEditableStringFromControlPointAliases(
         controlPoints: List<ControlPointAlias>,
         context: Context
-    ): String {
-        val useAlias = shouldUseAliases(context)
-        return controlPoints.joinToString(" ") { controlPointAlias ->
-            val controlPoint = controlPointAlias.controlPoint
-            val base = if (useAlias && controlPointAlias.alias?.name != null) {
-                controlPointAlias.alias!!.name
-            } else {
-                controlPoint.siCode.toString()
-            }
-            val marker = when (controlPoint.type) {
-                ControlPointType.BEACON -> ControlPointRules.BEACON_CONTROL_MARKER.toString()
-                ControlPointType.SEPARATOR -> ControlPointRules.SPECTATOR_CONTROL_MARKER.toString()
-                ControlPointType.CONTROL -> ""
-            }
-            "$base$marker"
+    ): String =
+        formatEditableControlPointAliases(controlPoints, shouldUseAliases(context))
+
+    /** Formats editable category controls while avoiding duplicate conventional marker aliases. */
+    internal fun formatEditableControlPointAliases(
+        controlPoints: List<ControlPointAlias>,
+        useAlias: Boolean
+    ): String = controlPoints.joinToString(" ") { controlPointAlias ->
+        val controlPoint = controlPointAlias.controlPoint
+        val base = if (useAlias && controlPointAlias.alias?.name != null) {
+            controlPointAlias.alias!!.name
+        } else {
+            controlPoint.siCode.toString()
         }
+        val marker = controlPoint.editMarkerFor(base, useAlias)
+        "$base$marker"
     }
 
     /** Formats raw readout punches without alias substitution. */
@@ -189,10 +189,28 @@ object ControlPointsHelper {
         }
         val aliasesByName = aliases.associateBy { it.name }
         return input.trim().split("\\s+".toRegex()).joinToString(" ") { token ->
-            aliasesByName[token]?.siCode?.toString()
+            aliasesByName[token]?.let { alias ->
+                if (token.equals(ControlPointRules.BEACON_CONTROL_MARKER.toString(), ignoreCase = true)) {
+                    "${alias.siCode}${ControlPointRules.BEACON_CONTROL_MARKER}"
+                } else {
+                    alias.siCode.toString()
+                }
+            }
                 ?: replaceMarkedAliasToken(token, aliasesByName)
         }
     }
+
+    private fun ControlPoint.editMarkerFor(base: String, useAlias: Boolean): String =
+        when (type) {
+            ControlPointType.BEACON ->
+                if (useAlias && base.equals(ControlPointRules.BEACON_CONTROL_MARKER.toString(), ignoreCase = true)) {
+                    ""
+                } else {
+                    ControlPointRules.BEACON_CONTROL_MARKER.toString()
+                }
+            ControlPointType.SEPARATOR -> ControlPointRules.SPECTATOR_CONTROL_MARKER.toString()
+            ControlPointType.CONTROL -> ""
+        }
 
     private fun replaceMarkedAliasToken(
         token: String,

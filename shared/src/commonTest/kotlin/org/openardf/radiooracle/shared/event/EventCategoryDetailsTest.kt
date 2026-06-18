@@ -166,6 +166,41 @@ class EventCategoryDetailsTest {
         assertEquals("'Slow 1' 'Slow 2' Spectator 'Fast 1' 'Fast 2' Beacon", displayedText)
     }
 
+    @Test
+    fun formatsSprintAssignedControlsWithCustomSiCodesInTraditionalOrder() {
+        val controls = listOf(
+            EventControl("control-s", "race", "S", 137, ControlPointType.CONTROL, publicLabel = "S"),
+            EventControl("control-1", "race", "1", 161, ControlPointType.CONTROL, publicLabel = "1"),
+            EventControl("control-2", "race", "2", 162, ControlPointType.CONTROL, publicLabel = "2"),
+            EventControl("control-1f", "race", "1F", 171, ControlPointType.CONTROL, publicLabel = "1F"),
+            EventControl("control-2f", "race", "2F", 172, ControlPointType.CONTROL, publicLabel = "2F"),
+            EventControl("control-b", "race", "B", 136, ControlPointType.BEACON, publicLabel = "B")
+        )
+        val categoryData = categoryData(
+            name = "M21",
+            order = 1,
+            differentProperties = true,
+            raceType = RaceType.SPRINT,
+            raceBand = null,
+            timeLimitSeconds = null
+        ).copy(
+            controlPoints = listOf(
+                EventControlPoint("cp-s", "M21", 137, ControlPointType.CONTROL, 1, "control-s"),
+                EventControlPoint("cp-1f", "M21", 171, ControlPointType.CONTROL, 2, "control-1f"),
+                EventControlPoint("cp-1", "M21", 161, ControlPointType.CONTROL, 3, "control-1"),
+                EventControlPoint("cp-2f", "M21", 172, ControlPointType.CONTROL, 4, "control-2f"),
+                EventControlPoint("cp-2", "M21", 162, ControlPointType.CONTROL, 5, "control-2"),
+                EventControlPoint("cp-b", "M21", 136, ControlPointType.BEACON, 6, "control-b")
+            ),
+            publicControlIds = listOf("control-s", "control-1", "control-2", "control-1f", "control-2f", "control-b")
+        )
+        val raceData = raceData(defaultRaceType = RaceType.SPRINT).copy(categories = listOf(categoryData), controls = controls)
+
+        val displayedText = EventCategoryDetails.from(raceData).single().controlPointsText
+
+        assertEquals("1 2 S 1F 2F B", displayedText)
+    }
+
     private fun raceData(defaultRaceType: RaceType = RaceType.CLASSIC): EventRaceData =
         EventRaceData(
             race = EventRace(

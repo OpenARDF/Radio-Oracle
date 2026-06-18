@@ -13,8 +13,10 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
+import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.shared.event.EventAlias
 import org.openardf.radiooracle.shared.event.EventAliasPunch
+import org.openardf.radiooracle.shared.event.EventAssignedControlOrder
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
@@ -351,15 +353,22 @@ private fun EventReadoutData.toRoomReadoutData(idMapper: RoomIdMapper): ReadoutD
 
 /** Converts the portable shared category aggregate back into an Android aggregate. */
 fun EventCategoryData.toRoomCategoryData(): CategoryData =
-    toRoomCategoryData(RoomIdMapper(), emptyMap())
+    toRoomCategoryData(RoomIdMapper(), emptyMap(), null)
 
 private fun EventCategoryData.toRoomCategoryData(
     idMapper: RoomIdMapper,
-    controlsById: Map<String, EventControl>
+    controlsById: Map<String, EventControl>,
+    race: EventRace?
 ): CategoryData {
-    val controlPoints = controlPoints.map { it.toRoomControlPoint(idMapper, controlsById) }
+    val raceType = race?.let(category::effectiveRaceType) ?: category.raceType ?: RaceType.CLASSIC
+    val controlPoints = androidImportControlPoints(controlsById, raceType)
+        .mapIndexed { index, controlPoint ->
+            controlPoint.toRoomControlPoint(idMapper, controlsById).also { roomControlPoint ->
+                roomControlPoint.order = index + 1
+            }
+        }
     val category = category.toRoomCategory(idMapper).also { roomCategory ->
-        if (roomCategory.controlPointsString.isBlank()) {
+        if (roomCategory.controlPointsString.isBlank() || raceType != RaceType.ORIENTEERING) {
             roomCategory.controlPointsString = ControlPointRules.formatControlPoints(
                 controlPoints.map { ControlPointDefinition(it.siCode, it.type, it.order) }
             )
@@ -370,6 +379,30 @@ private fun EventCategoryData.toRoomCategoryData(
         controlPoints = controlPoints,
         competitors = competitors.map { it.toRoomCompetitor(idMapper) }
     )
+}
+
+private fun EventCategoryData.androidImportControlPoints(
+    controlsById: Map<String, EventControl>,
+    raceType: RaceType
+): List<EventControlPoint> {
+    val pointsByControlId = controlPoints
+        .filter { it.controlId.isNotBlank() }
+        .associateBy { it.controlId }
+    val publicPoints = publicControlIds.mapIndexedNotNull { index, controlId ->
+        pointsByControlId[controlId]
+            ?: controlsById[controlId]?.let { control ->
+                EventControlPoint(
+                    id = "${category.id}-android-public-control-$index",
+                    categoryId = category.id,
+                    siCode = control.siCode,
+                    type = control.type,
+                    order = index + 1,
+                    controlId = control.id
+                )
+            }
+    }
+    val source = publicPoints.ifEmpty { controlPoints }
+    return EventAssignedControlOrder.sort(source, controlsById, raceType)
 }
 
 /** Converts the portable shared competitor/category model back into an Android relation object. */
@@ -398,7 +431,7 @@ fun EventRaceData.toRoomRaceData(): RaceData {
     val controlsById = controls.associateBy { it.id }
     return RaceData(
         race = race.toRoomRace(idMapper),
-        categories = categories.map { it.toRoomCategoryData(idMapper, controlsById) },
+        categories = categories.map { it.toRoomCategoryData(idMapper, controlsById, race) },
         aliases = androidCompatibleAliases(idMapper),
         competitorData = competitorData.map { it.toRoomCompetitorData(idMapper) },
         unmatchedReadoutData = unmatchedReadoutData.map { it.toRoomReadoutData(idMapper) }

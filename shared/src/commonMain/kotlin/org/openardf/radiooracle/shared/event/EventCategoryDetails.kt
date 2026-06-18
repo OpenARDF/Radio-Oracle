@@ -69,15 +69,7 @@ data class EventCategoryDetails(
             val sortedControlPoints = if (raceType == RaceType.ORIENTEERING) {
                 publicControlPoints.sortedBy { it.order }
             } else {
-                publicControlPoints.sortedWith(
-                    compareBy<EventControlPoint> {
-                        ControlPointRules.assignedControlSortGroup(it.siCode, it.type, raceType)
-                    }
-                        .thenBy { controlsById[it.controlId]?.publicSortNumber() ?: Int.MAX_VALUE }
-                        .thenBy { it.siCode }
-                        .thenBy { controlsById[it.controlId]?.publicDisplayLabel().orEmpty() }
-                        .thenBy { it.order }
-                )
+                EventAssignedControlOrder.sort(publicControlPoints, controlsById, raceType)
             }
             if (!useAliases || raceType == RaceType.ORIENTEERING) {
                 return ControlPointRules.formatControlPoints(
@@ -100,11 +92,3 @@ data class EventCategoryDetails(
         }
     }
 }
-
-private fun EventControl.publicDisplayLabel(): String =
-    publicLabel?.trim()?.takeIf { it.isNotEmpty() } ?: label
-
-private fun EventControl.publicSortNumber(): Int? =
-    publicDisplayLabel()
-        .let { Regex("\\d+").findAll(it).mapNotNull { match -> match.value.toIntOrNull() }.toList() }
-        .singleOrNull()

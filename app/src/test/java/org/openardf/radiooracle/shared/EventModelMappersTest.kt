@@ -250,6 +250,68 @@ class EventModelMappersTest {
     }
 
     @Test
+    fun mapsSprintPublicControlsToTraditionalAndroidOrder() {
+        val projectRaceData = EventRaceData(
+            race = EventRace(
+                id = "sprint-race",
+                name = "Sprint Race",
+                apiKey = "",
+                startDateTimeIso = "2026-05-31T10:00",
+                raceType = RaceType.SPRINT,
+                raceLevel = RaceLevel.PRACTICE,
+                raceBand = RaceBand.M80,
+                timeLimitSeconds = 3_600
+            ),
+            categories = listOf(
+                EventCategoryData(
+                    category = EventCategory(
+                        id = "category-m21",
+                        raceId = "sprint-race",
+                        name = "M21",
+                        isMan = true,
+                        maxAge = null,
+                        lengthMeters = 0,
+                        climbMeters = 0,
+                        order = 1,
+                        differentProperties = false,
+                        raceType = null,
+                        raceBand = null,
+                        timeLimitSeconds = null,
+                        controlPointsString = "137 161 171 162 172 136B"
+                    ),
+                    controlPoints = listOf(
+                        sprintControlPoint("point-s", "control-s", 137, 1),
+                        sprintControlPoint("point-1f", "control-1f", 171, 2),
+                        sprintControlPoint("point-1", "control-1", 161, 3),
+                        sprintControlPoint("point-2f", "control-2f", 172, 4),
+                        sprintControlPoint("point-2", "control-2", 162, 5),
+                        sprintControlPoint("point-b", "control-b", 136, 6, ControlPointType.BEACON)
+                    ),
+                    competitors = emptyList(),
+                    publicControlIds = listOf("control-s", "control-1", "control-2", "control-1f", "control-2f", "control-b")
+                )
+            ),
+            aliases = emptyList(),
+            competitorData = emptyList(),
+            unmatchedReadoutData = emptyList(),
+            controls = listOf(
+                sprintControl("control-s", 137, "S"),
+                sprintControl("control-1", 161, "1"),
+                sprintControl("control-2", 162, "2"),
+                sprintControl("control-1f", 171, "1F"),
+                sprintControl("control-2f", 172, "2F"),
+                sprintControl("control-b", 136, "B", ControlPointType.BEACON)
+            )
+        )
+
+        val category = projectRaceData.toRoomRaceData().categories.single()
+
+        assertEquals(listOf(161, 162, 137, 171, 172, 136), category.controlPoints.map { it.siCode })
+        assertEquals(listOf(1, 2, 3, 4, 5, 6), category.controlPoints.map { it.order })
+        assertEquals("161 162 137 171 172 136B", category.category.controlPointsString)
+    }
+
+    @Test
     fun mapsStandardCategoryGenderFromNameWhenStoredFlagIsStale() {
         val projectRaceData = EventRaceData(
             race = EventRace(
@@ -344,4 +406,35 @@ class EventModelMappersTest {
     }
 
     private fun uuid(value: String): UUID = UUID.fromString(value)
+
+    private fun sprintControlPoint(
+        id: String,
+        controlId: String,
+        siCode: Int,
+        order: Int,
+        type: ControlPointType = ControlPointType.CONTROL
+    ): EventControlPoint =
+        EventControlPoint(
+            id = id,
+            categoryId = "category-m21",
+            siCode = siCode,
+            type = type,
+            order = order,
+            controlId = controlId
+        )
+
+    private fun sprintControl(
+        id: String,
+        siCode: Int,
+        publicLabel: String,
+        type: ControlPointType = ControlPointType.CONTROL
+    ): EventControl =
+        EventControl(
+            id = id,
+            raceId = "sprint-race",
+            label = publicLabel,
+            siCode = siCode,
+            type = type,
+            publicLabel = publicLabel
+        )
 }
