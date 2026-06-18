@@ -230,9 +230,10 @@ class EventModelMappersTest {
                 EventControl(
                     id = "control-fox1-31-control",
                     raceId = "desktop-smoke-race",
-                    label = "FOX 1",
+                    label = "161",
                     siCode = 31,
-                    type = ControlPointType.CONTROL
+                    type = ControlPointType.CONTROL,
+                    publicLabel = "FOX 1"
                 )
             )
         )

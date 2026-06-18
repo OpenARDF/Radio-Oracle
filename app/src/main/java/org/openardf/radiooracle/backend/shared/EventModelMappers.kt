@@ -262,7 +262,7 @@ private fun EventControl.toRoomAlias(idMapper: RoomIdMapper): Alias =
         id = idMapper.uuidFor("alias-from-$id"),
         raceId = idMapper.uuidFor(raceId),
         siCode = siCode,
-        name = label
+        name = publicLabel?.takeIf { it.isNotBlank() } ?: label
     )
 
 /** Converts the portable shared competitor model back into an Android Room entity. */
@@ -409,7 +409,7 @@ private fun EventRaceData.androidCompatibleAliases(idMapper: RoomIdMapper): List
     val existingAliases = aliases.map { it.toRoomAlias(idMapper) }
     val existingCodes = existingAliases.map { it.siCode }.toSet()
     val controlAliases = controls
-        .filter { control -> control.label.isNotBlank() }
+        .filter { control -> control.label.isNotBlank() || !control.publicLabel.isNullOrBlank() }
         .map { it.toRoomAlias(idMapper) }
         .filterNot { it.siCode in existingCodes }
         .distinctBy { it.siCode }
