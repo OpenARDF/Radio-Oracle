@@ -125,3 +125,13 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_result_service_race_id` ON `result_service` (`race_id`)")
     }
 }
+
+// Migration from version 5 -> 6: remember imported source identity so repeated imports replace
+// the previous Android copy instead of accumulating duplicate events.
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `race` ADD COLUMN `import_source_id` TEXT")
+        db.execSQL("ALTER TABLE `race` ADD COLUMN `import_fingerprint` TEXT")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_race_import_source_id` ON `race` (`import_source_id`)")
+    }
+}

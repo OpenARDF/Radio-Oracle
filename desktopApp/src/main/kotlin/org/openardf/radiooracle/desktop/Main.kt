@@ -102,6 +102,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.awt.datatransfer.StringSelection
+import java.awt.image.BufferedImage
 import org.openardf.radiooracle.desktop.printing.DesktopPrinterDiagnostics
 import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinter
 import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinterSelector
@@ -228,6 +230,7 @@ private enum class DesktopSportIdentAppendOutcome {
 
 private val CategoryTableColumns = listOf(
     FixedTableColumn("Name", 150.dp),
+    FixedTableColumn("Gender", 92.dp),
     FixedTableColumn("Length (m)", 96.dp),
     FixedTableColumn("Climb (m)", 92.dp),
     FixedTableColumn("Type", 96.dp),
@@ -238,6 +241,7 @@ private val CategoryTableColumns = listOf(
 
 private val CategoryTableColumnHints = mapOf(
     "Name" to "Category/class name used for competitor assignment, start lists, and results.",
+    "Gender" to "Category gender used for exports and age/gender result grouping.",
     "Length (m)" to "Course length for this category in meters. This public value is used in exports and result displays.",
     "Climb (m)" to "Total climb for this category in meters. This public value is used in exports and result displays.",
     "Type" to "Race type used by this category. It normally follows the Event File setting unless category-specific properties are imported.",
@@ -245,6 +249,8 @@ private val CategoryTableColumnHints = mapOf(
     "Limit (min.)" to "Time limit for this category in minutes. It normally follows the Event File setting unless category-specific properties are imported.",
     "Assigned Controls" to "Ordered controls for this category. Separate entries with spaces, commas, or semicolons. Use the picker to insert Public labels. Manual entries may use SI codes, defined control labels, or Public label values; put labels containing spaces in single or double quotes, such as 'Fox 1'."
 )
+private val CategoryMenBackground = Color(0xFFE8F3FF)
+private val CategoryWomenBackground = Color(0xFFFFECEC)
 
 private val ProtectedCourseOrderTableColumns = listOf(
     FixedTableColumn("Category", 120.dp),
@@ -376,6 +382,8 @@ fun main(args: Array<String>) = application {
         var isReadoutAlertSoundEnabled by remember { mutableStateOf(true) }
         var areAliasesEnabled by remember { mutableStateOf(true) }
         var localResultServerUrl by remember { mutableStateOf<String?>(null) }
+        var eventFileTransferServer by remember { mutableStateOf<DesktopEventFileTransferServer?>(null) }
+        var eventFileTransferDialog by remember { mutableStateOf<DesktopEventFileTransferDialogState?>(null) }
         var isAboutDialogVisible by remember { mutableStateOf(false) }
         var isUpdateCheckingEnabled by remember {
             mutableStateOf(DesktopAppSettingsPreferences.isUpdateCheckingEnabled())
@@ -417,6 +425,13 @@ fun main(args: Array<String>) = application {
         var pendingCompetitorsCsvImportReview by remember { mutableStateOf<PendingCompetitorsCsvImportReview?>(null) }
         var syncCompetitorsCsvImport by remember { mutableStateOf(false) }
         val siPortMutex = remember { Mutex() }
+        val activeEventFileTransferServer by rememberUpdatedState(eventFileTransferServer)
+
+        DisposableEffect(Unit) {
+            onDispose {
+                activeEventFileTransferServer?.stop()
+            }
+        }
 
         LaunchedEffect(Unit) {
             DesktopDebugLog.initialize()
@@ -2939,6 +2954,72 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun sendEventFileToAndroid() {
+            if (projectSession.currentProject == null) {
+                projectStatusText = "Open or create an Event File before sending to Android."
+                return
+            }
+            if (projectSession.currentPath == null || hasProtectedUnsavedChanges()) {
+                if (!saveCurrentProject()) {
+                    projectStatusText = "Save the Event File before sending it to Android."
+                    return
+                }
+            }
+
+            val path = projectSession.currentPath ?: run {
+                projectStatusText = "Save the Event File before sending it to Android."
+                return
+            }
+
+            eventFileTransferServer?.stop()
+            eventFileTransferDialog = null
+
+            runCatching {
+                val server = DesktopEventFileTransferServer(
+                    filePath = path,
+                    onStopped = { reason ->
+                        appCoroutineScope.launch {
+                            val message = when (reason) {
+                                DesktopEventFileTransferStopReason.Downloaded ->
+                                    "Event File downloaded by Android. Transfer stopped."
+                                DesktopEventFileTransferStopReason.Cancelled ->
+                                    "Event File transfer cancelled."
+                                DesktopEventFileTransferStopReason.Timeout ->
+                                    "Event File transfer expired after 10 minutes."
+                            }
+                            projectStatusText = message
+                            eventFileTransferDialog = eventFileTransferDialog?.copy(statusText = message)
+                            DesktopDebugLog.info("EventFile", "Android transfer stopped: $reason")
+                        }
+                    }
+                )
+                val addresses = server.addresses
+                val session = server.start(addresses.first())
+                eventFileTransferServer = server
+                eventFileTransferDialog = DesktopEventFileTransferDialogState(
+                    addresses = addresses,
+                    selectedAddress = session.address,
+                    session = session,
+                    qrCode = desktopEventFileTransferQrCode(session.url),
+                    statusText = "Waiting for Android to download ${session.fileName}. The link expires after 10 minutes or one download."
+                )
+                projectStatusText = "Event File transfer ready at ${session.url}"
+                DesktopDebugLog.info(
+                    "EventFile",
+                    "Started Android transfer for ${path.fileName}: selectedHost=${session.address.host} port=${session.port} candidates=${
+                        addresses.joinToString { address ->
+                            "${address.interfaceName.ifBlank { "unknown" }}:${address.host}"
+                        }
+                    }"
+                )
+            }.onFailure { error ->
+                eventFileTransferServer = null
+                eventFileTransferDialog = null
+                projectStatusText = "Could not start Android transfer: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("EventFile", projectStatusText)
+            }
+        }
+
         fun requestNewEventFile() {
             pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
                 hasProtectedUnsavedChanges(),
@@ -2974,6 +3055,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.StartLocalResultDisplay -> projectFile != null && localResultServerUrl == null
                 DesktopNavAction.StopLocalResultDisplay -> localResultServerUrl != null
                 DesktopNavAction.SendRobis -> projectFile != null && !isSendingLiveResults
+                DesktopNavAction.SendEventFileToAndroid -> projectFile != null
                 DesktopNavAction.DownloadSiCard -> projectFile != null && !isDownloadingSiReadout && !isContinuousSiReadoutActive
                 DesktopNavAction.StartContinuousSiReadout ->
                     projectFile != null && !isDownloadingSiReadout && !isContinuousSiReadoutActive
@@ -3006,6 +3088,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.DeleteAllCategories,
                 DesktopNavAction.DeleteAllCompetitors,
                 DesktopNavAction.ExportEventFileCopy,
+                DesktopNavAction.SendEventFileToAndroid,
                 DesktopNavAction.ExportCategoriesCsv,
                 DesktopNavAction.ExportControlsCsv,
                 DesktopNavAction.ExportCourseKmlKmz,
@@ -3094,6 +3177,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportCompetitorsCsv -> importCompetitorsCsv()
                 DesktopNavAction.ImportStartsCsv -> importCompetitorStartsCsv()
                 DesktopNavAction.ExportEventFileCopy -> exportEventFileCopy()
+                DesktopNavAction.SendEventFileToAndroid -> sendEventFileToAndroid()
                 DesktopNavAction.ExportCategoriesCsv -> exportCategoriesCsv()
                 DesktopNavAction.ExportControlsCsv ->
                     exportCsv("Export Controls CSV", "controls", DesktopProjectFiles::exportControlsCsv)
@@ -3168,6 +3252,7 @@ fun main(args: Array<String>) = application {
                         saveCurrentProject()
                     }
                 )
+                Item("Send Event File to Android...", enabled = projectFile != null, onClick = ::sendEventFileToAndroid)
                 Item("Close Event File", enabled = projectFile != null, onClick = ::requestCloseEventFile)
             }
         }
@@ -3252,6 +3337,39 @@ fun main(args: Array<String>) = application {
                 onCheckForUpdates = ::checkForUpdates,
                 onOpenUpdateLink = ::openExternalUrl,
                 onDismiss = { isAboutDialogVisible = false }
+            )
+        }
+        eventFileTransferDialog?.let { dialogState ->
+            EventFileTransferDialog(
+                state = dialogState,
+                onAddressSelected = { address ->
+                    val server = eventFileTransferServer
+                    if (server != null) {
+                        runCatching {
+                            val session = server.sessionFor(address)
+                            eventFileTransferDialog = dialogState.copy(
+                                selectedAddress = address,
+                                session = session,
+                                qrCode = desktopEventFileTransferQrCode(session.url)
+                            )
+                            projectStatusText = "Event File transfer ready at ${session.url}"
+                        }.onFailure { error ->
+                            projectStatusText = "Could not update transfer URL: ${error.message ?: error::class.simpleName}"
+                        }
+                    }
+                },
+                onCopyUrl = {
+                    Toolkit.getDefaultToolkit().systemClipboard.setContents(
+                        StringSelection(dialogState.session.url),
+                        null
+                    )
+                    projectStatusText = "Copied Android transfer URL."
+                },
+                onCancel = {
+                    eventFileTransferServer?.stop()
+                    eventFileTransferServer = null
+                    eventFileTransferDialog = null
+                }
             )
         }
         appUpdateDialogStatus?.let { status ->
@@ -3680,6 +3798,18 @@ fun main(args: Array<String>) = application {
                         EventProjectEditor.renameCategory(currentProject, categoryId, name)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText = "Unsaved changes."
+                }.onFailure { error ->
+                    projectStatusText = "Edit failed: ${genericEditErrorText(error)}"
+                }
+            },
+            onUpdateCategoryGender = { categoryId, isMan ->
+                runCatching {
+                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.updateCategoryGender(currentProject, categoryId, isMan)
+                    }
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    recordActivity("Updated category gender.")
                     projectStatusText = "Unsaved changes."
                 }.onFailure { error ->
                     projectStatusText = "Edit failed: ${genericEditErrorText(error)}"
@@ -5346,6 +5476,87 @@ private fun EventRegImportDialog(
     )
 }
 
+private data class DesktopEventFileTransferDialogState(
+    val addresses: List<DesktopEventFileTransferAddress>,
+    val selectedAddress: DesktopEventFileTransferAddress,
+    val session: DesktopEventFileTransferSession,
+    val qrCode: BufferedImage,
+    val statusText: String
+)
+
+@Composable
+private fun EventFileTransferDialog(
+    state: DesktopEventFileTransferDialogState,
+    onAddressSelected: (DesktopEventFileTransferAddress) -> Unit,
+    onCopyUrl: () -> Unit,
+    onCancel: () -> Unit
+) {
+    var isAddressMenuExpanded by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Send Event File to Android") },
+        text = {
+            Column(
+                modifier = Modifier.widthIn(min = 420.dp, max = 560.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Scan this code from Android, or enter the URL manually. Use trusted Wi-Fi or a phone hotspot.")
+                Image(
+                    bitmap = state.qrCode.toComposeImageBitmap(),
+                    contentDescription = "Android Event File transfer QR code",
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .width(260.dp)
+                        .height(260.dp),
+                    contentScale = ContentScale.Fit
+                )
+                if (state.addresses.size > 1) {
+                    Box {
+                        Button(onClick = { isAddressMenuExpanded = true }) {
+                            ButtonLabel(state.selectedAddress.label)
+                        }
+                        DropdownMenu(
+                            expanded = isAddressMenuExpanded,
+                            onDismissRequest = { isAddressMenuExpanded = false }
+                        ) {
+                            state.addresses.forEach { address ->
+                                DropdownMenuItem(
+                                    onClick = {
+                                        isAddressMenuExpanded = false
+                                        onAddressSelected(address)
+                                    }
+                                ) {
+                                    Text(address.label)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Text("Address: ${state.selectedAddress.label}")
+                }
+                SelectionContainer {
+                    Text(
+                        state.session.url,
+                        style = MaterialTheme.typography.body2
+                    )
+                }
+                Text(state.statusText)
+            }
+        },
+        confirmButton = {
+            Button(onClick = onCopyUrl) {
+                ButtonLabel("Copy URL")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                ButtonLabel("Cancel")
+            }
+        }
+    )
+}
+
 @Composable
 private fun CompetitorCsvImportOptionsDialog(
     fileName: String,
@@ -5771,6 +5982,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit = { _, _, _, _ -> },
     onUpdateEventFileName: (String) -> Boolean = { false },
     onRenameCategory: (String, String) -> Unit = { _, _ -> },
+    onUpdateCategoryGender: (String, Boolean) -> Unit = { _, _ -> },
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit = { _, _, _ -> },
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit = { _, _, _ -> },
     onAddCategory: (String) -> Boolean = { false },
@@ -5996,6 +6208,7 @@ private fun RadioOManagerDesktopApp(
                                     onUpdateRaceSettings = onUpdateRaceSettings,
                                     onUpdateEventFileName = onUpdateEventFileName,
                                     onRenameCategory = onRenameCategory,
+                                    onUpdateCategoryGender = onUpdateCategoryGender,
                                     onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
                                     onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
                                     onAddCategory = onAddCategory,
@@ -6769,6 +6982,7 @@ private fun SectionWorkspace(
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
     onUpdateEventFileName: (String) -> Boolean,
     onRenameCategory: (String, String) -> Unit,
+    onUpdateCategoryGender: (String, Boolean) -> Unit,
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
     onAddCategory: (String) -> Boolean,
@@ -6894,6 +7108,7 @@ private fun SectionWorkspace(
                 categories = EventCategoryDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
                 controls = EventControlDetails.from(projectFile.raceData),
                 onRenameCategory = onRenameCategory,
+                onUpdateCategoryGender = onUpdateCategoryGender,
                 onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
                 onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
                 onAddCategory = onAddCategory,
@@ -11238,6 +11453,7 @@ private fun CategoryDetailsPanel(
     categories: List<EventCategoryDetails>,
     controls: List<EventControlDetails>,
     onRenameCategory: (String, String) -> Unit,
+    onUpdateCategoryGender: (String, Boolean) -> Unit,
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
     onAddCategory: (String) -> Boolean,
@@ -11312,6 +11528,7 @@ private fun CategoryDetailsPanel(
                                 category = category,
                                 controls = controls,
                                 onRenameCategory = onRenameCategory,
+                                onUpdateCategoryGender = onUpdateCategoryGender,
                                 onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
                                 onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats
                             )
@@ -11661,6 +11878,7 @@ private fun CategoryAddRow(
         Spacer(modifier = Modifier.width(CategoryTableColumns[4].width))
         Spacer(modifier = Modifier.width(CategoryTableColumns[5].width))
         Spacer(modifier = Modifier.width(CategoryTableColumns[6].width))
+        Spacer(modifier = Modifier.width(CategoryTableColumns[7].width))
     }
 }
 
@@ -11670,6 +11888,7 @@ private fun CategoryDetailRow(
     category: EventCategoryDetails,
     controls: List<EventControlDetails>,
     onRenameCategory: (String, String) -> Unit,
+    onUpdateCategoryGender: (String, Boolean) -> Unit,
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit
 ) {
@@ -11702,7 +11921,9 @@ private fun CategoryDetailRow(
         onDispose { applyLatestCategoryNameDraft() }
     }
     Row(
-        modifier = Modifier.width(fixedTableWidth(CategoryTableColumns)),
+        modifier = Modifier
+            .width(fixedTableWidth(CategoryTableColumns))
+            .background(categoryGenderBackground(category.isMan)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -11720,13 +11941,18 @@ private fun CategoryDetailRow(
             singleLine = true,
             label = { Text("Category") }
         )
+        CategoryGenderPicker(
+            isMan = category.isMan,
+            onGenderChange = { isMan -> onUpdateCategoryGender(category.id, isMan) },
+            modifier = Modifier.width(CategoryTableColumns[1].width)
+        )
         TextField(
             value = lengthMetersDraft,
             onValueChange = {
                 lengthMetersDraft = it
                 applyPhysicalStats(nextLength = it)
             },
-            modifier = Modifier.width(CategoryTableColumns[1].width),
+            modifier = Modifier.width(CategoryTableColumns[2].width),
             singleLine = true,
             label = { Text("Length m") }
         )
@@ -11736,25 +11962,25 @@ private fun CategoryDetailRow(
                 climbMetersDraft = it
                 applyPhysicalStats(nextClimb = it)
             },
-            modifier = Modifier.width(CategoryTableColumns[2].width),
+            modifier = Modifier.width(CategoryTableColumns[3].width),
             singleLine = true,
             label = { Text("Climb m") }
         )
         Text(
             category.raceTypeLabel,
-            modifier = Modifier.width(CategoryTableColumns[3].width),
-            color = DesktopPalette.Black,
-            fontSize = 13.sp
-        )
-        Text(
-            category.raceBandLabel,
             modifier = Modifier.width(CategoryTableColumns[4].width),
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
         Text(
-            desktopTimeLimitText(category.timeLimitText),
+            category.raceBandLabel,
             modifier = Modifier.width(CategoryTableColumns[5].width),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        Text(
+            desktopTimeLimitText(category.timeLimitText),
+            modifier = Modifier.width(CategoryTableColumns[6].width),
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -11768,10 +11994,59 @@ private fun CategoryDetailRow(
                 controlPointsDraft = text
                 onUpdateCategoryControlPoints(category.id, text, shouldCheckRequiredControls)
             },
-            modifier = Modifier.width(CategoryTableColumns[6].width)
+            modifier = Modifier.width(CategoryTableColumns[7].width)
         )
     }
 }
+
+@Composable
+private fun CategoryGenderPicker(
+    isMan: Boolean,
+    onGenderChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        Button(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                backgroundColor = if (isMan) Color(0xFFD5EAFE) else Color(0xFFFFD8D8),
+                contentColor = DesktopPalette.Black
+            )
+        ) {
+            ButtonLabel(if (isMan) "Men" else "Women")
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DropdownMenuItem(
+                onClick = {
+                    expanded = false
+                    if (!isMan) {
+                        onGenderChange(true)
+                    }
+                }
+            ) {
+                Text("Men")
+            }
+            DropdownMenuItem(
+                onClick = {
+                    expanded = false
+                    if (isMan) {
+                        onGenderChange(false)
+                    }
+                }
+            ) {
+                Text("Women")
+            }
+        }
+    }
+}
+
+private fun categoryGenderBackground(isMan: Boolean): Color =
+    if (isMan) CategoryMenBackground else CategoryWomenBackground
 
 @Composable
 private fun AssignedControlsEditor(

@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
+import java.security.MessageDigest
 import java.util.UUID
 
 /** Import/export processor for JSON race backups and live/final result feeds. */
@@ -99,8 +100,13 @@ object JsonProcessor : FormatProcessor {
 
     /** Imports a full race backup from a JSON string using the race-data Moshi adapter. */
     fun importRaceData(jsonString: String, dataProcessor: DataProcessor): RaceData {
+        val fingerprint = jsonString.sha256Hex()
         if (jsonString.contains("\"appName\"") && jsonString.contains("\"raceData\"")) {
-            return EventProjectFileJson.decode(jsonString).raceData.toRoomRaceData()
+            val eventRaceData = EventProjectFileJson.decode(jsonString).raceData
+            return eventRaceData.toRoomRaceData().withImportIdentity(
+                sourceId = "event-file:${eventRaceData.race.id}",
+                fingerprint = fingerprint
+            )
         }
 
         val moshi: Moshi = Moshi.Builder()
@@ -110,7 +116,11 @@ object JsonProcessor : FormatProcessor {
             .build()
         val adapter = moshi.adapter<RaceData>()
 
-        return adapter.nonNull().fromJson(jsonString)!!
+        val raceData = adapter.nonNull().fromJson(jsonString)!!
+        return raceData.withImportIdentity(
+            sourceId = "android-race:${raceData.race.id}",
+            fingerprint = fingerprint
+        )
     }
 
     /** Parses the ROBIS response shape returned by the live-result service. */
@@ -211,3 +221,14 @@ object JsonProcessor : FormatProcessor {
         }
     }
 }
+
+private fun RaceData.withImportIdentity(sourceId: String, fingerprint: String): RaceData {
+    race.importSourceId = sourceId
+    race.importFingerprint = fingerprint
+    return this
+}
+
+private fun String.sha256Hex(): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(toByteArray(Charsets.UTF_8))
+        .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }

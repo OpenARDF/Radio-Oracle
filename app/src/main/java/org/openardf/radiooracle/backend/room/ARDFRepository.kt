@@ -8,6 +8,8 @@ import org.openardf.radiooracle.backend.room.database.MIGRATION_1_2
 import org.openardf.radiooracle.backend.room.database.MIGRATION_2_3
 import org.openardf.radiooracle.backend.room.database.MIGRATION_3_4
 import org.openardf.radiooracle.backend.room.database.MIGRATION_4_5
+import org.openardf.radiooracle.backend.room.database.MIGRATION_5_6
+import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
@@ -30,7 +32,7 @@ class ARDFRepository private constructor(context: Context) {
             EventDatabase::class.java,
             "event-database"
         )
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
         .build()
 
     //-------------------Races-------------------
@@ -228,6 +230,16 @@ class ARDFRepository private constructor(context: Context) {
     //-------------------Race data-------------------
     suspend fun saveRaceData(raceData: RaceData) {
         eventDatabase.withTransaction {
+            raceData.race.importSourceId?.let { importSourceId ->
+                val deletedCount =
+                    eventDatabase.raceDao().deletePriorImportedCopies(importSourceId, raceData.race.id)
+                if (deletedCount > 0) {
+                    DebugLog.info(
+                        "Events",
+                        "Replaced prior imported event copies count=$deletedCount source=$importSourceId"
+                    )
+                }
+            }
             createRace(raceData.race)
             raceData.categories.forEach { cd ->
                 createOrUpdateCategory(

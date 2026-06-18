@@ -29,6 +29,7 @@ import org.openardf.radiooracle.backend.room.enums.ResultStatus
 import org.openardf.radiooracle.backend.room.enums.StandardCategoryType
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
 import org.openardf.radiooracle.backend.wrappers.StatisticsWrapper
+import org.openardf.radiooracle.ui.categories.CategoryDisplaySort
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -105,7 +106,7 @@ class SelectedRaceViewModel : ViewModel() {
                 // start collectors and keep job references so they can be cancelled on next setRace
                 categoryJob = launch {
                     dataProcessor.getCategoryDataFlowForRace(id).collect {
-                        _categories.value = it
+                        _categories.value = CategoryDisplaySort.categoryData(it)
                     }
                 }
                 competitorJob = launch {
@@ -121,7 +122,7 @@ class SelectedRaceViewModel : ViewModel() {
 
                 resultWrapperJob = launch {
                     ResultsProcessor.getResultWrapperFlowByRace(id, dataProcessor).collect {
-                        _resultWrappers.value = it
+                        _resultWrappers.value = CategoryDisplaySort.resultWrappers(it)
                     }
                 }
             }
@@ -169,7 +170,8 @@ class SelectedRaceViewModel : ViewModel() {
     //Category
     suspend fun getCategory(id: UUID) = dataProcessor.getCategory(id)
 
-    fun getCategories(): List<Category> = categories.value.map { it.category }
+    fun getCategories(): List<Category> =
+        CategoryDisplaySort.categories(categories.value.map { it.category })
     fun getCategoryByName(string: String, raceId: UUID): Category? {
         return runBlocking {
             return@runBlocking dataProcessor.getCategoryByName(string, raceId)

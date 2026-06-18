@@ -1,0 +1,112 @@
+package org.openardf.radiooracle.backend.files
+
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.openardf.radiooracle.backend.logging.DebugLog
+import java.io.IOException
+import java.net.SocketTimeoutException
+import java.net.URI
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
+
+class EventFileTransferDownloader(
+    private val client: OkHttpClient = OkHttpClient()
+) {
+    @Throws(EventFileTransferException::class)
+    fun download(rawUrl: String): String {
+        val url = EventFileTransferUrlValidator.validate(rawUrl)
+        DebugLog.info("EventFileTransfer", "Downloading Event File from ${safeUrlDescription(url)}")
+        val request = Request.Builder().url(url).get().build()
+
+        val response = try {
+            client.newCall(request).execute()
+        } catch (error: SocketTimeoutException) {
+            DebugLog.warn("EventFileTransfer", "Timed out downloading from ${safeUrlDescription(url)}")
+            throw EventFileTransferException("The desktop did not respond. Check that both devices are on the same trusted Wi-Fi or hotspot.")
+        } catch (error: IOException) {
+            DebugLog.warn("EventFileTransfer", "Could not reach ${safeUrlDescription(url)}: ${error.message ?: error::class.simpleName}")
+            throw EventFileTransferException("Could not reach the desktop. Check the Wi-Fi connection and try again.")
+        }
+
+        response.use {
+            if (it.code == 403) {
+                DebugLog.warn("EventFileTransfer", "Desktop rejected transfer token at ${safeUrlDescription(url)}")
+                throw EventFileTransferException("This transfer link is expired, already used, or has the wrong token.")
+            }
+            if (!it.isSuccessful) {
+                DebugLog.warn("EventFileTransfer", "Desktop returned HTTP ${it.code} from ${safeUrlDescription(url)}")
+                throw EventFileTransferException("The desktop returned HTTP ${it.code}. Start a new transfer and try again.")
+            }
+            val body = it.body.string()
+            DebugLog.info("EventFileTransfer", "Downloaded Event File bytes=${body.toByteArray().size} from ${safeUrlDescription(url)}")
+            return body
+        }
+    }
+}
+
+object EventFileTransferUrlValidator {
+    @Throws(EventFileTransferException::class)
+    fun validate(rawUrl: String): String {
+        val trimmedUrl = rawUrl.trim()
+        val uri = try {
+            URI(trimmedUrl)
+        } catch (error: IllegalArgumentException) {
+            throw EventFileTransferException("Enter the local transfer URL shown on the desktop.")
+        }
+
+        if (uri.scheme != "http") {
+            throw EventFileTransferException("Desktop transfer URLs must start with http://.")
+        }
+        val host = uri.host ?: throw EventFileTransferException("Desktop transfer URL is missing a host.")
+        if (!isLocalHost(host)) {
+            throw EventFileTransferException("Use a private Wi-Fi, hotspot, or .local desktop address, not a public internet URL.")
+        }
+        val token = queryParameters(uri)["token"]
+        if (token.isNullOrBlank()) {
+            throw EventFileTransferException("Desktop transfer URL is missing its token.")
+        }
+        return uri.toASCIIString()
+    }
+
+    private fun isLocalHost(host: String): Boolean {
+        val normalizedHost = host.lowercase()
+        if (normalizedHost == "localhost" || normalizedHost.endsWith(".local")) {
+            return true
+        }
+
+        val parts = normalizedHost.split('.').mapNotNull { it.toIntOrNull() }
+        if (parts.size != 4) {
+            return false
+        }
+        return parts[0] == 10 ||
+            parts[0] == 127 ||
+            parts[0] == 192 && parts[1] == 168 ||
+            parts[0] == 172 && parts[1] in 16..31 ||
+            parts[0] == 169 && parts[1] == 254
+    }
+
+    private fun queryParameters(uri: URI): Map<String, String> {
+        val query = uri.rawQuery ?: return emptyMap()
+        return query.split('&')
+            .mapNotNull { part ->
+                val pieces = part.split('=', limit = 2)
+                if (pieces.isEmpty() || pieces[0].isEmpty()) {
+                    null
+                } else {
+                    val key = URLDecoder.decode(pieces[0], StandardCharsets.UTF_8)
+                    val value = if (pieces.size == 2) pieces[1] else ""
+                    key to URLDecoder.decode(value, StandardCharsets.UTF_8)
+                }
+            }
+            .toMap()
+    }
+}
+
+class EventFileTransferException(message: String) : Exception(message)
+
+private fun safeUrlDescription(url: String): String {
+    return runCatching {
+        val uri = URI(url)
+        "${uri.scheme}://${uri.host}${if (uri.port >= 0) ":${uri.port}" else ""}${uri.path}"
+    }.getOrDefault("desktop transfer URL")
+}

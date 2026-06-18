@@ -154,6 +154,7 @@
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/race_dialog_external_id_layout"
             style="@style/dialog_textView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

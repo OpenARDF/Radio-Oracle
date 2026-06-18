@@ -1014,6 +1014,49 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun addCategoryInfersStandardCategoryGenderFromName() {
+        val original = projectFile(categories = emptyList())
+
+        val withWomen = EventProjectEditor.addCategory(original, "cat-w21", "W21")
+        val withMen = EventProjectEditor.addCategory(withWomen, "cat-m50", "M50")
+
+        assertEquals(false, withMen.raceData.categories.single { it.category.name == "W21" }.category.isMan)
+        assertEquals(true, withMen.raceData.categories.single { it.category.name == "M50" }.category.isMan)
+    }
+
+    @Test
+    fun updatesCategoryGender() {
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21"))
+        )
+
+        val updated = EventProjectEditor.updateCategoryGender(original, "cat-1", false)
+
+        assertEquals(false, updated.raceData.categories.single().category.isMan)
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCategoryGender(original, "missing", false)
+        }
+    }
+
+    @Test
+    fun importCategoryRowsInfersStandardCategoryGenderFromName() {
+        val original = projectFile(categories = emptyList())
+
+        val updated = EventProjectEditor.importCategoryRows(
+            projectFile = original,
+            rows = listOf(
+                categoryImportRow(name = "M50", isMan = false),
+                categoryImportRow(name = "W21", isMan = true)
+            ),
+            categoryIdFactory = generateSequence(1) { it + 1 }.map { "cat-$it" }.iterator()::next,
+            controlPointIdFactory = { categoryId, index -> "$categoryId-control-$index" }
+        )
+
+        assertEquals(true, updated.raceData.categories.single { it.category.name == "M50" }.category.isMan)
+        assertEquals(false, updated.raceData.categories.single { it.category.name == "W21" }.category.isMan)
+    }
+
+    @Test
     fun updatesExistingCategoryImportsByName() {
         val original = projectFile(
             categories = listOf(
@@ -1107,6 +1150,32 @@ class EventProjectEditorTest {
         val newCategoryCompetitor = updated.raceData.competitorData[2].competitorCategory
         assertEquals("cat-2", newCategoryCompetitor.competitor.categoryId)
         assertEquals("W21", newCategoryCompetitor.category?.name)
+        assertEquals(false, newCategoryCompetitor.category?.isMan)
+    }
+
+    @Test
+    fun importsCompetitorRowsInferMissingCategoryGenderFromName() {
+        val original = projectFile()
+
+        val updated = EventProjectEditor.importCompetitorRows(
+            projectFile = original,
+            rows = listOf(
+                competitorImportRow(
+                    firstName = "Pavel",
+                    lastName = "Kolsky",
+                    categoryName = "M50",
+                    isMan = false,
+                    startNumber = 1,
+                    index = "T001"
+                )
+            ),
+            competitorIdFactory = { "comp-1" },
+            categoryIdFactory = { "cat-m50" }
+        )
+
+        val category = updated.raceData.categories.single().category
+        assertEquals("M50", category.name)
+        assertEquals(true, category.isMan)
     }
 
     @Test

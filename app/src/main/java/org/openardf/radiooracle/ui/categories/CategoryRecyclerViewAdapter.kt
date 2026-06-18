@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.appcompat.widget.PopupMenu
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
@@ -39,6 +40,7 @@ class CategoryRecyclerViewAdapter(
 
     override fun onBindViewHolder(holder: CategoryViewHolder, position: Int) {
         val item = values[position]
+        holder.itemView.setBackgroundColor(categoryBackgroundColor(item.category.isMan))
         holder.title.text = item.category.name
         holder.numCompeititors.text =
             "(${item.competitors.size} ${
@@ -71,26 +73,8 @@ class CategoryRecyclerViewAdapter(
             showContextMenu(holder.moreBtn, position, item)
         }
 
-        holder.upBtn.setOnClickListener {
-            if (holder.layoutPosition != 0) {
-                moveCategory(holder.layoutPosition, true)
-            }
-        }
-
-        holder.downBtn.setOnClickListener {
-            if (holder.layoutPosition != values.size - 1)
-                moveCategory(holder.layoutPosition, false)
-        }
-
-        holder.upBtn.visibility = View.VISIBLE
-        holder.downBtn.visibility = View.VISIBLE
-        //Hide the buttons for last and first item
-        if (position == 0) {
-            holder.upBtn.visibility = View.GONE
-        }
-        if (position == values.size - 1) {
-            holder.downBtn.visibility = View.GONE
-        }
+        holder.upBtn.visibility = View.GONE
+        holder.downBtn.visibility = View.GONE
     }
 
     private fun showContextMenu(anchor: View, position: Int, item: CategoryData) {
@@ -122,9 +106,6 @@ class CategoryRecyclerViewAdapter(
         popupMenu.show()
     }
 
-    /**
-     * Changes the category's order and saves it to database
-     */
     private fun getDisplayControlPoints(item: CategoryData, raceType: RaceType): String {
         if (raceType == RaceType.ORIENTEERING) {
             return item.category.controlPointsString
@@ -141,20 +122,13 @@ class CategoryRecyclerViewAdapter(
     private fun currentRaceType(): RaceType =
         selectedRaceViewModel.getCurrentRace()?.raceType ?: RaceType.CLASSIC
 
-    private fun moveCategory(position: Int, up: Boolean) {
-        if (up) {
-            values[position - 1].category.order++
-            values[position].category.order--
-            selectedRaceViewModel.createOrUpdateCategory(values[position - 1].category, null)
-            selectedRaceViewModel.createOrUpdateCategory(values[position].category, null)
-            notifyItemMoved(position, position - 1)
+    private fun categoryBackgroundColor(isMan: Boolean): Int {
+        val colorRes = if (isMan) {
+            R.color.category_men_background
         } else {
-            values[position + 1].category.order--
-            values[position].category.order++
-            selectedRaceViewModel.createOrUpdateCategory(values[position + 1].category, null)
-            selectedRaceViewModel.createOrUpdateCategory(values[position].category, null)
-            notifyItemMoved(position, position + 1)
+            R.color.category_women_background
         }
+        return ContextCompat.getColor(context, colorRes)
     }
 
     inner class CategoryViewHolder(view: View) : RecyclerView.ViewHolder(view) {

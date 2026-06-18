@@ -10,6 +10,7 @@ import androidx.preference.PreferenceManager
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.files.DataImportValidator
 import org.openardf.radiooracle.backend.files.FileProcessor
+import org.openardf.radiooracle.backend.files.processors.JsonProcessor
 import org.openardf.radiooracle.backend.files.wrappers.DataImportWrapper
 import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
@@ -32,6 +33,7 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
+import org.openardf.radiooracle.backend.room.withFreshImportIds
 import org.openardf.radiooracle.backend.sportident.SIPort.CardData
 import org.openardf.radiooracle.backend.sportident.SIReaderService
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
@@ -125,15 +127,21 @@ class DataProcessor private constructor(context: Context) {
 
     suspend fun getRace(id: UUID) = ardfRepository.getRace(id)
 
-    suspend fun createRace(race: Race) = ardfRepository.createRace(race)
+    suspend fun createRace(race: Race) {
+        ardfRepository.createRace(race)
+        DebugLog.info("Events", "Created event=${race.id} name=${race.name}")
+    }
 
     suspend fun updateRace(race: Race) {
         ardfRepository.updateRace(race)
         updateResultsByRace(race.id)
+        DebugLog.info("Events", "Updated event=${race.id} name=${race.name}")
     }
 
     suspend fun deleteRace(id: UUID) {
+        val race = getRace(id)
         ardfRepository.deleteRace(id)
+        DebugLog.info("Events", "Deleted event=$id name=${race?.name ?: "unknown"}")
     }
 
     //CATEGORIES
@@ -523,16 +531,41 @@ class DataProcessor private constructor(context: Context) {
         return if (context != null) {
             fileProcessor?.importRaceData(uri, context)?.let { raceData ->
                 DataImportValidator.validateRaceDataImport(raceData, context)
-                return raceData
+                val importedRaceData = raceData.withFreshImportIds()
+                DebugLog.info(
+                    "Events",
+                    "Prepared Event File import event=${importedRaceData.race.id} name=${importedRaceData.race.name} source=${importedRaceData.race.importSourceId ?: "none"}"
+                )
+                return importedRaceData
             }
         } else null
     }
 
-    suspend fun exportRaceData(uri: Uri, raceId: UUID) =
-        fileProcessor?.exportRaceData(uri, raceId)
+    @Throws(Exception::class)
+    suspend fun importRaceData(jsonString: String): RaceData? {
+        val context = getContext() ?: return null
+        val raceData = JsonProcessor.importRaceData(jsonString, this)
+        DataImportValidator.validateRaceDataImport(raceData, context)
+        val importedRaceData = raceData.withFreshImportIds()
+        DebugLog.info(
+            "Events",
+            "Prepared downloaded Event File import event=${importedRaceData.race.id} name=${importedRaceData.race.name} source=${importedRaceData.race.importSourceId ?: "none"}"
+        )
+        return importedRaceData
+    }
 
-    suspend fun saveRaceData(raceData: RaceData) =
+    suspend fun exportRaceData(uri: Uri, raceId: UUID) {
+        fileProcessor?.exportRaceData(uri, raceId)
+        DebugLog.info("Events", "Exported event=$raceId")
+    }
+
+    suspend fun saveRaceData(raceData: RaceData) {
         ardfRepository.saveRaceData(raceData)
+        DebugLog.info(
+            "Events",
+            "Saved imported event=${raceData.race.id} name=${raceData.race.name} source=${raceData.race.importSourceId ?: "none"}"
+        )
+    }
 
     suspend fun saveDataImportWrapper(
         data: DataImportWrapper

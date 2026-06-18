@@ -6,6 +6,10 @@ object EventCategorySort {
         compareBy<EventCategoryData> { categoryNameKey(it.category.name) }
             .thenBy { it.category.order }
 
+    /** Compares category names with the same natural ARDF ordering used by category administration. */
+    fun compareNames(left: String, right: String): Int =
+        categoryNameKey(left).compareTo(categoryNameKey(right))
+
     private fun categoryNameKey(name: String): CategoryNameKey {
         val trimmed = name.trim()
         val prefix = trimmed.takeWhile { it.isLetter() }.uppercase()

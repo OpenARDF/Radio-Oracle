@@ -25,9 +25,14 @@ android {
         versionName = rootProject.ext.radioOracleVersion
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders = [radioOracleCommandReceiverExported: "false"]
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders.radioOracleCommandReceiverExported = "true"
+        }
+
         release {
             minifyEnabled = true
 
@@ -101,6 +106,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.markwon.core)
     implementation(libs.expandable.fab)
+    implementation(libs.google.code.scanner)
 
     //Testing libraries
     testImplementation(libs.junit)

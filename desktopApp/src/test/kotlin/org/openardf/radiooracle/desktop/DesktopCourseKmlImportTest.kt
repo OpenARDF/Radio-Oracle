@@ -360,6 +360,8 @@ class DesktopCourseKmlImportTest {
             listOf("M21") + expectedMissingCategoryNames,
             withCreatedCategories.raceData.categories.map { it.category.name }
         )
+        assertEquals(true, withCreatedCategories.raceData.categories.single { it.category.name == "M50" }.category.isMan)
+        assertEquals(false, withCreatedCategories.raceData.categories.single { it.category.name == "W35" }.category.isMan)
         assertEquals(9, withCreatedSummary.importedCategoryCount)
         assertNotNull(
             withCreatedCategories.raceData.categories

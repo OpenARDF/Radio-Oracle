@@ -6,6 +6,7 @@ import org.openardf.radiooracle.shared.event.CompetitorCsvImportDuplicatePolicy
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvExports
 import java.io.StringReader
@@ -429,7 +430,8 @@ private fun DesktopEventRegCompetitor.toImportRow(): CompetitorCsvImportRow =
         firstName = firstName,
         lastName = lastName,
         categoryName = categoryName,
-        isMan = categoryName.trim().uppercase().startsWith("M"),
+        isMan = StandardCategoryRules.inferIsManFromName(categoryName)
+            ?: categoryName.trim().uppercase().startsWith("M"),
         birthYear = null,
         club = club,
         index = "",

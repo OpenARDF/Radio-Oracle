@@ -31,6 +31,7 @@ import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.course.ControlPointRules
+import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
@@ -214,7 +215,7 @@ private fun EventCategory.toRoomCategory(idMapper: RoomIdMapper): Category =
         id = idMapper.uuidFor(id),
         raceId = idMapper.uuidFor(raceId),
         name = name,
-        isMan = isMan,
+        isMan = StandardCategoryRules.inferIsManFromName(name) ?: isMan,
         maxAge = maxAge,
         length = lengthMeters,
         climb = climbMeters,

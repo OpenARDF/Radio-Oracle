@@ -30,7 +30,7 @@ import org.openardf.radiooracle.backend.room.entity.ResultService
         Punch::class,
         Result::class,
         ResultService::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(DateTimeTypeConverter::class)

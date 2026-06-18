@@ -29,6 +29,20 @@ class EventCsvImportsTest {
     }
 
     @Test
+    fun parsesStandardCategoryGenderFromNameWhenCsvFlagIsStale() {
+        val result = EventCsvImports.parseAndroidCategoryRows(
+            """
+            M-21;0;99;5000;100;1;;;;3;31,32,90B
+            W-65;1;99;3000;80;1;;;;2;31,90B
+            """.trimIndent()
+        )
+
+        assertEquals(emptyList(), result.invalidLines)
+        assertEquals(true, result.rows.single { it.name == "M-21" }.isMan)
+        assertEquals(false, result.rows.single { it.name == "W-65" }.isMan)
+    }
+
+    @Test
     fun parsesAndroidExportedCategoryControlColumn() {
         val result = EventCsvImports.parseAndroidCategoryRows(
             "M21;1;99;5000;100;1;;;;3;31,32,90B"
@@ -158,6 +172,8 @@ class EventCsvImportsTest {
         assertEquals(123456, result.rows[0].siNumber)
         assertEquals("W21", result.rows[0].categoryName)
         assertEquals(null, result.rows[0].startNumber)
+        assertFalse(result.rows[0].isMan)
+        assertTrue(result.rows[1].isMan)
         assertEquals("", result.rows[0].club)
         assertEquals(null, result.rows[1].siNumber)
     }

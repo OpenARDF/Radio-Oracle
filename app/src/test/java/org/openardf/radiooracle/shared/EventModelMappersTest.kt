@@ -249,6 +249,73 @@ class EventModelMappersTest {
     }
 
     @Test
+    fun mapsStandardCategoryGenderFromNameWhenStoredFlagIsStale() {
+        val projectRaceData = EventRaceData(
+            race = EventRace(
+                id = "stale-gender-race",
+                name = "Stale Gender Race",
+                apiKey = "",
+                startDateTimeIso = "2026-05-31T10:00",
+                raceType = RaceType.CLASSIC,
+                raceLevel = RaceLevel.PRACTICE,
+                raceBand = RaceBand.M80,
+                timeLimitSeconds = 7_200
+            ),
+            categories = listOf(
+                EventCategoryData(
+                    category = EventCategory(
+                        id = "category-m60",
+                        raceId = "stale-gender-race",
+                        name = "M60",
+                        isMan = false,
+                        maxAge = null,
+                        lengthMeters = 0,
+                        climbMeters = 0,
+                        order = 1,
+                        differentProperties = false,
+                        raceType = null,
+                        raceBand = null,
+                        timeLimitSeconds = null,
+                        controlPointsString = ""
+                    ),
+                    controlPoints = emptyList(),
+                    competitors = emptyList()
+                ),
+                EventCategoryData(
+                    category = EventCategory(
+                        id = "category-w21",
+                        raceId = "stale-gender-race",
+                        name = "W21",
+                        isMan = true,
+                        maxAge = null,
+                        lengthMeters = 0,
+                        climbMeters = 0,
+                        order = 2,
+                        differentProperties = false,
+                        raceType = null,
+                        raceBand = null,
+                        timeLimitSeconds = null,
+                        controlPointsString = ""
+                    ),
+                    controlPoints = emptyList(),
+                    competitors = emptyList()
+                )
+            ),
+            aliases = emptyList(),
+            competitorData = emptyList(),
+            unmatchedReadoutData = emptyList(),
+            controls = emptyList()
+        )
+
+        val categoriesByName = projectRaceData.toRoomRaceData()
+            .categories
+            .associate { it.category.name to it.category.isMan }
+
+        assertEquals(true, categoriesByName["M60"])
+        assertEquals(false, categoriesByName["W21"])
+    }
+
+    @Test
     fun roomCompetitorNameHelpersUseSharedFormatting() {
         val competitor = Competitor(
             id = uuid("00000000-0000-0000-0000-000000000011"),

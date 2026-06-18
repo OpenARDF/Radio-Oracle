@@ -20,6 +20,7 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
+import org.openardf.radiooracle.backend.room.withFreshImportIds
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceBand
@@ -38,6 +39,7 @@ import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.sportident.SITime
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
@@ -200,6 +202,40 @@ class RaceJsonTests {
         assertEquals("31", raceData.categories.single().category.controlPointsString)
         assertEquals(31, raceData.categories.single().controlPoints.single().siCode)
         assertEquals(listOf("FOX 1"), raceData.aliases.map { it.name })
+        assertEquals("event-file:desktop-race", raceData.race.importSourceId)
+        assertEquals(64, raceData.race.importFingerprint?.length)
+    }
+
+    @Test
+    fun freshImportIdsCloneRaceDataAndPreserveRelationships() {
+        val original = goldenRaceData()
+        original.race.importSourceId = "event-file:desktop-race"
+        original.race.importFingerprint = "abc123"
+        val imported = original.withFreshImportIds()
+
+        val importedRaceId = imported.race.id
+        val importedCategory = imported.categories.single().category
+        val importedControlPoint = imported.categories.single().controlPoints.single()
+        val importedAlias = imported.aliases.single()
+        val importedCompetitor = imported.competitorData.single().competitorCategory.competitor
+        val importedResult = imported.competitorData.single().readoutData!!.result
+        val importedPunches = imported.competitorData.single().readoutData!!.punches.map { it.punch }
+
+        assertEquals("Desktop Golden Race", imported.race.name)
+        assertNotEquals(original.race.id, importedRaceId)
+        assertEquals(original.race.importSourceId, imported.race.importSourceId)
+        assertEquals(original.race.importFingerprint, imported.race.importFingerprint)
+        assertEquals(importedRaceId, importedCategory.raceId)
+        assertEquals(importedCategory.id, importedControlPoint.categoryId)
+        assertEquals(importedRaceId, importedAlias.raceId)
+        assertEquals(importedRaceId, importedCompetitor.raceId)
+        assertEquals(importedCategory.id, importedCompetitor.categoryId)
+        assertEquals(importedRaceId, importedResult.raceId)
+        assertEquals(importedCompetitor.id, importedResult.competitorId)
+        importedPunches.forEach { punch ->
+            assertEquals(importedRaceId, punch.raceId)
+            assertEquals(importedResult.id, punch.resultId)
+        }
     }
 
     private fun goldenRaceData(): RaceData {

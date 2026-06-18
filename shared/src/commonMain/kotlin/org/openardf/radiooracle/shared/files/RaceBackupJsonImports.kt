@@ -32,6 +32,7 @@ import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
+import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** Imports Android `.ardfjs` full race backup JSON into the shared desktop project model. */
@@ -152,11 +153,13 @@ object RaceBackupJsonImports {
                 order = index
             )
         }
+        val categoryName = categoryJson.requiredString("category_name")
         val category = EventCategory(
             id = categoryId,
             raceId = raceId,
-            name = categoryJson.requiredString("category_name"),
-            isMan = categoryJson.boolean("category_gender") ?: true,
+            name = categoryName,
+            isMan = StandardCategoryRules.inferIsManFromName(categoryName)
+                ?: (categoryJson.boolean("category_gender") ?: true),
             maxAge = categoryJson.int("category_max_age"),
             lengthMeters = categoryJson.int("category_length") ?: 0,
             climbMeters = categoryJson.int("category_climb") ?: 0,

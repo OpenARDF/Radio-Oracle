@@ -14,4 +14,6 @@
     <color name="light_grey">#CBC8C8</color>
     <color name="yellow_highlight">#FFB300</color>
     <color name="red_result_err">#F44336</color>
+    <color name="category_men_background">#E8F3FF</color>
+    <color name="category_women_background">#FFECEC</color>
 </resources>

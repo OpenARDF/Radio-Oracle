@@ -5,6 +5,7 @@ import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventControlDetails
+import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.event.defaultScored
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 
@@ -204,7 +205,8 @@ object EventCsvImports {
 
         return CategoryCsvImportRow(
             name = name,
-            isMan = fields[EventCsvFormat.Category.IS_MAN].trim() == "1",
+            isMan = StandardCategoryRules.inferIsManFromName(name)
+                ?: (fields[EventCsvFormat.Category.IS_MAN].trim() == "1"),
             maxAge = maxAge,
             lengthMeters = lengthMeters,
             climbMeters = climbMeters,
@@ -279,13 +281,15 @@ object EventCsvImports {
             "Invalid SI number at line: $lineIndex"
         }
 
+        val categoryName = fields[EventCsvFormat.ArdfEventRegistration.CATEGORY_NAME].trim()
         return CompetitorCsvImportRow(
             siNumber = siNumber,
             startNumber = null,
             firstName = firstName,
             lastName = lastName,
-            categoryName = fields[EventCsvFormat.ArdfEventRegistration.CATEGORY_NAME].trim(),
-            isMan = false,
+            categoryName = categoryName,
+            isMan = StandardCategoryRules.inferIsManFromName(categoryName)
+                ?: categoryName.trim().uppercase().startsWith("M"),
             birthYear = null,
             club = "",
             index = fields[EventCsvFormat.ArdfEventRegistration.INDEX].trim(),

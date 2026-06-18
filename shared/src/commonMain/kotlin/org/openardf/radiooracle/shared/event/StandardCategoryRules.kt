@@ -11,6 +11,8 @@ data class StandardCategoryDefinition(
 
 /** Shared parser and provider for built-in standard category presets. */
 object StandardCategoryRules {
+    private val standardCategoryNamePattern = Regex("^[A-Z][ -]?\\d{1,3}[A-Z]*$")
+
     private val internationalRows = listOf(
         "W19;0;19",
         "W21;0;34",
@@ -58,6 +60,19 @@ object StandardCategoryRules {
             StandardCategoryType.CZECH -> czechRows
         }
         return rows.mapNotNull(::parseDefinition)
+    }
+
+    /** Infers category gender from standard ARDF category prefixes when the stored flag is stale or absent. */
+    fun inferIsManFromName(name: String): Boolean? {
+        val normalized = name.trim().uppercase()
+        if (!standardCategoryNamePattern.matches(normalized)) {
+            return null
+        }
+        return when (normalized.first()) {
+            'M' -> true
+            'W', 'D' -> false
+            else -> null
+        }
     }
 
     /** Parses a semicolon-delimited category preset row in the form name;isMan;maxAge. */

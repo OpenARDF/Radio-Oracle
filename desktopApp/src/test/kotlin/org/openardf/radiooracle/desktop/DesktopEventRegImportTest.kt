@@ -63,6 +63,8 @@ class DesktopEventRegImportTest {
             listOf("M-21", "W-65"),
             sprintProject.raceData.categories.map { it.category.name }.sorted()
         )
+        assertEquals(true, sprintProject.raceData.categories.single { it.category.name == "M-21" }.category.isMan)
+        assertEquals(false, sprintProject.raceData.categories.single { it.category.name == "W-65" }.category.isMan)
         assertEquals(
             "BOK",
             sprintProject.raceData.competitorData
@@ -107,6 +109,7 @@ class DesktopEventRegImportTest {
         val sprintRows = EventCsvImports.parseAndroidCompetitorRows(sprintCsv).rows
         assertEquals(listOf("Fala", "Kerns"), sprintRows.map { it.lastName })
         assertEquals(listOf("M-21", "W-65"), sprintRows.map { it.categoryName })
+        assertEquals(listOf(true, false), sprintRows.map { it.isMan })
     }
 
     private fun sampleRegistrationHtml(): String =

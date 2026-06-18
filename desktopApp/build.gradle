@@ -19,6 +19,8 @@ dependencies {
     implementation(libs.jserialcomm)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.zip4j)
+    implementation(libs.zxing.core)
+    implementation(libs.zxing.javase)
 
     testImplementation(libs.junit)
 }

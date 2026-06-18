@@ -3,11 +3,16 @@ package org.openardf.radiooracle.ui.races
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.net.Uri
 import android.os.Bundle
+import android.text.InputType
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,14 +24,22 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.nambimobile.widgets.efab.FabOption
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.files.EventFileTransferDownloader
+import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 
@@ -39,6 +52,7 @@ class RaceSelectionFragment : Fragment() {
     private lateinit var raceCreateOption: FabOption
     private lateinit var robisImportOption: FabOption
     private lateinit var fileImportOption: FabOption
+    private lateinit var receiveDesktopOption: FabOption
     private lateinit var recyclerView: RecyclerView
     private var selectedRaceId: UUID? = null
     private var exportData: Boolean = true
@@ -81,6 +95,7 @@ class RaceSelectionFragment : Fragment() {
         raceCreateOption = view.findViewById(R.id.race_fab_create)
         robisImportOption = view.findViewById(R.id.race_fab_robis)
         fileImportOption = view.findViewById(R.id.race_fab_file)
+        receiveDesktopOption = view.findViewById(R.id.race_fab_receive_desktop)
 
         raceCreateOption.setOnClickListener {
             findNavController().navigate(
@@ -102,9 +117,13 @@ class RaceSelectionFragment : Fragment() {
         robisImportOption.setOnClickListener {
             findNavController().navigate(RaceSelectionFragmentDirections.importRobis())
         }
+        receiveDesktopOption.setOnClickListener {
+            showReceiveFromDesktopDialog()
+        }
 
         setMenuListener()
         setRecyclerAdapter()
+        setSwipeActions()
         setFragmentListener()
         setBackButton()
     }
@@ -220,6 +239,90 @@ class RaceSelectionFragment : Fragment() {
         }
     }
 
+    private fun showReceiveFromDesktopDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_file_receive_title)
+            .setMessage(R.string.event_file_receive_message)
+            .setPositiveButton(R.string.event_file_receive_scan_qr) { _, _ ->
+                scanDesktopTransferQr()
+            }
+            .setNeutralButton(R.string.event_file_receive_enter_url) { _, _ ->
+                showManualDesktopTransferUrlDialog()
+            }
+            .setNegativeButton(R.string.general_cancel, null)
+            .show()
+    }
+
+    private fun showManualDesktopTransferUrlDialog() {
+        val input = EditText(requireContext()).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            hint = getString(R.string.event_file_receive_url_hint)
+            setSingleLine(true)
+        }
+
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_file_receive_title)
+            .setMessage(R.string.event_file_receive_message)
+            .setView(input)
+            .setPositiveButton(R.string.race_import) { _, _ ->
+                importEventFileFromDesktopUrl(input.text.toString())
+            }
+            .setNegativeButton(R.string.general_cancel, null)
+            .show()
+    }
+
+    private fun scanDesktopTransferQr() {
+        val options = GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .build()
+        val scanner = GmsBarcodeScanning.getClient(requireActivity(), options)
+        scanner.startScan()
+            .addOnSuccessListener { barcode ->
+                val url = barcode.rawValue
+                if (url.isNullOrBlank()) {
+                    displayAlert("The QR code did not contain a desktop transfer URL.")
+                } else {
+                    importEventFileFromDesktopUrl(url)
+                }
+            }
+            .addOnFailureListener { error ->
+                displayAlert(error.message ?: "QR scan failed. Enter the transfer URL manually.")
+            }
+    }
+
+    private fun importEventFileFromDesktopUrl(rawUrl: String) {
+        val progressDialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_file_receive_title)
+            .setMessage(R.string.event_file_receive_progress)
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val jsonString = withContext(Dispatchers.IO) {
+                    EventFileTransferDownloader().download(rawUrl)
+                }
+                raceData = raceViewModel.importRaceData(jsonString)
+                    ?: throw IllegalStateException("Invalid Event File.")
+                progressDialog.dismiss()
+                findNavController().navigate(
+                    RaceSelectionFragmentDirections.raceCreateOfModify(
+                        RaceEditDialogFragment.RaceEditActions.IMPORT, -1, raceData!!.race
+                    )
+                )
+                Toast.makeText(
+                    requireContext(),
+                    getString(R.string.event_file_receive_success, raceData!!.race.name),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (error: Exception) {
+                progressDialog.dismiss()
+                displayAlert(error.message ?: getString(R.string.race_import_failure))
+            }
+        }
+    }
+
     /**
      * Displays alert dialog to confirm the deletion of the race
      */
@@ -238,6 +341,11 @@ class RaceSelectionFragment : Fragment() {
             dialog.cancel()
         }
         builder.show()
+    }
+
+    private fun confirmRaceDeletionFromSwipe(race: Race, position: Int) {
+        confirmRaceDeletion(race)
+        recyclerView.adapter?.notifyItemChanged(position)
     }
 
     private fun exportRace(raceId: UUID) {
@@ -280,5 +388,71 @@ class RaceSelectionFragment : Fragment() {
                 }
             }
         }
+    }
+
+    private fun setSwipeActions() {
+        val swipeCallback = object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
+            private val backgroundPaint = Paint().apply { color = Color.rgb(190, 40, 40) }
+            private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                textAlign = Paint.Align.RIGHT
+                textSize = resources.getDimensionPixelSize(R.dimen.race_swipe_delete_text_size).toFloat()
+            }
+
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean = false
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                val position = viewHolder.bindingAdapterPosition
+                if (position == RecyclerView.NO_POSITION) {
+                    DebugLog.warn("Events", "Swipe delete ignored because row position was stale")
+                    return
+                }
+                val adapter = recyclerView.adapter as? RaceRecyclerViewAdapter
+                val race = adapter?.raceAt(position)
+                if (race == null) {
+                    recyclerView.adapter?.notifyItemChanged(position)
+                    DebugLog.warn("Events", "Swipe delete ignored because row position was unavailable")
+                    return
+                }
+
+                DebugLog.info("Events", "Swipe delete requested event=${race.id} name=${race.name}")
+                confirmRaceDeletionFromSwipe(race, position)
+            }
+
+            override fun onChildDraw(
+                c: Canvas,
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                dX: Float,
+                dY: Float,
+                actionState: Int,
+                isCurrentlyActive: Boolean
+            ) {
+                val itemView = viewHolder.itemView
+                if (dX < 0) {
+                    c.drawRect(
+                        itemView.right + dX,
+                        itemView.top.toFloat(),
+                        itemView.right.toFloat(),
+                        itemView.bottom.toFloat(),
+                        backgroundPaint
+                    )
+                    val baseline = itemView.top + (itemView.height - textPaint.descent() - textPaint.ascent()) / 2
+                    c.drawText(
+                        getString(R.string.race_delete),
+                        itemView.right - resources.getDimensionPixelSize(R.dimen.race_swipe_delete_padding).toFloat(),
+                        baseline,
+                        textPaint
+                    )
+                }
+                super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
+            }
+        }
+
+        ItemTouchHelper(swipeCallback).attachToRecyclerView(recyclerView)
     }
 }

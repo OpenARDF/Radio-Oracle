@@ -21,7 +21,7 @@ import androidx.lifecycle.Observer
 import androidx.navigation.findNavController
 import androidx.navigation.ui.setupWithNavController
 import androidx.preference.PreferenceManager
-import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.navigation.NavigationBarView
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.AppState
 import org.openardf.radiooracle.backend.DataProcessor
@@ -115,7 +115,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val navView: BottomNavigationView = binding.navView
+        val navView: NavigationBarView = findViewById(R.id.nav_view)
         siStatusTextView = binding.siStatusView
 
         val navController = findNavController(R.id.nav_host_fragment_activity_main)

@@ -53,6 +53,13 @@ class RaceViewModel : ViewModel() {
         dataProcessor.importRaceData(uri)
     }
 
+    /** Imports a full race backup from downloaded Event File JSON. */
+    fun importRaceData(
+        jsonString: String
+    ) = runBlocking {
+        dataProcessor.importRaceData(jsonString)
+    }
+
     /** Downloads race data from an online provider. */
     fun fetchProviderRaceData(providerType: ProviderType, apiKey: String, context: Context) =
         runBlocking {

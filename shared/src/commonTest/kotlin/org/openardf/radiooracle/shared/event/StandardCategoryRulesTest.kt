@@ -39,4 +39,15 @@ class StandardCategoryRulesTest {
         assertEquals(StandardCategoryDefinition(name = "D7", isMan = false, maxAge = 7), czech.first())
         assertEquals(StandardCategoryDefinition(name = "M70", isMan = true, maxAge = 200), czech.last())
     }
+
+    @Test
+    fun infersGenderFromStandardCategoryNames() {
+        assertEquals(true, StandardCategoryRules.inferIsManFromName("M21"))
+        assertEquals(true, StandardCategoryRules.inferIsManFromName("M-21"))
+        assertEquals(true, StandardCategoryRules.inferIsManFromName(" m60 "))
+        assertEquals(false, StandardCategoryRules.inferIsManFromName("W50"))
+        assertEquals(false, StandardCategoryRules.inferIsManFromName("W-65"))
+        assertEquals(false, StandardCategoryRules.inferIsManFromName("D20"))
+        assertNull(StandardCategoryRules.inferIsManFromName("Beginner"))
+    }
 }

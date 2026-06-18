@@ -18,6 +18,7 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
+import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -191,7 +192,8 @@ object DesktopCourseKmlImporter {
                                 id = missingCategoryIdFactory(name),
                                 raceId = projectFile.raceData.race.id,
                                 name = name,
-                                isMan = name.trim().uppercase().startsWith("M"),
+                                isMan = StandardCategoryRules.inferIsManFromName(name)
+                                    ?: name.trim().uppercase().startsWith("M"),
                                 maxAge = name.filter(Char::isDigit).takeIf { it.isNotBlank() }?.toIntOrNull(),
                                 lengthMeters = 0,
                                 climbMeters = 0,

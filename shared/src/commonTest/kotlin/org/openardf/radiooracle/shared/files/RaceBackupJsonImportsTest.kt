@@ -33,6 +33,7 @@ class RaceBackupJsonImportsTest {
         assertEquals(6_000, raceData.race.timeLimitSeconds)
 
         assertEquals("M21", category.category.name)
+        assertEquals(true, category.category.isMan)
         assertEquals(RaceBand.M2, category.category.raceBand)
         assertEquals(5_400, category.category.timeLimitSeconds)
         assertEquals("31 90B", category.category.controlPointsString)
@@ -71,7 +72,7 @@ class RaceBackupJsonImportsTest {
           "categories": [
             {
               "category_name": "M21",
-              "category_gender": true,
+              "category_gender": false,
               "category_max_age": 99,
               "category_length": 4500,
               "category_climb": 180,

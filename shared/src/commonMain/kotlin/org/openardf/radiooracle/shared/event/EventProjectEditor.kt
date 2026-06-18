@@ -167,6 +167,30 @@ object EventProjectEditor {
         )
     }
 
+    /** Returns a copy of the Event File with one category's gender flag changed. */
+    fun updateCategoryGender(
+        projectFile: EventProjectFile,
+        categoryId: String,
+        isMan: Boolean
+    ): EventProjectFile {
+        var foundCategory = false
+        val categories = projectFile.raceData.categories.map { categoryData ->
+            if (categoryData.category.id == categoryId) {
+                foundCategory = true
+                categoryData.copy(category = categoryData.category.copy(isMan = isMan))
+            } else {
+                categoryData
+            }
+        }
+        require(foundCategory) {
+            "Category was not found: $categoryId"
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(categories = categories)
+        )
+    }
+
     /** Returns a copy of the Event File with a new category using conservative defaults. */
     fun addCategory(
         projectFile: EventProjectFile,
@@ -192,7 +216,7 @@ object EventProjectEditor {
             id = categoryId,
             raceId = projectFile.raceData.race.id,
             name = trimmedName,
-            isMan = true,
+            isMan = StandardCategoryRules.inferIsManFromName(trimmedName) ?: true,
             maxAge = null,
             lengthMeters = 0,
             climbMeters = 0,
@@ -1323,7 +1347,7 @@ object EventProjectEditor {
                 id = categoryId,
                 raceId = projectFile.raceData.race.id,
                 name = row.name,
-                isMan = row.isMan,
+                isMan = StandardCategoryRules.inferIsManFromName(row.name) ?: row.isMan,
                 maxAge = row.maxAge,
                 lengthMeters = row.lengthMeters,
                 climbMeters = row.climbMeters,
@@ -1445,7 +1469,7 @@ object EventProjectEditor {
                         id = categoryIdFactory(),
                         raceId = projectFile.raceData.race.id,
                         name = categoryName,
-                        isMan = false,
+                        isMan = StandardCategoryRules.inferIsManFromName(categoryName) ?: row.isMan,
                         maxAge = null,
                         lengthMeters = 0,
                         climbMeters = 0,

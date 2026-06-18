@@ -1,0 +1,122 @@
+package org.openardf.radiooracle.backend.commands
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import org.openardf.radiooracle.backend.DataProcessor
+import org.openardf.radiooracle.backend.logging.DebugLog
+import org.openardf.radiooracle.backend.room.ARDFRepository
+import java.util.UUID
+
+/**
+ * Debug-only command surface for exercising important app operations from adb.
+ *
+ * Release builds keep this receiver unexported through the manifest placeholder,
+ * and the receiver also refuses commands unless the installed app is debuggable.
+ */
+class AppCommandReceiver : BroadcastReceiver() {
+
+    override fun onReceive(context: Context, intent: Intent) {
+        if (!context.isDebuggableApp()) {
+            Log.w(TAG, "Ignoring command because this build is not debuggable")
+            return
+        }
+
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                handleCommand(context.applicationContext, intent)
+            } catch (error: Exception) {
+                DebugLog.error(TAG, "Command failed action=${intent.action}: ${error.message}")
+                Log.e(TAG, "Command failed action=${intent.action}", error)
+            } finally {
+                pendingResult.finish()
+            }
+        }
+    }
+
+    private suspend fun handleCommand(context: Context, intent: Intent) {
+        val dataProcessor = initializedDataProcessor(context)
+        when (intent.action) {
+            ACTION_LIST_EVENTS -> listEvents(dataProcessor)
+            ACTION_DELETE_EVENT -> deleteEvent(dataProcessor, intent)
+            ACTION_SELECT_EVENT -> selectEvent(dataProcessor, intent)
+            else -> {
+                DebugLog.warn(TAG, "Unknown command action=${intent.action}")
+                Log.w(TAG, "Unknown command action=${intent.action}")
+            }
+        }
+    }
+
+    private fun initializedDataProcessor(context: Context): DataProcessor {
+        DebugLog.initialize(context)
+        ARDFRepository.initialize(context)
+        DataProcessor.initialize(context)
+        return DataProcessor.get()
+    }
+
+    private suspend fun listEvents(dataProcessor: DataProcessor) {
+        val races = dataProcessor.getRaces().first().sortedBy { it.startDateTime }
+        DebugLog.info(TAG, "Command listed events count=${races.size}")
+        Log.i(TAG, "events count=${races.size}")
+        races.forEach { race ->
+            val message = "event id=${race.id} name=${race.name} source=${race.importSourceId ?: "local"}"
+            DebugLog.info(TAG, message)
+            Log.i(TAG, message)
+        }
+    }
+
+    private suspend fun deleteEvent(dataProcessor: DataProcessor, intent: Intent) {
+        val eventId = intent.uuidExtra() ?: return missingEventId()
+        val race = dataProcessor.getRace(eventId)
+        if (race == null) {
+            DebugLog.warn(TAG, "Command delete ignored missing event=$eventId")
+            Log.w(TAG, "event not found id=$eventId")
+            return
+        }
+
+        dataProcessor.deleteRace(eventId)
+        DebugLog.info(TAG, "Command deleted event=$eventId name=${race.name}")
+        Log.i(TAG, "deleted event id=$eventId name=${race.name}")
+    }
+
+    private suspend fun selectEvent(dataProcessor: DataProcessor, intent: Intent) {
+        val eventId = intent.uuidExtra() ?: return missingEventId()
+        val race = dataProcessor.setCurrentRace(eventId)
+        if (race == null) {
+            DebugLog.warn(TAG, "Command select ignored missing event=$eventId")
+            Log.w(TAG, "event not found id=$eventId")
+            return
+        }
+
+        DebugLog.info(TAG, "Command selected event=$eventId name=${race.name}")
+        Log.i(TAG, "selected event id=$eventId name=${race.name}")
+    }
+
+    private fun Intent.uuidExtra(): UUID? =
+        getStringExtra(EXTRA_EVENT_ID)?.let { rawValue ->
+            runCatching { UUID.fromString(rawValue) }.getOrNull()
+        }
+
+    private fun missingEventId() {
+        DebugLog.warn(TAG, "Command missing or invalid $EXTRA_EVENT_ID")
+        Log.w(TAG, "missing or invalid $EXTRA_EVENT_ID")
+    }
+
+    private fun Context.isDebuggableApp(): Boolean =
+        (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+    companion object {
+        private const val TAG = "AppCommand"
+        const val ACTION_LIST_EVENTS = "org.openardf.radiooracle.command.LIST_EVENTS"
+        const val ACTION_DELETE_EVENT = "org.openardf.radiooracle.command.DELETE_EVENT"
+        const val ACTION_SELECT_EVENT = "org.openardf.radiooracle.command.SELECT_EVENT"
+        const val EXTRA_EVENT_ID = "event_id"
+    }
+}

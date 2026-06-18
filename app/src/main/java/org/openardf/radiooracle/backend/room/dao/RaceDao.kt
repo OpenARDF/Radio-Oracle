@@ -30,4 +30,8 @@ interface RaceDao {
     /** Deletes one race by primary key. */
     @Query("DELETE FROM race WHERE id =(:id)")
     suspend fun deleteRace(id: UUID)
+
+    /** Deletes prior imported copies for the same source event, excluding the new clone. */
+    @Query("DELETE FROM race WHERE import_source_id = (:importSourceId) AND id != (:raceId)")
+    suspend fun deletePriorImportedCopies(importSourceId: String, raceId: UUID): Int
 }

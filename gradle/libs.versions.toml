@@ -18,6 +18,7 @@ escpos-printer = "3.4.0"
 expandable-fab = "1.2.1"
 firebase-bom = "34.13.0"
 google-services = "4.4.3"
+google-code-scanner = "16.1.0"
 junit = "4.13.2"
 jserialcomm = "2.11.4"
 kotlin = "2.2.0"
@@ -38,6 +39,7 @@ sortable-table-view = "2.8.1"
 usb-serial = "6.1.0"
 xmlunit = "2.11.0"
 zip4j = "2.11.5"
+zxing = "3.5.4"
 
 [libraries]
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "androidx-appcompat" }
@@ -61,6 +63,7 @@ expandable-fab = { module = "com.nambimobile.widgets:expandable-fab", version.re
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
 firebase-crashlytics-ndk = { module = "com.google.firebase:firebase-crashlytics-ndk" }
+google-code-scanner = { module = "com.google.android.gms:play-services-code-scanner", version.ref = "google-code-scanner" }
 junit = { module = "junit:junit", version.ref = "junit" }
 jserialcomm = { module = "com.fazecast:jSerialComm", version.ref = "jserialcomm" }
 kotlin-csv-jvm = { module = "com.github.doyaaaaaken:kotlin-csv-jvm", version.ref = "kotlin-csv" }
@@ -78,6 +81,8 @@ sortable-table-view = { module = "com.github.ISchwarz23:SortableTableView", vers
 usb-serial = { module = "com.github.felHR85:UsbSerial", version.ref = "usb-serial" }
 xmlunit-core = { module = "org.xmlunit:xmlunit-core", version.ref = "xmlunit" }
 zip4j = { module = "net.lingala.zip4j:zip4j", version.ref = "zip4j" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+zxing-javase = { module = "com.google.zxing:javase", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }

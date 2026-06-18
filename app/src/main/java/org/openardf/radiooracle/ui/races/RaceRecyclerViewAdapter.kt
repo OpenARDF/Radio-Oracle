@@ -90,6 +90,10 @@ class RaceRecyclerViewAdapter(
     /** Returns the number of races currently displayed. */
     override fun getItemCount(): Int = values.size
 
+    /** Returns the row's race for swipe and test hooks that operate by adapter position. */
+    fun raceAt(position: Int): Race? =
+        values.getOrNull(position)
+
     /** View holder for one race selection row. */
     inner class RaceViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val title: TextView = view.findViewById(R.id.race_item_title)

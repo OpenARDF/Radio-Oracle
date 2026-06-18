@@ -41,6 +41,7 @@ enum class DesktopNavAction {
     DeleteAllCategories,
     DeleteAllCompetitors,
     ExportEventFileCopy,
+    SendEventFileToAndroid,
     ExportCategoriesCsv,
     ExportControlsCsv,
     ExportCourseKmlKmz,
@@ -978,6 +979,8 @@ object DesktopNavigation {
             "Use Import EventReg Website to create event files from EventReg website exports.",
         "setup.event-file.export-android" to
             "Use Export Android Event File to write a backup JSON file for Android compatibility.",
+        "setup.event-file.send-android" to
+            "Use Send Event File to Android to share the saved Event File over local Wi-Fi.",
         "setup.event-file.settings" to
             "Use Settings to adjust event-related readout, live result, display, app, and readiness options.",
         "setup.event-file.si-settings" to
@@ -1034,6 +1037,13 @@ object DesktopNavigation {
                 "Export Android Event File...",
                 workflow,
                 DesktopNavAction.ExportAndroidRaceBackupJson,
+                section = DesktopSection.EventFile
+            ),
+            action(
+                "setup.event-file.send-android",
+                "Send Event File to Android...",
+                workflow,
+                DesktopNavAction.SendEventFileToAndroid,
                 section = DesktopSection.EventFile
             ),
             group(
