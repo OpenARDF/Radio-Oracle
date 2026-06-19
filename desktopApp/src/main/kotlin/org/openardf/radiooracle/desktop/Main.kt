@@ -7880,6 +7880,9 @@ private fun SectionWorkspace(
         if (section == DesktopSection.WorkflowHome) {
             WorkflowHomePanel(workflow)
         }
+        if (section == DesktopSection.PublicResultsSite) {
+            PublicResultsSiteWorkflowPanel()
+        }
         if (section == DesktopSection.Races && projectFile != null) {
             RaceDetailsPanel(
                 details = EventRaceDetails.from(projectFile.raceData.race),
@@ -14434,6 +14437,33 @@ private fun WorkflowHomePanel(workflow: DesktopWorkflow) {
             color = DesktopPalette.Disconnected,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun PublicResultsSiteWorkflowPanel() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            text = "Cloudflare Pages workflow",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "Save Cloudflare Settings once with the Pages project name, branch, account ID, and API token. Generate Public Results Site writes the static site folder for the current event. Start Public Site Preview opens the generated event folder locally for review. Publish Public Results Site uploads the generated site root to Cloudflare Pages.",
+            color = DesktopPalette.Black,
+            fontSize = 14.sp
+        )
+        Text(
+            text = "Generate after result changes, preview before publishing, then publish when the preview matches what web visitors should see.",
+            color = DesktopPalette.Black,
+            fontSize = 14.sp
         )
     }
 }

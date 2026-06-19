@@ -487,38 +487,58 @@ object DesktopNavigation {
                                 ),
                                 action("results.export-text", "Export Results TXT...", workflow, DesktopNavAction.ExportResultsText),
                                 action("results.export-html", "Export Results HTML...", workflow, DesktopNavAction.ExportResultsHtml),
+                                action("results.export-readouts", "Export Readouts CSV...", workflow, DesktopNavAction.ExportReadoutsCsv)
+                            )
+                        ),
+                        group(
+                            "results.exports.cloudflare-website",
+                            "Cloudflare Website",
+                            workflow,
+                            listOf(
                                 action(
                                     "results.generate-public-site",
                                     "Generate Public Results Site...",
                                     workflow,
-                                    DesktopNavAction.GeneratePublicResultsSite
-                                ),
-                                action(
-                                    "results.publish-public-site",
-                                    "Publish Public Results Site",
-                                    workflow,
-                                    DesktopNavAction.PublishPublicResultsSite
+                                    DesktopNavAction.GeneratePublicResultsSite,
+                                    section = DesktopSection.PublicResultsSite
                                 ),
                                 action(
                                     "results.start-public-site-preview",
                                     "Start Public Site Preview",
                                     workflow,
-                                    DesktopNavAction.StartPublicResultsSitePreview
+                                    DesktopNavAction.StartPublicResultsSitePreview,
+                                    section = DesktopSection.PublicResultsSite
+                                ),
+                                action(
+                                    "results.publish-public-site",
+                                    "Publish Public Results Site",
+                                    workflow,
+                                    DesktopNavAction.PublishPublicResultsSite,
+                                    section = DesktopSection.PublicResultsSite
+                                ),
+                                item(
+                                    "results.cloudflare-settings",
+                                    "Cloudflare Settings",
+                                    workflow,
+                                    DesktopSection.Settings,
+                                    requiresEventFile = false
                                 ),
                                 action(
                                     "results.open-public-site-preview",
                                     "Open Public Site Preview",
                                     workflow,
-                                    DesktopNavAction.OpenPublicResultsSitePreview
+                                    DesktopNavAction.OpenPublicResultsSitePreview,
+                                    section = DesktopSection.PublicResultsSite
                                 ),
                                 action(
                                     "results.stop-public-site-preview",
                                     "Stop Public Site Preview",
                                     workflow,
-                                    DesktopNavAction.StopPublicResultsSitePreview
-                                ),
-                                action("results.export-readouts", "Export Readouts CSV...", workflow, DesktopNavAction.ExportReadoutsCsv)
-                            )
+                                    DesktopNavAction.StopPublicResultsSitePreview,
+                                    section = DesktopSection.PublicResultsSite
+                                )
+                            ),
+                            DesktopSection.PublicResultsSite
                         ),
                         group(
                             "results.exports-json-xml",
@@ -967,6 +987,8 @@ object DesktopNavigation {
             "Use Exports to write result, readout, event-copy, JSON, XML, and ARDF-compatible files after race data is available.",
         "results.exports.result-files" to
             "Use Result Files to export scored results and readouts in CSV, TXT, HTML, and ARDFEvent-compatible formats.",
+        "results.exports.cloudflare-website" to
+            "Use Cloudflare Website to generate the public results site, preview the event folder locally, publish the generated site to Cloudflare Pages, and open the Cloudflare settings used by publishing.",
         "results.export-csv" to
             "Use Export Results CSV to write scored results as a spreadsheet-friendly file.",
         "results.export-ardfevent" to
@@ -985,6 +1007,8 @@ object DesktopNavigation {
             "Use Open Public Site Preview to reopen the generated public results site in your browser.",
         "results.stop-public-site-preview" to
             "Use Stop Public Site Preview to shut down the generated public results site preview.",
+        "results.cloudflare-settings" to
+            "Use Cloudflare Settings to enter the Pages project name, branch, account ID, and API token used when publishing the public results site.",
         "results.export-readouts" to
             "Use Export Readouts CSV to write downloaded and unmatched readout records for review or backup.",
         "results.exports-json-xml" to

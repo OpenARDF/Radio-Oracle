@@ -945,22 +945,50 @@ class DesktopNavigationTest {
     }
 
     @Test
-    fun resultFilesMenuExposesPublicSiteWorkflow() {
-        val resultFiles = DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport)
+    fun cloudflareWebsiteMenuExposesPublicSiteWorkflow() {
+        val exports = DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport)
             .first { it.label == "Exports" }
             .children
+        val resultFiles = exports
             .first { it.label == "Result Files" }
             .children
+        val cloudflareWebsite = exports
+            .first { it.label == "Cloudflare Website" }
 
+        assertFalse(
+            resultFiles
+                .mapNotNull { it.action }
+                .any {
+                    it in setOf(
+                        DesktopNavAction.GeneratePublicResultsSite,
+                        DesktopNavAction.PublishPublicResultsSite,
+                        DesktopNavAction.StartPublicResultsSitePreview,
+                        DesktopNavAction.OpenPublicResultsSitePreview,
+                        DesktopNavAction.StopPublicResultsSitePreview
+                    )
+                }
+        )
+        assertEquals(
+            listOf(
+                "Generate Public Results Site...",
+                "Start Public Site Preview",
+                "Publish Public Results Site",
+                "Cloudflare Settings",
+                "Open Public Site Preview",
+                "Stop Public Site Preview"
+            ),
+            cloudflareWebsite.children.map { it.label }
+        )
+        assertEquals(DesktopSection.PublicResultsSite, cloudflareWebsite.section)
         assertEquals(
             listOf(
                 DesktopNavAction.GeneratePublicResultsSite,
-                DesktopNavAction.PublishPublicResultsSite,
                 DesktopNavAction.StartPublicResultsSitePreview,
+                DesktopNavAction.PublishPublicResultsSite,
                 DesktopNavAction.OpenPublicResultsSitePreview,
                 DesktopNavAction.StopPublicResultsSitePreview
             ),
-            resultFiles
+            cloudflareWebsite.children
                 .mapNotNull { it.action }
                 .filter {
                     it in setOf(
@@ -971,6 +999,17 @@ class DesktopNavigationTest {
                         DesktopNavAction.StopPublicResultsSitePreview
                     )
                 }
+        )
+        assertEquals(DesktopSection.Settings, cloudflareWebsite.children.first { it.label == "Cloudflare Settings" }.section)
+        assertTrue(
+            DesktopNavigation.selectedDescription(
+                DesktopNavState(
+                    workflow = DesktopWorkflow.ResultsExport,
+                    submenuStack = listOf("results.exports", "results.exports.cloudflare-website"),
+                    selectedSection = DesktopSection.PublicResultsSite,
+                    selectedItemId = "results.exports.cloudflare-website"
+                )
+            ).contains("generate the public results site")
         )
     }
 

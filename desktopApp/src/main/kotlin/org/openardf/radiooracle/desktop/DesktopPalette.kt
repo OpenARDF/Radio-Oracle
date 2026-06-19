@@ -64,6 +64,7 @@ enum class DesktopSection(val label: String) {
     SiReadoutSettings("SI Readout Settings"),
     InForest("In Forest"),
     Results("Results"),
+    PublicResultsSite("Cloudflare Website"),
     LiveResultSettings("Live Result Settings"),
     DisplaySettings("Display Settings"),
     EventDiagnostics("Readiness"),
