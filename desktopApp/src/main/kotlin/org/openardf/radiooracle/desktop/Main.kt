@@ -2090,6 +2090,7 @@ fun main(args: Array<String>) = application {
                 lines = withRollbackBackupLine(listOf(
                     "${selectedSummary.importedCategoryCount} categories received stored route data.",
                     "${selectedSummary.duplicateCategoryCount} duplicate categories skipped.",
+                    "${selectedSummary.controlIdentityUpdateCount} control identities updated.",
                     "${selectedSummary.changedControlLocationCount} control locations updated.",
                     "${selectedSummary.categoryAssignmentUpdates.size.takeIf { applyCategoryAssignments } ?: 0} assigned-control lists replaced.",
                     "${selectedSummary.createdCategoryNames.size} missing categories created.",
@@ -4869,6 +4870,9 @@ private fun CourseKmlKmzImportReviewDialog(
                             Text("Duplicate categories already imported: ${selectedSummary.duplicateCategoryCount}")
                         }
                         Text("Matched course controls: ${courseControlMatchSummary(selectedSummary.matchedFoxCount, selectedSummary.matchedBeaconCount, selectedSummary.matchedSpectatorCount)}")
+                        if (selectedSummary.controlIdentityUpdateCount > 0) {
+                            Text("Control identities to update from SI= lines: ${selectedSummary.controlIdentityUpdateCount}")
+                        }
                         if (selectedSummary.labelConversions.isNotEmpty()) {
                             Text("Imported control names to treat as existing Event File labels:")
                             selectedSummary.labelConversions.take(8).forEach { conversion ->
@@ -4917,7 +4921,10 @@ private fun CourseKmlKmzImportReviewDialog(
                                 selectedSummary.changedControlLocationCount == 0
                             ) {
                                 "Keep imported data to use these $formatLabel names as matches to existing Event File labels. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Cancel leaves the Event File unchanged."
-                            } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.changedControlLocationCount > 0) {
+                            } else if (
+                                selectedSummary.importedCategoryCount == 0 &&
+                                (selectedSummary.changedControlLocationCount > 0 || selectedSummary.controlIdentityUpdateCount > 0)
+                            ) {
                                 "Keep imported data to update control locations. Affected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
                             } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.assignedCategoryControlCount > 0) {
                                 "Keep imported data to review matched $formatLabel control points. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."

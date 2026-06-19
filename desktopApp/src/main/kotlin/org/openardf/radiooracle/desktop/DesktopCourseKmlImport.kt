@@ -19,6 +19,7 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
+import org.openardf.radiooracle.shared.sportident.SportIdentCodes
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -66,7 +67,8 @@ data class DesktopCourseKmlImportSummary(
     val createdCategoryNames: List<String>,
     val categoryAssumptions: List<DesktopCourseKmlCategoryAssumption>,
     val eventTypeWarnings: List<String>,
-    val sourceSha256: String
+    val sourceSha256: String,
+    val controlIdentityUpdateCount: Int = 0
 ) {
     val assignedCategoryControlCount: Int
         get() = categoryAssignmentUpdates.sumOf { it.controls.size }
@@ -75,6 +77,7 @@ data class DesktopCourseKmlImportSummary(
         get() = matchedCategoryCount > 0 &&
             importedCategoryCount == 0 &&
             assignedCategoryControlCount == 0 &&
+            controlIdentityUpdateCount == 0 &&
             changedControlLocationCount == 0 &&
             duplicateCategoryCount == matchedCategoryCount
 
@@ -89,6 +92,7 @@ data class DesktopCourseKmlImportSummary(
             importedCategoryCount == 0 &&
             assignedCategoryControlCount == 0 &&
             duplicateCategoryCount == 0 &&
+            controlIdentityUpdateCount == 0 &&
             changedControlLocationCount == 0 &&
             matchedControlPointCount > 0
 
@@ -212,10 +216,12 @@ object DesktopCourseKmlImporter {
             )
         }
         val matchedControlResult = matchedControls(courseData.controls, projectWithMissingCategories.raceData.controls)
-        val controls = matchedControlResult.controls
+        val hintedProject = applyControlSiHints(projectWithMissingCategories, matchedControlResult.controls)
+        val matchedControlsForHintedProject = matchedControls(courseData.controls, hintedProject.raceData.controls)
+        val controls = matchedControlsForHintedProject.controls
         val controlsByLabel = controls.associateBy { it.label.normalizedCourseName() }
-        val categories = projectWithMissingCategories.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
-        val courseInfoByCategoryId = projectWithMissingCategories.raceData.categories.mapNotNull { categoryData ->
+        val categories = hintedProject.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
+        val courseInfoByCategoryId = hintedProject.raceData.categories.mapNotNull { categoryData ->
             categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
                 categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
             }
@@ -249,7 +255,7 @@ object DesktopCourseKmlImporter {
                 invalidateAllReferencedProtectedCourses = false
             )
         }
-        var updatedProject = projectWithMissingCategories
+        var updatedProject = hintedProject
         locationUpdateResult?.let { result ->
             updatedProject = result.projectFile
         }
@@ -412,7 +418,7 @@ object DesktopCourseKmlImporter {
             matchedFoxCount = controls.count { it.type == ControlPointType.CONTROL },
             matchedBeaconCount = controls.count { it.type == ControlPointType.BEACON },
             matchedSpectatorCount = controls.count { it.type == ControlPointType.SEPARATOR },
-            labelConversions = matchedControlResult.labelConversions,
+            labelConversions = matchedControlsForHintedProject.labelConversions,
             matchedCategoryIds = matchedCategoryIds,
             matchedCategoryNames = matchedCategoryNames,
             routeElevationPointCount = routeElevationPointCount,
@@ -433,7 +439,8 @@ object DesktopCourseKmlImporter {
                 controlCount = courseData.controls.size,
                 controlTypes = controls.map { it.type }
             ),
-            sourceSha256 = sourceSha256
+            sourceSha256 = sourceSha256,
+            controlIdentityUpdateCount = matchedControlResult.controls.count { it.siCodeHint != null && it.siCodeHint != it.siCode }
         )
         DesktopDebugLog.info(
             "CourseKml",
@@ -828,7 +835,11 @@ object DesktopCourseKmlImporter {
                 ?.let(::parseCoordinates)
                 ?.firstOrNull()
             if (pointCoordinates != null) {
-                controls += CourseControlPoint(name = name, point = pointCoordinates)
+                controls += CourseControlPoint(
+                    name = name,
+                    point = pointCoordinates,
+                    siCodeHint = placemark.childText("description").siCodeHint()
+                )
                 return@repeat
             }
             val lineCoordinates = placemark
@@ -971,6 +982,7 @@ object DesktopCourseKmlImporter {
                     label = control.idealOrderToken(),
                     displayLabel = control.displayCourseLabel(),
                     siCode = control.siCode,
+                    siCodeHint = imported.siCodeHint,
                     type = control.type,
                     point = imported.point
                 )
@@ -980,6 +992,32 @@ object DesktopCourseKmlImporter {
             controls = controls,
             labelConversions = labelConversions.distinct()
         )
+    }
+
+    private fun applyControlSiHints(
+        projectFile: EventProjectFile,
+        matchedControls: List<CourseMatchedControl>
+    ): EventProjectFile {
+        val updates = matchedControls
+            .filter { matchedControl -> matchedControl.siCodeHint != null && matchedControl.siCodeHint != matchedControl.siCode }
+            .distinctBy { it.controlId }
+        if (updates.isEmpty()) {
+            return projectFile
+        }
+        return updates.fold(projectFile) { currentProject, matchedControl ->
+            val control = currentProject.raceData.controls.firstOrNull { it.id == matchedControl.controlId }
+                ?: return@fold currentProject
+            EventProjectEditor.updateControl(
+                projectFile = currentProject,
+                controlId = control.id,
+                label = control.label,
+                siCode = matchedControl.siCodeHint!!.toString(),
+                type = control.type,
+                scored = control.scored,
+                publicLabel = control.publicLabel.orEmpty(),
+                notes = control.notes.orEmpty()
+            )
+        }
     }
 
     private fun uniqueControlTokensBy(
@@ -1487,7 +1525,8 @@ data class DesktopCourseKmlData(
 
 data class CourseControlPoint(
     val name: String,
-    val point: CourseGeoPoint
+    val point: CourseGeoPoint,
+    val siCodeHint: Int? = null
 )
 
 data class CourseRoute(
@@ -1544,6 +1583,7 @@ private data class CourseMatchedControl(
     val label: String,
     val displayLabel: String,
     val siCode: Int,
+    val siCodeHint: Int?,
     val type: ControlPointType,
     val point: CourseGeoPoint
 )
@@ -1616,6 +1656,20 @@ private fun String.controlKeywordNumber(): Int? {
     ).find(this)
     return match?.groupValues?.getOrNull(1)?.toIntOrNull()
 }
+
+private fun String?.siCodeHint(): Int? =
+    this
+        ?.lineSequence()
+        ?.map { line -> line.trim() }
+        ?.mapNotNull { line ->
+            Regex("""^SI\s*=\s*(\d+)\s*$""", RegexOption.IGNORE_CASE)
+                .matchEntire(line)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toIntOrNull()
+                ?.takeIf(SportIdentCodes::isSICodeValid)
+        }
+        ?.firstOrNull()
 
 private fun CourseControlPoint.isCourseStartPoint(): Boolean =
     name.isCourseStartName()

@@ -379,12 +379,12 @@ object DesktopControlsRouteKmlKmzExporter {
 
     private fun controlCatalogDescription(control: EventControl): String =
         buildList {
-            add("SI ${control.siCode}")
+            add("SI=${control.siCode}")
             add("Type ${control.type}")
             add(if (control.scored) "Scored" else "Not scored")
             control.publicLabel?.takeIf { it.isNotBlank() }?.let { add("Public label: $it") }
             control.notes?.takeIf { it.isNotBlank() }?.let { add("Notes: $it") }
-        }.joinToString("; ")
+        }.joinToString("\n")
 
     private fun courseRouteStyleId(categoryId: String): String = "courseRoute-${categoryId}"
 

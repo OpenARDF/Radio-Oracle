@@ -621,6 +621,33 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun importsControlSiCodesFromKmlDescriptionLines() {
+        val kmlPath = Files.createTempFile("description-si-controls", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithDescriptionSiLines())
+        val baseProject = EventProjectFactory.createEmptyProject("race", "Description SI Test", "2026-06-12T09:00")
+            .withControlIdentity(oldSiCode = 31, newSiCode = 131, label = "131", publicLabel = "Fox1")
+            .withControlIdentity(oldSiCode = 32, newSiCode = 132, label = "132", publicLabel = "Fox2")
+        val project = EventProjectEditor.addCategory(
+            baseProject,
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { 100.0 }
+        )
+
+        assertEquals(1, summary.controlIdentityUpdateCount)
+        assertEquals(231, updated.raceData.controls.single { it.publicLabel == "Fox1" }.siCode)
+        assertEquals(132, updated.raceData.controls.single { it.publicLabel == "Fox2" }.siCode)
+        assertEquals("231 132", summary.categoryAssignmentUpdates.single().controlPointsText)
+        assertEquals("Fox1 Fox2", DesktopProtectedCourseOrder.decrypt(updated.raceData.categories.single().category.encryptedIdealOrder!!, "course-key"))
+    }
+
+    @Test
     fun doesNotMatchBandNamedStartOrFinishAsNumberedFoxControls() {
         val kmlPath = Files.createTempFile("2m Classic 2025", ".kml")
         Files.writeString(kmlPath, sampleClassic2mKmlWithEndpointNames())
@@ -1812,6 +1839,39 @@ class DesktopCourseKmlImportTest {
                   -94.9700,39.0000,0
                   -94.9600,39.0000,0
                   -94.9300,39.0100,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleKmlWithDescriptionSiLines(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>Fox1</name>
+              <description>
+                Organizer note
+                SI=231
+              </description>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Fox2</name>
+              <description>SI code is 232</description>
+              <Point><coordinates>-94.9900,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0100,39.0000,0
+                  -95.0000,39.0000,0
+                  -94.9900,39.0000,0
+                  -94.9500,39.0000,0
                 </coordinates>
               </LineString>
             </Placemark>

@@ -55,6 +55,7 @@ class DesktopControlsRouteKmlKmzExportTest {
         assertNotEquals("ff00ffff", routeColor)
         assertTrue(kml.contains("-122.0001,45.0001,90"))
         assertTrue(kml.contains("<Data name=\"siCode\"><value>31</value></Data>"))
+        assertTrue(kml.contains("SI=31"))
     }
 
     @Test
