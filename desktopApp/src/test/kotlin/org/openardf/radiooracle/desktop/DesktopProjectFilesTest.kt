@@ -6,12 +6,16 @@ import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.event.EventAliasPunch
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -184,7 +188,10 @@ class DesktopProjectFilesTest {
     fun exportsPublicResultsSiteDirectory() {
         val directory = Files.createTempDirectory("rom-desktop-public-results-site")
 
-        val paths = DesktopProjectFiles.exportPublicResultsSite(directory, EventProjectFile(raceData = raceDataWithReadout()))
+        val paths = DesktopProjectFiles.exportPublicResultsSite(
+            directory,
+            EventProjectFile(raceData = raceDataWithSplitReadout())
+        )
 
         assertTrue(Files.exists(paths.indexHtml))
         assertTrue(Files.exists(paths.rootIndexHtml))
@@ -206,11 +213,19 @@ class DesktopProjectFilesTest {
         assertTrue(rootIndex.contains("OpenARDF Results"))
         assertTrue(rootIndex.contains("""href="2026-05-31-desktop-file-race/""""))
         assertTrue(index.contains("Desktop File Race"))
+        assertTrue(index.contains("""href="../">All published results</a>"""))
         assertTrue(index.contains("downloads/final-results.json"))
-        assertTrue(Files.readString(paths.eventDirectory.resolve("assets").resolve("site.js")).contains("data/public-results.json"))
+        val siteJs = Files.readString(paths.eventDirectory.resolve("assets").resolve("site.js"))
+        assertTrue(siteJs.contains("data/public-results.json"))
+        assertTrue(siteJs.contains("data-split-target"))
+        assertTrue(siteJs.contains("Tap for splits"))
         assertTrue(publicJson.contains("\"name\": \"Desktop File Race\""))
         assertTrue(publicJson.contains("\"competitor\": \"RUNNER Alice\""))
         assertTrue(publicJson.contains("\"runtime\": \"00:20:00\""))
+        assertTrue(publicJson.contains("\"splits\": ["))
+        assertTrue(publicJson.contains("\"control\": \"31\""))
+        assertTrue(publicJson.contains("\"legTime\": \"00:05:00\""))
+        assertTrue(publicJson.contains("\"cumulativeTime\": \"00:20:00\""))
         assertTrue(Files.readString(paths.iofResultListXml).contains("<ResultList"))
     }
 
@@ -305,6 +320,54 @@ class DesktopProjectFilesTest {
                             sent = false
                         ),
                         punches = emptyList()
+                    )
+                )
+            )
+        )
+    }
+
+    private fun raceDataWithSplitReadout(): EventRaceData {
+        val raceData = raceDataWithReadout()
+        val competitorData = raceData.competitorData.single()
+        val readoutData = competitorData.readoutData!!
+        return raceData.copy(
+            competitorData = listOf(
+                competitorData.copy(
+                    readoutData = readoutData.copy(
+                        punches = listOf(
+                            EventAliasPunch(
+                                punch = EventPunch(
+                                    id = "punch-control",
+                                    raceId = raceData.race.id,
+                                    resultId = readoutData.result.id,
+                                    cardNumber = 123456,
+                                    siCode = 31,
+                                    siTimeSeconds = 36_300,
+                                    originalSiTimeSeconds = 36_300,
+                                    punchType = SIRecordType.CONTROL,
+                                    order = 1,
+                                    punchStatus = PunchStatus.VALID,
+                                    splitSeconds = 300
+                                ),
+                                alias = null
+                            ),
+                            EventAliasPunch(
+                                punch = EventPunch(
+                                    id = "punch-finish",
+                                    raceId = raceData.race.id,
+                                    resultId = readoutData.result.id,
+                                    cardNumber = 123456,
+                                    siCode = 0,
+                                    siTimeSeconds = 37_200,
+                                    originalSiTimeSeconds = 37_200,
+                                    punchType = SIRecordType.FINISH,
+                                    order = 2,
+                                    punchStatus = PunchStatus.VALID,
+                                    splitSeconds = 900
+                                ),
+                                alias = null
+                            )
+                        )
                     )
                 )
             )

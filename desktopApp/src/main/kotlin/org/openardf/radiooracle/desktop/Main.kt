@@ -4156,6 +4156,11 @@ fun main(args: Array<String>) = application {
             onUpdateProtectedCoursePassword = ::updateProtectedCoursePassword,
             onSetUpdateCheckingEnabled = ::setUpdateCheckingEnabled,
             onSetCloudflarePagesPublishSettings = ::setCloudflarePagesPublishSettings,
+            onOpenPublishedPublicResultsSite = ::openExternalUrl,
+            onCopyPublishedPublicResultsSite = { url ->
+                Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(url), null)
+                projectStatusText = "Copied public results link."
+            },
             onLockProtectedCourseOrder = ::lockProtectedCourseOrder,
             onUpdateEventFileName = { fileName -> saveAsCurrentProject(fileName) },
             onRenameRace = { name ->
@@ -6824,6 +6829,7 @@ private fun RadioOManagerDesktopApp(
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit = { _, _, _, _, _, _ -> },
     onOpenVenueElevationCacheFolder: () -> Unit = {},
     onOpenPublishedPublicResultsSite: (String) -> Unit = {},
+    onCopyPublishedPublicResultsSite: (String) -> Unit = {},
     elevationCacheRefreshToken: Int = 0,
     onUnlockProtectedCourseOrder: (String) -> Boolean = { false },
     onUpdateProtectedIdealOrder: (String, String) -> Unit = { _, _ -> },
@@ -7072,6 +7078,7 @@ private fun RadioOManagerDesktopApp(
                                     onDownloadVenueElevationCache = onDownloadVenueElevationCache,
                                     onOpenVenueElevationCacheFolder = onOpenVenueElevationCacheFolder,
                                     onOpenPublishedPublicResultsSite = onOpenPublishedPublicResultsSite,
+                                    onCopyPublishedPublicResultsSite = onCopyPublishedPublicResultsSite,
                                     elevationCacheRefreshToken = elevationCacheRefreshToken,
                                     onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
                                     onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
@@ -7849,6 +7856,7 @@ private fun SectionWorkspace(
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
     onOpenVenueElevationCacheFolder: () -> Unit,
     onOpenPublishedPublicResultsSite: (String) -> Unit,
+    onCopyPublishedPublicResultsSite: (String) -> Unit,
     elevationCacheRefreshToken: Int,
     onUnlockProtectedCourseOrder: (String) -> Boolean,
     onUpdateProtectedIdealOrder: (String, String) -> Unit,
@@ -7902,7 +7910,8 @@ private fun SectionWorkspace(
         if (section == DesktopSection.PublicResultsLink) {
             PublicResultsSiteLinkPanel(
                 publishedUrl = publishedPublicResultSiteUrl,
-                onOpenUrl = onOpenPublishedPublicResultsSite
+                onOpenUrl = onOpenPublishedPublicResultsSite,
+                onCopyUrl = onCopyPublishedPublicResultsSite
             )
         }
         if (section == DesktopSection.Races && projectFile != null) {
@@ -14493,7 +14502,8 @@ private fun PublicResultsSiteWorkflowPanel() {
 @Composable
 private fun PublicResultsSiteLinkPanel(
     publishedUrl: String?,
-    onOpenUrl: (String) -> Unit
+    onOpenUrl: (String) -> Unit,
+    onCopyUrl: (String) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -14529,19 +14539,36 @@ private fun PublicResultsSiteLinkPanel(
             contentScale = ContentScale.Fit
         )
         Text(
-            text = "Scan the QR code or click the link below to view the published event results.",
+            text = "Scan the QR code or open the link below to view the published event results.",
             color = DesktopPalette.Black,
             fontSize = 14.sp
         )
-        SelectionContainer {
-            Text(
-                text = publishedUrl,
-                color = DesktopPalette.Primary,
-                fontSize = 14.sp,
-                textDecoration = TextDecoration.Underline,
-                modifier = Modifier.clickable { onOpenUrl(publishedUrl) }
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(onClick = { onOpenUrl(publishedUrl) }) {
+                ButtonLabel("Open Public Results")
+            }
+            Button(onClick = { onCopyUrl(publishedUrl) }) {
+                ButtonLabel("Copy Link")
+            }
         }
+        Text(
+            text = publishedUrl,
+            color = DesktopPalette.Primary,
+            fontSize = 14.sp,
+            textDecoration = TextDecoration.Underline,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onOpenUrl(publishedUrl) },
+            softWrap = true
+        )
+        TextField(
+            value = publishedUrl,
+            onValueChange = {},
+            readOnly = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 72.dp)
+        )
     }
 }
 
