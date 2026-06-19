@@ -72,14 +72,18 @@ class RaceRecyclerViewAdapter(
                     true
                 }
 
-
-                R.id.menu_item_delete_race -> {
+                R.id.menu_item_send_race_desktop -> {
                     onMoreClicked(2, position, item)
                     true
                 }
 
-                else -> {
+                R.id.menu_item_delete_race -> {
                     onMoreClicked(3, position, item)
+                    true
+                }
+
+                else -> {
+                    onMoreClicked(4, position, item)
                     true
                 }
             }

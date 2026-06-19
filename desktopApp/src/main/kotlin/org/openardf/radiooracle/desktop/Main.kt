@@ -387,6 +387,8 @@ fun main(args: Array<String>) = application {
         var localResultServerUrl by remember { mutableStateOf<String?>(null) }
         var eventFileTransferServer by remember { mutableStateOf<DesktopEventFileTransferServer?>(null) }
         var eventFileTransferDialog by remember { mutableStateOf<DesktopEventFileTransferDialogState?>(null) }
+        var androidFileReceiveServer by remember { mutableStateOf<DesktopAndroidFileReceiveServer?>(null) }
+        var androidFileReceiveDialog by remember { mutableStateOf<DesktopAndroidFileReceiveDialogState?>(null) }
         var isAboutDialogVisible by remember { mutableStateOf(false) }
         var isUpdateCheckingEnabled by remember {
             mutableStateOf(DesktopAppSettingsPreferences.isUpdateCheckingEnabled())
@@ -429,10 +431,12 @@ fun main(args: Array<String>) = application {
         var syncCompetitorsCsvImport by remember { mutableStateOf(false) }
         val siPortMutex = remember { Mutex() }
         val activeEventFileTransferServer by rememberUpdatedState(eventFileTransferServer)
+        val activeAndroidFileReceiveServer by rememberUpdatedState(androidFileReceiveServer)
 
         DisposableEffect(Unit) {
             onDispose {
                 activeEventFileTransferServer?.stop()
+                activeAndroidFileReceiveServer?.stop()
             }
         }
 
@@ -3024,6 +3028,93 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun handleReceivedAndroidFile(result: DesktopAndroidFileReceiveResult) {
+            val savedText = "Received ${result.fileName} from Android (${result.byteCount} bytes)."
+            recordActivity(savedText)
+            DesktopDebugLog.info("EventFile", "$savedText Saved to ${result.path}.")
+
+            val lowerFileName = result.fileName.lowercase()
+            when {
+                lowerFileName.endsWith(DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION) -> {
+                    if (hasProtectedUnsavedChanges()) {
+                        projectStatusText =
+                            "$savedText Saved to ${result.path}. Save or close the current Event File before importing it."
+                    } else {
+                        importAndroidRaceBackupJson(result.path)
+                    }
+                }
+                DesktopProjectFilePaths.isProjectFileName(result.fileName) -> {
+                    if (hasProtectedUnsavedChanges()) {
+                        projectStatusText =
+                            "$savedText Saved to ${result.path}. Save or close the current Event File before opening it."
+                    } else {
+                        openProject(result.path)
+                    }
+                }
+                else -> {
+                    projectStatusText = "$savedText Saved to ${result.path}."
+                }
+            }
+        }
+
+        fun receiveFileFromAndroid() {
+            androidFileReceiveServer?.stop()
+            androidFileReceiveDialog = null
+
+            runCatching {
+                val server = DesktopAndroidFileReceiveServer(
+                    receiveDirectory = DesktopAndroidFileReceiveLocations.receiveDirectory(),
+                    onReceived = { result ->
+                        appCoroutineScope.launch {
+                            handleReceivedAndroidFile(result)
+                            androidFileReceiveDialog = androidFileReceiveDialog?.copy(
+                                statusText = "Received ${result.fileName}. Transfer stopped."
+                            )
+                        }
+                    },
+                    onStopped = { reason ->
+                        appCoroutineScope.launch {
+                            val message = when (reason) {
+                                DesktopAndroidFileReceiveStopReason.Received ->
+                                    "Android file received. Transfer stopped."
+                                DesktopAndroidFileReceiveStopReason.Cancelled ->
+                                    "Android file receive cancelled."
+                                DesktopAndroidFileReceiveStopReason.Timeout ->
+                                    "Android file receive expired after 10 minutes."
+                            }
+                            projectStatusText = message
+                            androidFileReceiveDialog = androidFileReceiveDialog?.copy(statusText = message)
+                            DesktopDebugLog.info("EventFile", "Android receive stopped: $reason")
+                        }
+                    }
+                )
+                val addresses = server.addresses
+                val session = server.start(addresses.first())
+                androidFileReceiveServer = server
+                androidFileReceiveDialog = DesktopAndroidFileReceiveDialogState(
+                    addresses = addresses,
+                    selectedAddress = session.address,
+                    session = session,
+                    qrCode = desktopEventFileTransferQrCode(session.url),
+                    statusText = "Waiting for Android to upload a file. The link expires after 10 minutes or one upload."
+                )
+                projectStatusText = "Android file receive ready at ${session.url}"
+                DesktopDebugLog.info(
+                    "EventFile",
+                    "Started Android file receive: selectedHost=${session.address.host} port=${session.port} candidates=${
+                        addresses.joinToString { address ->
+                            "${address.interfaceName.ifBlank { "unknown" }}:${address.host}"
+                        }
+                    }"
+                )
+            }.onFailure { error ->
+                androidFileReceiveServer = null
+                androidFileReceiveDialog = null
+                projectStatusText = "Could not start Android file receive: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("EventFile", projectStatusText)
+            }
+        }
+
         fun requestNewEventFile() {
             pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
                 hasProtectedUnsavedChanges(),
@@ -3048,6 +3139,7 @@ fun main(args: Array<String>) = application {
             when (action) {
                 DesktopNavAction.NewEventFile,
                 DesktopNavAction.OpenEventFile,
+                DesktopNavAction.ReceiveFileFromAndroid,
                 DesktopNavAction.ImportAndroidRaceBackup,
                 DesktopNavAction.ImportEventRegWebsite,
                 DesktopNavAction.ImportDemFile -> true
@@ -3146,6 +3238,7 @@ fun main(args: Array<String>) = application {
                     }
                 DesktopNavAction.NewEventFile,
                 DesktopNavAction.OpenEventFile,
+                DesktopNavAction.ReceiveFileFromAndroid,
                 DesktopNavAction.ImportAndroidRaceBackup,
                 DesktopNavAction.ImportEventRegWebsite,
                 DesktopNavAction.ImportDemFile,
@@ -3159,6 +3252,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.NewEventFile -> requestNewEventFile()
                 DesktopNavAction.OpenEventFile -> chooseOpenEventFile()
                 DesktopNavAction.ImportAndroidRaceBackup -> chooseImportAndroidRaceBackupJson()
+                DesktopNavAction.ReceiveFileFromAndroid -> receiveFileFromAndroid()
                 DesktopNavAction.ImportEventRegWebsite -> showEventRegImportDialog()
                 DesktopNavAction.ImportEventRegCompetitorsCsv -> showEventRegCompetitorCsvImportDialog()
                 DesktopNavAction.SaveEventFile -> saveCurrentProject()
@@ -3257,6 +3351,7 @@ fun main(args: Array<String>) = application {
                     }
                 )
                 Item("Send Event File to Android...", enabled = projectFile != null, onClick = ::sendEventFileToAndroid)
+                Item("Receive from Android...", onClick = ::receiveFileFromAndroid)
                 Item("Close Event File", enabled = projectFile != null, onClick = ::requestCloseEventFile)
             }
         }
@@ -3373,6 +3468,39 @@ fun main(args: Array<String>) = application {
                     eventFileTransferServer?.stop()
                     eventFileTransferServer = null
                     eventFileTransferDialog = null
+                }
+            )
+        }
+        androidFileReceiveDialog?.let { dialogState ->
+            AndroidFileReceiveDialog(
+                state = dialogState,
+                onAddressSelected = { address ->
+                    val server = androidFileReceiveServer
+                    if (server != null) {
+                        runCatching {
+                            val session = server.sessionFor(address)
+                            androidFileReceiveDialog = dialogState.copy(
+                                selectedAddress = address,
+                                session = session,
+                                qrCode = desktopEventFileTransferQrCode(session.url)
+                            )
+                            projectStatusText = "Android file receive ready at ${session.url}"
+                        }.onFailure { error ->
+                            projectStatusText = "Could not update receive URL: ${error.message ?: error::class.simpleName}"
+                        }
+                    }
+                },
+                onCopyUrl = {
+                    Toolkit.getDefaultToolkit().systemClipboard.setContents(
+                        StringSelection(dialogState.session.url),
+                        null
+                    )
+                    projectStatusText = "Copied Android file receive URL."
+                },
+                onCancel = {
+                    androidFileReceiveServer?.stop()
+                    androidFileReceiveServer = null
+                    androidFileReceiveDialog = null
                 }
             )
         }
@@ -5550,6 +5678,14 @@ private data class DesktopEventFileTransferDialogState(
     val statusText: String
 )
 
+private data class DesktopAndroidFileReceiveDialogState(
+    val addresses: List<DesktopEventFileTransferAddress>,
+    val selectedAddress: DesktopEventFileTransferAddress,
+    val session: DesktopAndroidFileReceiveSession,
+    val qrCode: BufferedImage,
+    val statusText: String
+)
+
 @Composable
 private fun EventFileTransferDialog(
     state: DesktopEventFileTransferDialogState,
@@ -5571,6 +5707,79 @@ private fun EventFileTransferDialog(
                 Image(
                     bitmap = state.qrCode.toComposeImageBitmap(),
                     contentDescription = "Android Event File transfer QR code",
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .width(260.dp)
+                        .height(260.dp),
+                    contentScale = ContentScale.Fit
+                )
+                if (state.addresses.size > 1) {
+                    Box {
+                        Button(onClick = { isAddressMenuExpanded = true }) {
+                            ButtonLabel(state.selectedAddress.label)
+                        }
+                        DropdownMenu(
+                            expanded = isAddressMenuExpanded,
+                            onDismissRequest = { isAddressMenuExpanded = false }
+                        ) {
+                            state.addresses.forEach { address ->
+                                DropdownMenuItem(
+                                    onClick = {
+                                        isAddressMenuExpanded = false
+                                        onAddressSelected(address)
+                                    }
+                                ) {
+                                    Text(address.label)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Text("Address: ${state.selectedAddress.label}")
+                }
+                SelectionContainer {
+                    Text(
+                        state.session.url,
+                        style = MaterialTheme.typography.body2
+                    )
+                }
+                Text(state.statusText)
+            }
+        },
+        confirmButton = {
+            Button(onClick = onCopyUrl) {
+                ButtonLabel("Copy URL")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                ButtonLabel("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun AndroidFileReceiveDialog(
+    state: DesktopAndroidFileReceiveDialogState,
+    onAddressSelected: (DesktopEventFileTransferAddress) -> Unit,
+    onCopyUrl: () -> Unit,
+    onCancel: () -> Unit
+) {
+    var isAddressMenuExpanded by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Receive from Android") },
+        text = {
+            Column(
+                modifier = Modifier.widthIn(min = 420.dp, max = 560.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Scan this code from Android, or enter the URL manually. Use trusted Wi-Fi or a phone hotspot.")
+                Image(
+                    bitmap = state.qrCode.toComposeImageBitmap(),
+                    contentDescription = "Android file upload QR code",
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
                         .width(260.dp)

@@ -75,6 +75,15 @@
             app:fab_orientation="portrait"
             app:label_text="@string/race_receive_desktop" />
 
+        <com.nambimobile.widgets.efab.FabOption
+            android:id="@+id/race_fab_send_file_desktop"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:fab_color="?attr/colorPrimary"
+            app:fab_icon="@drawable/ic_upload"
+            app:fab_orientation="portrait"
+            app:label_text="@string/race_send_file_desktop" />
+
     </com.nambimobile.widgets.efab.ExpandableFabLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

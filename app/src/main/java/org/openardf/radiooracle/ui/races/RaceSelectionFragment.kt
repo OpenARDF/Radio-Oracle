@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.text.InputType
 import android.view.LayoutInflater
 import android.view.View
@@ -31,6 +32,8 @@ import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.nambimobile.widgets.efab.FabOption
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.files.DesktopFileTransferUpload
+import org.openardf.radiooracle.backend.files.DesktopFileTransferUploader
 import org.openardf.radiooracle.backend.files.EventFileTransferDownloader
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.Race
@@ -53,6 +56,7 @@ class RaceSelectionFragment : Fragment() {
     private lateinit var robisImportOption: FabOption
     private lateinit var fileImportOption: FabOption
     private lateinit var receiveDesktopOption: FabOption
+    private lateinit var sendFileDesktopOption: FabOption
     private lateinit var recyclerView: RecyclerView
     private var selectedRaceId: UUID? = null
     private var exportData: Boolean = true
@@ -60,6 +64,7 @@ class RaceSelectionFragment : Fragment() {
     private val raceViewModel: RaceViewModel by activityViewModels()
     private val selectedRaceViewModel: SelectedRaceViewModel by activityViewModels()
     private var raceData: RaceData? = null
+    private var pendingDesktopUpload: DesktopFileTransferUpload? = null
 
     // Race export
     private val getResult = registerForActivityResult(
@@ -72,6 +77,15 @@ class RaceSelectionFragment : Fragment() {
             if (uri != null) {
                 exportImportRaceData(uri)
             }
+        }
+    }
+
+    private val getDesktopUploadFileResult = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (it.resultCode == Activity.RESULT_OK) {
+            val uri = it.data?.data ?: return@registerForActivityResult
+            preparePickedFileForDesktopUpload(uri)
         }
     }
 
@@ -96,6 +110,7 @@ class RaceSelectionFragment : Fragment() {
         robisImportOption = view.findViewById(R.id.race_fab_robis)
         fileImportOption = view.findViewById(R.id.race_fab_file)
         receiveDesktopOption = view.findViewById(R.id.race_fab_receive_desktop)
+        sendFileDesktopOption = view.findViewById(R.id.race_fab_send_file_desktop)
 
         raceCreateOption.setOnClickListener {
             findNavController().navigate(
@@ -119,6 +134,12 @@ class RaceSelectionFragment : Fragment() {
         }
         receiveDesktopOption.setOnClickListener {
             showReceiveFromDesktopDialog()
+        }
+        sendFileDesktopOption.setOnClickListener {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.type = "*/*"
+            getDesktopUploadFileResult.launch(intent)
         }
 
         setMenuListener()
@@ -199,7 +220,8 @@ class RaceSelectionFragment : Fragment() {
             )
 
             1 -> exportRace(race.id)
-            2 -> confirmRaceDeletion(race)
+            2 -> prepareRaceForDesktopUpload(race)
+            3 -> confirmRaceDeletion(race)
         }
     }
 
@@ -323,6 +345,159 @@ class RaceSelectionFragment : Fragment() {
         }
     }
 
+    private fun prepareRaceForDesktopUpload(race: Race) {
+        val progressDialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_file_send_title)
+            .setMessage(R.string.event_file_send_progress)
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val upload = withContext(Dispatchers.IO) {
+                    DesktopFileTransferUpload(
+                        fileName = "${safeUploadFileStem(race.name)}.ardfjs",
+                        contentType = "application/json; charset=utf-8",
+                        bytes = raceViewModel.exportRaceDataBytes(race.id)
+                    )
+                }
+                pendingDesktopUpload = upload
+                progressDialog.dismiss()
+                showSendToDesktopDialog()
+            } catch (error: Exception) {
+                progressDialog.dismiss()
+                displayAlert(error.message ?: "Could not prepare Event File for desktop upload.")
+            }
+        }
+    }
+
+    private fun preparePickedFileForDesktopUpload(uri: Uri) {
+        val progressDialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_file_send_title)
+            .setMessage(R.string.event_file_send_progress)
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val upload = withContext(Dispatchers.IO) {
+                    desktopUploadFromUri(uri)
+                }
+                pendingDesktopUpload = upload
+                progressDialog.dismiss()
+                showSendToDesktopDialog()
+            } catch (error: Exception) {
+                progressDialog.dismiss()
+                displayAlert(error.message ?: "Could not read the selected file.")
+            }
+        }
+    }
+
+    private fun desktopUploadFromUri(uri: Uri): DesktopFileTransferUpload {
+        val resolver = requireContext().contentResolver
+        val fileName = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+                } else {
+                    null
+                }
+            }
+            ?: uri.lastPathSegment
+            ?: "android-upload.bin"
+        val bytes = resolver.openInputStream(uri)?.use { input -> input.readBytes() }
+            ?: throw IllegalStateException("Could not open the selected file.")
+        return DesktopFileTransferUpload(
+            fileName = fileName,
+            contentType = resolver.getType(uri) ?: "application/octet-stream",
+            bytes = bytes
+        )
+    }
+
+    private fun showSendToDesktopDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_file_send_title)
+            .setMessage(R.string.event_file_send_message)
+            .setPositiveButton(R.string.event_file_send_scan_qr) { _, _ ->
+                scanDesktopReceiveQr()
+            }
+            .setNeutralButton(R.string.event_file_send_enter_url) { _, _ ->
+                showManualDesktopReceiveUrlDialog()
+            }
+            .setNegativeButton(R.string.general_cancel, null)
+            .show()
+    }
+
+    private fun showManualDesktopReceiveUrlDialog() {
+        val input = EditText(requireContext()).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            hint = getString(R.string.event_file_send_url_hint)
+            setSingleLine(true)
+        }
+
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_file_send_title)
+            .setMessage(R.string.event_file_send_message)
+            .setView(input)
+            .setPositiveButton(R.string.race_send_desktop) { _, _ ->
+                sendPendingFileToDesktopUrl(input.text.toString())
+            }
+            .setNegativeButton(R.string.general_cancel, null)
+            .show()
+    }
+
+    private fun scanDesktopReceiveQr() {
+        val options = GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .build()
+        val scanner = GmsBarcodeScanning.getClient(requireActivity(), options)
+        scanner.startScan()
+            .addOnSuccessListener { barcode ->
+                val url = barcode.rawValue
+                if (url.isNullOrBlank()) {
+                    displayAlert("The QR code did not contain a desktop receive URL.")
+                } else {
+                    sendPendingFileToDesktopUrl(url)
+                }
+            }
+            .addOnFailureListener { error ->
+                displayAlert(error.message ?: "QR scan failed. Enter the receive URL manually.")
+            }
+    }
+
+    private fun sendPendingFileToDesktopUrl(rawUrl: String) {
+        val upload = pendingDesktopUpload ?: run {
+            displayAlert("Choose a file before sending to desktop.")
+            return
+        }
+        val progressDialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_file_send_title)
+            .setMessage(R.string.event_file_send_progress)
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    DesktopFileTransferUploader().upload(rawUrl, upload)
+                }
+                progressDialog.dismiss()
+                pendingDesktopUpload = null
+                Toast.makeText(
+                    requireContext(),
+                    getString(R.string.event_file_send_success, upload.fileName),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (error: Exception) {
+                progressDialog.dismiss()
+                displayAlert(error.message ?: "Desktop upload failed.")
+            }
+        }
+    }
+
     /**
      * Displays alert dialog to confirm the deletion of the race
      */
@@ -358,6 +533,13 @@ class RaceSelectionFragment : Fragment() {
         intent.putExtra(Intent.EXTRA_TITLE, "race.ardfjs")
         getResult.launch(intent)
     }
+
+    private fun safeUploadFileStem(name: String): String =
+        name
+            .trim()
+            .replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .ifBlank { "race" }
 
     private fun setRecyclerAdapter() {
 

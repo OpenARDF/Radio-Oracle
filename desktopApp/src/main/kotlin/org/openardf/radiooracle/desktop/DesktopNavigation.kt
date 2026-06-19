@@ -42,6 +42,7 @@ enum class DesktopNavAction {
     DeleteAllCompetitors,
     ExportEventFileCopy,
     SendEventFileToAndroid,
+    ReceiveFileFromAndroid,
     ExportCategoriesCsv,
     ExportControlsCsv,
     ExportCourseKmlKmz,
@@ -978,6 +979,8 @@ object DesktopNavigation {
             "Use Export Android Event File to write a backup JSON file for Android compatibility.",
         "setup.event-file.send-android" to
             "Use Send Event File to Android to share the saved Event File over local Wi-Fi.",
+        "setup.event-file.receive-android" to
+            "Use Receive from Android to accept an Event File or supporting file over local Wi-Fi.",
         "setup.event-file.settings" to
             "Use Settings to adjust event-related readout, live result, display, app, and readiness options.",
         "setup.event-file.si-settings" to
@@ -1042,6 +1045,14 @@ object DesktopNavigation {
                 workflow,
                 DesktopNavAction.SendEventFileToAndroid,
                 section = DesktopSection.EventFile
+            ),
+            action(
+                "setup.event-file.receive-android",
+                "Receive from Android...",
+                workflow,
+                DesktopNavAction.ReceiveFileFromAndroid,
+                requiresEventFile = false,
+                section = DesktopSection.Races
             ),
             group(
                 "setup.event-file.settings",

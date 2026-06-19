@@ -282,6 +282,7 @@ class DesktopNavigationTest {
                 "Import EventReg Website...",
                 "Export Android Event File...",
                 "Send Event File to Android...",
+                "Receive from Android...",
                 "Settings",
                 "Save Event",
                 "Close Event File"
@@ -421,6 +422,7 @@ class DesktopNavigationTest {
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.OpenEventFile }.requiresEventFile)
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.ImportAndroidRaceBackup }.requiresEventFile)
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.ImportEventRegWebsite }.requiresEventFile)
+        assertFalse(eventFileActions.first { it.action == DesktopNavAction.ReceiveFileFromAndroid }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SendEventFileToAndroid }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFile }.requiresEventFile)
@@ -434,6 +436,7 @@ class DesktopNavigationTest {
                 "Import EventReg Website...",
                 "Export Android Event File...",
                 "Send Event File to Android...",
+                "Receive from Android...",
                 "Settings",
                 "Save Event",
                 "Close Event File"
@@ -645,6 +648,7 @@ class DesktopNavigationTest {
                 "Import EventReg Website...",
                 "Export Android Event File...",
                 "Send Event File to Android...",
+                "Receive from Android...",
                 "Settings",
                 "Save Event",
                 "Close Event File"
@@ -865,6 +869,7 @@ class DesktopNavigationTest {
                 "Import EventReg Website...",
                 "Export Android Event File...",
                 "Send Event File to Android...",
+                "Receive from Android...",
                 "Settings",
                 "Save Event",
                 "Close Event File"

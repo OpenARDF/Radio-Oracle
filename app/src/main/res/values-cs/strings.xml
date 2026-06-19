@@ -275,6 +275,8 @@
     <string name="data_import_readout_multiple_finish">Více cílových ražení ve vyčítání: %1$s</string>
     <string name="race_import_internet">Importovat z ROBIS</string>
     <string name="race_receive_desktop">Přijmout z desktopu</string>
+    <string name="race_send_desktop">Odeslat do desktopu</string>
+    <string name="race_send_file_desktop">Odeslat soubor do desktopu</string>
     <string name="race_export_success">Událost úspěšně exportována</string>
     <string name="race_import_success">Událost úspěšně importována</string>
     <string name="race_import_failure">Chyba při importu události</string>
@@ -289,6 +291,13 @@
     <string name="result_service_api_key_missing">API klíč musí být nastaven.</string>
     <string name="prints_bluetooth_disabled">Bluetooth musí být zapnutý pro tisk!</string>
     <string name="prints_error">Chyba při tisku! %1$s</string>
+    <string name="event_file_send_title">Odeslat do desktopu</string>
+    <string name="event_file_send_message">Spusťte na desktopu příjem z Androidu a potom naskenujte QR kód nebo zadejte adresu pro příjem.</string>
+    <string name="event_file_send_scan_qr">Skenovat QR</string>
+    <string name="event_file_send_enter_url">Zadat URL</string>
+    <string name="event_file_send_url_hint">http://192.168.1.10:12345/radio-oracle/file-receive?token=...</string>
+    <string name="event_file_send_progress">Odesílání souboru...</string>
+    <string name="event_file_send_success">Odesláno do desktopu: %1$s</string>
     <string name="about_app_version">Verze %1$s</string>
     <string name="about_app_description">Radio-Oracle je open-source nástroj pro organizaci soutěží v radiovém orientačním běhu.</string>
     <string name="about_app_credits_title">Autoři a licence</string>

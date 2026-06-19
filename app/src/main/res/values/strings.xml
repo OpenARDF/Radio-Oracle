@@ -89,6 +89,8 @@
     <string name="race_import_file">Open Event File</string>
     <string name="race_import_internet">Import from ROBIS</string>
     <string name="race_receive_desktop">Receive from Desktop</string>
+    <string name="race_send_desktop">Send to Desktop</string>
+    <string name="race_send_file_desktop">Send File to Desktop</string>
     <string name="race_export_success">Event exported successfully</string>
     <string name="race_import_success">Event imported successfully</string>
     <string name="race_import_failure">Failed to import event</string>
@@ -115,6 +117,13 @@
     <string name="event_file_receive_url_hint">http://192.168.1.10:12345/radio-oracle/event-file?token=...</string>
     <string name="event_file_receive_progress">Receiving Event File...</string>
     <string name="event_file_receive_success">Imported event: %1$s</string>
+    <string name="event_file_send_title">Send to Desktop</string>
+    <string name="event_file_send_message">Start Receive from Android on the desktop, then scan its QR code or enter the receive URL.</string>
+    <string name="event_file_send_scan_qr">Scan QR</string>
+    <string name="event_file_send_enter_url">Enter URL</string>
+    <string name="event_file_send_url_hint">http://192.168.1.10:12345/radio-oracle/file-receive?token=...</string>
+    <string name="event_file_send_progress">Sending file...</string>
+    <string name="event_file_send_success">Sent to desktop: %1$s</string>
 
     <!--Categories-->
     <string name="si_codes">SI codes</string>

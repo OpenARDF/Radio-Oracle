@@ -55,6 +55,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import java.io.ByteArrayOutputStream
 import java.lang.ref.WeakReference
 import java.time.Duration
 import java.time.LocalDateTime
@@ -566,6 +567,12 @@ class DataProcessor private constructor(context: Context) {
         fileProcessor?.exportRaceData(uri, raceId)
         DebugLog.info("Events", "Exported event=$raceId")
     }
+
+    suspend fun exportRaceDataBytes(raceId: UUID): ByteArray =
+        ByteArrayOutputStream().use { outStream ->
+            JsonProcessor.exportRaceData(outStream, this, raceId)
+            outStream.toByteArray()
+        }
 
     suspend fun saveRaceData(raceData: RaceData) {
         ardfRepository.saveRaceData(raceData)

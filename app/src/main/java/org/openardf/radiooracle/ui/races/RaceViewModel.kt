@@ -73,6 +73,10 @@ class RaceViewModel : ViewModel() {
         dataProcessor.exportRaceData(uri, raceId)
     }
 
+    /** Exports a full race backup as bytes for direct desktop upload. */
+    suspend fun exportRaceDataBytes(raceId: UUID): ByteArray =
+        dataProcessor.exportRaceDataBytes(raceId)
+
     /** Observes races and publishes them sorted by start time. */
     init {
         viewModelScope.launch {

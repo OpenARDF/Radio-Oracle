@@ -1,27 +1,67 @@
 package org.openardf.radiooracle.backend.files
 
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.openardf.radiooracle.backend.logging.DebugLog
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import java.util.Base64
 
-class EventFileTransferDownloader(
+data class DesktopFileTransferUpload(
+    val fileName: String,
+    val contentType: String,
+    val bytes: ByteArray
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as DesktopFileTransferUpload
+
+        if (fileName != other.fileName) return false
+        if (contentType != other.contentType) return false
+        if (!bytes.contentEquals(other.bytes)) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = fileName.hashCode()
+        result = 31 * result + contentType.hashCode()
+        result = 31 * result + bytes.contentHashCode()
+        return result
+    }
+}
+
+class DesktopFileTransferUploader(
     private val client: OkHttpClient = OkHttpClient()
 ) {
     @Throws(EventFileTransferException::class)
-    fun download(rawUrl: String): String {
-        val url = EventFileTransferUrlValidator.validate(rawUrl)
-        DebugLog.info("EventFileTransfer", "Downloading Event File from ${safeUrlDescription(url)}")
-        val request = Request.Builder().url(url).get().build()
+    fun upload(rawUrl: String, upload: DesktopFileTransferUpload) {
+        val url = DesktopFileReceiveUrlValidator.validate(rawUrl)
+        DebugLog.info(
+            "EventFileTransfer",
+            "Uploading ${upload.fileName} bytes=${upload.bytes.size} to ${safeUrlDescription(url)}"
+        )
+        val request = Request.Builder()
+            .url(url)
+            .header(
+                "X-Radio-Oracle-Filename-B64",
+                Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(upload.fileName.toByteArray(StandardCharsets.UTF_8))
+            )
+            .post(upload.bytes.toRequestBody(upload.contentType.toMediaTypeOrNull()))
+            .build()
 
         val response = try {
             client.newCall(request).execute()
         } catch (error: SocketTimeoutException) {
-            DebugLog.warn("EventFileTransfer", "Timed out downloading from ${safeUrlDescription(url)}")
+            DebugLog.warn("EventFileTransfer", "Timed out uploading to ${safeUrlDescription(url)}")
             throw EventFileTransferException("The desktop did not respond. Check that both devices are on the same trusted Wi-Fi or hotspot.")
         } catch (error: IOException) {
             DebugLog.warn("EventFileTransfer", "Could not reach ${safeUrlDescription(url)}: ${error.message ?: error::class.simpleName}")
@@ -30,40 +70,45 @@ class EventFileTransferDownloader(
 
         response.use {
             if (it.code == 403) {
-                DebugLog.warn("EventFileTransfer", "Desktop rejected transfer token at ${safeUrlDescription(url)}")
-                throw EventFileTransferException("This transfer link is expired, already used, or has the wrong token.")
+                DebugLog.warn("EventFileTransfer", "Desktop rejected upload token at ${safeUrlDescription(url)}")
+                throw EventFileTransferException("This receive link is expired, already used, or has the wrong token.")
+            }
+            if (it.code == 413) {
+                DebugLog.warn("EventFileTransfer", "Desktop rejected upload as too large at ${safeUrlDescription(url)}")
+                throw EventFileTransferException("The desktop rejected this file because it is too large.")
             }
             if (!it.isSuccessful) {
                 DebugLog.warn("EventFileTransfer", "Desktop returned HTTP ${it.code} from ${safeUrlDescription(url)}")
-                throw EventFileTransferException("The desktop returned HTTP ${it.code}. Start a new transfer and try again.")
+                throw EventFileTransferException("The desktop returned HTTP ${it.code}. Start a new receive link and try again.")
             }
-            val body = it.body.string()
-            DebugLog.info("EventFileTransfer", "Downloaded Event File bytes=${body.toByteArray().size} from ${safeUrlDescription(url)}")
-            return body
+            DebugLog.info("EventFileTransfer", "Uploaded ${upload.fileName} to ${safeUrlDescription(url)}")
         }
     }
 }
 
-object EventFileTransferUrlValidator {
+object DesktopFileReceiveUrlValidator {
     @Throws(EventFileTransferException::class)
     fun validate(rawUrl: String): String {
         val trimmedUrl = rawUrl.trim()
         val uri = try {
             URI(trimmedUrl)
         } catch (error: IllegalArgumentException) {
-            throw EventFileTransferException("Enter the local transfer URL shown on the desktop.")
+            throw EventFileTransferException("Enter the local receive URL shown on the desktop.")
         }
 
         if (uri.scheme != "http") {
-            throw EventFileTransferException("Desktop transfer URLs must start with http://.")
+            throw EventFileTransferException("Desktop receive URLs must start with http://.")
         }
-        val host = uri.host ?: throw EventFileTransferException("Desktop transfer URL is missing a host.")
+        if (uri.path != "/radio-oracle/file-receive") {
+            throw EventFileTransferException("Scan the Receive from Android QR code shown on the desktop.")
+        }
+        val host = uri.host ?: throw EventFileTransferException("Desktop receive URL is missing a host.")
         if (!isLocalHost(host)) {
             throw EventFileTransferException("Use a private Wi-Fi, hotspot, or .local desktop address, not a public internet URL.")
         }
         val token = queryParameters(uri)["token"]
         if (token.isNullOrBlank()) {
-            throw EventFileTransferException("Desktop transfer URL is missing its token.")
+            throw EventFileTransferException("Desktop receive URL is missing its token.")
         }
         return uri.toASCIIString()
     }
@@ -100,13 +145,4 @@ object EventFileTransferUrlValidator {
             }
             .toMap()
     }
-}
-
-class EventFileTransferException(message: String) : Exception(message)
-
-internal fun safeUrlDescription(url: String): String {
-    return runCatching {
-        val uri = URI(url)
-        "${uri.scheme}://${uri.host}${if (uri.port >= 0) ":${uri.port}" else ""}${uri.path}"
-    }.getOrDefault("desktop transfer URL")
 }
