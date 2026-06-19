@@ -1,9 +1,11 @@
 package org.openardf.radiooracle.results
 
 import org.openardf.radiooracle.backend.results.ResultsProcessor
+import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.ControlPoint
 import org.openardf.radiooracle.backend.room.entity.Punch
 import org.openardf.radiooracle.backend.room.entity.Result
+import org.openardf.radiooracle.backend.room.entity.embeddeds.ControlPointAlias
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.ResultStatus
@@ -463,8 +465,8 @@ class ResultsEvaluationUnitTests {
         ResultsProcessor.evaluateSprint(punches, controlPoints, result)
         assertEquals(ResultStatus.OK, result.resultStatus)
         assertEquals(9, result.points)
-        for (punch in punches) {
-            assertEquals(PunchStatus.VALID, punch.punchStatus)
+        punches.forEachIndexed { index, punch ->
+            assertEquals(if (index == 7) PunchStatus.UNKNOWN else PunchStatus.VALID, punch.punchStatus)
         }
 
         //Add some random invalid data
@@ -574,6 +576,46 @@ class ResultsEvaluationUnitTests {
     }
 
     @Test
+    fun testSprintUsesAliasesForLoopRoles() {
+        val result = Result()
+        val punches = arrayListOf(
+            punch(171, 1),
+            punch(161, 2),
+            punch(137, 3),
+            punch(162, 4),
+            punch(172, 5),
+            punch(136, 6)
+        )
+        val controlPoints = arrayListOf(
+            controlPoint(161, ControlPointType.CONTROL, 1),
+            controlPoint(162, ControlPointType.CONTROL, 2),
+            controlPoint(137, ControlPointType.SEPARATOR, 3),
+            controlPoint(171, ControlPointType.CONTROL, 4),
+            controlPoint(172, ControlPointType.CONTROL, 5),
+            controlPoint(136, ControlPointType.BEACON, 6)
+        )
+        val aliases = listOf(
+            ControlPointAlias(controlPoints[0], Alias(161, "1")),
+            ControlPointAlias(controlPoints[1], Alias(162, "2")),
+            ControlPointAlias(controlPoints[2], Alias(137, "S")),
+            ControlPointAlias(controlPoints[3], Alias(171, "1F")),
+            ControlPointAlias(controlPoints[4], Alias(172, "2F")),
+            ControlPointAlias(controlPoints[5], Alias(136, "B"))
+        )
+
+        ResultsProcessor.evaluateSprint(punches, controlPoints, result, aliases)
+
+        assertEquals(ResultStatus.OK, result.resultStatus)
+        assertEquals(2, result.points)
+        assertEquals(PunchStatus.UNKNOWN, punches[0].punchStatus)
+        assertEquals(PunchStatus.VALID, punches[1].punchStatus)
+        assertEquals(PunchStatus.VALID, punches[2].punchStatus)
+        assertEquals(PunchStatus.UNKNOWN, punches[3].punchStatus)
+        assertEquals(PunchStatus.VALID, punches[4].punchStatus)
+        assertEquals(PunchStatus.VALID, punches[5].punchStatus)
+    }
+
+    @Test
     fun testSprintAllSeparators() {
         val result = Result()
         val punches = ArrayList<Punch>()
@@ -604,10 +646,10 @@ class ResultsEvaluationUnitTests {
         }
 
         ResultsProcessor.evaluateSprint(punches, controlPoints, result)
-        assertEquals(ResultStatus.OK, result.resultStatus)
-        assertEquals(12, result.points)
-        for (punch in punches) {
-            assertEquals(PunchStatus.VALID, punch.punchStatus)
+        assertEquals(ResultStatus.DID_NOT_FINISH, result.resultStatus)
+        assertEquals(9, result.points)
+        punches.forEachIndexed { index, punch ->
+            assertEquals(if (index < 9) PunchStatus.VALID else PunchStatus.UNKNOWN, punch.punchStatus)
         }
     }
 
@@ -653,4 +695,28 @@ class ResultsEvaluationUnitTests {
             controlPoints.last().type = ControlPointType.BEACON
         }
     }
+
+    private fun punch(siCode: Int, order: Int): Punch =
+        Punch(
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            null,
+            null,
+            siCode,
+            SITime(),
+            SITime(),
+            SIRecordType.CONTROL,
+            order,
+            PunchStatus.UNKNOWN,
+            Duration.ZERO
+        )
+
+    private fun controlPoint(siCode: Int, type: ControlPointType, order: Int): ControlPoint =
+        ControlPoint(
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            siCode,
+            type,
+            order
+        )
 }

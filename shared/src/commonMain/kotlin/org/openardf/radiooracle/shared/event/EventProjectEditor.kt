@@ -2084,12 +2084,13 @@ object EventProjectEditor {
             val categoryData = categoryId?.let { id ->
                 projectFile.raceData.categories.firstOrNull { it.category.id == id }
             }
+            val effectiveRaceType = categoryData?.category?.effectiveRaceType(projectFile.raceData.race)
             val controlPunches = punches
                 .filter { it.punch.punchType == SIRecordType.CONTROL }
                 .map { EvaluationPunch(it.punch.siCode, SIRecordType.CONTROL) }
             val evaluation = categoryData?.let { data ->
                 CourseEvaluator.evaluate(
-                    raceType = data.category.effectiveRaceType(projectFile.raceData.race),
+                    raceType = effectiveRaceType ?: data.category.effectiveRaceType(projectFile.raceData.race),
                     punches = controlPunches,
                     controlPoints = projectFile.raceData.evaluationControlPoints(data)
                 )
@@ -2397,11 +2398,12 @@ object EventProjectEditor {
         val categoryData = matchedCompetitor?.categoryId?.let { categoryId ->
             workingProjectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
         }
+        val effectiveRaceType = categoryData?.category?.effectiveRaceType(workingProjectFile.raceData.race)
 
         val controlPunches = readout.punches
         val evaluation = categoryData?.let { data ->
             CourseEvaluator.evaluate(
-                raceType = data.category.effectiveRaceType(projectFile.raceData.race),
+                raceType = effectiveRaceType ?: data.category.effectiveRaceType(projectFile.raceData.race),
                 punches = controlPunches.map { EvaluationPunch(it.siCode, SIRecordType.CONTROL) },
                 controlPoints = workingProjectFile.raceData.evaluationControlPoints(data)
             )
@@ -2662,7 +2664,8 @@ object EventProjectEditor {
             EvaluationControlPoint(
                 siCode = control?.siCode ?: controlPoint.siCode,
                 type = control?.type ?: controlPoint.type,
-                scored = control?.scored ?: controlPoint.type.defaultScored()
+                scored = control?.scored ?: controlPoint.type.defaultScored(),
+                label = control?.publicLabel ?: control?.label
             )
         }
     }

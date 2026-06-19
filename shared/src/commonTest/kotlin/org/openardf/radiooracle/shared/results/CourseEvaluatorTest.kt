@@ -135,7 +135,7 @@ class CourseEvaluatorTest {
     }
 
     @Test
-    fun sprintWithoutSpectatorRequiresSecondBeaconAtFinish() {
+    fun sprintWithoutSpectatorDoesNotRequireSecondBeaconAtFinish() {
         val evaluation = CourseEvaluator.evaluate(
             RaceType.SPRINT,
             punches = punches(31, 32, 36, 41, 42),
@@ -149,11 +149,11 @@ class CourseEvaluatorTest {
         )
 
         assertEquals(4, evaluation.points)
-        assertEquals(ResultStatus.DID_NOT_FINISH, evaluation.resultStatus)
+        assertEquals(ResultStatus.OK, evaluation.resultStatus)
     }
 
     @Test
-    fun sprintWithSpectatorStillRequiresBeacon() {
+    fun sprintWithSpectatorDoesNotRequireFinishBeaconControl() {
         val evaluation = CourseEvaluator.evaluate(
             RaceType.SPRINT,
             punches = punches(31, 32, 46, 41, 42),
@@ -167,7 +167,108 @@ class CourseEvaluatorTest {
         )
 
         assertEquals(4, evaluation.points)
+        assertEquals(ResultStatus.OK, evaluation.resultStatus)
+    }
+
+    @Test
+    fun sprintScoresOnlyAssignedLoopFoxesOnCorrectSideOfSpectator() {
+        val evaluation = CourseEvaluator.evaluate(
+            RaceType.SPRINT,
+            punches = punches(171, 161, 137, 162, 172, 136),
+            controlPoints = listOf(
+                EvaluationControlPoint(161, ControlPointType.CONTROL, label = "1"),
+                EvaluationControlPoint(162, ControlPointType.CONTROL, label = "2"),
+                EvaluationControlPoint(137, ControlPointType.SEPARATOR, scored = false, label = "S"),
+                EvaluationControlPoint(171, ControlPointType.CONTROL, label = "1F"),
+                EvaluationControlPoint(172, ControlPointType.CONTROL, label = "2F"),
+                EvaluationControlPoint(136, ControlPointType.BEACON, scored = false, label = "B")
+            )
+        )
+
+        assertEquals(2, evaluation.points)
+        assertEquals(ResultStatus.OK, evaluation.resultStatus)
+        assertEquals(
+            listOf(
+                PunchStatus.UNKNOWN,
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.UNKNOWN,
+                PunchStatus.VALID,
+                PunchStatus.VALID
+            ),
+            evaluation.punchStatuses
+        )
+    }
+
+    @Test
+    fun sprintMissingSpectatorIsDnfAndFastPunchesDoNotScore() {
+        val evaluation = CourseEvaluator.evaluate(
+            RaceType.SPRINT,
+            punches = punches(161, 171, 136),
+            controlPoints = listOf(
+                EvaluationControlPoint(161, ControlPointType.CONTROL, label = "1"),
+                EvaluationControlPoint(137, ControlPointType.SEPARATOR, scored = false, label = "S"),
+                EvaluationControlPoint(171, ControlPointType.CONTROL, label = "1F"),
+                EvaluationControlPoint(136, ControlPointType.BEACON, scored = false, label = "B")
+            )
+        )
+
+        assertEquals(1, evaluation.points)
         assertEquals(ResultStatus.DID_NOT_FINISH, evaluation.resultStatus)
+        assertEquals(
+            listOf(PunchStatus.VALID, PunchStatus.UNKNOWN, PunchStatus.UNKNOWN),
+            evaluation.punchStatuses
+        )
+    }
+
+    @Test
+    fun sprintRequiresAtLeastOneSlowAndOneFastFox() {
+        val evaluation = CourseEvaluator.evaluate(
+            RaceType.SPRINT,
+            punches = punches(161, 137, 136),
+            controlPoints = listOf(
+                EvaluationControlPoint(161, ControlPointType.CONTROL, label = "1"),
+                EvaluationControlPoint(137, ControlPointType.SEPARATOR, scored = false, label = "S"),
+                EvaluationControlPoint(171, ControlPointType.CONTROL, label = "1F"),
+                EvaluationControlPoint(136, ControlPointType.BEACON, scored = false, label = "B")
+            )
+        )
+
+        assertEquals(1, evaluation.points)
+        assertEquals(ResultStatus.DID_NOT_FINISH, evaluation.resultStatus)
+    }
+
+    @Test
+    fun sprintWithoutSpectatorUsesBeaconAsTransitionWithLabeledFastFoxes() {
+        val evaluation = CourseEvaluator.evaluate(
+            RaceType.SPRINT,
+            punches = punches(161, 136, 171, 136),
+            controlPoints = listOf(
+                EvaluationControlPoint(161, ControlPointType.CONTROL, label = "1"),
+                EvaluationControlPoint(171, ControlPointType.CONTROL, label = "1F"),
+                EvaluationControlPoint(136, ControlPointType.BEACON, scored = false, label = "B")
+            )
+        )
+
+        assertEquals(2, evaluation.points)
+        assertEquals(ResultStatus.OK, evaluation.resultStatus)
+    }
+
+    @Test
+    fun sprintDoesNotRequireFinalBeaconAfterFastLoop() {
+        val evaluation = CourseEvaluator.evaluate(
+            RaceType.SPRINT,
+            punches = punches(161, 137, 171),
+            controlPoints = listOf(
+                EvaluationControlPoint(161, ControlPointType.CONTROL, label = "1"),
+                EvaluationControlPoint(137, ControlPointType.SEPARATOR, scored = false, label = "S"),
+                EvaluationControlPoint(171, ControlPointType.CONTROL, label = "1F"),
+                EvaluationControlPoint(136, ControlPointType.BEACON, scored = false, label = "B")
+            )
+        )
+
+        assertEquals(2, evaluation.points)
+        assertEquals(ResultStatus.OK, evaluation.resultStatus)
     }
 
     @Test

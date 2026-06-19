@@ -19,6 +19,7 @@ import org.openardf.radiooracle.backend.room.entity.Punch
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.Result
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.ControlPointAlias
 import org.openardf.radiooracle.backend.room.enums.PunchStatus
 import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.backend.room.enums.ResultStatus
@@ -547,6 +548,12 @@ object ResultsProcessor {
         } catch (e: Exception) {
             Log.d("ResultsProcess", e.message.toString())
         }
+        var controlPointAliases: List<ControlPointAlias> = emptyList()
+        try {
+            controlPointAliases = dataProcessor.getControlPointAliasesByCategory(category.id)
+        } catch (e: Exception) {
+            Log.d("ResultsProcess", e.message.toString())
+        }
         result.points = 0
 
         val raceType = if (category.differentProperties) {
@@ -558,19 +565,22 @@ object ResultsProcessor {
             RaceType.CLASSIC, RaceType.SHORT, RaceType.FOXORING -> evaluateClassics(
                 punches,
                 controlPoints,
-                result
+                result,
+                controlPointAliases
             )
 
             RaceType.SPRINT -> evaluateSprint(
                 punches,
                 controlPoints,
-                result
+                result,
+                controlPointAliases
             )
 
             RaceType.ORIENTEERING -> evaluateOrienteering(
                 punches,
                 controlPoints,
-                result
+                result,
+                controlPointAliases
             )
         }
     }
@@ -715,9 +725,10 @@ object ResultsProcessor {
     fun evaluateClassics(
         punches: ArrayList<Punch>,
         controlPoints: List<ControlPoint>,
-        result: Result
+        result: Result,
+        controlPointAliases: List<ControlPointAlias> = emptyList()
     ) {
-        applyCourseEvaluation(RaceType.CLASSIC, punches, controlPoints, result)
+        applyCourseEvaluation(RaceType.CLASSIC, punches, controlPoints, result, controlPointAliases)
     }
 
     /**
@@ -726,9 +737,10 @@ object ResultsProcessor {
     fun evaluateSprint(
         punches: ArrayList<Punch>,
         controlPoints: List<ControlPoint>,
-        result: Result
+        result: Result,
+        controlPointAliases: List<ControlPointAlias> = emptyList()
     ) {
-        applyCourseEvaluation(RaceType.SPRINT, punches, controlPoints, result)
+        applyCourseEvaluation(RaceType.SPRINT, punches, controlPoints, result, controlPointAliases)
     }
 
     /**
@@ -737,21 +749,30 @@ object ResultsProcessor {
     fun evaluateOrienteering(
         punches: ArrayList<Punch>,
         controlPoints: List<ControlPoint>,
-        result: Result
+        result: Result,
+        controlPointAliases: List<ControlPointAlias> = emptyList()
     ) {
-        applyCourseEvaluation(RaceType.ORIENTEERING, punches, controlPoints, result)
+        applyCourseEvaluation(RaceType.ORIENTEERING, punches, controlPoints, result, controlPointAliases)
     }
 
     private fun applyCourseEvaluation(
         raceType: RaceType,
         punches: ArrayList<Punch>,
         controlPoints: List<ControlPoint>,
-        result: Result
+        result: Result,
+        controlPointAliases: List<ControlPointAlias> = emptyList()
     ) {
+        val aliasesByControlPointId = controlPointAliases.associateBy { it.controlPoint.id }
         val evaluation = CourseEvaluator.evaluate(
             raceType,
             punches.map { EvaluationPunch(it.siCode, it.punchType) },
-            controlPoints.map { EvaluationControlPoint(it.siCode, it.type) }
+            controlPoints.map { controlPoint ->
+                EvaluationControlPoint(
+                    siCode = controlPoint.siCode,
+                    type = controlPoint.type,
+                    label = aliasesByControlPointId[controlPoint.id]?.alias?.name
+                )
+            }
         )
         result.points = evaluation.points
         result.resultStatus = evaluation.resultStatus
