@@ -57,6 +57,7 @@ enum class DesktopNavAction {
     ExportResultsText,
     ExportResultsHtml,
     GeneratePublicResultsSite,
+    PublishPublicResultsSite,
     StartPublicResultsSitePreview,
     StopPublicResultsSitePreview,
     ExportArdfJson,
@@ -490,6 +491,12 @@ object DesktopNavigation {
                                     "Generate Public Results Site...",
                                     workflow,
                                     DesktopNavAction.GeneratePublicResultsSite
+                                ),
+                                action(
+                                    "results.publish-public-site",
+                                    "Publish Public Results Site",
+                                    workflow,
+                                    DesktopNavAction.PublishPublicResultsSite
                                 ),
                                 action(
                                     "results.start-public-site-preview",
@@ -963,6 +970,8 @@ object DesktopNavigation {
             "Use Export Results HTML to write a browser-readable results report.",
         "results.generate-public-site" to
             "Use Generate Public Results Site to write a Cloudflare Pages-ready static site folder.",
+        "results.publish-public-site" to
+            "Use Publish Public Results Site to deploy the generated public results site to Cloudflare Pages.",
         "results.start-public-site-preview" to
             "Use Start Public Site Preview to inspect the generated public results site on this computer.",
         "results.stop-public-site-preview" to

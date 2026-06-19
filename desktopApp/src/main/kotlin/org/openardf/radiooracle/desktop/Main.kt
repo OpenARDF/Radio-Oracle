@@ -354,6 +354,7 @@ fun main(args: Array<String>) = application {
         val localResultServer = remember {
             DesktopLocalResultServer(projectSupplier = { projectSession.currentProject })
         }
+        val publicResultSitePublisher = remember { DesktopCloudflarePagesPublisher() }
         val ticketPrinter = remember { DesktopTicketPrinter() }
         val appCoroutineScope = rememberCoroutineScope()
         val startupStatus = remember(startupPath) {
@@ -388,6 +389,7 @@ fun main(args: Array<String>) = application {
         var publicResultSiteDirectory by remember { mutableStateOf<Path?>(null) }
         var publicResultSitePreviewServer by remember { mutableStateOf<DesktopPublicResultSitePreviewServer?>(null) }
         var publicResultSitePreviewUrl by remember { mutableStateOf<String?>(null) }
+        var isPublishingPublicResultSite by remember { mutableStateOf(false) }
         var eventFileTransferServer by remember { mutableStateOf<DesktopEventFileTransferServer?>(null) }
         var eventFileTransferDialog by remember { mutableStateOf<DesktopEventFileTransferDialogState?>(null) }
         var eventFileTransferResultDialog by remember { mutableStateOf<DesktopEventFileTransferResultDialogState?>(null) }
@@ -2581,6 +2583,33 @@ fun main(args: Array<String>) = application {
             projectStatusText = "Public results site preview stopped."
         }
 
+        fun publishPublicResultsSite() {
+            val directory = publicResultSiteDirectory ?: run {
+                projectStatusText = "Generate a public results site before publishing."
+                return
+            }
+            if (isPublishingPublicResultSite) {
+                projectStatusText = "Public results site publishing is already in progress."
+                return
+            }
+            isPublishingPublicResultSite = true
+            projectStatusText = "Publishing public results site to Cloudflare Pages..."
+            appCoroutineScope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        publicResultSitePublisher.publish(
+                            DesktopCloudflarePagesPublishRequest(directory = directory)
+                        )
+                    }
+                }.onSuccess { result ->
+                    projectStatusText = "Published public results site to ${result.url}"
+                }.onFailure { error ->
+                    projectStatusText = "Public results site publish failed: ${error.message ?: error::class.simpleName}"
+                }
+                isPublishingPublicResultSite = false
+            }
+        }
+
         fun exportResultsText() {
             val currentProject = projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportTxt("Export Results TXT")?.let { path ->
@@ -3310,6 +3339,8 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.StopLocalResultDisplay -> localResultServerUrl != null
                 DesktopNavAction.StartPublicResultsSitePreview ->
                     publicResultSiteDirectory != null && publicResultSitePreviewUrl == null
+                DesktopNavAction.PublishPublicResultsSite ->
+                    publicResultSiteDirectory != null && !isPublishingPublicResultSite
                 DesktopNavAction.StopPublicResultsSitePreview -> publicResultSitePreviewUrl != null
                 DesktopNavAction.SendRobis -> projectFile != null && !isSendingLiveResults
                 DesktopNavAction.SendEventFileToAndroid -> projectFile != null
@@ -3398,6 +3429,12 @@ fun main(args: Array<String>) = application {
                         publicResultSitePreviewUrl != null -> "The public results site preview is already running."
                         else -> "Public results site preview is not available right now."
                     }
+                DesktopNavAction.PublishPublicResultsSite ->
+                    when {
+                        publicResultSiteDirectory == null -> "Generate a public results site before publishing."
+                        isPublishingPublicResultSite -> "The public results site is already being published."
+                        else -> "Public results site publishing is not available right now."
+                    }
                 DesktopNavAction.StopPublicResultsSitePreview ->
                     "The public results site preview is not running."
                 DesktopNavAction.SendRobis ->
@@ -3476,6 +3513,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportResultsText -> exportResultsText()
                 DesktopNavAction.ExportResultsHtml -> exportResultsHtml()
                 DesktopNavAction.GeneratePublicResultsSite -> generatePublicResultsSite()
+                DesktopNavAction.PublishPublicResultsSite -> publishPublicResultsSite()
                 DesktopNavAction.StartPublicResultsSitePreview -> startPublicResultsSitePreview()
                 DesktopNavAction.StopPublicResultsSitePreview -> stopPublicResultsSitePreview()
                 DesktopNavAction.ExportArdfJson -> exportArdfJson()

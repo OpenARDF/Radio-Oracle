@@ -945,6 +945,34 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun resultFilesMenuExposesPublicSiteWorkflow() {
+        val resultFiles = DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport)
+            .first { it.label == "Exports" }
+            .children
+            .first { it.label == "Result Files" }
+            .children
+
+        assertEquals(
+            listOf(
+                DesktopNavAction.GeneratePublicResultsSite,
+                DesktopNavAction.PublishPublicResultsSite,
+                DesktopNavAction.StartPublicResultsSitePreview,
+                DesktopNavAction.StopPublicResultsSitePreview
+            ),
+            resultFiles
+                .mapNotNull { it.action }
+                .filter {
+                    it in setOf(
+                        DesktopNavAction.GeneratePublicResultsSite,
+                        DesktopNavAction.PublishPublicResultsSite,
+                        DesktopNavAction.StartPublicResultsSitePreview,
+                        DesktopNavAction.StopPublicResultsSitePreview
+                    )
+                }
+        )
+    }
+
+    @Test
     fun helpMenuExposesConcreteActions() {
         val helpActions = DesktopNavigation.rootItems(DesktopWorkflow.SettingsHelp)
             .first { it.label == "Help" }
