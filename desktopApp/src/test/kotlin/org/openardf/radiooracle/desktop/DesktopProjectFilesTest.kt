@@ -181,6 +181,34 @@ class DesktopProjectFilesTest {
     }
 
     @Test
+    fun exportsPublicResultsSiteDirectory() {
+        val directory = Files.createTempDirectory("rom-desktop-public-results-site")
+
+        val paths = DesktopProjectFiles.exportPublicResultsSite(directory, EventProjectFile(raceData = raceDataWithReadout()))
+
+        assertTrue(Files.exists(paths.indexHtml))
+        assertTrue(Files.exists(paths.publicResultsJson))
+        assertTrue(Files.exists(paths.finalResultsJson))
+        assertTrue(Files.exists(paths.liveResultsJson))
+        assertTrue(Files.exists(paths.iofResultListXml))
+        assertTrue(Files.exists(paths.printableResultsHtml))
+        assertTrue(Files.exists(directory.resolve("_headers")))
+        assertTrue(Files.exists(directory.resolve("assets").resolve("site.css")))
+        assertTrue(Files.exists(directory.resolve("assets").resolve("site.js")))
+
+        val index = Files.readString(paths.indexHtml)
+        val publicJson = Files.readString(paths.publicResultsJson)
+
+        assertTrue(index.contains("Desktop File Race"))
+        assertTrue(index.contains("downloads/final-results.json"))
+        assertTrue(Files.readString(directory.resolve("assets").resolve("site.js")).contains("data/public-results.json"))
+        assertTrue(publicJson.contains("\"name\": \"Desktop File Race\""))
+        assertTrue(publicJson.contains("\"competitor\": \"RUNNER Alice\""))
+        assertTrue(publicJson.contains("\"runtime\": \"00:20:00\""))
+        assertTrue(Files.readString(paths.iofResultListXml).contains("<ResultList"))
+    }
+
+    @Test
     fun exportsResultsTextFile() {
         val directory = Files.createTempDirectory("rom-desktop-results-text")
         val path = directory.resolve("results.txt")

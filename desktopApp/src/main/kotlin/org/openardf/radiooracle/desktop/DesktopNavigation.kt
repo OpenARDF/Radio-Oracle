@@ -56,6 +56,7 @@ enum class DesktopNavAction {
     ExportArdfEventResultsCsv,
     ExportResultsText,
     ExportResultsHtml,
+    GeneratePublicResultsSite,
     ExportArdfJson,
     ExportAndroidRaceBackupJson,
     ExportLiveResultsJson,
@@ -482,6 +483,12 @@ object DesktopNavigation {
                                 ),
                                 action("results.export-text", "Export Results TXT...", workflow, DesktopNavAction.ExportResultsText),
                                 action("results.export-html", "Export Results HTML...", workflow, DesktopNavAction.ExportResultsHtml),
+                                action(
+                                    "results.generate-public-site",
+                                    "Generate Public Results Site...",
+                                    workflow,
+                                    DesktopNavAction.GeneratePublicResultsSite
+                                ),
                                 action("results.export-readouts", "Export Readouts CSV...", workflow, DesktopNavAction.ExportReadoutsCsv)
                             )
                         ),
@@ -940,6 +947,8 @@ object DesktopNavigation {
             "Use Export Results TXT to write a plain-text results report.",
         "results.export-html" to
             "Use Export Results HTML to write a browser-readable results report.",
+        "results.generate-public-site" to
+            "Use Generate Public Results Site to write a Cloudflare Pages-ready static site folder.",
         "results.export-readouts" to
             "Use Export Readouts CSV to write downloaded and unmatched readout records for review or backup.",
         "results.exports-json-xml" to

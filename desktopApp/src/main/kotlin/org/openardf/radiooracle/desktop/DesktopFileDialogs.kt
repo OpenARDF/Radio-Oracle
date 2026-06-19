@@ -252,6 +252,18 @@ object DesktopFileDialogs {
             ?.let(DesktopProjectFilePaths::withHtmlExtension)
             ?.let(::confirmOverwrite)
 
+    fun chooseExportPublicResultsSiteDirectory(): Path? {
+        val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
+        val chooser = JFileChooser(directory.toFile())
+        chooser.dialogTitle = "Generate Public Results Site"
+        chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+        chooser.approveButtonText = "Select Folder"
+        if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) {
+            return null
+        }
+        return chooser.selectedFile?.toPath()?.also(DesktopEventFileLocations::rememberEventFileDirectory)
+    }
+
     fun chooseExportCourseAnalysisPdf(defaultFileName: String? = null): Path? =
         chooseFile(
             title = "Export Course Analysis PDF",

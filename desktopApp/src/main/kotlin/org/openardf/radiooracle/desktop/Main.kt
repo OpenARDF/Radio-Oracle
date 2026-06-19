@@ -387,6 +387,8 @@ fun main(args: Array<String>) = application {
         var localResultServerUrl by remember { mutableStateOf<String?>(null) }
         var eventFileTransferServer by remember { mutableStateOf<DesktopEventFileTransferServer?>(null) }
         var eventFileTransferDialog by remember { mutableStateOf<DesktopEventFileTransferDialogState?>(null) }
+        var eventFileTransferResultDialog by remember { mutableStateOf<DesktopEventFileTransferResultDialogState?>(null) }
+        var eventFileTransferRequestId by remember { mutableStateOf(0) }
         var androidFileReceiveServer by remember { mutableStateOf<DesktopAndroidFileReceiveServer?>(null) }
         var androidFileReceiveDialog by remember { mutableStateOf<DesktopAndroidFileReceiveDialogState?>(null) }
         var androidFileReceiveResultDialog by remember { mutableStateOf<DesktopAndroidFileReceiveResultDialogState?>(null) }
@@ -2530,6 +2532,23 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun generatePublicResultsSite() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportPublicResultsSiteDirectory()?.let { directory ->
+                runCatching {
+                    val paths = DesktopProjectFiles.exportPublicResultsSite(
+                        directory,
+                        currentProject,
+                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap()
+                    )
+                    syncProjectState()
+                    projectStatusText = "Generated public results site at ${paths.directory}"
+                }.onFailure { error ->
+                    projectStatusText = "Public results site generation failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun exportResultsText() {
             val currentProject = projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportTxt("Export Results TXT")?.let { path ->
@@ -2985,13 +3004,20 @@ fun main(args: Array<String>) = application {
             }
 
             eventFileTransferServer?.stop()
+            eventFileTransferRequestId += 1
+            val transferRequestId = eventFileTransferRequestId
             eventFileTransferDialog = null
 
             runCatching {
+                val fileName = path.fileName.toString()
+                val byteCount = Files.size(path)
                 val server = DesktopEventFileTransferServer(
                     filePath = path,
                     onStopped = { reason ->
                         appCoroutineScope.launch {
+                            if (transferRequestId != eventFileTransferRequestId) {
+                                return@launch
+                            }
                             val message = when (reason) {
                                 DesktopEventFileTransferStopReason.Downloaded ->
                                     "Event File downloaded by Android. Transfer stopped."
@@ -3001,7 +3027,23 @@ fun main(args: Array<String>) = application {
                                     "Event File transfer expired after 10 minutes."
                             }
                             projectStatusText = message
-                            eventFileTransferDialog = eventFileTransferDialog?.copy(statusText = message)
+                            eventFileTransferDialog = null
+                            eventFileTransferServer = null
+                            when (reason) {
+                                DesktopEventFileTransferStopReason.Downloaded ->
+                                    eventFileTransferResultDialog = DesktopEventFileTransferResultDialogState.downloaded(
+                                        fileName = fileName,
+                                        path = path,
+                                        byteCount = byteCount
+                                    )
+                                DesktopEventFileTransferStopReason.Timeout ->
+                                    eventFileTransferResultDialog = DesktopEventFileTransferResultDialogState.failure(
+                                        title = "Android Transfer Expired",
+                                        message = "No Android device downloaded $fileName before the 10 minute transfer link expired.",
+                                        path = path
+                                    )
+                                DesktopEventFileTransferStopReason.Cancelled -> Unit
+                            }
                             DesktopDebugLog.info("EventFile", "Android transfer stopped: $reason")
                         }
                     }
@@ -3283,6 +3325,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportArdfEventResultsCsv,
                 DesktopNavAction.ExportResultsText,
                 DesktopNavAction.ExportResultsHtml,
+                DesktopNavAction.GeneratePublicResultsSite,
                 DesktopNavAction.ExportArdfJson,
                 DesktopNavAction.ExportAndroidRaceBackupJson,
                 DesktopNavAction.ExportLiveResultsJson,
@@ -3389,6 +3432,7 @@ fun main(args: Array<String>) = application {
                     exportCsv("Export ARDFEvent Results CSV", "ardfevent results", DesktopProjectFiles::exportArdfEventResultsCsv)
                 DesktopNavAction.ExportResultsText -> exportResultsText()
                 DesktopNavAction.ExportResultsHtml -> exportResultsHtml()
+                DesktopNavAction.GeneratePublicResultsSite -> generatePublicResultsSite()
                 DesktopNavAction.ExportArdfJson -> exportArdfJson()
                 DesktopNavAction.ExportAndroidRaceBackupJson -> exportAndroidRaceBackupJson()
                 DesktopNavAction.ExportLiveResultsJson -> exportLiveResultsJson()
@@ -3551,6 +3595,12 @@ fun main(args: Array<String>) = application {
                     eventFileTransferServer = null
                     eventFileTransferDialog = null
                 }
+            )
+        }
+        eventFileTransferResultDialog?.let { dialogState ->
+            EventFileTransferResultDialog(
+                state = dialogState,
+                onDismiss = { eventFileTransferResultDialog = null }
             )
         }
         androidFileReceiveDialog?.let { dialogState ->
@@ -5766,6 +5816,35 @@ private data class DesktopEventFileTransferDialogState(
     val statusText: String
 )
 
+private data class DesktopEventFileTransferResultDialogState(
+    val title: String,
+    val summary: String,
+    val sourcePath: Path?,
+    val details: List<String>
+) {
+    companion object {
+        fun downloaded(fileName: String, path: Path, byteCount: Long): DesktopEventFileTransferResultDialogState =
+            DesktopEventFileTransferResultDialogState(
+                title = "Android Download Complete",
+                summary = "Android downloaded the Event File.",
+                sourcePath = path,
+                details = listOf(
+                    "Downloaded file: $fileName",
+                    "Bytes sent: $byteCount",
+                    "Android imports the downloaded Event File into its race list."
+                )
+            )
+
+        fun failure(title: String, message: String, path: Path? = null): DesktopEventFileTransferResultDialogState =
+            DesktopEventFileTransferResultDialogState(
+                title = title,
+                summary = message,
+                sourcePath = path,
+                details = emptyList()
+            )
+    }
+}
+
 private data class DesktopAndroidFileReceiveDialogState(
     val addresses: List<DesktopEventFileTransferAddress>,
     val selectedAddress: DesktopEventFileTransferAddress,
@@ -5892,6 +5971,39 @@ private fun EventFileTransferDialog(
         dismissButton = {
             Button(onClick = onCancel) {
                 ButtonLabel("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun EventFileTransferResultDialog(
+    state: DesktopEventFileTransferResultDialogState,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(state.title) },
+        text = {
+            Column(
+                modifier = Modifier.widthIn(min = 420.dp, max = 560.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(state.summary)
+                state.details.forEach { detail ->
+                    Text(detail)
+                }
+                state.sourcePath?.let { path ->
+                    Text("Desktop Event File location:")
+                    SelectionContainer {
+                        Text(path.toString(), style = MaterialTheme.typography.body2)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                ButtonLabel("OK")
             }
         }
     )

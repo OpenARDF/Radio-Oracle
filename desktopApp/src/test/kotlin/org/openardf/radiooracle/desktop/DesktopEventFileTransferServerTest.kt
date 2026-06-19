@@ -10,6 +10,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util.concurrent.atomic.AtomicReference
 
 class DesktopEventFileTransferServerTest {
     private val address = DesktopEventFileTransferAddress("Local", "127.0.0.1")
@@ -36,6 +37,21 @@ class DesktopEventFileTransferServerTest {
         assertTrue(response.headers().firstValue("Content-Disposition").orElse("").contains(path.fileName.toString()))
 
         eventuallyUnavailable(session.url)
+    }
+
+    @Test
+    fun successfulDownloadReportsDownloadedStopReason() {
+        val stopReason = AtomicReference<DesktopEventFileTransferStopReason?>()
+        val server = server(eventFile("""{"ok":true}"""), onStopped = stopReason::set)
+        val session = server.start(address)
+
+        val response = client.send(
+            HttpRequest.newBuilder(URI.create(session.url)).GET().build(),
+            HttpResponse.BodyHandlers.discarding()
+        )
+
+        assertEquals(200, response.statusCode())
+        assertEquals(DesktopEventFileTransferStopReason.Downloaded, awaitStopReason(stopReason))
     }
 
     @Test
@@ -78,6 +94,16 @@ class DesktopEventFileTransferServerTest {
     }
 
     @Test
+    fun timeoutReportsTimeoutStopReason() {
+        val stopReason = AtomicReference<DesktopEventFileTransferStopReason?>()
+        val server = server(eventFile("""{"ok":true}"""), timeoutMillis = 25, onStopped = stopReason::set)
+
+        server.start(address)
+
+        assertEquals(DesktopEventFileTransferStopReason.Timeout, awaitStopReason(stopReason))
+    }
+
+    @Test
     fun cancelShutsServerDown() {
         val server = server(eventFile("""{"ok":true}"""))
         val session = server.start(address)
@@ -112,13 +138,15 @@ class DesktopEventFileTransferServerTest {
 
     private fun server(
         path: java.nio.file.Path,
-        timeoutMillis: Long = 60_000L
+        timeoutMillis: Long = 60_000L,
+        onStopped: (DesktopEventFileTransferStopReason) -> Unit = {}
     ): DesktopEventFileTransferServer =
         DesktopEventFileTransferServer(
             filePath = path,
             addressesProvider = { listOf(address) },
             tokenFactory = { "test-token" },
-            timeoutMillis = timeoutMillis
+            timeoutMillis = timeoutMillis,
+            onStopped = onStopped
         )
 
     private fun eventFile(text: String): java.nio.file.Path {
@@ -146,5 +174,16 @@ class DesktopEventFileTransferServerTest {
             Thread.sleep(25)
         }
         throw AssertionError("Server remained available.", lastError)
+    }
+
+    private fun awaitStopReason(
+        stopReason: AtomicReference<DesktopEventFileTransferStopReason?>
+    ): DesktopEventFileTransferStopReason {
+        val deadline = System.nanoTime() + 2_000_000_000L
+        while (System.nanoTime() < deadline) {
+            stopReason.get()?.let { return it }
+            Thread.sleep(25)
+        }
+        throw AssertionError("Server stop reason was not reported.")
     }
 }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>OpenARDF sample route</name>
+    <Placemark>
+      <name>Sample route</name>
+      <LineString>
+        <tessellate>1</tessellate>
+        <coordinates>
+          -79.00000000,35.00000000,130.00
+          -79.00200000,35.00100000,146.00
+          -79.00400000,35.00030000,139.00
+          -79.00600000,35.00220000,178.00
+          -79.00800000,35.00180000,169.00
+        </coordinates>
+      </LineString>
+    </Placemark>
+  </Document>
+</kml>

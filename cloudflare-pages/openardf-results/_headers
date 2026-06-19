@@ -1,0 +1,8 @@
+/*
+  X-Content-Type-Options: nosniff
+
+/data/*
+  Cache-Control: no-store
+
+/downloads/*
+  Cache-Control: public, max-age=300

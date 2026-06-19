@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenARDF Results</title>
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Radio-Oracle public results</p>
+      <h1>OpenARDF Results</h1>
+      <p class="summary">This placeholder verifies Cloudflare Pages direct upload for future Radio-Oracle event result publishing.</p>
+    </div>
+    <a class="button" href="downloads/sample-route.kml" download>Download KML</a>
+  </header>
+
+  <main>
+    <section class="overview" aria-label="Event overview">
+      <div>
+        <span class="metric-label">Event</span>
+        <strong id="event-name">Loading...</strong>
+      </div>
+      <div>
+        <span class="metric-label">Categories</span>
+        <strong id="category-count">0</strong>
+      </div>
+      <div>
+        <span class="metric-label">Published</span>
+        <strong id="published-at">Pending</strong>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Results</h2>
+          <p>Sample data only. Radio-Oracle will replace this with event results, split details, route graphics, elevation profiles, and downloads.</p>
+        </div>
+        <input id="search" type="search" placeholder="Filter results" aria-label="Filter results">
+      </div>
+      <div id="results"></div>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <h2>Route Preview</h2>
+        <svg viewBox="0 0 640 360" role="img" aria-label="Sample route preview">
+          <rect width="640" height="360" rx="8" fill="#f7f8fa"></rect>
+          <polyline points="72,286 160,210 238,244 318,128 430,164 560,72" fill="none" stroke="#1769aa" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"></polyline>
+          <g fill="#111827">
+            <circle cx="72" cy="286" r="9"></circle>
+            <circle cx="160" cy="210" r="9"></circle>
+            <circle cx="238" cy="244" r="9"></circle>
+            <circle cx="318" cy="128" r="9"></circle>
+            <circle cx="430" cy="164" r="9"></circle>
+            <circle cx="560" cy="72" r="9"></circle>
+          </g>
+        </svg>
+      </div>
+      <div class="panel">
+        <h2>Elevation Profile</h2>
+        <svg viewBox="0 0 640 360" role="img" aria-label="Sample elevation profile">
+          <rect width="640" height="360" rx="8" fill="#f7f8fa"></rect>
+          <polyline points="40,285 110,250 180,266 250,190 320,198 390,132 460,158 530,98 600,122" fill="none" stroke="#15803d" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></polyline>
+          <line x1="40" y1="310" x2="600" y2="310" stroke="#c9ced6"></line>
+        </svg>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Generated placeholder for Radio-Oracle web publishing.
+  </footer>
+
+  <script src="assets/site.js"></script>
+</body>
+</html>

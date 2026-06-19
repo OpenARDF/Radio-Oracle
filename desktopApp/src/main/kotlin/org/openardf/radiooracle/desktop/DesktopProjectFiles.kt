@@ -115,6 +115,17 @@ object DesktopProjectFiles : ProjectFileStore {
         writeText(path, TextResultExports.results(projectFile.raceData, protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId))
     }
 
+    fun exportPublicResultsSite(
+        directory: Path,
+        projectFile: EventProjectFile,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+    ): DesktopPublicResultSiteExportPaths =
+        DesktopPublicResultSiteExports.export(
+            directory = directory,
+            projectFile = projectFile,
+            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
+        )
+
     private fun writeText(path: Path, text: String) {
         path.parent?.let { Files.createDirectories(it) }
         Files.writeString(path, text, StandardCharsets.UTF_8)
