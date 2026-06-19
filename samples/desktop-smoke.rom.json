@@ -80,11 +80,27 @@
                 },
                 "controlPoints": [
                     {
+                        "id": "control-w21-31",
+                        "categoryId": "category-w21",
+                        "siCode": 31,
+                        "type": "CONTROL",
+                        "order": 1,
+                        "controlId": "control-fox1-31-control"
+                    },
+                    {
+                        "id": "control-w21-90",
+                        "categoryId": "category-w21",
+                        "siCode": 90,
+                        "type": "BEACON",
+                        "order": 2,
+                        "controlId": "control-beacon-90"
+                    },
+                    {
                         "id": "control-w21-41",
                         "categoryId": "category-w21",
                         "siCode": 41,
                         "type": "CONTROL",
-                        "order": 1,
+                        "order": 3,
                         "controlId": "control-41-41-control"
                     },
                     {
@@ -92,12 +108,14 @@
                         "categoryId": "category-w21",
                         "siCode": 42,
                         "type": "CONTROL",
-                        "order": 2,
+                        "order": 4,
                         "controlId": "control-42-42-control"
                     }
                 ],
                 "competitors": [],
                 "publicControlIds": [
+                    "control-fox1-31-control",
+                    "control-beacon-90",
                     "control-41-41-control",
                     "control-42-42-control"
                 ]
@@ -251,6 +269,18 @@
                 "latitude": null,
                 "longitude": null,
                 "notes": null
+            },
+            {
+                "id": "control-beacon-90",
+                "raceId": "desktop-smoke-race",
+                "label": "B",
+                "siCode": 90,
+                "type": "BEACON",
+                "mandatory": false,
+                "publicLabel": "B",
+                "latitude": null,
+                "longitude": null,
+                "notes": "Sprint beacon"
             }
         ]
     }

@@ -545,7 +545,7 @@ class DesktopSmokeSampleTest {
             siNumber = "222222",
             startSeconds = "660",
             finishSeconds = "1660",
-            controlCodes = "41 42",
+            controlCodes = "31 90 41 42",
             resultStatus = ResultStatus.OK,
             readoutDateTimeIso = "2026-05-31T12:30"
         ) { index, type ->
@@ -563,9 +563,9 @@ class DesktopSmokeSampleTest {
         assertEquals(222222, readout.result.siNumber)
         assertEquals(1_000, readout.result.runTimeSeconds)
         assertEquals(ResultStatus.OK, readout.result.resultStatus)
-        assertEquals(listOf(0, 41, 42, 0), readout.punches.map { it.punch.siCode })
+        assertEquals(listOf(0, 31, 90, 41, 42, 0), readout.punches.map { it.punch.siCode })
         assertEquals(
-            "41 42",
+            "FOX 1 B 41 42",
             EventReadoutDetails.from(readBack.raceData)
                 .first { it.id == "manual-result" }
                 .punchCodesText

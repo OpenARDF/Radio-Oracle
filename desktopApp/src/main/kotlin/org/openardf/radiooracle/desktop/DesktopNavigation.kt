@@ -57,6 +57,8 @@ enum class DesktopNavAction {
     ExportResultsText,
     ExportResultsHtml,
     GeneratePublicResultsSite,
+    StartPublicResultsSitePreview,
+    StopPublicResultsSitePreview,
     ExportArdfJson,
     ExportAndroidRaceBackupJson,
     ExportLiveResultsJson,
@@ -488,6 +490,18 @@ object DesktopNavigation {
                                     "Generate Public Results Site...",
                                     workflow,
                                     DesktopNavAction.GeneratePublicResultsSite
+                                ),
+                                action(
+                                    "results.start-public-site-preview",
+                                    "Start Public Site Preview",
+                                    workflow,
+                                    DesktopNavAction.StartPublicResultsSitePreview
+                                ),
+                                action(
+                                    "results.stop-public-site-preview",
+                                    "Stop Public Site Preview",
+                                    workflow,
+                                    DesktopNavAction.StopPublicResultsSitePreview
                                 ),
                                 action("results.export-readouts", "Export Readouts CSV...", workflow, DesktopNavAction.ExportReadoutsCsv)
                             )
@@ -949,6 +963,10 @@ object DesktopNavigation {
             "Use Export Results HTML to write a browser-readable results report.",
         "results.generate-public-site" to
             "Use Generate Public Results Site to write a Cloudflare Pages-ready static site folder.",
+        "results.start-public-site-preview" to
+            "Use Start Public Site Preview to inspect the generated public results site on this computer.",
+        "results.stop-public-site-preview" to
+            "Use Stop Public Site Preview to shut down the generated public results site preview.",
         "results.export-readouts" to
             "Use Export Readouts CSV to write downloaded and unmatched readout records for review or backup.",
         "results.exports-json-xml" to

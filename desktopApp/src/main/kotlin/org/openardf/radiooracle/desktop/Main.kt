@@ -385,6 +385,9 @@ fun main(args: Array<String>) = application {
         var isReadoutAlertSoundEnabled by remember { mutableStateOf(true) }
         var areAliasesEnabled by remember { mutableStateOf(true) }
         var localResultServerUrl by remember { mutableStateOf<String?>(null) }
+        var publicResultSiteDirectory by remember { mutableStateOf<Path?>(null) }
+        var publicResultSitePreviewServer by remember { mutableStateOf<DesktopPublicResultSitePreviewServer?>(null) }
+        var publicResultSitePreviewUrl by remember { mutableStateOf<String?>(null) }
         var eventFileTransferServer by remember { mutableStateOf<DesktopEventFileTransferServer?>(null) }
         var eventFileTransferDialog by remember { mutableStateOf<DesktopEventFileTransferDialogState?>(null) }
         var eventFileTransferResultDialog by remember { mutableStateOf<DesktopEventFileTransferResultDialogState?>(null) }
@@ -435,11 +438,13 @@ fun main(args: Array<String>) = application {
         val siPortMutex = remember { Mutex() }
         val activeEventFileTransferServer by rememberUpdatedState(eventFileTransferServer)
         val activeAndroidFileReceiveServer by rememberUpdatedState(androidFileReceiveServer)
+        val activePublicResultSitePreviewServer by rememberUpdatedState(publicResultSitePreviewServer)
 
         DisposableEffect(Unit) {
             onDispose {
                 activeEventFileTransferServer?.stop()
                 activeAndroidFileReceiveServer?.stop()
+                activePublicResultSitePreviewServer?.stop()
             }
         }
 
@@ -2541,12 +2546,39 @@ fun main(args: Array<String>) = application {
                         currentProject,
                         protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap()
                     )
+                    publicResultSiteDirectory = paths.directory
                     syncProjectState()
                     projectStatusText = "Generated public results site at ${paths.directory}"
                 }.onFailure { error ->
                     projectStatusText = "Public results site generation failed: ${error.message ?: error::class.simpleName}"
                 }
             }
+        }
+
+        fun startPublicResultsSitePreview() {
+            val directory = publicResultSiteDirectory ?: run {
+                projectStatusText = "Generate a public results site before starting preview."
+                return
+            }
+            runCatching {
+                publicResultSitePreviewServer?.stop()
+                val server = DesktopPublicResultSitePreviewServer(directory)
+                val url = server.start()
+                publicResultSitePreviewServer = server
+                publicResultSitePreviewUrl = url
+                projectStatusText = "Public results site preview running at $url"
+            }.onFailure { error ->
+                publicResultSitePreviewServer = null
+                publicResultSitePreviewUrl = null
+                projectStatusText = "Public results site preview failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
+        fun stopPublicResultsSitePreview() {
+            publicResultSitePreviewServer?.stop()
+            publicResultSitePreviewServer = null
+            publicResultSitePreviewUrl = null
+            projectStatusText = "Public results site preview stopped."
         }
 
         fun exportResultsText() {
@@ -3276,6 +3308,9 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.StopContinuousSiReadout -> isContinuousSiReadoutActive
                 DesktopNavAction.StartLocalResultDisplay -> projectFile != null && localResultServerUrl == null
                 DesktopNavAction.StopLocalResultDisplay -> localResultServerUrl != null
+                DesktopNavAction.StartPublicResultsSitePreview ->
+                    publicResultSiteDirectory != null && publicResultSitePreviewUrl == null
+                DesktopNavAction.StopPublicResultsSitePreview -> publicResultSitePreviewUrl != null
                 DesktopNavAction.SendRobis -> projectFile != null && !isSendingLiveResults
                 DesktopNavAction.SendEventFileToAndroid -> projectFile != null
                 DesktopNavAction.DownloadSiCard -> projectFile != null && !isDownloadingSiReadout && !isContinuousSiReadoutActive
@@ -3357,6 +3392,14 @@ fun main(args: Array<String>) = application {
                     }
                 DesktopNavAction.StopLocalResultDisplay ->
                     "The local result display is not running."
+                DesktopNavAction.StartPublicResultsSitePreview ->
+                    when {
+                        publicResultSiteDirectory == null -> "Generate a public results site before starting preview."
+                        publicResultSitePreviewUrl != null -> "The public results site preview is already running."
+                        else -> "Public results site preview is not available right now."
+                    }
+                DesktopNavAction.StopPublicResultsSitePreview ->
+                    "The public results site preview is not running."
                 DesktopNavAction.SendRobis ->
                     if (projectFile == null) {
                         "Open or create an Event File before sending ROBIS results."
@@ -3433,6 +3476,8 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportResultsText -> exportResultsText()
                 DesktopNavAction.ExportResultsHtml -> exportResultsHtml()
                 DesktopNavAction.GeneratePublicResultsSite -> generatePublicResultsSite()
+                DesktopNavAction.StartPublicResultsSitePreview -> startPublicResultsSitePreview()
+                DesktopNavAction.StopPublicResultsSitePreview -> stopPublicResultsSitePreview()
                 DesktopNavAction.ExportArdfJson -> exportArdfJson()
                 DesktopNavAction.ExportAndroidRaceBackupJson -> exportAndroidRaceBackupJson()
                 DesktopNavAction.ExportLiveResultsJson -> exportLiveResultsJson()
