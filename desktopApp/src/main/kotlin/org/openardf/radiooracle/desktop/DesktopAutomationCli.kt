@@ -598,9 +598,9 @@ object DesktopAutomationCli {
           log-test [message]              Write a desktop automation log entry.
           open-event-file <path>          Decode and validate an Event File.
           import-android-event-file <android-path> <desktop-path>
-                                          Import Android Event File and write a desktop Event File.
+                                          Convert an Android Event File into a desktop Event File.
           export-android-event-file <desktop-path> <android-path>
-                                          Export a desktop Event File as an Android Event File.
+                                          Save a desktop Event File as an Android Event File.
           import-competitors-csv <event-path> <csv-path>
                                           Import competitors CSV into an Event File.
           readiness-summary [--require-ready] <event-path>

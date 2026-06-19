@@ -72,7 +72,14 @@ object DesktopProjectFilePaths {
     }
 
     fun isProjectFileName(fileName: String): Boolean =
-        fileName.endsWith(PROJECT_EXTENSION) || fileName.endsWith(LEGACY_PROJECT_EXTENSION)
+        fileName.endsWith(PROJECT_EXTENSION, ignoreCase = true) ||
+            fileName.endsWith(LEGACY_PROJECT_EXTENSION, ignoreCase = true)
+
+    fun isAndroidRaceBackupJsonFileName(fileName: String): Boolean =
+        fileName.endsWith(ANDROID_RACE_BACKUP_JSON_EXTENSION, ignoreCase = true)
+
+    fun isOpenableEventFileName(fileName: String): Boolean =
+        isProjectFileName(fileName) || isAndroidRaceBackupJsonFileName(fileName)
 
     fun withCsvExtension(path: Path): Path =
         if (path.fileName.toString().endsWith(CSV_EXTENSION)) {
@@ -82,7 +89,7 @@ object DesktopProjectFilePaths {
         }
 
     fun withAndroidRaceBackupJsonExtension(path: Path): Path =
-        if (path.fileName.toString().endsWith(ANDROID_RACE_BACKUP_JSON_EXTENSION)) {
+        if (path.fileName.toString().endsWith(ANDROID_RACE_BACKUP_JSON_EXTENSION, ignoreCase = true)) {
             path
         } else {
             path.resolveSibling("${path.fileName}$ANDROID_RACE_BACKUP_JSON_EXTENSION")
@@ -217,7 +224,7 @@ object DesktopFileDialogs {
 
     fun chooseExportAndroidRaceBackupJson(eventName: String? = null): Path? =
         chooseFile(
-            title = "Export Android Event File",
+            title = "Save Android Event File",
             mode = FileDialog.SAVE,
             extension = DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION,
             defaultFileName = eventName?.let(DesktopProjectFilePaths::defaultAndroidEventJsonFileName)
@@ -374,16 +381,9 @@ object DesktopFileDialogs {
         return dialog.files.orEmpty().map { it.toPath() }
     }
 
-    fun chooseImportAndroidRaceBackupJson(): Path? =
-        chooseFile(
-            "Import Android Event File",
-            FileDialog.LOAD,
-            DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION
-        )
-
     private fun chooseFile(title: String, mode: Int, extension: String, defaultFileName: String? = null): Path? {
         val dialog = FileDialog(null as Frame?, title, mode)
-        dialog.filenameFilter = FilenameFilter { _, name -> name.endsWith(extension) }
+        dialog.filenameFilter = FilenameFilter { _, name -> name.endsWith(extension, ignoreCase = true) }
         dialog.file = defaultFileName ?: "*$extension"
         dialog.isVisible = true
 
@@ -443,9 +443,12 @@ object DesktopFileDialogs {
     private fun chooseEventFile(title: String, mode: Int, defaultFileName: String? = null): Path? {
         val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
         val dialog = FileDialog(null as Frame?, title, mode)
-        dialog.filenameFilter = FilenameFilter { _, name -> DesktopProjectFilePaths.isProjectFileName(name) }
+        dialog.filenameFilter = FilenameFilter { _, name -> DesktopProjectFilePaths.isOpenableEventFileName(name) }
         dialog.directory = directory.toString()
-        dialog.file = defaultFileName ?: "*${DesktopProjectFilePaths.PROJECT_EXTENSION}"
+        dialog.file = defaultFileName ?: listOf(
+            "*${DesktopProjectFilePaths.PROJECT_EXTENSION}",
+            "*${DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION}"
+        ).joinToString(";")
         dialog.isVisible = true
 
         val selectedDirectory = dialog.directory ?: return null

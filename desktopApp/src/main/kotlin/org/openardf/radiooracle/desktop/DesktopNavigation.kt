@@ -22,7 +22,6 @@ enum class DesktopWorkflow(
 enum class DesktopNavAction {
     NewEventFile,
     OpenEventFile,
-    ImportAndroidRaceBackup,
     ImportEventRegWebsite,
     ImportEventRegCompetitorsCsv,
     SaveEventFile,
@@ -970,17 +969,17 @@ object DesktopNavigation {
         "setup.event-file.new" to
             "Use New Event File to create a fresh event setup draft.",
         "setup.event-file.open" to
-            "Use Load File to open an existing Radio-Oracle Event File.",
-        "setup.event-file.import-android" to
-            "Use Import Android Event File to bring in an Android race backup as a desktop Event File.",
+            "Use Load Event File to open a desktop Event File or import an Android Event File by file extension.",
         "setup.event-file.import-eventreg" to
             "Use Import EventReg Website to create event files from EventReg website exports.",
+        "setup.event-file.android" to
+            "Use Android to share Event Files with Android devices or save an Android-compatible Event File.",
         "setup.event-file.export-android" to
-            "Use Export Android Event File to write a backup JSON file for Android compatibility.",
+            "Use Save Android Event File to write a backup JSON file for Android compatibility.",
         "setup.event-file.send-android" to
-            "Use Send Event File to Android to share the saved Event File over local Wi-Fi.",
+            "Use Send Event to Android to share the saved Event File over local Wi-Fi.",
         "setup.event-file.receive-android" to
-            "Use Receive from Android to accept an Event File or supporting file over local Wi-Fi.",
+            "Use Receive File from Android to accept an Event File or supporting file over local Wi-Fi.",
         "setup.event-file.settings" to
             "Use Settings to adjust event-related readout, live result, display, app, and readiness options.",
         "setup.event-file.si-settings" to
@@ -1017,14 +1016,6 @@ object DesktopNavigation {
                 requiresEventFile = false
             ),
             action(
-                "setup.event-file.import-android",
-                "Import Android Event File...",
-                workflow,
-                DesktopNavAction.ImportAndroidRaceBackup,
-                requiresEventFile = false,
-                section = DesktopSection.Races
-            ),
-            action(
                 "setup.event-file.import-eventreg",
                 "Import EventReg Website...",
                 workflow,
@@ -1032,27 +1023,36 @@ object DesktopNavigation {
                 requiresEventFile = false,
                 section = DesktopSection.Races
             ),
-            action(
-                "setup.event-file.export-android",
-                "Export Android Event File...",
+            group(
+                "setup.event-file.android",
+                "Android...",
                 workflow,
-                DesktopNavAction.ExportAndroidRaceBackupJson,
-                section = DesktopSection.EventFile
-            ),
-            action(
-                "setup.event-file.send-android",
-                "Send Event File to Android...",
-                workflow,
-                DesktopNavAction.SendEventFileToAndroid,
-                section = DesktopSection.EventFile
-            ),
-            action(
-                "setup.event-file.receive-android",
-                "Receive from Android...",
-                workflow,
-                DesktopNavAction.ReceiveFileFromAndroid,
-                requiresEventFile = false,
-                section = DesktopSection.Races
+                listOf(
+                    action(
+                        "setup.event-file.send-android",
+                        "Send Event to Android",
+                        workflow,
+                        DesktopNavAction.SendEventFileToAndroid,
+                        section = DesktopSection.EventFile
+                    ),
+                    action(
+                        "setup.event-file.receive-android",
+                        "Receive File from Android",
+                        workflow,
+                        DesktopNavAction.ReceiveFileFromAndroid,
+                        requiresEventFile = false,
+                        section = DesktopSection.Races
+                    ),
+                    action(
+                        "setup.event-file.export-android",
+                        "Save Android Event File...",
+                        workflow,
+                        DesktopNavAction.ExportAndroidRaceBackupJson,
+                        section = DesktopSection.EventFile
+                    )
+                ),
+                DesktopSection.EventFile,
+                requiresEventFile = false
             ),
             group(
                 "setup.event-file.settings",

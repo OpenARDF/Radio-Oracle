@@ -13,6 +13,7 @@ import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.enums.ResultStatus
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
+import org.openardf.radiooracle.shared.domain.toResultStatusCode
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -102,7 +103,7 @@ class ResultsFragmentRecyclerViewAdapter(
                     val res = singleResult.readoutData!!.result
                     competitorPlace.text =
                         if (res.resultStatus == ResultStatus.OK) {
-                            "${res.place}."
+                            "${res.place}. ${res.resultStatus.toResultStatusCode()}"
                         } else {
                             dataProcessor.resultStatusToShortString(res.resultStatus)
                         }

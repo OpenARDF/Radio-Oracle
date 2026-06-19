@@ -21,6 +21,7 @@ import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.domain.toResultStatusCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -166,35 +167,29 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
         val competitor = resultData.competitorCategory?.competitor
         val category = resultData.competitorCategory?.category?.name ?: "?"
         val punches = getPunchesFormatted(resultData.punches, race.raceType)
-        val compIndex =
-            "SI: ${resultData.result.siNumber ?: "?"} ${competitor?.index ?: context.getString(R.string.unknown)}"
+        val siNumber = "SI: ${resultData.result.siNumber ?: "?"}"
+        val bibNumber = competitor?.index?.takeIf { it.isNotBlank() }
 
-        val controls =
-            "[R]${resultData.result.points} ${
-                context.getString(
-                    R.string.general_controls
-                )
-            }"
+        val score = "[R]Score: ${resultData.result.points}"
+        val status =
+            "[R]${context.getString(R.string.general_status)}: ${resultData.result.resultStatus.toResultStatusCode()}"
 
         val runTime = "${context.getString(R.string.general_run_time)}: " +
                 TimeProcessor.durationToFormattedString(
                     resultData.result.runTime,
                     dataProcessor.useMinuteTimeFormat()
-                ) +
-                " ${
-                    dataProcessor.resultStatusToShortString(
-                        resultData.result.resultStatus
-                    )
-                }"
+                )
 
         val formatted = "[C]<b>${race.name}</b>\n" +
                 "[L]\n" +
                 "[L]${getMaxCompetitorName(resultData)}\n" +
-                "[L]$compIndex\n" +
-                "[L]$category\n\n" +
+                "[L]$siNumber\n" +
+                (bibNumber?.let { "[L]Bib: $it\n" } ?: "") +
+                "[L]${context.getString(R.string.general_category)}: $category\n\n" +
                 punches + "\n\n" +
                 "[R]<b>$runTime</b>\n" +
-                "[R]$controls\n"
+                "$score\n" +
+                "$status\n"
 
         val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
         val doublePrint =
@@ -242,28 +237,37 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
     private fun getAliasPunchFormatted(aliasPunch: AliasPunch, raceType: RaceType): String {
         when (aliasPunch.punch.punchType) {
             SIRecordType.START -> {
-                return "[L]${appContext.get()?.getString(R.string.general_start)}" +
-                        "[R]${aliasPunch.punch.siTime.getTimeString()}[R] "
+                return "[L]${
+                    formatTimeRow(
+                        appContext.get()?.getString(R.string.general_start) ?: "Start",
+                        aliasPunch.punch.siTime.getTimeString(),
+                        null
+                    )
+                }"
             }
 
             SIRecordType.FINISH -> {
-                return "[L]${appContext.get()?.getString(R.string.general_finish)}" +
-                        "[R]${aliasPunch.punch.siTime.getTimeString()}" +
-                        "[R]${
+                return "[L]${
+                    formatTimeRow(
+                        appContext.get()?.getString(R.string.general_finish) ?: "Finish",
+                        aliasPunch.punch.siTime.getTimeString(),
                             TimeProcessor.durationToFormattedString(
                                 aliasPunch.punch.split, dataProcessor.useMinuteTimeFormat()
                             )
-                        }"
+                    )
+                }"
             }
 
             SIRecordType.CONTROL -> {
-                return "[L]${formatCodeString(aliasPunch, raceType)}" +
-                        "[R]${aliasPunch.punch.siTime.getTimeString()}" +
-                        "[R]${
+                return "[L]${
+                    formatTimeRow(
+                        formatCodeString(aliasPunch, raceType),
+                        aliasPunch.punch.siTime.getTimeString(),
                             TimeProcessor.durationToFormattedString(
                                 aliasPunch.punch.split, dataProcessor.useMinuteTimeFormat()
                             )
-                        }"
+                    )
+                }"
             }
 
             else -> {
@@ -287,6 +291,24 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
             aliasPunch.punch.siCode.toString()
         }
         return "$code$symbol"
+    }
+
+    private fun formatTimeRow(label: String, time: String, split: String?): String {
+        val charactersPerLine = getCharactersPerLine()
+        val timeWidth = 8
+        if (split == null) {
+            val labelWidth = (charactersPerLine - timeWidth).coerceAtLeast(1)
+            return label.take(labelWidth).padEnd(labelWidth) + time.takeLast(timeWidth).padStart(timeWidth)
+        }
+
+        val splitWidth = split.length.coerceAtLeast(8)
+        val labelWidth = charactersPerLine - timeWidth - splitWidth - 2
+        if (labelWidth < 1) {
+            return listOf(label, time, split).joinToString(" ").take(charactersPerLine)
+        }
+        return label.take(labelWidth).padEnd(labelWidth) +
+                " " + time.takeLast(timeWidth).padStart(timeWidth) +
+                " " + split.padStart(splitWidth)
     }
 
     private fun shouldUseAliases(): Boolean {

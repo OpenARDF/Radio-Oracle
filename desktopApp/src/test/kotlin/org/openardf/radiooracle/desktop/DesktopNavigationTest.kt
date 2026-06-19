@@ -6,6 +6,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DesktopNavigationTest {
+    private val eventFileMenuLabels = listOf(
+        "New Event File",
+        "Load Event File...",
+        "Import EventReg Website...",
+        "Android...",
+        "Settings",
+        "Save Event",
+        "Close Event File"
+    )
+
+    private val androidEventFileMenuLabels = listOf(
+        "Send Event to Android",
+        "Receive File from Android",
+        "Save Android Event File..."
+    )
+
     @Test
     fun exposesVisibleWorkflowGroupsInBottomNavigationOrder() {
         assertEquals(
@@ -141,7 +157,7 @@ class DesktopNavigationTest {
         items.forEach { item ->
             assertEquals("Wrong menu indicator state for ${item.id}", item.action == null, DesktopNavigation.showsMenuIndicator(item))
             assertFalse("Stored labels should not include rendered indicator for ${item.id}", item.label.contains(">"))
-            if (item.children.isNotEmpty()) {
+            if (item.children.isNotEmpty() && item.id != "setup.event-file.android") {
                 assertFalse("Submenu labels should not use ellipses for ${item.id}", item.label.contains("..."))
             }
         }
@@ -274,21 +290,7 @@ class DesktopNavigationTest {
         assertEquals("setup.event-file", completedState.selectedItemId)
         assertEquals(DesktopSection.Races, completedState.selectedSection)
         assertEquals("Setup > Event File", DesktopNavigation.breadcrumb(completedState))
-        assertEquals(
-            listOf(
-                "New Event File",
-                "Load Event File...",
-                "Import Android Event File...",
-                "Import EventReg Website...",
-                "Export Android Event File...",
-                "Send Event File to Android...",
-                "Receive from Android...",
-                "Settings",
-                "Save Event",
-                "Close Event File"
-            ),
-            DesktopNavigation.currentItems(completedState).map { it.label }
-        )
+        assertEquals(eventFileMenuLabels, DesktopNavigation.currentItems(completedState).map { it.label })
     }
 
     @Test
@@ -420,29 +422,17 @@ class DesktopNavigationTest {
 
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.NewEventFile }.requiresEventFile)
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.OpenEventFile }.requiresEventFile)
-        assertFalse(eventFileActions.first { it.action == DesktopNavAction.ImportAndroidRaceBackup }.requiresEventFile)
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.ImportEventRegWebsite }.requiresEventFile)
-        assertFalse(eventFileActions.first { it.action == DesktopNavAction.ReceiveFileFromAndroid }.requiresEventFile)
-        assertTrue(eventFileActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.requiresEventFile)
-        assertTrue(eventFileActions.first { it.action == DesktopNavAction.SendEventFileToAndroid }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFile }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.CloseEventFile }.requiresEventFile)
+        val androidActions = eventFileActions.first { it.label == "Android..." }.children
+        assertFalse(eventFileActions.first { it.label == "Android..." }.requiresEventFile)
+        assertFalse(androidActions.first { it.action == DesktopNavAction.ReceiveFileFromAndroid }.requiresEventFile)
+        assertTrue(androidActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.requiresEventFile)
+        assertTrue(androidActions.first { it.action == DesktopNavAction.SendEventFileToAndroid }.requiresEventFile)
         assertFalse(eventFileActions.first { it.label == "Settings" }.requiresEventFile)
-        assertEquals(
-            listOf(
-                "New Event File",
-                "Load Event File...",
-                "Import Android Event File...",
-                "Import EventReg Website...",
-                "Export Android Event File...",
-                "Send Event File to Android...",
-                "Receive from Android...",
-                "Settings",
-                "Save Event",
-                "Close Event File"
-            ),
-            eventFileActions.map { it.label }
-        )
+        assertEquals(eventFileMenuLabels, eventFileActions.map { it.label })
+        assertEquals(androidEventFileMenuLabels, androidActions.map { it.label })
         assertEquals(
             listOf(
                 "SI Readout Settings",
@@ -640,21 +630,7 @@ class DesktopNavigationTest {
             .first { it.label == "Event File" }
             .children
 
-        assertEquals(
-            listOf(
-                "New Event File",
-                "Load Event File...",
-                "Import Android Event File...",
-                "Import EventReg Website...",
-                "Export Android Event File...",
-                "Send Event File to Android...",
-                "Receive from Android...",
-                "Settings",
-                "Save Event",
-                "Close Event File"
-            ),
-            eventFileItems.map { it.label }
-        )
+        assertEquals(eventFileMenuLabels, eventFileItems.map { it.label })
         assertFalse(eventFileItems.first { it.label == "Settings" }.requiresEventFile)
         assertEquals(
             DesktopSection.LiveResultSettings,
@@ -783,9 +759,11 @@ class DesktopNavigationTest {
     }
 
     @Test
-    fun androidEventFileExportLivesWithEventFileActions() {
+    fun androidEventFileActionsLiveInEventFileAndroidSubmenu() {
         val eventFileActions = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
             .first { it.label == "Event File" }
+            .children
+            .first { it.label == "Android..." }
             .children
         val resultJsonActions = DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport)
             .first { it.label == "Exports" }
@@ -794,10 +772,43 @@ class DesktopNavigationTest {
             .children
 
         assertEquals(
-            "Export Android Event File...",
+            "Save Android Event File...",
             eventFileActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.label
         )
+        assertEquals(
+            "Send Event to Android",
+            eventFileActions.first { it.action == DesktopNavAction.SendEventFileToAndroid }.label
+        )
+        assertEquals(
+            "Receive File from Android",
+            eventFileActions.first { it.action == DesktopNavAction.ReceiveFileFromAndroid }.label
+        )
         assertFalse(resultJsonActions.any { it.action == DesktopNavAction.ExportAndroidRaceBackupJson })
+    }
+
+    @Test
+    fun androidEventFileSubmenuSupportsBackNavigation() {
+        val eventFileState = DesktopNavigation.selectItem(
+            DesktopNavState(),
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+        ).state
+        val androidState = DesktopNavigation.selectItem(
+            eventFileState,
+            DesktopNavigation.currentItems(eventFileState).first { it.label == "Android..." }
+        ).state
+
+        assertEquals("Setup > Event File > Android...", DesktopNavigation.breadcrumb(androidState))
+        assertEquals(
+            listOf("setup.event-file", "setup.event-file.android"),
+            androidState.submenuStack
+        )
+        assertEquals(androidEventFileMenuLabels, DesktopNavigation.currentItems(androidState).map { it.label })
+        assertTrue(DesktopNavigation.canGoBack(androidState))
+
+        val backState = androidState.back()
+
+        assertEquals("Setup > Event File", DesktopNavigation.breadcrumb(backState))
+        assertEquals(eventFileMenuLabels, DesktopNavigation.currentItems(backState).map { it.label })
     }
 
     @Test
@@ -861,21 +872,7 @@ class DesktopNavigationTest {
         val backState = state.back()
 
         assertEquals("Setup > Event File", DesktopNavigation.breadcrumb(backState))
-        assertEquals(
-            listOf(
-                "New Event File",
-                "Load Event File...",
-                "Import Android Event File...",
-                "Import EventReg Website...",
-                "Export Android Event File...",
-                "Send Event File to Android...",
-                "Receive from Android...",
-                "Settings",
-                "Save Event",
-                "Close Event File"
-            ),
-            DesktopNavigation.currentItems(backState).map { it.label }
-        )
+        assertEquals(eventFileMenuLabels, DesktopNavigation.currentItems(backState).map { it.label })
     }
 
     @Test

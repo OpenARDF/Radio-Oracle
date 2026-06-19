@@ -389,6 +389,7 @@ fun main(args: Array<String>) = application {
         var eventFileTransferDialog by remember { mutableStateOf<DesktopEventFileTransferDialogState?>(null) }
         var androidFileReceiveServer by remember { mutableStateOf<DesktopAndroidFileReceiveServer?>(null) }
         var androidFileReceiveDialog by remember { mutableStateOf<DesktopAndroidFileReceiveDialogState?>(null) }
+        var androidFileReceiveResultDialog by remember { mutableStateOf<DesktopAndroidFileReceiveResultDialogState?>(null) }
         var isAboutDialogVisible by remember { mutableStateOf(false) }
         var isUpdateCheckingEnabled by remember {
             mutableStateOf(DesktopAppSettingsPreferences.isUpdateCheckingEnabled())
@@ -2823,28 +2824,32 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun chooseOpenEventFile() {
-            DesktopFileDialogs.chooseOpenProject()?.let { path ->
-                pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
-                    hasProtectedUnsavedChanges(),
+        fun openOrImportSelectedEventFile(path: Path) {
+            val action = when {
+                DesktopProjectFilePaths.isAndroidRaceBackupJsonFileName(path.fileName.toString()) ->
+                    PendingDirtyProjectAction.ImportAndroidRaceBackup(path)
+                DesktopProjectFilePaths.isProjectFileName(path.fileName.toString()) ->
                     PendingDirtyProjectAction.OpenProject(path)
-                )
-                if (pendingDirtyProjectAction == null) {
-                    openProject(path)
+                else -> {
+                    projectStatusText = "Unsupported Event File type: ${path.fileName}"
+                    return
+                }
+            }
+            pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
+                hasProtectedUnsavedChanges(),
+                action
+            )
+            if (pendingDirtyProjectAction == null) {
+                when (action) {
+                    is PendingDirtyProjectAction.OpenProject -> openProject(action.path)
+                    is PendingDirtyProjectAction.ImportAndroidRaceBackup -> importAndroidRaceBackupJson(action.path)
+                    else -> Unit
                 }
             }
         }
 
-        fun chooseImportAndroidRaceBackupJson() {
-            DesktopFileDialogs.chooseImportAndroidRaceBackupJson()?.let { path ->
-                pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
-                    hasProtectedUnsavedChanges(),
-                    PendingDirtyProjectAction.ImportAndroidRaceBackup(path)
-                )
-                if (pendingDirtyProjectAction == null) {
-                    importAndroidRaceBackupJson(path)
-                }
-            }
+        fun chooseOpenEventFile() {
+            DesktopFileDialogs.chooseOpenProject()?.let(::openOrImportSelectedEventFile)
         }
 
         fun showEventRegImportDialog() {
@@ -3028,33 +3033,100 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun handleReceivedAndroidFile(result: DesktopAndroidFileReceiveResult) {
+        fun handleReceivedAndroidFile(result: DesktopAndroidFileReceiveResult): DesktopAndroidFileReceiveResultDialogState {
             val savedText = "Received ${result.fileName} from Android (${result.byteCount} bytes)."
             recordActivity(savedText)
             DesktopDebugLog.info("EventFile", "$savedText Saved to ${result.path}.")
 
             val lowerFileName = result.fileName.lowercase()
-            when {
+            val outcome = when {
                 lowerFileName.endsWith(DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION) -> {
                     if (hasProtectedUnsavedChanges()) {
                         projectStatusText =
                             "$savedText Saved to ${result.path}. Save or close the current Event File before importing it."
+                        DesktopAndroidFileReceiveResultDialogState.savedOnly(
+                            fileName = result.fileName,
+                            path = result.path,
+                            reason = "The current desktop Event File has unsaved changes, so the received Android Event File was not loaded."
+                        )
                     } else {
-                        importAndroidRaceBackupJson(result.path)
+                        runCatching {
+                            clearAssignedControlsWarning()
+                            lockProtectedCourseOrder()
+                            val imported = DesktopProjectFiles.importAndroidRaceBackupJson(result.path) {
+                                UUID.randomUUID().toString()
+                            }
+                            projectFile = projectSession.newProject(imported)
+                            newEventDraftProject = null
+                            hasUnsavedEventDefinitionChanges = false
+                            isEventDefinitionSaveDialogVisible = false
+                            syncProjectState()
+                            projectStatusText = "Imported ${result.path.fileName} from Android. Save it to choose its desktop Event File path."
+                            DesktopAndroidFileReceiveResultDialogState.loaded(
+                                fileName = result.fileName,
+                                path = result.path,
+                                loadedMessage = "The received Android Event File is now open as an unsaved desktop Event File."
+                            )
+                        }.getOrElse { error ->
+                            projectStatusText =
+                                "$savedText Saved to ${result.path}, but import failed: ${error.message ?: error::class.simpleName}"
+                            DesktopDebugLog.error("EventFile", projectStatusText)
+                            DesktopAndroidFileReceiveResultDialogState.failedToLoad(
+                                fileName = result.fileName,
+                                path = result.path,
+                                failure = "Import failed: ${error.message ?: error::class.simpleName}"
+                            )
+                        }
                     }
                 }
                 DesktopProjectFilePaths.isProjectFileName(result.fileName) -> {
                     if (hasProtectedUnsavedChanges()) {
                         projectStatusText =
                             "$savedText Saved to ${result.path}. Save or close the current Event File before opening it."
+                        DesktopAndroidFileReceiveResultDialogState.savedOnly(
+                            fileName = result.fileName,
+                            path = result.path,
+                            reason = "The current desktop Event File has unsaved changes, so the received desktop Event File was not opened."
+                        )
                     } else {
-                        openProject(result.path)
+                        runCatching {
+                            clearAssignedControlsWarning()
+                            lockProtectedCourseOrder()
+                            projectFile = projectSession.open(result.path)
+                            newEventDraftProject = null
+                            hasUnsavedEventDefinitionChanges = false
+                            isEventDefinitionSaveDialogVisible = false
+                            hasUnsavedChanges = projectSession.hasUnsavedChanges
+                            DesktopLastEventFilePreferences.rememberEventFile(result.path)
+                            projectStatusText = "Opened ${result.path.fileName} from Android."
+                            DesktopDebugLog.info("EventFile", "Opened ${result.path.fileName} from Android receive")
+                            DesktopAndroidFileReceiveResultDialogState.loaded(
+                                fileName = result.fileName,
+                                path = result.path,
+                                loadedMessage = "The received desktop Event File is now open."
+                            )
+                        }.getOrElse { error ->
+                            projectStatusText =
+                                "$savedText Saved to ${result.path}, but open failed: ${error.message ?: error::class.simpleName}"
+                            DesktopDebugLog.error("EventFile", projectStatusText)
+                            DesktopAndroidFileReceiveResultDialogState.failedToLoad(
+                                fileName = result.fileName,
+                                path = result.path,
+                                failure = "Open failed: ${error.message ?: error::class.simpleName}"
+                            )
+                        }
                     }
                 }
                 else -> {
                     projectStatusText = "$savedText Saved to ${result.path}."
+                    DesktopAndroidFileReceiveResultDialogState.savedOnly(
+                        fileName = result.fileName,
+                        path = result.path,
+                        reason = "This file type is not automatically opened by the desktop app."
+                    )
                 }
             }
+            return outcome
         }
 
         fun receiveFileFromAndroid() {
@@ -3066,10 +3138,8 @@ fun main(args: Array<String>) = application {
                     receiveDirectory = DesktopAndroidFileReceiveLocations.receiveDirectory(),
                     onReceived = { result ->
                         appCoroutineScope.launch {
-                            handleReceivedAndroidFile(result)
-                            androidFileReceiveDialog = androidFileReceiveDialog?.copy(
-                                statusText = "Received ${result.fileName}. Transfer stopped."
-                            )
+                            androidFileReceiveDialog = null
+                            androidFileReceiveResultDialog = handleReceivedAndroidFile(result)
                         }
                     },
                     onStopped = { reason ->
@@ -3082,8 +3152,23 @@ fun main(args: Array<String>) = application {
                                 DesktopAndroidFileReceiveStopReason.Timeout ->
                                     "Android file receive expired after 10 minutes."
                             }
-                            projectStatusText = message
-                            androidFileReceiveDialog = androidFileReceiveDialog?.copy(statusText = message)
+                            when (reason) {
+                                DesktopAndroidFileReceiveStopReason.Received -> {
+                                    androidFileReceiveDialog = null
+                                }
+                                DesktopAndroidFileReceiveStopReason.Timeout -> {
+                                    projectStatusText = message
+                                    androidFileReceiveDialog = null
+                                    androidFileReceiveResultDialog = DesktopAndroidFileReceiveResultDialogState.failure(
+                                        title = "Android Receive Expired",
+                                        message = "No file was received before the 10 minute receive link expired."
+                                    )
+                                }
+                                DesktopAndroidFileReceiveStopReason.Cancelled -> {
+                                    projectStatusText = message
+                                    androidFileReceiveDialog = null
+                                }
+                            }
                             DesktopDebugLog.info("EventFile", "Android receive stopped: $reason")
                         }
                     }
@@ -3140,7 +3225,6 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.NewEventFile,
                 DesktopNavAction.OpenEventFile,
                 DesktopNavAction.ReceiveFileFromAndroid,
-                DesktopNavAction.ImportAndroidRaceBackup,
                 DesktopNavAction.ImportEventRegWebsite,
                 DesktopNavAction.ImportDemFile -> true
                 DesktopNavAction.ImportEventRegCompetitorsCsv -> projectFile != null
@@ -3239,7 +3323,6 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.NewEventFile,
                 DesktopNavAction.OpenEventFile,
                 DesktopNavAction.ReceiveFileFromAndroid,
-                DesktopNavAction.ImportAndroidRaceBackup,
                 DesktopNavAction.ImportEventRegWebsite,
                 DesktopNavAction.ImportDemFile,
                 DesktopNavAction.ShowDebugLogHelp,
@@ -3251,7 +3334,6 @@ fun main(args: Array<String>) = application {
             when (action) {
                 DesktopNavAction.NewEventFile -> requestNewEventFile()
                 DesktopNavAction.OpenEventFile -> chooseOpenEventFile()
-                DesktopNavAction.ImportAndroidRaceBackup -> chooseImportAndroidRaceBackupJson()
                 DesktopNavAction.ReceiveFileFromAndroid -> receiveFileFromAndroid()
                 DesktopNavAction.ImportEventRegWebsite -> showEventRegImportDialog()
                 DesktopNavAction.ImportEventRegCompetitorsCsv -> showEventRegCompetitorCsvImportDialog()
@@ -3350,8 +3432,8 @@ fun main(args: Array<String>) = application {
                         saveCurrentProject()
                     }
                 )
-                Item("Send Event File to Android...", enabled = projectFile != null, onClick = ::sendEventFileToAndroid)
-                Item("Receive from Android...", onClick = ::receiveFileFromAndroid)
+                Item("Send Event to Android", enabled = projectFile != null, onClick = ::sendEventFileToAndroid)
+                Item("Receive File from Android", onClick = ::receiveFileFromAndroid)
                 Item("Close Event File", enabled = projectFile != null, onClick = ::requestCloseEventFile)
             }
         }
@@ -3502,6 +3584,12 @@ fun main(args: Array<String>) = application {
                     androidFileReceiveServer = null
                     androidFileReceiveDialog = null
                 }
+            )
+        }
+        androidFileReceiveResultDialog?.let { dialogState ->
+            AndroidFileReceiveResultDialog(
+                state = dialogState,
+                onDismiss = { androidFileReceiveResultDialog = null }
             )
         }
         appUpdateDialogStatus?.let { status ->
@@ -5686,6 +5774,56 @@ private data class DesktopAndroidFileReceiveDialogState(
     val statusText: String
 )
 
+private data class DesktopAndroidFileReceiveResultDialogState(
+    val title: String,
+    val summary: String,
+    val savedPath: Path?,
+    val details: List<String>
+) {
+    companion object {
+        fun loaded(fileName: String, path: Path, loadedMessage: String): DesktopAndroidFileReceiveResultDialogState =
+            DesktopAndroidFileReceiveResultDialogState(
+                title = "Android File Received",
+                summary = loadedMessage,
+                savedPath = path,
+                details = listOf(
+                    "Received file: $fileName",
+                    "A saved copy remains at the path below."
+                )
+            )
+
+        fun savedOnly(fileName: String, path: Path, reason: String): DesktopAndroidFileReceiveResultDialogState =
+            DesktopAndroidFileReceiveResultDialogState(
+                title = "Android File Saved",
+                summary = "The received file was saved but not loaded.",
+                savedPath = path,
+                details = listOf(
+                    "Received file: $fileName",
+                    reason
+                )
+            )
+
+        fun failedToLoad(fileName: String, path: Path, failure: String): DesktopAndroidFileReceiveResultDialogState =
+            DesktopAndroidFileReceiveResultDialogState(
+                title = "Android File Saved",
+                summary = "The received file was saved, but the desktop app could not load it.",
+                savedPath = path,
+                details = listOf(
+                    "Received file: $fileName",
+                    failure
+                )
+            )
+
+        fun failure(title: String, message: String): DesktopAndroidFileReceiveResultDialogState =
+            DesktopAndroidFileReceiveResultDialogState(
+                title = title,
+                summary = message,
+                savedPath = null,
+                details = emptyList()
+            )
+    }
+}
+
 @Composable
 private fun EventFileTransferDialog(
     state: DesktopEventFileTransferDialogState,
@@ -5697,7 +5835,7 @@ private fun EventFileTransferDialog(
 
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Send Event File to Android") },
+        title = { Text("Send Event to Android") },
         text = {
             Column(
                 modifier = Modifier.widthIn(min = 420.dp, max = 560.dp),
@@ -5760,6 +5898,39 @@ private fun EventFileTransferDialog(
 }
 
 @Composable
+private fun AndroidFileReceiveResultDialog(
+    state: DesktopAndroidFileReceiveResultDialogState,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(state.title) },
+        text = {
+            Column(
+                modifier = Modifier.widthIn(min = 420.dp, max = 560.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(state.summary)
+                state.details.forEach { detail ->
+                    Text(detail)
+                }
+                state.savedPath?.let { path ->
+                    Text("Saved location:")
+                    SelectionContainer {
+                        Text(path.toString(), style = MaterialTheme.typography.body2)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                ButtonLabel("OK")
+            }
+        }
+    )
+}
+
+@Composable
 private fun AndroidFileReceiveDialog(
     state: DesktopAndroidFileReceiveDialogState,
     onAddressSelected: (DesktopEventFileTransferAddress) -> Unit,
@@ -5770,7 +5941,7 @@ private fun AndroidFileReceiveDialog(
 
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Receive from Android") },
+        title = { Text("Receive File from Android") },
         text = {
             Column(
                 modifier = Modifier.widthIn(min = 420.dp, max = 560.dp),

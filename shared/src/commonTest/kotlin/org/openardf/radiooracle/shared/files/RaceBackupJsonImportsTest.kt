@@ -59,6 +59,22 @@ class RaceBackupJsonImportsTest {
         assertEquals(SIRecordType.FINISH, unmatched.punches.single().punch.punchType)
     }
 
+    @Test
+    fun importsLegacyBlankAndroidResultStatusAsOk() {
+        var nextId = 0
+        val projectFile = RaceBackupJsonImports.projectFile(
+            androidRaceBackupJson().replace("\"result_status\": \"MP\"", "\"result_status\": \"\"")
+        ) {
+            "id-${nextId++}"
+        }
+
+        val result = projectFile.raceData.competitorData.single().readoutData!!.result
+        val unmatched = projectFile.raceData.unmatchedReadoutData.single().result
+
+        assertEquals(ResultStatus.OK, result.resultStatus)
+        assertEquals(ResultStatus.NO_RANKING, unmatched.resultStatus)
+    }
+
     private fun androidRaceBackupJson(): String =
         """
         {

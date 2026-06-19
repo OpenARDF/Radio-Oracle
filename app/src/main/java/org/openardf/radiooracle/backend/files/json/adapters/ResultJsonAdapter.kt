@@ -11,6 +11,8 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
 import org.openardf.radiooracle.backend.room.enums.SIRecordType
 import org.openardf.radiooracle.backend.sportident.SITime
+import org.openardf.radiooracle.shared.domain.resultStatusFromCode
+import org.openardf.radiooracle.shared.domain.toResultStatusCode
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
@@ -37,8 +39,7 @@ class ResultJsonAdapter(
             run_time = TimeProcessor.durationToFormattedString(result.runTime, true),
             place = result.place,
             punch_count = result.points,
-            result_status = dataProcessor
-                .resultStatusToShortString(result.resultStatus),
+            result_status = result.resultStatus.toResultStatusCode(),
             automatic_status = result.automaticStatus,
             punches = punches
                 .map { ap ->
@@ -74,7 +75,7 @@ class ResultJsonAdapter(
                 }
             },
             automaticStatus = resultJson.automatic_status ?: true,
-            resultStatus = dataProcessor.resultStatusShortStringToEnum(resultJson.result_status),
+            resultStatus = resultStatusFromCode(resultJson.result_status, blankAsOk = true),
             runTime = resultJson.run_time?.let { TimeProcessor.minuteStringToDuration(resultJson.run_time) }
                 ?: Duration.ZERO,
             modified = resultJson.modified ?: false,

@@ -264,18 +264,24 @@ class DesktopAutomationCliTest {
 
     @Test
     fun navSelectReportsAndroidEventFileActionsUnderEventFile() {
-        val importResult = runAutomation("nav-select", "Event File > Import Android Event File...")
-        val exportResult = runAutomation("nav-select", "Event File > Export Android Event File...")
+        val sendResult = runAutomation("nav-select", "Event File > Android... > Send Event to Android")
+        val receiveResult = runAutomation("nav-select", "Event File > Android... > Receive File from Android")
+        val exportResult = runAutomation("nav-select", "Event File > Android... > Save Android Event File...")
 
-        assertEquals(0, importResult.exitCode)
-        assertTrue(importResult.stdout.contains("\"action\":\"ImportAndroidRaceBackup\""))
-        assertTrue(importResult.stdout.contains("\"breadcrumb\":\"Setup > Event File\""))
-        assertTrue(importResult.stdout.contains("\"selectedItemId\":\"setup.event-file\""))
+        assertEquals(0, sendResult.exitCode)
+        assertTrue(sendResult.stdout.contains("\"action\":\"SendEventFileToAndroid\""))
+        assertTrue(sendResult.stdout.contains("\"breadcrumb\":\"Setup > Event File > Android...\""))
+        assertTrue(sendResult.stdout.contains("\"selectedItemId\":\"setup.event-file.android\""))
+
+        assertEquals(0, receiveResult.exitCode)
+        assertTrue(receiveResult.stdout.contains("\"action\":\"ReceiveFileFromAndroid\""))
+        assertTrue(receiveResult.stdout.contains("\"breadcrumb\":\"Setup > Event File > Android...\""))
+        assertTrue(receiveResult.stdout.contains("\"selectedItemId\":\"setup.event-file.android\""))
 
         assertEquals(0, exportResult.exitCode)
         assertTrue(exportResult.stdout.contains("\"action\":\"ExportAndroidRaceBackupJson\""))
-        assertTrue(exportResult.stdout.contains("\"breadcrumb\":\"Setup > Event File\""))
-        assertTrue(exportResult.stdout.contains("\"selectedItemId\":\"setup.event-file\""))
+        assertTrue(exportResult.stdout.contains("\"breadcrumb\":\"Setup > Event File > Android...\""))
+        assertTrue(exportResult.stdout.contains("\"selectedItemId\":\"setup.event-file.android\""))
     }
 
     @Test

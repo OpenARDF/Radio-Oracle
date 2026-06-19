@@ -23,6 +23,13 @@ class DesktopProjectFilePathsTest {
     }
 
     @Test
+    fun keepsExistingProjectFileExtensionCaseInsensitively() {
+        val path = Path.of("event.JSON")
+
+        assertEquals(path, DesktopProjectFilePaths.withProjectExtension(path))
+    }
+
+    @Test
     fun keepsExistingLegacyProjectFileExtension() {
         val path = Path.of("event.rom.json")
 
@@ -32,8 +39,18 @@ class DesktopProjectFilePathsTest {
     @Test
     fun recognizesCurrentAndLegacyEventFileNames() {
         assertTrue(DesktopProjectFilePaths.isProjectFileName("event.json"))
+        assertTrue(DesktopProjectFilePaths.isProjectFileName("event.JSON"))
         assertTrue(DesktopProjectFilePaths.isProjectFileName("event.rom.json"))
         assertFalse(DesktopProjectFilePaths.isProjectFileName("event.csv"))
+    }
+
+    @Test
+    fun recognizesOpenableDesktopAndAndroidEventFileNames() {
+        assertTrue(DesktopProjectFilePaths.isOpenableEventFileName("event.json"))
+        assertTrue(DesktopProjectFilePaths.isOpenableEventFileName("event.rom.json"))
+        assertTrue(DesktopProjectFilePaths.isOpenableEventFileName("event.ardfjs"))
+        assertTrue(DesktopProjectFilePaths.isOpenableEventFileName("event.ARDFJS"))
+        assertFalse(DesktopProjectFilePaths.isOpenableEventFileName("event.csv"))
     }
 
     @Test
@@ -202,6 +219,13 @@ class DesktopProjectFilePathsTest {
     @Test
     fun keepsExistingAndroidRaceBackupJsonExtension() {
         val path = Path.of("race.ardfjs")
+
+        assertEquals(path, DesktopProjectFilePaths.withAndroidRaceBackupJsonExtension(path))
+    }
+
+    @Test
+    fun keepsExistingAndroidRaceBackupJsonExtensionCaseInsensitively() {
+        val path = Path.of("race.ARDFJS")
 
         assertEquals(path, DesktopProjectFilePaths.withAndroidRaceBackupJsonExtension(path))
     }

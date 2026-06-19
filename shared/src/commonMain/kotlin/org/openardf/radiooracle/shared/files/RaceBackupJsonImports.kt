@@ -18,6 +18,7 @@ import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.domain.resultStatusFromCode
 import org.openardf.radiooracle.shared.event.EventAlias
 import org.openardf.radiooracle.shared.event.EventAliasPunch
 import org.openardf.radiooracle.shared.event.EventCategory
@@ -330,18 +331,7 @@ object RaceBackupJsonImports {
         string(name)?.let { value -> enumValues<T>().firstOrNull { it.name == value } }
 
     private fun JsonObject.resultStatus(name: String): ResultStatus =
-        when (string(name)) {
-            "OK" -> ResultStatus.OK
-            "MP" -> ResultStatus.MISPUNCHED
-            "NR" -> ResultStatus.NO_RANKING
-            "DSQ" -> ResultStatus.DISQUALIFIED
-            "DNS" -> ResultStatus.DID_NOT_START
-            "DNF" -> ResultStatus.DID_NOT_FINISH
-            "OVT" -> ResultStatus.OVER_TIME_LIMIT
-            "UNF" -> ResultStatus.UNOFFICIAL
-            "ERR" -> ResultStatus.ERROR
-            else -> ResultStatus.NO_RANKING
-        }
+        resultStatusFromCode(string(name), blankAsOk = true)
 
     private fun JsonObject.punchStatus(name: String): PunchStatus =
         when (string(name)) {

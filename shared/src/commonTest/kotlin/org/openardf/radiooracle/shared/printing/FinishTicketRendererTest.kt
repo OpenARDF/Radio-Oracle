@@ -28,23 +28,25 @@ import kotlin.test.assertTrue
 class FinishTicketRendererTest {
     @Test
     fun rendersMatchedFinishTicket() {
-        val text = FinishTicketRenderer.render(raceData(), resultId = "matched", charactersPerLine = 14)
+        val text = FinishTicketRenderer.render(raceData(), resultId = "matched")
 
         assertEquals(
             """
             [C]<b>Ticket Race</b>
             [L]
             [L]RUNNER Alice
-            [L]SI: 123456 A-12
-            [L]M21
+            [L]SI: 123456
+            [L]Bib: A-12
+            [L]Category: M21
             
-            [L]Start[R]10:00:00[R] 
-            [L]1 (Foxhole)OK[R]10:05:00[R]00:05:00
-            [L]2 (32)MP[R]10:10:00[R]00:10:00
-            [L]Finish[R]10:20:00[R]00:20:00
+            [L]Start                   10:00:00
+            [L]1 (Foxhole)OK  10:05:00 00:05:00
+            [L]2 (32)MP       10:10:00 00:10:00
+            [L]Finish         10:20:00 00:20:00
             
-            [R]<b>Run time: 00:20:00 OK</b>
-            [R]2 Controls
+            [R]<b>Run time: 00:20:00</b>
+            [R]Score: 2
+            [R]Status: OK
             """.trimIndent() + "\n",
             text
         )
@@ -59,13 +61,14 @@ class FinishTicketRendererTest {
             [C]<b>Ticket Race</b>
             [L]
             [L]?
-            [L]SI: 654321 ?
-            [L]?
+            [L]SI: 654321
+            [L]Category: ?
             
-            [L]1 (41)?[R]11:05:00[R]00:00:00
+            [L]1 (41)?        11:05:00 00:00:00
             
-            [R]<b>Run time: 00:00:00 No ranking</b>
-            [R]0 Controls
+            [R]<b>Run time: 00:00:00</b>
+            [R]Score: 0
+            [R]Status: NR
             """.trimIndent() + "\n",
             text
         )
@@ -119,50 +122,61 @@ class FinishTicketRendererTest {
         assertEquals("          Ticket Race", lines[0])
         assertEquals("", lines[1])
         assertEquals("RUNNER Alice", lines[2])
-        assertEquals("SI: 123456 A-12", lines[3])
-        assertEquals("M21", lines[4])
-        assertEquals("", lines[5])
-        assertEquals("Start                   10:00:00", lines[6])
-        assertEquals("1 (Foxhole)OK  10:05:00 00:05:00", lines[7])
-        assertEquals("2 (32)MP       10:10:00 00:10:00", lines[8])
-        assertEquals("Finish         10:20:00 00:20:00", lines[9])
-        assertEquals("", lines[10])
-        assertEquals("           Run time: 00:20:00 OK", lines[11])
-        assertEquals("                      2 Controls", lines[12])
+        assertEquals("SI: 123456", lines[3])
+        assertEquals("Bib: A-12", lines[4])
+        assertEquals("Category: M21", lines[5])
+        assertEquals("", lines[6])
+        assertEquals("Start                   10:00:00", lines[7])
+        assertEquals("1 (Foxhole)OK  10:05:00 00:05:00", lines[8])
+        assertEquals("2 (32)MP       10:10:00 00:10:00", lines[9])
+        assertEquals("Finish         10:20:00 00:20:00", lines[10])
+        assertEquals("", lines[11])
+        assertEquals("Run time: 00:20:00".padStart(32), lines[12])
+        assertEquals("Score: 2".padStart(32), lines[13])
+        assertEquals("Status: OK".padStart(32), lines[14])
     }
 
     @Test
     fun formatsUnmatchedTicketMarkupAsPlainTextForSystemPrinters() {
         val text = FinishTicketRenderer.render(raceData(), resultId = "unmatched")
-        val plainText = FinishTicketPlainTextFormatter.format(text, charactersPerLine = 24)
+        val plainText = FinishTicketPlainTextFormatter.format(text)
 
         val lines = plainText.lines()
-        assertEquals("      Ticket Race", lines[0])
+        assertEquals("          Ticket Race", lines[0])
         assertEquals("", lines[1])
         assertEquals("?", lines[2])
-        assertEquals("SI: 654321 ?", lines[3])
-        assertEquals("?", lines[4])
+        assertEquals("SI: 654321", lines[3])
+        assertEquals("Category: ?", lines[4])
         assertEquals("", lines[5])
-        assertEquals("1 (41) 11:05:00 00:00:00", lines[6])
+        assertEquals("1 (41)?        11:05:00 00:00:00", lines[6])
         assertEquals("", lines[7])
-        assertEquals(" Run time: 00:00:00 No ra", lines[8])
-        assertEquals("              0 Controls", lines[9])
+        assertEquals("Run time: 00:00:00".padStart(32), lines[8])
+        assertEquals("Score: 0".padStart(32), lines[9])
+        assertEquals("Status: NR".padStart(32), lines[10])
+    }
+
+    @Test
+    fun omitsBlankBibNumberFromTicketHeader() {
+        val text = FinishTicketRenderer.render(raceData(bibNumber = ""), resultId = "matched")
+
+        assertTrue("Bib:" !in text)
+        assertEquals("[L]Category: M21", text.lines()[4])
     }
 
     @Test
     fun rendersRadioOTicketWithRawSiCodesWhenAliasesAreDisabled() {
         val text = FinishTicketRenderer.render(raceData(), resultId = "matched", useAliases = false)
 
-        assertEquals("31OK", text.lines()[7].substringAfter("[L]").substringBefore("[R]"))
-        assertEquals("32MP", text.lines()[8].substringAfter("[L]").substringBefore("[R]"))
+        assertEquals("31OK", text.lines()[8].substringAfter("[L]").take(14).trimEnd())
+        assertEquals("32MP", text.lines()[9].substringAfter("[L]").take(14).trimEnd())
     }
 
     @Test
     fun rendersRadioOTicketWithNumberedAliasesWhenAliasesAreEnabled() {
         val text = FinishTicketRenderer.render(raceData(), resultId = "matched", useAliases = true)
 
-        assertEquals("1 (Foxhole)OK", text.lines()[7].substringAfter("[L]").substringBefore("[R]"))
-        assertEquals("2 (32)MP", text.lines()[8].substringAfter("[L]").substringBefore("[R]"))
+        assertEquals("1 (Foxhole)OK", text.lines()[8].substringAfter("[L]").take(14).trimEnd())
+        assertEquals("2 (32)MP", text.lines()[9].substringAfter("[L]").take(14).trimEnd())
     }
 
     @Test
@@ -184,8 +198,8 @@ class FinishTicketRendererTest {
             useAliases = true
         )
 
-        assertEquals("1 (1)OK", text.lines()[7].substringAfter("[L]").substringBefore("[R]"))
-        assertEquals("2 (32)MP", text.lines()[8].substringAfter("[L]").substringBefore("[R]"))
+        assertEquals("1 (1)OK", text.lines()[8].substringAfter("[L]").take(14).trimEnd())
+        assertEquals("2 (32)MP", text.lines()[9].substringAfter("[L]").take(14).trimEnd())
     }
 
     @Test
@@ -196,15 +210,16 @@ class FinishTicketRendererTest {
             useAliases = true
         )
 
-        assertEquals("1 (Foxhole)OK", text.lines()[7].substringAfter("[L]").substringBefore("[R]"))
-        assertEquals("2 (32)MP", text.lines()[8].substringAfter("[L]").substringBefore("[R]"))
+        assertEquals("1 (Foxhole)OK", text.lines()[8].substringAfter("[L]").take(14).trimEnd())
+        assertEquals("2 (32)MP", text.lines()[9].substringAfter("[L]").take(14).trimEnd())
     }
 
     private fun raceData(
         longName: Boolean = false,
         raceType: RaceType = RaceType.CLASSIC,
         unmatchedCardName: String? = null,
-        controls: List<EventControl> = emptyList()
+        controls: List<EventControl> = emptyList(),
+        bibNumber: String = "A-12"
     ): EventRaceData {
         val race = EventRace(
             id = "race",
@@ -244,7 +259,8 @@ class FinishTicketRendererTest {
             siNumber = 123456,
             siRent = false,
             startNumber = 1,
-            drawnStartTimeSeconds = null
+            drawnStartTimeSeconds = null,
+            bibNumber = bibNumber
         )
         val alias = EventAlias(
             id = "alias",
