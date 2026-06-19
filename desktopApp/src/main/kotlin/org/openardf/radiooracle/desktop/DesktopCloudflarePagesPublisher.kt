@@ -76,6 +76,15 @@ class DesktopCloudflarePagesPublisher(
                 }
             }
 
+        fun publicResultsUrl(baseUrl: String, eventPath: String?): String {
+            val rootUrl = baseUrl.trim().trimEnd('/')
+            val normalizedEventPath = eventPath
+                ?.trim()
+                ?.trim('/')
+                ?.takeIf { it.isNotBlank() }
+            return normalizedEventPath?.let { "$rootUrl/$it/" } ?: rootUrl
+        }
+
         private fun runProcess(
             command: List<String>,
             directory: Path,

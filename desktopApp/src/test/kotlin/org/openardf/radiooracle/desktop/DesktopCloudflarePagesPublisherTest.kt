@@ -92,6 +92,24 @@ class DesktopCloudflarePagesPublisherTest {
     }
 
     @Test
+    fun buildsPublishedPublicResultsEventUrl() {
+        assertEquals(
+            "https://openardf-results.pages.dev/2026-05-31-desktop-smoke-race/",
+            DesktopCloudflarePagesPublisher.publicResultsUrl(
+                "https://openardf-results.pages.dev/",
+                "/2026-05-31-desktop-smoke-race/"
+            )
+        )
+        assertEquals(
+            "https://openardf-results.pages.dev",
+            DesktopCloudflarePagesPublisher.publicResultsUrl(
+                "https://openardf-results.pages.dev/",
+                " "
+            )
+        )
+    }
+
+    @Test
     fun settingsCreateNormalizedPublishRequest() {
         val directory = Files.createTempDirectory("rom-public-site-publish-settings")
         val settings = DesktopCloudflarePagesPublishSettings(

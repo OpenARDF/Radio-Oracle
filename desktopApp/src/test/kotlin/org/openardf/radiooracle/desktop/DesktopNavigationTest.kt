@@ -973,6 +973,7 @@ class DesktopNavigationTest {
                 "Generate Public Results Site...",
                 "Start Public Site Preview",
                 "Publish Public Results Site",
+                "View Public Results",
                 "Cloudflare Settings",
                 "Open Public Site Preview",
                 "Stop Public Site Preview"
@@ -980,6 +981,10 @@ class DesktopNavigationTest {
             cloudflareWebsite.children.map { it.label }
         )
         assertEquals(DesktopSection.PublicResultsSite, cloudflareWebsite.section)
+        assertEquals(
+            DesktopSection.PublicResultsLink,
+            cloudflareWebsite.children.first { it.label == "View Public Results" }.section
+        )
         assertEquals(
             listOf(
                 DesktopNavAction.GeneratePublicResultsSite,
@@ -1010,6 +1015,47 @@ class DesktopNavigationTest {
                     selectedItemId = "results.exports.cloudflare-website"
                 )
             ).contains("generate the public results site")
+        )
+    }
+
+    @Test
+    fun viewPublicResultsReturnsToCloudflareWebsiteMenuOnBack() {
+        val resultsState = DesktopNavState().switchWorkflow(DesktopWorkflow.ResultsExport)
+        val exportsState = DesktopNavigation.selectItem(
+            resultsState,
+            DesktopNavigation.currentItems(resultsState).first { it.label == "Exports" }
+        ).state
+        val cloudflareWebsiteState = DesktopNavigation.selectItem(
+            exportsState,
+            DesktopNavigation.currentItems(exportsState).first { it.label == "Cloudflare Website" }
+        ).state
+        val viewPublicResultsState = DesktopNavigation.selectItem(
+            cloudflareWebsiteState,
+            DesktopNavigation.currentItems(cloudflareWebsiteState).first { it.label == "View Public Results" }
+        ).state
+
+        assertEquals(
+            "Results/File Export > Exports > Cloudflare Website > View Public Results",
+            DesktopNavigation.breadcrumb(viewPublicResultsState)
+        )
+        assertEquals(DesktopSection.PublicResultsLink, viewPublicResultsState.selectedSection)
+        assertEquals(emptyList<String>(), DesktopNavigation.currentItems(viewPublicResultsState).map { it.label })
+
+        val backState = viewPublicResultsState.back()
+
+        assertEquals("Results/File Export > Exports > Cloudflare Website", DesktopNavigation.breadcrumb(backState))
+        assertEquals(DesktopSection.PublicResultsSite, backState.selectedSection)
+        assertEquals(
+            listOf(
+                "Generate Public Results Site...",
+                "Start Public Site Preview",
+                "Publish Public Results Site",
+                "View Public Results",
+                "Cloudflare Settings",
+                "Open Public Site Preview",
+                "Stop Public Site Preview"
+            ),
+            DesktopNavigation.currentItems(backState).map { it.label }
         )
     }
 

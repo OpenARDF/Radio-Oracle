@@ -80,6 +80,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
@@ -390,6 +391,7 @@ fun main(args: Array<String>) = application {
         var publicResultSiteEventPath by remember { mutableStateOf<String?>(null) }
         var publicResultSitePreviewServer by remember { mutableStateOf<DesktopPublicResultSitePreviewServer?>(null) }
         var publicResultSitePreviewUrl by remember { mutableStateOf<String?>(null) }
+        var publishedPublicResultSiteUrl by remember { mutableStateOf<String?>(null) }
         var isPublishingPublicResultSite by remember { mutableStateOf(false) }
         var eventFileTransferServer by remember { mutableStateOf<DesktopEventFileTransferServer?>(null) }
         var eventFileTransferDialog by remember { mutableStateOf<DesktopEventFileTransferDialogState?>(null) }
@@ -445,6 +447,10 @@ fun main(args: Array<String>) = application {
         val activeEventFileTransferServer by rememberUpdatedState(eventFileTransferServer)
         val activeAndroidFileReceiveServer by rememberUpdatedState(androidFileReceiveServer)
         val activePublicResultSitePreviewServer by rememberUpdatedState(publicResultSitePreviewServer)
+
+        LaunchedEffect(projectFile?.raceData?.race?.id) {
+            publishedPublicResultSiteUrl = null
+        }
 
         DisposableEffect(Unit) {
             onDispose {
@@ -2565,6 +2571,7 @@ fun main(args: Array<String>) = application {
                     )
                     publicResultSiteDirectory = paths.directory
                     publicResultSiteEventPath = paths.eventPath
+                    publishedPublicResultSiteUrl = null
                     syncProjectState()
                     projectStatusText = "Generated public results site at ${paths.eventDirectory}"
                     DesktopDebugLog.info(
@@ -2644,7 +2651,9 @@ fun main(args: Array<String>) = application {
                         )
                     }
                 }.onSuccess { result ->
-                    projectStatusText = "Published public results site to ${result.url}"
+                    val publicUrl = DesktopCloudflarePagesPublisher.publicResultsUrl(result.url, publicResultSiteEventPath)
+                    publishedPublicResultSiteUrl = publicUrl
+                    projectStatusText = "Published public results site to $publicUrl"
                     DesktopDebugLog.info("PublicResults", "$projectStatusText root=$directory project=${result.projectName} branch=${result.branch}")
                 }.onFailure { error ->
                     projectStatusText = "Public results site publish failed: ${error.message ?: error::class.simpleName}"
@@ -4112,6 +4121,7 @@ fun main(args: Array<String>) = application {
             isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
             areAliasesEnabled = areAliasesEnabled,
             localResultServerUrl = localResultServerUrl,
+            publishedPublicResultSiteUrl = publishedPublicResultSiteUrl,
             printerDiagnostics = printerDiagnostics,
             isUpdateCheckingEnabled = isUpdateCheckingEnabled,
             cloudflarePagesPublishSettings = cloudflarePagesPublishSettings,
@@ -6755,6 +6765,7 @@ private fun RadioOManagerDesktopApp(
     isReadoutAlertSoundEnabled: Boolean = true,
     areAliasesEnabled: Boolean = true,
     localResultServerUrl: String? = null,
+    publishedPublicResultSiteUrl: String? = null,
     printerDiagnostics: DesktopPrinterDiagnostics = DesktopPrinterDiagnostics.from(emptyList()),
     isUpdateCheckingEnabled: Boolean = true,
     cloudflarePagesPublishSettings: DesktopCloudflarePagesPublishSettings = DesktopCloudflarePagesPublishSettings(),
@@ -6812,6 +6823,7 @@ private fun RadioOManagerDesktopApp(
     onDownloadMissingCourseAnalysisElevations: suspend (String, DesktopCourseAnalysisSummary) -> CourseAnalysisElevationPreparationResult? = { _, _ -> null },
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit = { _, _, _, _, _, _ -> },
     onOpenVenueElevationCacheFolder: () -> Unit = {},
+    onOpenPublishedPublicResultsSite: (String) -> Unit = {},
     elevationCacheRefreshToken: Int = 0,
     onUnlockProtectedCourseOrder: (String) -> Boolean = { false },
     onUpdateProtectedIdealOrder: (String, String) -> Unit = { _, _ -> },
@@ -7032,6 +7044,7 @@ private fun RadioOManagerDesktopApp(
                                     isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
                                     areAliasesEnabled = areAliasesEnabled,
                                     localResultServerUrl = localResultServerUrl,
+                                    publishedPublicResultSiteUrl = publishedPublicResultSiteUrl,
                                     printerDiagnostics = printerDiagnostics,
                                     isUpdateCheckingEnabled = isUpdateCheckingEnabled,
                                     cloudflarePagesPublishSettings = cloudflarePagesPublishSettings,
@@ -7058,6 +7071,7 @@ private fun RadioOManagerDesktopApp(
                                     onDownloadMissingCourseAnalysisElevations = onDownloadMissingCourseAnalysisElevations,
                                     onDownloadVenueElevationCache = onDownloadVenueElevationCache,
                                     onOpenVenueElevationCacheFolder = onOpenVenueElevationCacheFolder,
+                                    onOpenPublishedPublicResultsSite = onOpenPublishedPublicResultsSite,
                                     elevationCacheRefreshToken = elevationCacheRefreshToken,
                                     onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
                                     onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
@@ -7808,6 +7822,7 @@ private fun SectionWorkspace(
     isReadoutAlertSoundEnabled: Boolean,
     areAliasesEnabled: Boolean,
     localResultServerUrl: String?,
+    publishedPublicResultSiteUrl: String?,
     printerDiagnostics: DesktopPrinterDiagnostics,
     isUpdateCheckingEnabled: Boolean,
     cloudflarePagesPublishSettings: DesktopCloudflarePagesPublishSettings,
@@ -7833,6 +7848,7 @@ private fun SectionWorkspace(
     onDownloadMissingCourseAnalysisElevations: suspend (String, DesktopCourseAnalysisSummary) -> CourseAnalysisElevationPreparationResult?,
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
     onOpenVenueElevationCacheFolder: () -> Unit,
+    onOpenPublishedPublicResultsSite: (String) -> Unit,
     elevationCacheRefreshToken: Int,
     onUnlockProtectedCourseOrder: (String) -> Boolean,
     onUpdateProtectedIdealOrder: (String, String) -> Unit,
@@ -7882,6 +7898,12 @@ private fun SectionWorkspace(
         }
         if (section == DesktopSection.PublicResultsSite) {
             PublicResultsSiteWorkflowPanel()
+        }
+        if (section == DesktopSection.PublicResultsLink) {
+            PublicResultsSiteLinkPanel(
+                publishedUrl = publishedPublicResultSiteUrl,
+                onOpenUrl = onOpenPublishedPublicResultsSite
+            )
         }
         if (section == DesktopSection.Races && projectFile != null) {
             RaceDetailsPanel(
@@ -14465,6 +14487,61 @@ private fun PublicResultsSiteWorkflowPanel() {
             color = DesktopPalette.Black,
             fontSize = 14.sp
         )
+    }
+}
+
+@Composable
+private fun PublicResultsSiteLinkPanel(
+    publishedUrl: String?,
+    onOpenUrl: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "Published public results",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+        if (publishedUrl.isNullOrBlank()) {
+            Text(
+                text = "Publish the public results site first. After a successful publish, this screen will show the public event link and QR code.",
+                color = DesktopPalette.Black,
+                fontSize = 14.sp
+            )
+            return@Column
+        }
+
+        val qrCode = remember(publishedUrl) {
+            desktopEventFileTransferQrCode(publishedUrl, size = 360)
+        }
+        Image(
+            bitmap = qrCode.toComposeImageBitmap(),
+            contentDescription = "Published public results QR code",
+            modifier = Modifier
+                .width(280.dp)
+                .height(280.dp)
+                .align(Alignment.Start),
+            contentScale = ContentScale.Fit
+        )
+        Text(
+            text = "Scan the QR code or click the link below to view the published event results.",
+            color = DesktopPalette.Black,
+            fontSize = 14.sp
+        )
+        SelectionContainer {
+            Text(
+                text = publishedUrl,
+                color = DesktopPalette.Primary,
+                fontSize = 14.sp,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier.clickable { onOpenUrl(publishedUrl) }
+            )
+        }
     }
 }
 

@@ -517,6 +517,12 @@ object DesktopNavigation {
                                     section = DesktopSection.PublicResultsSite
                                 ),
                                 item(
+                                    "results.view-public-results",
+                                    "View Public Results",
+                                    workflow,
+                                    DesktopSection.PublicResultsLink
+                                ),
+                                item(
                                     "results.cloudflare-settings",
                                     "Cloudflare Settings",
                                     workflow,
@@ -1001,6 +1007,8 @@ object DesktopNavigation {
             "Use Generate Public Results Site to write a Cloudflare Pages-ready static site folder.",
         "results.publish-public-site" to
             "Use Publish Public Results Site to deploy the generated public results site to Cloudflare Pages.",
+        "results.view-public-results" to
+            "Use View Public Results after publishing to show the public event link and QR code for competitors and spectators.",
         "results.start-public-site-preview" to
             "Use Start Public Site Preview to inspect the generated public results site on this computer.",
         "results.open-public-site-preview" to
