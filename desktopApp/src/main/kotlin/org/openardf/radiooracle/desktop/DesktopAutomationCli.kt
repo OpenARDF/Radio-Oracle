@@ -694,7 +694,7 @@ object DesktopAutomationCli {
                                           Print validation and readiness issues as JSON.
           recalculate-results [--write] <event-path>
                                           Re-evaluate stored readouts against current courses.
-          export-public-results-site <event-path> <site-root>
+          export-public-results-site <event-file> <site-root>
                                           Generate the Cloudflare Pages-ready public site root.
           preview-public-results-site <site-root> [event-path]
                                           Start the preview server, verify a URL, and stop it.
