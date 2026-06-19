@@ -32,15 +32,30 @@ class DesktopCloudflarePagesPublisherTest {
         val directory = Files.createTempDirectory("rom-public-site-publish-runner")
         Files.writeString(directory.resolve("index.html"), "<!doctype html>")
         val commands = mutableListOf<List<String>>()
-        val publisher = DesktopCloudflarePagesPublisher { command, workingDirectory ->
+        val environments = mutableListOf<Map<String, String>>()
+        val publisher = DesktopCloudflarePagesPublisher { command, workingDirectory, environment ->
             commands += command
+            environments += environment
             assertEquals(directory, workingDirectory)
             DesktopCloudflarePagesProcessResult(0, "Uploaded")
         }
 
-        val result = publisher.publish(DesktopCloudflarePagesPublishRequest(directory = directory))
+        val result = publisher.publish(
+            DesktopCloudflarePagesPublishRequest(
+                directory = directory,
+                accountId = "account-id",
+                apiToken = "api-token"
+            )
+        )
 
         assertEquals(1, commands.size)
+        assertEquals(
+            mapOf(
+                "CLOUDFLARE_ACCOUNT_ID" to "account-id",
+                "CLOUDFLARE_API_TOKEN" to "api-token"
+            ),
+            environments.single()
+        )
         assertEquals("openardf-results", result.projectName)
         assertEquals("main", result.branch)
         assertEquals("https://openardf-results.pages.dev", result.url)
@@ -50,7 +65,7 @@ class DesktopCloudflarePagesPublisherTest {
     @Test
     fun rejectsDirectoryBeforeStartingRunner() {
         val directory = Files.createTempDirectory("rom-public-site-publish-missing")
-        val publisher = DesktopCloudflarePagesPublisher { _, _ ->
+        val publisher = DesktopCloudflarePagesPublisher { _, _, _ ->
             throw AssertionError("Runner should not start for incomplete public site.")
         }
 
@@ -60,5 +75,41 @@ class DesktopCloudflarePagesPublisherTest {
 
         assertTrue(error is IllegalArgumentException)
         assertTrue(error!!.message!!.contains("index.html"))
+    }
+
+    @Test
+    fun omitsBlankCloudflareEnvironmentValues() {
+        val request = DesktopCloudflarePagesPublishRequest(
+            directory = Files.createTempDirectory("rom-public-site-publish-env"),
+            accountId = " ",
+            apiToken = "token"
+        )
+
+        assertEquals(
+            mapOf("CLOUDFLARE_API_TOKEN" to "token"),
+            DesktopCloudflarePagesPublisher.environmentFor(request)
+        )
+    }
+
+    @Test
+    fun settingsCreateNormalizedPublishRequest() {
+        val directory = Files.createTempDirectory("rom-public-site-publish-settings")
+        val settings = DesktopCloudflarePagesPublishSettings(
+            projectName = " openardf-results ",
+            branch = " main ",
+            accountId = " account ",
+            apiToken = " token "
+        )
+
+        assertEquals(
+            DesktopCloudflarePagesPublishRequest(
+                directory = directory,
+                projectName = "openardf-results",
+                branch = "main",
+                accountId = "account",
+                apiToken = "token"
+            ),
+            settings.request(directory)
+        )
     }
 }

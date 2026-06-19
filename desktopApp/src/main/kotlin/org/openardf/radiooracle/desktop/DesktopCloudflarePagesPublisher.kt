@@ -8,7 +8,9 @@ import java.util.concurrent.TimeUnit
 data class DesktopCloudflarePagesPublishRequest(
     val directory: Path,
     val projectName: String = "openardf-results",
-    val branch: String = "main"
+    val branch: String = "main",
+    val accountId: String = "",
+    val apiToken: String = ""
 )
 
 data class DesktopCloudflarePagesPublishResult(
@@ -19,7 +21,7 @@ data class DesktopCloudflarePagesPublishResult(
 )
 
 class DesktopCloudflarePagesPublisher(
-    private val processRunner: (List<String>, Path) -> DesktopCloudflarePagesProcessResult =
+    private val processRunner: (List<String>, Path, Map<String, String>) -> DesktopCloudflarePagesProcessResult =
         DesktopCloudflarePagesPublisher::runProcess
 ) {
     fun publish(request: DesktopCloudflarePagesPublishRequest): DesktopCloudflarePagesPublishResult {
@@ -36,7 +38,7 @@ class DesktopCloudflarePagesPublisher(
             "Cloudflare Pages branch is required."
         }
 
-        val processResult = processRunner(commandFor(request), request.directory)
+        val processResult = processRunner(commandFor(request), request.directory, environmentFor(request))
         if (processResult.exitCode != 0) {
             throw IllegalStateException(processResult.output.ifBlank {
                 "Wrangler exited with status ${processResult.exitCode}."
@@ -64,13 +66,28 @@ class DesktopCloudflarePagesPublisher(
                 request.branch
             )
 
-        private fun runProcess(command: List<String>, directory: Path): DesktopCloudflarePagesProcessResult {
+        fun environmentFor(request: DesktopCloudflarePagesPublishRequest): Map<String, String> =
+            buildMap {
+                if (request.accountId.isNotBlank()) {
+                    put("CLOUDFLARE_ACCOUNT_ID", request.accountId.trim())
+                }
+                if (request.apiToken.isNotBlank()) {
+                    put("CLOUDFLARE_API_TOKEN", request.apiToken.trim())
+                }
+            }
+
+        private fun runProcess(
+            command: List<String>,
+            directory: Path,
+            environment: Map<String, String>
+        ): DesktopCloudflarePagesProcessResult {
             val outputPath = Files.createTempFile("rom-cloudflare-pages-publish", ".log")
             try {
                 val process = ProcessBuilder(command)
                     .directory(directory.toFile())
                     .redirectErrorStream(true)
                     .redirectOutput(outputPath.toFile())
+                    .also { builder -> builder.environment().putAll(environment) }
                     .start()
                 val completed = process.waitFor(5, TimeUnit.MINUTES)
                 if (!completed) {

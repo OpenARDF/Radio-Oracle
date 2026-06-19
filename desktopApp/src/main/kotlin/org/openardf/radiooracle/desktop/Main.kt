@@ -401,6 +401,9 @@ fun main(args: Array<String>) = application {
         var isUpdateCheckingEnabled by remember {
             mutableStateOf(DesktopAppSettingsPreferences.isUpdateCheckingEnabled())
         }
+        var cloudflarePagesPublishSettings by remember {
+            mutableStateOf(DesktopAppSettingsPreferences.cloudflarePagesPublishSettings())
+        }
         var updateCheckStatus by remember { mutableStateOf<DesktopAppUpdateStatus?>(null) }
         var appUpdateDialogStatus by remember { mutableStateOf<DesktopAppUpdateStatus?>(null) }
         var raceClockTick by remember { mutableStateOf(0L) }
@@ -2019,6 +2022,14 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun setCloudflarePagesPublishSettings(settings: DesktopCloudflarePagesPublishSettings): Boolean {
+            val normalized = settings.normalized()
+            cloudflarePagesPublishSettings = normalized
+            DesktopAppSettingsPreferences.setCloudflarePagesPublishSettings(normalized)
+            projectStatusText = "Cloudflare Pages publishing settings saved."
+            return true
+        }
+
         fun importReviewedDemFiles(review: DesktopVenueElevationDemImportReview): Boolean =
             runCatching {
                 val summary = DesktopVenueElevationCache.importReviewedDemFiles(review)
@@ -2598,7 +2609,7 @@ fun main(args: Array<String>) = application {
                 runCatching {
                     withContext(Dispatchers.IO) {
                         publicResultSitePublisher.publish(
-                            DesktopCloudflarePagesPublishRequest(directory = directory)
+                            cloudflarePagesPublishSettings.request(directory)
                         )
                     }
                 }.onSuccess { result ->
@@ -4066,6 +4077,7 @@ fun main(args: Array<String>) = application {
             localResultServerUrl = localResultServerUrl,
             printerDiagnostics = printerDiagnostics,
             isUpdateCheckingEnabled = isUpdateCheckingEnabled,
+            cloudflarePagesPublishSettings = cloudflarePagesPublishSettings,
             raceClockTick = raceClockTick,
             isNavActionEnabled = ::isNavActionEnabled,
             disabledNavActionReason = ::disabledNavActionReason,
@@ -4096,6 +4108,7 @@ fun main(args: Array<String>) = application {
             onUpdateProtectedControlLocation = ::updateProtectedControlLocation,
             onUpdateProtectedCoursePassword = ::updateProtectedCoursePassword,
             onSetUpdateCheckingEnabled = ::setUpdateCheckingEnabled,
+            onSetCloudflarePagesPublishSettings = ::setCloudflarePagesPublishSettings,
             onLockProtectedCourseOrder = ::lockProtectedCourseOrder,
             onUpdateEventFileName = { fileName -> saveAsCurrentProject(fileName) },
             onRenameRace = { name ->
@@ -6707,6 +6720,7 @@ private fun RadioOManagerDesktopApp(
     localResultServerUrl: String? = null,
     printerDiagnostics: DesktopPrinterDiagnostics = DesktopPrinterDiagnostics.from(emptyList()),
     isUpdateCheckingEnabled: Boolean = true,
+    cloudflarePagesPublishSettings: DesktopCloudflarePagesPublishSettings = DesktopCloudflarePagesPublishSettings(),
     raceClockTick: Long = 0L,
     onRenameRace: (String) -> Unit = {},
     onUpdateRaceStartDateTime: (String) -> Unit = {},
@@ -6773,6 +6787,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateProtectedControlLocation: (String, String, String) -> String = { _, _, _ -> "" },
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean = { _, _, _ -> false },
     onSetUpdateCheckingEnabled: (Boolean) -> Unit = {},
+    onSetCloudflarePagesPublishSettings: (DesktopCloudflarePagesPublishSettings) -> Boolean = { false },
     onLockProtectedCourseOrder: () -> Unit = {},
     isNavActionEnabled: (DesktopNavAction) -> Boolean = { false },
     disabledNavActionReason: (DesktopNavAction) -> String? = { null },
@@ -6982,6 +6997,7 @@ private fun RadioOManagerDesktopApp(
                                     localResultServerUrl = localResultServerUrl,
                                     printerDiagnostics = printerDiagnostics,
                                     isUpdateCheckingEnabled = isUpdateCheckingEnabled,
+                                    cloudflarePagesPublishSettings = cloudflarePagesPublishSettings,
                                     raceClockTick = raceClockTick,
                                     onSendRobisLiveResults = onSendRobisLiveResults,
                                     onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
@@ -7015,6 +7031,7 @@ private fun RadioOManagerDesktopApp(
                                     onUpdateProtectedControlLocation = onUpdateProtectedControlLocation,
                                     onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword,
                                     onSetUpdateCheckingEnabled = onSetUpdateCheckingEnabled,
+                                    onSetCloudflarePagesPublishSettings = onSetCloudflarePagesPublishSettings,
                                     isNavActionEnabled = isNavActionEnabled,
                                     onInsertTestControls = onInsertTestControls,
                                     onInsertTestCategories = onInsertTestCategories,
@@ -7756,6 +7773,7 @@ private fun SectionWorkspace(
     localResultServerUrl: String?,
     printerDiagnostics: DesktopPrinterDiagnostics,
     isUpdateCheckingEnabled: Boolean,
+    cloudflarePagesPublishSettings: DesktopCloudflarePagesPublishSettings,
     raceClockTick: Long,
     onSendRobisLiveResults: () -> Unit,
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
@@ -7788,6 +7806,7 @@ private fun SectionWorkspace(
     onUpdateProtectedControlLocation: (String, String, String) -> String,
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean,
     onSetUpdateCheckingEnabled: (Boolean) -> Unit,
+    onSetCloudflarePagesPublishSettings: (DesktopCloudflarePagesPublishSettings) -> Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
     onInsertTestControls: () -> Unit,
     onInsertTestCategories: () -> Unit,
@@ -8022,8 +8041,10 @@ private fun SectionWorkspace(
                 ),
                 printerDiagnostics = printerDiagnostics,
                 isUpdateCheckingEnabled = isUpdateCheckingEnabled,
+                cloudflarePagesPublishSettings = cloudflarePagesPublishSettings,
                 isCourseDataUnlocked = isProtectedCourseOrderUnlocked,
                 onSetUpdateCheckingEnabled = onSetUpdateCheckingEnabled,
+                onSetCloudflarePagesPublishSettings = onSetCloudflarePagesPublishSettings,
                 onUpdateCoursePassword = onUpdateProtectedCoursePassword
             )
         }
@@ -8317,8 +8338,10 @@ private fun AppSettingsPanel(
     diagnostics: DesktopProjectDiagnostics,
     printerDiagnostics: DesktopPrinterDiagnostics,
     isUpdateCheckingEnabled: Boolean,
+    cloudflarePagesPublishSettings: DesktopCloudflarePagesPublishSettings,
     isCourseDataUnlocked: Boolean,
     onSetUpdateCheckingEnabled: (Boolean) -> Unit,
+    onSetCloudflarePagesPublishSettings: (DesktopCloudflarePagesPublishSettings) -> Boolean,
     onUpdateCoursePassword: (String, String, String) -> Boolean
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -8347,6 +8370,12 @@ private fun AppSettingsPanel(
                 fontSize = 13.sp
             )
         }
+        AppSettingsSection("Cloudflare Pages publishing") {
+            CloudflarePagesPublishSettingsPanel(
+                settings = cloudflarePagesPublishSettings,
+                onSave = onSetCloudflarePagesPublishSettings
+            )
+        }
         AppSettingsSection("Printer information") {
             DetailRow("Printer", printerDiagnostics.readinessText)
             DetailRow(
@@ -8372,6 +8401,86 @@ private fun AppSettingsPanel(
         }
     }
 }
+
+@Composable
+private fun CloudflarePagesPublishSettingsPanel(
+    settings: DesktopCloudflarePagesPublishSettings,
+    onSave: (DesktopCloudflarePagesPublishSettings) -> Boolean
+) {
+    var projectNameDraft by remember(settings) { mutableStateOf(settings.projectName) }
+    var branchDraft by remember(settings) { mutableStateOf(settings.branch) }
+    var accountIdDraft by remember(settings) { mutableStateOf(settings.accountId) }
+    var apiTokenDraft by remember(settings) { mutableStateOf(settings.apiToken) }
+    fun submitSettings() {
+        if (projectNameDraft.isNotBlank() && branchDraft.isNotBlank()) {
+            onSave(
+                DesktopCloudflarePagesPublishSettings(
+                    projectName = projectNameDraft,
+                    branch = branchDraft,
+                    accountId = accountIdDraft,
+                    apiToken = apiTokenDraft
+                )
+            )
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            TextField(
+                value = projectNameDraft,
+                onValueChange = { projectNameDraft = it },
+                label = { Text("Pages project") },
+                singleLine = true,
+                modifier = Modifier
+                    .weight(1f)
+                    .commitOnEnter(::submitSettings)
+            )
+            TextField(
+                value = branchDraft,
+                onValueChange = { branchDraft = it },
+                label = { Text("Branch") },
+                singleLine = true,
+                modifier = Modifier
+                    .weight(1f)
+                    .commitOnEnter(::submitSettings)
+            )
+        }
+        TextField(
+            value = accountIdDraft,
+            onValueChange = { accountIdDraft = it },
+            label = { Text("Account ID") },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .commitOnEnter(::submitSettings)
+        )
+        TextField(
+            value = apiTokenDraft,
+            onValueChange = { apiTokenDraft = it },
+            label = { Text("API token") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .commitOnEnter(::submitSettings)
+        )
+        DisabledReasonTooltip(cloudflarePagesSettingsDisabledReason(projectNameDraft, branchDraft)) {
+            Button(
+                onClick = ::submitSettings,
+                enabled = projectNameDraft.isNotBlank() && branchDraft.isNotBlank()
+            ) {
+                ButtonLabel("Save Cloudflare Settings")
+            }
+        }
+    }
+}
+
+private fun cloudflarePagesSettingsDisabledReason(projectName: String, branch: String): String? =
+    when {
+        projectName.isBlank() -> "Enter a Cloudflare Pages project name."
+        branch.isBlank() -> "Enter a Cloudflare Pages branch."
+        else -> null
+    }
 
 @Composable
 private fun AppSettingsSection(
