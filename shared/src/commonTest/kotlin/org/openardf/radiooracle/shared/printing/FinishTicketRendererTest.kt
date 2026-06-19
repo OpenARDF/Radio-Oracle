@@ -39,7 +39,7 @@ class FinishTicketRendererTest {
             [L]Bib: A-12
             [L]Category: M21
             
-            [L]Start                   10:00:00
+            [L]Start          10:00:00
             [L]1 (Foxhole)OK  10:05:00 00:05:00
             [L]2 (32)MP       10:10:00 00:10:00
             [L]Finish         10:20:00 00:20:00
@@ -126,7 +126,8 @@ class FinishTicketRendererTest {
         assertEquals("Bib: A-12", lines[4])
         assertEquals("Category: M21", lines[5])
         assertEquals("", lines[6])
-        assertEquals("Start                   10:00:00", lines[7])
+        assertEquals("Start          10:00:00", lines[7])
+        assertEquals(lines[8].indexOf("10:05:00"), lines[7].indexOf("10:00:00"))
         assertEquals("1 (Foxhole)OK  10:05:00 00:05:00", lines[8])
         assertEquals("2 (32)MP       10:10:00 00:10:00", lines[9])
         assertEquals("Finish         10:20:00 00:20:00", lines[10])

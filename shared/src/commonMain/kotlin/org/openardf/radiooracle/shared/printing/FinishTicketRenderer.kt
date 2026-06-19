@@ -157,16 +157,16 @@ object FinishTicketRenderer {
 
     private fun formatTimeRow(label: String, time: String, split: String?, charactersPerLine: Int): String {
         val timeWidth = 8
-        if (split == null) {
-            val labelWidth = (charactersPerLine - timeWidth).coerceAtLeast(1)
-            return label.truncate(labelWidth).padEnd(labelWidth) + time.takeLast(timeWidth).padStart(timeWidth)
-        }
-
-        val splitWidth = split.length.coerceAtLeast(8)
+        val splitWidth = split?.length?.coerceAtLeast(8) ?: 8
         val labelWidth = charactersPerLine - timeWidth - splitWidth - 2
         if (labelWidth < 1) {
-            return listOf(label, time, split).joinToString(" ").truncate(charactersPerLine)
+            return listOfNotNull(label, time, split).joinToString(" ").truncate(charactersPerLine)
         }
+        if (split == null) {
+            return label.truncate(labelWidth).padEnd(labelWidth) +
+                " " + time.takeLast(timeWidth).padStart(timeWidth)
+        }
+
         return label.truncate(labelWidth).padEnd(labelWidth) +
             " " + time.takeLast(timeWidth).padStart(timeWidth) +
             " " + split.padStart(splitWidth)

@@ -296,16 +296,16 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
     private fun formatTimeRow(label: String, time: String, split: String?): String {
         val charactersPerLine = getCharactersPerLine()
         val timeWidth = 8
-        if (split == null) {
-            val labelWidth = (charactersPerLine - timeWidth).coerceAtLeast(1)
-            return label.take(labelWidth).padEnd(labelWidth) + time.takeLast(timeWidth).padStart(timeWidth)
-        }
-
-        val splitWidth = split.length.coerceAtLeast(8)
+        val splitWidth = split?.length?.coerceAtLeast(8) ?: 8
         val labelWidth = charactersPerLine - timeWidth - splitWidth - 2
         if (labelWidth < 1) {
-            return listOf(label, time, split).joinToString(" ").take(charactersPerLine)
+            return listOfNotNull(label, time, split).joinToString(" ").take(charactersPerLine)
         }
+        if (split == null) {
+            return label.take(labelWidth).padEnd(labelWidth) +
+                    " " + time.takeLast(timeWidth).padStart(timeWidth)
+        }
+
         return label.take(labelWidth).padEnd(labelWidth) +
                 " " + time.takeLast(timeWidth).padStart(timeWidth) +
                 " " + split.padStart(splitWidth)
