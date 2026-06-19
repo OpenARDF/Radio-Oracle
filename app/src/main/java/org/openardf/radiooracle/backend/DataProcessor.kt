@@ -16,6 +16,7 @@ import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.network.ProviderClient
+import org.openardf.radiooracle.backend.prints.PrintAttemptResult
 import org.openardf.radiooracle.backend.prints.PrintProcessor
 import org.openardf.radiooracle.backend.results.ResultsProcessor
 import org.openardf.radiooracle.backend.results.ResultsProcessor.updateResultsForCategory
@@ -629,11 +630,11 @@ class DataProcessor private constructor(context: Context) {
         printProcessor.disablePrinter()
     }
 
-    suspend fun printFinishTicket(resultData: ResultData, race: Race) =
+    suspend fun printFinishTicket(resultData: ResultData, race: Race): PrintAttemptResult =
         printProcessor.printFinishTicket(resultData, race)
 
 
-    suspend fun printResults(results: List<ResultWrapper>, race: Race) =
+    suspend fun printResults(results: List<ResultWrapper>, race: Race): PrintAttemptResult =
         printProcessor.printResults(results, race)
 
     //============================= GENERAL HELPER METHODS =========================================

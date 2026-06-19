@@ -28,72 +28,75 @@ import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 import java.text.Normalizer
 
+enum class PrintAttemptResult {
+    PRINTED,
+    NEEDS_SETUP,
+    FAILED
+}
+
 
 class PrintProcessor(context: Context, private val dataProcessor: DataProcessor) {
     private val appContext: WeakReference<Context> = WeakReference(context)
     private var printerReady: Boolean = false
     private var printer: EscPosPrinter? = null
 
-    private fun isPrintingEnabled() {
-        if (appContext.get() != null) {
-            val sharedPref = PreferenceManager.getDefaultSharedPreferences(appContext.get()!!)
-            val enabled = sharedPref.getBoolean(
-                appContext.get()!!.getString(R.string.key_prints_enabled), false
-            )
-            if (!enabled) {
-                logInfo("Printing disabled in preferences")
-                return
-            }
-            val address = sharedPref.getString(
-                appContext.get()!!.getString(R.string.key_prints_selected_printer_address), ""
-            )
-            if (!address.isNullOrEmpty()) {
-                val name = sharedPref.getString(
-                    appContext.get()!!.getString(R.string.key_prints_selected_printer_name), ""
-                )
-                logInfo("Initializing Bluetooth printer name=${name.orEmpty()} address=${address.maskBluetoothAddress()}")
-                val bluetoothAdapter = (appContext.get()
-                    ?.getSystemService(android.bluetooth.BluetoothManager::class.java))?.adapter
-                if (bluetoothAdapter != null) {
+    private fun preparePrinter(): PrinterSetupStatus {
+        if (printerReady) {
+            return PrinterSetupStatus.READY
+        }
 
-                    if (bluetoothAdapter.isEnabled) {
+        val context = appContext.get() ?: return PrinterSetupStatus.FAILED
+        val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
+        val enabled = sharedPref.getBoolean(
+            context.getString(R.string.key_prints_enabled), false
+        )
+        if (!enabled) {
+            logInfo("Printing disabled in preferences")
+            return PrinterSetupStatus.NEEDS_SETUP
+        }
+        val address = sharedPref.getString(
+            context.getString(R.string.key_prints_selected_printer_address), ""
+        )
+        if (address.isNullOrEmpty()) {
+            logWarn("Printing enabled but no Bluetooth printer address is selected")
+            return PrinterSetupStatus.NEEDS_SETUP
+        }
 
-                        try {
-                            printer =
-                                EscPosPrinter(
-                                    BluetoothConnection(bluetoothAdapter.getRemoteDevice(address)),
-                                    203,
-                                    58f,
-                                    32,
-                                    EscPosCharsetEncoding("windows-1250", 72)
-                                )   // TODO: fix charset encoding
-                            printerReady = true
-                            logInfo("Bluetooth printer initialized")
-                        } catch (e: Exception) {
-                            logError("Bluetooth printer init failed: ${e.message ?: e::class.simpleName}")
-                            CoroutineScope(Dispatchers.Main).launch {
-                                makeToast(
-                                    appContext.get()!!
-                                        .getString(R.string.prints_error_init),
-                                )
-                            }
-                            printerReady = false
-                        }
-                    }
-                    //Inform about disabled bluetooth
-                    else {
-                        logWarn("Bluetooth adapter is disabled")
-                        makeToast(
-                            appContext.get()?.getString(R.string.prints_bluetooth_disabled)
-                                ?: "Bluetooth disabled"
-                        )
-                    }
-                } else {
-                    logWarn("Bluetooth adapter is unavailable")
-                }
-            } else {
-                logWarn("Printing enabled but no Bluetooth printer address is selected")
-            }
+        val name = sharedPref.getString(
+            context.getString(R.string.key_prints_selected_printer_name), ""
+        )
+        logInfo("Initializing Bluetooth printer name=${name.orEmpty()} address=${address.maskBluetoothAddress()}")
+        val bluetoothAdapter = (context.getSystemService(android.bluetooth.BluetoothManager::class.java))?.adapter
+        if (bluetoothAdapter == null) {
+            logWarn("Bluetooth adapter is unavailable")
+            return PrinterSetupStatus.NEEDS_SETUP
+        }
+        if (!bluetoothAdapter.isEnabled) {
+            logWarn("Bluetooth adapter is disabled")
+            makeToast(
+                appContext.get()?.getString(R.string.prints_bluetooth_disabled)
+                    ?: "Bluetooth disabled"
+            )
+            return PrinterSetupStatus.NEEDS_SETUP
+        }
+
+        return try {
+            printer =
+                EscPosPrinter(
+                    BluetoothConnection(bluetoothAdapter.getRemoteDevice(address)),
+                    203,
+                    58f,
+                    32,
+                    EscPosCharsetEncoding("windows-1250", 72)
+                )   // TODO: fix charset encoding
+            printerReady = true
+            logInfo("Bluetooth printer initialized")
+            PrinterSetupStatus.READY
+        } catch (e: Exception) {
+            logError("Bluetooth printer init failed: ${e.message ?: e::class.simpleName}")
+            makeToast(context.getString(R.string.prints_error_init))
+            printerReady = false
+            PrinterSetupStatus.NEEDS_SETUP
         }
     }
 
@@ -102,43 +105,46 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
         logInfo("Bluetooth printer disabled")
     }
 
-    private suspend fun print(formatted: String) {
+    private suspend fun print(formatted: String): PrintAttemptResult {
         val context = appContext.get()!!
 
-        if (!printerReady) {
-            isPrintingEnabled()
+        val setupStatus = preparePrinter()
+        if (setupStatus != PrinterSetupStatus.READY) {
+            return when (setupStatus) {
+                PrinterSetupStatus.NEEDS_SETUP -> PrintAttemptResult.NEEDS_SETUP
+                PrinterSetupStatus.FAILED -> PrintAttemptResult.FAILED
+                PrinterSetupStatus.READY -> PrintAttemptResult.PRINTED
+            }
         }
 
-        if (printerReady) {
-            val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
-            val preference =
-                sharedPref.getBoolean(
-                    context.getString(R.string.key_prints_remove_diacritics),
-                    false
-                )
-            val version = "Radio-Oracle v${dataProcessor.getAppVersion()}"
+        val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
+        val preference =
+            sharedPref.getBoolean(
+                context.getString(R.string.key_prints_remove_diacritics),
+                false
+            )
+        val version = "Radio-Oracle v${dataProcessor.getAppVersion()}"
 
-            // Remove diacritics if the preference is set
-            val textToPrint = if (preference) {
-                removeDiacritics(formatted)
-            } else {
-                formatted
-            }
+        // Remove diacritics if the preference is set
+        val textToPrint = if (preference) {
+            removeDiacritics(formatted)
+        } else {
+            formatted
+        }
 
-            try {
-                logInfo("Submitting ESC/POS print job lines=${textToPrint.lines().size}")
-                printer!!.printFormattedText(textToPrint + "\n\n[C]${version}", 100)
-                logInfo("ESC/POS print job submitted")
-            } catch (e: Exception) {
-                logError("ESC/POS print failed: ${e.message ?: e::class.simpleName}")
-                CoroutineScope(Dispatchers.Main).launch {
-                    makeToast(
-                        appContext.get()?.getString(R.string.prints_error, e.message)
-                            ?: "Failed to print"
-                    )
-                }
-                printerReady = false
-            }
+        return try {
+            logInfo("Submitting ESC/POS print job lines=${textToPrint.lines().size}")
+            printer!!.printFormattedText(textToPrint + "\n\n[C]${version}", 100)
+            logInfo("ESC/POS print job submitted")
+            PrintAttemptResult.PRINTED
+        } catch (e: Exception) {
+            logError("ESC/POS print failed: ${e.message ?: e::class.simpleName}")
+            makeToast(
+                appContext.get()?.getString(R.string.prints_error, e.message)
+                    ?: "Failed to print"
+            )
+            printerReady = false
+            PrintAttemptResult.FAILED
         }
     }
 
@@ -155,7 +161,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
         }
     }
 
-    suspend fun printFinishTicket(resultData: ResultData, race: Race) {
+    suspend fun printFinishTicket(resultData: ResultData, race: Race): PrintAttemptResult {
         val context = appContext.get()!!
         val competitor = resultData.competitorCategory?.competitor
         val category = resultData.competitorCategory?.category?.name ?: "?"
@@ -206,11 +212,15 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
             "Printing finish ticket result=${resultData.result.id} si=${resultData.result.siNumber} " +
                 "doublePrint=$doublePrint delaySeconds=$doublePrintDelay"
         )
-        print(formatted)
+        val firstPrint = print(formatted)
+        if (firstPrint != PrintAttemptResult.PRINTED) {
+            return firstPrint
+        }
         if (doublePrint) {
             delay(doublePrintDelay * 1000L)
-            print(formatted)
+            return print(formatted)
         }
+        return PrintAttemptResult.PRINTED
     }
 
     private fun getMaxCompetitorName(resultData: ResultData): String {
@@ -285,9 +295,9 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
         return sharedPref.getBoolean(context.getString(R.string.key_results_use_aliases), true)
     }
 
-    suspend fun printResults(results: List<ResultWrapper>, race: Race) {
+    suspend fun printResults(results: List<ResultWrapper>, race: Race): PrintAttemptResult {
         val formatted = formatResultsHeader(race) + getResultsFormatted(results)
-        print(formatted)
+        return print(formatted)
     }
 
     private fun formatResultsHeader(race: Race): String {
@@ -392,5 +402,11 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
 
     private companion object {
         const val LOG_TAG = "Printer"
+    }
+
+    private enum class PrinterSetupStatus {
+        READY,
+        NEEDS_SETUP,
+        FAILED
     }
 }

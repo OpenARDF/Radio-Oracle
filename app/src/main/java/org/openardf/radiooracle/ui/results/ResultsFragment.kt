@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.BottomNavDirections
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
+import org.openardf.radiooracle.backend.prints.PrintAttemptResult
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
@@ -27,9 +28,9 @@ import org.openardf.radiooracle.databinding.FragmentResultsBinding
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
 import org.openardf.radiooracle.ui.races.RaceEditDialogFragment
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ResultsFragment : Fragment() {
 
@@ -125,13 +126,19 @@ class ResultsFragment : Fragment() {
 
             R.id.result_menu_print_results -> {
                 selectedRaceViewModel.getCurrentRace()?.let { race ->
-                    CoroutineScope(Dispatchers.IO).launch {
-                        dataProcessor.printResults(
-                            selectedRaceViewModel.resultWrappers.value,
-                            race
-                        )
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        val printResult = withContext(Dispatchers.IO) {
+                            dataProcessor.printResults(
+                                selectedRaceViewModel.resultWrappers.value,
+                                race
+                            )
+                        }
+                        if (printResult == PrintAttemptResult.NEEDS_SETUP) {
+                            findNavController().navigate(R.id.printsFragment)
+                        }
                     }
                 }
+                return true
             }
 
             R.id.result_menu_edit_race -> {

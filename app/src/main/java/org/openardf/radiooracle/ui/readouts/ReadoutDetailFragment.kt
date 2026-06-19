@@ -11,6 +11,7 @@ import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResultListener
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.RecyclerView
@@ -18,6 +19,7 @@ import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
+import org.openardf.radiooracle.backend.prints.PrintAttemptResult
 import org.openardf.radiooracle.backend.results.ResultsProcessor
 import org.openardf.radiooracle.backend.room.entity.embeddeds.AliasPunch
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
@@ -25,10 +27,10 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.categories.CategoryEditDialogFragment
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 /** Detail screen for one readout, including competitor data, result status, and punch list. */
@@ -167,11 +169,16 @@ class ReadoutDetailFragment : Fragment() {
 
                 R.id.readout_detail_menu_print_ticket -> {
                     selectedRaceViewModel.getCurrentRace()?.let { race ->
-                        CoroutineScope(Dispatchers.IO).launch {
-                            dataProcessor.printFinishTicket(
-                                resultData,
-                                race
-                            )
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            val printResult = withContext(Dispatchers.IO) {
+                                dataProcessor.printFinishTicket(
+                                    resultData,
+                                    race
+                                )
+                            }
+                            if (printResult == PrintAttemptResult.NEEDS_SETUP) {
+                                findNavController().navigate(R.id.printsFragment)
+                            }
                         }
                     }
                     true
