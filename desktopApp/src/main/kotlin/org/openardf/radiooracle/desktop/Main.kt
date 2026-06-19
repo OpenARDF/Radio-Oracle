@@ -4242,7 +4242,12 @@ fun main(args: Array<String>) = application {
                         )
                         roleWarning = combinedControlRoleWarning(
                             controlRoleMismatchWarning(type, publicLabel),
-                            duplicateControlRoleWarning(updatedProject.raceData.controls, type)
+                            duplicateControlRoleWarning(updatedProject.raceData.controls, type),
+                            controlCourseRuleWarning(
+                                controls = updatedProject.raceData.controls,
+                                raceType = updatedProject.raceData.race.raceType,
+                                changedRole = type
+                            )
                         )
                         updatedProject
                     }
@@ -4276,7 +4281,12 @@ fun main(args: Array<String>) = application {
                         )
                         roleWarning = combinedControlRoleWarning(
                             controlRoleMismatchWarning(type, publicLabel),
-                            duplicateControlRoleWarning(updatedProject.raceData.controls, type)
+                            duplicateControlRoleWarning(updatedProject.raceData.controls, type),
+                            controlCourseRuleWarning(
+                                controls = updatedProject.raceData.controls,
+                                raceType = updatedProject.raceData.race.raceType,
+                                changedRole = type
+                            )
                         )
                         updatedProject
                     }
@@ -11761,6 +11771,57 @@ private fun duplicateControlRoleWarning(controls: List<EventControl>, changedRol
         else -> null
     }
 }
+
+private fun controlCourseRuleWarning(
+    controls: List<EventControl>,
+    raceType: RaceType,
+    changedRole: ControlPointType
+): String? {
+    if (changedRole != ControlPointType.CONTROL) {
+        return null
+    }
+    val details = controls.map { it.toControlDetails() }
+    return when (raceType) {
+        RaceType.SPRINT -> {
+            val groups = SprintLoopControlGroups.from(details)
+            listOfNotNull(
+                sprintLoopFoxLimitWarning("Slow-loop", groups.slowLoopFoxes.size),
+                sprintLoopFoxLimitWarning("Fast-loop", groups.fastLoopFoxes.size)
+            ).joinToString("\n\n").takeIf { it.isNotBlank() }
+        }
+        RaceType.CLASSIC,
+        RaceType.SHORT -> {
+            val foxes = details.count { it.type == ControlPointType.CONTROL }
+            if (foxes > 5) {
+                "This ${raceType.toDisplayLabel()} Event File now has $foxes Fox controls. ${raceType.toDisplayLabel()} events should have exactly five Foxes."
+            } else {
+                null
+            }
+        }
+        RaceType.FOXORING,
+        RaceType.ORIENTEERING -> null
+    }
+}
+
+private fun sprintLoopFoxLimitWarning(loopLabel: String, foxes: Int): String? =
+    if (foxes > 5) {
+        "This Sprint Event File now has $foxes $loopLabel Fox controls. Sprint events should have exactly five $loopLabel Foxes."
+    } else {
+        null
+    }
+
+private fun EventControl.toControlDetails(): EventControlDetails =
+    EventControlDetails(
+        id = id,
+        label = label,
+        siCode = siCode,
+        siCodeText = siCode.toString(),
+        type = type,
+        typeLabel = EventControlDetails.typeLabel(type),
+        scored = scored,
+        publicLabel = publicLabel.orEmpty(),
+        notes = notes.orEmpty()
+    )
 
 private fun combinedControlRoleWarning(vararg warnings: String?): String? =
     warnings.filterNotNull().joinToString("\n\n").takeIf { it.isNotBlank() }
