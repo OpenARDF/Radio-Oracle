@@ -829,9 +829,9 @@ object DesktopNavigation {
         "setup.event-file" to
             "Use Event File to create, open, import, save, close, and inspect event files, including settings and readiness tools that affect the whole event.",
         "setup.controls" to
-            "Use Controls to define transmitters, starts, finishes, spectators, and related elevation or course-analysis data before categories and courses are finalized.",
+            "Use Controls to manually enter controls, import controls and courses from supported file types, analyze courses with appropriate elevation data applied, and import elevation DEMs.",
         "setup.controls.define" to
-            "Use Define Controls to edit the control catalog, public labels, SI codes, roles, locations, and control metadata used by courses and readouts.",
+            "Use Define Controls to manually enter controls, review imported controls, and edit public labels, SI codes, roles, and control metadata used by courses and readouts.",
         "setup.controls.elevation-cache" to
             "Use Elevation Data to inspect cached venue elevation files used for stored course routes, climb estimates, and course-analysis calculations.",
         "setup.controls.elevation-cache.import" to

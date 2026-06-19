@@ -252,6 +252,7 @@ private val CategoryTableColumnHints = mapOf(
 )
 private val CategoryMenBackground = Color(0xFFE8F3FF)
 private val CategoryWomenBackground = Color(0xFFFFECEC)
+private val ControlStatsOkColor = Color(0xFF1B5E20)
 
 private val ProtectedCourseOrderTableColumns = listOf(
     FixedTableColumn("Category", 120.dp),
@@ -4228,8 +4229,21 @@ fun main(args: Array<String>) = application {
                             )
                             lockedCourseWarning = currentProject.lockedProtectedCourseWarning(protectedCoursePassword != null)
                         }
-                        roleWarning = controlRoleMismatchWarning(type, publicLabel)
-                        EventProjectEditor.updateControl(currentProject, controlId, label, siCode, type, scored, publicLabel, notes)
+                        val updatedProject = EventProjectEditor.updateControl(
+                            currentProject,
+                            controlId,
+                            label,
+                            siCode,
+                            type,
+                            scored,
+                            publicLabel,
+                            notes
+                        )
+                        roleWarning = combinedControlRoleWarning(
+                            controlRoleMismatchWarning(type, publicLabel),
+                            duplicateControlRoleWarning(updatedProject.raceData.controls, type)
+                        )
+                        updatedProject
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = if (identityChanged) {
@@ -4249,8 +4263,7 @@ fun main(args: Array<String>) = application {
                 var roleWarning: String? = null
                 val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
-                        roleWarning = controlRoleMismatchWarning(type, publicLabel)
-                        EventProjectEditor.addControl(
+                        val updatedProject = EventProjectEditor.addControl(
                             currentProject,
                             UUID.randomUUID().toString(),
                             label,
@@ -4260,6 +4273,11 @@ fun main(args: Array<String>) = application {
                             publicLabel,
                             notes
                         )
+                        roleWarning = combinedControlRoleWarning(
+                            controlRoleMismatchWarning(type, publicLabel),
+                            duplicateControlRoleWarning(updatedProject.raceData.controls, type)
+                        )
+                        updatedProject
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = "Unsaved changes."
@@ -5840,6 +5858,96 @@ private fun BypassedDisabledNavigation.activeFor(
 private data class PendingAssignedControlsWarning(
     val warning: EventAssignedControlWarning,
     val previousControlPointsText: String?
+)
+
+private data class ControlRoleCounts(
+    val foxes: Int,
+    val beacons: Int,
+    val spectators: Int
+) {
+    companion object {
+        fun from(types: Iterable<ControlPointType>): ControlRoleCounts {
+            var foxes = 0
+            var beacons = 0
+            var spectators = 0
+            types.forEach { type ->
+                when (type) {
+                    ControlPointType.CONTROL -> foxes += 1
+                    ControlPointType.BEACON -> beacons += 1
+                    ControlPointType.SEPARATOR -> spectators += 1
+                }
+            }
+            return ControlRoleCounts(foxes = foxes, beacons = beacons, spectators = spectators)
+        }
+    }
+}
+
+private data class SprintLoopControlGroups(
+    val slowLoopFoxes: List<EventControlDetails>,
+    val fastLoopFoxes: List<EventControlDetails>
+) {
+    companion object {
+        fun from(controls: List<EventControlDetails>): SprintLoopControlGroups {
+            val foxes = controls.filter { it.type == ControlPointType.CONTROL }
+            val labeledGroups = foxes
+                .mapNotNull { control -> control.sprintLoopFromLabel()?.let { control to it } }
+                .toMap()
+            if (labeledGroups.isNotEmpty() && labeledGroups.size == foxes.size) {
+                return SprintLoopControlGroups(
+                    slowLoopFoxes = foxes.filter { labeledGroups[it] == SprintLoop.Slow },
+                    fastLoopFoxes = foxes.filter { labeledGroups[it] == SprintLoop.Fast }
+                )
+            }
+
+            val sortedFoxes = foxes.sortedWith(compareBy<EventControlDetails> { it.siCode }.thenBy { it.publicDisplayLabel() })
+            val slowFoxes = sortedFoxes.take(5)
+            return SprintLoopControlGroups(
+                slowLoopFoxes = slowFoxes,
+                fastLoopFoxes = sortedFoxes.drop(slowFoxes.size)
+            )
+        }
+    }
+}
+
+private enum class SprintLoop {
+    Slow,
+    Fast
+}
+
+private data class SprintControlDisplaySlot(
+    val group: Int,
+    val order: Int
+) : Comparable<SprintControlDisplaySlot> {
+    override fun compareTo(other: SprintControlDisplaySlot): Int =
+        compareValuesBy(this, other, SprintControlDisplaySlot::group, SprintControlDisplaySlot::order)
+
+    companion object {
+        fun forControl(control: EventControlDetails, groups: SprintLoopControlGroups): SprintControlDisplaySlot {
+            val publicSlot = control.publicLabel.trim().takeIf { it.isNotEmpty() }?.sprintDisplaySlot()
+            if (publicSlot != null) {
+                return publicSlot
+            }
+            return when (control.type) {
+                ControlPointType.CONTROL -> {
+                    val slowIndex = groups.slowLoopFoxes.indexOfFirst { it.id == control.id }
+                    if (slowIndex >= 0) {
+                        SprintControlDisplaySlot(0, slowIndex)
+                    } else {
+                        val fastIndex = groups.fastLoopFoxes.indexOfFirst { it.id == control.id }
+                        SprintControlDisplaySlot(2, fastIndex.takeIf { it >= 0 } ?: control.siCode)
+                    }
+                }
+                ControlPointType.SEPARATOR -> SprintControlDisplaySlot(1, control.siCode)
+                ControlPointType.BEACON -> SprintControlDisplaySlot(3, control.siCode)
+            }
+        }
+    }
+}
+
+private data class ControlStatsItem(
+    val label: String,
+    val count: Int,
+    val isCompliant: Boolean
 )
 
 private data class DesktopImportReport(
@@ -9471,7 +9579,7 @@ private fun ControlDetailsPanel(
 ) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(ControlTableColumns)
-    val orderedControls = rememberEditableRowOrder(controls) { it.id }
+    val orderedControls = remember(controls, raceType) { controls.customaryDisplayOrder(raceType) }
     var siCodeDraft by remember { mutableStateOf("") }
     var typeDraft by remember { mutableStateOf(ControlPointType.CONTROL) }
     var publicLabelDraft by remember { mutableStateOf("") }
@@ -9486,6 +9594,10 @@ private fun ControlDetailsPanel(
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ControlStatsRow(
+            controls = controls,
+            raceType = raceType
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
@@ -9558,6 +9670,137 @@ private fun ControlDetailsPanel(
         }
     }
 }
+
+@Composable
+private fun ControlStatsRow(
+    controls: List<EventControlDetails>,
+    raceType: RaceType
+) {
+    val items = controlStatsItems(controls, raceType)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        items.forEach { item ->
+            ControlStatsText(
+                label = item.label,
+                count = item.count,
+                isCompliant = item.isCompliant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ControlStatsText(
+    label: String,
+    count: Int,
+    isCompliant: Boolean
+) {
+    Text(
+        text = "$label: $count",
+        color = if (isCompliant) ControlStatsOkColor else DesktopPalette.Error,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Bold
+    )
+}
+
+private fun controlStatsItems(controls: List<EventControlDetails>, raceType: RaceType): List<ControlStatsItem> {
+    val counts = ControlRoleCounts.from(controls.map { it.type })
+    return when (raceType) {
+        RaceType.SPRINT -> {
+            val loopGroups = SprintLoopControlGroups.from(controls)
+            listOf(
+                ControlStatsItem("Slow-loop Foxes", loopGroups.slowLoopFoxes.size, loopGroups.slowLoopFoxes.size == 5),
+                ControlStatsItem("Fast-loop Foxes", loopGroups.fastLoopFoxes.size, loopGroups.fastLoopFoxes.size == 5),
+                ControlStatsItem("Beacons", counts.beacons, counts.beacons == 1),
+                ControlStatsItem("Spectators", counts.spectators, counts.spectators <= 1)
+            )
+        }
+        RaceType.CLASSIC,
+        RaceType.SHORT -> listOf(
+            ControlStatsItem("Foxes", counts.foxes, counts.foxes == 5),
+            ControlStatsItem("Beacons", counts.beacons, counts.beacons == 1)
+        )
+        RaceType.FOXORING -> listOf(
+            ControlStatsItem("Foxes", counts.foxes, counts.foxes in 4..12),
+            ControlStatsItem("Beacons", counts.beacons, counts.beacons == 1)
+        )
+        RaceType.ORIENTEERING -> listOf(
+            ControlStatsItem("Controls", counts.foxes, counts.foxes > 0)
+        )
+    }
+}
+
+private fun List<EventControlDetails>.customaryDisplayOrder(raceType: RaceType): List<EventControlDetails> =
+    when (raceType) {
+        RaceType.SPRINT -> {
+            val groups = SprintLoopControlGroups.from(this)
+            sortedWith(
+                compareBy<EventControlDetails> { SprintControlDisplaySlot.forControl(it, groups) }
+                    .thenBy { it.siCode }
+                    .thenBy { it.publicDisplayLabel() }
+            )
+        }
+        RaceType.CLASSIC,
+        RaceType.SHORT,
+        RaceType.FOXORING -> sortedWith(
+            compareBy<EventControlDetails> {
+                when (it.type) {
+                    ControlPointType.CONTROL -> 0
+                    ControlPointType.SEPARATOR -> 1
+                    ControlPointType.BEACON -> 2
+                }
+            }
+                .thenBy { it.siCode }
+                .thenBy { it.publicDisplayLabel() }
+        )
+        RaceType.ORIENTEERING -> sortedWith(compareBy<EventControlDetails> { it.siCode }.thenBy { it.publicDisplayLabel() })
+    }
+
+private fun EventControlDetails.sprintLoopFromLabel(): SprintLoop? =
+    publicLabel.trim().takeIf { it.isNotEmpty() }?.sprintLoopLabel()
+        ?: label.trim().takeIf { it.isNotEmpty() }?.sprintLoopLabel()
+
+private fun String.sprintLoopLabel(): SprintLoop? =
+    when {
+        sprintFastNumber() != null || trim().uppercase().contains("FAST") -> SprintLoop.Fast
+        sprintSlowNumber() != null -> SprintLoop.Slow
+        else -> null
+    }
+
+private fun String.sprintDisplaySlot(): SprintControlDisplaySlot? {
+    val normalized = trim().uppercase()
+    return when {
+        normalized in setOf("S", "SP", "SPEC", "SPECTATOR", "SEP", "SEPARATOR") ->
+            SprintControlDisplaySlot(1, 0)
+        normalized in setOf("B", "BB", "M", "MO", "BEACON", "FINISH BEACON") ->
+            SprintControlDisplaySlot(3, 0)
+        sprintFastNumber() != null -> SprintControlDisplaySlot(2, sprintFastNumber() ?: 0)
+        sprintSlowNumber() != null -> SprintControlDisplaySlot(0, sprintSlowNumber() ?: 0)
+        normalized.contains("FAST") -> SprintControlDisplaySlot(2, normalized.sprintLabelNumber() ?: Int.MAX_VALUE)
+        else -> null
+    }
+}
+
+private fun String.sprintSlowNumber(): Int? {
+    val normalized = trim().uppercase()
+    if (normalized.endsWith("F") || normalized.startsWith("F") || normalized.contains("FAST")) {
+        return null
+    }
+    return normalized.sprintLabelNumber()
+}
+
+private fun String.sprintFastNumber(): Int? {
+    val normalized = trim().uppercase()
+    val suffix = normalized.takeIf { it.endsWith("F") }?.dropLast(1)?.toIntOrNull()
+    val prefix = normalized.takeIf { it.startsWith("F") }?.drop(1)?.toIntOrNull()
+    return (suffix ?: prefix ?: normalized.takeIf { it.contains("FAST") }?.sprintLabelNumber())?.takeIf { it in 1..5 }
+}
+
+private fun String.sprintLabelNumber(): Int? =
+    Regex("""\b([1-5])\b""").find(this)?.groupValues?.get(1)?.toIntOrNull()
 
 @Composable
 private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
@@ -11500,6 +11743,20 @@ private fun controlRoleMismatchWarning(type: ControlPointType, publicLabel: Stri
         ControlRoleLabelRules.mismatchWarning(publicLabel, type, inferredRole)
     }
 }
+
+private fun duplicateControlRoleWarning(controls: List<EventControl>, changedRole: ControlPointType): String? {
+    val counts = ControlRoleCounts.from(controls.map { it.type })
+    return when {
+        changedRole == ControlPointType.BEACON && counts.beacons > 1 ->
+            "This Event File now has ${counts.beacons} Beacon controls. Radio-orienteering events should have exactly one Beacon."
+        changedRole == ControlPointType.SEPARATOR && counts.spectators > 1 ->
+            "This Event File now has ${counts.spectators} Spectator controls. Sprint courses should have no more than one Spectator."
+        else -> null
+    }
+}
+
+private fun combinedControlRoleWarning(vararg warnings: String?): String? =
+    warnings.filterNotNull().joinToString("\n\n").takeIf { it.isNotBlank() }
 
 private fun controlRoleBackgroundColor(type: ControlPointType): Color =
     when (type) {
