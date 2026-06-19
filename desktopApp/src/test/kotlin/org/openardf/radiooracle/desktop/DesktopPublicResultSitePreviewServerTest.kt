@@ -51,6 +51,25 @@ class DesktopPublicResultSitePreviewServerTest {
     }
 
     @Test
+    fun servesDirectoryIndexFilesForEventFolders() {
+        val directory = Files.createTempDirectory("rom-public-site-preview-event")
+        Files.writeString(directory.resolve("index.html"), "<!doctype html><h1>Root</h1>")
+        Files.createDirectories(directory.resolve("event-one"))
+        Files.writeString(directory.resolve("event-one").resolve("index.html"), "<!doctype html><h1>Event</h1>")
+        val server = DesktopPublicResultSitePreviewServer(directory)
+        try {
+            val connection = URL("${server.start()}event-one/").openConnection() as HttpURLConnection
+            val eventHtml = connection.inputStream.bufferedReader().readText()
+
+            assertEquals(200, connection.responseCode)
+            assertEquals("text/html; charset=utf-8", connection.contentType)
+            assertTrue(eventHtml.contains("Event"))
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
     fun rejectsNonGetRequests() {
         val directory = Files.createTempDirectory("rom-public-site-preview-post")
         Files.writeString(directory.resolve("index.html"), "<!doctype html>")

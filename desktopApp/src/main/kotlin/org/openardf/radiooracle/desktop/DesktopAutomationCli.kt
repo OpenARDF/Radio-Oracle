@@ -1,6 +1,8 @@
 package org.openardf.radiooracle.desktop
 
 import java.io.PrintStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -98,6 +100,8 @@ object DesktopAutomationCli {
             "import-competitors-csv" -> importCompetitorsCsv(commandArgs, out, err)
             "readiness-summary" -> readinessSummary(commandArgs, out, err)
             "recalculate-results" -> recalculateResults(commandArgs, out, err)
+            "export-public-results-site" -> exportPublicResultsSite(commandArgs, out, err)
+            "preview-public-results-site" -> previewPublicResultsSite(commandArgs, out, err)
             "nav-availability" -> navAvailability(commandArgs, out, err)
             "nav-select" -> navSelect(commandArgs, out, err)
             "si-status" -> siStatus(commandArgs, out, err, serialPortProvider)
@@ -137,6 +141,89 @@ object DesktopAutomationCli {
             0
         }.getOrElse { error ->
             err.println("Result recalculation failed: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
+    private fun exportPublicResultsSite(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val eventFileText = args.getOrNull(0)
+        val siteRootText = args.getOrNull(1)
+        if (eventFileText.isNullOrBlank() || siteRootText.isNullOrBlank()) {
+            err.println("export-public-results-site requires Event File and public site root paths.")
+            return 64
+        }
+        return runCatching {
+            DesktopDebugLog.initialize()
+            val eventFile = Path.of(eventFileText)
+            val siteRoot = Path.of(siteRootText)
+            val projectFile = DesktopProjectFiles.read(eventFile)
+            val paths = DesktopProjectFiles.exportPublicResultsSite(siteRoot, projectFile)
+            DesktopDebugLog.info(
+                "PublicResults",
+                "CLI generated public results site event=${paths.eventPath} root=${paths.directory} eventDirectory=${paths.eventDirectory}"
+            )
+            out.println(
+                jsonObject(
+                    "command" to "export-public-results-site",
+                    "eventFile" to eventFile.toAbsolutePath().normalize().toString(),
+                    "siteRoot" to paths.directory.toAbsolutePath().normalize().toString(),
+                    "eventPath" to paths.eventPath,
+                    "eventDirectory" to paths.eventDirectory.toAbsolutePath().normalize().toString(),
+                    "rootIndexHtml" to paths.rootIndexHtml.toAbsolutePath().normalize().toString(),
+                    "indexHtml" to paths.indexHtml.toAbsolutePath().normalize().toString(),
+                    "publicResultsJson" to paths.publicResultsJson.toAbsolutePath().normalize().toString()
+                )
+            )
+            0
+        }.getOrElse { error ->
+            DesktopDebugLog.error("PublicResults", "CLI public results export failed: ${error.message ?: error::class.simpleName}")
+            err.println("Public results site export failed: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
+    private fun previewPublicResultsSite(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val siteRootText = args.getOrNull(0)
+        if (siteRootText.isNullOrBlank()) {
+            err.println("preview-public-results-site requires a public site root path.")
+            return 64
+        }
+        return runCatching {
+            DesktopDebugLog.initialize()
+            val siteRoot = Path.of(siteRootText)
+            val requestedEventPath = args.getOrNull(1)
+                ?.trim()
+                ?.trim('/')
+                ?.takeIf { it.isNotBlank() }
+            val server = DesktopPublicResultSitePreviewServer(siteRoot)
+            try {
+                val rootUrl = server.start()
+                val previewUrl = requestedEventPath?.let { "$rootUrl$it/" } ?: rootUrl
+                val connection = URL(previewUrl).openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                val body = connection.inputStream.bufferedReader().use { it.readText() }
+                DesktopDebugLog.info(
+                    "PublicResults",
+                    "CLI checked public results preview url=$previewUrl status=${connection.responseCode}"
+                )
+                out.println(
+                    jsonObject(
+                        "command" to "preview-public-results-site",
+                        "siteRoot" to siteRoot.toAbsolutePath().normalize().toString(),
+                        "eventPath" to requestedEventPath,
+                        "url" to previewUrl,
+                        "responseCode" to connection.responseCode,
+                        "contentType" to connection.contentType,
+                        "bodyBytes" to body.toByteArray(Charsets.UTF_8).size
+                    )
+                )
+                0
+            } finally {
+                server.stop()
+            }
+        }.getOrElse { error ->
+            DesktopDebugLog.error("PublicResults", "CLI public results preview failed: ${error.message ?: error::class.simpleName}")
+            err.println("Public results site preview failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -607,6 +694,10 @@ object DesktopAutomationCli {
                                           Print validation and readiness issues as JSON.
           recalculate-results [--write] <event-path>
                                           Re-evaluate stored readouts against current courses.
+          export-public-results-site <event-path> <site-root>
+                                          Generate the Cloudflare Pages-ready public site root.
+          preview-public-results-site <site-root> [event-path]
+                                          Start the preview server, verify a URL, and stop it.
           nav-availability [event-path]   Print enabled/disabled menu state and long-click overrides.
           nav-select [--default-draft|--draft] <path>
                                           Simulate menu selection, using > between labels. Supports < Back.

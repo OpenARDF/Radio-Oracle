@@ -95,6 +95,30 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun publicResultsSiteCommandsGenerateAndCheckPreview() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-public-site")
+        val eventPath = directory.resolve("Automation Event.json")
+        val siteRoot = directory.resolve("site-root")
+        DesktopProjectFiles.write(eventPath, projectFile("Automation Event"))
+
+        val exportResult = runAutomation("export-public-results-site", eventPath.toString(), siteRoot.toString())
+        val previewResult = runAutomation(
+            "preview-public-results-site",
+            siteRoot.toString(),
+            "2026-06-03-automation-event"
+        )
+
+        assertEquals(0, exportResult.exitCode)
+        assertTrue(exportResult.stdout.contains("\"command\":\"export-public-results-site\""))
+        assertTrue(exportResult.stdout.contains("\"eventPath\":\"2026-06-03-automation-event\""))
+        assertTrue(Files.exists(siteRoot.resolve("2026-06-03-automation-event").resolve("index.html")))
+        assertEquals(0, previewResult.exitCode)
+        assertTrue(previewResult.stdout.contains("\"command\":\"preview-public-results-site\""))
+        assertTrue(previewResult.stdout.contains("\"responseCode\":200"))
+        assertTrue(previewResult.stdout.contains("\"contentType\":\"text/html; charset=utf-8\""))
+    }
+
+    @Test
     fun importAndroidEventFileCommandWritesDesktopEventFile() {
         val directory = Files.createTempDirectory("radio-oracle-automation")
         val androidPath = directory.resolve("Android Event.ardfjs")

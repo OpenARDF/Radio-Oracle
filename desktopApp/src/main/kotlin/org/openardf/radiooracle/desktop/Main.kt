@@ -2567,8 +2567,13 @@ fun main(args: Array<String>) = application {
                     publicResultSiteEventPath = paths.eventPath
                     syncProjectState()
                     projectStatusText = "Generated public results site at ${paths.eventDirectory}"
+                    DesktopDebugLog.info(
+                        "PublicResults",
+                        "Generated public results site root=${paths.directory} event=${paths.eventPath} eventDirectory=${paths.eventDirectory}"
+                    )
                 }.onFailure { error ->
                     projectStatusText = "Public results site generation failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("PublicResults", projectStatusText)
                 }
             }
         }
@@ -2590,14 +2595,17 @@ fun main(args: Array<String>) = application {
                 publicResultSitePreviewUrl = url
                 browseExternalUrl(url).onSuccess {
                     projectStatusText = "Public results site preview running at $url"
+                    DesktopDebugLog.info("PublicResults", projectStatusText)
                 }.onFailure { error ->
                     projectStatusText =
                         "Public results site preview running at $url, but the browser did not open: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.warn("PublicResults", projectStatusText)
                 }
             }.onFailure { error ->
                 publicResultSitePreviewServer = null
                 publicResultSitePreviewUrl = null
                 projectStatusText = "Public results site preview failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("PublicResults", projectStatusText)
             }
         }
 
@@ -2627,6 +2635,7 @@ fun main(args: Array<String>) = application {
             }
             isPublishingPublicResultSite = true
             projectStatusText = "Publishing public results site to Cloudflare Pages..."
+            DesktopDebugLog.info("PublicResults", "$projectStatusText root=$directory")
             appCoroutineScope.launch {
                 runCatching {
                     withContext(Dispatchers.IO) {
@@ -2636,8 +2645,10 @@ fun main(args: Array<String>) = application {
                     }
                 }.onSuccess { result ->
                     projectStatusText = "Published public results site to ${result.url}"
+                    DesktopDebugLog.info("PublicResults", "$projectStatusText root=$directory project=${result.projectName} branch=${result.branch}")
                 }.onFailure { error ->
                     projectStatusText = "Public results site publish failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("PublicResults", projectStatusText)
                 }
                 isPublishingPublicResultSite = false
             }

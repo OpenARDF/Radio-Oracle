@@ -62,7 +62,12 @@ private fun HttpExchange.handleStaticSiteRequest(siteDirectory: Path) {
     }
 
     val requestedPath = requestURI.path.trimStart('/').ifBlank { "index.html" }
-    val target = siteDirectory.resolve(requestedPath).normalize()
+    val requestedTarget = siteDirectory.resolve(requestedPath).normalize()
+    val target = if (Files.isDirectory(requestedTarget)) {
+        requestedTarget.resolve("index.html").normalize()
+    } else {
+        requestedTarget
+    }
     val siteRoot = siteDirectory.normalize()
     if (!target.startsWith(siteRoot) || !Files.isRegularFile(target)) {
         sendResponseHeaders(404, -1)
