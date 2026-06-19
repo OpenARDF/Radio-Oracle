@@ -262,7 +262,11 @@ object CourseEvaluator {
                 val spectator = controlPoints.firstOrNull { it.isSprintSpectator }
                 val beacon = controlPoints.lastOrNull { it.isSprintBeacon }
                 val spectatorIndex = spectator?.let { controlPoints.indexOf(it) } ?: -1
-                val controls = controlPoints.withIndex().filter { it.value.type == ControlPointType.CONTROL }
+                val controls = controlPoints.withIndex().filter { (_, control) ->
+                    control.type == ControlPointType.CONTROL &&
+                        !control.isSprintSpectator &&
+                        !control.isSprintBeacon
+                }
                 val hasFastLabels = controls.any { it.value.hasSprintFastLabel }
 
                 val slowControls = controls.filter { (index, control) ->

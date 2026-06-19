@@ -1,6 +1,9 @@
 package org.openardf.radiooracle.ui.categories
 
 import android.content.Context
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.BackgroundColorSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -12,7 +15,11 @@ import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
+import org.openardf.radiooracle.backend.room.entity.embeddeds.ControlPointAlias
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
+import org.openardf.radiooracle.shared.course.ControlPointDisplayToken
+import org.openardf.radiooracle.shared.course.ControlPointRules
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
@@ -106,17 +113,52 @@ class CategoryRecyclerViewAdapter(
         popupMenu.show()
     }
 
-    private fun getDisplayControlPoints(item: CategoryData, raceType: RaceType): String {
+    private fun getDisplayControlPoints(item: CategoryData, raceType: RaceType): CharSequence {
         if (raceType == RaceType.ORIENTEERING) {
             return item.category.controlPointsString
         }
 
         return runBlocking {
-            ControlPointsHelper.getStringFromControlPointAliases(
-                dataProcessor.getControlPointAliasesByCategory(item.category.id),
-                context
+            coloredControlPointAliases(dataProcessor.getControlPointAliasesByCategory(item.category.id))
+        }
+    }
+
+    private fun coloredControlPointAliases(controlPoints: List<ControlPointAlias>): CharSequence {
+        val useAliases = ControlPointsHelper.shouldUseAliases(context)
+        val builder = SpannableStringBuilder()
+        controlPoints.forEachIndexed { index, controlPointAlias ->
+            if (index > 0) {
+                builder.append(" ")
+            }
+            val start = builder.length
+            builder.append(controlPointAlias.displayToken(useAliases))
+            builder.setSpan(
+                BackgroundColorSpan(controlPointAlias.controlPoint.type.roleBackgroundColor()),
+                start,
+                builder.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             )
         }
+        return builder
+    }
+
+    private fun ControlPointAlias.displayToken(useAliases: Boolean): String =
+        ControlPointRules.formatDisplayTokens(
+            listOf(
+                ControlPointDisplayToken(
+                    siCode = controlPoint.siCode,
+                    aliasName = alias?.name
+                )
+            ),
+            useAliases
+        )
+
+    private fun ControlPointType.roleBackgroundColor(): Int {
+        val colorRes = when (this) {
+            ControlPointType.CONTROL -> R.color.control_role_fox_background
+            ControlPointType.SEPARATOR, ControlPointType.BEACON -> R.color.control_role_special_background
+        }
+        return ContextCompat.getColor(context, colorRes)
     }
 
     private fun currentRaceType(): RaceType =

@@ -393,6 +393,13 @@ class DataProcessor private constructor(context: Context) {
         }
     }
 
+    /** Recalculates stored results after scoring-rule changes that affect existing event data. */
+    suspend fun updateAllResults(reason: String) {
+        val races = getRaces().first()
+        races.forEach { race -> updateResultsByRace(race.id) }
+        DebugLog.info("Results", "Recalculated stored results count=${races.size} reason=$reason")
+    }
+
     suspend fun deleteResult(id: UUID) = ardfRepository.deleteResult(id)
 
     suspend fun deleteAllResultsByRace(raceId: UUID) {

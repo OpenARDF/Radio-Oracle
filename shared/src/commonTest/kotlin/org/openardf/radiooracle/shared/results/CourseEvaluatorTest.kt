@@ -272,6 +272,40 @@ class CourseEvaluatorTest {
     }
 
     @Test
+    fun sprintDoesNotScoreSpectatorOrBeaconMarkersAsFoxes() {
+        val evaluation = CourseEvaluator.evaluate(
+            RaceType.SPRINT,
+            punches = punches(165, 161, 162, 137, 174, 175, 172, 136),
+            controlPoints = listOf(
+                EvaluationControlPoint(161, ControlPointType.CONTROL, label = "1"),
+                EvaluationControlPoint(163, ControlPointType.CONTROL, label = "3"),
+                EvaluationControlPoint(165, ControlPointType.CONTROL, label = "5"),
+                EvaluationControlPoint(137, ControlPointType.CONTROL, label = "S"),
+                EvaluationControlPoint(171, ControlPointType.CONTROL, label = "1F"),
+                EvaluationControlPoint(174, ControlPointType.CONTROL, label = "4F"),
+                EvaluationControlPoint(175, ControlPointType.CONTROL, label = "5F"),
+                EvaluationControlPoint(136, ControlPointType.BEACON, scored = false, label = "B")
+            )
+        )
+
+        assertEquals(4, evaluation.points)
+        assertEquals(ResultStatus.OK, evaluation.resultStatus)
+        assertEquals(
+            listOf(
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.UNKNOWN,
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.UNKNOWN,
+                PunchStatus.VALID
+            ),
+            evaluation.punchStatuses
+        )
+    }
+
+    @Test
     fun evaluatesOrienteeringInOrder() {
         val evaluation = CourseEvaluator.evaluate(
             RaceType.ORIENTEERING,

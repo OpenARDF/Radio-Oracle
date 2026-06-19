@@ -114,6 +114,7 @@ import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
+import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCategorySort
@@ -4202,6 +4203,7 @@ fun main(args: Array<String>) = application {
                     var affectedProtectedCourses = 0
                     var identityChanged = false
                     var lockedCourseWarning = ""
+                    var roleWarning = ""
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         val existingControl = currentProject.raceData.controls.firstOrNull { it.id == controlId }
                         identityChanged = existingControl?.let { control ->
@@ -4219,24 +4221,27 @@ fun main(args: Array<String>) = application {
                             )
                             lockedCourseWarning = currentProject.lockedProtectedCourseWarning(protectedCoursePassword != null)
                         }
+                        roleWarning = controlRoleMismatchWarning(type, publicLabel)?.let { " Warning: $it" }.orEmpty()
                         EventProjectEditor.updateControl(currentProject, controlId, label, siCode, type, scored, publicLabel, notes)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = if (identityChanged) {
                         recordActivity("Updated control identity.")
                         val impactWarning = projectFile?.resultImpactWarning("Control identity changed") ?: ""
-                        "Control identity updated. This control is used by $affectedAssignedCategories assigned categor${if (affectedAssignedCategories == 1) "y" else "ies"} and $affectedProtectedCourses stored course${if (affectedProtectedCourses == 1) "" else "s"}.$lockedCourseWarning$impactWarning"
+                        "Control identity updated. This control is used by $affectedAssignedCategories assigned categor${if (affectedAssignedCategories == 1) "y" else "ies"} and $affectedProtectedCourses stored course${if (affectedProtectedCourses == 1) "" else "s"}.$lockedCourseWarning$impactWarning$roleWarning"
                     } else {
                         recordActivity("Updated control details.")
-                        "Unsaved changes."
+                        "Unsaved changes.$roleWarning"
                     }
                 }.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
             onAddControl = { label, siCode, type, scored, publicLabel, notes ->
+                var roleWarning = ""
                 val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
+                        roleWarning = controlRoleMismatchWarning(type, publicLabel)?.let { " Warning: $it" }.orEmpty()
                         EventProjectEditor.addControl(
                             currentProject,
                             UUID.randomUUID().toString(),
@@ -4249,7 +4254,7 @@ fun main(args: Array<String>) = application {
                         )
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    projectStatusText = "Unsaved changes."
+                    projectStatusText = "Unsaved changes.$roleWarning"
                 }
                 result.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
@@ -11235,45 +11240,50 @@ private fun ControlAddRow(
     onNotesChange: (String) -> Unit,
     onCommit: () -> Unit
 ) {
-    Row(
+    val roleWarning = controlRoleMismatchWarning(typeDraft, publicLabelDraft)
+    Column(
         modifier = Modifier.width(fixedTableWidth(ControlTableColumns)),
-        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        TextField(
-            value = siCodeDraft,
-            onValueChange = onSiCodeChange,
-            modifier = Modifier
-                .width(ControlTableColumns[0].width)
-                .commitOnEnter(onCommit),
-            singleLine = true,
-            label = { Text("SI code") }
-        )
-        ControlTypeDropdown(
-            type = typeDraft,
-            raceType = raceType,
-            onTypeChange = onTypeChange,
-            modifier = Modifier.width(ControlTableColumns[1].width)
-        )
-        TextField(
-            value = publicLabelDraft,
-            onValueChange = onPublicLabelChange,
-            modifier = Modifier
-                .width(ControlTableColumns[2].width)
-                .commitOnEnter(onCommit),
-            singleLine = true,
-            label = { Text("Public label") }
-        )
-        TextField(
-            value = notesDraft,
-            onValueChange = onNotesChange,
-            modifier = Modifier
-                .width(ControlTableColumns[3].width)
-                .commitOnEnter(onCommit),
-            singleLine = true,
-            label = { Text("Notes") }
-        )
-        Spacer(modifier = Modifier.width(ControlTableColumns[4].width))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = siCodeDraft,
+                onValueChange = onSiCodeChange,
+                modifier = Modifier
+                    .width(ControlTableColumns[0].width)
+                    .commitOnEnter(onCommit),
+                singleLine = true,
+                label = { Text("SI code") }
+            )
+            ControlTypeDropdown(
+                type = typeDraft,
+                raceType = raceType,
+                onTypeChange = onTypeChange,
+                modifier = Modifier.width(ControlTableColumns[1].width)
+            )
+            TextField(
+                value = publicLabelDraft,
+                onValueChange = onPublicLabelChange,
+                modifier = Modifier
+                    .width(ControlTableColumns[2].width)
+                    .commitOnEnter(onCommit),
+                singleLine = true,
+                label = { Text("Public label") }
+            )
+            TextField(
+                value = notesDraft,
+                onValueChange = onNotesChange,
+                modifier = Modifier
+                    .width(ControlTableColumns[3].width)
+                    .commitOnEnter(onCommit),
+                singleLine = true,
+                label = { Text("Notes") }
+            )
+            Spacer(modifier = Modifier.width(ControlTableColumns[4].width))
+        }
+        RoleMismatchWarningText(roleWarning)
     }
 }
 
@@ -11322,48 +11332,53 @@ private fun ControlDetailRow(
         updateControl(siCodeText = normalizedDraft)
     }
 
-    Row(
+    val roleWarning = controlRoleMismatchWarning(control.type, control.publicLabel)
+    Column(
         modifier = Modifier.width(fixedTableWidth(ControlTableColumns)),
-        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        TextField(
-            value = siCodeDraft,
-            onValueChange = { siCodeDraft = it },
-            modifier = Modifier
-                .width(ControlTableColumns[0].width)
-                .onFocusChanged { focusState ->
-                    val wasFocused = isSiCodeFocused
-                    isSiCodeFocused = focusState.isFocused
-                    if (wasFocused && !focusState.isFocused) {
-                        commitSiCodeDraft()
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = siCodeDraft,
+                onValueChange = { siCodeDraft = it },
+                modifier = Modifier
+                    .width(ControlTableColumns[0].width)
+                    .onFocusChanged { focusState ->
+                        val wasFocused = isSiCodeFocused
+                        isSiCodeFocused = focusState.isFocused
+                        if (wasFocused && !focusState.isFocused) {
+                            commitSiCodeDraft()
+                        }
                     }
-                }
-                .commitOnEnter(::commitSiCodeDraft),
-            singleLine = true,
-            label = { Text("SI code") }
-        )
-        ControlTypeDropdown(
-            type = control.type,
-            raceType = raceType,
-            onTypeChange = { updateControl(type = it, scored = it.defaultScored()) },
-            modifier = Modifier.width(ControlTableColumns[1].width)
-        )
-        TextField(
-            value = control.publicLabel,
-            onValueChange = { updateControl(publicLabel = it) },
-            modifier = Modifier.width(ControlTableColumns[2].width),
-            singleLine = true,
-            label = { Text("Public label") }
-        )
-        TextField(
-            value = control.notes,
-            onValueChange = { updateControl(notes = it) },
-            modifier = Modifier.width(ControlTableColumns[3].width),
-            singleLine = true,
-            label = { Text("Notes") }
-        )
-        Spacer(modifier = Modifier.width(ControlTableColumns[4].width))
+                    .commitOnEnter(::commitSiCodeDraft),
+                singleLine = true,
+                label = { Text("SI code") }
+            )
+            ControlTypeDropdown(
+                type = control.type,
+                raceType = raceType,
+                onTypeChange = { updateControl(type = it, scored = it.defaultScored()) },
+                modifier = Modifier.width(ControlTableColumns[1].width)
+            )
+            TextField(
+                value = control.publicLabel,
+                onValueChange = { updateControl(publicLabel = it) },
+                modifier = Modifier.width(ControlTableColumns[2].width),
+                singleLine = true,
+                label = { Text("Public label") }
+            )
+            TextField(
+                value = control.notes,
+                onValueChange = { updateControl(notes = it) },
+                modifier = Modifier.width(ControlTableColumns[3].width),
+                singleLine = true,
+                label = { Text("Notes") }
+            )
+            Spacer(modifier = Modifier.width(ControlTableColumns[4].width))
+        }
+        RoleMismatchWarningText(roleWarning)
     }
 }
 
@@ -11415,12 +11430,20 @@ private fun ControlTypeDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
-        Button(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+        Button(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                backgroundColor = controlRoleBackgroundColor(type),
+                contentColor = Color.Black
+            )
+        ) {
             ButtonLabel(controlRoleLabel(type, raceType))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             controlRoleOptions(raceType).forEach { option ->
                 DropdownMenuItem(
+                    modifier = Modifier.background(controlRoleBackgroundColor(option)),
                     onClick = {
                         expanded = false
                         onTypeChange(option)
@@ -11445,6 +11468,32 @@ private fun controlRoleLabel(type: ControlPointType, raceType: RaceType): String
         raceType == RaceType.ORIENTEERING && type == ControlPointType.CONTROL -> "Control"
         type == ControlPointType.CONTROL -> "Fox"
         else -> EventControlDetails.typeLabel(type)
+    }
+
+@Composable
+private fun RoleMismatchWarningText(warning: String?) {
+    if (warning != null) {
+        Text(
+            text = "Warning: $warning",
+            modifier = Modifier.padding(start = ControlTableColumns[0].width + TableColumnGap, top = 4.dp),
+            color = MaterialTheme.colors.error,
+            fontSize = 12.sp
+        )
+    }
+}
+
+private fun controlRoleMismatchWarning(type: ControlPointType, publicLabel: String): String? {
+    if (type != ControlPointType.CONTROL) {
+        return null
+    }
+    val inferredRole = ControlRoleLabelRules.inferredSpecialRole(publicLabel) ?: return null
+    return ControlRoleLabelRules.foxRoleWarning(publicLabel, inferredRole)
+}
+
+private fun controlRoleBackgroundColor(type: ControlPointType): Color =
+    when (type) {
+        ControlPointType.CONTROL -> Color(0xFFCDEFD1)
+        ControlPointType.SEPARATOR, ControlPointType.BEACON -> Color(0xFFD8E9FF)
     }
 
 /** Shows editable category names with read-only effective race settings. */

@@ -18,6 +18,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.findNavController
 import androidx.navigation.ui.setupWithNavController
 import androidx.preference.PreferenceManager
@@ -32,6 +33,8 @@ import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.sportident.SIReaderStatus
 import org.openardf.radiooracle.databinding.ActivityMainBinding
 import org.openardf.radiooracle.shared.sportident.SportIdentStationMode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 import java.util.Locale
 
@@ -42,6 +45,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var siStatusTextView: TextView
     private lateinit var dataProcessor: DataProcessor
     private var lastSiStationModeWarningKey: String? = null
+
+    companion object {
+        private const val KEY_RESULTS_SCORING_REVISION = "results_scoring_revision"
+        private const val RESULTS_SCORING_REVISION = 2
+    }
 
     private var usbDetachReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -96,6 +104,7 @@ class MainActivity : AppCompatActivity() {
         DebugLog.info("App", "MainActivity created")
         dataProcessor = DataProcessor.get()
         dataProcessor.fileProcessor = FileProcessor(WeakReference(this))
+        refreshStoredResultsForCurrentScoringRules()
 
 
         val filter = IntentFilter()
@@ -148,6 +157,26 @@ class MainActivity : AppCompatActivity() {
 
         //Set the observer for the SI text view
         setStationObserver()
+    }
+
+    private fun refreshStoredResultsForCurrentScoringRules() {
+        val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(applicationContext)
+        if (sharedPreferences.getInt(KEY_RESULTS_SCORING_REVISION, 0) >= RESULTS_SCORING_REVISION) {
+            return
+        }
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching {
+                dataProcessor.updateAllResults("scoring-revision-$RESULTS_SCORING_REVISION")
+                sharedPreferences.edit()
+                    .putInt(KEY_RESULTS_SCORING_REVISION, RESULTS_SCORING_REVISION)
+                    .apply()
+            }.onFailure { error ->
+                DebugLog.error(
+                    "Results",
+                    "Stored result recalculation failed reason=scoring-revision-$RESULTS_SCORING_REVISION error=${error.message}"
+                )
+            }
+        }
     }
 
     private fun detectSIReader() {
