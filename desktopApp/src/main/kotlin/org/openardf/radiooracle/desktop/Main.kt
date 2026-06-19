@@ -367,6 +367,7 @@ fun main(args: Array<String>) = application {
         var isEventDefinitionSaveDialogVisible by remember { mutableStateOf(false) }
         var pendingAssignedControlsWarning by remember { mutableStateOf<PendingAssignedControlsWarning?>(null) }
         var assignedControlsWarningJob by remember { mutableStateOf<Job?>(null) }
+        var pendingControlRoleWarning by remember { mutableStateOf<String?>(null) }
         var isNationalStartListDefaultsDialogVisible by remember { mutableStateOf(false) }
         var pendingReadoutEdit by remember { mutableStateOf<DesktopReadoutEditDraft?>(null) }
         var siReaderState by remember { mutableStateOf(DesktopSiReaderUiState.disconnected()) }
@@ -3689,6 +3690,12 @@ fun main(args: Array<String>) = application {
                 onCancel = { pendingReadoutEdit = null }
             )
         }
+        pendingControlRoleWarning?.let { warning ->
+            ControlRoleWarningDialog(
+                warning = warning,
+                onDismiss = { pendingControlRoleWarning = null }
+            )
+        }
 
         RadioOManagerDesktopApp(
             projectFile = projectFile,
@@ -4203,7 +4210,7 @@ fun main(args: Array<String>) = application {
                     var affectedProtectedCourses = 0
                     var identityChanged = false
                     var lockedCourseWarning = ""
-                    var roleWarning = ""
+                    var roleWarning: String? = null
                     projectFile = projectSession.updateCurrentProject { currentProject ->
                         val existingControl = currentProject.raceData.controls.firstOrNull { it.id == controlId }
                         identityChanged = existingControl?.let { control ->
@@ -4221,27 +4228,28 @@ fun main(args: Array<String>) = application {
                             )
                             lockedCourseWarning = currentProject.lockedProtectedCourseWarning(protectedCoursePassword != null)
                         }
-                        roleWarning = controlRoleMismatchWarning(type, publicLabel)?.let { " Warning: $it" }.orEmpty()
+                        roleWarning = controlRoleMismatchWarning(type, publicLabel)
                         EventProjectEditor.updateControl(currentProject, controlId, label, siCode, type, scored, publicLabel, notes)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = if (identityChanged) {
                         recordActivity("Updated control identity.")
                         val impactWarning = projectFile?.resultImpactWarning("Control identity changed") ?: ""
-                        "Control identity updated. This control is used by $affectedAssignedCategories assigned categor${if (affectedAssignedCategories == 1) "y" else "ies"} and $affectedProtectedCourses stored course${if (affectedProtectedCourses == 1) "" else "s"}.$lockedCourseWarning$impactWarning$roleWarning"
+                        "Control identity updated. This control is used by $affectedAssignedCategories assigned categor${if (affectedAssignedCategories == 1) "y" else "ies"} and $affectedProtectedCourses stored course${if (affectedProtectedCourses == 1) "" else "s"}.$lockedCourseWarning$impactWarning"
                     } else {
                         recordActivity("Updated control details.")
-                        "Unsaved changes.$roleWarning"
+                        "Unsaved changes."
                     }
+                    pendingControlRoleWarning = roleWarning
                 }.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
             onAddControl = { label, siCode, type, scored, publicLabel, notes ->
-                var roleWarning = ""
+                var roleWarning: String? = null
                 val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
-                        roleWarning = controlRoleMismatchWarning(type, publicLabel)?.let { " Warning: $it" }.orEmpty()
+                        roleWarning = controlRoleMismatchWarning(type, publicLabel)
                         EventProjectEditor.addControl(
                             currentProject,
                             UUID.randomUUID().toString(),
@@ -4254,7 +4262,8 @@ fun main(args: Array<String>) = application {
                         )
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    projectStatusText = "Unsaved changes.$roleWarning"
+                    projectStatusText = "Unsaved changes."
+                    pendingControlRoleWarning = roleWarning
                 }
                 result.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
@@ -4312,6 +4321,23 @@ fun main(args: Array<String>) = application {
             }
         )
     }
+}
+
+@Composable
+private fun ControlRoleWarningDialog(
+    warning: String,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Check control role") },
+        text = { Text(warning) },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("OK")
+            }
+        }
+    )
 }
 
 /** Prompts for the standard save/discard/cancel decision before replacing or closing a dirty Event File. */
@@ -11240,7 +11266,6 @@ private fun ControlAddRow(
     onNotesChange: (String) -> Unit,
     onCommit: () -> Unit
 ) {
-    val roleWarning = controlRoleMismatchWarning(typeDraft, publicLabelDraft)
     Column(
         modifier = Modifier.width(fixedTableWidth(ControlTableColumns)),
     ) {
@@ -11283,7 +11308,6 @@ private fun ControlAddRow(
             )
             Spacer(modifier = Modifier.width(ControlTableColumns[4].width))
         }
-        RoleMismatchWarningText(roleWarning)
     }
 }
 
@@ -11332,7 +11356,6 @@ private fun ControlDetailRow(
         updateControl(siCodeText = normalizedDraft)
     }
 
-    val roleWarning = controlRoleMismatchWarning(control.type, control.publicLabel)
     Column(
         modifier = Modifier.width(fixedTableWidth(ControlTableColumns)),
     ) {
@@ -11378,7 +11401,6 @@ private fun ControlDetailRow(
             )
             Spacer(modifier = Modifier.width(ControlTableColumns[4].width))
         }
-        RoleMismatchWarningText(roleWarning)
     }
 }
 
@@ -11470,24 +11492,13 @@ private fun controlRoleLabel(type: ControlPointType, raceType: RaceType): String
         else -> EventControlDetails.typeLabel(type)
     }
 
-@Composable
-private fun RoleMismatchWarningText(warning: String?) {
-    if (warning != null) {
-        Text(
-            text = "Warning: $warning",
-            modifier = Modifier.padding(start = ControlTableColumns[0].width + TableColumnGap, top = 4.dp),
-            color = MaterialTheme.colors.error,
-            fontSize = 12.sp
-        )
-    }
-}
-
 private fun controlRoleMismatchWarning(type: ControlPointType, publicLabel: String): String? {
-    if (type != ControlPointType.CONTROL) {
-        return null
+    val inferredRole = ControlRoleLabelRules.inferredRole(publicLabel) ?: return null
+    return if (inferredRole == type) {
+        null
+    } else {
+        ControlRoleLabelRules.mismatchWarning(publicLabel, type, inferredRole)
     }
-    val inferredRole = ControlRoleLabelRules.inferredSpecialRole(publicLabel) ?: return null
-    return ControlRoleLabelRules.foxRoleWarning(publicLabel, inferredRole)
 }
 
 private fun controlRoleBackgroundColor(type: ControlPointType): Color =
