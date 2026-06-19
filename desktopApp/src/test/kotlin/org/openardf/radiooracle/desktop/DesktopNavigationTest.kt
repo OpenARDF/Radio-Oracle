@@ -740,7 +740,6 @@ class DesktopNavigationTest {
         assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Course Order" }.section)
         assertEquals(
             listOf(
-                "Competitors",
                 "Import Competitors CSV...",
                 "Import EventReg Website...",
                 "Export Competitors CSV...",

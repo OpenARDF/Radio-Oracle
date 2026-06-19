@@ -358,7 +358,6 @@ object DesktopNavigation {
                     "Competitors",
                     workflow,
                     listOf(
-                        item("setup.competitors.view", "Competitors", workflow, DesktopSection.Competitors),
                         action(
                             "setup.competitors.import",
                             "Import Competitors CSV...",
@@ -875,8 +874,6 @@ object DesktopNavigation {
             "Use Export Categories CSV to write the current category list and course fields for review, backup, or external editing.",
         "setup.competitors" to
             "Use Competitors to add, import, export, edit, and assign competitors to categories before drawing starts or running race operations.",
-        "setup.competitors.view" to
-            "Use Competitors to maintain names, bibs, SI cards, categories, club identity, birth years, and start-related competitor fields.",
         "setup.competitors.import" to
             "Use Import Competitors CSV to append or update competitor lists while preserving existing event setup data.",
         "setup.competitors.import-eventreg" to
