@@ -8411,24 +8411,33 @@ private fun CloudflarePagesPublishSettingsPanel(
     var branchDraft by remember(settings) { mutableStateOf(settings.branch) }
     var accountIdDraft by remember(settings) { mutableStateOf(settings.accountId) }
     var apiTokenDraft by remember(settings) { mutableStateOf(settings.apiToken) }
+    var saveConfirmationText by remember { mutableStateOf<String?>(null) }
+    val savedSettings = settings.normalized()
+    val rawDraftSettings = DesktopCloudflarePagesPublishSettings(
+        projectName = projectNameDraft,
+        branch = branchDraft,
+        accountId = accountIdDraft,
+        apiToken = apiTokenDraft
+    )
+    val draftSettings = rawDraftSettings.normalized()
+    val disabledReason = cloudflarePagesSettingsDisabledReason(rawDraftSettings, draftSettings, savedSettings)
     fun submitSettings() {
-        if (projectNameDraft.isNotBlank() && branchDraft.isNotBlank()) {
-            onSave(
-                DesktopCloudflarePagesPublishSettings(
-                    projectName = projectNameDraft,
-                    branch = branchDraft,
-                    accountId = accountIdDraft,
-                    apiToken = apiTokenDraft
-                )
-            )
+        if (disabledReason == null && onSave(draftSettings)) {
+            saveConfirmationText = "Cloudflare Pages settings saved."
         }
+    }
+    fun clearSaveConfirmation() {
+        saveConfirmationText = null
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             TextField(
                 value = projectNameDraft,
-                onValueChange = { projectNameDraft = it },
+                onValueChange = {
+                    projectNameDraft = it
+                    clearSaveConfirmation()
+                },
                 label = { Text("Pages project") },
                 singleLine = true,
                 modifier = Modifier
@@ -8437,7 +8446,10 @@ private fun CloudflarePagesPublishSettingsPanel(
             )
             TextField(
                 value = branchDraft,
-                onValueChange = { branchDraft = it },
+                onValueChange = {
+                    branchDraft = it
+                    clearSaveConfirmation()
+                },
                 label = { Text("Branch") },
                 singleLine = true,
                 modifier = Modifier
@@ -8447,7 +8459,10 @@ private fun CloudflarePagesPublishSettingsPanel(
         }
         TextField(
             value = accountIdDraft,
-            onValueChange = { accountIdDraft = it },
+            onValueChange = {
+                accountIdDraft = it
+                clearSaveConfirmation()
+            },
             label = { Text("Account ID") },
             singleLine = true,
             modifier = Modifier
@@ -8456,7 +8471,10 @@ private fun CloudflarePagesPublishSettingsPanel(
         )
         TextField(
             value = apiTokenDraft,
-            onValueChange = { apiTokenDraft = it },
+            onValueChange = {
+                apiTokenDraft = it
+                clearSaveConfirmation()
+            },
             label = { Text("API token") },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
@@ -8464,21 +8482,39 @@ private fun CloudflarePagesPublishSettingsPanel(
                 .fillMaxWidth()
                 .commitOnEnter(::submitSettings)
         )
-        DisabledReasonTooltip(cloudflarePagesSettingsDisabledReason(projectNameDraft, branchDraft)) {
-            Button(
-                onClick = ::submitSettings,
-                enabled = projectNameDraft.isNotBlank() && branchDraft.isNotBlank()
-            ) {
-                ButtonLabel("Save Cloudflare Settings")
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            DisabledReasonTooltip(disabledReason) {
+                Button(
+                    onClick = ::submitSettings,
+                    enabled = disabledReason == null
+                ) {
+                    ButtonLabel("Save Cloudflare Settings")
+                }
+            }
+            saveConfirmationText?.let { confirmation ->
+                Text(
+                    text = confirmation,
+                    color = DesktopPalette.Connected,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
             }
         }
     }
 }
 
-private fun cloudflarePagesSettingsDisabledReason(projectName: String, branch: String): String? =
+private fun cloudflarePagesSettingsDisabledReason(
+    rawDraftSettings: DesktopCloudflarePagesPublishSettings,
+    draftSettings: DesktopCloudflarePagesPublishSettings,
+    savedSettings: DesktopCloudflarePagesPublishSettings
+): String? =
     when {
-        projectName.isBlank() -> "Enter a Cloudflare Pages project name."
-        branch.isBlank() -> "Enter a Cloudflare Pages branch."
+        rawDraftSettings.projectName.isBlank() -> "Enter a Cloudflare Pages project name."
+        rawDraftSettings.branch.isBlank() -> "Enter a Cloudflare Pages branch."
+        draftSettings == savedSettings -> "Cloudflare Pages publishing settings are already saved."
         else -> null
     }
 
