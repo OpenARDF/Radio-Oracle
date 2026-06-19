@@ -7,6 +7,16 @@ import org.openardf.radiooracle.shared.files.FinalResultJsonExports
 import org.openardf.radiooracle.shared.files.HtmlResultExports
 import org.openardf.radiooracle.shared.files.IofXmlExports
 import org.openardf.radiooracle.shared.files.LiveResultJsonExports
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -14,6 +24,9 @@ import java.time.Instant
 
 data class DesktopPublicResultSiteExportPaths(
     val directory: Path,
+    val eventDirectory: Path,
+    val eventPath: String,
+    val rootIndexHtml: Path,
     val indexHtml: Path,
     val publicResultsJson: Path,
     val finalResultsJson: Path,
@@ -31,10 +44,14 @@ object DesktopPublicResultSiteExports {
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
         generatedAt: Instant = Instant.now()
     ): DesktopPublicResultSiteExportPaths {
-        val assetsDirectory = directory.resolve("assets")
-        val dataDirectory = directory.resolve("data")
-        val downloadsDirectory = directory.resolve("downloads")
-        listOf(directory, assetsDirectory, dataDirectory, downloadsDirectory).forEach(Files::createDirectories)
+        val eventPath = eventPath(projectFile, generatedAt)
+        val eventDirectory = directory.resolve(eventPath)
+        val rootDataDirectory = directory.resolve("data")
+        val assetsDirectory = eventDirectory.resolve("assets")
+        val dataDirectory = eventDirectory.resolve("data")
+        val downloadsDirectory = eventDirectory.resolve("downloads")
+        listOf(directory, rootDataDirectory, eventDirectory, assetsDirectory, dataDirectory, downloadsDirectory)
+            .forEach(Files::createDirectories)
 
         val finalResultsJson = FinalResultJsonExports.results(projectFile.raceData, protectedCourseInfoByCategoryId)
         val liveResultsJson = LiveResultJsonExports.results(projectFile.raceData)
@@ -45,7 +62,8 @@ object DesktopPublicResultSiteExports {
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
         )
 
-        val indexPath = directory.resolve("index.html")
+        val rootIndexPath = directory.resolve("index.html")
+        val indexPath = eventDirectory.resolve("index.html")
         val publicResultsPath = dataDirectory.resolve("public-results.json")
         val finalResultsPath = downloadsDirectory.resolve("final-results.json")
         val liveResultsPath = downloadsDirectory.resolve("live-results.json")
@@ -63,9 +81,23 @@ object DesktopPublicResultSiteExports {
         writeText(liveResultsPath, liveResultsJson)
         writeText(iofResultsPath, iofResultListXml)
         writeText(printableResultsPath, printableResultsHtml)
+        val eventSummary = PublishedEventSummary(
+            path = eventPath,
+            name = projectFile.raceData.race.name,
+            start = projectFile.raceData.race.startDateTimeIso,
+            generatedAt = generatedAt.toString(),
+            resultCount = EventResultDetails.from(projectFile.raceData).size
+        )
+        writeText(dataDirectory.resolve("event-summary.json"), eventSummaryJson(eventSummary))
+        val events = mergedEventSummaries(rootDataDirectory.resolve("events.json"), eventSummary)
+        writeText(rootDataDirectory.resolve("events.json"), eventsJson(events))
+        writeText(rootIndexPath, rootIndexHtml(events))
 
         return DesktopPublicResultSiteExportPaths(
             directory = directory,
+            eventDirectory = eventDirectory,
+            eventPath = eventPath,
+            rootIndexHtml = rootIndexPath,
             indexHtml = indexPath,
             publicResultsJson = publicResultsPath,
             finalResultsJson = finalResultsPath,
@@ -73,6 +105,28 @@ object DesktopPublicResultSiteExports {
             iofResultListXml = iofResultsPath,
             printableResultsHtml = printableResultsPath
         )
+    }
+
+    private fun eventPath(projectFile: EventProjectFile, generatedAt: Instant): String {
+        val datePrefix = projectFile.raceData.race.startDateTimeIso
+            .take(10)
+            .takeIf { it.matches(Regex("""\d{4}-\d{2}-\d{2}""")) }
+            ?: generatedAt.toString().take(10)
+        val nameSlug = projectFile.raceData.race.name
+            .lowercase()
+            .map { character ->
+                when {
+                    character.isLetterOrDigit() -> character
+                    else -> '-'
+                }
+            }
+            .joinToString("")
+            .replace(Regex("-+"), "-")
+            .trim('-')
+            .ifBlank { "event" }
+            .take(64)
+            .trim('-')
+        return "$datePrefix-$nameSlug"
     }
 
     private fun publicResultsJson(projectFile: EventProjectFile, generatedAt: Instant): String {
@@ -127,6 +181,52 @@ object DesktopPublicResultSiteExports {
             append("\n  ]\n")
             append("}\n")
         }
+    }
+
+    private fun rootIndexHtml(events: List<PublishedEventSummary>): String {
+        val eventLinks = if (events.isEmpty()) {
+            """<p class="empty-state">No public result events have been generated yet.</p>"""
+        } else {
+            events.joinToString(separator = "\n") { event ->
+                """
+                <a class="event-link" href="${htmlText(event.path)}/">
+                  <span>
+                    <strong>${htmlText(event.name)}</strong>
+                    <small>${htmlText(event.start)} | ${event.resultCount} results | Published ${htmlText(event.generatedAt)}</small>
+                  </span>
+                </a>
+                """.trimIndent()
+            }
+        }
+        return """
+        <!doctype html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>OpenARDF Results</title>
+          <style>
+            :root{--bg:#f4f6f8;--panel:#fff;--text:#111827;--muted:#5f6b7a;--line:#d8dee8;--accent:#1769aa}
+            *{box-sizing:border-box}
+            body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+            header{padding:36px min(6vw,72px) 28px;background:#fff;border-bottom:1px solid var(--line)}
+            main{display:grid;gap:12px;width:min(900px,calc(100% - 32px));margin:24px auto 40px}
+            h1{margin:0 0 8px;font-size:34px;line-height:1.1}.summary,.empty-state,small{color:var(--muted)}
+            .event-link{display:flex;align-items:center;min-height:72px;padding:16px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);text-decoration:none}
+            .event-link:hover{border-color:var(--accent)}.event-link strong,.event-link small{display:block}.event-link small{margin-top:4px}
+          </style>
+        </head>
+        <body>
+          <header>
+            <h1>OpenARDF Results</h1>
+            <p class="summary">Published Radio-Oracle event results.</p>
+          </header>
+          <main>
+            $eventLinks
+          </main>
+        </body>
+        </html>
+        """.trimIndent() + "\n"
     }
 
     private fun indexHtml(eventName: String): String =
@@ -224,7 +324,13 @@ object DesktopPublicResultSiteExports {
         /data/*
           Cache-Control: no-store
 
+        /*/data/*
+          Cache-Control: no-store
+
         /downloads/*
+          Cache-Control: public, max-age=300
+
+        /*/downloads/*
           Cache-Control: public, max-age=300
         """.trimIndent() + "\n"
 
@@ -262,4 +368,69 @@ object DesktopPublicResultSiteExports {
             .replace(">", "&gt;")
             .replace("\"", "&quot;")
             .replace("'", "&#39;")
+
+    private fun eventSummaryJson(summary: PublishedEventSummary): String =
+        buildJsonObject {
+            put("path", summary.path)
+            put("name", summary.name)
+            put("start", summary.start)
+            put("generatedAt", summary.generatedAt)
+            put("resultCount", summary.resultCount)
+        }.toString() + "\n"
+
+    private fun eventsJson(events: List<PublishedEventSummary>): String =
+        buildJsonObject {
+            put(
+                "events",
+                buildJsonArray {
+                    events.forEach { event ->
+                        add(
+                            buildJsonObject {
+                                put("path", event.path)
+                                put("name", event.name)
+                                put("start", event.start)
+                                put("generatedAt", event.generatedAt)
+                                put("resultCount", event.resultCount)
+                            }
+                        )
+                    }
+                }
+            )
+        }.toString() + "\n"
+
+    private fun mergedEventSummaries(eventsJsonPath: Path, current: PublishedEventSummary): List<PublishedEventSummary> {
+        val existing = if (Files.exists(eventsJsonPath)) {
+            runCatching {
+                Json.parseToJsonElement(Files.readString(eventsJsonPath, StandardCharsets.UTF_8))
+                    .jsonObject["events"]
+                    ?.jsonArray
+                    ?.mapNotNull { element -> element.jsonObject.toPublishedEventSummaryOrNull() }
+                    ?: emptyList()
+            }.getOrElse { emptyList() }
+        } else {
+            emptyList()
+        }
+        return (existing.filterNot { it.path == current.path } + current)
+            .sortedWith(compareByDescending<PublishedEventSummary> { it.start }.thenBy { it.name })
+    }
+
+    private fun JsonObject.toPublishedEventSummaryOrNull(): PublishedEventSummary? {
+        val path = stringValue("path") ?: return null
+        val name = stringValue("name") ?: return null
+        val start = stringValue("start") ?: ""
+        val generatedAt = stringValue("generatedAt") ?: ""
+        val resultCount = (this["resultCount"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
+        return PublishedEventSummary(path, name, start, generatedAt, resultCount)
+    }
+
+    private fun JsonObject.stringValue(key: String): String? =
+        (this[key] as? JsonPrimitive)?.jsonPrimitive?.content
+
+    private data class PublishedEventSummary(
+        val path: String,
+        val name: String,
+        val start: String,
+        val generatedAt: String,
+        val resultCount: Int
+    )
 }

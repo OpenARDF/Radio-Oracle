@@ -387,6 +387,7 @@ fun main(args: Array<String>) = application {
         var areAliasesEnabled by remember { mutableStateOf(true) }
         var localResultServerUrl by remember { mutableStateOf<String?>(null) }
         var publicResultSiteDirectory by remember { mutableStateOf<Path?>(null) }
+        var publicResultSiteEventPath by remember { mutableStateOf<String?>(null) }
         var publicResultSitePreviewServer by remember { mutableStateOf<DesktopPublicResultSitePreviewServer?>(null) }
         var publicResultSitePreviewUrl by remember { mutableStateOf<String?>(null) }
         var isPublishingPublicResultSite by remember { mutableStateOf(false) }
@@ -1971,7 +1972,7 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun openExternalUrl(url: String) {
+        fun browseExternalUrl(url: String): Result<Unit> =
             runCatching {
                 if (!Desktop.isDesktopSupported()) {
                     error("Opening links is not supported on this system.")
@@ -1981,7 +1982,10 @@ fun main(args: Array<String>) = application {
                     error("Opening links is not supported on this system.")
                 }
                 desktop.browse(URI(url))
-            }.onSuccess {
+            }
+
+        fun openExternalUrl(url: String) {
+            browseExternalUrl(url).onSuccess {
                 projectStatusText = "Opened link: $url"
             }.onFailure { error ->
                 projectStatusText = "Could not open link: ${error.message ?: error::class.simpleName}"
@@ -2560,8 +2564,9 @@ fun main(args: Array<String>) = application {
                         protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap()
                     )
                     publicResultSiteDirectory = paths.directory
+                    publicResultSiteEventPath = paths.eventPath
                     syncProjectState()
-                    projectStatusText = "Generated public results site at ${paths.directory}"
+                    projectStatusText = "Generated public results site at ${paths.eventDirectory}"
                 }.onFailure { error ->
                     projectStatusText = "Public results site generation failed: ${error.message ?: error::class.simpleName}"
                 }
@@ -2576,10 +2581,19 @@ fun main(args: Array<String>) = application {
             runCatching {
                 publicResultSitePreviewServer?.stop()
                 val server = DesktopPublicResultSitePreviewServer(directory)
-                val url = server.start()
+                val serverUrl = server.start()
+                val url = publicResultSiteEventPath
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { path -> "$serverUrl${path.trim('/')}/" }
+                    ?: serverUrl
                 publicResultSitePreviewServer = server
                 publicResultSitePreviewUrl = url
-                projectStatusText = "Public results site preview running at $url"
+                browseExternalUrl(url).onSuccess {
+                    projectStatusText = "Public results site preview running at $url"
+                }.onFailure { error ->
+                    projectStatusText =
+                        "Public results site preview running at $url, but the browser did not open: ${error.message ?: error::class.simpleName}"
+                }
             }.onFailure { error ->
                 publicResultSitePreviewServer = null
                 publicResultSitePreviewUrl = null
@@ -2592,6 +2606,14 @@ fun main(args: Array<String>) = application {
             publicResultSitePreviewServer = null
             publicResultSitePreviewUrl = null
             projectStatusText = "Public results site preview stopped."
+        }
+
+        fun openPublicResultsSitePreview() {
+            val url = publicResultSitePreviewUrl ?: run {
+                projectStatusText = "Start the public results site preview before opening it."
+                return
+            }
+            openExternalUrl(url)
         }
 
         fun publishPublicResultsSite() {
@@ -3350,6 +3372,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.StopLocalResultDisplay -> localResultServerUrl != null
                 DesktopNavAction.StartPublicResultsSitePreview ->
                     publicResultSiteDirectory != null && publicResultSitePreviewUrl == null
+                DesktopNavAction.OpenPublicResultsSitePreview -> publicResultSitePreviewUrl != null
                 DesktopNavAction.PublishPublicResultsSite ->
                     publicResultSiteDirectory != null && !isPublishingPublicResultSite
                 DesktopNavAction.StopPublicResultsSitePreview -> publicResultSitePreviewUrl != null
@@ -3440,6 +3463,8 @@ fun main(args: Array<String>) = application {
                         publicResultSitePreviewUrl != null -> "The public results site preview is already running."
                         else -> "Public results site preview is not available right now."
                     }
+                DesktopNavAction.OpenPublicResultsSitePreview ->
+                    "Start the public results site preview before opening it."
                 DesktopNavAction.PublishPublicResultsSite ->
                     when {
                         publicResultSiteDirectory == null -> "Generate a public results site before publishing."
@@ -3526,6 +3551,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.GeneratePublicResultsSite -> generatePublicResultsSite()
                 DesktopNavAction.PublishPublicResultsSite -> publishPublicResultsSite()
                 DesktopNavAction.StartPublicResultsSitePreview -> startPublicResultsSitePreview()
+                DesktopNavAction.OpenPublicResultsSitePreview -> openPublicResultsSitePreview()
                 DesktopNavAction.StopPublicResultsSitePreview -> stopPublicResultsSitePreview()
                 DesktopNavAction.ExportArdfJson -> exportArdfJson()
                 DesktopNavAction.ExportAndroidRaceBackupJson -> exportAndroidRaceBackupJson()

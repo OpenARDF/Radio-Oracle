@@ -957,6 +957,7 @@ class DesktopNavigationTest {
                 DesktopNavAction.GeneratePublicResultsSite,
                 DesktopNavAction.PublishPublicResultsSite,
                 DesktopNavAction.StartPublicResultsSitePreview,
+                DesktopNavAction.OpenPublicResultsSitePreview,
                 DesktopNavAction.StopPublicResultsSitePreview
             ),
             resultFiles
@@ -966,6 +967,7 @@ class DesktopNavigationTest {
                         DesktopNavAction.GeneratePublicResultsSite,
                         DesktopNavAction.PublishPublicResultsSite,
                         DesktopNavAction.StartPublicResultsSitePreview,
+                        DesktopNavAction.OpenPublicResultsSitePreview,
                         DesktopNavAction.StopPublicResultsSitePreview
                     )
                 }

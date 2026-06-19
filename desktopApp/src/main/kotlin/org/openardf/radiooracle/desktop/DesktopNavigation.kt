@@ -59,6 +59,7 @@ enum class DesktopNavAction {
     GeneratePublicResultsSite,
     PublishPublicResultsSite,
     StartPublicResultsSitePreview,
+    OpenPublicResultsSitePreview,
     StopPublicResultsSitePreview,
     ExportArdfJson,
     ExportAndroidRaceBackupJson,
@@ -503,6 +504,12 @@ object DesktopNavigation {
                                     "Start Public Site Preview",
                                     workflow,
                                     DesktopNavAction.StartPublicResultsSitePreview
+                                ),
+                                action(
+                                    "results.open-public-site-preview",
+                                    "Open Public Site Preview",
+                                    workflow,
+                                    DesktopNavAction.OpenPublicResultsSitePreview
                                 ),
                                 action(
                                     "results.stop-public-site-preview",
@@ -974,6 +981,8 @@ object DesktopNavigation {
             "Use Publish Public Results Site to deploy the generated public results site to Cloudflare Pages.",
         "results.start-public-site-preview" to
             "Use Start Public Site Preview to inspect the generated public results site on this computer.",
+        "results.open-public-site-preview" to
+            "Use Open Public Site Preview to reopen the generated public results site in your browser.",
         "results.stop-public-site-preview" to
             "Use Stop Public Site Preview to shut down the generated public results site preview.",
         "results.export-readouts" to
