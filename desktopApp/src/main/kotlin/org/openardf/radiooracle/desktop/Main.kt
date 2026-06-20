@@ -10972,7 +10972,7 @@ private fun VenueElevationCacheImportPanel(
     var minLongitudeDraft by remember { mutableStateOf("") }
     var maxLongitudeDraft by remember { mutableStateOf("") }
     var bufferMetersDraft by remember { mutableStateOf("500") }
-    var resolutionMetersDraft by remember { mutableStateOf("10") }
+    var resolutionMetersDraft by remember { mutableStateOf("3") }
     var localRasterPathDraft by remember { mutableStateOf("") }
 
     fun applyBoundingBox(bounds: DesktopVenueElevationBoundingBox) {
@@ -11032,14 +11032,14 @@ private fun VenueElevationCacheImportPanel(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             LabeledTextField("Venue", venueNameDraft, { venueNameDraft = it }, Modifier.width(320.dp))
-            LabeledTextField("Resolution m", resolutionMetersDraft, { resolutionMetersDraft = it }, Modifier.width(120.dp))
-            LabeledTextField("Buffer m", bufferMetersDraft, { bufferMetersDraft = it }, Modifier.width(120.dp))
+            LabeledTextField("Resolution (m)", resolutionMetersDraft, { resolutionMetersDraft = it }, Modifier.width(120.dp))
+            LabeledTextField("Buffer (m)", bufferMetersDraft, { bufferMetersDraft = it }, Modifier.width(120.dp))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            LabeledTextField("Min lat", minLatitudeDraft, { minLatitudeDraft = it }, Modifier.width(150.dp))
-            LabeledTextField("Max lat", maxLatitudeDraft, { maxLatitudeDraft = it }, Modifier.width(150.dp))
-            LabeledTextField("Min lon", minLongitudeDraft, { minLongitudeDraft = it }, Modifier.width(150.dp))
-            LabeledTextField("Max lon", maxLongitudeDraft, { maxLongitudeDraft = it }, Modifier.width(150.dp))
+            LabeledTextField("Min lat", minLatitudeDraft, { minLatitudeDraft = it }, Modifier.width(150.dp), placeholder = "35.123456")
+            LabeledTextField("Max lat", maxLatitudeDraft, { maxLatitudeDraft = it }, Modifier.width(150.dp), placeholder = "35.234567")
+            LabeledTextField("Min lon", minLongitudeDraft, { minLongitudeDraft = it }, Modifier.width(150.dp), placeholder = "-82.345678")
+            LabeledTextField("Max lon", maxLongitudeDraft, { maxLongitudeDraft = it }, Modifier.width(150.dp), placeholder = "-82.234567")
         }
         estimate?.let {
             Text(
@@ -14727,6 +14727,7 @@ private fun LabeledTextField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    placeholder: String = "",
     onCommit: (() -> Unit)? = null
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
@@ -14740,6 +14741,9 @@ private fun LabeledTextField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
+            placeholder = placeholder.takeIf { it.isNotBlank() }?.let { placeholderText ->
+                { Text(placeholderText) }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (onCommit != null) Modifier.commitOnEnter(onCommit) else Modifier),
