@@ -1970,12 +1970,14 @@ fun main(args: Array<String>) = application {
                 return
             }
             val cleanVenueName = venueName.trim().ifBlank { "Venue" }
-            val cacheActionText = if (source == DesktopVenueElevationCacheSource.LocalLidarRaster) {
-                "Creating"
+            val isLocalFileImport = source == DesktopVenueElevationCacheSource.LocalLidarRaster
+            val cacheActionText = if (isLocalFileImport) "Importing" else "Downloading"
+            val operationText = if (isLocalFileImport) "file import" else "download"
+            projectStatusText = if (isLocalFileImport) {
+                "Importing local elevation file data for $cleanVenueName..."
             } else {
-                "Downloading"
+                "Downloading ${source.label} elevation cache for $cleanVenueName..."
             }
-            projectStatusText = "$cacheActionText ${source.label} elevation cache for $cleanVenueName..."
             DesktopDebugLog.info(
                 "ElevationCache",
                 "$cacheActionText started venue=$cleanVenueName source=${source.label} resolution=${resolutionMeters}m buffer=${bufferMeters}m " +
@@ -1984,7 +1986,8 @@ fun main(args: Array<String>) = application {
             venueElevationCacheProgress = VenueElevationCacheProgressUiState(
                 venueName = cleanVenueName,
                 completedPointCount = 0,
-                totalPointCount = 1
+                totalPointCount = 1,
+                isLocalFileImport = isLocalFileImport
             )
             venueElevationCacheJob = appCoroutineScope.launch {
                 val result = runCatching {
@@ -1999,28 +2002,32 @@ fun main(args: Array<String>) = application {
                             venueElevationCacheProgress = VenueElevationCacheProgressUiState(
                                 venueName = progress.venueName,
                                 completedPointCount = progress.completedPointCount,
-                                totalPointCount = progress.totalPointCount
+                                totalPointCount = progress.totalPointCount,
+                                isLocalFileImport = isLocalFileImport
                             )
                         }
                     )
                 }
                 result.onSuccess { summary ->
                     venueElevationCacheRefreshToken++
-                    projectStatusText =
+                    projectStatusText = if (isLocalFileImport) {
+                        "Imported ${summary.sourceName} elevation cache for ${summary.venueName}: ${summary.resolvedPointCount}/${summary.pointCount} points at ${summary.resolutionMeters.roundToInt()} m."
+                    } else {
                         "Downloaded ${summary.sourceName} elevation cache for ${summary.venueName}: ${summary.resolvedPointCount}/${summary.pointCount} points at ${summary.resolutionMeters.roundToInt()} m."
+                    }
                 }.onFailure { error ->
                     projectStatusText = if (error is CancellationException) {
                         DesktopDebugLog.info(
                             "ElevationCache",
                             "$cacheActionText canceled venue=$cleanVenueName source=${source.label}"
                         )
-                        "Elevation cache ${cacheActionText.lowercase()} canceled."
+                        "Elevation cache $operationText canceled."
                     } else {
                         DesktopDebugLog.error(
                             "ElevationCache",
                             "$cacheActionText failed venue=$cleanVenueName source=${source.label}: ${error.message ?: error::class.simpleName}"
                         )
-                        "Elevation cache ${cacheActionText.lowercase()} failed: ${error.message ?: error::class.simpleName}"
+                        "Elevation cache $operationText failed: ${error.message ?: error::class.simpleName}"
                     }
                 }
                 venueElevationCacheProgress = null
@@ -5776,14 +5783,24 @@ private fun VenueElevationCacheProgressDialog(
     val fraction = completed.toFloat() / total.toFloat()
     AlertDialog(
         onDismissRequest = {},
-        title = { Text("Creating elevation cache") },
+        title = { Text(if (progress.isLocalFileImport) "Importing elevation file" else "Creating elevation cache") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                LinearProgressIndicator(
-                    progress = fraction,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text("$remaining of $total elevation grid points left to download")
+                if (progress.isLocalFileImport) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    Text("Converting local elevation file data and creating the elevation cache.")
+                    Text(
+                        text = "This can take a long time for large elevation files.",
+                        fontSize = 13.sp,
+                        color = Color.DarkGray
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        progress = fraction,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text("$remaining of $total elevation grid points left to download")
+                }
             }
         },
         confirmButton = {},
@@ -6834,6 +6851,7 @@ private data class VenueElevationCacheProgressUiState(
     val venueName: String,
     val completedPointCount: Int,
     val totalPointCount: Int,
+    val isLocalFileImport: Boolean = false,
     val cancelRequested: Boolean = false
 )
 
