@@ -1813,11 +1813,17 @@ fun main(args: Array<String>) = application {
                 error("Elevation cache download is already running.")
             }
             val venueName = "${projectSession.currentProject?.raceData?.race?.name ?: "Course Analysis"} ${summary.categoryName} calculated route"
+            val estimatedRawBytes = DesktopVenueElevationCache.estimate(
+                boundingBox,
+                CourseAnalysisCalculatedRouteElevationResolutionMeters,
+                CourseAnalysisCalculatedRouteElevationBufferMeters
+            ).rawBytes
             venueElevationCacheJob = currentJob
             venueElevationCacheProgress = VenueElevationCacheProgressUiState(
                 venueName = venueName,
                 completedPointCount = 0,
-                totalPointCount = 1
+                totalPointCount = 1,
+                estimatedRawBytes = estimatedRawBytes
             )
             return try {
                 val cacheSummary = DesktopVenueElevationCache.download(
@@ -1831,7 +1837,9 @@ fun main(args: Array<String>) = application {
                         venueElevationCacheProgress = VenueElevationCacheProgressUiState(
                             venueName = progress.venueName,
                             completedPointCount = progress.completedPointCount,
-                            totalPointCount = progress.totalPointCount
+                            totalPointCount = progress.totalPointCount,
+                            estimatedRawBytes = progress.estimatedRawBytes ?: estimatedRawBytes,
+                            cancelRequested = venueElevationCacheProgress?.cancelRequested == true
                         )
                     }
                 )
@@ -1956,7 +1964,7 @@ fun main(args: Array<String>) = application {
 
         fun startVenueElevationCacheDownload(
             venueName: String,
-            boundingBox: DesktopVenueElevationBoundingBox,
+            boundingBox: DesktopVenueElevationBoundingBox?,
             resolutionMeters: Double,
             bufferMeters: Double,
             source: DesktopVenueElevationCacheSource,
@@ -1971,8 +1979,24 @@ fun main(args: Array<String>) = application {
             }
             val cleanVenueName = venueName.trim().ifBlank { "Venue" }
             val isLocalFileImport = source == DesktopVenueElevationCacheSource.LocalLidarRaster
+            val localSourceTypes = if (isLocalFileImport) {
+                DesktopVenueElevationCache.desktopLocalElevationSourceTypes(sourceUrl)
+            } else {
+                emptyList()
+            }
+            val localSourceIsPointCloud = localSourceTypes.isNotEmpty() &&
+                localSourceTypes.all { it == LocalElevationSourceType.LasPointCloud }
             val cacheActionText = if (isLocalFileImport) "Importing" else "Downloading"
             val operationText = if (isLocalFileImport) "file import" else "download"
+            val estimatedRawBytes = if (localSourceIsPointCloud) {
+                null
+            } else {
+                boundingBox?.takeIf { resolutionMeters > 0.0 }?.let { bounds ->
+                    runCatching {
+                        DesktopVenueElevationCache.estimate(bounds, resolutionMeters, bufferMeters).rawBytes
+                    }.getOrNull()
+                }
+            }
             projectStatusText = if (isLocalFileImport) {
                 "Importing local elevation file data for $cleanVenueName..."
             } else {
@@ -1981,13 +2005,14 @@ fun main(args: Array<String>) = application {
             DesktopDebugLog.info(
                 "ElevationCache",
                 "$cacheActionText started venue=$cleanVenueName source=${source.label} resolution=${resolutionMeters}m buffer=${bufferMeters}m " +
-                    "bounds=${boundingBox.minLatitude},${boundingBox.minLongitude}..${boundingBox.maxLatitude},${boundingBox.maxLongitude}"
+                    "bounds=${boundingBox?.let { "${it.minLatitude},${it.minLongitude}..${it.maxLatitude},${it.maxLongitude}" } ?: "full-source"}"
             )
             venueElevationCacheProgress = VenueElevationCacheProgressUiState(
                 venueName = cleanVenueName,
                 completedPointCount = 0,
                 totalPointCount = 1,
-                isLocalFileImport = isLocalFileImport
+                isLocalFileImport = isLocalFileImport,
+                estimatedRawBytes = estimatedRawBytes
             )
             venueElevationCacheJob = appCoroutineScope.launch {
                 val result = runCatching {
@@ -2000,13 +2025,15 @@ fun main(args: Array<String>) = application {
                         sourceUrl = sourceUrl,
                         onProgress = { progress ->
                             venueElevationCacheProgress = VenueElevationCacheProgressUiState(
-                                venueName = progress.venueName,
-                                completedPointCount = progress.completedPointCount,
-                                totalPointCount = progress.totalPointCount,
-                                isLocalFileImport = isLocalFileImport
-                            )
-                        }
-                    )
+                            venueName = progress.venueName,
+                            completedPointCount = progress.completedPointCount,
+                            totalPointCount = progress.totalPointCount,
+                            isLocalFileImport = isLocalFileImport,
+                            estimatedRawBytes = progress.estimatedRawBytes ?: estimatedRawBytes,
+                            cancelRequested = venueElevationCacheProgress?.cancelRequested == true
+                        )
+                    }
+                )
                 }
                 result.onSuccess { summary ->
                     venueElevationCacheRefreshToken++
@@ -5781,6 +5808,7 @@ private fun VenueElevationCacheProgressDialog(
     val completed = progress.completedPointCount.coerceIn(0, total)
     val remaining = (total - completed).coerceAtLeast(0)
     val fraction = completed.toFloat() / total.toFloat()
+    val estimatedSizeText = progress.estimatedRawBytes?.let(::bytesText) ?: "calculating..."
     AlertDialog(
         onDismissRequest = {},
         title = { Text(if (progress.isLocalFileImport) "Importing elevation file" else "Creating elevation cache") },
@@ -5789,6 +5817,7 @@ private fun VenueElevationCacheProgressDialog(
                 if (progress.isLocalFileImport) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     Text("Converting local elevation file data and creating the elevation cache.")
+                    Text("Estimated output size: $estimatedSizeText")
                     Text(
                         text = "This can take a long time for large elevation files.",
                         fontSize = 13.sp,
@@ -5800,6 +5829,7 @@ private fun VenueElevationCacheProgressDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Text("$remaining of $total elevation grid points left to download")
+                    Text("Estimated output size: $estimatedSizeText")
                 }
             }
         },
@@ -6852,6 +6882,7 @@ private data class VenueElevationCacheProgressUiState(
     val completedPointCount: Int,
     val totalPointCount: Int,
     val isLocalFileImport: Boolean = false,
+    val estimatedRawBytes: Long? = null,
     val cancelRequested: Boolean = false
 )
 
@@ -6964,7 +6995,7 @@ private fun RadioOManagerDesktopApp(
     recentActivityLog: List<String> = emptyList(),
     onResolveCachedCourseAnalysisElevations: suspend (String) -> CourseAnalysisElevationPreparationResult? = { null },
     onDownloadMissingCourseAnalysisElevations: suspend (String, DesktopCourseAnalysisSummary) -> CourseAnalysisElevationPreparationResult? = { _, _ -> null },
-    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit = { _, _, _, _, _, _ -> },
+    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox?, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit = { _, _, _, _, _, _ -> },
     onOpenVenueElevationCacheFolder: () -> Unit = {},
     onOpenPublishedPublicResultsSite: (String) -> Unit = {},
     onCopyPublishedPublicResultsSite: (String) -> Unit = {},
@@ -7991,7 +8022,7 @@ private fun SectionWorkspace(
     recentActivityLog: List<String>,
     onResolveCachedCourseAnalysisElevations: suspend (String) -> CourseAnalysisElevationPreparationResult?,
     onDownloadMissingCourseAnalysisElevations: suspend (String, DesktopCourseAnalysisSummary) -> CourseAnalysisElevationPreparationResult?,
-    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
+    onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox?, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
     onOpenVenueElevationCacheFolder: () -> Unit,
     onOpenPublishedPublicResultsSite: (String) -> Unit,
     onCopyPublishedPublicResultsSite: (String) -> Unit,
@@ -10959,7 +10990,7 @@ private fun VenueElevationCachePanel(
 private fun VenueElevationCacheImportPanel(
     projectFile: EventProjectFile,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
-    onDownloadCache: (String, DesktopVenueElevationBoundingBox, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit
+    onDownloadCache: (String, DesktopVenueElevationBoundingBox?, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit
 ) {
     val importedBounds = remember(protectedCourseInfoByCategoryId) {
         protectedCourseInfoByCategoryId.values.flatMap { it.courseGeoPoints() }.venueBoundingBoxOrNull()
@@ -11002,6 +11033,10 @@ private fun VenueElevationCacheImportPanel(
     }
     val resolutionMeters = resolutionMetersDraft.toDoubleOrNull()
     val bufferMeters = bufferMetersDraft.toDoubleOrNull() ?: 0.0
+    val boundingBoxFieldsAreBlank = minLatitudeDraft.isBlank() &&
+        maxLatitudeDraft.isBlank() &&
+        minLongitudeDraft.isBlank() &&
+        maxLongitudeDraft.isBlank()
     val estimate = remember(parsedBoundingBox, resolutionMeters, bufferMeters) {
         if (parsedBoundingBox != null && resolutionMeters != null && resolutionMeters > 0.0) {
             runCatching {
@@ -11104,12 +11139,11 @@ private fun VenueElevationCacheImportPanel(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 val localSourceTypes = DesktopVenueElevationCache.desktopLocalElevationSourceTypes(localRasterPathDraft)
-                val localSourceIsPointCloudOnly = localSourceTypes.isNotEmpty() &&
-                    localSourceTypes.all { it == LocalElevationSourceType.LasPointCloud }
                 val localSourceCanCreate = resolutionMeters != null &&
                     resolutionMeters > 0.0 &&
                     localRasterPathDraft.isNotBlank() &&
-                    (parsedBoundingBox != null || localSourceIsPointCloudOnly)
+                    localSourceTypes.isNotEmpty() &&
+                    (parsedBoundingBox != null || boundingBoxFieldsAreBlank)
                 Button(
                     onClick = {
                         val paths = DesktopFileDialogs.chooseElevationRaster()
@@ -11124,11 +11158,7 @@ private fun VenueElevationCacheImportPanel(
                     onClick = {
                         val resolution = resolutionMeters ?: return@Button
                         val bounds = parsedBoundingBox
-                            ?: if (localSourceIsPointCloudOnly) {
-                                DesktopVenueElevationBoundingBox(0.0, 0.0, 0.0, 0.0)
-                            } else {
-                                return@Button
-                            }
+                            ?: if (boundingBoxFieldsAreBlank) null else return@Button
                         onDownloadCache(
                             venueNameDraft,
                             bounds,

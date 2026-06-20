@@ -114,7 +114,8 @@ data class DesktopVenueElevationCacheEstimate(
 data class DesktopVenueElevationCacheProgress(
     val venueName: String,
     val completedPointCount: Int,
-    val totalPointCount: Int
+    val totalPointCount: Int,
+    val estimatedRawBytes: Long? = null
 )
 
 data class DesktopVenueElevationCacheSummary(
@@ -452,7 +453,7 @@ object DesktopVenueElevationCache {
 
     suspend fun download(
         venueName: String,
-        boundingBox: DesktopVenueElevationBoundingBox,
+        boundingBox: DesktopVenueElevationBoundingBox?,
         resolutionMeters: Double,
         bufferMeters: Double,
         source: DesktopVenueElevationCacheSource = DesktopVenueElevationCacheSource.Usgs3Dep,
@@ -463,7 +464,7 @@ object DesktopVenueElevationCache {
             DesktopVenueElevationCacheSource.Usgs3Dep ->
                 downloadUsgs3Dep(
                     venueName = venueName,
-                    boundingBox = boundingBox,
+                    boundingBox = requireNotNull(boundingBox) { "USGS 3DEP download requires bounding coordinates." },
                     resolutionMeters = resolutionMeters,
                     bufferMeters = bufferMeters,
                     onProgress = onProgress
@@ -471,7 +472,7 @@ object DesktopVenueElevationCache {
             DesktopVenueElevationCacheSource.WashingtonDnrLidarDtm ->
                 downloadWashingtonDnrLidarDtm(
                     venueName = venueName,
-                    boundingBox = boundingBox,
+                    boundingBox = requireNotNull(boundingBox) { "Washington DNR LiDAR DTM download requires bounding coordinates." },
                     resolutionMeters = resolutionMeters,
                     bufferMeters = bufferMeters,
                     onProgress = onProgress
@@ -479,7 +480,7 @@ object DesktopVenueElevationCache {
             DesktopVenueElevationCacheSource.OregonDogamiLidarDtm ->
                 downloadOregonDogamiLidarDtm(
                     venueName = venueName,
-                    boundingBox = boundingBox,
+                    boundingBox = requireNotNull(boundingBox) { "Oregon DOGAMI LiDAR DTM download requires bounding coordinates." },
                     resolutionMeters = resolutionMeters,
                     bufferMeters = bufferMeters,
                     onProgress = onProgress
@@ -510,7 +511,8 @@ object DesktopVenueElevationCache {
                 DesktopVenueElevationCacheProgress(
                     venueName = cleanVenueName,
                     completedPointCount = 0,
-                    totalPointCount = points.size
+                    totalPointCount = points.size,
+                    estimatedRawBytes = estimate.rawBytes
                 )
             )
             val elevations = MutableList<Double?>(points.size) { null }
@@ -526,7 +528,8 @@ object DesktopVenueElevationCache {
                     DesktopVenueElevationCacheProgress(
                         venueName = cleanVenueName,
                         completedPointCount = completed,
-                        totalPointCount = points.size
+                        totalPointCount = points.size,
+                        estimatedRawBytes = estimate.rawBytes
                     )
                 )
             }
@@ -587,7 +590,8 @@ object DesktopVenueElevationCache {
                 DesktopVenueElevationCacheProgress(
                     venueName = cleanVenueName,
                     completedPointCount = 0,
-                    totalPointCount = points.size
+                    totalPointCount = points.size,
+                    estimatedRawBytes = estimate.rawBytes
                 )
             )
             val directory = cacheDirectory()
@@ -614,7 +618,8 @@ object DesktopVenueElevationCache {
                     DesktopVenueElevationCacheProgress(
                         venueName = cleanVenueName,
                         completedPointCount = points.size,
-                        totalPointCount = points.size
+                        totalPointCount = points.size,
+                        estimatedRawBytes = estimate.rawBytes
                     )
                 )
                 val file = DesktopVenueElevationCacheFile(
@@ -672,7 +677,8 @@ object DesktopVenueElevationCache {
                 DesktopVenueElevationCacheProgress(
                     venueName = cleanVenueName,
                     completedPointCount = 0,
-                    totalPointCount = points.size
+                    totalPointCount = points.size,
+                    estimatedRawBytes = estimate.rawBytes
                 )
             )
             val elevations = MutableList<Double?>(points.size) { null }
@@ -688,7 +694,8 @@ object DesktopVenueElevationCache {
                     DesktopVenueElevationCacheProgress(
                         venueName = cleanVenueName,
                         completedPointCount = completed,
-                        totalPointCount = points.size
+                        totalPointCount = points.size,
+                        estimatedRawBytes = estimate.rawBytes
                     )
                 )
             }
@@ -732,7 +739,7 @@ object DesktopVenueElevationCache {
 
     private suspend fun createFromLocalLidarRaster(
         venueName: String,
-        boundingBox: DesktopVenueElevationBoundingBox,
+        boundingBox: DesktopVenueElevationBoundingBox?,
         resolutionMeters: Double,
         bufferMeters: Double,
         sourcePathText: String,
@@ -746,7 +753,7 @@ object DesktopVenueElevationCache {
             val gdal = DesktopGdalTools.requireAvailable()
             val workDirectory = Files.createTempDirectory("radio-oracle-local-lidar-")
             var elevationUnits = DesktopGdalElevationUnits("unspecified", 1.0)
-            var estimate = estimate(boundingBox, resolutionMeters, bufferMeters)
+            var estimate: DesktopVenueElevationCacheEstimate? = null
             var points = emptyList<CourseGeoPoint>()
             val elevations = try {
                 val rasterPath = when (sourceType) {
@@ -763,6 +770,24 @@ object DesktopVenueElevationCache {
                         val pdal = DesktopPdalTools.requireAvailable()
                         val outputRaster = workDirectory.resolve("point-cloud-dem.tif")
                         elevationUnits = pdal.commonElevationUnits(sourcePaths)
+                        estimate = runCatching {
+                            estimate(pdal.wgs84BoundingBox(sourcePaths), resolutionMeters, 0.0)
+                        }.onFailure { error ->
+                            DesktopDebugLog.info(
+                                "ElevationCache",
+                                "Could not estimate LAS/LAZ point-cloud extent before rasterization: ${error.message ?: error::class.simpleName}"
+                            )
+                        }.getOrNull()
+                        estimate?.let { pointCloudEstimate ->
+                            onProgress(
+                                DesktopVenueElevationCacheProgress(
+                                    venueName = cleanVenueName,
+                                    completedPointCount = 0,
+                                    totalPointCount = pointCloudEstimate.pointCount,
+                                    estimatedRawBytes = pointCloudEstimate.rawBytes
+                                )
+                            )
+                        }
                         pdal.rasterizeLasPointCloud(
                             sourcePaths = sourcePaths,
                             outputRaster = outputRaster,
@@ -775,13 +800,22 @@ object DesktopVenueElevationCache {
                 }
                 if (sourceType != LocalElevationSourceType.LasPointCloud) {
                     elevationUnits = gdal.elevationUnits(rasterPath)
+                    estimate = estimate(
+                        boundingBox ?: gdal.wgs84BoundingBox(rasterPath),
+                        resolutionMeters,
+                        if (boundingBox == null) 0.0 else bufferMeters
+                    )
                 }
-                points = estimate.gridPoints()
+                val cacheEstimate = requireNotNull(estimate) {
+                    "Local elevation source extent could not be determined."
+                }
+                points = cacheEstimate.gridPoints()
                 onProgress(
                     DesktopVenueElevationCacheProgress(
                         venueName = cleanVenueName,
                         completedPointCount = 0,
-                        totalPointCount = points.size
+                        totalPointCount = points.size,
+                        estimatedRawBytes = cacheEstimate.rawBytes
                     )
                 )
                 gdal.sampleWgs84(
@@ -793,7 +827,8 @@ object DesktopVenueElevationCache {
                             DesktopVenueElevationCacheProgress(
                                 venueName = cleanVenueName,
                                 completedPointCount = completed,
-                                totalPointCount = points.size
+                                totalPointCount = points.size,
+                                estimatedRawBytes = cacheEstimate.rawBytes
                             )
                         )
                     }
@@ -802,18 +837,23 @@ object DesktopVenueElevationCache {
                         DesktopVenueElevationCacheProgress(
                             venueName = cleanVenueName,
                             completedPointCount = points.size,
-                            totalPointCount = points.size
+                            totalPointCount = points.size,
+                            estimatedRawBytes = cacheEstimate.rawBytes
                         )
                     )
                 }
             } finally {
                 runCatching { deleteRecursively(workDirectory) }
             }
+            val cacheEstimate = requireNotNull(estimate) {
+                "Local elevation source extent could not be determined."
+            }
             onProgress(
                 DesktopVenueElevationCacheProgress(
                     venueName = cleanVenueName,
                     completedPointCount = points.size,
-                    totalPointCount = points.size
+                    totalPointCount = points.size,
+                    estimatedRawBytes = cacheEstimate.rawBytes
                 )
             )
             val file = DesktopVenueElevationCacheFile(
@@ -823,9 +863,9 @@ object DesktopVenueElevationCache {
                     sourceName = "Local LiDAR Raster - ${localElevationSourceLabel(sourcePaths)}${elevationUnits.sourceNameSuffix()}",
                     sourceUrl = sourcePaths.joinToString(System.lineSeparator()) { it.toString() },
                     resolutionMeters = resolutionMeters,
-                    rowCount = estimate.rowCount,
-                    columnCount = estimate.columnCount,
-                    boundingBox = estimate.boundingBox.toSerializable(),
+                    rowCount = cacheEstimate.rowCount,
+                    columnCount = cacheEstimate.columnCount,
+                    boundingBox = cacheEstimate.boundingBox.toSerializable(),
                     createdAtIso = Instant.now().toString()
                 ),
                 elevations = elevations
@@ -846,8 +886,8 @@ object DesktopVenueElevationCache {
             DesktopVenueElevationCacheSummary(
                 venueName = cleanVenueName,
                 path = path,
-                rowCount = estimate.rowCount,
-                columnCount = estimate.columnCount,
+                rowCount = cacheEstimate.rowCount,
+                columnCount = cacheEstimate.columnCount,
                 pointCount = points.size,
                 resolvedPointCount = elevations.count { it != null },
                 sourceName = file.metadata.sourceName,
@@ -1629,7 +1669,7 @@ object DesktopVenueElevationCache {
             "${sourcePaths.size} LAS/LAZ files"
         }
 
-    private fun rasterPathForZipArchive(
+    private suspend fun rasterPathForZipArchive(
         workDirectory: Path,
         zipPath: Path,
         gdal: DesktopGdalTools,
@@ -1669,7 +1709,7 @@ object DesktopVenueElevationCache {
         return vrt.toString()
     }
 
-    private fun extractRasterArchive(
+    private suspend fun extractRasterArchive(
         workDirectory: Path,
         zipPath: Path,
         gdal: DesktopGdalTools,
@@ -1951,6 +1991,27 @@ private fun findDesktopExecutable(name: String): Path? {
     return candidates.firstOrNull { Files.isExecutable(it) }
 }
 
+private suspend fun Process.waitForCancellable(): Int =
+    suspendCancellableCoroutine { continuation ->
+        val future = CompletableFuture.supplyAsync {
+            waitFor()
+        }
+        continuation.invokeOnCancellation {
+            destroyForcibly()
+            future.cancel(true)
+        }
+        future.whenComplete { exitCode, throwable ->
+            if (!continuation.isActive) {
+                return@whenComplete
+            }
+            if (throwable != null) {
+                continuation.resumeWithException((throwable as? CompletionException)?.cause ?: throwable)
+            } else {
+                continuation.resume(exitCode)
+            }
+        }
+    }
+
 private class DesktopGdalTools(
     val gdalBuildVrt: Path,
     private val gdalInfo: Path,
@@ -2026,7 +2087,7 @@ private class DesktopGdalTools(
                     }
                 }
             }
-            process.waitFor()
+            process.waitForCancellable()
         } finally {
             cancellationHandle?.dispose()
         }
@@ -2055,15 +2116,8 @@ private class DesktopGdalTools(
         return desktopGdalWgs84BoundingBoxFromInfo(output)
     }
 
-    fun runCommand(command: List<String>) {
-        val process = ProcessBuilder(command)
-            .redirectErrorStream(true)
-            .start()
-        val output = process.inputStream.bufferedReader().use { it.readText() }
-        val exitCode = process.waitFor()
-        require(exitCode == 0) {
-            "GDAL command failed with exit code $exitCode: ${output.trim()}"
-        }
+    suspend fun runCommand(command: List<String>) {
+        processOutput(command)
     }
 
     private suspend fun processOutput(command: List<String>): String {
@@ -2079,7 +2133,7 @@ private class DesktopGdalTools(
             }
         }
         val exitCode = try {
-            process.waitFor()
+            process.waitForCancellable()
         } finally {
             cancellationHandle?.dispose()
         }
@@ -2130,6 +2184,26 @@ private class DesktopPdalTools(
         return desktopGdalElevationUnitsFromInfo(output, sourcePath.toString())
     }
 
+    suspend fun wgs84BoundingBox(sourcePaths: List<Path>): DesktopVenueElevationBoundingBox {
+        require(sourcePaths.isNotEmpty()) {
+            "At least one LAS/LAZ source file is required."
+        }
+        return sourcePaths
+            .map { sourcePath ->
+                desktopPdalStacWgs84BoundingBoxFromInfo(
+                    processOutput(listOf(pdal.toString(), "info", "--stac", sourcePath.toString()))
+                )
+            }
+            .reduce { combined, boundingBox ->
+                DesktopVenueElevationBoundingBox(
+                    minLatitude = min(combined.minLatitude, boundingBox.minLatitude),
+                    maxLatitude = max(combined.maxLatitude, boundingBox.maxLatitude),
+                    minLongitude = min(combined.minLongitude, boundingBox.minLongitude),
+                    maxLongitude = max(combined.maxLongitude, boundingBox.maxLongitude)
+                )
+            }
+    }
+
     suspend fun rasterizeLasPointCloud(
         sourcePaths: List<Path>,
         outputRaster: Path,
@@ -2161,7 +2235,7 @@ private class DesktopPdalTools(
             }
         }
         val exitCode = try {
-            process.waitFor()
+            process.waitForCancellable()
         } finally {
             cancellationHandle?.dispose()
         }
@@ -2267,6 +2341,33 @@ internal fun desktopGdalWgs84BoundingBoxFromInfo(output: String): DesktopVenueEl
         maxLatitude = points.maxOf { it.latitude },
         minLongitude = points.minOf { it.longitude },
         maxLongitude = points.maxOf { it.longitude }
+    )
+}
+
+internal fun desktopPdalStacWgs84BoundingBoxFromInfo(output: String): DesktopVenueElevationBoundingBox {
+    val root = desktopGdalJson.parseToJsonElement(output).jsonObject
+    val values = root["bbox"]
+        ?.jsonArray
+        ?.map { value -> value.jsonPrimitive.doubleOrNull }
+        ?: throw IllegalArgumentException("PDAL STAC info did not include a WGS84 bbox.")
+    require(values.all { it != null } && (values.size == 4 || values.size == 6)) {
+        "PDAL STAC bbox must contain four 2D or six 3D numeric values."
+    }
+    val minLongitude = values[0] ?: error("Missing minimum longitude.")
+    val minLatitude = values[1] ?: error("Missing minimum latitude.")
+    val maxLongitude = values[if (values.size == 6) 3 else 2] ?: error("Missing maximum longitude.")
+    val maxLatitude = values[if (values.size == 6) 4 else 3] ?: error("Missing maximum latitude.")
+    require(minLatitude in -90.0..90.0 && maxLatitude in -90.0..90.0) {
+        "PDAL STAC bbox latitude values are outside WGS84 range."
+    }
+    require(minLongitude in -180.0..180.0 && maxLongitude in -180.0..180.0) {
+        "PDAL STAC bbox longitude values are outside WGS84 range."
+    }
+    return DesktopVenueElevationBoundingBox(
+        minLatitude = minLatitude,
+        maxLatitude = maxLatitude,
+        minLongitude = minLongitude,
+        maxLongitude = maxLongitude
     )
 }
 

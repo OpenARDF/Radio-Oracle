@@ -148,6 +148,40 @@ class DesktopVenueElevationCacheTest {
     }
 
     @Test
+    fun parsesPdalStacTwoDimensionalBoundingBox() {
+        val boundingBox = desktopPdalStacWgs84BoundingBoxFromInfo(
+            """
+            {
+              "type": "Feature",
+              "bbox": [-122.30, 44.80, -121.70, 45.40]
+            }
+            """.trimIndent()
+        )
+
+        assertEquals(44.80, boundingBox.minLatitude, 0.000001)
+        assertEquals(45.40, boundingBox.maxLatitude, 0.000001)
+        assertEquals(-122.30, boundingBox.minLongitude, 0.000001)
+        assertEquals(-121.70, boundingBox.maxLongitude, 0.000001)
+    }
+
+    @Test
+    fun parsesPdalStacThreeDimensionalBoundingBox() {
+        val boundingBox = desktopPdalStacWgs84BoundingBoxFromInfo(
+            """
+            {
+              "type": "Feature",
+              "bbox": [-122.30, 44.80, 95.0, -121.70, 45.40, 180.0]
+            }
+            """.trimIndent()
+        )
+
+        assertEquals(44.80, boundingBox.minLatitude, 0.000001)
+        assertEquals(45.40, boundingBox.maxLatitude, 0.000001)
+        assertEquals(-122.30, boundingBox.minLongitude, 0.000001)
+        assertEquals(-121.70, boundingBox.maxLongitude, 0.000001)
+    }
+
+    @Test
     fun acceptsCompleteGdalLocationInfoOutputWhenExitCodeReportsEdgeNoData() {
         assertTrue(gdalLocationInfoExitIsAcceptable(exitCode = 0, error = "", outputLineCount = 10, pointCount = 10))
         assertTrue(gdalLocationInfoExitIsAcceptable(exitCode = 1, error = "", outputLineCount = 10, pointCount = 10))
