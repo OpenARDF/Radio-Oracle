@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.HttpURLConnection
@@ -8,6 +9,14 @@ import java.net.URL
 import java.nio.file.Files
 
 class DesktopPublicResultSitePreviewServerTest {
+    @Test
+    fun localResultsQrCodeUrlsExcludeLoopbackPreviewAddresses() {
+        assertFalse(isShareableLocalResultsWebServerUrl("http://127.0.0.1:12345/event/"))
+        assertFalse(isShareableLocalResultsWebServerUrl("http://localhost:12345/event/"))
+        assertFalse(isShareableLocalResultsWebServerUrl("http://[::1]:12345/event/"))
+        assertTrue(isShareableLocalResultsWebServerUrl("http://192.168.1.20:12345/event/"))
+    }
+
     @Test
     fun servesStaticPublicSiteFilesOnLoopback() {
         val directory = Files.createTempDirectory("rom-public-site-preview")

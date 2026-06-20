@@ -71,7 +71,7 @@ enum class DesktopNavAction {
     StopContinuousSiReadout,
     OpenLocalResultsWebPage,
     PreviewLocalResultsWebPage,
-    ShareLocalResultsWebServerOnWifi,
+    StartLocalResultsWebServer,
     StopLocalResultsWebServer,
     SendRobis,
     ShowDebugLogHelp,
@@ -149,12 +149,21 @@ data class DesktopNavState(
     val selectedItemId: String = "setup.home"
 ) {
     fun switchWorkflow(nextWorkflow: DesktopWorkflow): DesktopNavState =
-        copy(
-            workflow = nextWorkflow,
-            submenuStack = emptyList(),
-            selectedSection = DesktopNavigation.defaultSection(nextWorkflow),
-            selectedItemId = DesktopNavigation.defaultItemId(nextWorkflow)
-        )
+        if (nextWorkflow == DesktopWorkflow.ResultsExport) {
+            copy(
+                workflow = nextWorkflow,
+                submenuStack = emptyList(),
+                selectedSection = DesktopSection.Results,
+                selectedItemId = "results.results"
+            )
+        } else {
+            copy(
+                workflow = nextWorkflow,
+                submenuStack = emptyList(),
+                selectedSection = DesktopNavigation.defaultSection(nextWorkflow),
+                selectedItemId = DesktopNavigation.defaultItemId(nextWorkflow)
+            )
+        }
 
     fun enter(item: DesktopNavItem): DesktopNavState =
         when {
@@ -451,7 +460,6 @@ object DesktopNavigation {
                 item("race.finish-tickets", "Finish Tickets", workflow, DesktopSection.Readouts)
             )
             DesktopWorkflow.ResultsExport -> listOf(
-                item("results.results", "Results", workflow, DesktopSection.Results),
                 group(
                     "results.live",
                     "Live Results",
@@ -477,10 +485,10 @@ object DesktopNavigation {
                                     section = DesktopSection.LocalResultsWebServer
                                 ),
                                 action(
-                                    "results.share-local-web-server-wifi",
-                                    "Share on WiFi",
+                                    "results.start-local-web-server",
+                                    "Start Web Server",
                                     workflow,
-                                    DesktopNavAction.ShareLocalResultsWebServerOnWifi,
+                                    DesktopNavAction.StartLocalResultsWebServer,
                                     section = DesktopSection.LocalResultsWebServer
                                 ),
                                 action(
@@ -879,6 +887,13 @@ object DesktopNavigation {
             if (selected.label !in labels) {
                 labels += selected.label
             }
+        } ?: run {
+            if (
+                state.selectedItemId == "results.results" &&
+                state.selectedSection.label !in labels
+            ) {
+                labels += state.selectedSection.label
+            }
         }
         return labels.joinToString(" > ")
     }
@@ -909,7 +924,8 @@ object DesktopNavigation {
 
     fun selectedDescription(state: DesktopNavState): String {
         val item = allItems(state.workflow).firstOrNull { it.id == state.selectedItemId }
-        return item?.let { itemDescriptions[it.id] }
+        return itemDescriptions[state.selectedItemId]
+            ?: item?.let { itemDescriptions[it.id] }
             ?: workflowDescriptions.getValue(state.workflow)
     }
 
@@ -1026,13 +1042,13 @@ object DesktopNavigation {
         "results.live" to
             "Live Results has two separate and independent options. Local Web Server serves a public results web page from this computer for local preview or devices on the same Wi-Fi network. ROBIS sends eligible matched live results to the configured external ROBIS endpoint.",
         "results.local-web-server" to
-            "Use Local Web Server to serve the public results web page from this computer and refresh it after new SI-card downloads.",
+            "Local Web Server serves the public results web page from this computer. Use Open Web Page to start or reopen the current page on this Mac. Preview Web Page regenerates and opens a local-only preview on this computer. Start Web Server restarts the server on a LAN address for nearby devices. Stop Web Server shuts it down.",
         "results.open-local-web-page" to
             "Use Open Web Page to start or reopen the local results web page on this computer.",
         "results.preview-local-web-page" to
             "Use Preview Web Page to regenerate the public results web page immediately and open it on this computer.",
-        "results.share-local-web-server-wifi" to
-            "Use Share on WiFi to serve the public results web page to devices on the same Wi-Fi network.",
+        "results.start-local-web-server" to
+            "Use Start Web Server to serve the public results web page to devices on the same Wi-Fi network.",
         "results.stop-local-web-server" to
             "Use Stop Web Server to shut down the local results web server.",
         "results.robis" to

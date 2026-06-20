@@ -310,7 +310,7 @@ class DesktopAutomationCliTest {
 
     @Test
     fun navSelectPrefersCurrentMenuItemAfterWorkflowSelection() {
-        val result = runAutomation("nav-select", "Results > Results")
+        val result = runAutomation("nav-select", "Results")
 
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"workflow\":\"Results/File Export\""))

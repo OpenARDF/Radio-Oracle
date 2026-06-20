@@ -48,7 +48,7 @@ class DesktopNavigationTest {
             DesktopNavigation.rootItems(DesktopWorkflow.RaceOps).map { it.label }
         )
         assertEquals(
-            listOf("Results", "Live Results", "Exports"),
+            listOf("Live Results", "Exports"),
             DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport).map { it.label }
         )
         assertEquals(
@@ -114,6 +114,34 @@ class DesktopNavigationTest {
         assertEquals(DesktopSection.WorkflowHome, state.selectedSection)
         assertEquals("race.home", state.selectedItemId)
         assertEquals("Race Operations", DesktopNavigation.selectedLabel(state))
+    }
+
+    @Test
+    fun switchingToResultsFileExportShowsResultsWithBackToRootMenu() {
+        val state = DesktopNavState()
+            .switchWorkflow(DesktopWorkflow.ResultsExport)
+
+        assertEquals(DesktopWorkflow.ResultsExport, state.workflow)
+        assertTrue(state.submenuStack.isEmpty())
+        assertEquals(DesktopSection.Results, state.selectedSection)
+        assertEquals("results.results", state.selectedItemId)
+        assertEquals("Results", DesktopNavigation.selectedLabel(state))
+        assertEquals("Results/File Export > Results", DesktopNavigation.breadcrumb(state))
+        assertTrue(DesktopNavigation.canGoBack(state))
+        assertEquals(
+            listOf("Live Results", "Exports"),
+            DesktopNavigation.currentItems(state).map { it.label }
+        )
+
+        val backState = state.back()
+
+        assertEquals(DesktopSection.WorkflowHome, backState.selectedSection)
+        assertEquals("results.home", backState.selectedItemId)
+        assertFalse(DesktopNavigation.canGoBack(backState))
+        assertEquals(
+            listOf("Live Results", "Exports"),
+            DesktopNavigation.currentItems(backState).map { it.label }
+        )
     }
 
     @Test
@@ -184,7 +212,6 @@ class DesktopNavigationTest {
     @Test
     fun backFromRootLeafScreensReturnsToWorkflowHome() {
         val cases = listOf(
-            DesktopWorkflow.ResultsExport to "Results",
             DesktopWorkflow.RaceOps to "Readouts",
             DesktopWorkflow.RaceOps to "In Forest",
             DesktopWorkflow.RaceOps to "Unmatched Readouts",
@@ -206,7 +233,7 @@ class DesktopNavigationTest {
 
     @Test
     fun workflowHomeDoesNotShowBack() {
-        DesktopWorkflow.entries.forEach { workflow ->
+        DesktopWorkflow.entries.filterNot { it == DesktopWorkflow.ResultsExport }.forEach { workflow ->
             assertFalse(DesktopNavigation.canGoBack(DesktopNavState().switchWorkflow(workflow)))
         }
     }
@@ -962,7 +989,7 @@ class DesktopNavigationTest {
             listOf(
                 "Open Web Page",
                 "Preview Web Page",
-                "Share on WiFi",
+                "Start Web Server",
                 "Stop Web Server"
             ),
             localWebServer.children.map { it.label }
@@ -971,7 +998,7 @@ class DesktopNavigationTest {
             listOf(
                 DesktopNavAction.OpenLocalResultsWebPage,
                 DesktopNavAction.PreviewLocalResultsWebPage,
-                DesktopNavAction.ShareLocalResultsWebServerOnWifi,
+                DesktopNavAction.StartLocalResultsWebServer,
                 DesktopNavAction.StopLocalResultsWebServer
             ),
             localWebServer.children.mapNotNull { it.action }

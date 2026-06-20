@@ -2777,10 +2777,10 @@ fun main(args: Array<String>) = application {
             startLocalResultsWebServer(regenerate = true)
         }
 
-        fun shareLocalResultsWebServerOnWifi() {
+        fun startLocalResultsWebServerOnWifi() {
             val address = discoverDesktopEventFileTransferAddresses().firstOrNull()
             if (address == null) {
-                projectStatusText = "No Wi-Fi or LAN address is available for local results sharing."
+                projectStatusText = "No Wi-Fi or LAN address is available for the local results web server."
                 DesktopDebugLog.warn("PublicResults", projectStatusText)
                 return
             }
@@ -3553,7 +3553,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.StopContinuousSiReadout -> isContinuousSiReadoutActive
                 DesktopNavAction.OpenLocalResultsWebPage,
                 DesktopNavAction.PreviewLocalResultsWebPage,
-                DesktopNavAction.ShareLocalResultsWebServerOnWifi -> projectFile != null
+                DesktopNavAction.StartLocalResultsWebServer -> projectFile != null
                 DesktopNavAction.StopLocalResultsWebServer -> localResultsWebServerUrl != null
                 DesktopNavAction.OpenPublicResultsSitePreview -> publicResultSiteDirectory != null
                 DesktopNavAction.PublishPublicResultsSite ->
@@ -3634,7 +3634,7 @@ fun main(args: Array<String>) = application {
                     "Continuous SI readout is not running."
                 DesktopNavAction.OpenLocalResultsWebPage,
                 DesktopNavAction.PreviewLocalResultsWebPage,
-                DesktopNavAction.ShareLocalResultsWebServerOnWifi ->
+                DesktopNavAction.StartLocalResultsWebServer ->
                     "Open or create an Event File before starting the local web server."
                 DesktopNavAction.StopLocalResultsWebServer ->
                     "The local results web server is not running."
@@ -3738,7 +3738,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.StopContinuousSiReadout -> stopContinuousSportIdentReadout()
                 DesktopNavAction.OpenLocalResultsWebPage -> openLocalResultsWebPage()
                 DesktopNavAction.PreviewLocalResultsWebPage -> previewLocalResultsWebPage()
-                DesktopNavAction.ShareLocalResultsWebServerOnWifi -> shareLocalResultsWebServerOnWifi()
+                DesktopNavAction.StartLocalResultsWebServer -> startLocalResultsWebServerOnWifi()
                 DesktopNavAction.StopLocalResultsWebServer -> stopLocalResultsWebServer()
                 DesktopNavAction.SendRobis -> sendRobisLiveResults()
                 DesktopNavAction.ShowDebugLogHelp -> {
@@ -8228,15 +8228,7 @@ private fun SectionWorkspace(
         }
         if (section == DesktopSection.LocalResultsWebServer) {
             LocalResultsWebServerPanel(
-                localResultsWebServerUrl = localResultsWebServerUrl,
-                isOpenEnabled = isNavActionEnabled(DesktopNavAction.OpenLocalResultsWebPage),
-                isPreviewEnabled = isNavActionEnabled(DesktopNavAction.PreviewLocalResultsWebPage),
-                isShareOnWifiEnabled = isNavActionEnabled(DesktopNavAction.ShareLocalResultsWebServerOnWifi),
-                isStopEnabled = isNavActionEnabled(DesktopNavAction.StopLocalResultsWebServer),
-                onOpen = { onNavAction(DesktopNavAction.OpenLocalResultsWebPage) },
-                onPreview = { onNavAction(DesktopNavAction.PreviewLocalResultsWebPage) },
-                onShareOnWifi = { onNavAction(DesktopNavAction.ShareLocalResultsWebServerOnWifi) },
-                onStop = { onNavAction(DesktopNavAction.StopLocalResultsWebServer) }
+                localResultsWebServerUrl = localResultsWebServerUrl
             )
         }
         if (section == DesktopSection.RobisLiveResults) {
@@ -8499,57 +8491,25 @@ private fun LiveResultsOverviewPanel() {
 /** Shows local public-results web server status and actions. */
 @Composable
 private fun LocalResultsWebServerPanel(
-    localResultsWebServerUrl: String?,
-    isOpenEnabled: Boolean,
-    isPreviewEnabled: Boolean,
-    isShareOnWifiEnabled: Boolean,
-    isStopEnabled: Boolean,
-    onOpen: () -> Unit,
-    onPreview: () -> Unit,
-    onShareOnWifi: () -> Unit,
-    onStop: () -> Unit
+    localResultsWebServerUrl: String?
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         DetailRow("Web server", localResultsWebServerUrl ?: "Stopped")
-        Row(horizontalArrangement = Arrangement.spacedBy(TableColumnGap)) {
-            Button(
-                onClick = onOpen,
-                enabled = isOpenEnabled
-            ) {
-                ButtonLabel("Open Web Page")
-            }
-            Button(
-                onClick = onPreview,
-                enabled = isPreviewEnabled
-            ) {
-                ButtonLabel("Preview Web Page")
-            }
-            Button(
-                onClick = onShareOnWifi,
-                enabled = isShareOnWifiEnabled
-            ) {
-                ButtonLabel("Share on WiFi")
-            }
-            Button(
-                onClick = onStop,
-                enabled = isStopEnabled
-            ) {
-                ButtonLabel("Stop Web Server")
-            }
-        }
         localResultsWebServerUrl?.let { url ->
-            val qrCode = remember(url) {
-                desktopEventFileTransferQrCode(url, size = 320)
+            if (isShareableLocalResultsWebServerUrl(url)) {
+                val qrCode = remember(url) {
+                    desktopEventFileTransferQrCode(url, size = 320)
+                }
+                Image(
+                    bitmap = qrCode.toComposeImageBitmap(),
+                    contentDescription = "Local results web server QR code",
+                    modifier = Modifier
+                        .width(220.dp)
+                        .height(220.dp)
+                        .align(Alignment.Start),
+                    contentScale = ContentScale.Fit
+                )
             }
-            Image(
-                bitmap = qrCode.toComposeImageBitmap(),
-                contentDescription = "Local results web server QR code",
-                modifier = Modifier
-                    .width(220.dp)
-                    .height(220.dp)
-                    .align(Alignment.Start),
-                contentScale = ContentScale.Fit
-            )
             SelectionContainer {
                 Text(
                     text = url,
@@ -8562,6 +8522,12 @@ private fun LocalResultsWebServerPanel(
         }
     }
 }
+
+internal fun isShareableLocalResultsWebServerUrl(url: String): Boolean =
+    runCatching {
+        val host = URI(url).host?.lowercase()?.trim('[', ']') ?: return@runCatching false
+        host !in setOf("127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1")
+    }.getOrDefault(false)
 
 /** Shows ROBIS result-sending settings. */
 @Composable
