@@ -233,7 +233,7 @@ object DesktopAutomationCli {
         return runCatching {
             val projectFile = pathText?.let { DesktopProjectFiles.read(Path.of(it)) }
             val readiness = DesktopNavigationReadiness.from(projectFile)
-            val workflowItems = DesktopWorkflow.bottomBarEntries.map { workflow ->
+            val workflowItems = DesktopWorkflow.bottomBarEntries(readiness).map { workflow ->
                 val enabled = DesktopNavigation.isWorkflowEnabled(workflow, readiness)
                 val longClickOverride = DesktopNavigation.canLongClickOverrideDisabledWorkflow(workflow, readiness)
                 mapOf(

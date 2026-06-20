@@ -1,0 +1,25 @@
+{
+    "schemaVersion": 1,
+    "appName": "Radio-Oracle",
+    "seriesId": "sample-series",
+    "name": "Sample Two-Day Championship",
+    "events": [
+        {
+            "seriesEventId": "day-1",
+            "eventFilePath": "day-1.rom.json",
+            "order": 0,
+            "displayName": "Sample Championship Day 1",
+            "startDateTimeIso": "2026-07-01T10:00",
+            "formatLabel": "CLASSIC"
+        },
+        {
+            "seriesEventId": "day-2",
+            "eventFilePath": "day-2.rom.json",
+            "order": 1,
+            "displayName": "Sample Championship Day 2",
+            "startDateTimeIso": "2026-07-02T10:00",
+            "formatLabel": "FOXORING"
+        }
+    ],
+    "competitorMatchOverrides": []
+}

@@ -1,0 +1,26 @@
+{
+    "schemaVersion": 3,
+    "appName": "Radio-Oracle",
+    "raceData": {
+        "race": {
+            "id": "sample-series-day-1",
+            "name": "Sample Championship Day 1",
+            "apiKey": "",
+            "startDateTimeIso": "2026-07-01T10:00",
+            "raceType": "CLASSIC",
+            "raceLevel": "PRACTICE",
+            "raceBand": "M80",
+            "timeLimitSeconds": 7200,
+            "courseAnalyzerSpeedCompensationFactor": 1.0
+        },
+        "categories": [],
+        "aliases": [],
+        "competitorData": [],
+        "unmatchedReadoutData": [],
+        "controls": []
+    },
+    "seriesLink": {
+        "seriesId": "sample-series",
+        "seriesEventId": "day-1"
+    }
+}

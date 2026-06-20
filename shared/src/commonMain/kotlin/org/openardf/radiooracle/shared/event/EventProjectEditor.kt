@@ -54,6 +54,14 @@ data class ResultRecalculationOutcome(
 
 /** Shared Event File editing helpers used by desktop and future non-Android flows. */
 object EventProjectEditor {
+    /** Returns a copy of the Event File linked to an Event Series manifest entry. */
+    fun updateSeriesLink(projectFile: EventProjectFile, seriesId: String, seriesEventId: String): EventProjectFile =
+        projectFile.copy(seriesLink = EventSeriesLink(seriesId = seriesId.trim(), seriesEventId = seriesEventId.trim()))
+
+    /** Returns a copy of the Event File without Event Series backlink metadata. */
+    fun removeSeriesLink(projectFile: EventProjectFile): EventProjectFile =
+        projectFile.copy(seriesLink = null)
+
     /** Returns a copy of the Event File with a validated race name. */
     fun renameRace(projectFile: EventProjectFile, name: String): EventProjectFile {
         val trimmedName = name.trim()

@@ -43,6 +43,27 @@ class EventProjectFileTest {
     }
 
     @Test
+    fun omitsSeriesLinkForOrdinaryEventFiles() {
+        val encoded = EventProjectFileJson.encode(EventProjectFile(raceData = raceData()))
+
+        assertFalse(encoded.contains("seriesLink"))
+    }
+
+    @Test
+    fun serializesAndDeserializesOptionalSeriesLink() {
+        val original = EventProjectFile(
+            raceData = raceData(),
+            seriesLink = EventSeriesLink(seriesId = "series-1", seriesEventId = "day-1")
+        )
+
+        val encoded = EventProjectFileJson.encode(original)
+        val decoded = EventProjectFileJson.decode(encoded)
+
+        assertTrue(encoded.contains("\"seriesLink\""))
+        assertEquals(original.seriesLink, decoded.seriesLink)
+    }
+
+    @Test
     fun defaultsMissingCourseAnalyzerSpeedFactorForOlderEventFiles() {
         val encoded = EventProjectFileJson.encode(EventProjectFile(raceData = raceData()))
             .replace(Regex(""",\n\s+"courseAnalyzerSpeedCompensationFactor": 1\.0"""), "")

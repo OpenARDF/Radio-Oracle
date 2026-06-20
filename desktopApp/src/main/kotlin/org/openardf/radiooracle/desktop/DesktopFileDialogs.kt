@@ -9,6 +9,7 @@ import java.util.prefs.Preferences
 import javax.swing.JFileChooser
 import javax.swing.JOptionPane
 import javax.swing.filechooser.FileNameExtensionFilter
+import org.openardf.radiooracle.shared.event.EVENT_SERIES_FILE_NAME
 
 /** Event File path helpers shared by desktop file dialogs and tests. */
 object DesktopProjectFilePaths {
@@ -191,6 +192,10 @@ object DesktopFileDialogs {
     fun chooseOpenProject(): Path? =
         chooseEventFile("Open Radio-Oracle Event File", FileDialog.LOAD)
 
+    /** Lets the user choose an existing Event Series manifest, returning null when cancelled. */
+    fun chooseOpenEventSeries(): Path? =
+        chooseSeriesManifest("Open Radio-Oracle Event Series")
+
     /** Lets the user choose a save location, returning null when cancelled. */
     fun chooseSaveProject(raceName: String? = null, suggestedFileName: String? = null): Path? =
         chooseEventFile(
@@ -258,6 +263,18 @@ object DesktopFileDialogs {
         chooser.dialogTitle = "Generate Public Results Site"
         chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
         chooser.approveButtonText = "Select Folder"
+        if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) {
+            return null
+        }
+        return chooser.selectedFile?.toPath()?.also(DesktopEventFileLocations::rememberEventFileDirectory)
+    }
+
+    fun chooseExportEventSeriesDirectory(): Path? {
+        val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
+        val chooser = JFileChooser(directory.toFile())
+        chooser.dialogTitle = "Export Event Series"
+        chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+        chooser.approveButtonText = "Export Here"
         if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) {
             return null
         }
@@ -466,6 +483,19 @@ object DesktopFileDialogs {
             "*${DesktopProjectFilePaths.PROJECT_EXTENSION}",
             "*${DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION}"
         ).joinToString(";")
+        dialog.isVisible = true
+
+        val selectedDirectory = dialog.directory ?: return null
+        val file = dialog.file ?: return null
+        return Path.of(selectedDirectory, file).also(DesktopEventFileLocations::rememberEventFileDirectory)
+    }
+
+    private fun chooseSeriesManifest(title: String): Path? {
+        val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
+        val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD)
+        dialog.filenameFilter = FilenameFilter { _, name -> name == EVENT_SERIES_FILE_NAME }
+        dialog.directory = directory.toString()
+        dialog.file = EVENT_SERIES_FILE_NAME
         dialog.isVisible = true
 
         val selectedDirectory = dialog.directory ?: return null

@@ -3,6 +3,7 @@ package org.openardf.radiooracle.shared.event
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 
@@ -11,17 +12,36 @@ import kotlinx.serialization.json.jsonObject
 data class EventProjectFile(
     val schemaVersion: Int = EventProjectFileFormat.CURRENT_SCHEMA_VERSION,
     val appName: String = EventProjectFileFormat.APP_NAME,
-    val raceData: EventRaceData
+    val raceData: EventRaceData,
+    val seriesLink: EventSeriesLink? = null
 ) {
     /** Returns true when this file schema can be read by the current shared code. */
     fun isSupportedSchema(): Boolean =
         EventProjectFileFormat.isSupportedSchema(schemaVersion)
 }
 
+/** Optional backlink from an Event File to its authoritative series manifest entry. */
+@Serializable
+data class EventSeriesLink(
+    val seriesId: String,
+    val seriesEventId: String
+) {
+    init {
+        require(seriesId.isNotBlank()) {
+            "Series id must not be blank."
+        }
+        require(seriesEventId.isNotBlank()) {
+            "Series event id must not be blank."
+        }
+    }
+}
+
 /** JSON codec for portable `.rom.json` Event Files. */
 object EventProjectFileJson {
+    @OptIn(ExperimentalSerializationApi::class)
     private val json = Json {
         encodeDefaults = true
+        explicitNulls = false
         ignoreUnknownKeys = true
         prettyPrint = true
     }

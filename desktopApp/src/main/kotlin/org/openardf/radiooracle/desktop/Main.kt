@@ -115,6 +115,7 @@ import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
+import org.openardf.radiooracle.shared.event.EVENT_SERIES_FILE_NAME
 import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCategoryData
@@ -137,6 +138,8 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventReadoutDuplicatePolicy
 import org.openardf.radiooracle.shared.event.EventReadoutDetails
 import org.openardf.radiooracle.shared.event.EventResultDetails
+import org.openardf.radiooracle.shared.event.EventSeriesIssueSeverity
+import org.openardf.radiooracle.shared.event.EventSeriesSupport
 import org.openardf.radiooracle.shared.event.EventStartListDetails
 import org.openardf.radiooracle.shared.event.EventStartListRuleSeverity
 import org.openardf.radiooracle.shared.event.EventStartListRow
@@ -1314,6 +1317,174 @@ fun main(args: Array<String>) = application {
                 projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
                 DesktopDebugLog.error("EventFile", "Save failed: ${error.message ?: error::class.simpleName}")
             }.isSuccess
+        }
+
+        fun currentSeriesManifestPath(): Path? {
+            val currentPath = projectSession.currentPath ?: return null
+            return generateSequence(currentPath.parent) { it.parent }
+                .take(6)
+                .map { it.resolve(EVENT_SERIES_FILE_NAME) }
+                .firstOrNull { Files.exists(it) }
+        }
+
+        fun createEventSeriesWithCurrentEvent() {
+            val currentProject = projectSession.currentProject ?: run {
+                projectStatusText = "Open or create an Event File before creating an Event Series."
+                return
+            }
+            val currentPath = projectSession.currentPath ?: run {
+                projectStatusText = "Save this Event File before creating an Event Series."
+                return
+            }
+            val seriesFolder = currentPath.parent ?: run {
+                projectStatusText = "Event Series creation failed: Event File has no parent folder."
+                return
+            }
+            runCatching {
+                val result = DesktopEventSeriesActions.createSeriesWithEvent(
+                    seriesFolder = seriesFolder,
+                    seriesId = "${currentProject.raceData.race.id}-series",
+                    seriesName = "${currentProject.raceData.race.name} Series",
+                    eventPath = currentPath,
+                    eventProjectFile = currentProject
+                )
+                DesktopEventSeriesFiles.write(result.manifestPath, result.seriesFile)
+                projectFile = projectSession.updateCurrentProject { result.eventProjectFile }
+                projectSession.save()
+                syncProjectState()
+                projectStatusText = "Created Event Series ${result.manifestPath.fileName} and linked this Event File."
+                recordActivity(projectStatusText)
+            }.onFailure { error ->
+                projectStatusText = "Create Event Series failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
+        fun linkCurrentEventToSeries() {
+            val currentProject = projectSession.currentProject ?: run {
+                projectStatusText = "Open or create an Event File before linking to an Event Series."
+                return
+            }
+            val currentPath = projectSession.currentPath ?: run {
+                projectStatusText = "Save this Event File before linking to an Event Series."
+                return
+            }
+            val manifestPath = DesktopFileDialogs.chooseOpenEventSeries() ?: return
+            runCatching {
+                val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+                val seriesFolder = requireNotNull(manifestPath.parent) {
+                    "Event Series manifest has no parent folder."
+                }
+                val result = DesktopEventSeriesActions.linkCurrentEvent(
+                    seriesFile = seriesFile,
+                    eventPath = currentPath,
+                    seriesFolder = seriesFolder,
+                    eventProjectFile = currentProject
+                )
+                DesktopEventSeriesFiles.write(manifestPath, result.seriesFile)
+                projectFile = projectSession.updateCurrentProject { result.eventProjectFile }
+                projectSession.save()
+                syncProjectState()
+                projectStatusText = "Linked this Event File to ${manifestPath.fileName}."
+                recordActivity(projectStatusText)
+            }.onFailure { error ->
+                projectStatusText = "Link Event Series failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
+        fun removeCurrentEventFromSeries() {
+            val currentProject = projectSession.currentProject ?: run {
+                projectStatusText = "Open or create an Event File before removing a series link."
+                return
+            }
+            val manifestPath = currentSeriesManifestPath() ?: run {
+                projectStatusText = "Series manifest not found near this Event File; no link was removed."
+                return
+            }
+            runCatching {
+                val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+                val result = DesktopEventSeriesActions.removeCurrentEvent(seriesFile, currentProject)
+                DesktopEventSeriesFiles.write(manifestPath, result.seriesFile)
+                projectFile = projectSession.updateCurrentProject { result.eventProjectFile }
+                projectSession.save()
+                syncProjectState()
+                projectStatusText = "Removed this Event File from ${manifestPath.fileName}."
+                recordActivity(projectStatusText)
+            }.onFailure { error ->
+                projectStatusText = "Remove Event Series link failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
+        fun validateCurrentEventSeries() {
+            val manifestPath = currentSeriesManifestPath() ?: run {
+                projectStatusText = "Series manifest not found near this Event File."
+                return
+            }
+            runCatching {
+                val session = DesktopEventSeriesSession(DesktopEventSeriesFiles)
+                session.open(manifestPath)
+                val issues = session.validateLinkedEvents()
+                projectStatusText = if (issues.isEmpty()) {
+                    "Event Series validation passed."
+                } else {
+                    "Event Series validation found ${issues.size} issue${if (issues.size == 1) "" else "s"}: ${issues.first().message}"
+                }
+            }.onFailure { error ->
+                projectStatusText = "Event Series validation failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
+        fun exportCurrentEventSeries() {
+            val manifestPath = currentSeriesManifestPath() ?: run {
+                projectStatusText = "Series manifest not found near this Event File."
+                return
+            }
+            val targetFolder = DesktopFileDialogs.chooseExportEventSeriesDirectory() ?: return
+            runCatching {
+                val result = DesktopEventSeriesActions.exportSeries(DesktopEventSeriesFiles, manifestPath, targetFolder)
+                projectStatusText = "Exported Event Series to ${result.manifestPath.parent} with ${result.eventFilePaths.size} Event File${if (result.eventFilePaths.size == 1) "" else "s"}."
+                recordActivity(projectStatusText)
+            }.onFailure { error ->
+                projectStatusText = "Export Event Series failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
+        fun balanceStartListFromEventSeries() {
+            val currentProject = projectSession.currentProject ?: run {
+                projectStatusText = "Open or create an Event File before balancing starts from an Event Series."
+                return
+            }
+            val link = currentProject.seriesLink ?: run {
+                projectStatusText = "Link this Event File to an Event Series before balancing starts from the series."
+                return
+            }
+            val manifestPath = currentSeriesManifestPath() ?: run {
+                projectStatusText = "Series manifest not found near this Event File."
+                return
+            }
+            runCatching {
+                val session = DesktopEventSeriesSession(DesktopEventSeriesFiles)
+                val seriesFile = session.open(manifestPath)
+                val linkedEvents = session.loadLinkedEvents()
+                val validationIssues = session.validateLinkedEvents()
+                require(validationIssues.none { it.severity == EventSeriesIssueSeverity.ERROR }) {
+                    validationIssues.first().message
+                }
+                val settings = currentProject.raceData.effectiveStartDrawSettings()
+                val balanced = EventSeriesSupport.drawStartListWithSeriesBalancedStartGroups(
+                    seriesFile = seriesFile,
+                    linkedEvents = linkedEvents,
+                    currentSeriesEventId = link.seriesEventId,
+                    currentProjectFile = currentProject,
+                    intervalText = settings.intervalText,
+                    options = settings.options
+                )
+                projectFile = projectSession.updateCurrentProject { balanced }
+                syncProjectState()
+                projectStatusText = "Balanced Start List from Event Series. Save the Event File to keep the draw."
+                recordActivity(projectStatusText)
+            }.onFailure { error ->
+                projectStatusText = "Balance from Event Series failed: ${error.message ?: error::class.simpleName}"
+            }
         }
 
         fun exportCsv(title: String, suffix: String, export: (Path, EventProjectFile) -> Unit) {
@@ -3614,7 +3785,16 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportLiveResultsJson,
                 DesktopNavAction.ExportFinalResultsJson,
                 DesktopNavAction.ExportIofStartListXml,
-                DesktopNavAction.ExportIofResultListXml ->
+                DesktopNavAction.ExportIofResultListXml,
+                DesktopNavAction.CreateEventSeriesWithCurrentEvent,
+                DesktopNavAction.LinkCurrentEventToSeries,
+                DesktopNavAction.ChangeCurrentEventSeriesLink,
+                DesktopNavAction.RemoveCurrentEventFromSeries,
+                DesktopNavAction.ValidateCurrentEventSeriesLink,
+                DesktopNavAction.BalanceStartListFromEventSeries,
+                DesktopNavAction.OpenEventSeriesEvent,
+                DesktopNavAction.ValidateEventSeries,
+                DesktopNavAction.ExportEventSeries ->
                     "Open or create an Event File first."
                 DesktopNavAction.DownloadSiCard ->
                     when {
@@ -3741,6 +3921,17 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.StartLocalResultsWebServer -> startLocalResultsWebServerOnWifi()
                 DesktopNavAction.StopLocalResultsWebServer -> stopLocalResultsWebServer()
                 DesktopNavAction.SendRobis -> sendRobisLiveResults()
+                DesktopNavAction.CreateEventSeriesWithCurrentEvent -> createEventSeriesWithCurrentEvent()
+                DesktopNavAction.LinkCurrentEventToSeries,
+                DesktopNavAction.ChangeCurrentEventSeriesLink -> linkCurrentEventToSeries()
+                DesktopNavAction.RemoveCurrentEventFromSeries -> removeCurrentEventFromSeries()
+                DesktopNavAction.ValidateCurrentEventSeriesLink,
+                DesktopNavAction.ValidateEventSeries -> validateCurrentEventSeries()
+                DesktopNavAction.BalanceStartListFromEventSeries -> balanceStartListFromEventSeries()
+                DesktopNavAction.ExportEventSeries -> exportCurrentEventSeries()
+                DesktopNavAction.OpenEventSeriesEvent -> {
+                    projectStatusText = "Use Load Event File to open another Event File listed in this Event Series."
+                }
                 DesktopNavAction.ShowDebugLogHelp -> {
                     val logDirectory = DesktopDebugLog.logDirectory()
                     DesktopDebugLog.info("App", "User requested desktop log location")
@@ -7764,7 +7955,7 @@ private fun WorkflowBar(
             .padding(horizontal = 10.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        DesktopWorkflow.bottomBarEntries.forEach { workflow ->
+        DesktopWorkflow.bottomBarEntries(navigationReadiness).forEach { workflow ->
             val isSelected = workflow == selectedWorkflow
             val isEnabled = DesktopNavigation.isWorkflowEnabled(workflow, navigationReadiness)
             val canLongClickOverride = DesktopNavigation.canLongClickOverrideDisabledWorkflow(workflow, navigationReadiness)

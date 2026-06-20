@@ -1,0 +1,26 @@
+{
+    "schemaVersion": 3,
+    "appName": "Radio-Oracle",
+    "raceData": {
+        "race": {
+            "id": "sample-series-day-2",
+            "name": "Sample Championship Day 2",
+            "apiKey": "",
+            "startDateTimeIso": "2026-07-02T10:00",
+            "raceType": "FOXORING",
+            "raceLevel": "PRACTICE",
+            "raceBand": "M80",
+            "timeLimitSeconds": 7200,
+            "courseAnalyzerSpeedCompensationFactor": 1.0
+        },
+        "categories": [],
+        "aliases": [],
+        "competitorData": [],
+        "unmatchedReadoutData": [],
+        "controls": []
+    },
+    "seriesLink": {
+        "seriesId": "sample-series",
+        "seriesEventId": "day-2"
+    }
+}

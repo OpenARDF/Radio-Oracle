@@ -11,11 +11,19 @@ enum class DesktopWorkflow(
 ) {
     Setup("Setup", "Setup", requiresEventFileInBottomBar = false),
     RaceOps("Race Operations", "Race Ops"),
+    Series("Event Series", "Series"),
     ResultsExport("Results/File Export", "Results"),
     SettingsHelp("Help/About/App Settings", "Settings", requiresEventFileInBottomBar = false);
 
     companion object {
         val bottomBarEntries: List<DesktopWorkflow> = listOf(Setup, RaceOps, ResultsExport)
+
+        fun bottomBarEntries(readiness: DesktopNavigationReadiness): List<DesktopWorkflow> =
+            if (readiness.hasSeriesContext) {
+                listOf(Setup, RaceOps, Series, ResultsExport)
+            } else {
+                bottomBarEntries
+            }
     }
 }
 
@@ -66,6 +74,15 @@ enum class DesktopNavAction {
     ExportFinalResultsJson,
     ExportIofStartListXml,
     ExportIofResultListXml,
+    CreateEventSeriesWithCurrentEvent,
+    LinkCurrentEventToSeries,
+    ChangeCurrentEventSeriesLink,
+    RemoveCurrentEventFromSeries,
+    ValidateCurrentEventSeriesLink,
+    BalanceStartListFromEventSeries,
+    OpenEventSeriesEvent,
+    ValidateEventSeries,
+    ExportEventSeries,
     DownloadSiCard,
     StartContinuousSiReadout,
     StopContinuousSiReadout,
@@ -86,6 +103,7 @@ data class DesktopNavigationReadiness(
     val hasAssignedCompetitors: Boolean = false,
     val hasStartList: Boolean = false,
     val hasRaceOpsData: Boolean = false,
+    val hasSeriesContext: Boolean = false,
     val competitorCount: Int = 0,
     val unassignedCompetitorCount: Int = 0,
     val unscheduledCompetitorCount: Int = 0
@@ -119,6 +137,7 @@ data class DesktopNavigationReadiness(
                 hasStartList = hasCompetitors && unscheduledCompetitorCount == 0,
                 hasRaceOpsData = raceData.competitorData.any { it.readoutData != null } ||
                     raceData.unmatchedReadoutData.isNotEmpty(),
+                hasSeriesContext = projectFile.seriesLink != null,
                 competitorCount = competitors.size,
                 unassignedCompetitorCount = unassignedCompetitorCount,
                 unscheduledCompetitorCount = unscheduledCompetitorCount
@@ -450,6 +469,64 @@ object DesktopNavigation {
                 item("race.unmatched", "Unmatched Readouts", workflow, DesktopSection.Readouts),
                 item("race.finish-tickets", "Finish Tickets", workflow, DesktopSection.Readouts)
             )
+            DesktopWorkflow.Series -> listOf(
+                group(
+                    "series.events",
+                    "Events",
+                    workflow,
+                    listOf(
+                        item("series.events.view", "Series Events", workflow, DesktopSection.SeriesEvents),
+                        action("series.events.open", "Open Series Event...", workflow, DesktopNavAction.OpenEventSeriesEvent)
+                    ),
+                    DesktopSection.SeriesEvents
+                ),
+                group(
+                    "series.start-fairness",
+                    "Start Fairness",
+                    workflow,
+                    listOf(
+                        item(
+                            "series.start-fairness.view",
+                            "Start Fairness",
+                            workflow,
+                            DesktopSection.SeriesStartFairness
+                        ),
+                        action(
+                            "series.start-fairness.balance",
+                            "Balance From Event Series",
+                            workflow,
+                            DesktopNavAction.BalanceStartListFromEventSeries
+                        )
+                    ),
+                    DesktopSection.SeriesStartFairness
+                ),
+                item(
+                    "series.competitor-matching",
+                    "Competitor Matching",
+                    workflow,
+                    DesktopSection.SeriesCompetitorMatching
+                ),
+                group(
+                    "series.validation",
+                    "Series Validation",
+                    workflow,
+                    listOf(
+                        item("series.validation.view", "Series Validation", workflow, DesktopSection.SeriesValidation),
+                        action("series.validation.run", "Validate Series", workflow, DesktopNavAction.ValidateEventSeries)
+                    ),
+                    DesktopSection.SeriesValidation
+                ),
+                group(
+                    "series.settings",
+                    "Series Settings",
+                    workflow,
+                    listOf(
+                        item("series.settings.view", "Series Settings", workflow, DesktopSection.SeriesSettings),
+                        action("series.settings.export", "Export Series...", workflow, DesktopNavAction.ExportEventSeries)
+                    ),
+                    DesktopSection.SeriesSettings
+                )
+            )
             DesktopWorkflow.ResultsExport -> listOf(
                 group(
                     "results.live",
@@ -684,6 +761,7 @@ object DesktopNavigation {
             DesktopWorkflow.Setup,
             DesktopWorkflow.SettingsHelp -> true
             DesktopWorkflow.RaceOps -> readiness.isSetupComplete
+            DesktopWorkflow.Series -> readiness.hasSeriesContext
             DesktopWorkflow.ResultsExport -> readiness.hasRaceOpsData
         }
 
@@ -713,6 +791,12 @@ object DesktopNavigation {
             DesktopWorkflow.ResultsExport ->
                 if (!readiness.hasRaceOpsData) {
                     "Results need at least one SI-card readout or unmatched readout."
+                } else {
+                    null
+                }
+            DesktopWorkflow.Series ->
+                if (!readiness.hasSeriesContext) {
+                    "Series is available after this Event File is linked to an Event Series."
                 } else {
                     null
                 }
@@ -755,6 +839,8 @@ object DesktopNavigation {
                 startListReason(readiness)
             item.workflow == DesktopWorkflow.RaceOps ->
                 setupIncompleteReason(readiness, "Race Ops")
+            item.workflow == DesktopWorkflow.Series ->
+                "Link this Event File to an Event Series first."
             item.workflow == DesktopWorkflow.ResultsExport ->
                 "Results need at least one SI-card readout or unmatched readout."
             else -> null
@@ -886,6 +972,7 @@ object DesktopNavigation {
         when (workflow) {
             DesktopWorkflow.Setup,
             DesktopWorkflow.RaceOps,
+            DesktopWorkflow.Series,
             DesktopWorkflow.SettingsHelp -> DesktopSection.WorkflowHome
             DesktopWorkflow.ResultsExport -> DesktopSection.Results
         }
@@ -894,6 +981,7 @@ object DesktopNavigation {
         when (workflow) {
             DesktopWorkflow.Setup -> "setup.home"
             DesktopWorkflow.RaceOps -> "race.home"
+            DesktopWorkflow.Series -> "series.home"
             DesktopWorkflow.ResultsExport -> "results.home"
             DesktopWorkflow.SettingsHelp -> "settings.home"
         }
@@ -924,6 +1012,8 @@ object DesktopNavigation {
             "Use Setup to create or open an Event File, define controls and courses, maintain categories and competitors, and draw or import the start list before competition operations begin.",
         DesktopWorkflow.RaceOps to
             "Use Race Ops during competition to download SI cards, monitor active competitors, review unmatched readouts, and print finish tickets after setup data is complete.",
+        DesktopWorkflow.Series to
+            "Use Series to move between linked events, review cross-event start fairness and competitor matching, validate the series, and export a clean series backup.",
         DesktopWorkflow.ResultsExport to
             "Use Results/File Export to review scored finishers by category after readouts are matched. Use Live Results to run local web-server or ROBIS live publishing, and use Exports to write final result, readout, Event File, JSON, XML, and ARDF-compatible files.",
         DesktopWorkflow.SettingsHelp to
@@ -1115,12 +1205,50 @@ object DesktopNavigation {
             "Use Display Settings to configure readout and result display preferences.",
         "setup.event-file.app-settings" to
             "Use App Settings to review app-level settings, hardware status, and event password options.",
+        "setup.event-file.series-settings" to
+            "Use Event Series settings to create, link, change, remove, or validate the current Event File's series membership.",
+        "setup.event-file.series-create" to
+            "Use Create New Series with This Event to start a manifest-backed multi-event series from the current Event File.",
+        "setup.event-file.series-link" to
+            "Use Link to Existing Series to add the current Event File to an existing Event Series manifest.",
+        "setup.event-file.series-change" to
+            "Use Change Series Link to move this Event File to another manifest entry.",
+        "setup.event-file.series-remove" to
+            "Use Remove from Series to clear this Event File's series link and remove its manifest entry when possible.",
+        "setup.event-file.series-validate" to
+            "Use Validate Series Link to check this Event File backlink against the open Event Series manifest.",
         "setup.event-file.diagnostics" to
             "Use Readiness to inspect event consistency, recent imports, generated test data tools, and diagnostics.",
         "setup.event-file.save" to
             "Use Save Event to write the current Event File to its existing path.",
         "setup.event-file.close" to
-            "Use Close Event File to close the active event after handling any unsaved changes."
+            "Use Close Event File to close the active event after handling any unsaved changes.",
+        "series.events" to
+            "Use Events to review the manifest-listed Event Files and open another event in the same series.",
+        "series.events.view" to
+            "Use Series Events to inspect the ordered list of Event Files included in this series.",
+        "series.events.open" to
+            "Use Open Series Event to switch to another manifest-listed Event File after unsaved changes are handled.",
+        "series.start-fairness" to
+            "Use Start Fairness to review and balance start thirds across prior events in this series.",
+        "series.start-fairness.view" to
+            "Use Start Fairness to inspect current cross-event start-third history.",
+        "series.start-fairness.balance" to
+            "Use Balance From Event Series to draw the current event using prior linked events as the start-third history source.",
+        "series.competitor-matching" to
+            "Use Competitor Matching to review same-person matches across series events by SI number, start number fallback, and overrides.",
+        "series.validation" to
+            "Use Series Validation to check manifest membership, required Event Files, backlinks, and cross-event consistency.",
+        "series.validation.view" to
+            "Use Series Validation to inspect the latest series validation findings.",
+        "series.validation.run" to
+            "Use Validate Series to re-check the open Event Series manifest and linked Event Files.",
+        "series.settings" to
+            "Use Series Settings to review series metadata and export a clean backup package.",
+        "series.settings.view" to
+            "Use Series Settings to inspect the open Event Series manifest.",
+        "series.settings.export" to
+            "Use Export Series to copy only the manifest and manifest-listed Event Files to a clean backup folder."
     )
 
     private fun eventFileActions(workflow: DesktopWorkflow): List<DesktopNavItem> =
@@ -1211,6 +1339,44 @@ object DesktopNavigation {
                         workflow,
                         DesktopSection.Settings,
                         requiresEventFile = false
+                    ),
+                    group(
+                        "setup.event-file.series-settings",
+                        "Event Series",
+                        workflow,
+                        listOf(
+                            action(
+                                "setup.event-file.series-create",
+                                "Create New Series with This Event",
+                                workflow,
+                                DesktopNavAction.CreateEventSeriesWithCurrentEvent
+                            ),
+                            action(
+                                "setup.event-file.series-link",
+                                "Link to Existing Series...",
+                                workflow,
+                                DesktopNavAction.LinkCurrentEventToSeries
+                            ),
+                            action(
+                                "setup.event-file.series-change",
+                                "Change Series Link...",
+                                workflow,
+                                DesktopNavAction.ChangeCurrentEventSeriesLink
+                            ),
+                            action(
+                                "setup.event-file.series-remove",
+                                "Remove from Series...",
+                                workflow,
+                                DesktopNavAction.RemoveCurrentEventFromSeries
+                            ),
+                            action(
+                                "setup.event-file.series-validate",
+                                "Validate Series Link",
+                                workflow,
+                                DesktopNavAction.ValidateCurrentEventSeriesLink
+                            )
+                        ),
+                        DesktopSection.SeriesSettings
                     ),
                     item(
                         "setup.event-file.diagnostics",

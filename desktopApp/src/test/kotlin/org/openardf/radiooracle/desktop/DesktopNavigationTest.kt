@@ -31,9 +31,22 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun bottomBarAddsSeriesOnlyWhenEventHasSeriesContext() {
+        assertEquals(
+            listOf(DesktopWorkflow.Setup, DesktopWorkflow.RaceOps, DesktopWorkflow.ResultsExport),
+            DesktopWorkflow.bottomBarEntries(DesktopNavigationReadiness(hasEventFile = true))
+        )
+        assertEquals(
+            listOf(DesktopWorkflow.Setup, DesktopWorkflow.RaceOps, DesktopWorkflow.Series, DesktopWorkflow.ResultsExport),
+            DesktopWorkflow.bottomBarEntries(DesktopNavigationReadiness(hasEventFile = true, hasSeriesContext = true))
+        )
+    }
+
+    @Test
     fun bottomNavigationDisablesWorkflowsThatNeedAnOpenEventFile() {
         assertFalse(DesktopWorkflow.Setup.requiresEventFileInBottomBar)
         assertTrue(DesktopWorkflow.RaceOps.requiresEventFileInBottomBar)
+        assertTrue(DesktopWorkflow.Series.requiresEventFileInBottomBar)
         assertTrue(DesktopWorkflow.ResultsExport.requiresEventFileInBottomBar)
     }
 
@@ -48,12 +61,34 @@ class DesktopNavigationTest {
             DesktopNavigation.rootItems(DesktopWorkflow.RaceOps).map { it.label }
         )
         assertEquals(
+            listOf("Events", "Start Fairness", "Competitor Matching", "Series Validation", "Series Settings"),
+            DesktopNavigation.rootItems(DesktopWorkflow.Series).map { it.label }
+        )
+        assertEquals(
             listOf("Live Results", "Exports"),
             DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport).map { it.label }
         )
         assertEquals(
             listOf("App Settings", "Hardware Preferences", "Help"),
             DesktopNavigation.rootItems(DesktopWorkflow.SettingsHelp).map { it.label }
+        )
+    }
+
+    @Test
+    fun seriesWorkflowRequiresSeriesContext() {
+        assertEquals(
+            "Series is available after this Event File is linked to an Event Series.",
+            DesktopNavigation.disabledWorkflowReason(
+                DesktopWorkflow.Series,
+                DesktopNavigationReadiness(hasEventFile = true, hasSeriesContext = false)
+            )
+        )
+        assertEquals(
+            null,
+            DesktopNavigation.disabledWorkflowReason(
+                DesktopWorkflow.Series,
+                DesktopNavigationReadiness(hasEventFile = true, hasSeriesContext = true)
+            )
         )
     }
 
@@ -457,6 +492,7 @@ class DesktopNavigationTest {
                 "Live Results",
                 "Display Settings",
                 "App Settings",
+                "Event Series",
                 "Readiness"
             ),
             eventFileActions.first { it.label == "Settings" }.children.map { it.label }

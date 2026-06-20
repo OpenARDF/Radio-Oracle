@@ -293,16 +293,17 @@ Goal: add platform-specific capabilities after the event-admin beta is stable.
   is isolated from Android WorkManager.
 - Add a post-beta Competition View that treats a championship as a higher-level
   aggregate of multiple events.
-- Persist lightweight competition definitions that group existing Event Files
-  without duplicating their core event data. The competition definition should
-  at minimum record which events belong to the championship, their intended
-  order, scoring/eligibility rules, and any operator-approved competitor
-  matching overrides across days.
+- Build on the initial Event Series foundation: a lightweight
+  `series.radio-oracle.json` manifest groups existing Event Files without
+  duplicating their core event data, records manifest-owned membership and event
+  order, and can carry operator-approved competitor matching overrides across
+  days.
+- Extend the Event Series manifest over time with scoring/eligibility rules
+  once championship standings move from roadmap item to implementation work.
 - Keep current event flows as the default single-event behavior so the existing
   menu structure and menu complexity do not grow by default.
-- Introduce an opt-in competition context (for example a competition selector and
-  dedicated competition dashboard) that displays results and fairness analysis
-  across all events in the series.
+- Continue the opt-in competition context started by the contextual Series
+  workflow so cross-event tools remain additive to the current event workflow.
 - Reuse and extend the existing multi-day `Balance from CSVs` workflow as the
   first competition-aware start fairness input rather than creating a separate
   competing balancing path immediately.
