@@ -2624,11 +2624,12 @@ fun main(args: Array<String>) = application {
         }
 
         fun openPublicResultsSitePreview() {
-            val url = publicResultSitePreviewUrl ?: run {
-                projectStatusText = "Start the public results site preview before opening it."
+            val runningUrl = publicResultSitePreviewUrl
+            if (runningUrl != null) {
+                openExternalUrl(runningUrl)
                 return
             }
-            openExternalUrl(url)
+            startPublicResultsSitePreview()
         }
 
         fun publishPublicResultsSite() {
@@ -3390,9 +3391,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.StopContinuousSiReadout -> isContinuousSiReadoutActive
                 DesktopNavAction.StartLocalResultDisplay -> projectFile != null && localResultServerUrl == null
                 DesktopNavAction.StopLocalResultDisplay -> localResultServerUrl != null
-                DesktopNavAction.StartPublicResultsSitePreview ->
-                    publicResultSiteDirectory != null && publicResultSitePreviewUrl == null
-                DesktopNavAction.OpenPublicResultsSitePreview -> publicResultSitePreviewUrl != null
+                DesktopNavAction.OpenPublicResultsSitePreview -> publicResultSiteDirectory != null
                 DesktopNavAction.PublishPublicResultsSite ->
                     publicResultSiteDirectory != null && !isPublishingPublicResultSite
                 DesktopNavAction.StopPublicResultsSitePreview -> publicResultSitePreviewUrl != null
@@ -3477,14 +3476,8 @@ fun main(args: Array<String>) = application {
                     }
                 DesktopNavAction.StopLocalResultDisplay ->
                     "The local result display is not running."
-                DesktopNavAction.StartPublicResultsSitePreview ->
-                    when {
-                        publicResultSiteDirectory == null -> "Generate a public results site before starting preview."
-                        publicResultSitePreviewUrl != null -> "The public results site preview is already running."
-                        else -> "Public results site preview is not available right now."
-                    }
                 DesktopNavAction.OpenPublicResultsSitePreview ->
-                    "Start the public results site preview before opening it."
+                    "Generate a public results site before opening preview."
                 DesktopNavAction.PublishPublicResultsSite ->
                     when {
                         publicResultSiteDirectory == null -> "Generate a public results site before publishing."
@@ -3570,7 +3563,6 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportResultsHtml -> exportResultsHtml()
                 DesktopNavAction.GeneratePublicResultsSite -> generatePublicResultsSite()
                 DesktopNavAction.PublishPublicResultsSite -> publishPublicResultsSite()
-                DesktopNavAction.StartPublicResultsSitePreview -> startPublicResultsSitePreview()
                 DesktopNavAction.OpenPublicResultsSitePreview -> openPublicResultsSitePreview()
                 DesktopNavAction.StopPublicResultsSitePreview -> stopPublicResultsSitePreview()
                 DesktopNavAction.ExportArdfJson -> exportArdfJson()
@@ -14487,7 +14479,7 @@ private fun PublicResultsSiteWorkflowPanel() {
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Save Cloudflare Settings once with the Pages project name, branch, account ID, and API token. Generate Public Results Site writes the static site folder for the current event. Start Public Site Preview opens the generated event folder locally for review. Publish Public Results Site uploads the generated site root to Cloudflare Pages.",
+            text = "Save Cloudflare Settings once with the Pages project name, branch, account ID, and API token. Generate Public Results Site writes the static site folder for the current event. Public Site Preview opens the generated event folder locally for review. Publish Public Results Site uploads the generated site root to Cloudflare Pages.",
             color = DesktopPalette.Black,
             fontSize = 14.sp
         )

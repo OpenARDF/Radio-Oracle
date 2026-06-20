@@ -962,7 +962,6 @@ class DesktopNavigationTest {
                     it in setOf(
                         DesktopNavAction.GeneratePublicResultsSite,
                         DesktopNavAction.PublishPublicResultsSite,
-                        DesktopNavAction.StartPublicResultsSitePreview,
                         DesktopNavAction.OpenPublicResultsSitePreview,
                         DesktopNavAction.StopPublicResultsSitePreview
                     )
@@ -971,14 +970,19 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "Generate Public Results Site...",
-                "Start Public Site Preview",
                 "Publish Public Results Site",
+                "Public Site Preview",
                 "View Public Results",
-                "Cloudflare Settings",
+                "Cloudflare Settings"
+            ),
+            cloudflareWebsite.children.map { it.label }
+        )
+        assertEquals(
+            listOf(
                 "Open Public Site Preview",
                 "Stop Public Site Preview"
             ),
-            cloudflareWebsite.children.map { it.label }
+            cloudflareWebsite.children.first { it.label == "Public Site Preview" }.children.map { it.label }
         )
         assertEquals(DesktopSection.PublicResultsSite, cloudflareWebsite.section)
         assertEquals(
@@ -988,18 +992,16 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 DesktopNavAction.GeneratePublicResultsSite,
-                DesktopNavAction.StartPublicResultsSitePreview,
                 DesktopNavAction.PublishPublicResultsSite,
                 DesktopNavAction.OpenPublicResultsSitePreview,
                 DesktopNavAction.StopPublicResultsSitePreview
             ),
-            cloudflareWebsite.children
+            flatten(cloudflareWebsite.children)
                 .mapNotNull { it.action }
                 .filter {
                     it in setOf(
                         DesktopNavAction.GeneratePublicResultsSite,
                         DesktopNavAction.PublishPublicResultsSite,
-                        DesktopNavAction.StartPublicResultsSitePreview,
                         DesktopNavAction.OpenPublicResultsSitePreview,
                         DesktopNavAction.StopPublicResultsSitePreview
                     )
@@ -1048,12 +1050,10 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "Generate Public Results Site...",
-                "Start Public Site Preview",
                 "Publish Public Results Site",
+                "Public Site Preview",
                 "View Public Results",
-                "Cloudflare Settings",
-                "Open Public Site Preview",
-                "Stop Public Site Preview"
+                "Cloudflare Settings"
             ),
             DesktopNavigation.currentItems(backState).map { it.label }
         )

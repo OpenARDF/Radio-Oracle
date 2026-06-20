@@ -58,7 +58,6 @@ enum class DesktopNavAction {
     ExportResultsHtml,
     GeneratePublicResultsSite,
     PublishPublicResultsSite,
-    StartPublicResultsSitePreview,
     OpenPublicResultsSitePreview,
     StopPublicResultsSitePreview,
     ExportArdfJson,
@@ -503,18 +502,33 @@ object DesktopNavigation {
                                     section = DesktopSection.PublicResultsSite
                                 ),
                                 action(
-                                    "results.start-public-site-preview",
-                                    "Start Public Site Preview",
-                                    workflow,
-                                    DesktopNavAction.StartPublicResultsSitePreview,
-                                    section = DesktopSection.PublicResultsSite
-                                ),
-                                action(
                                     "results.publish-public-site",
                                     "Publish Public Results Site",
                                     workflow,
                                     DesktopNavAction.PublishPublicResultsSite,
                                     section = DesktopSection.PublicResultsSite
+                                ),
+                                group(
+                                    "results.public-site-preview",
+                                    "Public Site Preview",
+                                    workflow,
+                                    listOf(
+                                        action(
+                                            "results.open-public-site-preview",
+                                            "Open Public Site Preview",
+                                            workflow,
+                                            DesktopNavAction.OpenPublicResultsSitePreview,
+                                            section = DesktopSection.PublicResultsSite
+                                        ),
+                                        action(
+                                            "results.stop-public-site-preview",
+                                            "Stop Public Site Preview",
+                                            workflow,
+                                            DesktopNavAction.StopPublicResultsSitePreview,
+                                            section = DesktopSection.PublicResultsSite
+                                        )
+                                    ),
+                                    DesktopSection.PublicResultsSite
                                 ),
                                 item(
                                     "results.view-public-results",
@@ -528,20 +542,6 @@ object DesktopNavigation {
                                     workflow,
                                     DesktopSection.Settings,
                                     requiresEventFile = false
-                                ),
-                                action(
-                                    "results.open-public-site-preview",
-                                    "Open Public Site Preview",
-                                    workflow,
-                                    DesktopNavAction.OpenPublicResultsSitePreview,
-                                    section = DesktopSection.PublicResultsSite
-                                ),
-                                action(
-                                    "results.stop-public-site-preview",
-                                    "Stop Public Site Preview",
-                                    workflow,
-                                    DesktopNavAction.StopPublicResultsSitePreview,
-                                    section = DesktopSection.PublicResultsSite
                                 )
                             ),
                             DesktopSection.PublicResultsSite
@@ -1009,10 +1009,10 @@ object DesktopNavigation {
             "Use Publish Public Results Site to deploy the generated public results site to Cloudflare Pages.",
         "results.view-public-results" to
             "Use View Public Results after publishing to show the public event link and QR code for competitors and spectators.",
-        "results.start-public-site-preview" to
-            "Use Start Public Site Preview to inspect the generated public results site on this computer.",
+        "results.public-site-preview" to
+            "Use Public Site Preview to open or stop the local preview of the generated public results site.",
         "results.open-public-site-preview" to
-            "Use Open Public Site Preview to reopen the generated public results site in your browser.",
+            "Use Open Public Site Preview to start or reopen the generated public results site in your browser.",
         "results.stop-public-site-preview" to
             "Use Stop Public Site Preview to shut down the generated public results site preview.",
         "results.cloudflare-settings" to
