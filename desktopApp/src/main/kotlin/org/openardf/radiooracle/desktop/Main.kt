@@ -14806,8 +14806,9 @@ private fun Double.decimalText(): String =
 
 private fun bytesText(bytes: Long): String =
     when {
-        bytes >= 1024L * 1024L -> "${oneDecimal(bytes.toDouble() / (1024.0 * 1024.0))} MiB"
-        bytes >= 1024L -> "${oneDecimal(bytes.toDouble() / 1024.0)} KiB"
+        bytes >= 1_000_000_000L -> "${oneDecimal(bytes.toDouble() / 1_000_000_000.0)} GB"
+        bytes >= 1_000_000L -> "${oneDecimal(bytes.toDouble() / 1_000_000.0)} MB"
+        bytes >= 1_000L -> "${oneDecimal(bytes.toDouble() / 1_000.0)} KB"
         else -> "$bytes B"
     }
 
