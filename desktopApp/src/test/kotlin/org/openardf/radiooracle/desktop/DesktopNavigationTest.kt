@@ -121,22 +121,28 @@ class DesktopNavigationTest {
     }
 
     @Test
-    fun submenuStackStopsAtTwoLevels() {
-        val startList = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Start List" }
-        val firstLevel = DesktopNavState().enter(startList)
-        val exports = DesktopNavigation.currentItems(firstLevel).first { it.label == "Exports" }
-        val secondLevel = firstLevel.enter(exports)
-        val blocked = secondLevel.enter(
-            DesktopNavItem(
-                id = "test.third",
-                label = "Third",
-                workflow = DesktopWorkflow.Setup,
-                children = listOf(DesktopNavItem("test.leaf", "Leaf", DesktopWorkflow.Setup))
-            )
-        )
+    fun eventSeriesSettingsDrillIntoThirdLevelMenu() {
+        val eventFile = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+        val eventFileState = DesktopNavState().enter(eventFile)
+        val settings = DesktopNavigation.currentItems(eventFileState).first { it.label == "Settings" }
+        val settingsState = eventFileState.enter(settings)
+        val eventSeries = DesktopNavigation.currentItems(settingsState).first { it.label == "Event Series" }
+        val eventSeriesState = settingsState.enter(eventSeries)
 
-        assertEquals(listOf("setup.start-list", "setup.start-list.exports"), secondLevel.submenuStack)
-        assertEquals(secondLevel, blocked)
+        assertEquals(
+            listOf("setup.event-file", "setup.event-file.settings", "setup.event-file.series-settings"),
+            eventSeriesState.submenuStack
+        )
+        assertEquals(
+            listOf(
+                "Create New Series with This Event",
+                "Link to Existing Series...",
+                "Change Series Link...",
+                "Remove from Series...",
+                "Validate Series Link"
+            ),
+            DesktopNavigation.currentItems(eventSeriesState).map { it.label }
+        )
     }
 
     @Test

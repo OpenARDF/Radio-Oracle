@@ -2,7 +2,7 @@ package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.EventProjectFile
 
-private const val MaxSubmenuDepth = 2
+private const val MaxSubmenuDepth = 3
 
 enum class DesktopWorkflow(
     val label: String,
