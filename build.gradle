@@ -14,4 +14,4 @@ plugins {
     alias(libs.plugins.crashlytics) apply false
 }
 
-ext.radioOracleVersion = "1.0.12"
+ext.radioOracleVersion = "1.0.13"
