@@ -117,31 +117,24 @@ class DesktopNavigationTest {
     }
 
     @Test
-    fun switchingToResultsFileExportShowsResultsWithBackToRootMenu() {
+    fun switchingToResultsFileExportShowsResultsWithoutBack() {
         val state = DesktopNavState()
             .switchWorkflow(DesktopWorkflow.ResultsExport)
 
         assertEquals(DesktopWorkflow.ResultsExport, state.workflow)
         assertTrue(state.submenuStack.isEmpty())
         assertEquals(DesktopSection.Results, state.selectedSection)
-        assertEquals("results.results", state.selectedItemId)
+        assertEquals("results.home", state.selectedItemId)
         assertEquals("Results", DesktopNavigation.selectedLabel(state))
-        assertEquals("Results/File Export > Results", DesktopNavigation.breadcrumb(state))
-        assertTrue(DesktopNavigation.canGoBack(state))
+        assertEquals("Results/File Export", DesktopNavigation.breadcrumb(state))
+        assertFalse(DesktopNavigation.canGoBack(state))
         assertEquals(
             listOf("Live Results", "Exports"),
             DesktopNavigation.currentItems(state).map { it.label }
         )
-
-        val backState = state.back()
-
-        assertEquals(DesktopSection.WorkflowHome, backState.selectedSection)
-        assertEquals("results.home", backState.selectedItemId)
-        assertFalse(DesktopNavigation.canGoBack(backState))
-        assertEquals(
-            listOf("Live Results", "Exports"),
-            DesktopNavigation.currentItems(backState).map { it.label }
-        )
+        assertTrue(DesktopNavigation.selectedDescription(state).contains("review scored finishers by category"))
+        assertTrue(DesktopNavigation.selectedDescription(state).contains("Use Live Results"))
+        assertTrue(DesktopNavigation.selectedDescription(state).contains("use Exports"))
     }
 
     @Test
@@ -233,7 +226,7 @@ class DesktopNavigationTest {
 
     @Test
     fun workflowHomeDoesNotShowBack() {
-        DesktopWorkflow.entries.filterNot { it == DesktopWorkflow.ResultsExport }.forEach { workflow ->
+        DesktopWorkflow.entries.forEach { workflow ->
             assertFalse(DesktopNavigation.canGoBack(DesktopNavState().switchWorkflow(workflow)))
         }
     }

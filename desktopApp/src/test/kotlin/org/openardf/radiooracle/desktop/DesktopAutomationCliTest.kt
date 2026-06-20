@@ -314,9 +314,9 @@ class DesktopAutomationCliTest {
 
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"workflow\":\"Results/File Export\""))
-        assertTrue(result.stdout.contains("\"breadcrumb\":\"Results/File Export > Results\""))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Results/File Export\""))
         assertTrue(result.stdout.contains("\"selectedSection\":\"Results\""))
-        assertTrue(result.stdout.contains("\"selectedItemId\":\"results.results\""))
+        assertTrue(result.stdout.contains("\"selectedItemId\":\"results.home\""))
     }
 
     @Test

@@ -149,21 +149,12 @@ data class DesktopNavState(
     val selectedItemId: String = "setup.home"
 ) {
     fun switchWorkflow(nextWorkflow: DesktopWorkflow): DesktopNavState =
-        if (nextWorkflow == DesktopWorkflow.ResultsExport) {
-            copy(
-                workflow = nextWorkflow,
-                submenuStack = emptyList(),
-                selectedSection = DesktopSection.Results,
-                selectedItemId = "results.results"
-            )
-        } else {
-            copy(
-                workflow = nextWorkflow,
-                submenuStack = emptyList(),
-                selectedSection = DesktopNavigation.defaultSection(nextWorkflow),
-                selectedItemId = DesktopNavigation.defaultItemId(nextWorkflow)
-            )
-        }
+        copy(
+            workflow = nextWorkflow,
+            submenuStack = emptyList(),
+            selectedSection = DesktopNavigation.defaultSection(nextWorkflow),
+            selectedItemId = DesktopNavigation.defaultItemId(nextWorkflow)
+        )
 
     fun enter(item: DesktopNavItem): DesktopNavState =
         when {
@@ -887,13 +878,6 @@ object DesktopNavigation {
             if (selected.label !in labels) {
                 labels += selected.label
             }
-        } ?: run {
-            if (
-                state.selectedItemId == "results.results" &&
-                state.selectedSection.label !in labels
-            ) {
-                labels += state.selectedSection.label
-            }
         }
         return labels.joinToString(" > ")
     }
@@ -902,8 +886,8 @@ object DesktopNavigation {
         when (workflow) {
             DesktopWorkflow.Setup,
             DesktopWorkflow.RaceOps,
-            DesktopWorkflow.ResultsExport,
             DesktopWorkflow.SettingsHelp -> DesktopSection.WorkflowHome
+            DesktopWorkflow.ResultsExport -> DesktopSection.Results
         }
 
     fun defaultItemId(workflow: DesktopWorkflow): String =
@@ -941,7 +925,7 @@ object DesktopNavigation {
         DesktopWorkflow.RaceOps to
             "Use Race Ops during competition to download SI cards, monitor active competitors, review unmatched readouts, and print finish tickets after setup data is complete.",
         DesktopWorkflow.ResultsExport to
-            "Use Results/File Export after readouts are available to review scored results, run local or ROBIS live result publishing, and export final result files.",
+            "Use Results/File Export to review scored finishers by category after readouts are matched. Use Live Results to run local web-server or ROBIS live publishing, and use Exports to write final result, readout, Event File, JSON, XML, and ARDF-compatible files.",
         DesktopWorkflow.SettingsHelp to
             "Use Settings for app preferences, hardware-related options, logs, beta-scope information, and about information that is not tied to one event workflow."
     )
@@ -1037,8 +1021,6 @@ object DesktopNavigation {
             "Use Unmatched Readouts to review SI-card readouts that are not yet assigned to competitors.",
         "race.finish-tickets" to
             "Use Finish Tickets to preview and print competitor finish tickets from available readout and result data.",
-        "results.results" to
-            "Use Results to review scored competitor results, adjust manual readout status, and inspect result details after readouts are matched.",
         "results.live" to
             "Live Results has two separate and independent options. Local Web Server serves a public results web page from this computer for local preview or devices on the same Wi-Fi network. ROBIS sends eligible matched live results to the configured external ROBIS endpoint.",
         "results.local-web-server" to
