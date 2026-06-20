@@ -48,7 +48,7 @@ class DesktopNavigationTest {
             .first { it.label == "Events" }
 
         assertEquals(
-            listOf("Series Events", "Add Event to Series...", "Open Series Event..."),
+            listOf("Add Event to Series...", "Open Series Event..."),
             events.children.map { it.label }
         )
         assertEquals(DesktopNavAction.AddEventToSeries, events.children.first { it.label == "Add Event to Series..." }.action)
@@ -59,7 +59,7 @@ class DesktopNavigationTest {
         val roots = DesktopNavigation.rootItems(DesktopWorkflow.Series)
 
         assertEquals(
-            listOf("Start History", "Balance From Event Series"),
+            listOf("Balance From Event Series"),
             roots.first { it.label == "Start Fairness" }.children.map { it.label }
         )
         assertEquals(
@@ -67,7 +67,7 @@ class DesktopNavigationTest {
             roots.first { it.label == "Series Validation" }.children.map { it.label }
         )
         assertEquals(
-            listOf("Manifest Details", "Export Series..."),
+            listOf("Export Series..."),
             roots.first { it.label == "Series Settings" }.children.map { it.label }
         )
     }
@@ -75,6 +75,13 @@ class DesktopNavigationTest {
     @Test
     fun seriesSubmenuGroupsDoNotRepeatTheirParentLabel() {
         assertNoRepeatedParentChildLabels(DesktopNavigation.rootItems(DesktopWorkflow.Series))
+    }
+
+    @Test
+    fun menuGroupsDoNotContainViewOnlyChildrenForTheirOwnSection() {
+        DesktopWorkflow.entries.forEach { workflow ->
+            assertNoRedundantViewOnlyChildren(DesktopNavigation.rootItems(workflow))
+        }
     }
 
     @Test
@@ -320,7 +327,7 @@ class DesktopNavigationTest {
         assertEquals(DesktopSection.StartList, state.selectedSection)
         assertEquals("Setup > Start List", DesktopNavigation.breadcrumb(state))
         assertEquals(
-            listOf("Start List", "Import Starts CSV...", "Exports"),
+            listOf("Import Starts CSV...", "Exports"),
             DesktopNavigation.currentItems(state).map { it.label }
         )
     }
@@ -469,7 +476,7 @@ class DesktopNavigationTest {
                 currentState = startListState,
                 nextState = DesktopNavigation.selectItem(
                     startListState,
-                    DesktopNavigation.currentItems(startListState).first { it.label == "Start List" }
+                    DesktopNavigation.currentItems(startListState).first { it.label == "Exports" }
                 ).state,
                 hasUnsavedChanges = true
             )
@@ -746,7 +753,6 @@ class DesktopNavigationTest {
 
         assertEquals(
             listOf(
-                "Define Controls",
                 "Elevation Data",
                 "Course Analyzer",
                 "Import/Export",
@@ -764,7 +770,6 @@ class DesktopNavigationTest {
             ),
             categoryItems.map { it.label }
         )
-        assertEquals(DesktopSection.Controls, controlItems.first { it.label == "Define Controls" }.section)
         assertEquals(DesktopNavAction.DeleteAllControls, controlItems.last { it.label == "Delete All Controls..." }.action)
         assertEquals(DesktopSection.CourseAnalysis, controlItems.first { it.label == "Course Analyzer" }.section)
         assertEquals(
@@ -972,23 +977,29 @@ class DesktopNavigationTest {
 
     @Test
     fun selectingSetupSectionLeafHidesSiblingButtonsUntilBack() {
-        val controlsState = DesktopNavigation.selectItem(
+        val categoriesState = DesktopNavigation.selectItem(
             DesktopNavState(),
-            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Controls" }
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Categories" }
         ).state
-        val defineControlsState = DesktopNavigation.selectItem(
-            controlsState,
-            DesktopNavigation.currentItems(controlsState).first { it.label == "Define Controls" }
+        val courseOrderState = DesktopNavigation.selectItem(
+            categoriesState,
+            DesktopNavigation.currentItems(categoriesState).first { it.label == "Course Order" }
         ).state
 
-        assertEquals("Setup > Controls > Define Controls", DesktopNavigation.breadcrumb(defineControlsState))
-        assertEquals(emptyList<String>(), DesktopNavigation.currentItems(defineControlsState).map { it.label })
+        assertEquals("Setup > Categories > Course Order", DesktopNavigation.breadcrumb(courseOrderState))
+        assertEquals(emptyList<String>(), DesktopNavigation.currentItems(courseOrderState).map { it.label })
 
-        val backState = defineControlsState.back()
+        val backState = courseOrderState.back()
 
-        assertEquals("Setup > Controls", DesktopNavigation.breadcrumb(backState))
+        assertEquals("Setup > Categories", DesktopNavigation.breadcrumb(backState))
         assertEquals(
-            listOf("Define Controls", "Elevation Data", "Course Analyzer", "Import/Export", "Delete All Controls..."),
+            listOf(
+                "Course Order",
+                "Import Categories CSV...",
+                "Export Categories CSV...",
+                "Delete All Control Assignments...",
+                "Delete All Categories..."
+            ),
             DesktopNavigation.currentItems(backState).map { it.label }
         )
     }
@@ -1233,6 +1244,22 @@ class DesktopNavigationTest {
                 item.children.any { child -> child.label == item.label }
             )
             assertNoRepeatedParentChildLabels(item.children)
+        }
+    }
+
+    private fun assertNoRedundantViewOnlyChildren(items: List<DesktopNavItem>) {
+        items.forEach { item ->
+            assertFalse(
+                "Submenu '${item.label}' should not contain a view-only child for its own section.",
+                item.id != "setup.event-file.settings" &&
+                    item.section != null &&
+                    item.children.any { child ->
+                        child.action == null &&
+                            child.children.isEmpty() &&
+                            child.section == item.section
+                    }
+            )
+            assertNoRedundantViewOnlyChildren(item.children)
         }
     }
 

@@ -248,7 +248,6 @@ object DesktopNavigation {
                     "Controls",
                     workflow,
                     listOf(
-                        item("setup.controls.define", "Define Controls", workflow, DesktopSection.Controls),
                         group(
                             "setup.controls.elevation-cache",
                             "Elevation Data",
@@ -417,7 +416,6 @@ object DesktopNavigation {
                     "Start List",
                     workflow,
                     listOf(
-                        item("setup.start-list.view", "Start List", workflow, DesktopSection.StartList),
                         action("setup.start-list.import", "Import Starts CSV...", workflow, DesktopNavAction.ImportStartsCsv),
                         group(
                             "setup.start-list.exports",
@@ -477,7 +475,6 @@ object DesktopNavigation {
                     "Events",
                     workflow,
                     listOf(
-                        item("series.events.view", "Series Events", workflow, DesktopSection.SeriesEvents),
                         action("series.events.add", "Add Event to Series...", workflow, DesktopNavAction.AddEventToSeries),
                         action("series.events.open", "Open Series Event...", workflow, DesktopNavAction.OpenEventSeriesEvent)
                     ),
@@ -488,12 +485,6 @@ object DesktopNavigation {
                     "Start Fairness",
                     workflow,
                     listOf(
-                        item(
-                            "series.start-fairness.view",
-                            "Start History",
-                            workflow,
-                            DesktopSection.SeriesStartFairness
-                        ),
                         action(
                             "series.start-fairness.balance",
                             "Balance From Event Series",
@@ -523,7 +514,6 @@ object DesktopNavigation {
                     "Series Settings",
                     workflow,
                     listOf(
-                        item("series.settings.view", "Manifest Details", workflow, DesktopSection.SeriesSettings),
                         action("series.settings.export", "Export Series...", workflow, DesktopNavAction.ExportEventSeries)
                     ),
                     DesktopSection.SeriesSettings
@@ -1027,8 +1017,6 @@ object DesktopNavigation {
             "Use Event File to create, open, import, save, close, and inspect event files, including settings and readiness tools that affect the whole event.",
         "setup.controls" to
             "Use Controls to manually enter controls, import controls and courses from supported file types, analyze courses with appropriate elevation data applied, and import elevation DEMs.",
-        "setup.controls.define" to
-            "Use Define Controls to manually enter controls, review imported controls, and edit public labels, SI codes, roles, and control metadata used by courses and readouts.",
         "setup.controls.elevation-cache" to
             "Use Elevation Data to inspect cached venue elevation files used for stored course routes, climb estimates, and course-analysis calculations.",
         "setup.controls.elevation-cache.import" to
@@ -1081,8 +1069,6 @@ object DesktopNavigation {
             "Use Delete All Competitors to remove every competitor while preserving downloaded readouts as unmatched records for review.",
         "setup.start-list" to
             "Use Start List to import, draw, balance, review, and export competitor start times once categories and assignments are ready.",
-        "setup.start-list.view" to
-            "Use Start List to review drawn start times, start-list settings, and scheduling status for competitors.",
         "setup.start-list.import" to
             "Use Import Starts CSV to apply externally prepared start times to the competitors in this Event File.",
         "setup.start-list.exports" to
@@ -1227,16 +1213,12 @@ object DesktopNavigation {
             "Use Close Event File to close the active event after handling any unsaved changes.",
         "series.events" to
             "Use Events to review the manifest-listed Event Files and open another event in the same series.",
-        "series.events.view" to
-            "Use Series Events to inspect the ordered list of Event Files included in this series.",
         "series.events.add" to
             "Use Add Event to Series to add another Event File to the open Event Series manifest.",
         "series.events.open" to
             "Use Open Series Event to switch to another manifest-listed Event File after unsaved changes are handled.",
         "series.start-fairness" to
             "Use Start Fairness to review and balance start thirds across prior events in this series.",
-        "series.start-fairness.view" to
-            "Use Start History to inspect current cross-event start-third history.",
         "series.start-fairness.balance" to
             "Use Balance From Event Series to draw the current event using prior linked events as the start-third history source.",
         "series.competitor-matching" to
@@ -1247,8 +1229,6 @@ object DesktopNavigation {
             "Use Validate Series to re-check the open Event Series manifest and linked Event Files.",
         "series.settings" to
             "Use Series Settings to review series metadata and export a clean backup package.",
-        "series.settings.view" to
-            "Use Manifest Details to inspect the open Event Series manifest.",
         "series.settings.export" to
             "Use Export Series to copy only the manifest and manifest-listed Event Files to a clean backup folder."
     )
