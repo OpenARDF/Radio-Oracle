@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.util.Log
+import androidx.preference.PreferenceManager
+import org.openardf.radiooracle.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -12,6 +14,8 @@ import kotlinx.coroutines.launch
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.ARDFRepository
+import org.openardf.radiooracle.backend.room.entity.Race
+import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import java.util.UUID
 
 /**
@@ -47,6 +51,9 @@ class AppCommandReceiver : BroadcastReceiver() {
             ACTION_LIST_EVENTS -> listEvents(dataProcessor)
             ACTION_DELETE_EVENT -> deleteEvent(dataProcessor, intent)
             ACTION_SELECT_EVENT -> selectEvent(dataProcessor, intent)
+            ACTION_PRINT_STATUS -> printStatus(context)
+            ACTION_PRINT_FINISH_TICKET -> printFinishTicket(dataProcessor, intent)
+            ACTION_PRINT_LATEST_FINISH_TICKET -> printLatestFinishTicket(dataProcessor, intent)
             else -> {
                 DebugLog.warn(TAG, "Unknown command action=${intent.action}")
                 Log.w(TAG, "Unknown command action=${intent.action}")
@@ -99,15 +106,110 @@ class AppCommandReceiver : BroadcastReceiver() {
         Log.i(TAG, "selected event id=$eventId name=${race.name}")
     }
 
-    private fun Intent.uuidExtra(): UUID? =
-        getStringExtra(EXTRA_EVENT_ID)?.let { rawValue ->
+    private suspend fun printStatus(context: Context) {
+        val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
+        val enabled = sharedPref.getBoolean(context.getString(R.string.key_prints_enabled), false)
+        val automaticMode = sharedPref.getString(context.getString(R.string.key_prints_automatic_printout), "")
+        val printerName = sharedPref.getString(context.getString(R.string.key_prints_selected_printer_name), "")
+        val printerAddress = sharedPref.getString(context.getString(R.string.key_prints_selected_printer_address), "")
+        val doublePrint = sharedPref.getBoolean(context.getString(R.string.key_prints_double_print), false)
+        val doublePrintDelay = sharedPref.getInt(context.getString(R.string.key_prints_double_print_delay), 0)
+        val removeDiacritics = sharedPref.getBoolean(context.getString(R.string.key_prints_remove_diacritics), false)
+        val message = "print status enabled=$enabled automatic=$automaticMode printer=$printerName " +
+            "address=${printerAddress.orEmpty().maskBluetoothAddress()} doublePrint=$doublePrint " +
+            "doublePrintDelay=$doublePrintDelay removeDiacritics=$removeDiacritics"
+
+        DebugLog.info(TAG, message)
+        Log.i(TAG, message)
+    }
+
+    private suspend fun printFinishTicket(dataProcessor: DataProcessor, intent: Intent) {
+        val resultId = intent.uuidExtra(EXTRA_RESULT_ID) ?: return missingResultId()
+        val resultData = dataProcessor.getResultData(resultId)
+        val race = dataProcessor.getRace(resultData.result.raceId)
+        if (race == null) {
+            DebugLog.warn(TAG, "Command print ignored missing race=${resultData.result.raceId} result=$resultId")
+            Log.w(TAG, "race not found id=${resultData.result.raceId} result=$resultId")
+            return
+        }
+        printFinishTicket(dataProcessor, race, resultData, "result id=$resultId")
+    }
+
+    private suspend fun printLatestFinishTicket(dataProcessor: DataProcessor, intent: Intent) {
+        val race = intent.uuidExtra(EXTRA_EVENT_ID)?.let { eventId ->
+            dataProcessor.getRace(eventId).also {
+                if (it == null) {
+                    DebugLog.warn(TAG, "Command print latest ignored missing event=$eventId")
+                    Log.w(TAG, "event not found id=$eventId")
+                }
+            }
+        } ?: latestRace(dataProcessor)
+
+        if (race == null) {
+            DebugLog.warn(TAG, "Command print latest ignored because no events exist")
+            Log.w(TAG, "no events available")
+            return
+        }
+
+        val resultData = dataProcessor.getResultDataFlowByRace(race.id)
+            .first()
+            .maxByOrNull { it.result.readoutTime }
+        if (resultData == null) {
+            DebugLog.warn(TAG, "Command print latest ignored because event has no readouts event=${race.id}")
+            Log.w(TAG, "event has no readouts id=${race.id}")
+            return
+        }
+        printFinishTicket(dataProcessor, race, resultData, "latest event=${race.id}")
+    }
+
+    private suspend fun latestRace(dataProcessor: DataProcessor): Race? =
+        dataProcessor.getRaces().first().maxByOrNull { it.startDateTime }
+
+    private suspend fun printFinishTicket(
+        dataProcessor: DataProcessor,
+        race: Race,
+        resultData: ResultData,
+        source: String
+    ) {
+        DebugLog.info(
+            TAG,
+            "Command printing finish ticket source=$source result=${resultData.result.id} " +
+                "si=${resultData.result.siNumber} race=${race.id}"
+        )
+        Log.i(TAG, "printing finish ticket source=$source result=${resultData.result.id} race=${race.id}")
+        val printResult = dataProcessor.printFinishTicket(resultData, race)
+        DebugLog.info(TAG, "Command print finish ticket outcome=$printResult result=${resultData.result.id}")
+        Log.i(TAG, "print finish ticket outcome=$printResult result=${resultData.result.id}")
+    }
+
+    private fun Intent.uuidExtra(name: String): UUID? =
+        getStringExtra(name)?.let { rawValue ->
             runCatching { UUID.fromString(rawValue) }.getOrNull()
         }
+
+    private fun Intent.uuidExtra(): UUID? =
+        uuidExtra(EXTRA_EVENT_ID)
 
     private fun missingEventId() {
         DebugLog.warn(TAG, "Command missing or invalid $EXTRA_EVENT_ID")
         Log.w(TAG, "missing or invalid $EXTRA_EVENT_ID")
     }
+
+    private fun missingResultId() {
+        DebugLog.warn(TAG, "Command missing or invalid $EXTRA_RESULT_ID")
+        Log.w(TAG, "missing or invalid $EXTRA_RESULT_ID")
+    }
+
+    private fun String.maskBluetoothAddress(): String =
+        split(":").let { parts ->
+            if (parts.size == 6) {
+                "xx:xx:xx:${parts.takeLast(3).joinToString(":")}"
+            } else if (isBlank()) {
+                "<none>"
+            } else {
+                "<selected>"
+            }
+        }
 
     private fun Context.isDebuggableApp(): Boolean =
         (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
@@ -117,6 +219,10 @@ class AppCommandReceiver : BroadcastReceiver() {
         const val ACTION_LIST_EVENTS = "org.openardf.radiooracle.command.LIST_EVENTS"
         const val ACTION_DELETE_EVENT = "org.openardf.radiooracle.command.DELETE_EVENT"
         const val ACTION_SELECT_EVENT = "org.openardf.radiooracle.command.SELECT_EVENT"
+        const val ACTION_PRINT_STATUS = "org.openardf.radiooracle.command.PRINT_STATUS"
+        const val ACTION_PRINT_FINISH_TICKET = "org.openardf.radiooracle.command.PRINT_FINISH_TICKET"
+        const val ACTION_PRINT_LATEST_FINISH_TICKET = "org.openardf.radiooracle.command.PRINT_LATEST_FINISH_TICKET"
         const val EXTRA_EVENT_ID = "event_id"
+        const val EXTRA_RESULT_ID = "result_id"
     }
 }

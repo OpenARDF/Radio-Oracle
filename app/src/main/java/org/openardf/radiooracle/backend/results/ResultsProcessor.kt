@@ -47,6 +47,11 @@ import java.util.UUID
 
 
 object ResultsProcessor {
+    internal const val PRINT_AUTOMATIC_MANUALLY_VALUE = "manually"
+    internal const val PRINT_AUTOMATIC_CATEGORY_MATCHED_VALUE = "category_matched"
+    internal const val PRINT_AUTOMATIC_COMPETITOR_MATCHED_VALUE = "competitor_matched"
+    internal const val PRINT_AUTOMATIC_ALWAYS_VALUE = "allways"
+
     private fun adjustTime(previous: SITime, current: SITime): SITime {
         if (current.isAtOrAfter(previous)) {
             return current
@@ -311,13 +316,23 @@ object ResultsProcessor {
             dataProcessor
         )
 
-        // Add printing based on option
-        if (isToPrintFinishTicket(competitor, category, context)) {
+        val shouldPrintFinishTicket = isToPrintFinishTicket(competitor, category, context)
+        DebugLog.info(
+            "Printer",
+            "Automatic finish-ticket print decision result=${result.id} " +
+                "si=${result.siNumber} competitorMatched=${competitor != null} " +
+                "categoryMatched=${category != null} shouldPrint=$shouldPrintFinishTicket"
+        )
+        if (shouldPrintFinishTicket) {
             dataProcessor.getRace(result.raceId)?.let { race ->
                 CoroutineScope(Dispatchers.IO).launch {
-                    dataProcessor.printFinishTicket(
+                    val printResult = dataProcessor.printFinishTicket(
                         dataProcessor.getResultData(result.id),
                         race
+                    )
+                    DebugLog.info(
+                        "Printer",
+                        "Automatic finish-ticket print result result=${result.id} outcome=$printResult"
                     )
                 }
             }
@@ -358,26 +373,28 @@ object ResultsProcessor {
         context: Context,
     ): Boolean {
         val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
-        val preference =
-            sharedPref.getString(
-                context.getString(R.string.key_prints_automatic_printout),
-                context.getString(R.string.print_automatic_manually)
-            )
-
-        when (preference) {
-            context.getString(R.string.print_automatic_manually_value) -> return true
-            context.getString(R.string.print_automatic_competitor_matched_value) -> {
-                return competitor != null
-            }
-
-            context.getString(R.string.print_automatic_category_matched_value) -> {
-                return competitor != null && category != null
-            }
-
-            else -> {}
-        }
-        return false
+        val preference = sharedPref.getString(
+            context.getString(R.string.key_prints_automatic_printout),
+            PRINT_AUTOMATIC_MANUALLY_VALUE
+        )
+        return shouldPrintFinishTicketForPreference(
+            preference = preference,
+            competitorMatched = competitor != null,
+            categoryMatched = category != null
+        )
     }
+
+    internal fun shouldPrintFinishTicketForPreference(
+        preference: String?,
+        competitorMatched: Boolean,
+        categoryMatched: Boolean
+    ): Boolean =
+        when (preference) {
+            PRINT_AUTOMATIC_ALWAYS_VALUE -> true
+            PRINT_AUTOMATIC_COMPETITOR_MATCHED_VALUE -> competitorMatched
+            PRINT_AUTOMATIC_CATEGORY_MATCHED_VALUE -> competitorMatched && categoryMatched
+            else -> false
+        }
 
     private fun isToMakeSound(
         context: Context,
