@@ -9032,7 +9032,11 @@ private fun StartListDetailsPanel(
                     persistSettingsIfIntervalIsValid(it, startDrawOptions())
                 },
                 label = { Text("Interval") },
-                modifier = Modifier.width(132.dp)
+                modifier = Modifier
+                    .width(132.dp)
+                    .commitOnEnter {
+                        persistSettingsIfIntervalIsValid(intervalDraft, startDrawOptions())
+                    }
             )
             EnumPicker(
                 selectedValue = clubHandling,
@@ -9068,7 +9072,11 @@ private fun StartListDetailsPanel(
                     }
                 },
                 label = { Text("Seed") },
-                modifier = Modifier.width(180.dp)
+                modifier = Modifier
+                    .width(180.dp)
+                    .commitOnEnter {
+                        persistSettingsIfIntervalIsValid(intervalDraft, startDrawOptions(seedValue = seedDraft))
+                    }
             )
             EnumPicker(
                 selectedValue = startGroupMode,
@@ -12552,10 +12560,17 @@ private fun ControlDetailRow(
 ) {
     var siCodeDraft by remember(control.id) { mutableStateOf(control.siCodeText) }
     var isSiCodeFocused by remember(control.id) { mutableStateOf(false) }
+    var publicLabelDraft by remember(control.id) { mutableStateOf(control.publicLabel) }
+    var isPublicLabelFocused by remember(control.id) { mutableStateOf(false) }
 
     LaunchedEffect(control.siCodeText, isSiCodeFocused) {
         if (!isSiCodeFocused) {
             siCodeDraft = control.siCodeText
+        }
+    }
+    LaunchedEffect(control.publicLabel, isPublicLabelFocused) {
+        if (!isPublicLabelFocused) {
+            publicLabelDraft = control.publicLabel
         }
     }
 
@@ -12589,6 +12604,15 @@ private fun ControlDetailRow(
         updateControl(siCodeText = normalizedDraft)
     }
 
+    fun commitPublicLabelDraft() {
+        val normalizedDraft = publicLabelDraft.trim()
+        if (normalizedDraft == control.publicLabel) {
+            publicLabelDraft = control.publicLabel
+            return
+        }
+        updateControl(publicLabel = normalizedDraft)
+    }
+
     Column(
         modifier = Modifier.width(fixedTableWidth(ControlTableColumns)),
     ) {
@@ -12619,9 +12643,18 @@ private fun ControlDetailRow(
                 modifier = Modifier.width(ControlTableColumns[1].width)
             )
             TextField(
-                value = control.publicLabel,
-                onValueChange = { updateControl(publicLabel = it) },
-                modifier = Modifier.width(ControlTableColumns[2].width),
+                value = publicLabelDraft,
+                onValueChange = { publicLabelDraft = it },
+                modifier = Modifier
+                    .width(ControlTableColumns[2].width)
+                    .onFocusChanged { focusState ->
+                        val wasFocused = isPublicLabelFocused
+                        isPublicLabelFocused = focusState.isFocused
+                        if (wasFocused && !focusState.isFocused) {
+                            commitPublicLabelDraft()
+                        }
+                    }
+                    .commitOnEnter(::commitPublicLabelDraft),
                 singleLine = true,
                 label = { Text("Public label") }
             )
@@ -12973,8 +13006,11 @@ private fun ProtectedCourseOrderPanel(
                 categoryName = categoryData.category.name,
                 idealOrderDraft = idealOrderDrafts[categoryId].orEmpty(),
                 assignedControls = assignedIdealOrderControls,
-                onIdealOrderChange = { idealOrderText ->
+                onIdealOrderDraftChange = { idealOrderText ->
                     idealOrderDrafts = idealOrderDrafts + (categoryId to idealOrderText)
+                },
+                onIdealOrderCommit = { idealOrderText ->
+                    idealOrderDrafts = idealOrderDrafts + (categoryId to idealOrderText.trim())
                     onUpdateIdealOrder(categoryId, idealOrderText)
                 }
             )
@@ -13119,7 +13155,8 @@ private fun ProtectedCourseOrderRow(
     categoryName: String,
     idealOrderDraft: String,
     assignedControls: List<EventControl>,
-    onIdealOrderChange: (String) -> Unit
+    onIdealOrderDraftChange: (String) -> Unit,
+    onIdealOrderCommit: (String) -> Unit
 ) {
     Row(
         modifier = Modifier.width(fixedTableWidth(ProtectedCourseOrderTableColumns)),
@@ -13135,7 +13172,8 @@ private fun ProtectedCourseOrderRow(
         ProtectedIdealOrderEditor(
             idealOrderDraft = idealOrderDraft,
             assignedControls = assignedControls,
-            onIdealOrderChange = onIdealOrderChange,
+            onIdealOrderDraftChange = onIdealOrderDraftChange,
+            onIdealOrderCommit = onIdealOrderCommit,
             modifier = Modifier.width(ProtectedCourseOrderTableColumns[1].width)
         )
     }
@@ -13145,10 +13183,12 @@ private fun ProtectedCourseOrderRow(
 private fun ProtectedIdealOrderEditor(
     idealOrderDraft: String,
     assignedControls: List<EventControl>,
-    onIdealOrderChange: (String) -> Unit,
+    onIdealOrderDraftChange: (String) -> Unit,
+    onIdealOrderCommit: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var hasPendingTextEdit by remember { mutableStateOf(false) }
     val pickerControls = remember(assignedControls) {
         assignedControls
             .filter { it.type == ControlPointType.CONTROL || it.type == ControlPointType.BEACON }
@@ -13173,9 +13213,25 @@ private fun ProtectedIdealOrderEditor(
     ) {
         TextField(
             value = idealOrderDraft,
-            onValueChange = onIdealOrderChange,
+            onValueChange = {
+                hasPendingTextEdit = true
+                onIdealOrderDraftChange(it)
+            },
             enabled = assignedControls.isNotEmpty(),
-            modifier = Modifier.width(ProtectedIdealOrderTextFieldWidth),
+            modifier = Modifier
+                .width(ProtectedIdealOrderTextFieldWidth)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused && hasPendingTextEdit) {
+                        hasPendingTextEdit = false
+                        onIdealOrderCommit(idealOrderDraft)
+                    }
+                }
+                .commitOnEnter {
+                    if (hasPendingTextEdit) {
+                        hasPendingTextEdit = false
+                        onIdealOrderCommit(idealOrderDraft)
+                    }
+                },
             singleLine = true,
             label = { Text("Ideal order") }
         )
@@ -13195,7 +13251,10 @@ private fun ProtectedIdealOrderEditor(
                     val publicLabel = control.publicDisplayLabel()
                     DropdownMenuItem(
                         onClick = {
-                            onIdealOrderChange(appendPublicControlLabel(idealOrderDraft, publicLabel))
+                            val nextText = appendPublicControlLabel(idealOrderDraft, publicLabel)
+                            hasPendingTextEdit = false
+                            onIdealOrderDraftChange(nextText)
+                            onIdealOrderCommit(nextText)
                             if (availablePickerControls.size <= 1) {
                                 expanded = false
                             }
@@ -13310,7 +13369,9 @@ private fun CategoryDetailRow(
                 lengthMetersDraft = it
                 applyPhysicalStats(nextLength = it)
             },
-            modifier = Modifier.width(CategoryTableColumns[2].width),
+            modifier = Modifier
+                .width(CategoryTableColumns[2].width)
+                .commitOnEnter { applyPhysicalStats() },
             singleLine = true,
             label = { Text("Length m") }
         )
@@ -13320,7 +13381,9 @@ private fun CategoryDetailRow(
                 climbMetersDraft = it
                 applyPhysicalStats(nextClimb = it)
             },
-            modifier = Modifier.width(CategoryTableColumns[3].width),
+            modifier = Modifier
+                .width(CategoryTableColumns[3].width)
+                .commitOnEnter { applyPhysicalStats() },
             singleLine = true,
             label = { Text("Climb m") }
         )
