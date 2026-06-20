@@ -3792,6 +3792,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.RemoveCurrentEventFromSeries,
                 DesktopNavAction.ValidateCurrentEventSeriesLink,
                 DesktopNavAction.BalanceStartListFromEventSeries,
+                DesktopNavAction.AddEventToSeries,
                 DesktopNavAction.OpenEventSeriesEvent,
                 DesktopNavAction.ValidateEventSeries,
                 DesktopNavAction.ExportEventSeries ->
@@ -3928,6 +3929,9 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ValidateCurrentEventSeriesLink,
                 DesktopNavAction.ValidateEventSeries -> validateCurrentEventSeries()
                 DesktopNavAction.BalanceStartListFromEventSeries -> balanceStartListFromEventSeries()
+                DesktopNavAction.AddEventToSeries -> {
+                    projectStatusText = "Add Event to Series will let you choose another Event File for this series in the next implementation slice."
+                }
                 DesktopNavAction.ExportEventSeries -> exportCurrentEventSeries()
                 DesktopNavAction.OpenEventSeriesEvent -> {
                     projectStatusText = "Use Load Event File to open another Event File listed in this Event Series."

@@ -37,9 +37,21 @@ class DesktopNavigationTest {
             DesktopWorkflow.bottomBarEntries(DesktopNavigationReadiness(hasEventFile = true))
         )
         assertEquals(
-            listOf(DesktopWorkflow.Setup, DesktopWorkflow.RaceOps, DesktopWorkflow.Series, DesktopWorkflow.ResultsExport),
+            listOf(DesktopWorkflow.Series, DesktopWorkflow.Setup, DesktopWorkflow.RaceOps, DesktopWorkflow.ResultsExport),
             DesktopWorkflow.bottomBarEntries(DesktopNavigationReadiness(hasEventFile = true, hasSeriesContext = true))
         )
+    }
+
+    @Test
+    fun seriesEventsMenuIncludesAddEventAction() {
+        val events = DesktopNavigation.rootItems(DesktopWorkflow.Series)
+            .first { it.label == "Events" }
+
+        assertEquals(
+            listOf("Series Events", "Add Event to Series...", "Open Series Event..."),
+            events.children.map { it.label }
+        )
+        assertEquals(DesktopNavAction.AddEventToSeries, events.children.first { it.label == "Add Event to Series..." }.action)
     }
 
     @Test

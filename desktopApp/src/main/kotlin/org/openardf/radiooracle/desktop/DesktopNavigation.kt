@@ -20,7 +20,8 @@ enum class DesktopWorkflow(
 
         fun bottomBarEntries(readiness: DesktopNavigationReadiness): List<DesktopWorkflow> =
             if (readiness.hasSeriesContext) {
-                listOf(Setup, RaceOps, Series, ResultsExport)
+                // When a series is active, put cross-event planning before event-scoped workflows.
+                listOf(Series, Setup, RaceOps, ResultsExport)
             } else {
                 bottomBarEntries
             }
@@ -80,6 +81,7 @@ enum class DesktopNavAction {
     RemoveCurrentEventFromSeries,
     ValidateCurrentEventSeriesLink,
     BalanceStartListFromEventSeries,
+    AddEventToSeries,
     OpenEventSeriesEvent,
     ValidateEventSeries,
     ExportEventSeries,
@@ -476,6 +478,7 @@ object DesktopNavigation {
                     workflow,
                     listOf(
                         item("series.events.view", "Series Events", workflow, DesktopSection.SeriesEvents),
+                        action("series.events.add", "Add Event to Series...", workflow, DesktopNavAction.AddEventToSeries),
                         action("series.events.open", "Open Series Event...", workflow, DesktopNavAction.OpenEventSeriesEvent)
                     ),
                     DesktopSection.SeriesEvents
@@ -1227,6 +1230,8 @@ object DesktopNavigation {
             "Use Events to review the manifest-listed Event Files and open another event in the same series.",
         "series.events.view" to
             "Use Series Events to inspect the ordered list of Event Files included in this series.",
+        "series.events.add" to
+            "Use Add Event to Series to add another Event File to the open Event Series manifest.",
         "series.events.open" to
             "Use Open Series Event to switch to another manifest-listed Event File after unsaved changes are handled.",
         "series.start-fairness" to
