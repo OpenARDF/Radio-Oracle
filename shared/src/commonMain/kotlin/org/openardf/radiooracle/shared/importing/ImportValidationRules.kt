@@ -19,6 +19,14 @@ object ImportValidationRules {
     /** Returns non-null SI numbers that occur more than once. */
     fun duplicateSINumbers(siNumbers: List<Int?>): Set<Int> = duplicateValues(siNumbers.filterNotNull())
 
+    /** Returns non-blank bib numbers that occur more than once. */
+    fun duplicateBibNumbers(bibNumbers: List<String>): Set<String> =
+        duplicateValues(bibNumbers.map { it.trim() }.filter { it.isNotEmpty() })
+
+    /** Returns non-blank call signs that occur more than once, using case-insensitive comparison. */
+    fun duplicateCallSigns(callSigns: List<String>): Set<String> =
+        duplicateValues(callSigns.map { it.trim().uppercase() }.filter { it.isNotEmpty() })
+
     /** Detects unsupported readout punch combinations, such as multiple starts or finishes. */
     fun validateReadoutPunchTypes(punchTypes: List<SIRecordType>): Set<ReadoutPunchValidationError> {
         val errors = LinkedHashSet<ReadoutPunchValidationError>()

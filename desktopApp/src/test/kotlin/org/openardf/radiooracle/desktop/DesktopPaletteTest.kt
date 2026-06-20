@@ -52,4 +52,9 @@ class DesktopPaletteTest {
         assertEquals(0xFFFFFF00L, DesktopPalette.WARNING_ARGB)
         assertEquals(0xFFC62828L, DesktopPalette.ERROR_ARGB)
     }
+
+    @Test
+    fun keepsSeriesNavigationVisuallyDistinctFromEventWorkflows() {
+        assertEquals(0xFFFFD59EL, DesktopPalette.SERIES_NAVIGATION_ARGB)
+    }
 }

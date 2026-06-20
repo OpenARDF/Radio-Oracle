@@ -27,7 +27,7 @@ Event Series support is an opt-in championship and multi-day layer above existin
 
 - Load linked Event Files as read-only snapshots unless the user explicitly opens one as the current Event File.
 - Track series dirty state separately from Event File dirty state.
-- Match competitors across events by SI number first, then unique start number fallback when SI is absent, then operator-approved overrides.
+- Match competitors across events by SI number, bib number, call sign, and operator-approved overrides.
 - Report ambiguous, missing, duplicate, and conflicting matches without blocking ordinary Event File work.
 - Reuse the existing balanced-thirds start-list algorithm for series-aware fairness.
 - Derive prior starts from earlier manifest-ordered linked Event Files for `Balance from Event Series`.
@@ -48,7 +48,7 @@ Event Series support is an opt-in championship and multi-day layer above existin
 - Test Event File `seriesLink` compatibility and ordinary Event Files without series metadata.
 - Test desktop series create/open/save/close, dirty-state isolation, link/unlink, validation, and clean export.
 - Test contextual Series workflow visibility and default single-event navigation behavior.
-- Test competitor identity matching by SI number, start number fallback, and override.
+- Test competitor identity matching by SI number, bib number, call sign, and override.
 - Test series-based start balancing against equivalent CSV-based balancing history.
 - Acceptance scenarios:
   - A single-day event behaves exactly as before.

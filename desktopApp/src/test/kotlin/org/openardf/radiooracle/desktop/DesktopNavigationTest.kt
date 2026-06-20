@@ -48,10 +48,18 @@ class DesktopNavigationTest {
             .first { it.label == "Events" }
 
         assertEquals(
-            listOf("Add Event to Series...", "Open Series Event..."),
+            listOf("Add Event to Series..."),
             events.children.map { it.label }
         )
         assertEquals(DesktopNavAction.AddEventToSeries, events.children.first { it.label == "Add Event to Series..." }.action)
+    }
+
+    @Test
+    fun seriesEventsMenuDoesNotDuplicateRowSpecificOpenAction() {
+        val events = DesktopNavigation.rootItems(DesktopWorkflow.Series)
+            .first { it.label == "Events" }
+
+        assertFalse(events.children.any { it.label == "Open Series Event..." })
     }
 
     @Test
@@ -63,13 +71,22 @@ class DesktopNavigationTest {
             roots.first { it.label == "Start Fairness" }.children.map { it.label }
         )
         assertEquals(
-            listOf("Validate Series"),
+            emptyList<String>(),
             roots.first { it.label == "Series Validation" }.children.map { it.label }
         )
         assertEquals(
             listOf("Export Series..."),
             roots.first { it.label == "Series Settings" }.children.map { it.label }
         )
+    }
+
+    @Test
+    fun seriesActionsAvoidDuplicateMenuAndScreenButtons() {
+        val roots = DesktopNavigation.rootItems(DesktopWorkflow.Series)
+
+        assertTrue(roots.first { it.label == "Events" }.children.any { it.label == "Add Event to Series..." })
+        assertFalse(roots.first { it.label == "Series Validation" }.children.any { it.label == "Validate Series" })
+        assertFalse(roots.first { it.label == "Events" }.children.any { it.label == "Open Series Event..." })
     }
 
     @Test
@@ -1041,13 +1058,18 @@ class DesktopNavigationTest {
     }
 
     @Test
-    fun everyNavigationActionIsStillReachableFromTheMenuTree() {
+    fun everyNavigationActionIsReachableFromMenuOrNamedPanelControl() {
         val reachableActions = DesktopWorkflow.entries
             .flatMap { workflow -> flatten(DesktopNavigation.rootItems(workflow)) }
             .mapNotNull { it.action }
             .toSet()
+        val panelLocalActions = setOf(
+            // Series Validation owns the results display, so its command belongs in that panel
+            // instead of duplicating the same action in the left menu.
+            DesktopNavAction.ValidateEventSeries
+        )
 
-        assertEquals(DesktopNavAction.entries.toSet(), reachableActions)
+        assertEquals(DesktopNavAction.entries.toSet(), reachableActions + panelLocalActions)
     }
 
     @Test

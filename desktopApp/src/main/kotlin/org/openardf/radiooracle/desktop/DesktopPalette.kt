@@ -22,6 +22,7 @@ object DesktopPalette {
     const val WARNING_ARGB = 0xFFFFFF00L
     const val WARNING_BACKGROUND_ARGB = 0xFFFFFDE7L
     const val NAVIGATION_BACKGROUND_ARGB = 0xFFEAF4FFL
+    const val SERIES_NAVIGATION_ARGB = 0xFFFFD59EL
     const val LIGHT_GREY_ARGB = 0xFFCBC8C8L
 
     val Primary = Color(PRIMARY_ARGB)
@@ -37,6 +38,7 @@ object DesktopPalette {
     val Warning = Color(WARNING_ARGB)
     val WarningBackground = Color(WARNING_BACKGROUND_ARGB)
     val NavigationBackground = Color(NAVIGATION_BACKGROUND_ARGB)
+    val SeriesNavigation = Color(SERIES_NAVIGATION_ARGB)
     val LightGrey = Color(LIGHT_GREY_ARGB)
 }
 

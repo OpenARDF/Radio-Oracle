@@ -134,6 +134,14 @@ object EventValidationRules {
             ImportValidationRules.duplicateSINumbers(
                 eventCompetitors.map { it.siNumber }
             ).takeIf { it.isNotEmpty() }?.let { add(EventValidationIssue.DuplicateSINumbers(it)) }
+
+            ImportValidationRules.duplicateBibNumbers(
+                eventCompetitors.map { it.bibNumber }
+            ).takeIf { it.isNotEmpty() }?.let { add(EventValidationIssue.DuplicateBibNumbers(it)) }
+
+            ImportValidationRules.duplicateCallSigns(
+                eventCompetitors.map { it.callSign }
+            ).takeIf { it.isNotEmpty() }?.let { add(EventValidationIssue.DuplicateCallSigns(it)) }
         }
     }
 
@@ -165,6 +173,8 @@ sealed interface EventValidationIssue {
     data class DuplicateControlLabels(val labels: Set<String>) : EventValidationIssue
     data class DuplicateStartNumbers(val startNumbers: Set<Int>) : EventValidationIssue
     data class DuplicateSINumbers(val siNumbers: Set<Int>) : EventValidationIssue
+    data class DuplicateBibNumbers(val bibNumbers: Set<String>) : EventValidationIssue
+    data class DuplicateCallSigns(val callSigns: Set<String>) : EventValidationIssue
     data class MultipleStartPunches(val siNumber: Int?) : EventValidationIssue
     data class MultipleFinishPunches(val siNumber: Int?) : EventValidationIssue
     data class LegacyIncompatibleCategoryControlCodes(val categoryName: String, val codes: Set<Int>) : EventValidationIssue

@@ -92,6 +92,10 @@ data class DesktopProjectDiagnostics(
                     "Duplicate start numbers: ${issue.startNumbers.joinToString()}."
                 is EventValidationIssue.DuplicateSINumbers ->
                     "Duplicate SI numbers: ${issue.siNumbers.joinToString()}."
+                is EventValidationIssue.DuplicateBibNumbers ->
+                    "Duplicate bib numbers: ${issue.bibNumbers.joinToString()}."
+                is EventValidationIssue.DuplicateCallSigns ->
+                    "Duplicate call signs: ${issue.callSigns.joinToString()}."
                 is EventValidationIssue.MultipleStartPunches ->
                     "Readout has multiple start punches: ${issue.siNumber ?: "unknown SI"}."
                 is EventValidationIssue.MultipleFinishPunches ->

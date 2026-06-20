@@ -139,6 +139,7 @@ import org.openardf.radiooracle.shared.event.EventReadoutDetails
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.EventSeriesIssueSeverity
 import org.openardf.radiooracle.shared.event.EventSeriesSupport
+import org.openardf.radiooracle.shared.event.EventSeriesValidationIssue
 import org.openardf.radiooracle.shared.event.EventStartListDetails
 import org.openardf.radiooracle.shared.event.EventStartListRuleSeverity
 import org.openardf.radiooracle.shared.event.EventStartListRow
@@ -422,6 +423,11 @@ fun main(args: Array<String>) = application {
         var recentImportCheckpoint by remember { mutableStateOf<DesktopImportCheckpoint?>(null) }
         var recentActivityLog by remember { mutableStateOf<List<String>>(emptyList()) }
         var seriesEventSummaries by remember { mutableStateOf<List<DesktopEventSeriesEventSummary>>(emptyList()) }
+        var seriesCompetitorMatchSummaries by remember {
+            mutableStateOf<List<DesktopEventSeriesCompetitorMatchSummary>>(emptyList())
+        }
+        var eventSeriesValidationState by remember { mutableStateOf<EventSeriesValidationUiState?>(null) }
+        var eventSeriesValidationEventPath by remember { mutableStateOf<Path?>(null) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzUnlockAction by remember { mutableStateOf<CourseKmlKmzUnlockAction?>(null) }
@@ -526,11 +532,17 @@ fun main(args: Array<String>) = application {
         fun refreshSeriesEventSummaries() {
             val currentPath = projectSession.currentPath
             val manifestPath = currentPath?.let { DesktopEventSeriesActions.findManifestNearEvent(it) }
-            seriesEventSummaries = if (manifestPath == null) {
-                emptyList()
+            if (manifestPath == null) {
+                seriesEventSummaries = emptyList()
+                seriesCompetitorMatchSummaries = emptyList()
             } else {
                 runCatching {
-                    DesktopEventSeriesActions.eventSummaries(
+                    seriesEventSummaries = DesktopEventSeriesActions.eventSummaries(
+                        store = DesktopEventSeriesFiles,
+                        manifestPath = manifestPath,
+                        currentEventPath = currentPath
+                    )
+                    seriesCompetitorMatchSummaries = DesktopEventSeriesActions.competitorMatchingSummaries(
                         store = DesktopEventSeriesFiles,
                         manifestPath = manifestPath,
                         currentEventPath = currentPath
@@ -540,7 +552,8 @@ fun main(args: Array<String>) = application {
                         "EventSeries",
                         "Failed to refresh Event Series events manifest=$manifestPath: ${it.message ?: it::class.simpleName}"
                     )
-                    emptyList()
+                    seriesEventSummaries = emptyList()
+                    seriesCompetitorMatchSummaries = emptyList()
                 }
             }
         }
@@ -549,6 +562,11 @@ fun main(args: Array<String>) = application {
             projectFile = projectSession.currentProject
             hasUnsavedChanges = projectSession.hasUnsavedChanges
             refreshSeriesEventSummaries()
+            val currentEventPath = projectSession.currentPath?.toAbsolutePath()?.normalize()
+            if (eventSeriesValidationEventPath != currentEventPath) {
+                eventSeriesValidationState = null
+                eventSeriesValidationEventPath = currentEventPath
+            }
         }
 
         LaunchedEffect(Unit) {
@@ -782,11 +800,11 @@ fun main(args: Array<String>) = application {
             runCatching {
                 clearAssignedControlsWarning()
                 lockProtectedCourseOrder()
-                projectFile = projectSession.open(path)
+                projectSession.open(path)
                 newEventDraftProject = null
                 hasUnsavedEventDefinitionChanges = false
                 isEventDefinitionSaveDialogVisible = false
-                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                syncProjectState()
                 DesktopLastEventFilePreferences.rememberEventFile(path)
                 projectStatusText = "Opened ${path.fileName}"
                 DesktopDebugLog.info("EventFile", "Opened ${path.fileName}")
@@ -1440,6 +1458,8 @@ fun main(args: Array<String>) = application {
 
         fun validateCurrentEventSeries() {
             val manifestPath = currentSeriesManifestPath() ?: run {
+                eventSeriesValidationState = null
+                eventSeriesValidationEventPath = projectSession.currentPath?.toAbsolutePath()?.normalize()
                 projectStatusText = "Series manifest not found near this Event File."
                 return
             }
@@ -1447,13 +1467,25 @@ fun main(args: Array<String>) = application {
                 val session = DesktopEventSeriesSession(DesktopEventSeriesFiles)
                 session.open(manifestPath)
                 val issues = session.validateLinkedEvents()
+                eventSeriesValidationState = EventSeriesValidationUiState(
+                    manifestPath = manifestPath,
+                    issues = issues
+                )
+                eventSeriesValidationEventPath = projectSession.currentPath?.toAbsolutePath()?.normalize()
                 projectStatusText = if (issues.isEmpty()) {
                     "Event Series validation passed."
                 } else {
                     "Event Series validation found ${issues.size} issue${if (issues.size == 1) "" else "s"}: ${issues.first().message}"
                 }
             }.onFailure { error ->
-                projectStatusText = "Event Series validation failed: ${error.message ?: error::class.simpleName}"
+                val message = error.message ?: error::class.simpleName ?: "Unknown error"
+                eventSeriesValidationState = EventSeriesValidationUiState(
+                    manifestPath = manifestPath,
+                    issues = emptyList(),
+                    errorMessage = message
+                )
+                eventSeriesValidationEventPath = projectSession.currentPath?.toAbsolutePath()?.normalize()
+                projectStatusText = "Event Series validation failed: $message"
             }
         }
 
@@ -3879,7 +3911,6 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ValidateCurrentEventSeriesLink,
                 DesktopNavAction.BalanceStartListFromEventSeries,
                 DesktopNavAction.AddEventToSeries,
-                DesktopNavAction.OpenEventSeriesEvent,
                 DesktopNavAction.ValidateEventSeries,
                 DesktopNavAction.ExportEventSeries ->
                     "Open or create an Event File first."
@@ -4017,9 +4048,6 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.BalanceStartListFromEventSeries -> balanceStartListFromEventSeries()
                 DesktopNavAction.AddEventToSeries -> addEventToCurrentSeries()
                 DesktopNavAction.ExportEventSeries -> exportCurrentEventSeries()
-                DesktopNavAction.OpenEventSeriesEvent -> {
-                    projectStatusText = "Select Events in the Event Series workflow, then open a listed Event File."
-                }
                 DesktopNavAction.ShowDebugLogHelp -> {
                     val logDirectory = DesktopDebugLog.logDirectory()
                     DesktopDebugLog.info("App", "User requested desktop log location")
@@ -4536,6 +4564,8 @@ fun main(args: Array<String>) = application {
             projectFile = projectFile,
             eventFilePath = projectSession.currentPath,
             seriesEventSummaries = seriesEventSummaries,
+            seriesCompetitorMatchSummaries = seriesCompetitorMatchSummaries,
+            eventSeriesValidationState = eventSeriesValidationState,
             projectStatusText = projectStatusText,
             hasUnsavedChanges = hasUnsavedChanges,
             siReaderState = siReaderState,
@@ -7175,6 +7205,12 @@ private data class DesktopReadoutEditDraft(
     val updateCompetitorCategory: Boolean = false
 )
 
+private data class EventSeriesValidationUiState(
+    val manifestPath: Path,
+    val issues: List<EventSeriesValidationIssue>,
+    val errorMessage: String? = null
+)
+
 /**
  * Builds the launchable desktop app shell.
  *
@@ -7187,6 +7223,8 @@ private fun RadioOManagerDesktopApp(
     projectFile: EventProjectFile? = null,
     eventFilePath: Path? = null,
     seriesEventSummaries: List<DesktopEventSeriesEventSummary> = emptyList(),
+    seriesCompetitorMatchSummaries: List<DesktopEventSeriesCompetitorMatchSummary> = emptyList(),
+    eventSeriesValidationState: EventSeriesValidationUiState? = null,
     projectStatusText: String = "No Event File open.",
     hasUnsavedChanges: Boolean = false,
     siReaderState: DesktopSiReaderUiState = DesktopSiReaderUiState.disconnected(),
@@ -7310,13 +7348,7 @@ private fun RadioOManagerDesktopApp(
             mutableStateOf<String?>(null)
         }
         val baseNavigationReadiness = DesktopNavigationReadiness.from(projectFile)
-        val hasValidSeriesContext = projectFile?.seriesLink?.let { link ->
-            seriesEventSummaries.any { summary ->
-                summary.isCurrentEvent && summary.seriesEventId == link.seriesEventId
-            }
-        } == true
-        // A backlink alone is not enough to enter the Series workflow; the manifest must list
-        // the current Event File because the manifest owns series membership.
+        val hasValidSeriesContext = hasDesktopEventSeriesContext(projectFile, seriesEventSummaries)
         val navigationReadiness = baseNavigationReadiness.copy(hasSeriesContext = hasValidSeriesContext)
         val activeBypassedDisabledNavigation = bypassedDisabledNavigation
             ?.activeFor(navState, navigationReadiness)
@@ -7437,10 +7469,12 @@ private fun RadioOManagerDesktopApp(
                                     title = DesktopNavigation.selectedLabel(navState),
                                     breadcrumb = DesktopNavigation.breadcrumb(navState),
                                     menuDescription = DesktopNavigation.selectedDescription(navState),
-                                    projectFile = projectFile,
-                                    eventFilePath = eventFilePath,
-                                    seriesEventSummaries = seriesEventSummaries,
-                                    projectStatusText = projectStatusText,
+                projectFile = projectFile,
+                eventFilePath = eventFilePath,
+                seriesEventSummaries = seriesEventSummaries,
+                seriesCompetitorMatchSummaries = seriesCompetitorMatchSummaries,
+                eventSeriesValidationState = eventSeriesValidationState,
+                projectStatusText = projectStatusText,
                                     siReaderState = siReaderState,
                                     onRenameRace = onRenameRace,
                                     onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
@@ -7816,6 +7850,48 @@ private fun saveEventButtonColors() =
         disabledContentColor = DesktopPalette.Disconnected
     )
 
+@Composable
+private fun navigationItemButtonColors(workflow: DesktopWorkflow, action: DesktopNavAction?) =
+    when {
+        action == DesktopNavAction.SaveEventFile -> saveEventButtonColors()
+        workflow == DesktopWorkflow.Series -> seriesNavigationButtonColors()
+        else -> ButtonDefaults.buttonColors()
+    }
+
+@Composable
+private fun workflowButtonColors(workflow: DesktopWorkflow, isBypassedDisabled: Boolean) =
+    ButtonDefaults.buttonColors(
+        backgroundColor = if (workflow == DesktopWorkflow.Series) {
+            DesktopPalette.SeriesNavigation
+        } else {
+            DesktopPalette.PrimaryVariant
+        },
+        contentColor = if (workflow == DesktopWorkflow.Series) {
+            DesktopPalette.Black
+        } else {
+            DesktopPalette.White
+        },
+        disabledBackgroundColor = if (isBypassedDisabled) {
+            DesktopPalette.Warning
+        } else {
+            DesktopPalette.LightGrey
+        },
+        disabledContentColor = if (isBypassedDisabled) {
+            DesktopPalette.Black
+        } else {
+            DesktopPalette.Disconnected
+        }
+    )
+
+@Composable
+private fun seriesNavigationButtonColors() =
+    ButtonDefaults.buttonColors(
+        backgroundColor = DesktopPalette.SeriesNavigation,
+        contentColor = DesktopPalette.Black,
+        disabledBackgroundColor = DesktopPalette.LightGrey,
+        disabledContentColor = DesktopPalette.Disconnected
+    )
+
 private const val DisabledMenuOverrideHoldMillis = 3_000L
 
 private fun Modifier.disabledMenuLongClickOverride(
@@ -7906,11 +7982,7 @@ private fun NavigationRail(
                                 .fillMaxWidth()
                                 .heightIn(min = 34.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            colors = if (item.action == DesktopNavAction.SaveEventFile) {
-                                saveEventButtonColors()
-                            } else {
-                                ButtonDefaults.buttonColors()
-                            }
+                            colors = navigationItemButtonColors(navState.workflow, item.action)
                         ) {
                             Text(
                                 text = if (DesktopNavigation.showsMenuIndicator(item)) "${item.label} >" else item.label,
@@ -8079,20 +8151,7 @@ private fun WorkflowBar(
                                 width = if (isSelected) 2.dp else 1.dp,
                                 color = if (isSelected) DesktopPalette.Black else DesktopPalette.LightGrey
                             ),
-                        colors = ButtonDefaults.buttonColors(
-                            backgroundColor = DesktopPalette.PrimaryVariant,
-                            contentColor = DesktopPalette.White,
-                            disabledBackgroundColor = if (isBypassedDisabled) {
-                                DesktopPalette.Warning
-                            } else {
-                                DesktopPalette.LightGrey
-                            },
-                            disabledContentColor = if (isBypassedDisabled) {
-                                DesktopPalette.Black
-                            } else {
-                                DesktopPalette.Disconnected
-                            }
-                        )
+                        colors = workflowButtonColors(workflow, isBypassedDisabled)
                     ) {
                         Text(
                             text = workflow.shortLabel,
@@ -8219,6 +8278,8 @@ private fun SectionWorkspace(
     projectFile: EventProjectFile?,
     eventFilePath: Path?,
     seriesEventSummaries: List<DesktopEventSeriesEventSummary>,
+    seriesCompetitorMatchSummaries: List<DesktopEventSeriesCompetitorMatchSummary>,
+    eventSeriesValidationState: EventSeriesValidationUiState?,
     projectStatusText: String,
     siReaderState: DesktopSiReaderUiState,
     onRenameRace: (String) -> Unit,
@@ -8456,9 +8517,17 @@ private fun SectionWorkspace(
         if (section == DesktopSection.SeriesEvents) {
             EventSeriesEventsPanel(
                 summaries = seriesEventSummaries,
-                onAddEvent = { onNavAction(DesktopNavAction.AddEventToSeries) },
                 onOpenEvent = onOpenSeriesEvent
             )
+        }
+        if (section == DesktopSection.SeriesValidation) {
+            EventSeriesValidationPanel(
+                state = eventSeriesValidationState,
+                onValidate = { onNavAction(DesktopNavAction.ValidateEventSeries) }
+            )
+        }
+        if (section == DesktopSection.SeriesCompetitorMatching) {
+            EventSeriesCompetitorMatchingPanel(seriesCompetitorMatchSummaries)
         }
         if (section == DesktopSection.Readouts && projectFile != null) {
             ReadoutDetailsPanel(
@@ -9495,15 +9564,10 @@ private fun StartListDetailRow(row: EventStartListRow) {
 @Composable
 private fun EventSeriesEventsPanel(
     summaries: List<DesktopEventSeriesEventSummary>,
-    onAddEvent: () -> Unit,
     onOpenEvent: (DesktopEventSeriesEventSummary) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onAddEvent) {
-                ButtonLabel("Add Event to Series...")
-            }
-        }
+        // Add Event stays in the left menu; this panel only contains row-specific Open actions.
         if (summaries.isEmpty()) {
             Text(
                 text = "No Event Series manifest was found for this Event File.",
@@ -9525,6 +9589,220 @@ private fun EventSeriesEventsPanel(
                 EventSeriesEventRow(summary, onOpenEvent)
             }
         }
+    }
+}
+
+/** Shows the latest validation result for the active Event Series manifest. */
+@Composable
+private fun EventSeriesValidationPanel(
+    state: EventSeriesValidationUiState?,
+    onValidate: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Keep validation as a panel-local action because this screen owns the results display.
+            // Do not also add a left-menu action for the same command.
+            Button(onClick = onValidate) {
+                ButtonLabel("Validate Series")
+            }
+            Text(
+                text = state?.manifestPath?.fileName?.toString() ?: "No validation results",
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
+
+        if (state == null) {
+            Text(
+                text = "No validation results.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+            return@Column
+        }
+
+        val errorMessage = state.errorMessage
+        if (errorMessage != null) {
+            Text(
+                text = "Validation failed: $errorMessage",
+                color = DesktopPalette.Error,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            return@Column
+        }
+
+        val errorCount = state.issues.count { it.severity == EventSeriesIssueSeverity.ERROR }
+        val warningCount = state.issues.count { it.severity == EventSeriesIssueSeverity.WARNING }
+        DetailHeaderRow(listOf("Errors", "Warnings", "Total issues"))
+        DetailGridRow(
+            listOf(
+                errorCount.toString(),
+                warningCount.toString(),
+                state.issues.size.toString()
+            )
+        )
+
+        if (state.issues.isEmpty()) {
+            Text(
+                text = "No issues found.",
+                color = DesktopPalette.PrimaryVariant,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                EventSeriesValidationHeaderRow()
+                state.issues.forEach { issue ->
+                    EventSeriesValidationIssueRow(issue)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventSeriesValidationHeaderRow() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Severity", modifier = Modifier.width(96.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Series Event", modifier = Modifier.width(168.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Issue", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun EventSeriesValidationIssueRow(issue: EventSeriesValidationIssue) {
+    val color = when (issue.severity) {
+        EventSeriesIssueSeverity.ERROR -> DesktopPalette.Error
+        EventSeriesIssueSeverity.WARNING -> DesktopPalette.Warning
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = issue.severity.name.lowercase().replaceFirstChar { it.uppercase() },
+            modifier = Modifier.width(96.dp),
+            color = color,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = issue.seriesEventId.orEmpty(),
+            modifier = Modifier.width(168.dp),
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = issue.message,
+            modifier = Modifier.weight(1f),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+    }
+}
+
+/** Shows competitor identity matching diagnostics for the active Event Series. */
+@Composable
+private fun EventSeriesCompetitorMatchingPanel(
+    summaries: List<DesktopEventSeriesCompetitorMatchSummary>
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Compares the current Event File with the other manifest-listed events in this series.",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        Text(
+            text = "Matches are competitor pairs found by unique SI number, bib number, call sign, or by a manual override when one is configured. Issues are duplicate identity values that make an automatic match ambiguous.",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
+        if (summaries.isEmpty()) {
+            Text(
+                text = "No other series events are available to compare with the current Event File.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+            return@Column
+        }
+
+        DetailHeaderRow(listOf("Events in series", "Comparison rows", "Matched competitors", "Matching issues"))
+        DetailGridRow(
+            listOf(
+                (summaries.size + 1).toString(),
+                summaries.size.toString(),
+                summaries.sumOf { it.matchCount }.toString(),
+                summaries.sumOf { it.issueCount }.toString()
+            )
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            EventSeriesCompetitorMatchingHeaderRow()
+            summaries.forEach { summary ->
+                EventSeriesCompetitorMatchingRow(summary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventSeriesCompetitorMatchingHeaderRow() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Other Event", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Other / Current", modifier = Modifier.width(120.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Matched", modifier = Modifier.width(80.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("SI", modifier = Modifier.width(56.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Bib", modifier = Modifier.width(56.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Call", modifier = Modifier.width(56.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Override", modifier = Modifier.width(76.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Issues", modifier = Modifier.width(64.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun EventSeriesCompetitorMatchingRow(summary: DesktopEventSeriesCompetitorMatchSummary) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = summary.comparedEventName,
+            modifier = Modifier.weight(1f),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = "${summary.comparedCompetitorCount} / ${summary.currentCompetitorCount}",
+            modifier = Modifier.width(120.dp),
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
+        Text(summary.matchCount.toString(), modifier = Modifier.width(80.dp), fontSize = 13.sp)
+        Text(summary.siNumberMatchCount.toString(), modifier = Modifier.width(56.dp), fontSize = 13.sp)
+        Text(summary.bibNumberMatchCount.toString(), modifier = Modifier.width(56.dp), fontSize = 13.sp)
+        Text(summary.callSignMatchCount.toString(), modifier = Modifier.width(56.dp), fontSize = 13.sp)
+        Text(summary.overrideMatchCount.toString(), modifier = Modifier.width(76.dp), fontSize = 13.sp)
+        Text(
+            text = summary.issueCount.toString(),
+            modifier = Modifier.width(64.dp),
+            color = if (summary.issueCount > 0) DesktopPalette.Warning else DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            fontWeight = if (summary.issueCount > 0) FontWeight.SemiBold else FontWeight.Normal
+        )
     }
 }
 

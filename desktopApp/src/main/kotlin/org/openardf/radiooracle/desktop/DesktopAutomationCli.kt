@@ -14,6 +14,7 @@ import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
 import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
 import org.openardf.radiooracle.shared.event.CompetitorCsvImportDuplicatePolicy
 import org.openardf.radiooracle.shared.event.EventProjectEditor
+import org.openardf.radiooracle.shared.event.EventSeriesIssueSeverity
 import org.openardf.radiooracle.shared.event.EventValidationRules
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportProfile
 import org.openardf.radiooracle.shared.files.EventCsvImports
@@ -100,6 +101,8 @@ object DesktopAutomationCli {
             "import-competitors-csv" -> importCompetitorsCsv(commandArgs, out, err)
             "event-series-list" -> eventSeriesList(commandArgs, out, err)
             "event-series-add-event" -> eventSeriesAddEvent(commandArgs, out, err)
+            "event-series-validate" -> eventSeriesValidate(commandArgs, out, err)
+            "event-series-match" -> eventSeriesMatch(commandArgs, out, err)
             "readiness-summary" -> readinessSummary(commandArgs, out, err)
             "recalculate-results" -> recalculateResults(commandArgs, out, err)
             "export-public-results-site" -> exportPublicResultsSite(commandArgs, out, err)
@@ -515,6 +518,86 @@ object DesktopAutomationCli {
         }
     }
 
+    private fun eventSeriesValidate(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val manifestText = args.getOrNull(0)
+        if (manifestText.isNullOrBlank()) {
+            err.println("event-series-validate requires an Event Series manifest path.")
+            return 64
+        }
+        return runCatching {
+            val manifestPath = Path.of(manifestText)
+            val session = DesktopEventSeriesSession(DesktopEventSeriesFiles)
+            session.open(manifestPath)
+            val issues = session.validateLinkedEvents()
+            out.println(
+                jsonObject(
+                    "command" to "event-series-validate",
+                    "manifest" to manifestPath.toAbsolutePath().normalize().toString(),
+                    "issueCount" to issues.size,
+                    "errorCount" to issues.count { it.severity == EventSeriesIssueSeverity.ERROR },
+                    "warningCount" to issues.count { it.severity == EventSeriesIssueSeverity.WARNING },
+                    "issues" to issues.map { issue ->
+                        mapOf(
+                            "severity" to issue.severity.name,
+                            "seriesEventId" to issue.seriesEventId,
+                            "message" to issue.message
+                        )
+                    }
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Event Series validation failed: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
+    private fun eventSeriesMatch(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val manifestText = args.getOrNull(0)
+        val currentEventText = args.getOrNull(1)
+        if (manifestText.isNullOrBlank() || currentEventText.isNullOrBlank()) {
+            err.println("event-series-match requires Event Series manifest and current Event File paths.")
+            return 64
+        }
+        return runCatching {
+            val manifestPath = Path.of(manifestText)
+            val currentEventPath = Path.of(currentEventText)
+            val summaries = DesktopEventSeriesActions.competitorMatchingSummaries(
+                store = DesktopEventSeriesFiles,
+                manifestPath = manifestPath,
+                currentEventPath = currentEventPath
+            )
+            out.println(
+                jsonObject(
+                    "command" to "event-series-match",
+                    "manifest" to manifestPath.toAbsolutePath().normalize().toString(),
+                    "currentEvent" to currentEventPath.toAbsolutePath().normalize().toString(),
+                    "comparedEventCount" to summaries.size,
+                    "matchCount" to summaries.sumOf { it.matchCount },
+                    "issueCount" to summaries.sumOf { it.issueCount },
+                    "events" to summaries.map { summary ->
+                        mapOf(
+                            "seriesEventId" to summary.comparedSeriesEventId,
+                            "displayName" to summary.comparedEventName,
+                            "comparedCompetitorCount" to summary.comparedCompetitorCount,
+                            "currentCompetitorCount" to summary.currentCompetitorCount,
+                            "matchCount" to summary.matchCount,
+                            "siNumberMatchCount" to summary.siNumberMatchCount,
+                            "bibNumberMatchCount" to summary.bibNumberMatchCount,
+                            "callSignMatchCount" to summary.callSignMatchCount,
+                            "overrideMatchCount" to summary.overrideMatchCount,
+                            "issueCount" to summary.issueCount
+                        )
+                    }
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Event Series competitor matching failed: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
     private fun readinessSummary(args: List<String>, out: PrintStream, err: PrintStream): Int {
         val pathText = args.firstOrNull { !it.startsWith("--") }
         if (pathText.isNullOrBlank()) {
@@ -906,6 +989,10 @@ object DesktopAutomationCli {
                                           List series manifest events as JSON.
           event-series-add-event <manifest-path> <event-path>
                                           Add an Event File to a series manifest and write its backlink.
+          event-series-validate <manifest-path>
+                                          Validate a series manifest and linked Event Files.
+          event-series-match <manifest-path> <current-event-path>
+                                          Print competitor matching diagnostics for the current series event.
           readiness-summary [--require-ready] <event-path>
                                           Print validation and readiness issues as JSON.
           recalculate-results [--write] <event-path>

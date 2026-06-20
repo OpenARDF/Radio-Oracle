@@ -95,7 +95,7 @@ For CSV-based balancing:
 4. Select the prior starts CSV files for the same multi-day competition.
 5. Radio-Oracle computes a preferred third for every current competitor, saves those assignments, and draws the start list in `Balanced thirds` mode.
 
-Prior starts are matched to current competitors by SI number when present. If no SI number is available, start number is used as a fallback. This fallback is less reliable when start numbers change between days, so SI numbers are preferred for multi-day fairness. Series-based matching can also use operator-approved competitor match overrides stored in the series manifest when the same person cannot be matched confidently from event data alone.
+Prior starts from linked Event Files are matched to current competitors by persistent identity fields: SI number, bib number, then call sign. Prior starts CSV files currently carry SI numbers but not bib numbers or call signs, so CSV-based balancing can only match competitors that have SI numbers in the starts file. Start/order numbers are not used as competitor identity keys.
 
 Each selected prior starts CSV, or each prior Event File selected by the series manifest, is converted into first, middle, and late thirds by sorting its distinct start times and applying the same third-boundary rule used by the draw. The current-day assignment heuristic then evaluates each competitor's history:
 

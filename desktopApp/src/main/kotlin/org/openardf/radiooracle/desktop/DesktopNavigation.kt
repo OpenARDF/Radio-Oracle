@@ -82,7 +82,6 @@ enum class DesktopNavAction {
     ValidateCurrentEventSeriesLink,
     BalanceStartListFromEventSeries,
     AddEventToSeries,
-    OpenEventSeriesEvent,
     ValidateEventSeries,
     ExportEventSeries,
     DownloadSiCard,
@@ -475,8 +474,7 @@ object DesktopNavigation {
                     "Events",
                     workflow,
                     listOf(
-                        action("series.events.add", "Add Event to Series...", workflow, DesktopNavAction.AddEventToSeries),
-                        action("series.events.open", "Open Series Event...", workflow, DesktopNavAction.OpenEventSeriesEvent)
+                        action("series.events.add", "Add Event to Series...", workflow, DesktopNavAction.AddEventToSeries)
                     ),
                     DesktopSection.SeriesEvents
                 ),
@@ -500,13 +498,10 @@ object DesktopNavigation {
                     workflow,
                     DesktopSection.SeriesCompetitorMatching
                 ),
-                group(
+                item(
                     "series.validation",
                     "Series Validation",
                     workflow,
-                    listOf(
-                        action("series.validation.run", "Validate Series", workflow, DesktopNavAction.ValidateEventSeries)
-                    ),
                     DesktopSection.SeriesValidation
                 ),
                 group(
@@ -1215,18 +1210,14 @@ object DesktopNavigation {
             "Use Events to review the manifest-listed Event Files and open another event in the same series.",
         "series.events.add" to
             "Use Add Event to Series to add another Event File to the open Event Series manifest.",
-        "series.events.open" to
-            "Use Open Series Event to switch to another manifest-listed Event File after unsaved changes are handled.",
         "series.start-fairness" to
             "Use Start Fairness to review and balance start thirds across prior events in this series.",
         "series.start-fairness.balance" to
             "Use Balance From Event Series to draw the current event using prior linked events as the start-third history source.",
         "series.competitor-matching" to
-            "Use Competitor Matching to review same-person matches across series events by SI number, start number fallback, and overrides.",
+            "Use Competitor Matching to review same-person matches across series events by SI number, bib number, call sign, and overrides.",
         "series.validation" to
             "Use Series Validation to check manifest membership, required Event Files, backlinks, and cross-event consistency.",
-        "series.validation.run" to
-            "Use Validate Series to re-check the open Event Series manifest and linked Event Files.",
         "series.settings" to
             "Use Series Settings to review series metadata and export a clean backup package.",
         "series.settings.export" to

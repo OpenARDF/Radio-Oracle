@@ -29,7 +29,8 @@ data class EventSeriesCompetitorMatch(
 
 enum class EventSeriesCompetitorMatchMethod {
     SI_NUMBER,
-    START_NUMBER,
+    BIB_NUMBER,
+    CALL_SIGN,
     OVERRIDE
 }
 
@@ -139,18 +140,24 @@ object EventSeriesSupport {
         val matches = mutableListOf<EventSeriesCompetitorMatch>()
         val usedTargets = mutableSetOf<String>()
 
-        val targetBySi = uniqueCompetitorsByKey(
-            toEvent,
-            key = { it.siNumber?.takeIf { value -> value > 0 }?.toString() },
-            issueLabel = "SI number",
-            issues = issues
-        )
-        val targetByStart = uniqueCompetitorsByKey(
-            toEvent,
-            key = { competitor -> if (competitor.siNumber == null) competitor.startNumber.toString() else null },
-            issueLabel = "start number",
-            issues = issues
-        )
+        /*
+         * Series-level identity must use persistent competitor identifiers. The legacy
+         * startNumber field is event-local ordering data in this workflow, so it is
+         * deliberately excluded from automatic same-person matching.
+         */
+        var targetBySi: Map<String, EventCompetitor> = emptyMap()
+        var targetByBib: Map<String, EventCompetitor> = emptyMap()
+        var targetByCallSign: Map<String, EventCompetitor> = emptyMap()
+        listOf(fromEvent, toEvent).forEach { event ->
+            val eventBySi = uniqueCompetitorsByKey(event, { it.seriesSiKey() }, "SI number", issues)
+            val eventByBib = uniqueCompetitorsByKey(event, { it.seriesBibKey() }, "bib number", issues)
+            val eventByCallSign = uniqueCompetitorsByKey(event, { it.seriesCallSignKey() }, "call sign", issues)
+            if (event.event.seriesEventId == toEvent.event.seriesEventId) {
+                targetBySi = eventBySi
+                targetByBib = eventByBib
+                targetByCallSign = eventByCallSign
+            }
+        }
 
         seriesFile.competitorMatchOverrides
             .filter { override ->
@@ -187,17 +194,27 @@ object EventSeriesSupport {
                     return@forEach
                 }
 
-                if (competitor.siNumber == null) {
-                    val startTarget = targetByStart[competitor.startNumber.toString()]
-                    if (startTarget != null && usedTargets.add(startTarget.id)) {
-                        matches += EventSeriesCompetitorMatch(
-                            fromSeriesEventId = fromEvent.event.seriesEventId,
-                            fromCompetitorId = competitor.id,
-                            toSeriesEventId = toEvent.event.seriesEventId,
-                            toCompetitorId = startTarget.id,
-                            method = EventSeriesCompetitorMatchMethod.START_NUMBER
-                        )
-                    }
+                val bibTarget = competitor.seriesBibKey()?.let { targetByBib[it] }
+                if (bibTarget != null && usedTargets.add(bibTarget.id)) {
+                    matches += EventSeriesCompetitorMatch(
+                        fromSeriesEventId = fromEvent.event.seriesEventId,
+                        fromCompetitorId = competitor.id,
+                        toSeriesEventId = toEvent.event.seriesEventId,
+                        toCompetitorId = bibTarget.id,
+                        method = EventSeriesCompetitorMatchMethod.BIB_NUMBER
+                    )
+                    return@forEach
+                }
+
+                val callSignTarget = competitor.seriesCallSignKey()?.let { targetByCallSign[it] }
+                if (callSignTarget != null && usedTargets.add(callSignTarget.id)) {
+                    matches += EventSeriesCompetitorMatch(
+                        fromSeriesEventId = fromEvent.event.seriesEventId,
+                        fromCompetitorId = competitor.id,
+                        toSeriesEventId = toEvent.event.seriesEventId,
+                        toCompetitorId = callSignTarget.id,
+                        method = EventSeriesCompetitorMatchMethod.CALL_SIGN
+                    )
                 }
             }
 
@@ -216,7 +233,9 @@ object EventSeriesSupport {
                         totalSeconds = requireNotNull(competitor.drawnStartTimeSeconds),
                         useMinutes = true
                     ),
-                    siNumber = competitor.siNumber
+                    siNumber = competitor.siNumber,
+                    bibNumber = competitor.bibNumber,
+                    callSign = competitor.callSign
                 )
             }
 
@@ -243,4 +262,13 @@ object EventSeriesSupport {
             .filterValues { it.size == 1 }
             .mapValues { it.value.single() }
     }
+
+    private fun EventCompetitor.seriesSiKey(): String? =
+        siNumber?.takeIf { it > 0 }?.toString()
+
+    private fun EventCompetitor.seriesBibKey(): String? =
+        bibNumber.trim().takeIf { it.isNotEmpty() }
+
+    private fun EventCompetitor.seriesCallSignKey(): String? =
+        callSign.trim().uppercase().takeIf { it.isNotEmpty() }
 }

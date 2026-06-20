@@ -44,7 +44,9 @@ enum class CompetitorCsvImportProfile {
 data class CompetitorStartCsvImportRow(
     val startNumber: Int,
     val startTimeText: String,
-    val siNumber: Int?
+    val siNumber: Int?,
+    val bibNumber: String = "",
+    val callSign: String = ""
 )
 
 data class CategoryCsvImportRow(

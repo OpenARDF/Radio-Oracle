@@ -8,6 +8,9 @@ import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.EventCompetitor
+import org.openardf.radiooracle.shared.event.EventCompetitorCategory
+import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -173,6 +176,89 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun competitorMatchingSummariesCompareOtherSeriesEventsToCurrentEvent() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val seriesFile = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-1", "events/day-1.rom.json", 0, "Day 1"),
+                EventSeriesEvent("day-2", "events/day-2.rom.json", 1, "Day 2")
+            )
+        )
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile),
+            eventFiles = mapOf(
+                Path.of("/source/events/day-1.rom.json") to projectFile(
+                    name = "Day 1",
+                    competitors = listOf(
+                        competitorData(id = "day-1-alice", startNumber = 11, siNumber = 123456),
+                        competitorData(id = "day-1-bob", startNumber = 22, siNumber = null, bibNumber = "B-22"),
+                        competitorData(id = "day-1-cara", startNumber = 33, siNumber = null, callSign = "K0ABC")
+                    )
+                ),
+                Path.of("/source/events/day-2.rom.json") to projectFile(
+                    name = "Day 2",
+                    competitors = listOf(
+                        competitorData(id = "day-2-alice", startNumber = 99, siNumber = 123456),
+                        competitorData(id = "day-2-bob", startNumber = 88, siNumber = null, bibNumber = "B-22"),
+                        competitorData(id = "day-2-cara", startNumber = 77, siNumber = null, callSign = "k0abc")
+                    )
+                )
+            )
+        )
+
+        val summaries = DesktopEventSeriesActions.competitorMatchingSummaries(
+            store = store,
+            manifestPath = manifestPath,
+            currentEventPath = Path.of("/source/events/day-2.rom.json")
+        )
+
+        val summary = summaries.single()
+        assertEquals("Day 1", summary.comparedEventName)
+        assertEquals("day-1", summary.comparedSeriesEventId)
+        assertEquals(3, summary.comparedCompetitorCount)
+        assertEquals(3, summary.currentCompetitorCount)
+        assertEquals(3, summary.matchCount)
+        assertEquals(1, summary.siNumberMatchCount)
+        assertEquals(1, summary.bibNumberMatchCount)
+        assertEquals(1, summary.callSignMatchCount)
+        assertEquals(0, summary.overrideMatchCount)
+        assertEquals(0, summary.issueCount)
+    }
+
+    @Test
+    fun seriesContextIsAvailableForManifestListedCurrentEventWithoutBacklink() {
+        assertEquals(
+            true,
+            hasDesktopEventSeriesContext(
+                projectFile = projectFile("Day 2"),
+                summaries = listOf(eventSummary("day-2", isCurrentEvent = true))
+            )
+        )
+    }
+
+    @Test
+    fun seriesContextRejectsCurrentEventWithMismatchedBacklink() {
+        assertEquals(
+            false,
+            hasDesktopEventSeriesContext(
+                projectFile = projectFile("Day 2").copy(seriesLink = EventSeriesLink("series-1", "day-1")),
+                summaries = listOf(eventSummary("day-2", isCurrentEvent = true))
+            )
+        )
+    }
+
+    @Test
+    fun seriesContextIsUnavailableWhenNoManifestEntryIsCurrent() {
+        assertEquals(
+            false,
+            hasDesktopEventSeriesContext(
+                projectFile = projectFile("Day 2").copy(seriesLink = EventSeriesLink("series-1", "day-2")),
+                summaries = listOf(eventSummary("day-2", isCurrentEvent = false))
+            )
+        )
+    }
+
+    @Test
     fun exportSeriesCopiesOnlyManifestListedFiles() {
         val manifestPath = Path.of("/source/series.radio-oracle.json")
         val seriesFile = seriesFile(
@@ -220,7 +306,22 @@ class DesktopEventSeriesTest {
     private fun seriesFile(events: List<EventSeriesEvent> = listOf(EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"))): EventSeriesFile =
         EventSeriesFile(seriesId = "series-1", name = "Championship", events = events)
 
-    private fun projectFile(name: String, eventId: String = name): EventProjectFile =
+    private fun eventSummary(seriesEventId: String, isCurrentEvent: Boolean): DesktopEventSeriesEventSummary =
+        DesktopEventSeriesEventSummary(
+            seriesEventId = seriesEventId,
+            displayName = seriesEventId,
+            order = 0,
+            eventFilePath = "$seriesEventId.rom.json",
+            resolvedPath = Path.of("/work/championship/$seriesEventId.rom.json"),
+            exists = true,
+            isCurrentEvent = isCurrentEvent
+        )
+
+    private fun projectFile(
+        name: String,
+        eventId: String = name,
+        competitors: List<EventCompetitorData> = emptyList()
+    ): EventProjectFile =
         EventProjectFile(
             raceData = EventRaceData(
                 race = EventRace(
@@ -235,9 +336,40 @@ class DesktopEventSeriesTest {
                 ),
                 categories = emptyList(),
                 aliases = emptyList(),
-                competitorData = emptyList(),
+                competitorData = competitors,
                 unmatchedReadoutData = emptyList()
             )
+        )
+
+    private fun competitorData(
+        id: String,
+        startNumber: Int,
+        siNumber: Int?,
+        bibNumber: String = "",
+        callSign: String = ""
+    ): EventCompetitorData =
+        EventCompetitorData(
+            competitorCategory = EventCompetitorCategory(
+                competitor = EventCompetitor(
+                    id = id,
+                    raceId = "race",
+                    categoryId = null,
+                    firstName = id,
+                    lastName = "Runner",
+                    club = "OPEN",
+                    index = "",
+                    isMan = true,
+                    birthYear = null,
+                    siNumber = siNumber,
+                    siRent = false,
+                    startNumber = startNumber,
+                    drawnStartTimeSeconds = null,
+                    bibNumber = bibNumber,
+                    callSign = callSign
+                ),
+                category = null
+            ),
+            readoutData = null
         )
 }
 

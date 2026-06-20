@@ -23,8 +23,8 @@ class EventValidationRulesTest {
             categories = listOf(categoryData("M21"), categoryData("M21")),
             aliases = listOf(alias("F1", 31), alias("F1", 32), alias("F2", 31)),
             competitors = listOf(
-                competitorData("one", startNumber = 1, siNumber = 123),
-                competitorData("two", startNumber = 1, siNumber = 123)
+                competitorData("one", startNumber = 1, siNumber = 123, bibNumber = "B1", callSign = "K0ABC"),
+                competitorData("two", startNumber = 1, siNumber = 123, bibNumber = "B1", callSign = "k0abc")
             )
         )
 
@@ -36,6 +36,8 @@ class EventValidationRulesTest {
         assertTrue(issues.contains(EventValidationIssue.DuplicateAliasCodes(setOf(31))))
         assertTrue(issues.contains(EventValidationIssue.DuplicateStartNumbers(setOf(1))))
         assertTrue(issues.contains(EventValidationIssue.DuplicateSINumbers(setOf(123))))
+        assertTrue(issues.contains(EventValidationIssue.DuplicateBibNumbers(setOf("B1"))))
+        assertTrue(issues.contains(EventValidationIssue.DuplicateCallSigns(setOf("K0ABC"))))
     }
 
     @Test
@@ -156,6 +158,8 @@ class EventValidationRulesTest {
         id: String,
         startNumber: Int = 1,
         siNumber: Int? = 123,
+        bibNumber: String = "",
+        callSign: String = "",
         readoutData: EventReadoutData? = null
     ): EventCompetitorData =
         EventCompetitorData(
@@ -173,7 +177,9 @@ class EventValidationRulesTest {
                     siNumber = siNumber,
                     siRent = false,
                     startNumber = startNumber,
-                    drawnStartTimeSeconds = null
+                    drawnStartTimeSeconds = null,
+                    bibNumber = bibNumber,
+                    callSign = callSign
                 ),
                 category = null
             ),

@@ -82,7 +82,7 @@ class EventSeriesSupportTest {
     }
 
     @Test
-    fun matchesCompetitorsBySiNumberThenStartNumberFallback() {
+    fun matchesCompetitorsByPersistentIdentityFields() {
         val series = seriesFile()
         val from = linkedEvent(
             "day-1",
@@ -90,7 +90,8 @@ class EventSeriesSupportTest {
                 "Day 1",
                 competitors = listOf(
                     competitorData("si-source", 11, 123456),
-                    competitorData("start-source", 22, null)
+                    competitorData("bib-source", 22, null, bibNumber = "B-22"),
+                    competitorData("call-source", 33, null, callSign = "K0ABC")
                 )
             )
         )
@@ -100,7 +101,8 @@ class EventSeriesSupportTest {
                 "Day 2",
                 competitors = listOf(
                     competitorData("si-target", 99, 123456),
-                    competitorData("start-target", 22, null)
+                    competitorData("bib-target", 88, null, bibNumber = "B-22"),
+                    competitorData("call-target", 77, null, callSign = "k0abc")
                 )
             )
         )
@@ -108,10 +110,31 @@ class EventSeriesSupportTest {
         val report = EventSeriesSupport.matchCompetitors(series, from, to)
 
         assertEquals(
-            listOf(EventSeriesCompetitorMatchMethod.SI_NUMBER, EventSeriesCompetitorMatchMethod.START_NUMBER),
+            listOf(
+                EventSeriesCompetitorMatchMethod.SI_NUMBER,
+                EventSeriesCompetitorMatchMethod.BIB_NUMBER,
+                EventSeriesCompetitorMatchMethod.CALL_SIGN
+            ),
             report.matches.map { it.method }
         )
-        assertEquals(listOf("si-target", "start-target"), report.matches.map { it.toCompetitorId })
+        assertEquals(listOf("si-target", "bib-target", "call-target"), report.matches.map { it.toCompetitorId })
+    }
+
+    @Test
+    fun doesNotMatchCompetitorsByStartNumberAlone() {
+        val series = seriesFile()
+        val from = linkedEvent(
+            "day-1",
+            projectFile("Day 1", competitors = listOf(competitorData("source", 22, null)))
+        )
+        val to = linkedEvent(
+            "day-2",
+            projectFile("Day 2", competitors = listOf(competitorData("target", 22, null)))
+        )
+
+        val report = EventSeriesSupport.matchCompetitors(series, from, to)
+
+        assertEquals(emptyList<EventSeriesCompetitorMatch>(), report.matches)
     }
 
     @Test
@@ -243,7 +266,9 @@ class EventSeriesSupportTest {
         id: String,
         startNumber: Int,
         siNumber: Int?,
-        drawnStartTimeSeconds: Long? = null
+        drawnStartTimeSeconds: Long? = null,
+        bibNumber: String = "",
+        callSign: String = ""
     ): EventCompetitorData =
         EventCompetitorData(
             competitorCategory = EventCompetitorCategory(
@@ -260,7 +285,9 @@ class EventSeriesSupportTest {
                     siNumber = siNumber,
                     siRent = false,
                     startNumber = startNumber,
-                    drawnStartTimeSeconds = drawnStartTimeSeconds
+                    drawnStartTimeSeconds = drawnStartTimeSeconds,
+                    bibNumber = bibNumber,
+                    callSign = callSign
                 ),
                 category = null
             ),

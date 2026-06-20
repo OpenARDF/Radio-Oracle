@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.desktop.printing.DesktopPrinterDiagnostics
@@ -12,6 +13,9 @@ import org.openardf.radiooracle.desktop.usb.DesktopSerialPortProvider
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.EventCompetitor
+import org.openardf.radiooracle.shared.event.EventCompetitorCategory
+import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -278,6 +282,96 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun eventSeriesValidateCommandReportsDuplicateRaceIds() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-series-validate")
+        val manifestPath = directory.resolve("series.radio-oracle.json")
+        val dayOnePath = directory.resolve("day-1.json")
+        val dayTwoPath = directory.resolve("day-2.json")
+        DesktopEventSeriesFiles.write(
+            manifestPath,
+            EventSeriesFile(
+                seriesId = "series-1",
+                name = "Championship",
+                events = listOf(
+                    EventSeriesEvent("day-1", "day-1.json", 0, "Day 1"),
+                    EventSeriesEvent("day-2", "day-2.json", 1, "Day 2")
+                )
+            )
+        )
+        DesktopProjectFiles.write(
+            dayOnePath,
+            projectFile("Day 1", eventId = "copied-race-id", seriesLink = EventSeriesLink("series-1", "day-1"))
+        )
+        DesktopProjectFiles.write(
+            dayTwoPath,
+            projectFile("Day 2", eventId = "copied-race-id", seriesLink = EventSeriesLink("series-1", "day-2"))
+        )
+
+        val result = runAutomation("event-series-validate", manifestPath.toString())
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"event-series-validate\""))
+        assertTrue(result.stdout.contains("\"issueCount\":2"))
+        assertTrue(result.stdout.contains("\"warningCount\":2"))
+        assertTrue(result.stdout.contains("\"errorCount\":0"))
+        assertTrue(result.stdout.contains("duplicate race ID"))
+    }
+
+    @Test
+    fun eventSeriesMatchCommandReportsCompetitorMatchingDiagnostics() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-series-match")
+        val manifestPath = directory.resolve("series.radio-oracle.json")
+        val dayOnePath = directory.resolve("day-1.json")
+        val dayTwoPath = directory.resolve("day-2.json")
+        DesktopEventSeriesFiles.write(
+            manifestPath,
+            EventSeriesFile(
+                seriesId = "series-1",
+                name = "Championship",
+                events = listOf(
+                    EventSeriesEvent("day-1", "day-1.json", 0, "Day 1"),
+                    EventSeriesEvent("day-2", "day-2.json", 1, "Day 2")
+                )
+            )
+        )
+        DesktopProjectFiles.write(
+            dayOnePath,
+            projectFile(
+                "Day 1",
+                eventId = "day-1",
+                competitors = listOf(
+                    competitorData(id = "day-1-alice", startNumber = 11, siNumber = 123456),
+                    competitorData(id = "day-1-bob", startNumber = 22, siNumber = null, bibNumber = "B-22"),
+                    competitorData(id = "day-1-cara", startNumber = 33, siNumber = null, callSign = "K0ABC")
+                )
+            )
+        )
+        DesktopProjectFiles.write(
+            dayTwoPath,
+            projectFile(
+                "Day 2",
+                eventId = "day-2",
+                competitors = listOf(
+                    competitorData(id = "day-2-alice", startNumber = 99, siNumber = 123456),
+                    competitorData(id = "day-2-bob", startNumber = 88, siNumber = null, bibNumber = "B-22"),
+                    competitorData(id = "day-2-cara", startNumber = 77, siNumber = null, callSign = "k0abc")
+                )
+            )
+        )
+
+        val result = runAutomation("event-series-match", manifestPath.toString(), dayTwoPath.toString())
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"event-series-match\""))
+        assertTrue(result.stdout.contains("\"comparedEventCount\":1"))
+        assertTrue(result.stdout.contains("\"matchCount\":3"))
+        assertTrue(result.stdout.contains("\"siNumberMatchCount\":1"))
+        assertTrue(result.stdout.contains("\"bibNumberMatchCount\":1"))
+        assertTrue(result.stdout.contains("\"callSignMatchCount\":1"))
+        assertTrue(result.stdout.contains("\"issueCount\":0"))
+    }
+
+    @Test
     fun navSelectReportsNewEventFileAction() {
         val result = runAutomation("nav-select", "Event File > New Event File")
 
@@ -322,6 +416,8 @@ class DesktopAutomationCliTest {
         assertTrue(result.stdout.contains("\"path\":\"Event Series > Events\""))
         assertTrue(result.stdout.contains("\"path\":\"Event Series > Events > Add Event to Series...\""))
         assertTrue(result.stdout.contains("\"action\":\"AddEventToSeries\""))
+        assertFalse(result.stdout.contains("Open Series Event"))
+        assertFalse(result.stdout.contains("Event Series > Series Validation > Validate Series"))
     }
 
     @Test
@@ -491,7 +587,12 @@ class DesktopAutomationCliTest {
         )
     }
 
-    private fun projectFile(name: String, eventId: String = "race"): EventProjectFile =
+    private fun projectFile(
+        name: String,
+        eventId: String = "race",
+        seriesLink: EventSeriesLink? = null,
+        competitors: List<EventCompetitorData> = emptyList()
+    ): EventProjectFile =
         EventProjectFile(
             raceData = EventRaceData(
                 race = EventRace(
@@ -506,9 +607,41 @@ class DesktopAutomationCliTest {
                 ),
                 categories = emptyList(),
                 aliases = emptyList(),
-                competitorData = emptyList(),
+                competitorData = competitors,
                 unmatchedReadoutData = emptyList()
-            )
+            ),
+            seriesLink = seriesLink
+        )
+
+    private fun competitorData(
+        id: String,
+        startNumber: Int,
+        siNumber: Int?,
+        bibNumber: String = "",
+        callSign: String = ""
+    ): EventCompetitorData =
+        EventCompetitorData(
+            competitorCategory = EventCompetitorCategory(
+                competitor = EventCompetitor(
+                    id = id,
+                    raceId = "race",
+                    categoryId = null,
+                    firstName = id,
+                    lastName = "Runner",
+                    club = "OPEN",
+                    index = "",
+                    isMan = true,
+                    birthYear = null,
+                    siNumber = siNumber,
+                    siRent = false,
+                    startNumber = startNumber,
+                    drawnStartTimeSeconds = null,
+                    bibNumber = bibNumber,
+                    callSign = callSign
+                ),
+                category = null
+            ),
+            readoutData = null
         )
 }
 

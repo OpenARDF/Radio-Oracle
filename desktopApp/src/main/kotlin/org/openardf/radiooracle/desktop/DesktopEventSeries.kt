@@ -192,6 +192,51 @@ object DesktopEventSeriesActions {
         }
     }
 
+    fun competitorMatchingSummaries(
+        store: EventSeriesStore,
+        manifestPath: Path,
+        currentEventPath: Path?
+    ): List<DesktopEventSeriesCompetitorMatchSummary> {
+        val seriesFile = store.read(manifestPath)
+        val seriesFolder = requireNotNull(manifestPath.parent) {
+            "Event Series manifest must have a parent folder."
+        }
+        val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize() ?: return emptyList()
+        val loadedEvents = seriesFile.sortedEvents().mapNotNull { event ->
+            val resolvedPath = seriesFolder.resolve(event.eventFilePath).normalize()
+            if (!store.exists(resolvedPath)) {
+                null
+            } else {
+                EventSeriesLinkedEvent(
+                    event = event,
+                    projectFile = store.readEvent(resolvedPath)
+                ) to resolvedPath.toAbsolutePath().normalize()
+            }
+        }
+        val current = loadedEvents.firstOrNull { (_, path) -> path == normalizedCurrentPath }?.first
+            ?: return emptyList()
+
+        return loadedEvents
+            .map { it.first }
+            .filterNot { it.event.seriesEventId == current.event.seriesEventId }
+            .map { other ->
+                val report = EventSeriesSupport.matchCompetitors(seriesFile, other, current)
+                val methodCounts = report.matches.groupingBy { it.method.name }.eachCount()
+                DesktopEventSeriesCompetitorMatchSummary(
+                    comparedEventName = other.event.displayName,
+                    comparedSeriesEventId = other.event.seriesEventId,
+                    comparedCompetitorCount = other.projectFile.raceData.competitorData.size,
+                    currentCompetitorCount = current.projectFile.raceData.competitorData.size,
+                    matchCount = report.matches.size,
+                    siNumberMatchCount = methodCounts["SI_NUMBER"] ?: 0,
+                    bibNumberMatchCount = methodCounts["BIB_NUMBER"] ?: 0,
+                    callSignMatchCount = methodCounts["CALL_SIGN"] ?: 0,
+                    overrideMatchCount = methodCounts["OVERRIDE"] ?: 0,
+                    issueCount = report.issues.size
+                )
+            }
+    }
+
     fun createSeriesWithEvent(
         seriesFolder: Path,
         seriesId: String,
@@ -367,3 +412,27 @@ data class DesktopEventSeriesEventSummary(
     val startDateTimeIso: String? = null,
     val formatLabel: String? = null
 )
+
+data class DesktopEventSeriesCompetitorMatchSummary(
+    val comparedEventName: String,
+    val comparedSeriesEventId: String,
+    val comparedCompetitorCount: Int,
+    val currentCompetitorCount: Int,
+    val matchCount: Int,
+    val siNumberMatchCount: Int,
+    val bibNumberMatchCount: Int,
+    val callSignMatchCount: Int,
+    val overrideMatchCount: Int,
+    val issueCount: Int
+)
+
+internal fun hasDesktopEventSeriesContext(
+    projectFile: EventProjectFile?,
+    summaries: List<DesktopEventSeriesEventSummary>
+): Boolean {
+    val openProjectFile = projectFile ?: return false
+    val currentSummary = summaries.firstOrNull { it.isCurrentEvent } ?: return false
+    // The manifest is authoritative. Missing backlinks should not hide the Series workflow,
+    // because validation and settings tools are needed to diagnose and repair that state.
+    return openProjectFile.seriesLink?.seriesEventId?.let { it == currentSummary.seriesEventId } != false
+}

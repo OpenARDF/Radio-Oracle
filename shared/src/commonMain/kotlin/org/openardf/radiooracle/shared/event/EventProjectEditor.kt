@@ -1079,8 +1079,9 @@ object EventProjectEditor {
      * The historical inputs are intentionally the simple starts CSV rows rather
      * than full Event Files: organizers can select the exported starts from
      * previous championship days and Radio-Oracle can infer which third each
-     * competitor occupied on each day. Matching is by SI number when available,
-     * with start number as a fallback for older or incomplete starts files.
+     * competitor occupied on each day. Matching uses persistent competitor
+     * identity fields: SI number, then bib number, then call sign. Rows without
+     * one of those identifiers are ignored for multi-day identity history.
      */
     fun drawStartListWithBalancedStartGroups(
         projectFile: EventProjectFile,
@@ -3490,10 +3491,11 @@ object EventProjectEditor {
 
     private fun startGroupHistoryFromStartRows(rows: List<CompetitorStartCsvImportRow>): List<CompetitorStartGroupHistory> {
         val scheduledRows = rows
-            .map { row ->
+            .mapNotNull { row ->
                 val startSeconds = DurationFormatter.minuteStringToSeconds(row.startTimeText.trim())
-                val competitorKey = row.historyKey()
-                row to startSeconds to competitorKey
+                row.historyKey()?.let { competitorKey ->
+                    row to startSeconds to competitorKey
+                }
             }
         val startSlotIndexBySeconds = scheduledRows
             .map { it.first.second }
@@ -3538,13 +3540,15 @@ object EventProjectEditor {
         competitors
             .sortedWith(
                 compareByDescending<EventCompetitor> { competitor ->
-                    historyByCompetitorKey[competitor.historyKey()]?.values?.maxOrNull() ?: 0
+                    competitor.historyKey()?.let { historyByCompetitorKey[it]?.values?.maxOrNull() } ?: 0
                 }
-                    .thenByDescending { competitor -> historyByCompetitorKey[competitor.historyKey()]?.values?.sum() ?: 0 }
+                    .thenByDescending { competitor ->
+                        competitor.historyKey()?.let { historyByCompetitorKey[it]?.values?.sum() } ?: 0
+                    }
                     .then(competitorStartDrawComparator(options, "balanced-start-groups"))
             )
             .forEach { competitor ->
-                val history = historyByCompetitorKey[competitor.historyKey()].orEmpty()
+                val history = competitor.historyKey()?.let { historyByCompetitorKey[it] }.orEmpty()
                 val selectedStartGroup = (1..3)
                     .minWithOrNull(
                         compareBy<Int> { candidateStartGroup ->
@@ -3614,11 +3618,15 @@ object EventProjectEditor {
             else -> 1
         }
 
-    private fun CompetitorStartCsvImportRow.historyKey(): String =
-        siNumber?.let { "si:$it" } ?: "start:$startNumber"
+    private fun CompetitorStartCsvImportRow.historyKey(): String? =
+        siNumber?.takeIf { it > 0 }?.let { "si:$it" }
+            ?: bibNumber.trim().takeIf { it.isNotEmpty() }?.let { "bib:$it" }
+            ?: callSign.trim().uppercase().takeIf { it.isNotEmpty() }?.let { "call:$it" }
 
-    private fun EventCompetitor.historyKey(): String =
-        siNumber?.let { "si:$it" } ?: "start:$startNumber"
+    private fun EventCompetitor.historyKey(): String? =
+        siNumber?.takeIf { it > 0 }?.let { "si:$it" }
+            ?: bibNumber.trim().takeIf { it.isNotEmpty() }?.let { "bib:$it" }
+            ?: callSign.trim().uppercase().takeIf { it.isNotEmpty() }?.let { "call:$it" }
 
     private fun seededRank(seed: String, value: String): Long {
         // FNV-1a followed by MurmurHash3-style finalization. Kotlin/Native/JVM
