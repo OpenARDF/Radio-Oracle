@@ -14,15 +14,28 @@ diff:
     git -c core.pager=delta diff
 
 compile:
-    JAVA_HOME="{{java_home}}" ./gradlew :desktopApp:compileKotlin
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:compileKotlin
 
 test:
-    JAVA_HOME="{{java_home}}" ./gradlew :desktopApp:test
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:test
+
+test-nav:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:test --tests org.openardf.radiooracle.desktop.DesktopNavigationTest --tests org.openardf.radiooracle.desktop.DesktopAutomationCliTest
+
+nav-audit:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='nav-audit --require-clean'
+
+nav-tree workflow="":
+    @if [ -n "{{workflow}}" ]; then \
+        JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='nav-tree --workflow "{{workflow}}"'; \
+    else \
+        JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='nav-tree'; \
+    fi
 
 desktop-check: compile test
 
 desktop-package:
-    JAVA_HOME="{{java_home}}" ./gradlew :desktopApp:checkRuntime :desktopApp:createDistributable :desktopApp:verifyDesktopDistributable
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:checkRuntime :desktopApp:createDistributable :desktopApp:verifyDesktopDistributable
 
 desktop-close:
     pkill -x Radio-Oracle 2>/dev/null || true

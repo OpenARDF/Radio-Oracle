@@ -277,6 +277,28 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun navTreeReportsMenuStructureAsJson() {
+        val result = runAutomation("nav-tree", "--workflow", "Event Series")
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"nav-tree\""))
+        assertTrue(result.stdout.contains("\"workflow\":\"Event Series\""))
+        assertTrue(result.stdout.contains("\"path\":\"Event Series > Events\""))
+        assertTrue(result.stdout.contains("\"path\":\"Event Series > Events > Add Event to Series...\""))
+        assertTrue(result.stdout.contains("\"action\":\"AddEventToSeries\""))
+    }
+
+    @Test
+    fun navAuditReportsCleanNavigationJson() {
+        val result = runAutomation("nav-audit", "--require-clean")
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"nav-audit\""))
+        assertTrue(result.stdout.contains("\"issueCount\":0"))
+        assertTrue(result.stdout.contains("\"issues\":[]"))
+    }
+
+    @Test
     fun navSelectDraftModeReportsGuardBeforeLeavingNewEventFile() {
         val result = runAutomation("nav-select", "--draft", "Event File > New Event File > < Back")
 

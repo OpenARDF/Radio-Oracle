@@ -105,6 +105,8 @@ object DesktopAutomationCli {
             "preview-public-results-site" -> previewPublicResultsSite(commandArgs, out, err)
             "nav-availability" -> navAvailability(commandArgs, out, err)
             "nav-select" -> navSelect(commandArgs, out, err)
+            "nav-tree" -> navTree(commandArgs, out, err)
+            "nav-audit" -> navAudit(commandArgs, out, err)
             "si-status" -> siStatus(commandArgs, out, err, serialPortProvider)
             "printer-status" -> printerStatus(commandArgs, out, err, printerDiagnostics)
             else -> {
@@ -636,6 +638,127 @@ object DesktopAutomationCli {
             .map(String::trim)
             .filter(String::isNotEmpty)
 
+    private fun navTree(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val workflowName = optionValue(args, "--workflow")
+        val workflows = if (workflowName.isNullOrBlank()) {
+            DesktopWorkflow.entries
+        } else {
+            val workflow = workflowByCliName(workflowName) ?: run {
+                err.println("Unknown workflow for nav-tree: $workflowName")
+                return 64
+            }
+            listOf(workflow)
+        }
+        val items = workflows.flatMap { workflow ->
+            flattenNavItems(DesktopNavigation.rootItems(workflow)).map { item ->
+                mapOf(
+                    "workflow" to workflow.label,
+                    "id" to item.id,
+                    "label" to item.label,
+                    "path" to navPath(workflow, item.id),
+                    "section" to item.section?.label,
+                    "action" to item.action?.name,
+                    "requiresEventFile" to item.requiresEventFile,
+                    "childCount" to item.children.size
+                )
+            }
+        }
+        out.println(
+            jsonObject(
+                "command" to "nav-tree",
+                "workflow" to workflowName,
+                "itemCount" to items.size,
+                "items" to items
+            )
+        )
+        return 0
+    }
+
+    private fun navAudit(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val requireClean = "--require-clean" in args
+        val issues = DesktopWorkflow.entries.flatMap { workflow ->
+            navAuditIssuesForItems(workflow, DesktopNavigation.rootItems(workflow))
+        }
+        out.println(
+            jsonObject(
+                "command" to "nav-audit",
+                "issueCount" to issues.size,
+                "issues" to issues
+            )
+        )
+        return if (requireClean && issues.isNotEmpty()) 69 else 0
+    }
+
+    private fun navAuditIssuesForItems(
+        workflow: DesktopWorkflow,
+        items: List<DesktopNavItem>
+    ): List<Map<String, String?>> =
+        items.flatMap { item ->
+            val repeatedLabelIssues = item.children
+                .filter { child -> child.label == item.label }
+                .map { child ->
+                    mapOf(
+                        "type" to "duplicate-child-label",
+                        "workflow" to workflow.label,
+                        "path" to navPath(workflow, child.id),
+                        "parentId" to item.id,
+                        "childId" to child.id,
+                        "label" to child.label
+                    )
+                }
+            val redundantViewIssues = if (item.id == "setup.event-file.settings") {
+                emptyList()
+            } else {
+                item.children
+                    .filter { child ->
+                        item.section != null &&
+                            child.action == null &&
+                            child.children.isEmpty() &&
+                            child.section == item.section
+                    }
+                    .map { child ->
+                        mapOf(
+                            "type" to "redundant-view-child",
+                            "workflow" to workflow.label,
+                            "path" to navPath(workflow, child.id),
+                            "parentId" to item.id,
+                            "childId" to child.id,
+                            "label" to child.label
+                        )
+                    }
+            }
+            repeatedLabelIssues + redundantViewIssues + navAuditIssuesForItems(workflow, item.children)
+        }
+
+    private fun flattenNavItems(items: List<DesktopNavItem>): List<DesktopNavItem> =
+        items + items.flatMap { flattenNavItems(it.children) }
+
+    private fun navPath(workflow: DesktopWorkflow, itemId: String): String {
+        val labels = mutableListOf(workflow.label)
+        fun visit(items: List<DesktopNavItem>): Boolean {
+            items.forEach { item ->
+                labels += item.label
+                if (item.id == itemId) {
+                    return true
+                }
+                if (visit(item.children)) {
+                    return true
+                }
+                labels.removeAt(labels.lastIndex)
+            }
+            return false
+        }
+        visit(DesktopNavigation.rootItems(workflow))
+        return labels.joinToString(" > ")
+    }
+
+    private fun workflowByCliName(name: String): DesktopWorkflow? =
+        DesktopWorkflow.entries.firstOrNull { workflow ->
+            workflow.label.equals(name, ignoreCase = true) ||
+                workflow.shortLabel.equals(name, ignoreCase = true) ||
+                workflow.name.equals(name, ignoreCase = true)
+        }
+
     private fun siStatus(
         args: List<String>,
         out: PrintStream,
@@ -749,6 +872,8 @@ object DesktopAutomationCli {
           nav-availability [event-path]   Print enabled/disabled menu state and long-click overrides.
           nav-select [--default-draft|--draft] <path>
                                           Simulate menu selection, using > between labels. Supports < Back.
+          nav-tree [--workflow <name>]     Print the navigation tree as JSON for menu review.
+          nav-audit [--require-clean]      Report duplicate and redundant navigation items as JSON.
           si-status [--require] [--port]  Probe attached SI station state.
           printer-status [--require]      Inspect desktop printer selection state.
     """.trimIndent()
