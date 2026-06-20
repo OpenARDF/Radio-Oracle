@@ -15,6 +15,9 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.EventSeriesEvent
+import org.openardf.radiooracle.shared.event.EventSeriesFile
+import org.openardf.radiooracle.shared.event.EventSeriesLink
 
 class DesktopAutomationCliTest {
     @Test
@@ -210,6 +213,35 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun eventSeriesAddEventCommandUpdatesManifestAndEventBacklink() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-series")
+        val manifestPath = directory.resolve("series.radio-oracle.json")
+        val dayOnePath = directory.resolve("day-1.json")
+        val dayTwoPath = directory.resolve("day-2.json")
+        DesktopEventSeriesFiles.write(
+            manifestPath,
+            EventSeriesFile(
+                seriesId = "series-1",
+                name = "Championship",
+                events = listOf(EventSeriesEvent("day-1", "day-1.json", 0, "day-1"))
+            )
+        )
+        DesktopProjectFiles.write(dayOnePath, projectFile("day-1", eventId = "day-1"))
+        DesktopProjectFiles.write(dayTwoPath, projectFile("day-2", eventId = "day-2"))
+
+        val result = runAutomation("event-series-add-event", manifestPath.toString(), dayTwoPath.toString())
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"event-series-add-event\""))
+        assertTrue(result.stdout.contains("\"seriesId\":\"series-1\""))
+        assertTrue(result.stdout.contains("\"seriesEventId\":\"day-2\""))
+        assertTrue(result.stdout.contains("\"eventFilePath\":\"day-2.json\""))
+        assertTrue(result.stdout.contains("\"eventCount\":2"))
+        assertEquals(EventSeriesLink("series-1", "day-2"), DesktopProjectFiles.read(dayTwoPath).seriesLink)
+        assertEquals(listOf("day-1", "day-2"), DesktopEventSeriesFiles.read(manifestPath).sortedEvents().map { it.seriesEventId })
+    }
+
+    @Test
     fun navSelectReportsNewEventFileAction() {
         val result = runAutomation("nav-select", "Event File > New Event File")
 
@@ -389,11 +421,11 @@ class DesktopAutomationCliTest {
         )
     }
 
-    private fun projectFile(name: String): EventProjectFile =
+    private fun projectFile(name: String, eventId: String = "race"): EventProjectFile =
         EventProjectFile(
             raceData = EventRaceData(
                 race = EventRace(
-                    id = "race",
+                    id = eventId,
                     name = name,
                     apiKey = "",
                     startDateTimeIso = "2026-06-03T10:00",

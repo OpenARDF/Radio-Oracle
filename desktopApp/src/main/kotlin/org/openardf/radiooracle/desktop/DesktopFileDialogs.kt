@@ -192,6 +192,10 @@ object DesktopFileDialogs {
     fun chooseOpenProject(): Path? =
         chooseEventFile("Open Radio-Oracle Event File", FileDialog.LOAD)
 
+    /** Lets the user choose an existing desktop Event File to add to an Event Series. */
+    fun chooseEventSeriesMemberEventFile(): Path? =
+        chooseDesktopEventFile("Add Event File to Event Series")
+
     /** Lets the user choose an existing Event Series manifest, returning null when cancelled. */
     fun chooseOpenEventSeries(): Path? =
         chooseSeriesManifest("Open Radio-Oracle Event Series")
@@ -483,6 +487,19 @@ object DesktopFileDialogs {
             "*${DesktopProjectFilePaths.PROJECT_EXTENSION}",
             "*${DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION}"
         ).joinToString(";")
+        dialog.isVisible = true
+
+        val selectedDirectory = dialog.directory ?: return null
+        val file = dialog.file ?: return null
+        return Path.of(selectedDirectory, file).also(DesktopEventFileLocations::rememberEventFileDirectory)
+    }
+
+    private fun chooseDesktopEventFile(title: String): Path? {
+        val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
+        val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD)
+        dialog.filenameFilter = FilenameFilter { _, name -> DesktopProjectFilePaths.isProjectFileName(name) }
+        dialog.directory = directory.toString()
+        dialog.file = "*${DesktopProjectFilePaths.PROJECT_EXTENSION}"
         dialog.isVisible = true
 
         val selectedDirectory = dialog.directory ?: return null

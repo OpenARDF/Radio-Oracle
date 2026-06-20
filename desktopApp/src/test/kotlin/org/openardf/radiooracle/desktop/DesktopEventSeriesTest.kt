@@ -78,6 +78,57 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun addEventToSeriesAppendsManifestEntryAndBacklink() {
+        val result = DesktopEventSeriesActions.addEventToSeries(
+            seriesFile = seriesFile(),
+            seriesFolder = Path.of("/work/championship"),
+            eventPath = Path.of("/work/championship/day-2.rom.json"),
+            eventProjectFile = projectFile("Day 2"),
+            seriesEventId = "day-2"
+        )
+
+        assertEquals(listOf("day-1", "day-2"), result.seriesFile.sortedEvents().map { it.seriesEventId })
+        assertEquals("day-2.rom.json", result.seriesFile.sortedEvents().last().eventFilePath)
+        assertEquals(1, result.seriesFile.sortedEvents().last().order)
+        assertEquals(EventSeriesLink("series-1", "day-2"), result.eventProjectFile.seriesLink)
+    }
+
+    @Test
+    fun addEventToSeriesRefreshesExistingEventWithoutChangingOrder() {
+        val originalSeries = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"),
+                EventSeriesEvent("day-2", "day-2.rom.json", 1, "Old Day 2")
+            )
+        )
+
+        val result = DesktopEventSeriesActions.addEventToSeries(
+            seriesFile = originalSeries,
+            seriesFolder = Path.of("/work/championship"),
+            eventPath = Path.of("/work/championship/day-2.rom.json"),
+            eventProjectFile = projectFile("Updated Day 2"),
+            seriesEventId = "day-2"
+        )
+
+        assertEquals(2, result.seriesFile.events.size)
+        assertEquals("Updated Day 2", result.seriesFile.events.single { it.seriesEventId == "day-2" }.displayName)
+        assertEquals(1, result.seriesFile.events.single { it.seriesEventId == "day-2" }.order)
+    }
+
+    @Test
+    fun addEventToSeriesRequiresEventFileInsideSeriesFolder() {
+        assertThrows(IllegalArgumentException::class.java) {
+            DesktopEventSeriesActions.addEventToSeries(
+                seriesFile = seriesFile(),
+                seriesFolder = Path.of("/work/championship"),
+                eventPath = Path.of("/work/other/day-2.rom.json"),
+                eventProjectFile = projectFile("Day 2"),
+                seriesEventId = "day-2"
+            )
+        }
+    }
+
+    @Test
     fun exportSeriesCopiesOnlyManifestListedFiles() {
         val manifestPath = Path.of("/source/series.radio-oracle.json")
         val seriesFile = seriesFile(

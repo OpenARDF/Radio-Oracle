@@ -1433,6 +1433,42 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun addEventToCurrentSeries() {
+            val currentProject = projectSession.currentProject ?: run {
+                projectStatusText = "Open or create an Event File before adding another event to a series."
+                return
+            }
+            if (currentProject.seriesLink == null) {
+                projectStatusText = "Link this Event File to an Event Series before adding another series event."
+                return
+            }
+            val manifestPath = currentSeriesManifestPath() ?: run {
+                projectStatusText = "Series manifest not found near this Event File."
+                return
+            }
+            val eventPath = DesktopFileDialogs.chooseEventSeriesMemberEventFile() ?: return
+            runCatching {
+                val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+                val seriesFolder = requireNotNull(manifestPath.parent) {
+                    "Event Series manifest has no parent folder."
+                }
+                val eventProjectFile = DesktopEventSeriesFiles.readEvent(eventPath)
+                val result = DesktopEventSeriesActions.addEventToSeries(
+                    seriesFile = seriesFile,
+                    eventPath = eventPath,
+                    seriesFolder = seriesFolder,
+                    eventProjectFile = eventProjectFile
+                )
+                // The added Event File is not the currently open document, so write it through the series store.
+                DesktopEventSeriesFiles.write(manifestPath, result.seriesFile)
+                DesktopEventSeriesFiles.writeEvent(eventPath, result.eventProjectFile)
+                projectStatusText = "Added ${eventPath.fileName} to ${manifestPath.fileName}."
+                recordActivity(projectStatusText)
+            }.onFailure { error ->
+                projectStatusText = "Add Event to Series failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
         fun exportCurrentEventSeries() {
             val manifestPath = currentSeriesManifestPath() ?: run {
                 projectStatusText = "Series manifest not found near this Event File."
@@ -3929,9 +3965,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ValidateCurrentEventSeriesLink,
                 DesktopNavAction.ValidateEventSeries -> validateCurrentEventSeries()
                 DesktopNavAction.BalanceStartListFromEventSeries -> balanceStartListFromEventSeries()
-                DesktopNavAction.AddEventToSeries -> {
-                    projectStatusText = "Add Event to Series will let you choose another Event File for this series in the next implementation slice."
-                }
+                DesktopNavAction.AddEventToSeries -> addEventToCurrentSeries()
                 DesktopNavAction.ExportEventSeries -> exportCurrentEventSeries()
                 DesktopNavAction.OpenEventSeriesEvent -> {
                     projectStatusText = "Use Load Event File to open another Event File listed in this Event Series."

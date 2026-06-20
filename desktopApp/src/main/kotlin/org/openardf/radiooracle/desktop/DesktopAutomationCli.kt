@@ -98,6 +98,7 @@ object DesktopAutomationCli {
             "import-android-event-file" -> importAndroidEventFile(commandArgs, out, err)
             "export-android-event-file" -> exportAndroidEventFile(commandArgs, out, err)
             "import-competitors-csv" -> importCompetitorsCsv(commandArgs, out, err)
+            "event-series-add-event" -> eventSeriesAddEvent(commandArgs, out, err)
             "readiness-summary" -> readinessSummary(commandArgs, out, err)
             "recalculate-results" -> recalculateResults(commandArgs, out, err)
             "export-public-results-site" -> exportPublicResultsSite(commandArgs, out, err)
@@ -424,6 +425,51 @@ object DesktopAutomationCli {
         }
     }
 
+    private fun eventSeriesAddEvent(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val manifestText = args.getOrNull(0)
+        val eventFileText = args.getOrNull(1)
+        if (manifestText.isNullOrBlank() || eventFileText.isNullOrBlank()) {
+            err.println("event-series-add-event requires Event Series manifest and Event File paths.")
+            return 64
+        }
+        return runCatching {
+            val manifestPath = Path.of(manifestText)
+            val eventPath = Path.of(eventFileText)
+            val seriesFolder = requireNotNull(manifestPath.parent) {
+                "Event Series manifest has no parent folder."
+            }
+            val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+            val eventProjectFile = DesktopEventSeriesFiles.readEvent(eventPath)
+            val result = DesktopEventSeriesActions.addEventToSeries(
+                seriesFile = seriesFile,
+                eventPath = eventPath,
+                seriesFolder = seriesFolder,
+                eventProjectFile = eventProjectFile
+            )
+            DesktopEventSeriesFiles.write(manifestPath, result.seriesFile)
+            DesktopEventSeriesFiles.writeEvent(eventPath, result.eventProjectFile)
+            val link = requireNotNull(result.eventProjectFile.seriesLink) {
+                "Added Event File did not receive an Event Series backlink."
+            }
+            val manifestEvent = result.seriesFile.events.first { it.seriesEventId == link.seriesEventId }
+            out.println(
+                jsonObject(
+                    "command" to "event-series-add-event",
+                    "manifest" to manifestPath.toAbsolutePath().normalize().toString(),
+                    "eventFile" to eventPath.toAbsolutePath().normalize().toString(),
+                    "seriesId" to link.seriesId,
+                    "seriesEventId" to link.seriesEventId,
+                    "eventFilePath" to manifestEvent.eventFilePath,
+                    "eventCount" to result.seriesFile.events.size
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Add Event to Series failed: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
     private fun readinessSummary(args: List<String>, out: PrintStream, err: PrintStream): Int {
         val pathText = args.firstOrNull { !it.startsWith("--") }
         if (pathText.isNullOrBlank()) {
@@ -690,6 +736,8 @@ object DesktopAutomationCli {
                                           Save a desktop Event File as an Android Event File.
           import-competitors-csv <event-path> <csv-path>
                                           Import competitors CSV into an Event File.
+          event-series-add-event <manifest-path> <event-path>
+                                          Add an Event File to a series manifest and write its backlink.
           readiness-summary [--require-ready] <event-path>
                                           Print validation and readiness issues as JSON.
           recalculate-results [--write] <event-path>

@@ -162,7 +162,7 @@ object DesktopEventSeriesActions {
         seriesEventId: String = eventProjectFile.raceData.race.id
     ): DesktopEventSeriesCreateResult {
         val manifestPath = seriesFolder.resolve(EVENT_SERIES_FILE_NAME)
-        val relativeEventPath = seriesFolder.normalize().relativize(eventPath.normalize()).toString().replace('\\', '/')
+        val relativeEventPath = relativeEventPath(seriesFolder, eventPath)
         val event = EventSeriesEvent(
             seriesEventId = seriesEventId,
             eventFilePath = relativeEventPath,
@@ -186,9 +186,27 @@ object DesktopEventSeriesActions {
         seriesFolder: Path,
         eventProjectFile: EventProjectFile,
         seriesEventId: String = eventProjectFile.raceData.race.id
+    ): DesktopEventSeriesLinkResult =
+        addEventToSeries(
+            seriesFile = seriesFile,
+            eventPath = eventPath,
+            seriesFolder = seriesFolder,
+            eventProjectFile = eventProjectFile,
+            seriesEventId = seriesEventId
+        )
+
+    fun addEventToSeries(
+        seriesFile: EventSeriesFile,
+        eventPath: Path,
+        seriesFolder: Path,
+        eventProjectFile: EventProjectFile,
+        seriesEventId: String = eventProjectFile.raceData.race.id
     ): DesktopEventSeriesLinkResult {
-        val relativeEventPath = seriesFolder.normalize().relativize(eventPath.normalize()).toString().replace('\\', '/')
-        val nextOrder = (seriesFile.events.maxOfOrNull { it.order } ?: -1) + 1
+        val relativeEventPath = relativeEventPath(seriesFolder, eventPath)
+        val existingEvent = seriesFile.events.firstOrNull {
+            it.seriesEventId == seriesEventId || it.eventFilePath == relativeEventPath
+        }
+        val nextOrder = existingEvent?.order ?: (seriesFile.events.maxOfOrNull { it.order } ?: -1) + 1
         val event = EventSeriesEvent(
             seriesEventId = seriesEventId,
             eventFilePath = relativeEventPath,
@@ -197,7 +215,12 @@ object DesktopEventSeriesActions {
             startDateTimeIso = eventProjectFile.raceData.race.startDateTimeIso,
             formatLabel = eventProjectFile.raceData.race.raceType.name
         )
-        val updatedSeriesFile = seriesFile.copy(events = seriesFile.events.filterNot { it.seriesEventId == seriesEventId } + event)
+        // Re-selecting an existing Event File refreshes its manifest metadata without changing its order.
+        val updatedSeriesFile = seriesFile.copy(
+            events = seriesFile.events.filterNot {
+                it.seriesEventId == seriesEventId || it.eventFilePath == relativeEventPath
+            } + event
+        )
         val linkedProjectFile = EventProjectEditor.updateSeriesLink(eventProjectFile, seriesFile.seriesId, seriesEventId)
         return DesktopEventSeriesLinkResult(updatedSeriesFile, linkedProjectFile)
     }
@@ -236,6 +259,15 @@ object DesktopEventSeriesActions {
             manifestPath = targetManifest,
             eventFilePaths = seriesFile.sortedEvents().map { targetFolder.resolve(it.eventFilePath).normalize() }
         )
+    }
+
+    private fun relativeEventPath(seriesFolder: Path, eventPath: Path): String {
+        val normalizedFolder = seriesFolder.toAbsolutePath().normalize()
+        val normalizedEventPath = eventPath.toAbsolutePath().normalize()
+        require(normalizedEventPath.startsWith(normalizedFolder)) {
+            "Event File must be inside the Event Series folder before it can be added to the manifest."
+        }
+        return normalizedFolder.relativize(normalizedEventPath).toString().replace('\\', '/')
     }
 }
 
