@@ -11,6 +11,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -137,9 +138,11 @@ data class DesktopVenueElevationCacheListing(
     val resolutionMeters: Double,
     val rowCount: Int,
     val columnCount: Int,
-    val resolvedPointCount: Int,
+    val resolvedPointCount: Int?,
     val createdAtIso: String,
-    val boundingBox: DesktopVenueElevationBoundingBox
+    val boundingBox: DesktopVenueElevationBoundingBox,
+    val fileSizeBytes: Long,
+    val fileModifiedAtIso: String
 )
 
 data class DesktopVenueElevationSpotCheckSummary(
@@ -282,20 +285,44 @@ object DesktopVenueElevationCache {
         return points.boundingBoxOrNull()
     }
 
-    fun listings(): List<DesktopVenueElevationCacheListing> =
-        loadCaches().map { cache ->
-            DesktopVenueElevationCacheListing(
-                venueName = cache.metadata.venueName,
-                path = cache.path,
-                sourceName = cache.metadata.sourceName,
-                resolutionMeters = cache.metadata.resolutionMeters,
-                rowCount = cache.metadata.rowCount,
-                columnCount = cache.metadata.columnCount,
-                resolvedPointCount = cache.elevations.count { it != null },
-                createdAtIso = cache.metadata.createdAtIso,
-                boundingBox = cache.metadata.boundingBox.toPublic()
-            )
-        }.sortedWith(compareBy<DesktopVenueElevationCacheListing> { it.venueName.lowercase() }.thenBy { it.resolutionMeters })
+    fun listings(): List<DesktopVenueElevationCacheListing> {
+        val directory = cacheDirectory()
+        if (!Files.isDirectory(directory)) {
+            return emptyList()
+        }
+        val files = Files.list(directory).use { stream ->
+            stream
+                .filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".roelev.json") }
+                .sorted()
+                .toList()
+        }
+        return files.mapNotNull { path ->
+            runCatching {
+                val attributes = Files.readAttributes(path, java.nio.file.attribute.BasicFileAttributes::class.java)
+                val metadata = readCacheMetadata(path)
+                DesktopVenueElevationCacheListing(
+                    venueName = metadata.venueName,
+                    path = path,
+                    sourceName = metadata.sourceName,
+                    resolutionMeters = metadata.resolutionMeters,
+                    rowCount = metadata.rowCount,
+                    columnCount = metadata.columnCount,
+                    resolvedPointCount = null,
+                    createdAtIso = metadata.createdAtIso,
+                    boundingBox = metadata.boundingBox.toPublic(),
+                    fileSizeBytes = attributes.size(),
+                    fileModifiedAtIso = attributes.lastModifiedTime().toInstant().toString()
+                )
+            }.getOrElse { error ->
+                DesktopDebugLog.warn("ElevationCache", "Could not list ${path.fileName}: ${error.message ?: error::class.simpleName}")
+                null
+            }
+        }.sortedWith(
+            compareBy<DesktopVenueElevationCacheListing> { it.venueName.lowercase() }
+                .thenBy { it.resolutionMeters }
+                .thenBy { it.path.fileName.toString() }
+        )
+    }
 
     fun reviewDemFileImport(paths: List<Path>): DesktopVenueElevationDemImportReview {
         val targetDirectory = cacheDirectory()
@@ -770,21 +797,21 @@ object DesktopVenueElevationCache {
                         val pdal = DesktopPdalTools.requireAvailable()
                         val outputRaster = workDirectory.resolve("point-cloud-dem.tif")
                         elevationUnits = pdal.commonElevationUnits(sourcePaths)
-                        estimate = runCatching {
-                            estimate(pdal.wgs84BoundingBox(sourcePaths), resolutionMeters, 0.0)
+                        val estimatedRawBytes = runCatching {
+                            pdal.estimatedRawBytes(sourcePaths, resolutionMeters)
                         }.onFailure { error ->
                             DesktopDebugLog.info(
                                 "ElevationCache",
-                                "Could not estimate LAS/LAZ point-cloud extent before rasterization: ${error.message ?: error::class.simpleName}"
+                                "Could not estimate LAS/LAZ point-cloud output size before rasterization: ${error.message ?: error::class.simpleName}"
                             )
                         }.getOrNull()
-                        estimate?.let { pointCloudEstimate ->
+                        estimatedRawBytes?.let { rawBytes ->
                             onProgress(
                                 DesktopVenueElevationCacheProgress(
                                     venueName = cleanVenueName,
                                     completedPointCount = 0,
-                                    totalPointCount = pointCloudEstimate.pointCount,
-                                    estimatedRawBytes = pointCloudEstimate.rawBytes
+                                    totalPointCount = 1,
+                                    estimatedRawBytes = rawBytes
                                 )
                             )
                         }
@@ -1810,27 +1837,53 @@ object DesktopVenueElevationCache {
             )
         }.toString()
 
+    private fun readCacheMetadata(path: Path): DesktopVenueElevationCacheMetadata =
+        parseCacheMetadata(readCacheMetadataObjectText(path))
+
+    private fun readCacheMetadataObjectText(path: Path, maxChars: Int = 262_144): String {
+        val builder = StringBuilder()
+        Files.newBufferedReader(path, StandardCharsets.UTF_8).use { reader ->
+            val buffer = CharArray(8192)
+            while (builder.length < maxChars) {
+                val read = reader.read(buffer, 0, min(buffer.size, maxChars - builder.length))
+                if (read < 0) {
+                    break
+                }
+                builder.append(buffer, 0, read)
+                metadataObjectTextFromCachePrefix(builder.toString())?.let { return it }
+            }
+        }
+        throw IllegalArgumentException("Cache metadata was not found near the start of the file.")
+    }
+
+    private fun parseCacheMetadata(metadataText: String): DesktopVenueElevationCacheMetadata =
+        parseCacheMetadata(json.parseToJsonElement(metadataText).jsonObject)
+
+    private fun parseCacheMetadata(metadata: JsonObject): DesktopVenueElevationCacheMetadata {
+        val boundingBox = metadata.getValue("boundingBox").jsonObject
+        return DesktopVenueElevationCacheMetadata(
+            version = metadata.getValue("version").jsonPrimitive.content.toInt(),
+            venueName = metadata.getValue("venueName").jsonPrimitive.content,
+            sourceName = metadata.getValue("sourceName").jsonPrimitive.content,
+            sourceUrl = metadata.getValue("sourceUrl").jsonPrimitive.content,
+            resolutionMeters = metadata.getValue("resolutionMeters").jsonPrimitive.content.toDouble(),
+            rowCount = metadata.getValue("rowCount").jsonPrimitive.content.toInt(),
+            columnCount = metadata.getValue("columnCount").jsonPrimitive.content.toInt(),
+            boundingBox = DesktopVenueElevationBoundingBoxValue(
+                minLatitude = boundingBox.getValue("minLatitude").jsonPrimitive.content.toDouble(),
+                maxLatitude = boundingBox.getValue("maxLatitude").jsonPrimitive.content.toDouble(),
+                minLongitude = boundingBox.getValue("minLongitude").jsonPrimitive.content.toDouble(),
+                maxLongitude = boundingBox.getValue("maxLongitude").jsonPrimitive.content.toDouble()
+            ),
+            createdAtIso = metadata.getValue("createdAtIso").jsonPrimitive.content
+        )
+    }
+
     private fun parseCacheFile(text: String, path: Path): DesktopVenueElevationCacheFile {
         val root = json.parseToJsonElement(text).jsonObject
         val metadata = root.getValue("metadata").jsonObject
-        val boundingBox = metadata.getValue("boundingBox").jsonObject
         return DesktopVenueElevationCacheFile(
-            metadata = DesktopVenueElevationCacheMetadata(
-                version = metadata.getValue("version").jsonPrimitive.content.toInt(),
-                venueName = metadata.getValue("venueName").jsonPrimitive.content,
-                sourceName = metadata.getValue("sourceName").jsonPrimitive.content,
-                sourceUrl = metadata.getValue("sourceUrl").jsonPrimitive.content,
-                resolutionMeters = metadata.getValue("resolutionMeters").jsonPrimitive.content.toDouble(),
-                rowCount = metadata.getValue("rowCount").jsonPrimitive.content.toInt(),
-                columnCount = metadata.getValue("columnCount").jsonPrimitive.content.toInt(),
-                boundingBox = DesktopVenueElevationBoundingBoxValue(
-                    minLatitude = boundingBox.getValue("minLatitude").jsonPrimitive.content.toDouble(),
-                    maxLatitude = boundingBox.getValue("maxLatitude").jsonPrimitive.content.toDouble(),
-                    minLongitude = boundingBox.getValue("minLongitude").jsonPrimitive.content.toDouble(),
-                    maxLongitude = boundingBox.getValue("maxLongitude").jsonPrimitive.content.toDouble()
-                ),
-                createdAtIso = metadata.getValue("createdAtIso").jsonPrimitive.content
-            ),
+            metadata = parseCacheMetadata(metadata),
             elevations = root.getValue("elevations").jsonArray.map { value ->
                 if (value == JsonNull) null else value.jsonPrimitive.doubleOrNull
             },
@@ -2204,6 +2257,22 @@ private class DesktopPdalTools(
             }
     }
 
+    suspend fun estimatedRawBytes(sourcePaths: List<Path>, resolutionMeters: Double): Long {
+        require(sourcePaths.isNotEmpty()) {
+            "At least one LAS/LAZ source file is required."
+        }
+        val estimates = sourcePaths.map { sourcePath ->
+            desktopPdalSummaryPointCloudExtentEstimateFromInfo(
+                processOutput(listOf(pdal.toString(), "info", "--summary", sourcePath.toString()))
+            )
+        }
+        var combined = estimates.first()
+        estimates.drop(1).forEach { estimate ->
+            combined = combined.unionOrNull(estimate) ?: return estimates.sumOf { it.rawBytes(resolutionMeters) }
+        }
+        return combined.rawBytes(resolutionMeters)
+    }
+
     suspend fun rasterizeLasPointCloud(
         sourcePaths: List<Path>,
         outputRaster: Path,
@@ -2373,6 +2442,116 @@ internal fun desktopPdalStacWgs84BoundingBoxFromInfo(output: String): DesktopVen
         minLongitude = minLongitude,
         maxLongitude = maxLongitude
     )
+}
+
+internal data class DesktopPdalPointCloudExtentEstimate(
+    val minX: Double,
+    val maxX: Double,
+    val minY: Double,
+    val maxY: Double,
+    val isGeographic: Boolean,
+    val horizontalUnitMeters: Double,
+    val srsKey: String
+) {
+    fun rawBytes(resolutionMeters: Double): Long {
+        val widthMeters = if (isGeographic) {
+            (maxX - minX) * metersPerDegreeLongitude((minY + maxY) / 2.0)
+        } else {
+            (maxX - minX) * horizontalUnitMeters
+        }.coerceAtLeast(0.0)
+        val heightMeters = if (isGeographic) {
+            (maxY - minY) * METERS_PER_DEGREE_LATITUDE
+        } else {
+            (maxY - minY) * horizontalUnitMeters
+        }.coerceAtLeast(0.0)
+        val cellSize = resolutionMeters.coerceAtLeast(0.01)
+        val columns = ceil(widthMeters / cellSize).toLong() + 1L
+        val rows = ceil(heightMeters / cellSize).toLong() + 1L
+        return rows.coerceAtLeast(1L) * columns.coerceAtLeast(1L) * java.lang.Double.BYTES.toLong()
+    }
+
+    fun unionOrNull(other: DesktopPdalPointCloudExtentEstimate): DesktopPdalPointCloudExtentEstimate? {
+        if (isGeographic != other.isGeographic ||
+            horizontalUnitMeters != other.horizontalUnitMeters ||
+            srsKey != other.srsKey
+        ) {
+            return null
+        }
+        return copy(
+            minX = min(minX, other.minX),
+            maxX = max(maxX, other.maxX),
+            minY = min(minY, other.minY),
+            maxY = max(maxY, other.maxY)
+        )
+    }
+}
+
+internal fun desktopPdalSummaryPointCloudExtentEstimateFromInfo(output: String): DesktopPdalPointCloudExtentEstimate {
+    val jsonStart = output.indexOf('{')
+    require(jsonStart >= 0) {
+        "PDAL summary info did not include JSON output."
+    }
+    val summary = desktopGdalJson.parseToJsonElement(output.substring(jsonStart)).jsonObject
+        .getValue("summary")
+        .jsonObject
+    val bounds = summary.getValue("bounds").jsonObject
+    val srs = summary["srs"]?.jsonObject
+    val isGeographic = srs?.get("isgeographic")?.jsonPrimitive?.content?.toBooleanStrictOrNull() == true
+    val horizontal = srs?.get("horizontal")?.jsonPrimitive?.content.orEmpty()
+    return DesktopPdalPointCloudExtentEstimate(
+        minX = bounds.getValue("minx").jsonPrimitive.content.toDouble(),
+        maxX = bounds.getValue("maxx").jsonPrimitive.content.toDouble(),
+        minY = bounds.getValue("miny").jsonPrimitive.content.toDouble(),
+        maxY = bounds.getValue("maxy").jsonPrimitive.content.toDouble(),
+        isGeographic = isGeographic,
+        horizontalUnitMeters = if (isGeographic) 1.0 else projectedCoordinateUnitMeters(horizontal),
+        srsKey = horizontal.ifBlank { srs?.toString().orEmpty() }
+    )
+}
+
+private fun projectedCoordinateUnitMeters(horizontalWkt: String): Double {
+    val unitPattern = Regex("(?:UNIT|LENGTHUNIT)\\[\"[^\"]+\",\\s*([0-9.Ee+-]+)")
+    return unitPattern
+        .findAll(horizontalWkt)
+        .mapNotNull { match -> match.groupValues.getOrNull(1)?.toDoubleOrNull() }
+        .lastOrNull()
+        ?: 1.0
+}
+
+internal fun metadataObjectTextFromCachePrefix(text: String): String? {
+    val keyIndex = text.indexOf("\"metadata\"")
+    if (keyIndex < 0) {
+        return null
+    }
+    val objectStart = text.indexOf('{', startIndex = keyIndex)
+    if (objectStart < 0) {
+        return null
+    }
+    var depth = 0
+    var inString = false
+    var isEscaped = false
+    for (index in objectStart until text.length) {
+        val char = text[index]
+        if (inString) {
+            when {
+                isEscaped -> isEscaped = false
+                char == '\\' -> isEscaped = true
+                char == '"' -> inString = false
+            }
+            continue
+        }
+        when (char) {
+            '"' -> inString = true
+            '{' -> depth++
+            '}' -> {
+                depth--
+                if (depth == 0) {
+                    return text.substring(objectStart, index + 1)
+                }
+            }
+        }
+    }
+    return null
 }
 
 private fun collectWgs84CoordinatePairs(element: JsonElement, points: MutableList<CourseGeoPoint>) {

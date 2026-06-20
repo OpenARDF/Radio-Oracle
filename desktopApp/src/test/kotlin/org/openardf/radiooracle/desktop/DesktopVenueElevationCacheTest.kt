@@ -200,6 +200,134 @@ class DesktopVenueElevationCacheTest {
     }
 
     @Test
+    fun estimatesPointCloudOutputBytesFromProjectedMeterSummary() {
+        val estimate = desktopPdalSummaryPointCloudExtentEstimateFromInfo(
+            """
+            {
+              "summary": {
+                "bounds": {
+                  "minx": -9178673.06,
+                  "maxx": -9176934.03,
+                  "miny": 4254485.01,
+                  "maxy": 4256185.65
+                },
+                "srs": {
+                  "horizontal": "PROJCS[\"WGS 84 / Pseudo-Mercator\",UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AUTHORITY[\"EPSG\",\"3857\"]]",
+                  "isgeographic": false
+                }
+              }
+            }
+            """.trimIndent()
+        )
+
+        assertEquals(2_640_064L, estimate.rawBytes(3.0))
+    }
+
+    @Test
+    fun estimatesPointCloudOutputBytesFromProjectedFootSummary() {
+        val estimate = desktopPdalSummaryPointCloudExtentEstimateFromInfo(
+            """
+            {
+              "summary": {
+                "bounds": {
+                  "minx": 1000.0,
+                  "maxx": 1300.0,
+                  "miny": 2000.0,
+                  "maxy": 2600.0
+                },
+                "srs": {
+                  "horizontal": "PROJCRS[\"StatePlane\",CS[Cartesian,2],AXIS[\"easting\",east,LENGTHUNIT[\"US survey foot\",0.304800609601219]],AXIS[\"northing\",north,LENGTHUNIT[\"US survey foot\",0.304800609601219]]]",
+                  "isgeographic": false
+                }
+              }
+            }
+            """.trimIndent()
+        )
+
+        assertEquals(15_872L, estimate.rawBytes(3.0))
+    }
+
+    @Test
+    fun combinesPointCloudOutputEstimateForMultipleFilesWithSameSrs() {
+        val first = DesktopPdalPointCloudExtentEstimate(
+            minX = 0.0,
+            maxX = 300.0,
+            minY = 0.0,
+            maxY = 300.0,
+            isGeographic = false,
+            horizontalUnitMeters = 1.0,
+            srsKey = "EPSG:3857"
+        )
+        val second = DesktopPdalPointCloudExtentEstimate(
+            minX = 300.0,
+            maxX = 600.0,
+            minY = 0.0,
+            maxY = 300.0,
+            isGeographic = false,
+            horizontalUnitMeters = 1.0,
+            srsKey = "EPSG:3857"
+        )
+
+        val combined = first.unionOrNull(second)
+
+        assertEquals(162_408L, combined?.rawBytes(3.0))
+    }
+
+    @Test
+    fun keepsPointCloudOutputEstimateSeparateForMultipleFilesWithDifferentSrs() {
+        val first = DesktopPdalPointCloudExtentEstimate(
+            minX = 0.0,
+            maxX = 300.0,
+            minY = 0.0,
+            maxY = 300.0,
+            isGeographic = false,
+            horizontalUnitMeters = 1.0,
+            srsKey = "EPSG:3857"
+        )
+        val second = DesktopPdalPointCloudExtentEstimate(
+            minX = 1000.0,
+            maxX = 1300.0,
+            minY = 2000.0,
+            maxY = 2300.0,
+            isGeographic = false,
+            horizontalUnitMeters = 0.304800609601219,
+            srsKey = "StatePlane feet"
+        )
+
+        assertEquals(null, first.unionOrNull(second))
+        assertEquals(89_800L, first.rawBytes(3.0) + second.rawBytes(3.0))
+    }
+
+    @Test
+    fun extractsCacheMetadataObjectWithoutReadingElevationArray() {
+        val metadataText = metadataObjectTextFromCachePrefix(
+            """
+            {
+              "metadata": {
+                "version": 1,
+                "venueName": "Test Venue",
+                "sourceName": "USGS 3DEP",
+                "sourceUrl": "test",
+                "resolutionMeters": 3.0,
+                "rowCount": 2,
+                "columnCount": 2,
+                "boundingBox": {
+                  "minLatitude": 44.9,
+                  "maxLatitude": 45.1,
+                  "minLongitude": -122.1,
+                  "maxLongitude": -121.9
+                },
+                "createdAtIso": "2026-06-08T00:00:00Z"
+              },
+              "elevations": [not valid json
+            """.trimIndent()
+        )
+
+        assertTrue(metadataText?.contains("\"venueName\": \"Test Venue\"") == true)
+        assertTrue(metadataText?.contains("elevations") == false)
+    }
+
+    @Test
     fun acceptsCompleteGdalLocationInfoOutputWhenExitCodeReportsEdgeNoData() {
         assertTrue(gdalLocationInfoExitIsAcceptable(exitCode = 0, error = "", outputLineCount = 10, pointCount = 10))
         assertTrue(gdalLocationInfoExitIsAcceptable(exitCode = 1, error = "", outputLineCount = 10, pointCount = 10))
@@ -376,6 +504,35 @@ class DesktopVenueElevationCacheTest {
             assertEquals(1, summary.importedCount)
             assertTrue(Files.exists(summary.targetDirectory.resolve("billy-bob.roelev.json")))
             assertEquals(listOf("Test Venue"), DesktopVenueElevationCache.listings().map { it.venueName })
+        }
+    }
+
+    @Test
+    fun listsCacheMetadataWithoutParsingElevationArray() {
+        withTemporaryUserHome { home ->
+            val cacheDirectory = home
+                .resolve("Library")
+                .resolve("Application Support")
+                .resolve("Radio-Oracle")
+                .resolve("elevations")
+            Files.createDirectories(cacheDirectory)
+            val path = cacheDirectory.resolve("metadata-only-listing.roelev.json")
+            Files.writeString(
+                path,
+                cacheJson("USGS 3DEP", 3.0, 100.0).substringBefore("\"elevations\"") +
+                    "\"elevations\": [not valid json"
+            )
+
+            val listing = DesktopVenueElevationCache.listings().single()
+
+            assertEquals("Test Venue", listing.venueName)
+            assertEquals("USGS 3DEP", listing.sourceName)
+            assertEquals(3.0, listing.resolutionMeters, 0.0)
+            assertEquals(2, listing.rowCount)
+            assertEquals(2, listing.columnCount)
+            assertEquals(null, listing.resolvedPointCount)
+            assertEquals(Files.size(path), listing.fileSizeBytes)
+            assertTrue(listing.fileModifiedAtIso.isNotBlank())
         }
     }
 

@@ -10942,15 +10942,19 @@ private fun VenueElevationCachePanel(
             )
         } else {
             cacheListings.forEach { listing ->
+                val totalPointCount = listing.rowCount.toLong() * listing.columnCount.toLong()
+                val pointText = listing.resolvedPointCount?.let { resolved ->
+                    "$resolved/$totalPointCount points"
+                } ?: "$totalPointCount grid points"
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "${listing.venueName} - ${listing.sourceName} ${listing.resolutionMeters.roundToInt()} m - ${listing.resolvedPointCount}/${listing.rowCount * listing.columnCount} points",
+                        text = "${listing.venueName} - ${listing.sourceName} ${listing.resolutionMeters.roundToInt()} m - $pointText",
                         color = DesktopPalette.Black,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "${listing.path.fileName}  ${listing.createdAtIso}",
+                        text = "${listing.path.fileName}  created ${listing.createdAtIso}  modified ${listing.fileModifiedAtIso}  ${bytesText(listing.fileSizeBytes)}",
                         color = DesktopPalette.Black,
                         fontSize = 12.sp
                     )
