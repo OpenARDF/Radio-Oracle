@@ -11085,10 +11085,18 @@ private fun VenueElevationCacheImportPanel(
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                val localSourceTypes = DesktopVenueElevationCache.desktopLocalElevationSourceTypes(localRasterPathDraft)
+                val localSourceIsPointCloudOnly = localSourceTypes.isNotEmpty() &&
+                    localSourceTypes.all { it == LocalElevationSourceType.LasPointCloud }
+                val localSourceCanCreate = resolutionMeters != null &&
+                    resolutionMeters > 0.0 &&
+                    localRasterPathDraft.isNotBlank() &&
+                    (parsedBoundingBox != null || localSourceIsPointCloudOnly)
                 Button(
                     onClick = {
-                        DesktopFileDialogs.chooseElevationRaster()?.let { path ->
-                            localRasterPathDraft = path.toString()
+                        val paths = DesktopFileDialogs.chooseElevationRaster()
+                        if (paths.isNotEmpty()) {
+                            localRasterPathDraft = paths.joinToString("; ") { it.toString() }
                         }
                     }
                 ) {
@@ -11096,8 +11104,13 @@ private fun VenueElevationCacheImportPanel(
                 }
                 Button(
                     onClick = {
-                        val bounds = parsedBoundingBox ?: return@Button
                         val resolution = resolutionMeters ?: return@Button
+                        val bounds = parsedBoundingBox
+                            ?: if (localSourceIsPointCloudOnly) {
+                                DesktopVenueElevationBoundingBox(0.0, 0.0, 0.0, 0.0)
+                            } else {
+                                return@Button
+                            }
                         onDownloadCache(
                             venueNameDraft,
                             bounds,
@@ -11107,22 +11120,19 @@ private fun VenueElevationCacheImportPanel(
                             localRasterPathDraft
                         )
                     },
-                    enabled = parsedBoundingBox != null &&
-                        resolutionMeters != null &&
-                        resolutionMeters > 0.0 &&
-                        localRasterPathDraft.isNotBlank()
+                    enabled = localSourceCanCreate
                 ) {
                     ButtonLabel("Create Cache from Local Source")
                 }
             }
             LabeledTextField(
-                "Local source file",
+                "Local source file(s)",
                 localRasterPathDraft,
                 { localRasterPathDraft = it },
                 Modifier.width(640.dp)
             )
             Text(
-                text = "Use a local GeoTIFF raster (.tif/.tiff), GeoTIFF ZIP (.zip), or LAS/LAZ point cloud (.las/.laz), such as a countywide LiDAR DEM, to create a venue-sized cache without downloading elevation data.",
+                text = "Use a local GeoTIFF raster (.tif/.tiff), GeoTIFF ZIP (.zip), or one or more LAS/LAZ point clouds (.las/.laz), such as countywide LiDAR DEM files, to create a cache without downloading elevation data.",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )

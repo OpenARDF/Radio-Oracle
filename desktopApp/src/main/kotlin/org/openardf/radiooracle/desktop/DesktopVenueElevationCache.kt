@@ -8,6 +8,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -44,12 +46,10 @@ import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
-import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
-import kotlin.math.tan
 
 enum class DesktopVenueElevationReferenceSource(
     val label: String
@@ -739,55 +739,51 @@ object DesktopVenueElevationCache {
         onProgress: (DesktopVenueElevationCacheProgress) -> Unit = {}
     ): DesktopVenueElevationCacheSummary =
         withContext(Dispatchers.IO) {
-            val sourcePath = Path.of(sourcePathText.trim()).toAbsolutePath().normalize()
-            require(Files.isRegularFile(sourcePath)) {
-                "Local LiDAR raster file was not found: $sourcePath"
-            }
-            val sourceType = localElevationSourceType(sourcePath)
-            require(sourceType != null) {
-                "Local elevation source must be a GeoTIFF raster (.tif/.tiff), GeoTIFF ZIP (.zip), or LAS/LAZ point cloud (.las/.laz)."
-            }
+            val sources = localElevationSources(sourcePathText)
+            val sourcePaths = sources.paths
+            val sourceType = sources.type
             val cleanVenueName = venueName.trim().ifBlank { "Venue" }
-            val estimate = estimate(boundingBox, resolutionMeters, bufferMeters)
-            val points = estimate.gridPoints()
-            onProgress(
-                DesktopVenueElevationCacheProgress(
-                    venueName = cleanVenueName,
-                    completedPointCount = 0,
-                    totalPointCount = points.size
-                )
-            )
             val gdal = DesktopGdalTools.requireAvailable()
             val workDirectory = Files.createTempDirectory("radio-oracle-local-lidar-")
             var elevationUnits = DesktopGdalElevationUnits("unspecified", 1.0)
+            var estimate = estimate(boundingBox, resolutionMeters, bufferMeters)
+            var points = emptyList<CourseGeoPoint>()
             val elevations = try {
                 val rasterPath = when (sourceType) {
                     LocalElevationSourceType.GeoTiff ->
-                        sourcePath.toString()
+                        sourcePaths.single().toString()
                     LocalElevationSourceType.GeoTiffZip ->
                         rasterPathForZipArchive(
                             workDirectory = workDirectory,
-                            zipPath = sourcePath,
+                            zipPath = sourcePaths.single(),
                             gdal = gdal,
                             sourceLabel = "Local LiDAR raster"
                         )
                     LocalElevationSourceType.LasPointCloud -> {
                         val pdal = DesktopPdalTools.requireAvailable()
                         val outputRaster = workDirectory.resolve("point-cloud-dem.tif")
-                        elevationUnits = pdal.elevationUnits(sourcePath)
+                        elevationUnits = pdal.commonElevationUnits(sourcePaths)
                         pdal.rasterizeLasPointCloud(
-                            sourcePath = sourcePath,
+                            sourcePaths = sourcePaths,
                             outputRaster = outputRaster,
                             resolutionMeters = resolutionMeters,
-                            boundingBox = estimate.boundingBox,
                             workDirectory = workDirectory
                         )
+                        estimate = estimate(gdal.wgs84BoundingBox(outputRaster.toString()), resolutionMeters, 0.0)
                         outputRaster.toString()
                     }
                 }
                 if (sourceType != LocalElevationSourceType.LasPointCloud) {
                     elevationUnits = gdal.elevationUnits(rasterPath)
                 }
+                points = estimate.gridPoints()
+                onProgress(
+                    DesktopVenueElevationCacheProgress(
+                        venueName = cleanVenueName,
+                        completedPointCount = 0,
+                        totalPointCount = points.size
+                    )
+                )
                 gdal.sampleWgs84(
                     rasterPath = rasterPath,
                     points = points,
@@ -824,8 +820,8 @@ object DesktopVenueElevationCache {
                 metadata = DesktopVenueElevationCacheMetadata(
                     version = CACHE_VERSION,
                     venueName = cleanVenueName,
-                    sourceName = "Local LiDAR Raster - ${sourcePath.fileName}${elevationUnits.sourceNameSuffix()}",
-                    sourceUrl = sourcePath.toString(),
+                    sourceName = "Local LiDAR Raster - ${localElevationSourceLabel(sourcePaths)}${elevationUnits.sourceNameSuffix()}",
+                    sourceUrl = sourcePaths.joinToString(System.lineSeparator()) { it.toString() },
                     resolutionMeters = resolutionMeters,
                     rowCount = estimate.rowCount,
                     columnCount = estimate.columnCount,
@@ -842,7 +838,7 @@ object DesktopVenueElevationCache {
             val hash = fileSha256(path)
             DesktopDebugLog.info(
                 "ElevationCache",
-                "Created venue=$cleanVenueName source=Local LiDAR Raster sourceFile=${sourcePath.fileName} " +
+                "Created venue=$cleanVenueName source=Local LiDAR Raster sourceFiles=${localElevationSourceLabel(sourcePaths)} " +
                     "unit=${elevationUnits.label} multiplier=${elevationUnits.valueMultiplier} " +
                     "resolution=${resolutionMeters}m points=${points.size} resolved=${elevations.count { it != null }} " +
                     "file=${path.fileName} hash=${hash.take(12)}"
@@ -1568,6 +1564,50 @@ object DesktopVenueElevationCache {
     private fun localElevationSourceType(path: Path): LocalElevationSourceType? =
         desktopLocalElevationSourceType(path.fileName.toString())
 
+    private fun localElevationSources(sourcePathText: String): LocalElevationSources {
+        val sourcePaths = desktopLocalElevationSourcePathTexts(sourcePathText)
+            .map { Path.of(it).toAbsolutePath().normalize() }
+        require(sourcePaths.isNotEmpty()) {
+            "Local elevation import requires a source file."
+        }
+        sourcePaths.forEach { sourcePath ->
+            require(Files.isRegularFile(sourcePath)) {
+                "Local elevation source file was not found: $sourcePath"
+            }
+        }
+        val sourceTypes = sourcePaths.map { sourcePath ->
+            localElevationSourceType(sourcePath)
+                ?: throw IllegalArgumentException(
+                    "Local elevation source must be a GeoTIFF raster (.tif/.tiff), GeoTIFF ZIP (.zip), " +
+                        "or LAS/LAZ point cloud (.las/.laz): $sourcePath"
+                )
+        }
+        val distinctTypes = sourceTypes.distinct()
+        require(distinctTypes.size == 1) {
+            "Local elevation import cannot mix raster, ZIP, and LAS/LAZ point-cloud sources."
+        }
+        val sourceType = distinctTypes.single()
+        require(sourcePaths.size == 1 || sourceType == LocalElevationSourceType.LasPointCloud) {
+            "Only LAS/LAZ point-cloud imports support selecting more than one source file."
+        }
+        return LocalElevationSources(paths = sourcePaths, type = sourceType)
+    }
+
+    internal fun desktopLocalElevationSourcePathTexts(sourcePathText: String): List<String> =
+        sourcePathText
+            .splitToSequence(Regex("[;\\r\\n]+"))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toList()
+
+    internal fun desktopLocalElevationSourceTypes(sourcePathText: String): List<LocalElevationSourceType> =
+        desktopLocalElevationSourcePathTexts(sourcePathText).mapNotNull { sourcePath ->
+            val fileName = runCatching { Path.of(sourcePath).fileName?.toString() }
+                .getOrNull()
+                ?: sourcePath
+            desktopLocalElevationSourceType(fileName)
+        }
+
     internal fun desktopLocalElevationSourceType(fileName: String): LocalElevationSourceType? {
         val name = fileName.lowercase(Locale.US)
         return when {
@@ -1581,6 +1621,13 @@ object DesktopVenueElevationCache {
                 null
         }
     }
+
+    private fun localElevationSourceLabel(sourcePaths: List<Path>): String =
+        if (sourcePaths.size == 1) {
+            sourcePaths.single().fileName.toString()
+        } else {
+            "${sourcePaths.size} LAS/LAZ files"
+        }
 
     private fun rasterPathForZipArchive(
         workDirectory: Path,
@@ -1758,6 +1805,11 @@ internal enum class LocalElevationSourceType {
     LasPointCloud
 }
 
+private data class LocalElevationSources(
+    val paths: List<Path>,
+    val type: LocalElevationSourceType
+)
+
 private data class DesktopVenueElevationCacheFile(
     val metadata: DesktopVenueElevationCacheMetadata,
     val elevations: List<Double?>,
@@ -1812,8 +1864,6 @@ private const val WASHINGTON_DNR_DOWNLOAD_URL = "https://lidarportal.dnr.wa.gov/
 private const val FEET_TO_METERS = 0.3048
 private const val US_SURVEY_FOOT_TO_METERS = 1200.0 / 3937.0
 private const val GDAL_SAMPLE_PROGRESS_INTERVAL = 5_000
-private const val WEB_MERCATOR_RADIUS = 6_378_137.0
-private const val WEB_MERCATOR_MAX_LATITUDE = 85.05112878
 
 internal data class DesktopGdalElevationUnits(
     val label: String,
@@ -1883,6 +1933,8 @@ private fun metersPerDegreeLongitude(latitude: Double): Double =
 
 private fun Double.gdalCoordinateText(): String =
     "%.8f".format(Locale.US, this)
+
+private val desktopGdalJson = Json { ignoreUnknownKeys = true }
 
 private fun findDesktopExecutable(name: String): Path? {
     val candidates = buildList {
@@ -1998,6 +2050,11 @@ private class DesktopGdalTools(
         return desktopGdalElevationUnitsFromInfo(output, rasterPath)
     }
 
+    suspend fun wgs84BoundingBox(rasterPath: String): DesktopVenueElevationBoundingBox {
+        val output = processOutput(listOf(gdalInfo.toString(), "-json", rasterPath))
+        return desktopGdalWgs84BoundingBoxFromInfo(output)
+    }
+
     fun runCommand(command: List<String>) {
         val process = ProcessBuilder(command)
             .redirectErrorStream(true)
@@ -2050,26 +2107,33 @@ private class DesktopGdalTools(
 private class DesktopPdalTools(
     private val pdal: Path
 ) {
-    suspend fun elevationUnits(sourcePath: Path): DesktopGdalElevationUnits {
+    suspend fun commonElevationUnits(sourcePaths: List<Path>): DesktopGdalElevationUnits {
+        val units = sourcePaths.map { sourcePath -> elevationUnits(sourcePath) }
+            .distinctBy { it.label to it.valueMultiplier }
+        require(units.size == 1) {
+            "Selected LAS/LAZ files must use the same elevation units."
+        }
+        return units.single()
+    }
+
+    private suspend fun elevationUnits(sourcePath: Path): DesktopGdalElevationUnits {
         val output = processOutput(listOf(pdal.toString(), "info", "--metadata", sourcePath.toString()))
         return desktopGdalElevationUnitsFromInfo(output, sourcePath.toString())
     }
 
     suspend fun rasterizeLasPointCloud(
-        sourcePath: Path,
+        sourcePaths: List<Path>,
         outputRaster: Path,
         resolutionMeters: Double,
-        boundingBox: DesktopVenueElevationBoundingBox,
         workDirectory: Path
     ) {
         val pipelinePath = workDirectory.resolve("pdal-laz-to-dem.json")
         Files.writeString(
             pipelinePath,
             desktopPdalLasPointCloudRasterPipeline(
-                sourcePath = sourcePath,
+                sourcePaths = sourcePaths,
                 outputRaster = outputRaster,
-                resolutionMeters = resolutionMeters,
-                boundingBox = boundingBox
+                resolutionMeters = resolutionMeters
             )
         )
         processOutput(listOf(pdal.toString(), "pipeline", pipelinePath.toString()))
@@ -2112,35 +2176,53 @@ private class DesktopPdalTools(
 }
 
 internal fun desktopPdalLasPointCloudRasterPipeline(
-    sourcePath: Path,
+    sourcePaths: List<Path>,
     outputRaster: Path,
-    resolutionMeters: Double,
-    boundingBox: DesktopVenueElevationBoundingBox
+    resolutionMeters: Double
 ): String {
+    require(sourcePaths.isNotEmpty()) {
+        "At least one LAS/LAZ source file is required."
+    }
     val cellSize = resolutionMeters.coerceAtLeast(0.01)
     val radius = (cellSize * sqrt(2.0)).coerceAtLeast(1.0)
-    val bounds = boundingBox.webMercatorBoundsText()
     return buildJsonObject {
         put(
             "pipeline",
             buildJsonArray {
-                add(
-                    buildJsonObject {
-                        put("type", "readers.las")
-                        put("filename", sourcePath.toString())
-                    }
-                )
+                sourcePaths.forEachIndexed { index, sourcePath ->
+                    add(
+                        buildJsonObject {
+                            put("type", "readers.las")
+                            put("filename", sourcePath.toString())
+                            put("tag", "source_$index")
+                        }
+                    )
+                }
+                val reprojectionInput = if (sourcePaths.size == 1) {
+                    "source_0"
+                } else {
+                    add(
+                        buildJsonObject {
+                            put("type", "filters.merge")
+                            put(
+                                "inputs",
+                                buildJsonArray {
+                                    sourcePaths.indices.forEach { index ->
+                                        add(JsonPrimitive("source_$index"))
+                                    }
+                                }
+                            )
+                            put("tag", "merged_sources")
+                        }
+                    )
+                    "merged_sources"
+                }
                 add(
                     buildJsonObject {
                         put("type", "filters.reprojection")
+                        put("inputs", buildJsonArray { add(JsonPrimitive(reprojectionInput)) })
                         put("out_srs", "EPSG:3857")
                         put("error_on_failure", true)
-                    }
-                )
-                add(
-                    buildJsonObject {
-                        put("type", "filters.crop")
-                        put("bounds", bounds)
                     }
                 )
                 add(
@@ -2160,30 +2242,36 @@ internal fun desktopPdalLasPointCloudRasterPipeline(
     }.toString()
 }
 
-private fun DesktopVenueElevationBoundingBox.webMercatorBoundsText(): String {
-    val minPoint = CourseGeoPoint(
-        latitude = minLatitude.coerceIn(-WEB_MERCATOR_MAX_LATITUDE, WEB_MERCATOR_MAX_LATITUDE),
-        longitude = minLongitude
-    ).toWebMercator()
-    val maxPoint = CourseGeoPoint(
-        latitude = maxLatitude.coerceIn(-WEB_MERCATOR_MAX_LATITUDE, WEB_MERCATOR_MAX_LATITUDE),
-        longitude = maxLongitude
-    ).toWebMercator()
-    return "([${minPoint.x.pdalDecimal(3)},${maxPoint.x.pdalDecimal(3)}]," +
-        "[${minPoint.y.pdalDecimal(3)},${maxPoint.y.pdalDecimal(3)}])"
+internal fun desktopGdalWgs84BoundingBoxFromInfo(output: String): DesktopVenueElevationBoundingBox {
+    val root = desktopGdalJson.parseToJsonElement(output).jsonObject
+    val coordinates = root["wgs84Extent"]
+        ?.jsonObject
+        ?.get("coordinates")
+        ?: throw IllegalArgumentException("GDAL info did not include a WGS84 extent.")
+    val points = mutableListOf<CourseGeoPoint>()
+    collectWgs84CoordinatePairs(coordinates, points)
+    require(points.isNotEmpty()) {
+        "GDAL info WGS84 extent did not include coordinate pairs."
+    }
+    return DesktopVenueElevationBoundingBox(
+        minLatitude = points.minOf { it.latitude },
+        maxLatitude = points.maxOf { it.latitude },
+        minLongitude = points.minOf { it.longitude },
+        maxLongitude = points.maxOf { it.longitude }
+    )
 }
 
-private fun CourseGeoPoint.toWebMercator(): WebMercatorPoint {
-    val latitude = latitude.coerceIn(-WEB_MERCATOR_MAX_LATITUDE, WEB_MERCATOR_MAX_LATITUDE)
-    val x = WEB_MERCATOR_RADIUS * Math.toRadians(longitude)
-    val y = WEB_MERCATOR_RADIUS * ln(tan(Math.PI / 4.0 + Math.toRadians(latitude) / 2.0))
-    return WebMercatorPoint(x = x, y = y)
+private fun collectWgs84CoordinatePairs(element: JsonElement, points: MutableList<CourseGeoPoint>) {
+    if (element !is JsonArray) {
+        return
+    }
+    val longitude = (element.getOrNull(0) as? JsonPrimitive)?.doubleOrNull
+    val latitude = (element.getOrNull(1) as? JsonPrimitive)?.doubleOrNull
+    if (longitude != null && latitude != null) {
+        points += CourseGeoPoint(latitude = latitude, longitude = longitude)
+        return
+    }
+    element.forEach { child ->
+        collectWgs84CoordinatePairs(child, points)
+    }
 }
-
-private data class WebMercatorPoint(
-    val x: Double,
-    val y: Double
-)
-
-private fun Double.pdalDecimal(places: Int): String =
-    "%.${places}f".format(Locale.US, this)

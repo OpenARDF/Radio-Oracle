@@ -87,26 +87,64 @@ class DesktopVenueElevationCacheTest {
     }
 
     @Test
-    fun buildsPdalPipelineForLasPointCloudRasterization() {
+    fun parsesMultipleLocalElevationSourcePaths() {
+        assertEquals(
+            listOf("/data/a.laz", "/data/b.laz"),
+            DesktopVenueElevationCache.desktopLocalElevationSourcePathTexts("/data/a.laz; /data/b.laz")
+        )
+        assertEquals(
+            listOf("/data/a.laz", "/data/b.laz"),
+            DesktopVenueElevationCache.desktopLocalElevationSourcePathTexts("/data/a.laz\n/data/b.laz")
+        )
+        assertEquals(
+            listOf(LocalElevationSourceType.LasPointCloud, LocalElevationSourceType.LasPointCloud),
+            DesktopVenueElevationCache.desktopLocalElevationSourceTypes("/data/a.laz; /data/b.LAS")
+        )
+    }
+
+    @Test
+    fun buildsPdalMergePipelineForLasPointCloudRasterization() {
         val pipeline = desktopPdalLasPointCloudRasterPipeline(
-            sourcePath = Path.of("/data/source.laz"),
+            sourcePaths = listOf(Path.of("/data/source-a.laz"), Path.of("/data/source-b.laz")),
             outputRaster = Path.of("/tmp/output.tif"),
-            resolutionMeters = 2.5,
-            boundingBox = DesktopVenueElevationBoundingBox(
-                minLatitude = 44.9999,
-                maxLatitude = 45.0001,
-                minLongitude = -122.0001,
-                maxLongitude = -121.9999
-            )
+            resolutionMeters = 2.5
         )
 
+        assertTrue(pipeline.contains("source-a.laz"))
+        assertTrue(pipeline.contains("source-b.laz"))
         assertTrue(pipeline.contains("readers.las"))
+        assertTrue(pipeline.contains("filters.merge"))
         assertTrue(pipeline.contains("filters.reprojection"))
         assertTrue(pipeline.contains("EPSG:3857"))
-        assertTrue(pipeline.contains("filters.crop"))
+        assertTrue(!pipeline.contains("filters.crop"))
         assertTrue(pipeline.contains("writers.gdal"))
         assertTrue(pipeline.contains("\"resolution\":2.5"))
         assertTrue(pipeline.contains("\"output_type\":\"idw\""))
+    }
+
+    @Test
+    fun parsesGdalWgs84ExtentBoundingBox() {
+        val boundingBox = desktopGdalWgs84BoundingBoxFromInfo(
+            """
+            {
+              "wgs84Extent": {
+                "type": "Polygon",
+                "coordinates": [[
+                  [-122.10, 44.90],
+                  [-122.10, 45.20],
+                  [-121.80, 45.20],
+                  [-121.80, 44.90],
+                  [-122.10, 44.90]
+                ]]
+              }
+            }
+            """.trimIndent()
+        )
+
+        assertEquals(44.90, boundingBox.minLatitude, 0.000001)
+        assertEquals(45.20, boundingBox.maxLatitude, 0.000001)
+        assertEquals(-122.10, boundingBox.minLongitude, 0.000001)
+        assertEquals(-121.80, boundingBox.maxLongitude, 0.000001)
     }
 
     @Test

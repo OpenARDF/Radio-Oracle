@@ -364,7 +364,7 @@ object DesktopFileDialogs {
             ?.let { DesktopControlsRouteKmlKmzExportTarget(it, DesktopControlsRouteKmlKmzExportFormat.Gpx) }
     }
 
-    fun chooseElevationRaster(): Path? {
+    fun chooseElevationRaster(): List<Path> {
         val dialog = FileDialog(null as Frame?, "Select Elevation Source", FileDialog.LOAD)
         dialog.filenameFilter = FilenameFilter { _, name ->
             name.endsWith(".tif", ignoreCase = true) ||
@@ -374,11 +374,16 @@ object DesktopFileDialogs {
                 name.endsWith(".laz", ignoreCase = true)
         }
         dialog.file = "*.tif;*.tiff;*.zip;*.las;*.laz"
+        dialog.isMultipleMode = true
         dialog.isVisible = true
 
-        val directory = dialog.directory ?: return null
-        val file = dialog.file ?: return null
-        return Path.of(directory, file)
+        val selectedFiles = dialog.files.orEmpty().map { it.toPath() }
+        if (selectedFiles.isNotEmpty()) {
+            return selectedFiles
+        }
+        val directory = dialog.directory ?: return emptyList()
+        val file = dialog.file ?: return emptyList()
+        return listOf(Path.of(directory, file))
     }
 
     fun chooseImportDemFiles(): List<Path> {
