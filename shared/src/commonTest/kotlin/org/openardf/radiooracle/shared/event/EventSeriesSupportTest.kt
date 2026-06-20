@@ -23,6 +23,32 @@ class EventSeriesSupportTest {
     }
 
     @Test
+    fun validatesDuplicateUnderlyingRaceIdsAcrossLinkedEvents() {
+        val series = seriesFile(events = listOf(seriesEvent("day-1", 0), seriesEvent("day-2", 1)))
+        val linkedEvents = listOf(
+            linkedEvent(
+                "day-1",
+                projectFile("Day 1", raceId = "copied-race-id", seriesLink = EventSeriesLink("series-1", "day-1"))
+            ),
+            linkedEvent(
+                "day-2",
+                projectFile("Day 2", raceId = "copied-race-id", seriesLink = EventSeriesLink("series-1", "day-2"))
+            )
+        )
+
+        val issues = EventSeriesSupport.validateLinkedEvents(series, linkedEvents)
+
+        assertEquals(
+            listOf(
+                "Event File 'day-1' has a duplicate race ID shared with: day-2.",
+                "Event File 'day-2' has a duplicate race ID shared with: day-1."
+            ),
+            issues.map { it.message }
+        )
+        assertTrue(issues.all { it.severity == EventSeriesIssueSeverity.WARNING })
+    }
+
+    @Test
     fun extractsPriorStartRowsInManifestOrder() {
         val series = seriesFile()
         val linkedEvents = listOf(
@@ -163,6 +189,7 @@ class EventSeriesSupportTest {
 
     private fun projectFile(
         name: String,
+        raceId: String = name,
         competitors: List<EventCompetitorData> = emptyList(),
         seriesLink: EventSeriesLink? = null
     ): EventProjectFile {
@@ -170,7 +197,7 @@ class EventSeriesSupportTest {
         return EventProjectFile(
             raceData = EventRaceData(
                 race = EventRace(
-                    id = name,
+                    id = raceId,
                     name = name,
                     apiKey = "",
                     startDateTimeIso = "2026-06-01T10:00",

@@ -213,6 +213,42 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun eventSeriesListCommandReportsManifestEvents() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-series")
+        val manifestPath = directory.resolve("series.radio-oracle.json")
+        val dayOnePath = directory.resolve("day-1.json")
+        val dayTwoPath = directory.resolve("day-2.json")
+        DesktopEventSeriesFiles.write(
+            manifestPath,
+            EventSeriesFile(
+                seriesId = "series-1",
+                name = "Championship",
+                events = listOf(
+                    EventSeriesEvent("day-1", "day-1.json", 0, "Day 1"),
+                    EventSeriesEvent("day-2", "day-2.json", 1, "Day 2")
+                )
+            )
+        )
+        DesktopProjectFiles.write(dayOnePath, projectFile("Day 1", eventId = "day-1"))
+        DesktopProjectFiles.write(dayTwoPath, projectFile("Day 2", eventId = "day-2"))
+
+        val result = runAutomation(
+            "event-series-list",
+            manifestPath.toString(),
+            "--current-event",
+            dayTwoPath.toString()
+        )
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"event-series-list\""))
+        assertTrue(result.stdout.contains("\"eventCount\":2"))
+        assertTrue(result.stdout.contains("\"missingCount\":0"))
+        assertTrue(result.stdout.contains("\"seriesEventId\":\"day-1\""))
+        assertTrue(result.stdout.contains("\"seriesEventId\":\"day-2\""))
+        assertTrue(result.stdout.contains("\"current\":true"))
+    }
+
+    @Test
     fun eventSeriesAddEventCommandUpdatesManifestAndEventBacklink() {
         val directory = Files.createTempDirectory("radio-oracle-automation-series")
         val manifestPath = directory.resolve("series.radio-oracle.json")

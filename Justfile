@@ -32,6 +32,13 @@ nav-tree workflow="":
         JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='nav-tree'; \
     fi
 
+series-list manifest current="":
+    @if [ -n "{{current}}" ]; then \
+        JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-list "{{manifest}}" --current-event "{{current}}"'; \
+    else \
+        JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-list "{{manifest}}"'; \
+    fi
+
 desktop-check: compile test
 
 desktop-package:

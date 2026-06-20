@@ -98,6 +98,7 @@ object DesktopAutomationCli {
             "import-android-event-file" -> importAndroidEventFile(commandArgs, out, err)
             "export-android-event-file" -> exportAndroidEventFile(commandArgs, out, err)
             "import-competitors-csv" -> importCompetitorsCsv(commandArgs, out, err)
+            "event-series-list" -> eventSeriesList(commandArgs, out, err)
             "event-series-add-event" -> eventSeriesAddEvent(commandArgs, out, err)
             "readiness-summary" -> readinessSummary(commandArgs, out, err)
             "recalculate-results" -> recalculateResults(commandArgs, out, err)
@@ -423,6 +424,48 @@ object DesktopAutomationCli {
             0
         }.getOrElse { error ->
             err.println("Failed to import Competitors CSV: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
+    private fun eventSeriesList(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val manifestText = args.getOrNull(0)
+        if (manifestText.isNullOrBlank()) {
+            err.println("event-series-list requires an Event Series manifest path.")
+            return 64
+        }
+        return runCatching {
+            val manifestPath = Path.of(manifestText)
+            val currentEventPath = optionValue(args, "--current-event")?.let(Path::of)
+            val summaries = DesktopEventSeriesActions.eventSummaries(
+                store = DesktopEventSeriesFiles,
+                manifestPath = manifestPath,
+                currentEventPath = currentEventPath
+            )
+            out.println(
+                jsonObject(
+                    "command" to "event-series-list",
+                    "manifest" to manifestPath.toAbsolutePath().normalize().toString(),
+                    "eventCount" to summaries.size,
+                    "missingCount" to summaries.count { !it.exists },
+                    "events" to summaries.map { summary ->
+                        mapOf(
+                            "seriesEventId" to summary.seriesEventId,
+                            "displayName" to summary.displayName,
+                            "order" to summary.order,
+                            "eventFilePath" to summary.eventFilePath,
+                            "resolvedPath" to summary.resolvedPath.toAbsolutePath().normalize().toString(),
+                            "exists" to summary.exists,
+                            "current" to summary.isCurrentEvent,
+                            "startDateTimeIso" to summary.startDateTimeIso,
+                            "formatLabel" to summary.formatLabel
+                        )
+                    }
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Event Series list failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -859,6 +902,8 @@ object DesktopAutomationCli {
                                           Save a desktop Event File as an Android Event File.
           import-competitors-csv <event-path> <csv-path>
                                           Import competitors CSV into an Event File.
+          event-series-list <manifest-path> [--current-event <event-path>]
+                                          List series manifest events as JSON.
           event-series-add-event <manifest-path> <event-path>
                                           Add an Event File to a series manifest and write its backlink.
           readiness-summary [--require-ready] <event-path>

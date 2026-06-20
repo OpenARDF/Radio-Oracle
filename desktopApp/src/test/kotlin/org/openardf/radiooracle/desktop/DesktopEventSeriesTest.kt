@@ -116,6 +116,24 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun addEventToSeriesAppendsCopiedEventFileWithDuplicateRaceId() {
+        val originalSeries = seriesFile(
+            events = listOf(EventSeriesEvent("race-id", "day-1.rom.json", 0, "Day 1"))
+        )
+
+        val result = DesktopEventSeriesActions.addEventToSeries(
+            seriesFile = originalSeries,
+            seriesFolder = Path.of("/work/championship"),
+            eventPath = Path.of("/work/championship/day-2.rom.json"),
+            eventProjectFile = projectFile("Copied Day 2", eventId = "race-id")
+        )
+
+        assertEquals(listOf("race-id", "race-id-day-2"), result.seriesFile.sortedEvents().map { it.seriesEventId })
+        assertEquals("day-2.rom.json", result.seriesFile.sortedEvents().last().eventFilePath)
+        assertEquals(EventSeriesLink("series-1", "race-id-day-2"), result.eventProjectFile.seriesLink)
+    }
+
+    @Test
     fun addEventToSeriesRequiresEventFileInsideSeriesFolder() {
         assertThrows(IllegalArgumentException::class.java) {
             DesktopEventSeriesActions.addEventToSeries(
@@ -126,6 +144,32 @@ class DesktopEventSeriesTest {
                 seriesEventId = "day-2"
             )
         }
+    }
+
+    @Test
+    fun eventSummariesReportCurrentAndMissingFilesWithoutLoadingEvents() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val seriesFile = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-1", "events/day-1.rom.json", 0, "Day 1"),
+                EventSeriesEvent("day-2", "events/day-2.rom.json", 1, "Day 2")
+            )
+        )
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile),
+            eventFiles = mapOf(Path.of("/source/events/day-2.rom.json") to projectFile("Day 2"))
+        )
+
+        val summaries = DesktopEventSeriesActions.eventSummaries(
+            store = store,
+            manifestPath = manifestPath,
+            currentEventPath = Path.of("/source/events/day-2.rom.json")
+        )
+
+        assertEquals(listOf("day-1", "day-2"), summaries.map { it.seriesEventId })
+        assertEquals(false, summaries.first { it.seriesEventId == "day-1" }.exists)
+        assertEquals(true, summaries.first { it.seriesEventId == "day-2" }.exists)
+        assertEquals(true, summaries.first { it.seriesEventId == "day-2" }.isCurrentEvent)
     }
 
     @Test
@@ -176,11 +220,11 @@ class DesktopEventSeriesTest {
     private fun seriesFile(events: List<EventSeriesEvent> = listOf(EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"))): EventSeriesFile =
         EventSeriesFile(seriesId = "series-1", name = "Championship", events = events)
 
-    private fun projectFile(name: String): EventProjectFile =
+    private fun projectFile(name: String, eventId: String = name): EventProjectFile =
         EventProjectFile(
             raceData = EventRaceData(
                 race = EventRace(
-                    id = name,
+                    id = eventId,
                     name = name,
                     apiKey = "",
                     startDateTimeIso = "2026-06-01T10:00",

@@ -71,6 +71,28 @@ object EventSeriesSupport {
                 )
             }
         }
+        // A copied or buggy Event File can carry the same underlying race id as another file.
+        // Series membership can still be unique through seriesEventId/path, but validation should
+        // flag the duplicate because other import, diagnostic, and UI code may still assume race ids
+        // distinguish Event Files.
+        linkedEvents
+            .groupBy { it.projectFile.raceData.race.id }
+            .filter { (raceId, events) -> raceId.isNotBlank() && events.size > 1 }
+            .values
+            .forEach { duplicateEvents ->
+                duplicateEvents.forEach { linked ->
+                    val otherEventNames = duplicateEvents
+                        .filterNot { it.event.seriesEventId == linked.event.seriesEventId }
+                        .map { it.event.displayName }
+                        .distinct()
+                        .joinToString(", ")
+                    issues += EventSeriesValidationIssue(
+                        severity = EventSeriesIssueSeverity.WARNING,
+                        message = "Event File '${linked.event.displayName}' has a duplicate race ID shared with: $otherEventNames.",
+                        seriesEventId = linked.event.seriesEventId
+                    )
+                }
+            }
 
         return issues
     }

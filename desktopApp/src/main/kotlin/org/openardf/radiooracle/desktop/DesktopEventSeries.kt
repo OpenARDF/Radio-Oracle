@@ -153,6 +153,45 @@ class DesktopEventSeriesSession(private val store: EventSeriesStore) {
 
 /** High-level desktop operations for Event Series membership and clean export. */
 object DesktopEventSeriesActions {
+    fun findManifestNearEvent(
+        eventPath: Path,
+        maxAncestorDepth: Int = 6,
+        exists: (Path) -> Boolean = Files::exists
+    ): Path? =
+        generateSequence(eventPath.parent) { it.parent }
+            .take(maxAncestorDepth)
+            .map { it.resolve(EVENT_SERIES_FILE_NAME) }
+            .firstOrNull(exists)
+
+    fun eventSummaries(
+        store: EventSeriesStore,
+        manifestPath: Path,
+        currentEventPath: Path? = null
+    ): List<DesktopEventSeriesEventSummary> {
+        val seriesFile = store.read(manifestPath)
+        val seriesFolder = requireNotNull(manifestPath.parent) {
+            "Event Series manifest must have a parent folder."
+        }
+        val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize()
+        // The Events screen should be cheap and tolerant: list manifest entries and file presence
+        // without reading every Event File just to render the workflow panel.
+        return seriesFile.sortedEvents().map { event ->
+            val resolvedPath = seriesFolder.resolve(event.eventFilePath).normalize()
+            DesktopEventSeriesEventSummary(
+                seriesEventId = event.seriesEventId,
+                displayName = event.displayName,
+                order = event.order,
+                eventFilePath = event.eventFilePath,
+                resolvedPath = resolvedPath,
+                exists = store.exists(resolvedPath),
+                isCurrentEvent = normalizedCurrentPath != null &&
+                    resolvedPath.toAbsolutePath().normalize() == normalizedCurrentPath,
+                startDateTimeIso = event.startDateTimeIso,
+                formatLabel = event.formatLabel
+            )
+        }
+    }
+
     fun createSeriesWithEvent(
         seriesFolder: Path,
         seriesId: String,
@@ -203,12 +242,12 @@ object DesktopEventSeriesActions {
         seriesEventId: String = eventProjectFile.raceData.race.id
     ): DesktopEventSeriesLinkResult {
         val relativeEventPath = relativeEventPath(seriesFolder, eventPath)
-        val existingEvent = seriesFile.events.firstOrNull {
-            it.seriesEventId == seriesEventId || it.eventFilePath == relativeEventPath
-        }
+        val existingEvent = seriesFile.events.firstOrNull { it.eventFilePath == relativeEventPath }
+        val resolvedSeriesEventId = existingEvent?.seriesEventId
+            ?: uniqueSeriesEventId(seriesFile, seriesEventId, relativeEventPath)
         val nextOrder = existingEvent?.order ?: (seriesFile.events.maxOfOrNull { it.order } ?: -1) + 1
         val event = EventSeriesEvent(
-            seriesEventId = seriesEventId,
+            seriesEventId = resolvedSeriesEventId,
             eventFilePath = relativeEventPath,
             order = nextOrder,
             displayName = eventProjectFile.raceData.race.name,
@@ -218,10 +257,10 @@ object DesktopEventSeriesActions {
         // Re-selecting an existing Event File refreshes its manifest metadata without changing its order.
         val updatedSeriesFile = seriesFile.copy(
             events = seriesFile.events.filterNot {
-                it.seriesEventId == seriesEventId || it.eventFilePath == relativeEventPath
+                it.seriesEventId == resolvedSeriesEventId || it.eventFilePath == relativeEventPath
             } + event
         )
-        val linkedProjectFile = EventProjectEditor.updateSeriesLink(eventProjectFile, seriesFile.seriesId, seriesEventId)
+        val linkedProjectFile = EventProjectEditor.updateSeriesLink(eventProjectFile, seriesFile.seriesId, resolvedSeriesEventId)
         return DesktopEventSeriesLinkResult(updatedSeriesFile, linkedProjectFile)
     }
 
@@ -269,6 +308,35 @@ object DesktopEventSeriesActions {
         }
         return normalizedFolder.relativize(normalizedEventPath).toString().replace('\\', '/')
     }
+
+    private fun uniqueSeriesEventId(seriesFile: EventSeriesFile, preferredId: String, relativeEventPath: String): String {
+        val usedIds = seriesFile.events.map { it.seriesEventId }.toSet()
+        val normalizedPreferredId = preferredId.trim().ifBlank { "event" }
+        if (normalizedPreferredId !in usedIds) {
+            return normalizedPreferredId
+        }
+        // Older copied Event Files can share the same race id. In a series, membership is per
+        // Event File, so duplicate race ids on different paths need distinct series event ids.
+        val fileName = relativeEventPath.substringAfterLast('/')
+        val fileNameWithoutProjectExtension = fileName
+            .removeSuffix(".rom.json")
+            .removeSuffix(".json")
+        val fileStem = fileNameWithoutProjectExtension.substringBeforeLast('.', fileNameWithoutProjectExtension)
+        val slug = fileStem
+            .lowercase()
+            .map { character -> if (character.isLetterOrDigit()) character else '-' }
+            .joinToString("")
+            .replace(Regex("-+"), "-")
+            .trim('-')
+            .ifBlank { "event" }
+        val baseId = "$normalizedPreferredId-$slug"
+        if (baseId !in usedIds) {
+            return baseId
+        }
+        return generateSequence(2) { it + 1 }
+            .map { "$baseId-$it" }
+            .first { it !in usedIds }
+    }
 }
 
 data class DesktopEventSeriesCreateResult(
@@ -286,4 +354,16 @@ data class DesktopEventSeriesLinkResult(
 data class EventSeriesExportResult(
     val manifestPath: Path,
     val eventFilePaths: List<Path>
+)
+
+data class DesktopEventSeriesEventSummary(
+    val seriesEventId: String,
+    val displayName: String,
+    val order: Int,
+    val eventFilePath: String,
+    val resolvedPath: Path,
+    val exists: Boolean,
+    val isCurrentEvent: Boolean,
+    val startDateTimeIso: String? = null,
+    val formatLabel: String? = null
 )

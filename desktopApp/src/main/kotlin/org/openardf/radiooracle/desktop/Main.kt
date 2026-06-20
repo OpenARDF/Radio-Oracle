@@ -115,7 +115,6 @@ import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
-import org.openardf.radiooracle.shared.event.EVENT_SERIES_FILE_NAME
 import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCategoryData
@@ -422,6 +421,7 @@ fun main(args: Array<String>) = application {
         var recentImportReport by remember { mutableStateOf<DesktopImportReport?>(null) }
         var recentImportCheckpoint by remember { mutableStateOf<DesktopImportCheckpoint?>(null) }
         var recentActivityLog by remember { mutableStateOf<List<String>>(emptyList()) }
+        var seriesEventSummaries by remember { mutableStateOf<List<DesktopEventSeriesEventSummary>>(emptyList()) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzUnlockAction by remember { mutableStateOf<CourseKmlKmzUnlockAction?>(null) }
@@ -518,9 +518,41 @@ fun main(args: Array<String>) = application {
             printerDiagnostics = DesktopPrinterDiagnostics.from(printers)
         }
 
+        fun currentSeriesManifestPath(): Path? {
+            val currentPath = projectSession.currentPath ?: return null
+            return DesktopEventSeriesActions.findManifestNearEvent(currentPath)
+        }
+
+        fun refreshSeriesEventSummaries() {
+            val currentPath = projectSession.currentPath
+            val manifestPath = currentPath?.let { DesktopEventSeriesActions.findManifestNearEvent(it) }
+            seriesEventSummaries = if (manifestPath == null) {
+                emptyList()
+            } else {
+                runCatching {
+                    DesktopEventSeriesActions.eventSummaries(
+                        store = DesktopEventSeriesFiles,
+                        manifestPath = manifestPath,
+                        currentEventPath = currentPath
+                    )
+                }.getOrElse {
+                    DesktopDebugLog.error(
+                        "EventSeries",
+                        "Failed to refresh Event Series events manifest=$manifestPath: ${it.message ?: it::class.simpleName}"
+                    )
+                    emptyList()
+                }
+            }
+        }
+
         fun syncProjectState() {
             projectFile = projectSession.currentProject
             hasUnsavedChanges = projectSession.hasUnsavedChanges
+            refreshSeriesEventSummaries()
+        }
+
+        LaunchedEffect(Unit) {
+            refreshSeriesEventSummaries()
         }
 
         fun markEventDefinitionChangeIfLoaded(previousProject: EventProjectFile?, updatedProject: EventProjectFile) {
@@ -1319,14 +1351,6 @@ fun main(args: Array<String>) = application {
             }.isSuccess
         }
 
-        fun currentSeriesManifestPath(): Path? {
-            val currentPath = projectSession.currentPath ?: return null
-            return generateSequence(currentPath.parent) { it.parent }
-                .take(6)
-                .map { it.resolve(EVENT_SERIES_FILE_NAME) }
-                .firstOrNull { Files.exists(it) }
-        }
-
         fun createEventSeriesWithCurrentEvent() {
             val currentProject = projectSession.currentProject ?: run {
                 projectStatusText = "Open or create an Event File before creating an Event Series."
@@ -1459,13 +1483,31 @@ fun main(args: Array<String>) = application {
                     seriesFolder = seriesFolder,
                     eventProjectFile = eventProjectFile
                 )
+                val addedLink = requireNotNull(result.eventProjectFile.seriesLink) {
+                    "Added Event File did not receive an Event Series backlink."
+                }
                 // The added Event File is not the currently open document, so write it through the series store.
                 DesktopEventSeriesFiles.write(manifestPath, result.seriesFile)
                 DesktopEventSeriesFiles.writeEvent(eventPath, result.eventProjectFile)
-                projectStatusText = "Added ${eventPath.fileName} to ${manifestPath.fileName}."
+                val verifiedSeriesFile = DesktopEventSeriesFiles.read(manifestPath)
+                val verifiedEvent = requireNotNull(
+                    verifiedSeriesFile.events.firstOrNull { it.seriesEventId == addedLink.seriesEventId }
+                ) {
+                    "Event Series manifest write did not include ${eventPath.fileName}."
+                }
+                refreshSeriesEventSummaries()
+                DesktopDebugLog.info(
+                    "EventSeries",
+                    "Added event manifest=$manifestPath eventFile=$eventPath beforeCount=${seriesFile.events.size} " +
+                        "afterCount=${verifiedSeriesFile.events.size} seriesEventId=${addedLink.seriesEventId} " +
+                        "eventFilePath=${verifiedEvent.eventFilePath}"
+                )
+                val actionVerb = if (verifiedSeriesFile.events.size > seriesFile.events.size) "Added" else "Updated"
+                projectStatusText = "$actionVerb ${eventPath.fileName} in ${manifestPath.fileName}; series now has ${verifiedSeriesFile.events.size} events."
                 recordActivity(projectStatusText)
             }.onFailure { error ->
                 projectStatusText = "Add Event to Series failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("EventSeries", projectStatusText)
             }
         }
 
@@ -3355,6 +3397,14 @@ fun main(args: Array<String>) = application {
             DesktopFileDialogs.chooseOpenProject()?.let(::openOrImportSelectedEventFile)
         }
 
+        fun openSeriesEvent(summary: DesktopEventSeriesEventSummary) {
+            when {
+                summary.isCurrentEvent -> projectStatusText = "${summary.displayName} is already open."
+                !summary.exists -> projectStatusText = "Series event file is missing: ${summary.eventFilePath}"
+                else -> openOrImportSelectedEventFile(summary.resolvedPath)
+            }
+        }
+
         fun showEventRegImportDialog() {
             eventRegImportUrl = DesktopEventRegImportPreferences.lastRegistrationUrl()
             isEventRegImportDialogVisible = true
@@ -3968,7 +4018,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.AddEventToSeries -> addEventToCurrentSeries()
                 DesktopNavAction.ExportEventSeries -> exportCurrentEventSeries()
                 DesktopNavAction.OpenEventSeriesEvent -> {
-                    projectStatusText = "Use Load Event File to open another Event File listed in this Event Series."
+                    projectStatusText = "Select Events in the Event Series workflow, then open a listed Event File."
                 }
                 DesktopNavAction.ShowDebugLogHelp -> {
                     val logDirectory = DesktopDebugLog.logDirectory()
@@ -4485,6 +4535,7 @@ fun main(args: Array<String>) = application {
         RadioOManagerDesktopApp(
             projectFile = projectFile,
             eventFilePath = projectSession.currentPath,
+            seriesEventSummaries = seriesEventSummaries,
             projectStatusText = projectStatusText,
             hasUnsavedChanges = hasUnsavedChanges,
             siReaderState = siReaderState,
@@ -4505,6 +4556,7 @@ fun main(args: Array<String>) = application {
             raceClockTick = raceClockTick,
             isNavActionEnabled = ::isNavActionEnabled,
             disabledNavActionReason = ::disabledNavActionReason,
+            onOpenSeriesEvent = ::openSeriesEvent,
             onInsertTestControls = ::insertTestControls,
             onInsertTestCategories = ::insertTestCategories,
             onInsertTestCompetitors = ::insertTestCompetitors,
@@ -7134,6 +7186,7 @@ private data class DesktopReadoutEditDraft(
 private fun RadioOManagerDesktopApp(
     projectFile: EventProjectFile? = null,
     eventFilePath: Path? = null,
+    seriesEventSummaries: List<DesktopEventSeriesEventSummary> = emptyList(),
     projectStatusText: String = "No Event File open.",
     hasUnsavedChanges: Boolean = false,
     siReaderState: DesktopSiReaderUiState = DesktopSiReaderUiState.disconnected(),
@@ -7221,6 +7274,7 @@ private fun RadioOManagerDesktopApp(
     onLockProtectedCourseOrder: () -> Unit = {},
     isNavActionEnabled: (DesktopNavAction) -> Boolean = { false },
     disabledNavActionReason: (DesktopNavAction) -> String? = { null },
+    onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit = {},
     onInsertTestControls: () -> Unit = {},
     onInsertTestCategories: () -> Unit = {},
     onInsertTestCompetitors: () -> Unit = {},
@@ -7255,7 +7309,15 @@ private fun RadioOManagerDesktopApp(
         var courseAnalysisApplyStatusText by remember(projectFile?.raceData?.race?.id) {
             mutableStateOf<String?>(null)
         }
-        val navigationReadiness = DesktopNavigationReadiness.from(projectFile)
+        val baseNavigationReadiness = DesktopNavigationReadiness.from(projectFile)
+        val hasValidSeriesContext = projectFile?.seriesLink?.let { link ->
+            seriesEventSummaries.any { summary ->
+                summary.isCurrentEvent && summary.seriesEventId == link.seriesEventId
+            }
+        } == true
+        // A backlink alone is not enough to enter the Series workflow; the manifest must list
+        // the current Event File because the manifest owns series membership.
+        val navigationReadiness = baseNavigationReadiness.copy(hasSeriesContext = hasValidSeriesContext)
         val activeBypassedDisabledNavigation = bypassedDisabledNavigation
             ?.activeFor(navState, navigationReadiness)
         val workspaceBackgroundColor = when {
@@ -7377,6 +7439,7 @@ private fun RadioOManagerDesktopApp(
                                     menuDescription = DesktopNavigation.selectedDescription(navState),
                                     projectFile = projectFile,
                                     eventFilePath = eventFilePath,
+                                    seriesEventSummaries = seriesEventSummaries,
                                     projectStatusText = projectStatusText,
                                     siReaderState = siReaderState,
                                     onRenameRace = onRenameRace,
@@ -7464,6 +7527,7 @@ private fun RadioOManagerDesktopApp(
                                     onSetUpdateCheckingEnabled = onSetUpdateCheckingEnabled,
                                     onSetCloudflarePagesPublishSettings = onSetCloudflarePagesPublishSettings,
                                     isNavActionEnabled = isNavActionEnabled,
+                                    onOpenSeriesEvent = onOpenSeriesEvent,
                                     onInsertTestControls = onInsertTestControls,
                                     onInsertTestCategories = onInsertTestCategories,
                                     onInsertTestCompetitors = onInsertTestCompetitors,
@@ -8154,6 +8218,7 @@ private fun SectionWorkspace(
     menuDescription: String,
     projectFile: EventProjectFile?,
     eventFilePath: Path?,
+    seriesEventSummaries: List<DesktopEventSeriesEventSummary>,
     projectStatusText: String,
     siReaderState: DesktopSiReaderUiState,
     onRenameRace: (String) -> Unit,
@@ -8240,6 +8305,7 @@ private fun SectionWorkspace(
     onSetUpdateCheckingEnabled: (Boolean) -> Unit,
     onSetCloudflarePagesPublishSettings: (DesktopCloudflarePagesPublishSettings) -> Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
+    onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit,
     onInsertTestControls: () -> Unit,
     onInsertTestCategories: () -> Unit,
     onInsertTestCompetitors: () -> Unit,
@@ -8385,6 +8451,13 @@ private fun SectionWorkspace(
                 onUpdateStartDrawSettings = onUpdateStartDrawSettings,
                 onDrawStartList = onDrawStartList,
                 onDrawBalancedStartList = onDrawBalancedStartList
+            )
+        }
+        if (section == DesktopSection.SeriesEvents) {
+            EventSeriesEventsPanel(
+                summaries = seriesEventSummaries,
+                onAddEvent = { onNavAction(DesktopNavAction.AddEventToSeries) },
+                onOpenEvent = onOpenSeriesEvent
             )
         }
         if (section == DesktopSection.Readouts && projectFile != null) {
@@ -9415,6 +9488,106 @@ private fun StartListDetailRow(row: EventStartListRow) {
         FixedTableText(row.competitorName, StartListTableColumns[2].width, rowColor)
         FixedTableText(row.categoryName, StartListTableColumns[3].width, rowColor)
         FixedTableText(row.siNumberText, StartListTableColumns[4].width, rowColor)
+    }
+}
+
+/** Shows the manifest-owned Event Files in the active Event Series. */
+@Composable
+private fun EventSeriesEventsPanel(
+    summaries: List<DesktopEventSeriesEventSummary>,
+    onAddEvent: () -> Unit,
+    onOpenEvent: (DesktopEventSeriesEventSummary) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onAddEvent) {
+                ButtonLabel("Add Event to Series...")
+            }
+        }
+        if (summaries.isEmpty()) {
+            Text(
+                text = "No Event Series manifest was found for this Event File.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+            return@Column
+        }
+        DetailHeaderRow(listOf("Events", "Missing files"))
+        DetailGridRow(
+            listOf(
+                summaries.size.toString(),
+                summaries.count { !it.exists }.toString()
+            )
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            EventSeriesEventHeaderRow()
+            summaries.forEach { summary ->
+                EventSeriesEventRow(summary, onOpenEvent)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventSeriesEventHeaderRow() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Order", modifier = Modifier.width(64.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Event", modifier = Modifier.weight(1.2f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Start", modifier = Modifier.width(160.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("File", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Status", modifier = Modifier.width(112.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Spacer(modifier = Modifier.width(88.dp))
+    }
+}
+
+@Composable
+private fun EventSeriesEventRow(
+    summary: DesktopEventSeriesEventSummary,
+    onOpenEvent: (DesktopEventSeriesEventSummary) -> Unit
+) {
+    val statusText = when {
+        summary.isCurrentEvent -> "Current"
+        !summary.exists -> "Missing"
+        else -> "Ready"
+    }
+    val statusColor = when {
+        summary.isCurrentEvent -> DesktopPalette.PrimaryVariant
+        !summary.exists -> DesktopPalette.Error
+        else -> DesktopPalette.Disconnected
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text((summary.order + 1).toString(), modifier = Modifier.width(64.dp), color = DesktopPalette.Black, fontSize = 13.sp)
+        Text(summary.displayName, modifier = Modifier.weight(1.2f), color = DesktopPalette.Black, fontSize = 13.sp)
+        Text(
+            summary.startDateTimeIso?.let(DesktopDateTimeText::displayIsoOrRaw).orEmpty(),
+            modifier = Modifier.width(160.dp),
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
+        Text(
+            summary.eventFilePath,
+            modifier = Modifier.weight(1f),
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(statusText, modifier = Modifier.width(112.dp), color = statusColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Button(
+            onClick = { onOpenEvent(summary) },
+            enabled = summary.exists && !summary.isCurrentEvent,
+            modifier = Modifier.width(88.dp)
+        ) {
+            ButtonLabel("Open")
+        }
     }
 }
 
