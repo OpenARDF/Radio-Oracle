@@ -2345,7 +2345,11 @@ internal fun desktopGdalWgs84BoundingBoxFromInfo(output: String): DesktopVenueEl
 }
 
 internal fun desktopPdalStacWgs84BoundingBoxFromInfo(output: String): DesktopVenueElevationBoundingBox {
-    val root = desktopGdalJson.parseToJsonElement(output).jsonObject
+    val jsonStart = output.indexOf('{')
+    require(jsonStart >= 0) {
+        "PDAL STAC info did not include JSON output."
+    }
+    val root = desktopGdalJson.parseToJsonElement(output.substring(jsonStart)).jsonObject
     val values = root["bbox"]
         ?.jsonArray
         ?.map { value -> value.jsonPrimitive.doubleOrNull }

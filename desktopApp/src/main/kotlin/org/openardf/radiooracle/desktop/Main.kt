@@ -11071,10 +11071,10 @@ private fun VenueElevationCacheImportPanel(
             LabeledTextField("Buffer (m)", bufferMetersDraft, { bufferMetersDraft = it }, Modifier.width(120.dp))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            LabeledTextField("Min lat", minLatitudeDraft, { minLatitudeDraft = it }, Modifier.width(150.dp), placeholder = "35.123456")
-            LabeledTextField("Max lat", maxLatitudeDraft, { maxLatitudeDraft = it }, Modifier.width(150.dp), placeholder = "35.234567")
-            LabeledTextField("Min lon", minLongitudeDraft, { minLongitudeDraft = it }, Modifier.width(150.dp), placeholder = "-82.345678")
-            LabeledTextField("Max lon", maxLongitudeDraft, { maxLongitudeDraft = it }, Modifier.width(150.dp), placeholder = "-82.234567")
+            LabeledTextField("Min lat", minLatitudeDraft, { minLatitudeDraft = it }, Modifier.width(150.dp), placeholder = "ex: 35.123456")
+            LabeledTextField("Max lat", maxLatitudeDraft, { maxLatitudeDraft = it }, Modifier.width(150.dp), placeholder = "ex: 35.234567")
+            LabeledTextField("Min lon", minLongitudeDraft, { minLongitudeDraft = it }, Modifier.width(150.dp), placeholder = "ex: -82.345678")
+            LabeledTextField("Max lon", maxLongitudeDraft, { maxLongitudeDraft = it }, Modifier.width(150.dp), placeholder = "ex: -82.234567")
         }
         estimate?.let {
             Text(
