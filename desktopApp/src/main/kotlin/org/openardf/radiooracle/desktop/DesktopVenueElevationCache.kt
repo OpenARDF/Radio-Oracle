@@ -2038,7 +2038,7 @@ private class DesktopGdalTools(
                     throw failure
                 }
             }
-        require(exitCode == 0) {
+        require(gdalLocationInfoExitIsAcceptable(exitCode, error, outputLineCount, points.size)) {
             "GDAL gdallocationinfo failed with exit code $exitCode: ${error.trim()}"
         }
         onSampledCount(outputLineCount.coerceAtMost(points.size))
@@ -2103,6 +2103,15 @@ private class DesktopGdalTools(
         }
     }
 }
+
+internal fun gdalLocationInfoExitIsAcceptable(
+    exitCode: Int,
+    error: String,
+    outputLineCount: Int,
+    pointCount: Int
+): Boolean =
+    exitCode == 0 ||
+        (exitCode == 1 && error.isBlank() && outputLineCount >= pointCount)
 
 private class DesktopPdalTools(
     private val pdal: Path

@@ -148,6 +148,15 @@ class DesktopVenueElevationCacheTest {
     }
 
     @Test
+    fun acceptsCompleteGdalLocationInfoOutputWhenExitCodeReportsEdgeNoData() {
+        assertTrue(gdalLocationInfoExitIsAcceptable(exitCode = 0, error = "", outputLineCount = 10, pointCount = 10))
+        assertTrue(gdalLocationInfoExitIsAcceptable(exitCode = 1, error = "", outputLineCount = 10, pointCount = 10))
+        assertTrue(!gdalLocationInfoExitIsAcceptable(exitCode = 1, error = "failed", outputLineCount = 10, pointCount = 10))
+        assertTrue(!gdalLocationInfoExitIsAcceptable(exitCode = 1, error = "", outputLineCount = 9, pointCount = 10))
+        assertTrue(!gdalLocationInfoExitIsAcceptable(exitCode = 2, error = "", outputLineCount = 10, pointCount = 10))
+    }
+
+    @Test
     fun prefersLidarDtmCacheOverFinerUsgsCache() {
         withTemporaryUserHome { home ->
             val cacheDirectory = home
