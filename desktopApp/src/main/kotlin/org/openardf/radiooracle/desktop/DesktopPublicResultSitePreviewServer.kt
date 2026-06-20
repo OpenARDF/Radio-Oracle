@@ -10,7 +10,8 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class DesktopPublicResultSitePreviewServer(
-    private val siteDirectory: Path
+    private val siteDirectory: Path,
+    private val sharedAddress: DesktopEventFileTransferAddress? = null
 ) {
     private var server: HttpServer? = null
     private var executor: ExecutorService? = null
@@ -27,7 +28,12 @@ class DesktopPublicResultSitePreviewServer(
             "Public results site folder does not contain index.html."
         }
 
-        val nextServer = HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0)
+        val bindAddress = if (sharedAddress == null) {
+            InetAddress.getLoopbackAddress()
+        } else {
+            InetAddress.getByName("0.0.0.0")
+        }
+        val nextServer = HttpServer.create(InetSocketAddress(bindAddress, 0), 0)
         val nextExecutor = Executors.newSingleThreadExecutor { runnable ->
             Thread(runnable, "radio-oracle-public-site-preview").apply { isDaemon = true }
         }
@@ -39,7 +45,7 @@ class DesktopPublicResultSitePreviewServer(
 
         server = nextServer
         executor = nextExecutor
-        url = "http://127.0.0.1:${nextServer.address.port}/"
+        url = "http://${sharedAddress?.host ?: "127.0.0.1"}:${nextServer.address.port}/"
         return requireNotNull(url)
     }
 

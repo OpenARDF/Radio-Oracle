@@ -35,6 +35,27 @@ class DesktopPublicResultSitePreviewServerTest {
     }
 
     @Test
+    fun canAdvertiseSharedAddressForWifiServing() {
+        val directory = Files.createTempDirectory("rom-public-site-preview-wifi")
+        Files.writeString(directory.resolve("index.html"), "<!doctype html><h1>Shared</h1>")
+        val server = DesktopPublicResultSitePreviewServer(
+            directory,
+            sharedAddress = DesktopEventFileTransferAddress("Test WiFi", "127.0.0.1", "en0")
+        )
+        try {
+            val url = server.start()
+            val connection = URL(url).openConnection() as HttpURLConnection
+            val indexHtml = connection.inputStream.bufferedReader().readText()
+
+            assertTrue(url.startsWith("http://127.0.0.1:"))
+            assertEquals(200, connection.responseCode)
+            assertTrue(indexHtml.contains("Shared"))
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
     fun supportsHeadRequests() {
         val directory = Files.createTempDirectory("rom-public-site-preview-head")
         Files.writeString(directory.resolve("index.html"), "<!doctype html>")

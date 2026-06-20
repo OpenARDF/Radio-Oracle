@@ -69,8 +69,10 @@ enum class DesktopNavAction {
     DownloadSiCard,
     StartContinuousSiReadout,
     StopContinuousSiReadout,
-    StartLocalResultDisplay,
-    StopLocalResultDisplay,
+    OpenLocalResultsWebPage,
+    PreviewLocalResultsWebPage,
+    ShareLocalResultsWebServerOnWifi,
+    StopLocalResultsWebServer,
     SendRobis,
     ShowDebugLogHelp,
     ShowAbout
@@ -455,8 +457,42 @@ object DesktopNavigation {
                     "Live Results",
                     workflow,
                     listOf(
-                        action("results.start-display", "Start Display", workflow, DesktopNavAction.StartLocalResultDisplay),
-                        action("results.stop-display", "Stop Display", workflow, DesktopNavAction.StopLocalResultDisplay),
+                        group(
+                            "results.local-web-server",
+                            "Local Web Server",
+                            workflow,
+                            listOf(
+                                action(
+                                    "results.open-local-web-page",
+                                    "Open Web Page",
+                                    workflow,
+                                    DesktopNavAction.OpenLocalResultsWebPage,
+                                    section = DesktopSection.LiveResultSettings
+                                ),
+                                action(
+                                    "results.preview-local-web-page",
+                                    "Preview Web Page",
+                                    workflow,
+                                    DesktopNavAction.PreviewLocalResultsWebPage,
+                                    section = DesktopSection.LiveResultSettings
+                                ),
+                                action(
+                                    "results.share-local-web-server-wifi",
+                                    "Share on WiFi",
+                                    workflow,
+                                    DesktopNavAction.ShareLocalResultsWebServerOnWifi,
+                                    section = DesktopSection.LiveResultSettings
+                                ),
+                                action(
+                                    "results.stop-local-web-server",
+                                    "Stop Web Server",
+                                    workflow,
+                                    DesktopNavAction.StopLocalResultsWebServer,
+                                    section = DesktopSection.LiveResultSettings
+                                )
+                            ),
+                            DesktopSection.LiveResultSettings
+                        ),
                         action("results.send-robis", "Send ROBIS", workflow, DesktopNavAction.SendRobis),
                         item(
                             "results.live-settings",
@@ -981,14 +1017,20 @@ object DesktopNavigation {
             "Use Results to review scored competitor results, adjust manual readout status, and inspect result details after readouts are matched.",
         "results.live" to
             "Use Live Results to run local result display tools and send eligible live results to ROBIS.",
-        "results.start-display" to
-            "Use Start Display to launch the local result display service for spectators or officials.",
-        "results.stop-display" to
-            "Use Stop Display to shut down the local result display service.",
+        "results.local-web-server" to
+            "Use Local Web Server to serve the public results web page from this computer and refresh it after new SI-card downloads.",
+        "results.open-local-web-page" to
+            "Use Open Web Page to start or reopen the local results web page on this computer.",
+        "results.preview-local-web-page" to
+            "Use Preview Web Page to regenerate the public results web page immediately and open it on this computer.",
+        "results.share-local-web-server-wifi" to
+            "Use Share on WiFi to serve the public results web page to devices on the same Wi-Fi network.",
+        "results.stop-local-web-server" to
+            "Use Stop Web Server to shut down the local results web server.",
         "results.send-robis" to
             "Use Send ROBIS to send unsent matched live results to the configured ROBIS endpoint.",
         "results.live-settings" to
-            "Use Live Result Settings to configure ROBIS sending, background sending, and the local result display service.",
+            "Use Live Result Settings to configure ROBIS sending, background sending, and local result display options.",
         "results.exports" to
             "Use Exports to write result, readout, event-copy, JSON, XML, and ARDF-compatible files after race data is available.",
         "results.exports.result-files" to

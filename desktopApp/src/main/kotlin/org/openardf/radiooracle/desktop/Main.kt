@@ -387,6 +387,11 @@ fun main(args: Array<String>) = application {
         var isReadoutAlertSoundEnabled by remember { mutableStateOf(true) }
         var areAliasesEnabled by remember { mutableStateOf(true) }
         var localResultServerUrl by remember { mutableStateOf<String?>(null) }
+        var localResultsWebServerDirectory by remember { mutableStateOf<Path?>(null) }
+        var localResultsWebServerEventPath by remember { mutableStateOf<String?>(null) }
+        var localResultsWebServer by remember { mutableStateOf<DesktopPublicResultSitePreviewServer?>(null) }
+        var localResultsWebServerUrl by remember { mutableStateOf<String?>(null) }
+        var localResultsWebServerRefreshJob by remember { mutableStateOf<Job?>(null) }
         var publicResultSiteDirectory by remember { mutableStateOf<Path?>(null) }
         var publicResultSiteEventPath by remember { mutableStateOf<String?>(null) }
         var publicResultSitePreviewServer by remember { mutableStateOf<DesktopPublicResultSitePreviewServer?>(null) }
@@ -446,16 +451,27 @@ fun main(args: Array<String>) = application {
         val siPortMutex = remember { Mutex() }
         val activeEventFileTransferServer by rememberUpdatedState(eventFileTransferServer)
         val activeAndroidFileReceiveServer by rememberUpdatedState(androidFileReceiveServer)
+        val activeLocalResultsWebServer by rememberUpdatedState(localResultsWebServer)
+        val activeLocalResultsWebServerRefreshJob by rememberUpdatedState(localResultsWebServerRefreshJob)
         val activePublicResultSitePreviewServer by rememberUpdatedState(publicResultSitePreviewServer)
 
         LaunchedEffect(projectFile?.raceData?.race?.id) {
             publishedPublicResultSiteUrl = null
+            localResultsWebServerRefreshJob?.cancel()
+            localResultsWebServerRefreshJob = null
+            localResultsWebServer?.stop()
+            localResultsWebServer = null
+            localResultsWebServerUrl = null
+            localResultsWebServerDirectory = null
+            localResultsWebServerEventPath = null
         }
 
         DisposableEffect(Unit) {
             onDispose {
                 activeEventFileTransferServer?.stop()
                 activeAndroidFileReceiveServer?.stop()
+                activeLocalResultsWebServerRefreshJob?.cancel()
+                activeLocalResultsWebServer?.stop()
                 activePublicResultSitePreviewServer?.stop()
             }
         }
@@ -783,6 +799,58 @@ fun main(args: Array<String>) = application {
             DesktopDebugLog.info("EventFile", "Created new unsaved Event File")
         }
 
+        fun localResultsWebPageUrl(rootUrl: String, eventPath: String?): String =
+            eventPath
+                ?.takeIf { it.isNotBlank() }
+                ?.let { path -> "$rootUrl${path.trim('/')}/" }
+                ?: rootUrl
+
+        fun regenerateLocalResultsWebPage(): String {
+            val currentProject = requireNotNull(projectSession.currentProject) {
+                "Open or create an Event File before starting the local web server."
+            }
+            val directory = localResultsWebServerDirectory
+                ?: Files.createTempDirectory("radio-oracle-local-results-web").also {
+                    localResultsWebServerDirectory = it
+                }
+            val paths = DesktopProjectFiles.exportPublicResultsSite(
+                directory,
+                currentProject,
+                protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap()
+            )
+            localResultsWebServerDirectory = paths.directory
+            localResultsWebServerEventPath = paths.eventPath
+            DesktopDebugLog.info(
+                "PublicResults",
+                "Regenerated local results web page root=${paths.directory} event=${paths.eventPath}"
+            )
+            return paths.eventPath
+        }
+
+        fun scheduleLocalResultsWebPageRefresh() {
+            if (localResultsWebServer == null) {
+                return
+            }
+            localResultsWebServerRefreshJob?.cancel()
+            localResultsWebServerRefreshJob = appCoroutineScope.launch {
+                delay(60_000L)
+                runCatching {
+                    regenerateLocalResultsWebPage()
+                }.onSuccess {
+                    val url = localResultsWebServerUrl
+                    projectStatusText = if (url == null) {
+                        "Local results web page refreshed."
+                    } else {
+                        "Local results web page refreshed at $url"
+                    }
+                }.onFailure { error ->
+                    projectStatusText = "Local results web page refresh failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("PublicResults", projectStatusText)
+                }
+            }
+            projectStatusText = "Local results web page will refresh 1 minute after the latest SI download."
+        }
+
         fun appendSportIdentDownload(download: DesktopSportIdentCardBlockDownload): DesktopSportIdentAppendOutcome {
             val currentProject = projectSession.currentProject ?: return DesktopSportIdentAppendOutcome.DuplicateIgnored
             val isDuplicate = currentProject.raceData.containsReadoutForSiNumber(download.readout.siNumber)
@@ -808,6 +876,7 @@ fun main(args: Array<String>) = application {
             if (isReadoutAlertSoundEnabled && lastReadoutSeverity == EventLastReadoutSeverity.Error) {
                 beepDesktopReadoutAlert()
             }
+            scheduleLocalResultsWebPageRefresh()
             return when {
                 !isDuplicate -> DesktopSportIdentAppendOutcome.Added
                 readoutDuplicatePolicy == EventReadoutDuplicatePolicy.Replace ->
@@ -2632,6 +2701,71 @@ fun main(args: Array<String>) = application {
             startPublicResultsSitePreview()
         }
 
+        fun startLocalResultsWebServer(sharedAddress: DesktopEventFileTransferAddress? = null, regenerate: Boolean = false) {
+            runCatching {
+                if (regenerate || localResultsWebServerDirectory == null || localResultsWebServerEventPath == null) {
+                    regenerateLocalResultsWebPage()
+                }
+                val directory = requireNotNull(localResultsWebServerDirectory)
+                localResultsWebServer?.stop()
+                val server = DesktopPublicResultSitePreviewServer(
+                    siteDirectory = directory,
+                    sharedAddress = sharedAddress
+                )
+                val rootUrl = server.start()
+                val pageUrl = localResultsWebPageUrl(rootUrl, localResultsWebServerEventPath)
+                localResultsWebServer = server
+                localResultsWebServerUrl = pageUrl
+                browseExternalUrl(pageUrl).onSuccess {
+                    val scope = if (sharedAddress == null) "on this computer" else "on Wi-Fi"
+                    projectStatusText = "Local results web page running $scope at $pageUrl"
+                    DesktopDebugLog.info("PublicResults", projectStatusText)
+                }.onFailure { error ->
+                    projectStatusText =
+                        "Local results web page running at $pageUrl, but the browser did not open: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.warn("PublicResults", projectStatusText)
+                }
+            }.onFailure { error ->
+                localResultsWebServer?.stop()
+                localResultsWebServer = null
+                localResultsWebServerUrl = null
+                projectStatusText = "Local results web server failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("PublicResults", projectStatusText)
+            }
+        }
+
+        fun openLocalResultsWebPage() {
+            val runningUrl = localResultsWebServerUrl
+            if (runningUrl != null) {
+                openExternalUrl(runningUrl)
+                return
+            }
+            startLocalResultsWebServer()
+        }
+
+        fun previewLocalResultsWebPage() {
+            startLocalResultsWebServer(regenerate = true)
+        }
+
+        fun shareLocalResultsWebServerOnWifi() {
+            val address = discoverDesktopEventFileTransferAddresses().firstOrNull()
+            if (address == null) {
+                projectStatusText = "No Wi-Fi or LAN address is available for local results sharing."
+                DesktopDebugLog.warn("PublicResults", projectStatusText)
+                return
+            }
+            startLocalResultsWebServer(sharedAddress = address, regenerate = true)
+        }
+
+        fun stopLocalResultsWebServer() {
+            localResultsWebServerRefreshJob?.cancel()
+            localResultsWebServerRefreshJob = null
+            localResultsWebServer?.stop()
+            localResultsWebServer = null
+            localResultsWebServerUrl = null
+            projectStatusText = "Local results web server stopped."
+        }
+
         fun publishPublicResultsSite() {
             val directory = publicResultSiteDirectory ?: run {
                 projectStatusText = "Generate a public results site before publishing."
@@ -3389,8 +3523,10 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ShowAbout -> true
                 DesktopNavAction.SaveEventFile -> canSaveEventFile()
                 DesktopNavAction.StopContinuousSiReadout -> isContinuousSiReadoutActive
-                DesktopNavAction.StartLocalResultDisplay -> projectFile != null && localResultServerUrl == null
-                DesktopNavAction.StopLocalResultDisplay -> localResultServerUrl != null
+                DesktopNavAction.OpenLocalResultsWebPage,
+                DesktopNavAction.PreviewLocalResultsWebPage,
+                DesktopNavAction.ShareLocalResultsWebServerOnWifi -> projectFile != null
+                DesktopNavAction.StopLocalResultsWebServer -> localResultsWebServerUrl != null
                 DesktopNavAction.OpenPublicResultsSitePreview -> publicResultSiteDirectory != null
                 DesktopNavAction.PublishPublicResultsSite ->
                     publicResultSiteDirectory != null && !isPublishingPublicResultSite
@@ -3468,14 +3604,12 @@ fun main(args: Array<String>) = application {
                     }
                 DesktopNavAction.StopContinuousSiReadout ->
                     "Continuous SI readout is not running."
-                DesktopNavAction.StartLocalResultDisplay ->
-                    if (projectFile == null) {
-                        "Open or create an Event File before starting the local result display."
-                    } else {
-                        "The local result display is already running."
-                    }
-                DesktopNavAction.StopLocalResultDisplay ->
-                    "The local result display is not running."
+                DesktopNavAction.OpenLocalResultsWebPage,
+                DesktopNavAction.PreviewLocalResultsWebPage,
+                DesktopNavAction.ShareLocalResultsWebServerOnWifi ->
+                    "Open or create an Event File before starting the local web server."
+                DesktopNavAction.StopLocalResultsWebServer ->
+                    "The local results web server is not running."
                 DesktopNavAction.OpenPublicResultsSitePreview ->
                     "Generate a public results site before opening preview."
                 DesktopNavAction.PublishPublicResultsSite ->
@@ -3574,16 +3708,10 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.DownloadSiCard -> downloadSportIdentReadout()
                 DesktopNavAction.StartContinuousSiReadout -> startContinuousSportIdentReadout()
                 DesktopNavAction.StopContinuousSiReadout -> stopContinuousSportIdentReadout()
-                DesktopNavAction.StartLocalResultDisplay -> {
-                    val url = localResultServer.start()
-                    localResultServerUrl = url
-                    projectStatusText = "Local result display running at $url"
-                }
-                DesktopNavAction.StopLocalResultDisplay -> {
-                    localResultServer.stop()
-                    localResultServerUrl = null
-                    projectStatusText = "Local result display stopped."
-                }
+                DesktopNavAction.OpenLocalResultsWebPage -> openLocalResultsWebPage()
+                DesktopNavAction.PreviewLocalResultsWebPage -> previewLocalResultsWebPage()
+                DesktopNavAction.ShareLocalResultsWebServerOnWifi -> shareLocalResultsWebServerOnWifi()
+                DesktopNavAction.StopLocalResultsWebServer -> stopLocalResultsWebServer()
                 DesktopNavAction.SendRobis -> sendRobisLiveResults()
                 DesktopNavAction.ShowDebugLogHelp -> {
                     val logDirectory = DesktopDebugLog.logDirectory()

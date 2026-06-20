@@ -945,6 +945,41 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun liveResultsMenuExposesLocalWebServerWorkflow() {
+        val liveResults = DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport)
+            .first { it.label == "Live Results" }
+        val localWebServer = liveResults.children.first { it.label == "Local Web Server" }
+
+        assertEquals(
+            listOf(
+                "Local Web Server",
+                "Send ROBIS",
+                "Live Result Settings"
+            ),
+            liveResults.children.map { it.label }
+        )
+        assertEquals(DesktopSection.LiveResultSettings, localWebServer.section)
+        assertEquals(
+            listOf(
+                "Open Web Page",
+                "Preview Web Page",
+                "Share on WiFi",
+                "Stop Web Server"
+            ),
+            localWebServer.children.map { it.label }
+        )
+        assertEquals(
+            listOf(
+                DesktopNavAction.OpenLocalResultsWebPage,
+                DesktopNavAction.PreviewLocalResultsWebPage,
+                DesktopNavAction.ShareLocalResultsWebServerOnWifi,
+                DesktopNavAction.StopLocalResultsWebServer
+            ),
+            localWebServer.children.mapNotNull { it.action }
+        )
+    }
+
+    @Test
     fun cloudflareWebsiteMenuExposesPublicSiteWorkflow() {
         val exports = DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport)
             .first { it.label == "Exports" }
