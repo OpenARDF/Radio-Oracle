@@ -514,7 +514,6 @@ object DesktopNavigation {
                     "Series Validation",
                     workflow,
                     listOf(
-                        item("series.validation.view", "Validation Results", workflow, DesktopSection.SeriesValidation),
                         action("series.validation.run", "Validate Series", workflow, DesktopNavAction.ValidateEventSeries)
                     ),
                     DesktopSection.SeriesValidation
@@ -1244,8 +1243,6 @@ object DesktopNavigation {
             "Use Competitor Matching to review same-person matches across series events by SI number, start number fallback, and overrides.",
         "series.validation" to
             "Use Series Validation to check manifest membership, required Event Files, backlinks, and cross-event consistency.",
-        "series.validation.view" to
-            "Use Validation Results to inspect the latest series validation findings.",
         "series.validation.run" to
             "Use Validate Series to re-check the open Event Series manifest and linked Event Files.",
         "series.settings" to

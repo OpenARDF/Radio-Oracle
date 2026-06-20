@@ -63,7 +63,7 @@ class DesktopNavigationTest {
             roots.first { it.label == "Start Fairness" }.children.map { it.label }
         )
         assertEquals(
-            listOf("Validation Results", "Validate Series"),
+            listOf("Validate Series"),
             roots.first { it.label == "Series Validation" }.children.map { it.label }
         )
         assertEquals(
