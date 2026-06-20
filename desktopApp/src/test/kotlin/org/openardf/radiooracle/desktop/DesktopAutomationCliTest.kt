@@ -265,6 +265,18 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun navSelectReportsClearSeriesValidationPath() {
+        val result = runAutomation("nav-select", "Event Series > Series Validation > Validation Results")
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"nav-select\""))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Event Series > Series Validation > Validation Results\""))
+        assertTrue(result.stdout.contains("\"selectedSection\":\"Series Validation\""))
+        assertTrue(result.stdout.contains("\"selectedItemId\":\"series.validation.view\""))
+        assertTrue(result.stdout.contains("\"action\":null"))
+    }
+
+    @Test
     fun navSelectDraftModeReportsGuardBeforeLeavingNewEventFile() {
         val result = runAutomation("nav-select", "--draft", "Event File > New Event File > < Back")
 

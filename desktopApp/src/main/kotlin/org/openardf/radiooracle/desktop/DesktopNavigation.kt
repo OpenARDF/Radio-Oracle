@@ -490,7 +490,7 @@ object DesktopNavigation {
                     listOf(
                         item(
                             "series.start-fairness.view",
-                            "Start Fairness",
+                            "Start History",
                             workflow,
                             DesktopSection.SeriesStartFairness
                         ),
@@ -514,7 +514,7 @@ object DesktopNavigation {
                     "Series Validation",
                     workflow,
                     listOf(
-                        item("series.validation.view", "Series Validation", workflow, DesktopSection.SeriesValidation),
+                        item("series.validation.view", "Validation Results", workflow, DesktopSection.SeriesValidation),
                         action("series.validation.run", "Validate Series", workflow, DesktopNavAction.ValidateEventSeries)
                     ),
                     DesktopSection.SeriesValidation
@@ -524,7 +524,7 @@ object DesktopNavigation {
                     "Series Settings",
                     workflow,
                     listOf(
-                        item("series.settings.view", "Series Settings", workflow, DesktopSection.SeriesSettings),
+                        item("series.settings.view", "Manifest Details", workflow, DesktopSection.SeriesSettings),
                         action("series.settings.export", "Export Series...", workflow, DesktopNavAction.ExportEventSeries)
                     ),
                     DesktopSection.SeriesSettings
@@ -1237,7 +1237,7 @@ object DesktopNavigation {
         "series.start-fairness" to
             "Use Start Fairness to review and balance start thirds across prior events in this series.",
         "series.start-fairness.view" to
-            "Use Start Fairness to inspect current cross-event start-third history.",
+            "Use Start History to inspect current cross-event start-third history.",
         "series.start-fairness.balance" to
             "Use Balance From Event Series to draw the current event using prior linked events as the start-third history source.",
         "series.competitor-matching" to
@@ -1245,13 +1245,13 @@ object DesktopNavigation {
         "series.validation" to
             "Use Series Validation to check manifest membership, required Event Files, backlinks, and cross-event consistency.",
         "series.validation.view" to
-            "Use Series Validation to inspect the latest series validation findings.",
+            "Use Validation Results to inspect the latest series validation findings.",
         "series.validation.run" to
             "Use Validate Series to re-check the open Event Series manifest and linked Event Files.",
         "series.settings" to
             "Use Series Settings to review series metadata and export a clean backup package.",
         "series.settings.view" to
-            "Use Series Settings to inspect the open Event Series manifest.",
+            "Use Manifest Details to inspect the open Event Series manifest.",
         "series.settings.export" to
             "Use Export Series to copy only the manifest and manifest-listed Event Files to a clean backup folder."
     )

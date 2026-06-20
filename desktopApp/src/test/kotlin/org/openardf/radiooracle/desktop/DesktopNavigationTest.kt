@@ -55,6 +55,29 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun seriesSubmenusUseDistinctDestinationLabels() {
+        val roots = DesktopNavigation.rootItems(DesktopWorkflow.Series)
+
+        assertEquals(
+            listOf("Start History", "Balance From Event Series"),
+            roots.first { it.label == "Start Fairness" }.children.map { it.label }
+        )
+        assertEquals(
+            listOf("Validation Results", "Validate Series"),
+            roots.first { it.label == "Series Validation" }.children.map { it.label }
+        )
+        assertEquals(
+            listOf("Manifest Details", "Export Series..."),
+            roots.first { it.label == "Series Settings" }.children.map { it.label }
+        )
+    }
+
+    @Test
+    fun seriesSubmenuGroupsDoNotRepeatTheirParentLabel() {
+        assertNoRepeatedParentChildLabels(DesktopNavigation.rootItems(DesktopWorkflow.Series))
+    }
+
+    @Test
     fun bottomNavigationDisablesWorkflowsThatNeedAnOpenEventFile() {
         assertFalse(DesktopWorkflow.Setup.requiresEventFileInBottomBar)
         assertTrue(DesktopWorkflow.RaceOps.requiresEventFileInBottomBar)
@@ -1201,6 +1224,16 @@ class DesktopNavigationTest {
         assertEquals("settings.about", state.selectedItemId)
         assertEquals("About Radio-Oracle...", DesktopNavigation.selectedLabel(state))
         assertEquals("Help/About/App Settings > Help > About Radio-Oracle...", DesktopNavigation.breadcrumb(state))
+    }
+
+    private fun assertNoRepeatedParentChildLabels(items: List<DesktopNavItem>) {
+        items.forEach { item ->
+            assertFalse(
+                "Submenu '${item.label}' should not contain a child with the same label.",
+                item.children.any { child -> child.label == item.label }
+            )
+            assertNoRepeatedParentChildLabels(item.children)
+        }
     }
 
     private fun flatten(items: List<DesktopNavItem>): List<DesktopNavItem> =
