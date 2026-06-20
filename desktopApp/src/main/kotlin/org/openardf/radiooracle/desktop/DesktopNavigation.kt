@@ -467,41 +467,49 @@ object DesktopNavigation {
                                     "Open Web Page",
                                     workflow,
                                     DesktopNavAction.OpenLocalResultsWebPage,
-                                    section = DesktopSection.LiveResultSettings
+                                    section = DesktopSection.LocalResultsWebServer
                                 ),
                                 action(
                                     "results.preview-local-web-page",
                                     "Preview Web Page",
                                     workflow,
                                     DesktopNavAction.PreviewLocalResultsWebPage,
-                                    section = DesktopSection.LiveResultSettings
+                                    section = DesktopSection.LocalResultsWebServer
                                 ),
                                 action(
                                     "results.share-local-web-server-wifi",
                                     "Share on WiFi",
                                     workflow,
                                     DesktopNavAction.ShareLocalResultsWebServerOnWifi,
-                                    section = DesktopSection.LiveResultSettings
+                                    section = DesktopSection.LocalResultsWebServer
                                 ),
                                 action(
                                     "results.stop-local-web-server",
                                     "Stop Web Server",
                                     workflow,
                                     DesktopNavAction.StopLocalResultsWebServer,
-                                    section = DesktopSection.LiveResultSettings
+                                    section = DesktopSection.LocalResultsWebServer
                                 )
                             ),
-                            DesktopSection.LiveResultSettings
+                            DesktopSection.LocalResultsWebServer
                         ),
-                        action("results.send-robis", "Send ROBIS", workflow, DesktopNavAction.SendRobis),
-                        item(
-                            "results.live-settings",
-                            "Live Result Settings",
+                        group(
+                            "results.robis",
+                            "ROBIS",
                             workflow,
-                            DesktopSection.LiveResultSettings,
-                            requiresEventFile = false
+                            listOf(
+                                action(
+                                    "results.send-robis",
+                                    "Send ROBIS",
+                                    workflow,
+                                    DesktopNavAction.SendRobis,
+                                    section = DesktopSection.RobisLiveResults
+                                )
+                            ),
+                            DesktopSection.RobisLiveResults
                         )
-                    )
+                    ),
+                    DesktopSection.LiveResultsOverview
                 ),
                 group(
                     "results.exports",
@@ -1016,7 +1024,7 @@ object DesktopNavigation {
         "results.results" to
             "Use Results to review scored competitor results, adjust manual readout status, and inspect result details after readouts are matched.",
         "results.live" to
-            "Use Live Results to run local result display tools and send eligible live results to ROBIS.",
+            "Live Results has two separate and independent options. Local Web Server serves a public results web page from this computer for local preview or devices on the same Wi-Fi network. ROBIS sends eligible matched live results to the configured external ROBIS endpoint.",
         "results.local-web-server" to
             "Use Local Web Server to serve the public results web page from this computer and refresh it after new SI-card downloads.",
         "results.open-local-web-page" to
@@ -1027,10 +1035,10 @@ object DesktopNavigation {
             "Use Share on WiFi to serve the public results web page to devices on the same Wi-Fi network.",
         "results.stop-local-web-server" to
             "Use Stop Web Server to shut down the local results web server.",
+        "results.robis" to
+            "Use ROBIS to send eligible matched live results to the configured ROBIS endpoint, either manually or with background sending enabled.",
         "results.send-robis" to
             "Use Send ROBIS to send unsent matched live results to the configured ROBIS endpoint.",
-        "results.live-settings" to
-            "Use Live Result Settings to configure ROBIS sending, background sending, and local result display options.",
         "results.exports" to
             "Use Exports to write result, readout, event-copy, JSON, XML, and ARDF-compatible files after race data is available.",
         "results.exports.result-files" to
@@ -1104,7 +1112,7 @@ object DesktopNavigation {
         "setup.event-file.si-settings" to
             "Use SI Readout Settings to configure SI-card download behavior used during Race Ops.",
         "setup.event-file.live-settings" to
-            "Use Live Result Settings to configure ROBIS and local result-display behavior.",
+            "Use Live Results to choose between the local web server and ROBIS live-result workflows.",
         "setup.event-file.display-settings" to
             "Use Display Settings to configure readout and result display preferences.",
         "setup.event-file.app-settings" to
@@ -1187,9 +1195,9 @@ object DesktopNavigation {
                     ),
                     item(
                         "setup.event-file.live-settings",
-                        "Live Result Settings",
+                        "Live Results",
                         workflow,
-                        DesktopSection.LiveResultSettings,
+                        DesktopSection.LiveResultsOverview,
                         requiresEventFile = false
                     ),
                     item(

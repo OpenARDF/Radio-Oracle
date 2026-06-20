@@ -66,7 +66,9 @@ enum class DesktopSection(val label: String) {
     Results("Results"),
     PublicResultsSite("Cloudflare Website"),
     PublicResultsLink("View Public Results"),
-    LiveResultSettings("Live Result Settings"),
+    LiveResultsOverview("Live Results"),
+    LocalResultsWebServer("Local Web Server"),
+    RobisLiveResults("ROBIS"),
     DisplaySettings("Display Settings"),
     EventDiagnostics("Readiness"),
     Settings("Settings")

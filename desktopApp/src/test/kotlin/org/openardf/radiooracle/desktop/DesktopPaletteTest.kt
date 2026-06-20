@@ -27,7 +27,9 @@ class DesktopPaletteTest {
                 "Results",
                 "Cloudflare Website",
                 "View Public Results",
-                "Live Result Settings",
+                "Live Results",
+                "Local Web Server",
+                "ROBIS",
                 "Display Settings",
                 "Readiness",
                 "Settings"

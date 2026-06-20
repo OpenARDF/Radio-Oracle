@@ -352,9 +352,6 @@ fun main(args: Array<String>) = application {
             startupProjectPath(args.firstOrNull()?.let(Path::of))
         }
         val projectSession = remember { DesktopProjectSession(DesktopProjectFiles) }
-        val localResultServer = remember {
-            DesktopLocalResultServer(projectSupplier = { projectSession.currentProject })
-        }
         val publicResultSitePublisher = remember { DesktopCloudflarePagesPublisher() }
         val ticketPrinter = remember { DesktopTicketPrinter() }
         val appCoroutineScope = rememberCoroutineScope()
@@ -386,7 +383,6 @@ fun main(args: Array<String>) = application {
         var readoutDuplicatePolicy by remember { mutableStateOf(EventReadoutDuplicatePolicy.Reject) }
         var isReadoutAlertSoundEnabled by remember { mutableStateOf(true) }
         var areAliasesEnabled by remember { mutableStateOf(true) }
-        var localResultServerUrl by remember { mutableStateOf<String?>(null) }
         var localResultsWebServerDirectory by remember { mutableStateOf<Path?>(null) }
         var localResultsWebServerEventPath by remember { mutableStateOf<String?>(null) }
         var localResultsWebServer by remember { mutableStateOf<DesktopPublicResultSitePreviewServer?>(null) }
@@ -3103,7 +3099,6 @@ fun main(args: Array<String>) = application {
             pendingDirtyProjectAction = null
             when (action) {
                 PendingDirtyProjectAction.ExitApplication -> {
-                    localResultServer.stop()
                     exitApplication()
                 }
                 PendingDirtyProjectAction.NewProject -> createNewProject()
@@ -3121,7 +3116,6 @@ fun main(args: Array<String>) = application {
                 PendingDirtyProjectAction.ExitApplication
             )
             if (pendingDirtyProjectAction == null) {
-                localResultServer.stop()
                 exitApplication()
             }
         }
@@ -4274,7 +4268,7 @@ fun main(args: Array<String>) = application {
             readoutDuplicatePolicy = readoutDuplicatePolicy,
             isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
             areAliasesEnabled = areAliasesEnabled,
-            localResultServerUrl = localResultServerUrl,
+            localResultsWebServerUrl = localResultsWebServerUrl,
             publishedPublicResultSiteUrl = publishedPublicResultSiteUrl,
             printerDiagnostics = printerDiagnostics,
             isUpdateCheckingEnabled = isUpdateCheckingEnabled,
@@ -4892,21 +4886,6 @@ fun main(args: Array<String>) = application {
                 } else {
                     "Readout alert sounds disabled."
                 }
-            },
-            onStartLocalResultServer = {
-                runCatching {
-                    localResultServer.start()
-                }.onSuccess { url ->
-                    localResultServerUrl = url
-                    projectStatusText = "Local result display running at $url"
-                }.onFailure { error ->
-                    projectStatusText = "Local result display failed: ${error.message ?: error::class.simpleName}"
-                }
-            },
-            onStopLocalResultServer = {
-                localResultServer.stop()
-                localResultServerUrl = null
-                projectStatusText = "Local result display stopped."
             },
             hasDefaultUnsavedNewEventFileDraft = isDefaultUnsavedNewEventFileDraft(),
             hasEditedUnsavedNewEventFileDraft = hasEditedUnsavedNewEventFileDraft(),
@@ -6938,7 +6917,7 @@ private fun RadioOManagerDesktopApp(
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy = EventReadoutDuplicatePolicy.Reject,
     isReadoutAlertSoundEnabled: Boolean = true,
     areAliasesEnabled: Boolean = true,
-    localResultServerUrl: String? = null,
+    localResultsWebServerUrl: String? = null,
     publishedPublicResultSiteUrl: String? = null,
     printerDiagnostics: DesktopPrinterDiagnostics = DesktopPrinterDiagnostics.from(emptyList()),
     isUpdateCheckingEnabled: Boolean = true,
@@ -6985,8 +6964,6 @@ private fun RadioOManagerDesktopApp(
     onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit = {},
     onSetReadoutAlertSoundEnabled: (Boolean) -> Unit = {},
     onSetAliasesEnabled: (Boolean) -> Unit = {},
-    onStartLocalResultServer: () -> Unit = {},
-    onStopLocalResultServer: () -> Unit = {},
     isProtectedCourseOrderUnlocked: Boolean = false,
     protectedIdealOrderByCategoryId: Map<String, String> = emptyMap(),
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
@@ -7218,7 +7195,7 @@ private fun RadioOManagerDesktopApp(
                                     readoutDuplicatePolicy = readoutDuplicatePolicy,
                                     isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
                                     areAliasesEnabled = areAliasesEnabled,
-                                    localResultServerUrl = localResultServerUrl,
+                                    localResultsWebServerUrl = localResultsWebServerUrl,
                                     publishedPublicResultSiteUrl = publishedPublicResultSiteUrl,
                                     printerDiagnostics = printerDiagnostics,
                                     isUpdateCheckingEnabled = isUpdateCheckingEnabled,
@@ -7229,8 +7206,6 @@ private fun RadioOManagerDesktopApp(
                                     onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
                                     onSetReadoutAlertSoundEnabled = onSetReadoutAlertSoundEnabled,
                                     onSetAliasesEnabled = onSetAliasesEnabled,
-                                    onStartLocalResultServer = onStartLocalResultServer,
-                                    onStopLocalResultServer = onStopLocalResultServer,
                                     isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
                                     protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                                     protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
@@ -7997,7 +7972,7 @@ private fun SectionWorkspace(
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
     isReadoutAlertSoundEnabled: Boolean,
     areAliasesEnabled: Boolean,
-    localResultServerUrl: String?,
+    localResultsWebServerUrl: String?,
     publishedPublicResultSiteUrl: String?,
     printerDiagnostics: DesktopPrinterDiagnostics,
     isUpdateCheckingEnabled: Boolean,
@@ -8008,8 +7983,6 @@ private fun SectionWorkspace(
     onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit,
     onSetReadoutAlertSoundEnabled: (Boolean) -> Unit,
     onSetAliasesEnabled: (Boolean) -> Unit,
-    onStartLocalResultServer: () -> Unit,
-    onStopLocalResultServer: () -> Unit,
     isProtectedCourseOrderUnlocked: Boolean,
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
@@ -8250,19 +8223,32 @@ private fun SectionWorkspace(
                 isEventFileOpen = projectFile != null
             )
         }
-        if (section == DesktopSection.LiveResultSettings) {
-            LiveResultSettingsPanel(
+        if (section == DesktopSection.LiveResultsOverview) {
+            LiveResultsOverviewPanel()
+        }
+        if (section == DesktopSection.LocalResultsWebServer) {
+            LocalResultsWebServerPanel(
+                localResultsWebServerUrl = localResultsWebServerUrl,
+                isOpenEnabled = isNavActionEnabled(DesktopNavAction.OpenLocalResultsWebPage),
+                isPreviewEnabled = isNavActionEnabled(DesktopNavAction.PreviewLocalResultsWebPage),
+                isShareOnWifiEnabled = isNavActionEnabled(DesktopNavAction.ShareLocalResultsWebServerOnWifi),
+                isStopEnabled = isNavActionEnabled(DesktopNavAction.StopLocalResultsWebServer),
+                onOpen = { onNavAction(DesktopNavAction.OpenLocalResultsWebPage) },
+                onPreview = { onNavAction(DesktopNavAction.PreviewLocalResultsWebPage) },
+                onShareOnWifi = { onNavAction(DesktopNavAction.ShareLocalResultsWebServerOnWifi) },
+                onStop = { onNavAction(DesktopNavAction.StopLocalResultsWebServer) }
+            )
+        }
+        if (section == DesktopSection.RobisLiveResults) {
+            RobisLiveResultsPanel(
                 diagnostics = DesktopProjectDiagnostics.from(
                     projectFile,
                     protectedCourseInfoByCategoryId.takeIf { isProtectedCourseOrderUnlocked } ?: emptyMap()
                 ),
                 isSendingLiveResults = isSendingLiveResults,
                 isBackgroundLiveResultSendingEnabled = isBackgroundLiveResultSendingEnabled,
-                localResultServerUrl = localResultServerUrl,
                 onSendRobisLiveResults = onSendRobisLiveResults,
-                onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
-                onStartLocalResultServer = onStartLocalResultServer,
-                onStopLocalResultServer = onStopLocalResultServer
+                onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled
             )
         }
         if (section == DesktopSection.DisplaySettings) {
@@ -8498,35 +8484,96 @@ private fun SiReadoutSettingsPanel(
     }
 }
 
-/** Shows live result display and ROBIS result-sending settings. */
+/** Explains the separate live-results paths. */
 @Composable
-private fun LiveResultSettingsPanel(
+private fun LiveResultsOverviewPanel() {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Choose Local Web Server or ROBIS from the Live Results menu.",
+            color = DesktopPalette.Black,
+            fontSize = 14.sp
+        )
+    }
+}
+
+/** Shows local public-results web server status and actions. */
+@Composable
+private fun LocalResultsWebServerPanel(
+    localResultsWebServerUrl: String?,
+    isOpenEnabled: Boolean,
+    isPreviewEnabled: Boolean,
+    isShareOnWifiEnabled: Boolean,
+    isStopEnabled: Boolean,
+    onOpen: () -> Unit,
+    onPreview: () -> Unit,
+    onShareOnWifi: () -> Unit,
+    onStop: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        DetailRow("Web server", localResultsWebServerUrl ?: "Stopped")
+        Row(horizontalArrangement = Arrangement.spacedBy(TableColumnGap)) {
+            Button(
+                onClick = onOpen,
+                enabled = isOpenEnabled
+            ) {
+                ButtonLabel("Open Web Page")
+            }
+            Button(
+                onClick = onPreview,
+                enabled = isPreviewEnabled
+            ) {
+                ButtonLabel("Preview Web Page")
+            }
+            Button(
+                onClick = onShareOnWifi,
+                enabled = isShareOnWifiEnabled
+            ) {
+                ButtonLabel("Share on WiFi")
+            }
+            Button(
+                onClick = onStop,
+                enabled = isStopEnabled
+            ) {
+                ButtonLabel("Stop Web Server")
+            }
+        }
+        localResultsWebServerUrl?.let { url ->
+            val qrCode = remember(url) {
+                desktopEventFileTransferQrCode(url, size = 320)
+            }
+            Image(
+                bitmap = qrCode.toComposeImageBitmap(),
+                contentDescription = "Local results web server QR code",
+                modifier = Modifier
+                    .width(220.dp)
+                    .height(220.dp)
+                    .align(Alignment.Start),
+                contentScale = ContentScale.Fit
+            )
+            SelectionContainer {
+                Text(
+                    text = url,
+                    color = DesktopPalette.Primary,
+                    fontSize = 14.sp,
+                    textDecoration = TextDecoration.Underline,
+                    softWrap = true
+                )
+            }
+        }
+    }
+}
+
+/** Shows ROBIS result-sending settings. */
+@Composable
+private fun RobisLiveResultsPanel(
     diagnostics: DesktopProjectDiagnostics,
     isSendingLiveResults: Boolean,
     isBackgroundLiveResultSendingEnabled: Boolean,
-    localResultServerUrl: String?,
     onSendRobisLiveResults: () -> Unit,
-    onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
-    onStartLocalResultServer: () -> Unit,
-    onStopLocalResultServer: () -> Unit
+    onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        DetailRow("Local result display", localResultServerUrl ?: "Stopped")
-        Row(horizontalArrangement = Arrangement.spacedBy(TableColumnGap)) {
-            Button(
-                onClick = onStartLocalResultServer,
-                enabled = diagnostics.projectState == "Event File open" && localResultServerUrl == null
-            ) {
-                ButtonLabel("Start Display")
-            }
-            Button(
-                onClick = onStopLocalResultServer,
-                enabled = localResultServerUrl != null
-            ) {
-                ButtonLabel("Stop Display")
-            }
-        }
-        DetailRow("Live results", diagnostics.liveResultPlanText)
+        DetailRow("ROBIS results", diagnostics.liveResultPlanText)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(
                 checked = isBackgroundLiveResultSendingEnabled,

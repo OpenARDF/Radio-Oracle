@@ -67,11 +67,9 @@ class DesktopNavigationTest {
             .first { it.label == "SI Readout Settings" }
         val resultsLiveSettings = DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport)
             .first { it.label == "Live Results" }
-            .children
-            .first { it.label == "Live Result Settings" }
 
         assertEquals(DesktopSection.SiReadoutSettings, setupSiSettings.section)
-        assertEquals(DesktopSection.LiveResultSettings, resultsLiveSettings.section)
+        assertEquals(DesktopSection.LiveResultsOverview, resultsLiveSettings.section)
     }
 
     @Test
@@ -436,7 +434,7 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "SI Readout Settings",
-                "Live Result Settings",
+                "Live Results",
                 "Display Settings",
                 "App Settings",
                 "Readiness"
@@ -633,10 +631,10 @@ class DesktopNavigationTest {
         assertEquals(eventFileMenuLabels, eventFileItems.map { it.label })
         assertFalse(eventFileItems.first { it.label == "Settings" }.requiresEventFile)
         assertEquals(
-            DesktopSection.LiveResultSettings,
+            DesktopSection.LiveResultsOverview,
             eventFileItems.first { it.label == "Settings" }
                 .children
-                .first { it.label == "Live Result Settings" }
+                .first { it.label == "Live Results" }
                 .section
         )
         assertFalse(DesktopNavigation.rootItems(DesktopWorkflow.Setup).any { it.label == "Utils" })
@@ -949,16 +947,17 @@ class DesktopNavigationTest {
         val liveResults = DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport)
             .first { it.label == "Live Results" }
         val localWebServer = liveResults.children.first { it.label == "Local Web Server" }
+        val robis = liveResults.children.first { it.label == "ROBIS" }
 
         assertEquals(
             listOf(
                 "Local Web Server",
-                "Send ROBIS",
-                "Live Result Settings"
+                "ROBIS"
             ),
             liveResults.children.map { it.label }
         )
-        assertEquals(DesktopSection.LiveResultSettings, localWebServer.section)
+        assertEquals(DesktopSection.LiveResultsOverview, liveResults.section)
+        assertEquals(DesktopSection.LocalResultsWebServer, localWebServer.section)
         assertEquals(
             listOf(
                 "Open Web Page",
@@ -977,6 +976,9 @@ class DesktopNavigationTest {
             ),
             localWebServer.children.mapNotNull { it.action }
         )
+        assertEquals(DesktopSection.RobisLiveResults, robis.section)
+        assertEquals(listOf("Send ROBIS"), robis.children.map { it.label })
+        assertEquals(listOf(DesktopNavAction.SendRobis), robis.children.mapNotNull { it.action })
     }
 
     @Test
