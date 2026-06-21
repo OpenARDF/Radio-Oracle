@@ -993,18 +993,22 @@ object DesktopAutomationCli {
             err.println("event-series-validate requires an Event Series manifest path.")
             return 64
         }
+        val requireClean = "--require-clean" in args
         return runCatching {
             val manifestPath = Path.of(manifestText)
             val session = DesktopEventSeriesSession(DesktopEventSeriesFiles)
             session.open(manifestPath)
             val issues = session.validateLinkedEvents()
+            val errorCount = issues.count { it.severity == EventSeriesIssueSeverity.ERROR }
+            val warningCount = issues.count { it.severity == EventSeriesIssueSeverity.WARNING }
             out.println(
                 jsonObject(
                     "command" to "event-series-validate",
                     "manifest" to manifestPath.toAbsolutePath().normalize().toString(),
                     "issueCount" to issues.size,
-                    "errorCount" to issues.count { it.severity == EventSeriesIssueSeverity.ERROR },
-                    "warningCount" to issues.count { it.severity == EventSeriesIssueSeverity.WARNING },
+                    "errorCount" to errorCount,
+                    "warningCount" to warningCount,
+                    "requireClean" to requireClean,
                     "issues" to issues.map { issue ->
                         mapOf(
                             "severity" to issue.severity.name,
@@ -1014,7 +1018,7 @@ object DesktopAutomationCli {
                     }
                 )
             )
-            0
+            if (requireClean && issues.isNotEmpty()) 69 else 0
         }.getOrElse { error ->
             err.println("Event Series validation failed: ${error.message ?: error::class.simpleName}")
             66
@@ -1822,8 +1826,8 @@ object DesktopAutomationCli {
                                           List series manifest events as JSON.
           event-series-add-event <manifest-path> <event-path>
                                           Add an Event File to a series manifest and write its backlink.
-          event-series-validate <manifest-path>
-                                          Validate a series manifest and linked Event Files.
+          event-series-validate <manifest-path> [--require-clean]
+                                          Validate a series manifest and linked Event Files; fail when issues exist with --require-clean.
           event-series-export <manifest-path> <target-folder>
                                           Copy the manifest and only manifest-listed Event Files to a clean folder.
           event-series-match <manifest-path> <current-event-path>

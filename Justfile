@@ -39,8 +39,8 @@ series-list manifest current="":
         JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-list "{{manifest}}"'; \
     fi
 
-series-validate manifest:
-    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-validate "{{manifest}}"'
+series-validate manifest flags="":
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-validate "{{manifest}}" {{flags}}'
 
 series-export manifest target:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-export "{{manifest}}" "{{target}}"'

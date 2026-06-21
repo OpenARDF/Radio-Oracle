@@ -21,6 +21,8 @@ The export validates that required Event Files exist before writing the backup. 
 
 For CLI smoke testing, use `just series-export <manifest> <target-folder>`. The command runs the same clean-export path and reports the copied manifest and Event File paths as JSON.
 
+Use `just series-validate <manifest> '--require-clean'` when automation should fail if the manifest, required Event Files, backlinks, or cross-event checks report warnings or errors.
+
 ## Scope
 
 The first implementation supports manifest storage, Event File backlinks, contextual navigation, clean export helpers, competitor matching diagnostics, and series-based start fairness inputs. Championship scoring and overall standings remain a later phase.

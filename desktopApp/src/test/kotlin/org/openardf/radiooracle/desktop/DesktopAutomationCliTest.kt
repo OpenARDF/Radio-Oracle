@@ -583,7 +583,18 @@ class DesktopAutomationCliTest {
         assertTrue(result.stdout.contains("\"issueCount\":2"))
         assertTrue(result.stdout.contains("\"warningCount\":2"))
         assertTrue(result.stdout.contains("\"errorCount\":0"))
+        assertTrue(result.stdout.contains("\"requireClean\":false"))
         assertTrue(result.stdout.contains("duplicate race ID"))
+
+        val requireCleanResult = runAutomation(
+            "event-series-validate",
+            manifestPath.toString(),
+            "--require-clean"
+        )
+
+        assertEquals(69, requireCleanResult.exitCode)
+        assertTrue(requireCleanResult.stdout.contains("\"requireClean\":true"))
+        assertTrue(requireCleanResult.stdout.contains("\"issueCount\":2"))
     }
 
     @Test
