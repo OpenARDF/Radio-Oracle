@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_FILE_NAME
+import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
@@ -201,7 +202,7 @@ object DesktopEventSeriesActions {
         val seriesFolder = requireNotNull(manifestPath.parent) {
             "Event Series manifest must have a parent folder."
         }
-        val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize() ?: return emptyList()
+        val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize()
         val loadedEvents = seriesFile.sortedEvents().mapNotNull { event ->
             val resolvedPath = seriesFolder.resolve(event.eventFilePath).normalize()
             if (!store.exists(resolvedPath)) {
@@ -213,29 +214,200 @@ object DesktopEventSeriesActions {
                 ) to resolvedPath.toAbsolutePath().normalize()
             }
         }
-        val current = loadedEvents.firstOrNull { (_, path) -> path == normalizedCurrentPath }?.first
-            ?: return emptyList()
 
         return loadedEvents
-            .map { it.first }
-            .filterNot { it.event.seriesEventId == current.event.seriesEventId }
-            .map { other ->
-                val report = EventSeriesSupport.matchCompetitors(seriesFile, other, current)
-                val methodCounts = report.matches.groupingBy { it.method.name }.eachCount()
-                DesktopEventSeriesCompetitorMatchSummary(
-                    comparedEventName = other.event.displayName,
-                    comparedSeriesEventId = other.event.seriesEventId,
-                    comparedCompetitorCount = other.projectFile.raceData.competitorData.size,
-                    currentCompetitorCount = current.projectFile.raceData.competitorData.size,
-                    matchCount = report.matches.size,
-                    siNumberMatchCount = methodCounts["SI_NUMBER"] ?: 0,
-                    bibNumberMatchCount = methodCounts["BIB_NUMBER"] ?: 0,
-                    callSignMatchCount = methodCounts["CALL_SIGN"] ?: 0,
-                    overrideMatchCount = methodCounts["OVERRIDE"] ?: 0,
-                    issueCount = report.issues.size
-                )
+            .flatMapIndexed { leftIndex, (left, leftPath) ->
+                loadedEvents.drop(leftIndex + 1).map { (right, rightPath) ->
+                    val report = EventSeriesSupport.matchCompetitors(seriesFile, left, right)
+                    val methodCounts = report.matches.groupingBy { it.method.name }.eachCount()
+                    DesktopEventSeriesCompetitorMatchSummary(
+                        firstEventName = left.event.displayName,
+                        firstSeriesEventId = left.event.seriesEventId,
+                        firstCompetitorCount = left.projectFile.raceData.competitorData.size,
+                        secondEventName = right.event.displayName,
+                        secondSeriesEventId = right.event.seriesEventId,
+                        secondCompetitorCount = right.projectFile.raceData.competitorData.size,
+                        includesCurrentEvent = normalizedCurrentPath != null &&
+                            (leftPath == normalizedCurrentPath || rightPath == normalizedCurrentPath),
+                        matchCount = report.matches.size,
+                        siNumberMatchCount = methodCounts["SI_NUMBER"] ?: 0,
+                        bibNumberMatchCount = methodCounts["BIB_NUMBER"] ?: 0,
+                        callSignMatchCount = methodCounts["CALL_SIGN"] ?: 0,
+                        overrideMatchCount = methodCounts["OVERRIDE"] ?: 0,
+                        issueCount = report.issues.size
+                    )
+                }
             }
     }
+
+    fun startFairnessSummary(
+        store: EventSeriesStore,
+        manifestPath: Path,
+        currentEventPath: Path?,
+        currentProjectFile: EventProjectFile?
+    ): DesktopEventSeriesStartFairnessSummary? {
+        val seriesFile = store.read(manifestPath)
+        val seriesFolder = requireNotNull(manifestPath.parent) {
+            "Event Series manifest must have a parent folder."
+        }
+        val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize() ?: return null
+        val currentProject = currentProjectFile ?: return null
+        val sortedEvents = seriesFile.sortedEvents()
+        val eventsWithPaths = sortedEvents.map { event ->
+            event to seriesFolder.resolve(event.eventFilePath).normalize()
+        }
+        val currentEvent = eventsWithPaths.firstOrNull { (_, path) ->
+            path.toAbsolutePath().normalize() == normalizedCurrentPath
+        }?.first ?: return null
+        val eventStarts = eventsWithPaths
+            .filter { (_, path) -> store.exists(path) }
+            .map { (event, path) -> event to startFairnessStarts(event, store.readEvent(path)) }
+        val generatedStarts = eventStarts.flatMap { it.second }
+        val identifiedStarts = generatedStarts.filter { it.identityKey != null }
+        val startThirdCounts = generatedStarts
+            .groupingBy { it.startThird }
+            .eachCount()
+        val competitorHistories = identifiedStarts
+            .groupBy { it.identityKey }
+        val competitorFairnessRows = competitorHistories
+            .map { (_, history) -> startFairnessCompetitorHistory(history) }
+            .sortedWith(
+                compareByDescending<DesktopEventSeriesStartFairnessCompetitorHistory> { it.isUneven }
+                    .thenByDescending { it.spread }
+                    .thenBy { it.competitorName }
+            )
+        val competitorsWithUnevenHistoryCount = competitorFairnessRows.count { it.isUneven }
+        val priorEvents = eventsWithPaths.filter { (event, _) -> event.order < currentEvent.order }
+        val priorRowsByEvent = priorEvents
+            .filter { (_, path) -> store.exists(path) }
+            .map { (_, path) -> EventSeriesSupport.startRowsFromEventFile(store.readEvent(path)) }
+
+        val currentCompetitors = currentProject.raceData.competitorData
+            .map { it.competitorCategory.competitor }
+        val priorStartRows = priorRowsByEvent.flatten()
+        return DesktopEventSeriesStartFairnessSummary(
+            seriesEventCount = sortedEvents.size,
+            currentEventName = currentEvent.displayName,
+            currentEventOrder = currentEvent.order,
+            missingEventFileCount = eventsWithPaths.count { (_, path) -> !store.exists(path) },
+            eventsWithGeneratedStartsCount = eventStarts.count { it.second.isNotEmpty() },
+            eventsWithoutGeneratedStartsCount = sortedEvents.size - eventStarts.count { it.second.isNotEmpty() },
+            generatedStartRowCount = generatedStarts.size,
+            identifiedGeneratedStartRowCount = identifiedStarts.size,
+            unidentifiedGeneratedStartRowCount = generatedStarts.size - identifiedStarts.size,
+            competitorsWithIdentifiedHistoryCount = competitorHistories.size,
+            competitorsWithUnevenHistoryCount = competitorsWithUnevenHistoryCount,
+            firstThirdStartCount = startThirdCounts[1].orZero(),
+            middleThirdStartCount = startThirdCounts[2].orZero(),
+            lateThirdStartCount = startThirdCounts[3].orZero(),
+            competitorHistories = competitorFairnessRows,
+            priorEventCount = priorEvents.size,
+            missingPriorEventFileCount = priorEvents.count { (_, path) -> !store.exists(path) },
+            priorEventsWithStartsCount = priorRowsByEvent.count { it.isNotEmpty() },
+            priorStartRowCount = priorStartRows.size,
+            identifiedPriorStartRowCount = priorStartRows.count {
+                it.siNumber?.takeIf { value -> value > 0 } != null ||
+                    it.bibNumber.isNotBlank() ||
+                    it.callSign.isNotBlank()
+            },
+            currentCompetitorCount = currentCompetitors.size,
+            identifiedCurrentCompetitorCount = currentCompetitors.count {
+                it.siNumber?.takeIf { value -> value > 0 } != null ||
+                    it.bibNumber.isNotBlank() ||
+                    it.callSign.isNotBlank()
+            }
+        )
+    }
+
+    private fun startFairnessStarts(
+        event: EventSeriesEvent,
+        projectFile: EventProjectFile
+    ): List<DesktopEventSeriesStartFairnessStart> {
+        val competitorsWithStarts = projectFile.raceData.competitorData
+            .map { it.competitorCategory.competitor }
+            .filter { it.drawnStartTimeSeconds != null }
+            .sortedWith(
+                compareBy<EventCompetitor>(
+                    { requireNotNull(it.drawnStartTimeSeconds) },
+                    { it.startNumber },
+                    { it.fullName() }
+                )
+            )
+        return competitorsWithStarts.mapIndexed { index, competitor ->
+            val identity = startFairnessIdentity(competitor)
+            DesktopEventSeriesStartFairnessStart(
+                identityKey = identity?.key,
+                identityLabel = identity?.label ?: "Unidentified",
+                competitorName = competitor.fullName(),
+                eventOrder = event.order,
+                startThird = startThirdForSlot(index, competitorsWithStarts.size)
+            )
+        }
+    }
+
+    private fun startThirdForSlot(slotIndex: Int, slotCount: Int): Int {
+        if (slotCount <= 0) {
+            return 1
+        }
+        return (((slotIndex * 3) / slotCount) + 1).coerceIn(1, 3)
+    }
+
+    private fun startFairnessIdentity(competitor: EventCompetitor): DesktopEventSeriesStartFairnessIdentity? =
+        competitor.siNumber?.takeIf { it > 0 }?.let {
+            DesktopEventSeriesStartFairnessIdentity(key = "si:$it", label = "SI $it")
+        } ?: competitor.bibNumber.trim().takeIf { it.isNotEmpty() }?.let {
+            DesktopEventSeriesStartFairnessIdentity(key = "bib:${it.uppercase()}", label = "Bib $it")
+        } ?: competitor.callSign.trim().takeIf { it.isNotEmpty() }?.let {
+            DesktopEventSeriesStartFairnessIdentity(key = "call:${it.uppercase()}", label = "Call ${it.uppercase()}")
+        }
+
+    private fun startFairnessCompetitorHistory(
+        history: List<DesktopEventSeriesStartFairnessStart>
+    ): DesktopEventSeriesStartFairnessCompetitorHistory {
+        val firstThirdCount = history.count { it.startThird == 1 }
+        val middleThirdCount = history.count { it.startThird == 2 }
+        val lateThirdCount = history.count { it.startThird == 3 }
+        val counts = listOf(firstThirdCount, middleThirdCount, lateThirdCount)
+        val spread = counts.maxOrNull().orZero() - counts.minOrNull().orZero()
+        val isUneven = history.size >= 2 && spread > 1
+        return DesktopEventSeriesStartFairnessCompetitorHistory(
+            competitorName = history.first().competitorName,
+            identityLabel = history.first().identityLabel,
+            generatedStartCount = history.size,
+            thirdHistoryText = history
+                .sortedBy { it.eventOrder }
+                .joinToString(" ") { it.startThird.shortStartThirdLabel() },
+            firstThirdCount = firstThirdCount,
+            middleThirdCount = middleThirdCount,
+            lateThirdCount = lateThirdCount,
+            spread = spread,
+            isUneven = isUneven,
+            recommendation = startFairnessRecommendation(history.size, counts, isUneven)
+        )
+    }
+
+    private fun startFairnessRecommendation(totalStarts: Int, counts: List<Int>, isUneven: Boolean): String {
+        if (totalStarts < 2) {
+            return "Needs more history"
+        }
+        if (!isUneven) {
+            return "Balanced"
+        }
+        val minimum = counts.minOrNull().orZero()
+        val neededThirds = listOf("early", "middle", "late")
+            .filterIndexed { index, _ -> counts[index] == minimum }
+            .joinToString("/")
+        return "Prefer $neededThirds"
+    }
+
+    private fun Int.shortStartThirdLabel(): String =
+        when (this) {
+            1 -> "E"
+            2 -> "M"
+            else -> "L"
+        }
+
+    private fun Int?.orZero(): Int = this ?: 0
 
     fun createSeriesWithEvent(
         seriesFolder: Path,
@@ -414,16 +586,70 @@ data class DesktopEventSeriesEventSummary(
 )
 
 data class DesktopEventSeriesCompetitorMatchSummary(
-    val comparedEventName: String,
-    val comparedSeriesEventId: String,
-    val comparedCompetitorCount: Int,
-    val currentCompetitorCount: Int,
+    val firstEventName: String,
+    val firstSeriesEventId: String,
+    val firstCompetitorCount: Int,
+    val secondEventName: String,
+    val secondSeriesEventId: String,
+    val secondCompetitorCount: Int,
+    val includesCurrentEvent: Boolean,
     val matchCount: Int,
     val siNumberMatchCount: Int,
     val bibNumberMatchCount: Int,
     val callSignMatchCount: Int,
     val overrideMatchCount: Int,
     val issueCount: Int
+)
+
+private data class DesktopEventSeriesStartFairnessStart(
+    val identityKey: String?,
+    val identityLabel: String,
+    val competitorName: String,
+    val eventOrder: Int,
+    val startThird: Int
+)
+
+private data class DesktopEventSeriesStartFairnessIdentity(
+    val key: String,
+    val label: String
+)
+
+data class DesktopEventSeriesStartFairnessCompetitorHistory(
+    val competitorName: String,
+    val identityLabel: String,
+    val generatedStartCount: Int,
+    val thirdHistoryText: String,
+    val firstThirdCount: Int,
+    val middleThirdCount: Int,
+    val lateThirdCount: Int,
+    val spread: Int,
+    val isUneven: Boolean,
+    val recommendation: String
+)
+
+data class DesktopEventSeriesStartFairnessSummary(
+    val seriesEventCount: Int,
+    val currentEventName: String,
+    val currentEventOrder: Int,
+    val missingEventFileCount: Int,
+    val eventsWithGeneratedStartsCount: Int,
+    val eventsWithoutGeneratedStartsCount: Int,
+    val generatedStartRowCount: Int,
+    val identifiedGeneratedStartRowCount: Int,
+    val unidentifiedGeneratedStartRowCount: Int,
+    val competitorsWithIdentifiedHistoryCount: Int,
+    val competitorsWithUnevenHistoryCount: Int,
+    val firstThirdStartCount: Int,
+    val middleThirdStartCount: Int,
+    val lateThirdStartCount: Int,
+    val competitorHistories: List<DesktopEventSeriesStartFairnessCompetitorHistory>,
+    val priorEventCount: Int,
+    val missingPriorEventFileCount: Int,
+    val priorEventsWithStartsCount: Int,
+    val priorStartRowCount: Int,
+    val identifiedPriorStartRowCount: Int,
+    val currentCompetitorCount: Int,
+    val identifiedCurrentCompetitorCount: Int
 )
 
 internal fun hasDesktopEventSeriesContext(

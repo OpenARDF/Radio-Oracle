@@ -423,6 +423,7 @@ fun main(args: Array<String>) = application {
         var recentImportCheckpoint by remember { mutableStateOf<DesktopImportCheckpoint?>(null) }
         var recentActivityLog by remember { mutableStateOf<List<String>>(emptyList()) }
         var seriesEventSummaries by remember { mutableStateOf<List<DesktopEventSeriesEventSummary>>(emptyList()) }
+        var seriesStartFairnessSummary by remember { mutableStateOf<DesktopEventSeriesStartFairnessSummary?>(null) }
         var seriesCompetitorMatchSummaries by remember {
             mutableStateOf<List<DesktopEventSeriesCompetitorMatchSummary>>(emptyList())
         }
@@ -534,6 +535,7 @@ fun main(args: Array<String>) = application {
             val manifestPath = currentPath?.let { DesktopEventSeriesActions.findManifestNearEvent(it) }
             if (manifestPath == null) {
                 seriesEventSummaries = emptyList()
+                seriesStartFairnessSummary = null
                 seriesCompetitorMatchSummaries = emptyList()
             } else {
                 runCatching {
@@ -541,6 +543,12 @@ fun main(args: Array<String>) = application {
                         store = DesktopEventSeriesFiles,
                         manifestPath = manifestPath,
                         currentEventPath = currentPath
+                    )
+                    seriesStartFairnessSummary = DesktopEventSeriesActions.startFairnessSummary(
+                        store = DesktopEventSeriesFiles,
+                        manifestPath = manifestPath,
+                        currentEventPath = currentPath,
+                        currentProjectFile = projectSession.currentProject
                     )
                     seriesCompetitorMatchSummaries = DesktopEventSeriesActions.competitorMatchingSummaries(
                         store = DesktopEventSeriesFiles,
@@ -553,6 +561,7 @@ fun main(args: Array<String>) = application {
                         "Failed to refresh Event Series events manifest=$manifestPath: ${it.message ?: it::class.simpleName}"
                     )
                     seriesEventSummaries = emptyList()
+                    seriesStartFairnessSummary = null
                     seriesCompetitorMatchSummaries = emptyList()
                 }
             }
@@ -4564,6 +4573,7 @@ fun main(args: Array<String>) = application {
             projectFile = projectFile,
             eventFilePath = projectSession.currentPath,
             seriesEventSummaries = seriesEventSummaries,
+            seriesStartFairnessSummary = seriesStartFairnessSummary,
             seriesCompetitorMatchSummaries = seriesCompetitorMatchSummaries,
             eventSeriesValidationState = eventSeriesValidationState,
             projectStatusText = projectStatusText,
@@ -7223,6 +7233,7 @@ private fun RadioOManagerDesktopApp(
     projectFile: EventProjectFile? = null,
     eventFilePath: Path? = null,
     seriesEventSummaries: List<DesktopEventSeriesEventSummary> = emptyList(),
+    seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary? = null,
     seriesCompetitorMatchSummaries: List<DesktopEventSeriesCompetitorMatchSummary> = emptyList(),
     eventSeriesValidationState: EventSeriesValidationUiState? = null,
     projectStatusText: String = "No Event File open.",
@@ -7472,6 +7483,7 @@ private fun RadioOManagerDesktopApp(
                 projectFile = projectFile,
                 eventFilePath = eventFilePath,
                 seriesEventSummaries = seriesEventSummaries,
+                seriesStartFairnessSummary = seriesStartFairnessSummary,
                 seriesCompetitorMatchSummaries = seriesCompetitorMatchSummaries,
                 eventSeriesValidationState = eventSeriesValidationState,
                 projectStatusText = projectStatusText,
@@ -8278,6 +8290,7 @@ private fun SectionWorkspace(
     projectFile: EventProjectFile?,
     eventFilePath: Path?,
     seriesEventSummaries: List<DesktopEventSeriesEventSummary>,
+    seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary?,
     seriesCompetitorMatchSummaries: List<DesktopEventSeriesCompetitorMatchSummary>,
     eventSeriesValidationState: EventSeriesValidationUiState?,
     projectStatusText: String,
@@ -8519,6 +8532,9 @@ private fun SectionWorkspace(
                 summaries = seriesEventSummaries,
                 onOpenEvent = onOpenSeriesEvent
             )
+        }
+        if (section == DesktopSection.SeriesStartFairness) {
+            EventSeriesStartFairnessPanel(seriesStartFairnessSummary)
         }
         if (section == DesktopSection.SeriesValidation) {
             EventSeriesValidationPanel(
@@ -9709,6 +9725,142 @@ private fun EventSeriesValidationIssueRow(issue: EventSeriesValidationIssue) {
     }
 }
 
+/** Summarizes generated start-list fairness across all Event Files in the active Event Series. */
+@Composable
+private fun EventSeriesStartFairnessPanel(
+    summary: DesktopEventSeriesStartFairnessSummary?
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Reviews generated start lists across all manifest-listed events in this series.",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        Text(
+            text = "Each generated start list is split by competitor order into early, middle, and late thirds. Competitors are compared by SI number, bib number, or call sign; start/order numbers are not identity keys.",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
+        if (summary == null) {
+            Text(
+                text = "No start fairness summary is available for this Event File.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+            return@Column
+        }
+
+        if (summary.generatedStartRowCount == 0) {
+            Text(
+                text = "No generated start lists were found in this series yet.",
+                color = DesktopPalette.Error,
+                fontSize = 13.sp
+            )
+        } else if (summary.identifiedGeneratedStartRowCount == 0) {
+            Text(
+                text = "Generated starts were found, but none have SI number, bib number, or call sign identity data.",
+                color = DesktopPalette.Error,
+                fontSize = 13.sp
+            )
+        }
+
+        DetailHeaderRow(listOf("Events in series", "With generated starts", "Without generated starts", "Missing files"))
+        DetailGridRow(
+            listOf(
+                summary.seriesEventCount.toString(),
+                summary.eventsWithGeneratedStartsCount.toString(),
+                summary.eventsWithoutGeneratedStartsCount.toString(),
+                summary.missingEventFileCount.toString()
+            )
+        )
+        DetailHeaderRow(listOf("Generated starts", "Identified starts", "Unidentified starts", "Competitor histories"))
+        DetailGridRow(
+            listOf(
+                summary.generatedStartRowCount.toString(),
+                summary.identifiedGeneratedStartRowCount.toString(),
+                summary.unidentifiedGeneratedStartRowCount.toString(),
+                summary.competitorsWithIdentifiedHistoryCount.toString()
+            )
+        )
+        DetailHeaderRow(listOf("First third", "Middle third", "Late third", "Uneven histories"))
+        DetailGridRow(
+            listOf(
+                summary.firstThirdStartCount.toString(),
+                summary.middleThirdStartCount.toString(),
+                summary.lateThirdStartCount.toString(),
+                summary.competitorsWithUnevenHistoryCount.toString()
+            )
+        )
+        Text(
+            text = "Uneven means a competitor's early/middle/late counts differ by more than one. Use the Action column when manually editing starts or regenerating affected event start lists.",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
+        if (summary.competitorHistories.isNotEmpty()) {
+            EventSeriesStartFairnessHistoryHeaderRow()
+            summary.competitorHistories.forEach { history ->
+                EventSeriesStartFairnessHistoryRow(history)
+            }
+        }
+        Text(
+            text = "Balance From Event Series still uses earlier manifest-ordered events as history for the current event. Current event: ${summary.currentEventName} (order ${summary.currentEventOrder}).",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
+    }
+}
+
+@Composable
+private fun EventSeriesStartFairnessHistoryHeaderRow() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Competitor", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("ID", modifier = Modifier.width(96.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Starts", modifier = Modifier.width(52.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("History", modifier = Modifier.width(72.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Early", modifier = Modifier.width(48.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Mid", modifier = Modifier.width(48.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Late", modifier = Modifier.width(48.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Action", modifier = Modifier.width(132.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun EventSeriesStartFairnessHistoryRow(
+    history: DesktopEventSeriesStartFairnessCompetitorHistory
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = history.competitorName,
+            modifier = Modifier.weight(1f),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(history.identityLabel, modifier = Modifier.width(96.dp), color = DesktopPalette.Disconnected, fontSize = 13.sp)
+        Text(history.generatedStartCount.toString(), modifier = Modifier.width(52.dp), fontSize = 13.sp)
+        Text(history.thirdHistoryText, modifier = Modifier.width(72.dp), color = DesktopPalette.Disconnected, fontSize = 13.sp)
+        Text(history.firstThirdCount.toString(), modifier = Modifier.width(48.dp), fontSize = 13.sp)
+        Text(history.middleThirdCount.toString(), modifier = Modifier.width(48.dp), fontSize = 13.sp)
+        Text(history.lateThirdCount.toString(), modifier = Modifier.width(48.dp), fontSize = 13.sp)
+        Text(
+            text = history.recommendation,
+            modifier = Modifier.width(132.dp),
+            color = if (history.isUneven) DesktopPalette.Error else DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            fontWeight = if (history.isUneven) FontWeight.SemiBold else FontWeight.Normal
+        )
+    }
+}
+
 /** Shows competitor identity matching diagnostics for the active Event Series. */
 @Composable
 private fun EventSeriesCompetitorMatchingPanel(
@@ -9716,7 +9868,7 @@ private fun EventSeriesCompetitorMatchingPanel(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = "Compares the current Event File with the other manifest-listed events in this series.",
+            text = "Compares competitor identity matches across all manifest-listed events in this series.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -9727,22 +9879,33 @@ private fun EventSeriesCompetitorMatchingPanel(
         )
         if (summaries.isEmpty()) {
             Text(
-                text = "No other series events are available to compare with the current Event File.",
+                text = "At least two readable series events are needed for competitor matching.",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
             return@Column
         }
+        val eventCount = summaries
+            .flatMap { listOf(it.firstSeriesEventId, it.secondSeriesEventId) }
+            .distinct()
+            .size
 
         DetailHeaderRow(listOf("Events in series", "Comparison rows", "Matched competitors", "Matching issues"))
         DetailGridRow(
             listOf(
-                (summaries.size + 1).toString(),
+                eventCount.toString(),
                 summaries.size.toString(),
                 summaries.sumOf { it.matchCount }.toString(),
                 summaries.sumOf { it.issueCount }.toString()
             )
         )
+        if (summaries.any { it.matchCount > 0 } && summaries.any { it.matchCount == 0 }) {
+            Text(
+                text = "Some event pairs have matches and some do not. Rows marked Current include the loaded Event File.",
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             EventSeriesCompetitorMatchingHeaderRow()
             summaries.forEach { summary ->
@@ -9759,8 +9922,9 @@ private fun EventSeriesCompetitorMatchingHeaderRow() {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("Other Event", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
-        Text("Other / Current", modifier = Modifier.width(120.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Event Pair", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Competitors", modifier = Modifier.width(120.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Current", modifier = Modifier.width(64.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text("Matched", modifier = Modifier.width(80.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text("SI", modifier = Modifier.width(56.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text("Bib", modifier = Modifier.width(56.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -9778,7 +9942,7 @@ private fun EventSeriesCompetitorMatchingRow(summary: DesktopEventSeriesCompetit
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = summary.comparedEventName,
+            text = "${summary.firstEventName} / ${summary.secondEventName}",
             modifier = Modifier.weight(1f),
             color = DesktopPalette.Black,
             fontSize = 13.sp,
@@ -9786,9 +9950,15 @@ private fun EventSeriesCompetitorMatchingRow(summary: DesktopEventSeriesCompetit
             overflow = TextOverflow.Ellipsis
         )
         Text(
-            text = "${summary.comparedCompetitorCount} / ${summary.currentCompetitorCount}",
+            text = "${summary.firstCompetitorCount} / ${summary.secondCompetitorCount}",
             modifier = Modifier.width(120.dp),
             color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
+        Text(
+            text = if (summary.includesCurrentEvent) "Yes" else "",
+            modifier = Modifier.width(64.dp),
+            color = if (summary.includesCurrentEvent) DesktopPalette.Black else DesktopPalette.Disconnected,
             fontSize = 13.sp
         )
         Text(summary.matchCount.toString(), modifier = Modifier.width(80.dp), fontSize = 13.sp)

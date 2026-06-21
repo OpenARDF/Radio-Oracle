@@ -103,6 +103,7 @@ object DesktopAutomationCli {
             "event-series-add-event" -> eventSeriesAddEvent(commandArgs, out, err)
             "event-series-validate" -> eventSeriesValidate(commandArgs, out, err)
             "event-series-match" -> eventSeriesMatch(commandArgs, out, err)
+            "event-series-start-fairness" -> eventSeriesStartFairness(commandArgs, out, err)
             "readiness-summary" -> readinessSummary(commandArgs, out, err)
             "recalculate-results" -> recalculateResults(commandArgs, out, err)
             "export-public-results-site" -> exportPublicResultsSite(commandArgs, out, err)
@@ -394,15 +395,19 @@ object DesktopAutomationCli {
             val csv = Files.readString(csvPath)
             val profile = EventCsvImports.detectCompetitorProfile(csv)
             val result = EventCsvImports.parseAndroidCompetitorRows(csv)
+            val updateExisting = "--update-existing" in args
             val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
                 projectFile = originalProjectFile,
                 rows = result.rows,
                 competitorIdFactory = { UUID.randomUUID().toString() },
                 categoryIdFactory = { UUID.randomUUID().toString() },
-                duplicatePolicy = if (profile == CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION) {
-                    CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_INDEX
-                } else {
-                    CompetitorCsvImportDuplicatePolicy.REJECT_DUPLICATES
+                duplicatePolicy = when {
+                    profile == CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION ->
+                        CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_INDEX
+                    updateExisting ->
+                        CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY
+                    else ->
+                        CompetitorCsvImportDuplicatePolicy.REJECT_DUPLICATES
                 }
             )
             DesktopProjectFiles.write(eventFilePath, outcome.projectFile)
@@ -413,6 +418,7 @@ object DesktopAutomationCli {
                     "eventFile" to eventFilePath.toAbsolutePath().normalize().toString(),
                     "csv" to csvPath.toAbsolutePath().normalize().toString(),
                     "profile" to profile.name,
+                    "updateExisting" to updateExisting,
                     "raceName" to outcome.projectFile.raceData.race.name,
                     "importedCount" to outcome.importedCount,
                     "updatedCount" to outcome.updatedCount,
@@ -572,15 +578,19 @@ object DesktopAutomationCli {
                     "command" to "event-series-match",
                     "manifest" to manifestPath.toAbsolutePath().normalize().toString(),
                     "currentEvent" to currentEventPath.toAbsolutePath().normalize().toString(),
+                    "comparisonRowCount" to summaries.size,
                     "comparedEventCount" to summaries.size,
                     "matchCount" to summaries.sumOf { it.matchCount },
                     "issueCount" to summaries.sumOf { it.issueCount },
                     "events" to summaries.map { summary ->
                         mapOf(
-                            "seriesEventId" to summary.comparedSeriesEventId,
-                            "displayName" to summary.comparedEventName,
-                            "comparedCompetitorCount" to summary.comparedCompetitorCount,
-                            "currentCompetitorCount" to summary.currentCompetitorCount,
+                            "firstSeriesEventId" to summary.firstSeriesEventId,
+                            "firstEventName" to summary.firstEventName,
+                            "firstCompetitorCount" to summary.firstCompetitorCount,
+                            "secondSeriesEventId" to summary.secondSeriesEventId,
+                            "secondEventName" to summary.secondEventName,
+                            "secondCompetitorCount" to summary.secondCompetitorCount,
+                            "includesCurrentEvent" to summary.includesCurrentEvent,
                             "matchCount" to summary.matchCount,
                             "siNumberMatchCount" to summary.siNumberMatchCount,
                             "bibNumberMatchCount" to summary.bibNumberMatchCount,
@@ -594,6 +604,73 @@ object DesktopAutomationCli {
             0
         }.getOrElse { error ->
             err.println("Event Series competitor matching failed: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
+    private fun eventSeriesStartFairness(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val manifestText = args.getOrNull(0)
+        val currentEventText = args.getOrNull(1)
+        if (manifestText.isNullOrBlank() || currentEventText.isNullOrBlank()) {
+            err.println("event-series-start-fairness requires Event Series manifest and current Event File paths.")
+            return 64
+        }
+        return runCatching {
+            val manifestPath = Path.of(manifestText)
+            val currentEventPath = Path.of(currentEventText)
+            val currentProjectFile = DesktopProjectFiles.read(currentEventPath)
+            val summary = DesktopEventSeriesActions.startFairnessSummary(
+                store = DesktopEventSeriesFiles,
+                manifestPath = manifestPath,
+                currentEventPath = currentEventPath,
+                currentProjectFile = currentProjectFile
+            )
+            out.println(
+                jsonObject(
+                    "command" to "event-series-start-fairness",
+                    "manifest" to manifestPath.toAbsolutePath().normalize().toString(),
+                    "currentEvent" to currentEventPath.toAbsolutePath().normalize().toString(),
+                    "available" to (summary != null),
+                    "seriesEventCount" to summary?.seriesEventCount,
+                    "currentEventName" to summary?.currentEventName,
+                    "currentEventOrder" to summary?.currentEventOrder,
+                    "missingEventFileCount" to summary?.missingEventFileCount,
+                    "eventsWithGeneratedStartsCount" to summary?.eventsWithGeneratedStartsCount,
+                    "eventsWithoutGeneratedStartsCount" to summary?.eventsWithoutGeneratedStartsCount,
+                    "generatedStartRowCount" to summary?.generatedStartRowCount,
+                    "identifiedGeneratedStartRowCount" to summary?.identifiedGeneratedStartRowCount,
+                    "unidentifiedGeneratedStartRowCount" to summary?.unidentifiedGeneratedStartRowCount,
+                    "competitorsWithIdentifiedHistoryCount" to summary?.competitorsWithIdentifiedHistoryCount,
+                    "competitorsWithUnevenHistoryCount" to summary?.competitorsWithUnevenHistoryCount,
+                    "firstThirdStartCount" to summary?.firstThirdStartCount,
+                    "middleThirdStartCount" to summary?.middleThirdStartCount,
+                    "lateThirdStartCount" to summary?.lateThirdStartCount,
+                    "competitorHistories" to summary?.competitorHistories?.map { history ->
+                        mapOf(
+                            "competitorName" to history.competitorName,
+                            "identityLabel" to history.identityLabel,
+                            "generatedStartCount" to history.generatedStartCount,
+                            "thirdHistoryText" to history.thirdHistoryText,
+                            "firstThirdCount" to history.firstThirdCount,
+                            "middleThirdCount" to history.middleThirdCount,
+                            "lateThirdCount" to history.lateThirdCount,
+                            "spread" to history.spread,
+                            "isUneven" to history.isUneven,
+                            "recommendation" to history.recommendation
+                        )
+                    },
+                    "priorEventCount" to summary?.priorEventCount,
+                    "missingPriorEventFileCount" to summary?.missingPriorEventFileCount,
+                    "priorEventsWithStartsCount" to summary?.priorEventsWithStartsCount,
+                    "priorStartRowCount" to summary?.priorStartRowCount,
+                    "identifiedPriorStartRowCount" to summary?.identifiedPriorStartRowCount,
+                    "currentCompetitorCount" to summary?.currentCompetitorCount,
+                    "identifiedCurrentCompetitorCount" to summary?.identifiedCurrentCompetitorCount
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Event Series start fairness summary failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -983,7 +1060,7 @@ object DesktopAutomationCli {
                                           Convert an Android Event File into a desktop Event File.
           export-android-event-file <desktop-path> <android-path>
                                           Save a desktop Event File as an Android Event File.
-          import-competitors-csv <event-path> <csv-path>
+          import-competitors-csv <event-path> <csv-path> [--update-existing]
                                           Import competitors CSV into an Event File.
           event-series-list <manifest-path> [--current-event <event-path>]
                                           List series manifest events as JSON.
@@ -993,6 +1070,8 @@ object DesktopAutomationCli {
                                           Validate a series manifest and linked Event Files.
           event-series-match <manifest-path> <current-event-path>
                                           Print competitor matching diagnostics for the current series event.
+          event-series-start-fairness <manifest-path> <current-event-path>
+                                          Print start fairness input diagnostics for the current series event.
           readiness-summary [--require-ready] <event-path>
                                           Print validation and readiness issues as JSON.
           recalculate-results [--write] <event-path>

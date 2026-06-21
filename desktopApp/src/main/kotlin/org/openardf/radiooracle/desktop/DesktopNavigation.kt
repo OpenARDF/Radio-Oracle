@@ -1211,7 +1211,7 @@ object DesktopNavigation {
         "series.events.add" to
             "Use Add Event to Series to add another Event File to the open Event Series manifest.",
         "series.start-fairness" to
-            "Use Start Fairness to review and balance start thirds across prior events in this series.",
+            "Use Start Fairness to review generated start thirds across all events in this series.",
         "series.start-fairness.balance" to
             "Use Balance From Event Series to draw the current event using prior linked events as the start-third history source.",
         "series.competitor-matching" to

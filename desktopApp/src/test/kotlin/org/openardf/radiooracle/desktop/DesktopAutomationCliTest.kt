@@ -217,6 +217,41 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun importCompetitorsCsvCommandCanUpdateExistingSiNumbersWithoutChangingInternalStartNumbers() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-update-competitors")
+        val eventFilePath = directory.resolve("Automation Event.json")
+        val csvPath = directory.resolve("competitors.csv")
+        DesktopProjectFiles.write(
+            eventFilePath,
+            projectFile(
+                "Automation Event",
+                competitors = listOf(
+                    competitorData(id = "Alice", startNumber = 1, siNumber = null),
+                    competitorData(id = "Bob", startNumber = 2, siNumber = 2222)
+                )
+            )
+        )
+        Files.writeString(
+            csvPath,
+            """
+                si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent;preferred_start_group;bib_number;call_sign
+                3333;2;Alice;Runner;M50;0;1974;OPEN;75;;0;;75;
+            """.trimIndent()
+        )
+
+        val importResult = runAutomation("import-competitors-csv", eventFilePath.toString(), csvPath.toString(), "--update-existing")
+        val updated = DesktopProjectFiles.read(eventFilePath).raceData.competitorData.map { it.competitorCategory.competitor }
+
+        assertEquals(0, importResult.exitCode)
+        assertTrue(importResult.stdout.contains("\"updateExisting\":true"))
+        assertTrue(importResult.stdout.contains("\"updatedCount\":1"))
+        assertEquals(3333, updated.single { it.id == "Alice" }.siNumber)
+        assertEquals("75", updated.single { it.id == "Alice" }.index)
+        assertEquals("75", updated.single { it.id == "Alice" }.bibNumber)
+        assertEquals(listOf(1, 2), updated.map { it.startNumber })
+    }
+
+    @Test
     fun eventSeriesListCommandReportsManifestEvents() {
         val directory = Files.createTempDirectory("radio-oracle-automation-series")
         val manifestPath = directory.resolve("series.radio-oracle.json")
@@ -363,12 +398,95 @@ class DesktopAutomationCliTest {
 
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"command\":\"event-series-match\""))
+        assertTrue(result.stdout.contains("\"comparisonRowCount\":1"))
         assertTrue(result.stdout.contains("\"comparedEventCount\":1"))
+        assertTrue(result.stdout.contains("\"firstEventName\":\"Day 1\""))
+        assertTrue(result.stdout.contains("\"secondEventName\":\"Day 2\""))
+        assertTrue(result.stdout.contains("\"includesCurrentEvent\":true"))
         assertTrue(result.stdout.contains("\"matchCount\":3"))
         assertTrue(result.stdout.contains("\"siNumberMatchCount\":1"))
         assertTrue(result.stdout.contains("\"bibNumberMatchCount\":1"))
         assertTrue(result.stdout.contains("\"callSignMatchCount\":1"))
         assertTrue(result.stdout.contains("\"issueCount\":0"))
+    }
+
+    @Test
+    fun eventSeriesStartFairnessCommandReportsHistoryInputs() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-series-start-fairness")
+        val manifestPath = directory.resolve("series.radio-oracle.json")
+        val dayOnePath = directory.resolve("day-1.json")
+        val dayTwoPath = directory.resolve("day-2.json")
+        val dayThreePath = directory.resolve("day-3.json")
+        DesktopEventSeriesFiles.write(
+            manifestPath,
+            EventSeriesFile(
+                seriesId = "series-1",
+                name = "Championship",
+                events = listOf(
+                    EventSeriesEvent("day-1", "day-1.json", 0, "Day 1"),
+                    EventSeriesEvent("day-2", "day-2.json", 1, "Day 2"),
+                    EventSeriesEvent("day-3", "day-3.json", 2, "Day 3")
+                )
+            )
+        )
+        DesktopProjectFiles.write(
+            dayOnePath,
+            projectFile(
+                "Day 1",
+                eventId = "day-1",
+                competitors = listOf(
+                    competitorData(id = "day-1-alice", startNumber = 1, siNumber = 111, drawnStartTimeSeconds = 0)
+                )
+            )
+        )
+        DesktopProjectFiles.write(
+            dayTwoPath,
+            projectFile(
+                "Day 2",
+                eventId = "day-2",
+                competitors = listOf(
+                    competitorData(id = "day-2-bob", startNumber = 2, siNumber = null, drawnStartTimeSeconds = 600, bibNumber = "B-2"),
+                    competitorData(id = "day-2-unidentified", startNumber = 3, siNumber = null, drawnStartTimeSeconds = 1200)
+                )
+            )
+        )
+        DesktopProjectFiles.write(
+            dayThreePath,
+            projectFile(
+                "Day 3",
+                eventId = "day-3",
+                competitors = listOf(
+                    competitorData(id = "day-3-alice", startNumber = 10, siNumber = 111),
+                    competitorData(id = "day-3-bob", startNumber = 20, siNumber = null, bibNumber = "B-2"),
+                    competitorData(id = "day-3-unidentified", startNumber = 30, siNumber = null)
+                )
+            )
+        )
+
+        val result = runAutomation("event-series-start-fairness", manifestPath.toString(), dayThreePath.toString())
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"event-series-start-fairness\""))
+        assertTrue(result.stdout.contains("\"available\":true"))
+        assertTrue(result.stdout.contains("\"seriesEventCount\":3"))
+        assertTrue(result.stdout.contains("\"eventsWithGeneratedStartsCount\":2"))
+        assertTrue(result.stdout.contains("\"eventsWithoutGeneratedStartsCount\":1"))
+        assertTrue(result.stdout.contains("\"generatedStartRowCount\":3"))
+        assertTrue(result.stdout.contains("\"identifiedGeneratedStartRowCount\":2"))
+        assertTrue(result.stdout.contains("\"unidentifiedGeneratedStartRowCount\":1"))
+        assertTrue(result.stdout.contains("\"competitorsWithIdentifiedHistoryCount\":2"))
+        assertTrue(result.stdout.contains("\"firstThirdStartCount\":2"))
+        assertTrue(result.stdout.contains("\"middleThirdStartCount\":1"))
+        assertTrue(result.stdout.contains("\"lateThirdStartCount\":0"))
+        assertTrue(result.stdout.contains("\"competitorHistories\""))
+        assertTrue(result.stdout.contains("\"identityLabel\":\"SI 111\""))
+        assertTrue(result.stdout.contains("\"thirdHistoryText\":\"E\""))
+        assertTrue(result.stdout.contains("\"recommendation\":\"Needs more history\""))
+        assertTrue(result.stdout.contains("\"priorEventCount\":2"))
+        assertTrue(result.stdout.contains("\"priorStartRowCount\":3"))
+        assertTrue(result.stdout.contains("\"identifiedPriorStartRowCount\":2"))
+        assertTrue(result.stdout.contains("\"currentCompetitorCount\":3"))
+        assertTrue(result.stdout.contains("\"identifiedCurrentCompetitorCount\":2"))
     }
 
     @Test
@@ -617,6 +735,7 @@ class DesktopAutomationCliTest {
         id: String,
         startNumber: Int,
         siNumber: Int?,
+        drawnStartTimeSeconds: Long? = null,
         bibNumber: String = "",
         callSign: String = ""
     ): EventCompetitorData =
@@ -635,7 +754,7 @@ class DesktopAutomationCliTest {
                     siNumber = siNumber,
                     siRent = false,
                     startNumber = startNumber,
-                    drawnStartTimeSeconds = null,
+                    drawnStartTimeSeconds = drawnStartTimeSeconds,
                     bibNumber = bibNumber,
                     callSign = callSign
                 ),

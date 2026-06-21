@@ -45,6 +45,9 @@ series-validate manifest:
 series-match manifest current:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-match "{{manifest}}" "{{current}}"'
 
+series-start-fairness manifest current:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-start-fairness "{{manifest}}" "{{current}}"'
+
 desktop-check: compile test
 
 desktop-package:

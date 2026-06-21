@@ -1400,6 +1400,113 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun synchronizingExistingCompetitorKeepsInternalStartNumberWhenCsvStartNumberCollides() {
+        val category = category("cat-1", "M21")
+        val alice = competitorData(
+            "comp-1",
+            "Alice",
+            "Runner",
+            startNumber = 1,
+            siNumber = null,
+            category = category,
+            club = "BOK"
+        )
+        val bob = competitorData(
+            "comp-2",
+            "Bob",
+            "Runner",
+            startNumber = 2,
+            siNumber = 2222,
+            category = category,
+            club = "BOK"
+        )
+        val original = projectFile(
+            categories = listOf(
+                categoryData(
+                    "cat-1",
+                    "M21",
+                    competitors = listOf(alice.competitorCategory.competitor, bob.competitorCategory.competitor)
+                )
+            ),
+            competitors = listOf(alice, bob)
+        )
+
+        val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
+            projectFile = original,
+            rows = listOf(
+                competitorImportRow(
+                    firstName = "Alice",
+                    lastName = "Runner",
+                    club = "BOK",
+                    startNumber = 2,
+                    siNumber = 3333,
+                    categoryName = "M21",
+                    index = ""
+                )
+            ),
+            competitorIdFactory = { "comp-new" },
+            categoryIdFactory = { "cat-2" },
+            duplicatePolicy = CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY
+        )
+
+        val competitors = outcome.projectFile.raceData.competitorData.map { it.competitorCategory.competitor }
+        val updatedAlice = competitors.single { it.id == "comp-1" }
+        assertEquals(0, outcome.importedCount)
+        assertEquals(1, outcome.updatedCount)
+        assertEquals(1, updatedAlice.startNumber)
+        assertEquals(3333, updatedAlice.siNumber)
+        assertEquals(listOf(1, 2), competitors.map { it.startNumber })
+    }
+
+    @Test
+    fun synchronizingExistingCompetitorCanMatchNameClubWhenCsvAddsRegistrationIndex() {
+        val category = category("cat-1", "M21")
+        val existing = competitorData(
+            "comp-1",
+            "Gheorghe",
+            "Fala",
+            startNumber = 1,
+            siNumber = null,
+            category = category,
+            club = "BOK"
+        )
+        val original = projectFile(
+            categories = listOf(
+                categoryData("cat-1", "M21", competitors = listOf(existing.competitorCategory.competitor))
+            ),
+            competitors = listOf(existing)
+        )
+
+        val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
+            projectFile = original,
+            rows = listOf(
+                competitorImportRow(
+                    firstName = "Gheorghe",
+                    lastName = "Fala",
+                    club = "BOK",
+                    startNumber = 1,
+                    siNumber = 2450670,
+                    categoryName = "M21",
+                    index = "75",
+                    bibNumber = "75"
+                )
+            ),
+            competitorIdFactory = { "comp-new" },
+            categoryIdFactory = { "cat-2" },
+            duplicatePolicy = CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY
+        )
+
+        val updated = outcome.projectFile.raceData.competitorData.single().competitorCategory.competitor
+        assertEquals(0, outcome.importedCount)
+        assertEquals(1, outcome.updatedCount)
+        assertEquals("comp-1", updated.id)
+        assertEquals(1, updated.startNumber)
+        assertEquals(2450670, updated.siNumber)
+        assertEquals("75", updated.index)
+        assertEquals("75", updated.bibNumber)
+    }
+
+    @Test
     fun rejectsDuplicateCompetitorImportNumbers() {
         val original = projectFile(
             competitors = listOf(

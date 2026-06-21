@@ -176,12 +176,13 @@ class DesktopEventSeriesTest {
     }
 
     @Test
-    fun competitorMatchingSummariesCompareOtherSeriesEventsToCurrentEvent() {
+    fun competitorMatchingSummariesCompareAllSeriesEventPairs() {
         val manifestPath = Path.of("/source/series.radio-oracle.json")
         val seriesFile = seriesFile(
             events = listOf(
                 EventSeriesEvent("day-1", "events/day-1.rom.json", 0, "Day 1"),
-                EventSeriesEvent("day-2", "events/day-2.rom.json", 1, "Day 2")
+                EventSeriesEvent("day-2", "events/day-2.rom.json", 1, "Day 2"),
+                EventSeriesEvent("day-3", "events/day-3.rom.json", 2, "Day 3")
             )
         )
         val store = InMemoryEventSeriesStore(
@@ -202,6 +203,12 @@ class DesktopEventSeriesTest {
                         competitorData(id = "day-2-bob", startNumber = 88, siNumber = null, bibNumber = "B-22"),
                         competitorData(id = "day-2-cara", startNumber = 77, siNumber = null, callSign = "k0abc")
                     )
+                ),
+                Path.of("/source/events/day-3.rom.json") to projectFile(
+                    name = "Day 3",
+                    competitors = listOf(
+                        competitorData(id = "day-3-unmatched", startNumber = 1, siNumber = null)
+                    )
                 )
             )
         )
@@ -209,20 +216,176 @@ class DesktopEventSeriesTest {
         val summaries = DesktopEventSeriesActions.competitorMatchingSummaries(
             store = store,
             manifestPath = manifestPath,
-            currentEventPath = Path.of("/source/events/day-2.rom.json")
+            currentEventPath = Path.of("/source/events/day-3.rom.json")
         )
 
-        val summary = summaries.single()
-        assertEquals("Day 1", summary.comparedEventName)
-        assertEquals("day-1", summary.comparedSeriesEventId)
-        assertEquals(3, summary.comparedCompetitorCount)
+        val matchedPair = summaries.single { it.firstSeriesEventId == "day-1" && it.secondSeriesEventId == "day-2" }
+        assertEquals(3, summaries.size)
+        assertEquals("Day 1", matchedPair.firstEventName)
+        assertEquals("Day 2", matchedPair.secondEventName)
+        assertEquals(3, matchedPair.firstCompetitorCount)
+        assertEquals(3, matchedPair.secondCompetitorCount)
+        assertEquals(false, matchedPair.includesCurrentEvent)
+        assertEquals(3, matchedPair.matchCount)
+        assertEquals(1, matchedPair.siNumberMatchCount)
+        assertEquals(1, matchedPair.bibNumberMatchCount)
+        assertEquals(1, matchedPair.callSignMatchCount)
+        assertEquals(0, matchedPair.overrideMatchCount)
+        assertEquals(0, matchedPair.issueCount)
+        assertEquals(0, summaries.single { it.firstSeriesEventId == "day-1" && it.secondSeriesEventId == "day-3" }.matchCount)
+        assertEquals(true, summaries.single { it.firstSeriesEventId == "day-1" && it.secondSeriesEventId == "day-3" }.includesCurrentEvent)
+        assertEquals(0, summaries.single { it.firstSeriesEventId == "day-2" && it.secondSeriesEventId == "day-3" }.matchCount)
+    }
+
+    @Test
+    fun startFairnessSummaryReportsPriorStartsAndUsableIdentity() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val seriesFile = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-1", "events/day-1.rom.json", 0, "Day 1"),
+                EventSeriesEvent("day-2", "events/day-2.rom.json", 1, "Day 2"),
+                EventSeriesEvent("day-3", "events/day-3.rom.json", 2, "Day 3")
+            )
+        )
+        val currentProject = projectFile(
+            name = "Day 3",
+            competitors = listOf(
+                competitorData(id = "current-si", startNumber = 1, siNumber = 111),
+                competitorData(id = "current-bib", startNumber = 2, siNumber = null, bibNumber = "B-2"),
+                competitorData(id = "current-unidentified", startNumber = 3, siNumber = null)
+            )
+        )
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile),
+            eventFiles = mapOf(
+                Path.of("/source/events/day-1.rom.json") to projectFile(
+                    name = "Day 1",
+                    competitors = listOf(
+                        competitorData(id = "prior-si", startNumber = 1, siNumber = 111, drawnStartTimeSeconds = 0)
+                    )
+                ),
+                Path.of("/source/events/day-2.rom.json") to projectFile(
+                    name = "Day 2",
+                    competitors = listOf(
+                        competitorData(id = "prior-bib", startNumber = 2, siNumber = null, drawnStartTimeSeconds = 600, bibNumber = "B-2"),
+                        competitorData(id = "prior-unidentified", startNumber = 3, siNumber = null, drawnStartTimeSeconds = 1200)
+                    )
+                ),
+                Path.of("/source/events/day-3.rom.json") to currentProject
+            )
+        )
+
+        val summary = requireNotNull(
+            DesktopEventSeriesActions.startFairnessSummary(
+                store = store,
+                manifestPath = manifestPath,
+                currentEventPath = Path.of("/source/events/day-3.rom.json"),
+                currentProjectFile = currentProject
+            )
+        )
+
+        assertEquals(3, summary.seriesEventCount)
+        assertEquals(0, summary.missingEventFileCount)
+        assertEquals(2, summary.eventsWithGeneratedStartsCount)
+        assertEquals(1, summary.eventsWithoutGeneratedStartsCount)
+        assertEquals(3, summary.generatedStartRowCount)
+        assertEquals(2, summary.identifiedGeneratedStartRowCount)
+        assertEquals(1, summary.unidentifiedGeneratedStartRowCount)
+        assertEquals(2, summary.competitorsWithIdentifiedHistoryCount)
+        assertEquals(0, summary.competitorsWithUnevenHistoryCount)
+        assertEquals(2, summary.firstThirdStartCount)
+        assertEquals(1, summary.middleThirdStartCount)
+        assertEquals(0, summary.lateThirdStartCount)
+        assertEquals(2, summary.priorEventCount)
+        assertEquals(0, summary.missingPriorEventFileCount)
+        assertEquals(2, summary.priorEventsWithStartsCount)
+        assertEquals(3, summary.priorStartRowCount)
+        assertEquals(2, summary.identifiedPriorStartRowCount)
         assertEquals(3, summary.currentCompetitorCount)
-        assertEquals(3, summary.matchCount)
-        assertEquals(1, summary.siNumberMatchCount)
-        assertEquals(1, summary.bibNumberMatchCount)
-        assertEquals(1, summary.callSignMatchCount)
-        assertEquals(0, summary.overrideMatchCount)
-        assertEquals(0, summary.issueCount)
+        assertEquals(2, summary.identifiedCurrentCompetitorCount)
+        val siHistory = summary.competitorHistories.single { it.identityLabel == "SI 111" }
+        assertEquals("RUNNER prior-si", siHistory.competitorName)
+        assertEquals(1, siHistory.generatedStartCount)
+        assertEquals("E", siHistory.thirdHistoryText)
+        assertEquals(1, siHistory.firstThirdCount)
+        assertEquals(0, siHistory.middleThirdCount)
+        assertEquals(0, siHistory.lateThirdCount)
+        assertEquals("Needs more history", siHistory.recommendation)
+    }
+
+    @Test
+    fun startFairnessSummarySplitsGeneratedCompetitorOrderIntoEqualThirds() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val competitors = (1..9).map { index ->
+            competitorData(
+                id = "competitor-$index",
+                startNumber = index,
+                siNumber = 1000 + index,
+                drawnStartTimeSeconds = 0
+            )
+        }
+        val event = projectFile(name = "Day 1", competitors = competitors)
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(
+                manifestPath to seriesFile(
+                    events = listOf(EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"))
+                )
+            ),
+            eventFiles = mapOf(Path.of("/source/day-1.rom.json") to event)
+        )
+
+        val summary = requireNotNull(
+            DesktopEventSeriesActions.startFairnessSummary(
+                store = store,
+                manifestPath = manifestPath,
+                currentEventPath = Path.of("/source/day-1.rom.json"),
+                currentProjectFile = event
+            )
+        )
+
+        assertEquals(9, summary.generatedStartRowCount)
+        assertEquals(3, summary.firstThirdStartCount)
+        assertEquals(3, summary.middleThirdStartCount)
+        assertEquals(3, summary.lateThirdStartCount)
+    }
+
+    @Test
+    fun startFairnessSummaryFlagsSeriesWithNoGeneratedStarts() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val dayOne = projectFile(name = "Day 1", competitors = listOf(competitorData(id = "day-1", startNumber = 1, siNumber = 111)))
+        val dayTwo = projectFile(name = "Day 2", competitors = listOf(competitorData(id = "day-2", startNumber = 2, siNumber = 222)))
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(
+                manifestPath to seriesFile(
+                    events = listOf(
+                        EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"),
+                        EventSeriesEvent("day-2", "day-2.rom.json", 1, "Day 2")
+                    )
+                )
+            ),
+            eventFiles = mapOf(
+                Path.of("/source/day-1.rom.json") to dayOne,
+                Path.of("/source/day-2.rom.json") to dayTwo
+            )
+        )
+
+        val summary = requireNotNull(
+            DesktopEventSeriesActions.startFairnessSummary(
+                store = store,
+                manifestPath = manifestPath,
+                currentEventPath = Path.of("/source/day-2.rom.json"),
+                currentProjectFile = dayTwo
+            )
+        )
+
+        assertEquals(2, summary.seriesEventCount)
+        assertEquals(0, summary.eventsWithGeneratedStartsCount)
+        assertEquals(2, summary.eventsWithoutGeneratedStartsCount)
+        assertEquals(0, summary.generatedStartRowCount)
+        assertEquals(0, summary.identifiedGeneratedStartRowCount)
+        assertEquals(0, summary.firstThirdStartCount)
+        assertEquals(0, summary.middleThirdStartCount)
+        assertEquals(0, summary.lateThirdStartCount)
     }
 
     @Test
@@ -345,6 +508,7 @@ class DesktopEventSeriesTest {
         id: String,
         startNumber: Int,
         siNumber: Int?,
+        drawnStartTimeSeconds: Long? = null,
         bibNumber: String = "",
         callSign: String = ""
     ): EventCompetitorData =
@@ -363,7 +527,7 @@ class DesktopEventSeriesTest {
                     siNumber = siNumber,
                     siRent = false,
                     startNumber = startNumber,
-                    drawnStartTimeSeconds = null,
+                    drawnStartTimeSeconds = drawnStartTimeSeconds,
                     bibNumber = bibNumber,
                     callSign = callSign
                 ),

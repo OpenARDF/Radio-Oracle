@@ -1502,10 +1502,16 @@ object EventProjectEditor {
                 }
             }
 
-            val startNumber = row.startNumber ?: if (existingPosition >= 0) {
+            val startNumber = if (existingPosition >= 0) {
+                /*
+                 * Keep the internal competitor start/order number stable when a
+                 * roster CSV updates an existing competitor. Older exports and
+                 * EventReg-derived files often used this field like a bib number,
+                 * while modern imports carry bib numbers separately.
+                 */
                 competitors[existingPosition].competitorCategory.competitor.startNumber
             } else {
-                nextStartNumber++
+                row.startNumber ?: nextStartNumber++
             }
             if (startNumber >= nextStartNumber) {
                 nextStartNumber = startNumber + 1
@@ -2597,7 +2603,7 @@ object EventProjectEditor {
             CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY ->
                 competitors.indexOfFirst { data ->
                     data.competitorCategory.competitor.importKey() == importKey()
-                }
+                }.takeIf { it >= 0 } ?: existingCompetitorPositionByNameClub(competitors)
         }
 
     /*
@@ -2612,6 +2618,29 @@ object EventProjectEditor {
 
     private fun EventCompetitor.importKey(): String =
         competitorImportKey(index = index, firstName = firstName, lastName = lastName, club = club)
+
+    private fun CompetitorCsvImportRow.existingCompetitorPositionByNameClub(
+        competitors: List<EventCompetitorData>
+    ): Int {
+        val rowKey = competitorImportKey(index = "", firstName = firstName, lastName = lastName, club = club)
+        val matches = competitors.withIndex()
+            .filter { (_, data) ->
+                val competitor = data.competitorCategory.competitor
+                competitor.index.isBlank() &&
+                    competitorImportKey(
+                        index = "",
+                        firstName = competitor.firstName,
+                        lastName = competitor.lastName,
+                        club = competitor.club
+                    ) == rowKey
+            }
+        /*
+         * EventReg follow-up CSVs can supply registration indexes after an
+         * Event File was created without them. Only use this fallback when the
+         * existing event has one unambiguous same-name/same-club competitor.
+         */
+        return matches.singleOrNull()?.index ?: -1
+    }
 
     private fun competitorImportKey(index: String, firstName: String, lastName: String, club: String): String {
         val trimmedIndex = index.trim()
