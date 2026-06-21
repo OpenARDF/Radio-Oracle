@@ -71,7 +71,7 @@ class DesktopStartupProjectTest {
         val projectFile = projectFile("USA and IARU Region 2 Radio Orienteering 80m Classic")
 
         assertEquals(
-            "Event:USA and IARU Region 2 Radio Orienteering 80m Classic",
+            "Event: USA and IARU Region 2 Radio Orienteering 80m Classic",
             desktopTopBarEventText(projectFile)
         )
     }
@@ -79,6 +79,14 @@ class DesktopStartupProjectTest {
     @Test
     fun topBarTextShowsEmptyEventFileState() {
         assertEquals("No event file loaded", desktopTopBarEventText(null))
+    }
+
+    @Test
+    fun topBarTextShowsSeriesName() {
+        assertEquals(
+            "Series: USA Championships 2026",
+            desktopTopBarSeriesText(EventSeriesUiContext(Path.of("series.radio-oracle.json"), "USA Championships 2026"))
+        )
     }
 
     private fun projectFile(name: String): EventProjectFile =

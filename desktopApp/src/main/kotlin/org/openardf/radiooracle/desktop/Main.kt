@@ -453,6 +453,7 @@ fun main(args: Array<String>) = application {
         var seriesCompetitorIdentityCoverageSummaries by remember {
             mutableStateOf<List<DesktopEventSeriesCompetitorIdentityCoverageSummary>>(emptyList())
         }
+        var eventSeriesUiContext by remember { mutableStateOf<EventSeriesUiContext?>(null) }
         var eventSeriesValidationState by remember { mutableStateOf<EventSeriesValidationUiState?>(null) }
         var eventSeriesValidationEventPath by remember { mutableStateOf<Path?>(null) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
@@ -596,8 +597,14 @@ fun main(args: Array<String>) = application {
                 seriesStartFairnessSummary = null
                 seriesCompetitorMatchSummaries = emptyList()
                 seriesCompetitorIdentityCoverageSummaries = emptyList()
+                eventSeriesUiContext = null
             } else {
                 runCatching {
+                    val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+                    eventSeriesUiContext = EventSeriesUiContext(
+                        manifestPath = manifestPath,
+                        seriesName = seriesFile.name
+                    )
                     seriesEventSummaries = DesktopEventSeriesActions.eventSummaries(
                         store = DesktopEventSeriesFiles,
                         manifestPath = manifestPath,
@@ -628,6 +635,7 @@ fun main(args: Array<String>) = application {
                     seriesStartFairnessSummary = null
                     seriesCompetitorMatchSummaries = emptyList()
                     seriesCompetitorIdentityCoverageSummaries = emptyList()
+                    eventSeriesUiContext = null
                 }
             }
         }
@@ -1685,6 +1693,32 @@ fun main(args: Array<String>) = application {
                 recordActivity(projectStatusText)
             }.onFailure { error ->
                 projectStatusText = "Export Event Series failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
+        fun updateCurrentEventSeriesName(name: String): Boolean {
+            val trimmedName = name.trim()
+            if (trimmedName.isBlank()) {
+                projectStatusText = "Series name was not changed because it cannot be blank."
+                return false
+            }
+            val manifestPath = currentSeriesManifestPath() ?: run {
+                projectStatusText = "Series manifest not found near this Event File."
+                return false
+            }
+            return runCatching {
+                val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+                val updatedSeriesFile = DesktopEventSeriesActions.renameSeries(seriesFile, trimmedName)
+                if (updatedSeriesFile != seriesFile) {
+                    DesktopEventSeriesFiles.write(manifestPath, updatedSeriesFile)
+                }
+                refreshSeriesEventSummaries()
+                projectStatusText = "Renamed Event Series to $trimmedName."
+                recordActivity(projectStatusText)
+                true
+            }.getOrElse { error ->
+                projectStatusText = "Rename Event Series failed: ${error.message ?: error::class.simpleName}"
+                false
             }
         }
 
@@ -4776,6 +4810,7 @@ fun main(args: Array<String>) = application {
         RadioOManagerDesktopApp(
             projectFile = projectFile,
             eventFilePath = projectSession.currentPath,
+            eventSeriesUiContext = eventSeriesUiContext,
             seriesEventSummaries = seriesEventSummaries,
             seriesStartFairnessSummary = seriesStartFairnessSummary,
             seriesStartFairnessOptimizationResult = seriesStartFairnessOptimizationResult,
@@ -4805,6 +4840,7 @@ fun main(args: Array<String>) = application {
             disabledNavActionReason = ::disabledNavActionReason,
             onOptimizeSeriesStartFairness = ::optimizeSeriesStartFairness,
             onOpenSeriesEvent = ::openSeriesEvent,
+            onUpdateEventSeriesName = ::updateCurrentEventSeriesName,
             onInsertTestControls = ::insertTestControls,
             onInsertTestCategories = ::insertTestCategories,
             onInsertTestCompetitors = ::insertTestCompetitors,
@@ -7524,6 +7560,11 @@ private data class EventSeriesValidationUiState(
     val errorMessage: String? = null
 )
 
+internal data class EventSeriesUiContext(
+    val manifestPath: Path,
+    val seriesName: String
+)
+
 /**
  * Builds the launchable desktop app shell.
  *
@@ -7535,6 +7576,7 @@ private data class EventSeriesValidationUiState(
 private fun RadioOManagerDesktopApp(
     projectFile: EventProjectFile? = null,
     eventFilePath: Path? = null,
+    eventSeriesUiContext: EventSeriesUiContext? = null,
     seriesEventSummaries: List<DesktopEventSeriesEventSummary> = emptyList(),
     seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary? = null,
     seriesStartFairnessOptimizationResult: DesktopEventSeriesStartFairnessOptimizationResult? = null,
@@ -7631,6 +7673,7 @@ private fun RadioOManagerDesktopApp(
     disabledNavActionReason: (DesktopNavAction) -> String? = { null },
     onOptimizeSeriesStartFairness: () -> Unit = {},
     onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit = {},
+    onUpdateEventSeriesName: (String) -> Boolean = { false },
     onInsertTestControls: () -> Unit = {},
     onInsertTestCategories: () -> Unit = {},
     onInsertTestCompetitors: () -> Unit = {},
@@ -7746,7 +7789,10 @@ private fun RadioOManagerDesktopApp(
         } else {
             Surface(modifier = Modifier.fillMaxSize(), color = DesktopPalette.White) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    AppTopBar(projectFile)
+                    AppTopBar(
+                        projectFile = projectFile,
+                        eventSeriesUiContext = eventSeriesUiContext.takeIf { hasValidSeriesContext }
+                    )
                     Row(modifier = Modifier.weight(1f)) {
                         NavigationRail(
                             navState = navState,
@@ -7789,6 +7835,7 @@ private fun RadioOManagerDesktopApp(
                                     menuDescription = DesktopNavigation.selectedDescription(navState),
                 projectFile = projectFile,
                 eventFilePath = eventFilePath,
+                eventSeriesUiContext = eventSeriesUiContext.takeIf { hasValidSeriesContext },
                 seriesEventSummaries = seriesEventSummaries,
                 seriesStartFairnessSummary = seriesStartFairnessSummary,
                 seriesStartFairnessOptimizationResult = seriesStartFairnessOptimizationResult,
@@ -7885,6 +7932,7 @@ private fun RadioOManagerDesktopApp(
                                     isNavActionEnabled = isNavActionEnabled,
                                     onOptimizeSeriesStartFairness = onOptimizeSeriesStartFairness,
                                     onOpenSeriesEvent = onOpenSeriesEvent,
+                                    onUpdateEventSeriesName = onUpdateEventSeriesName,
                                     onInsertTestControls = onInsertTestControls,
                                     onInsertTestCategories = onInsertTestCategories,
                                     onInsertTestCompetitors = onInsertTestCompetitors,
@@ -7952,11 +8000,11 @@ private fun RadioOManagerDesktopApp(
 
 /** Renders the Android-style app bar used at the top of the desktop window. */
 @Composable
-private fun AppTopBar(projectFile: EventProjectFile?) {
+private fun AppTopBar(projectFile: EventProjectFile?, eventSeriesUiContext: EventSeriesUiContext?) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(if (eventSeriesUiContext == null) 56.dp else 68.dp)
             .background(DesktopPalette.Primary)
             .padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -7968,14 +8016,28 @@ private fun AppTopBar(projectFile: EventProjectFile?) {
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.width(16.dp))
-        Text(
-            text = desktopTopBarEventText(projectFile),
+        Column(
             modifier = Modifier.weight(1f),
-            color = DesktopPalette.White,
-            fontSize = 14.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+            verticalArrangement = Arrangement.Center
+        ) {
+            eventSeriesUiContext?.let { context ->
+                Text(
+                    text = desktopTopBarSeriesText(context),
+                    color = DesktopPalette.SeriesNavigation,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                text = desktopTopBarEventText(projectFile),
+                color = DesktopPalette.White,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -8056,8 +8118,11 @@ private fun rememberRadioOracleLogoBitmap() = remember {
 internal fun desktopTopBarEventText(projectFile: EventProjectFile?): String =
     projectFile?.raceData?.race?.name
         ?.takeIf { it.isNotBlank() }
-        ?.let { "Event:$it" }
+        ?.let { "Event: $it" }
         ?: "No event file loaded"
+
+internal fun desktopTopBarSeriesText(seriesContext: EventSeriesUiContext): String =
+    "Series: ${seriesContext.seriesName.ifBlank { "Untitled Series" }}"
 
 private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEditDraft? {
     competitorData.forEach { data ->
@@ -8600,6 +8665,7 @@ private fun SectionWorkspace(
     menuDescription: String,
     projectFile: EventProjectFile?,
     eventFilePath: Path?,
+    eventSeriesUiContext: EventSeriesUiContext?,
     seriesEventSummaries: List<DesktopEventSeriesEventSummary>,
     seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary?,
     seriesStartFairnessOptimizationResult: DesktopEventSeriesStartFairnessOptimizationResult?,
@@ -8695,6 +8761,7 @@ private fun SectionWorkspace(
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
     onOptimizeSeriesStartFairness: () -> Unit,
     onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit,
+    onUpdateEventSeriesName: (String) -> Boolean,
     onInsertTestControls: () -> Unit,
     onInsertTestCategories: () -> Unit,
     onInsertTestCompetitors: () -> Unit,
@@ -8867,6 +8934,12 @@ private fun SectionWorkspace(
             EventSeriesCompetitorMatchingPanel(
                 summaries = seriesCompetitorMatchSummaries,
                 identityCoverageSummaries = seriesCompetitorIdentityCoverageSummaries
+            )
+        }
+        if (section == DesktopSection.SeriesSettings) {
+            EventSeriesSettingsPanel(
+                seriesContext = eventSeriesUiContext,
+                onUpdateSeriesName = onUpdateEventSeriesName
             )
         }
         if (section == DesktopSection.Readouts && projectFile != null) {
@@ -10598,6 +10671,67 @@ private fun EventSeriesCompetitorMatchingRow(summary: DesktopEventSeriesCompetit
             fontSize = 13.sp,
             fontWeight = if (summary.issueCount > 0) FontWeight.SemiBold else FontWeight.Normal
         )
+    }
+}
+
+/** Lets organizers edit manifest-owned settings for the active Event Series. */
+@Composable
+private fun EventSeriesSettingsPanel(
+    seriesContext: EventSeriesUiContext?,
+    onUpdateSeriesName: (String) -> Boolean
+) {
+    if (seriesContext == null) {
+        Text(
+            text = "No Event Series manifest was found for this Event File.",
+            color = DesktopPalette.Black,
+            fontSize = 14.sp
+        )
+        return
+    }
+
+    var nameDraft by remember(seriesContext.seriesName) { mutableStateOf(seriesContext.seriesName) }
+    val trimmedName = nameDraft.trim()
+    val canApply = trimmedName.isNotBlank() && trimmedName != seriesContext.seriesName
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = "Manifest: ${seriesContext.manifestPath}",
+            color = DesktopPalette.Disconnected,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = nameDraft,
+                onValueChange = { nameDraft = it },
+                label = { Text("Series name") },
+                modifier = Modifier
+                    .widthIn(min = 360.dp, max = 640.dp)
+                    .commitOnEnter {
+                        if (canApply && onUpdateSeriesName(trimmedName)) {
+                            nameDraft = trimmedName
+                        }
+                    },
+                singleLine = true
+            )
+            Button(
+                enabled = canApply,
+                onClick = {
+                    if (onUpdateSeriesName(trimmedName)) {
+                        nameDraft = trimmedName
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    backgroundColor = DesktopPalette.SeriesNavigation,
+                    contentColor = DesktopPalette.Black
+                )
+            ) {
+                Text("Apply")
+            }
+        }
     }
 }
 

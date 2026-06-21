@@ -87,6 +87,16 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun renameSeriesTrimsNameAndRejectsBlank() {
+        val renamed = DesktopEventSeriesActions.renameSeries(seriesFile(), "  Championship Week  ")
+
+        assertEquals("Championship Week", renamed.name)
+        assertThrows(IllegalArgumentException::class.java) {
+            DesktopEventSeriesActions.renameSeries(seriesFile(), "   ")
+        }
+    }
+
+    @Test
     fun addEventToSeriesAppendsManifestEntryAndBacklink() {
         val result = DesktopEventSeriesActions.addEventToSeries(
             seriesFile = seriesFile(),

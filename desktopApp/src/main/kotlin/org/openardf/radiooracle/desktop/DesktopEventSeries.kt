@@ -788,6 +788,15 @@ object DesktopEventSeriesActions {
         return DesktopEventSeriesCreateResult(manifestPath, seriesFile, eventPath, linkedProjectFile)
     }
 
+    /** Updates the manifest-owned name shown in Series-level desktop workflow chrome. */
+    fun renameSeries(seriesFile: EventSeriesFile, seriesName: String): EventSeriesFile {
+        val trimmedName = seriesName.trim()
+        require(trimmedName.isNotBlank()) {
+            "Series name must not be blank."
+        }
+        return seriesFile.copy(name = trimmedName)
+    }
+
     fun linkCurrentEvent(
         seriesFile: EventSeriesFile,
         eventPath: Path,
