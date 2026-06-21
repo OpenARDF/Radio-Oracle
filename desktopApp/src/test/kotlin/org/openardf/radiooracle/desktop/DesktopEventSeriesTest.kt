@@ -329,6 +329,58 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun competitorIdentityCoverageSummariesReportSeriesWidePresence() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val seriesFile = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-1", "events/day-1.rom.json", 0, "Day 1"),
+                EventSeriesEvent("day-2", "events/day-2.rom.json", 1, "Day 2"),
+                EventSeriesEvent("day-3", "events/day-3.rom.json", 2, "Day 3")
+            )
+        )
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile),
+            eventFiles = mapOf(
+                Path.of("/source/events/day-1.rom.json") to projectFile(
+                    name = "Day 1",
+                    competitors = listOf(
+                        competitorData(id = "day-1-alice", startNumber = 11, siNumber = 123456),
+                        competitorData(id = "day-1-bob", startNumber = 22, siNumber = null, bibNumber = "B-22")
+                    )
+                ),
+                Path.of("/source/events/day-2.rom.json") to projectFile(
+                    name = "Day 2",
+                    competitors = listOf(
+                        competitorData(id = "day-2-alice", startNumber = 99, siNumber = 123456),
+                        competitorData(id = "day-2-bob", startNumber = 88, siNumber = null, bibNumber = "B-22")
+                    )
+                ),
+                Path.of("/source/events/day-3.rom.json") to projectFile(
+                    name = "Day 3",
+                    competitors = listOf(
+                        competitorData(id = "day-3-alice", startNumber = 1, siNumber = 123456),
+                        competitorData(id = "day-3-unidentified", startNumber = 2, siNumber = null)
+                    )
+                )
+            )
+        )
+
+        val summaries = DesktopEventSeriesActions.competitorIdentityCoverageSummaries(
+            store = store,
+            manifestPath = manifestPath
+        )
+
+        val alice = summaries.single { it.identityLabel == "SI 123456" }
+        val bob = summaries.single { it.identityLabel == "Bib B-22" }
+        assertEquals(2, summaries.size)
+        assertEquals(3, alice.presentEventCount)
+        assertEquals(3, alice.totalReadableEventCount)
+        assertEquals(emptyList<String>(), alice.missingEventNames)
+        assertEquals(2, bob.presentEventCount)
+        assertEquals(listOf("Day 3"), bob.missingEventNames)
+    }
+
+    @Test
     fun startFairnessSummaryReportsPriorStartsAndUsableIdentity() {
         val manifestPath = Path.of("/source/series.radio-oracle.json")
         val seriesFile = seriesFile(

@@ -394,6 +394,134 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun eventSeriesStartFairnessVerifyReportsBoundedSearchSpace() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-series-start-verify-bounded")
+        val manifestPath = directory.resolve("series.radio-oracle.json")
+        val dayOnePath = directory.resolve("day-1.json")
+        val dayTwoPath = directory.resolve("day-2.json")
+        val categories = listOf(
+            categoryData("cat-a", "M21", 1),
+            categoryData("cat-b", "M40", 2),
+            categoryData("cat-c", "W21", 3)
+        )
+        fun competitorsFor(eventPrefix: String): List<EventCompetitorData> =
+            listOf(
+                competitorData(
+                    id = "$eventPrefix-alice",
+                    startNumber = 1,
+                    siNumber = 1111,
+                    drawnStartTimeSeconds = 0,
+                    categoryId = "cat-a",
+                    club = "A"
+                ),
+                competitorData(
+                    id = "$eventPrefix-bob",
+                    startNumber = 2,
+                    siNumber = 2222,
+                    drawnStartTimeSeconds = 60,
+                    categoryId = "cat-b",
+                    club = "B"
+                ),
+                competitorData(
+                    id = "$eventPrefix-cara",
+                    startNumber = 3,
+                    siNumber = 3333,
+                    drawnStartTimeSeconds = 120,
+                    categoryId = "cat-c",
+                    club = "C"
+                )
+            )
+        DesktopEventSeriesFiles.write(
+            manifestPath,
+            EventSeriesFile(
+                seriesId = "series-1",
+                name = "Championship",
+                events = listOf(
+                    EventSeriesEvent("day-1", "day-1.json", 0, "Day 1"),
+                    EventSeriesEvent("day-2", "day-2.json", 1, "Day 2")
+                )
+            )
+        )
+        DesktopProjectFiles.write(dayOnePath, projectFile("Day 1", eventId = "day-1", categories = categories, competitors = competitorsFor("day-1")))
+        DesktopProjectFiles.write(dayTwoPath, projectFile("Day 2", eventId = "day-2", categories = categories, competitors = competitorsFor("day-2")))
+
+        val result = runAutomation(
+            "event-series-start-fairness-verify",
+            manifestPath.toString(),
+            dayTwoPath.toString(),
+            "--max-events",
+            "2",
+            "--max-event-competitors",
+            "3",
+            "--max-combinations",
+            "10",
+            "--optimizer-samples",
+            "0"
+        )
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"event-series-start-fairness-verify\""))
+        assertTrue(result.stdout.contains("\"exhaustiveSearchComplete\":false"))
+        assertTrue(result.stdout.contains("\"verificationLimitReason\":\"Series signature search would exceed --max-combinations 10.\""))
+        assertTrue(result.stdout.contains("\"combinationCount\":36"))
+        assertTrue(result.stdout.contains("\"maxCombinations\":10"))
+        assertTrue(result.stdout.contains("\"uniqueThirdSignatureCount\":6"))
+    }
+
+    @Test
+    fun eventSeriesStartFairnessVerifyCanSelectSeriesEvents() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-series-start-verify-selected")
+        val manifestPath = directory.resolve("series.radio-oracle.json")
+        val dayOnePath = directory.resolve("day-1.json")
+        val dayTwoPath = directory.resolve("day-2.json")
+        val categories = listOf(
+            categoryData("cat-a", "M21", 1),
+            categoryData("cat-b", "M40", 2),
+            categoryData("cat-c", "W21", 3)
+        )
+        fun competitorsFor(eventPrefix: String): List<EventCompetitorData> =
+            listOf(
+                competitorData(id = "$eventPrefix-alice", startNumber = 1, siNumber = 1111, drawnStartTimeSeconds = 0, categoryId = "cat-a", club = "A"),
+                competitorData(id = "$eventPrefix-bob", startNumber = 2, siNumber = 2222, drawnStartTimeSeconds = 60, categoryId = "cat-b", club = "B"),
+                competitorData(id = "$eventPrefix-cara", startNumber = 3, siNumber = 3333, drawnStartTimeSeconds = 120, categoryId = "cat-c", club = "C")
+            )
+        DesktopEventSeriesFiles.write(
+            manifestPath,
+            EventSeriesFile(
+                seriesId = "series-1",
+                name = "Championship",
+                events = listOf(
+                    EventSeriesEvent("day-1", "day-1.json", 0, "Day 1"),
+                    EventSeriesEvent("day-2", "day-2.json", 1, "Day 2")
+                )
+            )
+        )
+        DesktopProjectFiles.write(dayOnePath, projectFile("Day 1", eventId = "day-1", categories = categories, competitors = competitorsFor("day-1")))
+        DesktopProjectFiles.write(dayTwoPath, projectFile("Day 2", eventId = "day-2", categories = categories, competitors = competitorsFor("day-2")))
+
+        val result = runAutomation(
+            "event-series-start-fairness-verify",
+            manifestPath.toString(),
+            dayTwoPath.toString(),
+            "--series-event-id",
+            "day-1",
+            "--max-events",
+            "1",
+            "--max-event-competitors",
+            "3",
+            "--optimizer-samples",
+            "0"
+        )
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"eventCount\":1"))
+        assertTrue(result.stdout.contains("\"selectedSeriesEventIds\":[\"day-1\"]"))
+        assertTrue(result.stdout.contains("\"combinationCount\":6"))
+        assertTrue(result.stdout.contains("\"seriesEventId\":\"day-1\""))
+        assertFalse(result.stdout.contains("\"seriesEventId\":\"day-2\""))
+    }
+
+    @Test
     fun eventSeriesAddEventCommandUpdatesManifestAndEventBacklink() {
         val directory = Files.createTempDirectory("radio-oracle-automation-series")
         val manifestPath = directory.resolve("series.radio-oracle.json")
@@ -505,7 +633,14 @@ class DesktopAutomationCliTest {
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"command\":\"event-series-match\""))
         assertTrue(result.stdout.contains("\"comparisonRowCount\":1"))
-        assertTrue(result.stdout.contains("\"comparedEventCount\":1"))
+        assertTrue(result.stdout.contains("\"comparedEventCount\":2"))
+        assertTrue(result.stdout.contains("\"identityCoverageRowCount\":3"))
+        assertTrue(result.stdout.contains("\"allEventIdentityCount\":3"))
+        assertTrue(result.stdout.contains("\"partialIdentityCount\":0"))
+        assertTrue(result.stdout.contains("\"duplicateIdentityCount\":0"))
+        assertTrue(result.stdout.contains("\"identityLabel\":\"SI 123456\""))
+        assertTrue(result.stdout.contains("\"presentEventCount\":2"))
+        assertTrue(result.stdout.contains("\"totalReadableEventCount\":2"))
         assertTrue(result.stdout.contains("\"firstEventName\":\"Day 1\""))
         assertTrue(result.stdout.contains("\"secondEventName\":\"Day 2\""))
         assertTrue(result.stdout.contains("\"includesCurrentEvent\":true"))

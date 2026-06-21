@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.desktop
 
 import java.io.PrintStream
+import java.math.BigInteger
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Files
@@ -18,6 +19,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
+import org.openardf.radiooracle.shared.event.EventSeriesFile
 import org.openardf.radiooracle.shared.event.EventSeriesIssueSeverity
 import org.openardf.radiooracle.shared.event.EventStartListDetails
 import org.openardf.radiooracle.shared.event.EventStartListRuleSeverity
@@ -645,6 +647,16 @@ object DesktopAutomationCli {
         )
     }
 
+    private fun seriesVerificationEventSummary(event: SeriesStartFairnessVerificationEvent): Map<String, Any?> =
+        mapOf(
+            "seriesEventId" to event.event.seriesEventId,
+            "displayName" to event.event.displayName,
+            "lockedForOptimization" to event.lockedForOptimization,
+            "exhaustedOrderCount" to event.exhaustedOrderCount,
+            "eventPerfectOrderCount" to event.eventPerfectOrderCount,
+            "uniqueThirdSignatureCount" to event.signatures.size
+        )
+
     private fun seriesVerificationScore(
         signatures: List<SeriesStartFairnessThirdSignature>
     ): SeriesStartFairnessVerificationScore {
@@ -1023,15 +1035,41 @@ object DesktopAutomationCli {
                 manifestPath = manifestPath,
                 currentEventPath = currentEventPath
             )
+            val identityCoverageSummaries = DesktopEventSeriesActions.competitorIdentityCoverageSummaries(
+                store = DesktopEventSeriesFiles,
+                manifestPath = manifestPath
+            )
+            val comparedEventCount = summaries
+                .flatMap { listOf(it.firstSeriesEventId, it.secondSeriesEventId) }
+                .distinct()
+                .size
             out.println(
                 jsonObject(
                     "command" to "event-series-match",
                     "manifest" to manifestPath.toAbsolutePath().normalize().toString(),
                     "currentEvent" to currentEventPath.toAbsolutePath().normalize().toString(),
                     "comparisonRowCount" to summaries.size,
-                    "comparedEventCount" to summaries.size,
+                    "comparedEventCount" to comparedEventCount,
+                    "identityCoverageRowCount" to identityCoverageSummaries.size,
+                    "allEventIdentityCount" to identityCoverageSummaries.count {
+                        it.presentEventCount == it.totalReadableEventCount && it.duplicateEventNames.isEmpty()
+                    },
+                    "partialIdentityCount" to identityCoverageSummaries.count { it.missingEventNames.isNotEmpty() },
+                    "duplicateIdentityCount" to identityCoverageSummaries.count { it.duplicateEventNames.isNotEmpty() },
                     "matchCount" to summaries.sumOf { it.matchCount },
                     "issueCount" to summaries.sumOf { it.issueCount },
+                    "identityCoverage" to identityCoverageSummaries.map { summary ->
+                        mapOf(
+                            "identityLabel" to summary.identityLabel,
+                            "competitorName" to summary.competitorName,
+                            "presentEventCount" to summary.presentEventCount,
+                            "totalReadableEventCount" to summary.totalReadableEventCount,
+                            "presentEventNames" to summary.presentEventNames,
+                            "missingEventNames" to summary.missingEventNames,
+                            "occurrenceCount" to summary.occurrenceCount,
+                            "duplicateEventNames" to summary.duplicateEventNames
+                        )
+                    },
                     "events" to summaries.map { summary ->
                         mapOf(
                             "firstSeriesEventId" to summary.firstSeriesEventId,
@@ -1218,11 +1256,25 @@ object DesktopAutomationCli {
 
             val manifestPath = Path.of(manifestText)
             val currentEventPath = Path.of(currentEventText)
-            val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+            val selectedSeriesEventIds = optionValues(args, "--series-event-id").distinct()
+            val sourceSeriesFile = DesktopEventSeriesFiles.read(manifestPath)
+            val sourceSortedEvents = sourceSeriesFile.sortedEvents()
+            val sortedEvents = if (selectedSeriesEventIds.isEmpty()) {
+                sourceSortedEvents
+            } else {
+                val selected = sourceSortedEvents.filter { it.seriesEventId in selectedSeriesEventIds }
+                val missing = selectedSeriesEventIds.filterNot { requestedId ->
+                    sourceSortedEvents.any { it.seriesEventId == requestedId }
+                }
+                require(missing.isEmpty()) {
+                    "Series event id(s) not found: ${missing.joinToString()}."
+                }
+                selected
+            }
+            val verificationSeriesFile = sourceSeriesFile.copy(events = sortedEvents)
             val seriesFolder = requireNotNull(manifestPath.parent) {
                 "Event Series manifest must have a parent folder."
             }
-            val sortedEvents = seriesFile.sortedEvents()
             require(sortedEvents.size <= maxEvents) {
                 "Series has ${sortedEvents.size} events; refusing exhaustive search above --max-events $maxEvents."
             }
@@ -1240,23 +1292,58 @@ object DesktopAutomationCli {
                     maxEventOrders = maxEventOrders
                 )
             }
-            val combinationCount = verificationEvents.fold(1L) { product, event ->
-                val size = event.signatures.size.coerceAtLeast(1).toLong()
-                require(product <= maxCombinations / size) {
-                    "Series signature search would exceed --max-combinations $maxCombinations."
-                }
-                product * size
+            val combinationCount = verificationEvents.fold(BigInteger.ONE) { product, event ->
+                product * BigInteger.valueOf(event.signatures.size.coerceAtLeast(1).toLong())
             }
             val currentScore = seriesVerificationScore(
                 verificationEvents.map { currentSeriesThirdSignature(it.projectFile) }
             )
+            if (combinationCount > BigInteger.valueOf(maxCombinations)) {
+                // The verifier is meant for small, exact checks. Large real series should still
+                // return the measured per-event search space so we can choose useful tighter bounds.
+                out.println(
+                    jsonObject(
+                        "command" to "event-series-start-fairness-verify",
+                        "manifest" to manifestPath.toAbsolutePath().normalize().toString(),
+                        "currentEvent" to currentEventPath.toAbsolutePath().normalize().toString(),
+                        "eventCount" to verificationEvents.size,
+                        "selectedSeriesEventIds" to selectedSeriesEventIds,
+                        "exhaustiveSearchComplete" to false,
+                        "verificationLimitReason" to "Series signature search would exceed --max-combinations $maxCombinations.",
+                        "combinationCount" to combinationCount,
+                        "maxCombinations" to maxCombinations,
+                        "currentScore" to currentScore.value,
+                        "currentUnevenHistoryCount" to currentScore.unevenHistoryCount,
+                        "currentSpreadSum" to currentScore.spreadSum,
+                        "events" to verificationEvents.map(::seriesVerificationEventSummary)
+                    )
+                )
+                return 0
+            }
             val exhaustive = exhaustiveSeriesStartFairnessSearch(
                 events = verificationEvents,
                 sampleLimit = sampleLimit.coerceAtLeast(0)
             )
             val optimizerResults = (1..optimizerSamples).map { sampleIndex ->
+                val verificationStore = if (selectedSeriesEventIds.isEmpty()) {
+                    DesktopEventSeriesFiles
+                } else {
+                    /*
+                     * Subset verification is for proving optimizer reach on bounded real-world
+                     * cases. The wrapper keeps Event File reads on disk but limits the manifest
+                     * that the optimizer sees to the exact same selected events being exhausted.
+                     */
+                    object : EventSeriesStore by DesktopEventSeriesFiles {
+                        override fun read(path: Path): EventSeriesFile =
+                            if (path.toAbsolutePath().normalize() == manifestPath.toAbsolutePath().normalize()) {
+                                verificationSeriesFile
+                            } else {
+                                DesktopEventSeriesFiles.read(path)
+                            }
+                    }
+                }
                 val result = DesktopEventSeriesActions.optimizeStartFairness(
-                    store = DesktopEventSeriesFiles,
+                    store = verificationStore,
                     manifestPath = manifestPath,
                     currentEventPath = currentEventPath,
                     maxPasses = optimizerPasses,
@@ -1278,6 +1365,7 @@ object DesktopAutomationCli {
                     "manifest" to manifestPath.toAbsolutePath().normalize().toString(),
                     "currentEvent" to currentEventPath.toAbsolutePath().normalize().toString(),
                     "eventCount" to verificationEvents.size,
+                    "selectedSeriesEventIds" to selectedSeriesEventIds,
                     "exhaustiveSearchComplete" to true,
                     "combinationCount" to combinationCount,
                     "currentScore" to currentScore.value,
@@ -1294,16 +1382,7 @@ object DesktopAutomationCli {
                     "bestOptimizerScore" to bestOptimizerScore?.value,
                     "bestOptimizerUnevenHistoryCount" to bestOptimizerScore?.unevenHistoryCount,
                     "bestOptimizerSpreadSum" to bestOptimizerScore?.spreadSum,
-                    "events" to verificationEvents.map { event ->
-                        mapOf(
-                            "seriesEventId" to event.event.seriesEventId,
-                            "displayName" to event.event.displayName,
-                            "lockedForOptimization" to event.lockedForOptimization,
-                            "exhaustedOrderCount" to event.exhaustedOrderCount,
-                            "eventPerfectOrderCount" to event.eventPerfectOrderCount,
-                            "uniqueThirdSignatureCount" to event.signatures.size
-                        )
-                    },
+                    "events" to verificationEvents.map(::seriesVerificationEventSummary),
                     "sampleOptimalCombinationSignatures" to exhaustive.sampleOptimalCombinationSignatures
                 )
             )
@@ -1686,6 +1765,11 @@ object DesktopAutomationCli {
         return if (index >= 0) args.getOrNull(index + 1) else null
     }
 
+    private fun optionValues(args: List<String>, name: String): List<String> =
+        args.withIndex()
+            .filter { (_, value) -> value == name }
+            .mapNotNull { (index, _) -> args.getOrNull(index + 1) }
+
     private fun helpText(): String = """
         Radio-Oracle desktop automation
 
@@ -1713,7 +1797,7 @@ object DesktopAutomationCli {
                                           Print start fairness input diagnostics for the current series event.
           event-series-optimize-start-fairness <manifest-path> <current-event-path> [--write] [--seed-salt <text>]
                                           Try to improve or preserve series start fairness with randomized candidates; writes changed Event Files only with --write.
-          event-series-start-fairness-verify <manifest-path> <current-event-path> [--max-events <n>] [--max-event-competitors <n>] [--max-event-orders <n>] [--max-combinations <n>] [--optimizer-samples <n>]
+          event-series-start-fairness-verify <manifest-path> <current-event-path> [--series-event-id <id>]... [--max-events <n>] [--max-event-competitors <n>] [--max-event-orders <n>] [--max-combinations <n>] [--optimizer-samples <n>]
                                           Exhaustively verify small series start-third combinations and compare optimizer reach.
           event-start-list-verify <event-path> [--max-competitors <n>] [--sample-limit <n>] [--generator-samples <n>]
                                           Exhaustively count event start orders that score 100/100.

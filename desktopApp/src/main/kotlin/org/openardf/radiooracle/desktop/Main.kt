@@ -450,6 +450,9 @@ fun main(args: Array<String>) = application {
         var seriesCompetitorMatchSummaries by remember {
             mutableStateOf<List<DesktopEventSeriesCompetitorMatchSummary>>(emptyList())
         }
+        var seriesCompetitorIdentityCoverageSummaries by remember {
+            mutableStateOf<List<DesktopEventSeriesCompetitorIdentityCoverageSummary>>(emptyList())
+        }
         var eventSeriesValidationState by remember { mutableStateOf<EventSeriesValidationUiState?>(null) }
         var eventSeriesValidationEventPath by remember { mutableStateOf<Path?>(null) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
@@ -592,6 +595,7 @@ fun main(args: Array<String>) = application {
                 seriesEventSummaries = emptyList()
                 seriesStartFairnessSummary = null
                 seriesCompetitorMatchSummaries = emptyList()
+                seriesCompetitorIdentityCoverageSummaries = emptyList()
             } else {
                 runCatching {
                     seriesEventSummaries = DesktopEventSeriesActions.eventSummaries(
@@ -610,6 +614,11 @@ fun main(args: Array<String>) = application {
                         manifestPath = manifestPath,
                         currentEventPath = currentPath
                     )
+                    seriesCompetitorIdentityCoverageSummaries =
+                        DesktopEventSeriesActions.competitorIdentityCoverageSummaries(
+                            store = DesktopEventSeriesFiles,
+                            manifestPath = manifestPath
+                        )
                 }.getOrElse {
                     DesktopDebugLog.error(
                         "EventSeries",
@@ -618,6 +627,7 @@ fun main(args: Array<String>) = application {
                     seriesEventSummaries = emptyList()
                     seriesStartFairnessSummary = null
                     seriesCompetitorMatchSummaries = emptyList()
+                    seriesCompetitorIdentityCoverageSummaries = emptyList()
                 }
             }
         }
@@ -4771,6 +4781,7 @@ fun main(args: Array<String>) = application {
             seriesStartFairnessOptimizationResult = seriesStartFairnessOptimizationResult,
             eventStartListDrawNumbering = eventStartListDrawNumbering,
             seriesCompetitorMatchSummaries = seriesCompetitorMatchSummaries,
+            seriesCompetitorIdentityCoverageSummaries = seriesCompetitorIdentityCoverageSummaries,
             eventSeriesValidationState = eventSeriesValidationState,
             projectStatusText = projectStatusText,
             hasUnsavedChanges = hasUnsavedChanges,
@@ -7529,6 +7540,7 @@ private fun RadioOManagerDesktopApp(
     seriesStartFairnessOptimizationResult: DesktopEventSeriesStartFairnessOptimizationResult? = null,
     eventStartListDrawNumbering: DesktopStartListDrawNumbering? = null,
     seriesCompetitorMatchSummaries: List<DesktopEventSeriesCompetitorMatchSummary> = emptyList(),
+    seriesCompetitorIdentityCoverageSummaries: List<DesktopEventSeriesCompetitorIdentityCoverageSummary> = emptyList(),
     eventSeriesValidationState: EventSeriesValidationUiState? = null,
     projectStatusText: String = "No Event File open.",
     hasUnsavedChanges: Boolean = false,
@@ -7782,6 +7794,7 @@ private fun RadioOManagerDesktopApp(
                 seriesStartFairnessOptimizationResult = seriesStartFairnessOptimizationResult,
                 eventStartListDrawNumbering = eventStartListDrawNumbering,
                 seriesCompetitorMatchSummaries = seriesCompetitorMatchSummaries,
+                seriesCompetitorIdentityCoverageSummaries = seriesCompetitorIdentityCoverageSummaries,
                 eventSeriesValidationState = eventSeriesValidationState,
                 projectStatusText = projectStatusText,
                                     siReaderState = siReaderState,
@@ -8592,6 +8605,7 @@ private fun SectionWorkspace(
     seriesStartFairnessOptimizationResult: DesktopEventSeriesStartFairnessOptimizationResult?,
     eventStartListDrawNumbering: DesktopStartListDrawNumbering?,
     seriesCompetitorMatchSummaries: List<DesktopEventSeriesCompetitorMatchSummary>,
+    seriesCompetitorIdentityCoverageSummaries: List<DesktopEventSeriesCompetitorIdentityCoverageSummary>,
     eventSeriesValidationState: EventSeriesValidationUiState?,
     projectStatusText: String,
     siReaderState: DesktopSiReaderUiState,
@@ -8850,7 +8864,10 @@ private fun SectionWorkspace(
             )
         }
         if (section == DesktopSection.SeriesCompetitorMatching) {
-            EventSeriesCompetitorMatchingPanel(seriesCompetitorMatchSummaries)
+            EventSeriesCompetitorMatchingPanel(
+                summaries = seriesCompetitorMatchSummaries,
+                identityCoverageSummaries = seriesCompetitorIdentityCoverageSummaries
+            )
         }
         if (section == DesktopSection.Readouts && projectFile != null) {
             ReadoutDetailsPanel(
@@ -10368,7 +10385,8 @@ private fun EventSeriesStartFairnessHistoryRow(
 /** Shows competitor identity matching diagnostics for the active Event Series. */
 @Composable
 private fun EventSeriesCompetitorMatchingPanel(
-    summaries: List<DesktopEventSeriesCompetitorMatchSummary>
+    summaries: List<DesktopEventSeriesCompetitorMatchSummary>,
+    identityCoverageSummaries: List<DesktopEventSeriesCompetitorIdentityCoverageSummary>
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -10393,14 +10411,44 @@ private fun EventSeriesCompetitorMatchingPanel(
             .flatMap { listOf(it.firstSeriesEventId, it.secondSeriesEventId) }
             .distinct()
             .size
+        val allEventIdentityCount = identityCoverageSummaries.count {
+            it.presentEventCount == it.totalReadableEventCount && it.duplicateEventNames.isEmpty()
+        }
+        val partialIdentityCount = identityCoverageSummaries.count { it.missingEventNames.isNotEmpty() }
+        val duplicateIdentityCount = identityCoverageSummaries.count { it.duplicateEventNames.isNotEmpty() }
 
-        DetailHeaderRow(listOf("Events in series", "Comparison rows", "Matched competitors", "Matching issues"))
+        DetailHeaderRow(listOf("Events in series", "Identified competitors", "All events", "Partial", "Duplicate issues"))
         DetailGridRow(
             listOf(
                 eventCount.toString(),
+                identityCoverageSummaries.size.toString(),
+                allEventIdentityCount.toString(),
+                partialIdentityCount.toString(),
+                duplicateIdentityCount.toString()
+            )
+        )
+        if (identityCoverageSummaries.isEmpty()) {
+            Text(
+                text = "No competitors with SI numbers, bib numbers, call signs, or manual overrides were found in the readable series events.",
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                EventSeriesCompetitorIdentityCoverageHeaderRow()
+                identityCoverageSummaries.forEach { summary ->
+                    EventSeriesCompetitorIdentityCoverageRow(summary)
+                }
+            }
+        }
+        DetailHeaderRow(listOf("Comparison rows", "Matched pairs", "SI matches", "Bib matches", "Call matches"))
+        DetailGridRow(
+            listOf(
                 summaries.size.toString(),
                 summaries.sumOf { it.matchCount }.toString(),
-                summaries.sumOf { it.issueCount }.toString()
+                summaries.sumOf { it.siNumberMatchCount }.toString(),
+                summaries.sumOf { it.bibNumberMatchCount }.toString(),
+                summaries.sumOf { it.callSignMatchCount }.toString()
             )
         )
         if (summaries.any { it.matchCount > 0 } && summaries.any { it.matchCount == 0 }) {
@@ -10416,6 +10464,79 @@ private fun EventSeriesCompetitorMatchingPanel(
                 EventSeriesCompetitorMatchingRow(summary)
             }
         }
+    }
+}
+
+@Composable
+private fun EventSeriesCompetitorIdentityCoverageHeaderRow() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Identity", modifier = Modifier.width(120.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Competitor", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Coverage", modifier = Modifier.width(96.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Events", modifier = Modifier.weight(1.1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Missing", modifier = Modifier.weight(1.1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Issues", modifier = Modifier.width(96.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun EventSeriesCompetitorIdentityCoverageRow(summary: DesktopEventSeriesCompetitorIdentityCoverageSummary) {
+    val hasIssue = summary.missingEventNames.isNotEmpty() || summary.duplicateEventNames.isNotEmpty()
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = summary.identityLabel,
+            modifier = Modifier.width(120.dp),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = summary.competitorName,
+            modifier = Modifier.weight(1f),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = "${summary.presentEventCount}/${summary.totalReadableEventCount}",
+            modifier = Modifier.width(96.dp),
+            color = if (hasIssue) DesktopPalette.Warning else DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            fontWeight = if (hasIssue) FontWeight.SemiBold else FontWeight.Normal
+        )
+        Text(
+            text = summary.presentEventNames.joinToString(", "),
+            modifier = Modifier.weight(1.1f),
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = summary.missingEventNames.joinToString(", "),
+            modifier = Modifier.weight(1.1f),
+            color = if (summary.missingEventNames.isNotEmpty()) DesktopPalette.Warning else DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = if (summary.duplicateEventNames.isEmpty()) "" else "Duplicate",
+            modifier = Modifier.width(96.dp),
+            color = if (summary.duplicateEventNames.isNotEmpty()) DesktopPalette.Warning else DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            fontWeight = if (summary.duplicateEventNames.isNotEmpty()) FontWeight.SemiBold else FontWeight.Normal
+        )
     }
 }
 
