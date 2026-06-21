@@ -26,12 +26,15 @@ Start List settings are stored in the event project data, not desktop-local pref
 - `startersPerStartTime`
 - `seed`
 - `startGroupMode`
+- `lockedForSeriesOptimization`
 
 The seed is persisted for compatibility and repeatable internal generation, but it is not shown on the desktop Start List screen. The desktop `Generate Start List` button supplies a hidden non-default seed on each press and tries to find a start order that has not already been generated for that Event File during the current desktop session. Radio-Oracle numbers distinct generated start orders and shows the current start order number next to the button. If the event constraints do not produce another unique order, the draw returns to start order #1.
 
 `startGroupMode` defaults to `No start groups`. In that mode, no start-third rule is applied and the generator behaves like a normal single-event draw. When changed to `Preferred thirds`, the generator uses each competitor's optional `preferredStartGroup` value. The canonical competitor CSV column is `preferred_start_group`; blank means no assignment, and accepted values are `1`, `2`, and `3`.
 
 `Balanced thirds` is an internal mode used by series balancing tools. It derives current-day preferred thirds from other series Event Files with generated starts, saves those assignments into the current Event File, then runs the same constrained draw as `Preferred thirds`.
+
+`lockedForSeriesOptimization` is set from the desktop Start List checkbox labeled `Lock this start list`. When checked, the Start List screen disables start-list controls that would redraw or reinterpret the current order: interval, club handling, starters per time, start-group mode, and `Generate Start List`. The Series optimizer also skips locked Event Files and reports how many unlocked Event Files remain available for optimization.
 
 ## Draw Model
 
@@ -81,6 +84,8 @@ Radio-Oracle supports this with series-aware desktop workflows:
 - `Optimize Series Starts` searches for improved randomized start-list combinations across the series.
 
 `Optimize Series Starts` can be pressed repeatedly to look for alternate randomized solutions. Radio-Oracle numbers distinct whole-series start assignments found during the current desktop session and reports when a press repeats an earlier solution.
+
+If an Event File's Start List page has `Lock this start list` checked, `Optimize Series Starts` leaves that Event File's generated starts unchanged and searches only through the unlocked events. This supports manual decisions such as keeping one event fixed while improving fairness with the remaining days.
 
 The Start Fairness panel reports a 0-100 fairness number. A score of 100 means every identified competitor with at least two generated starts is balanced as well as mathematically possible across early, middle, and late thirds. For example, one start in each third is perfect across three events, and a 2/1/1 split is perfect across four events. If no identified competitor has enough generated starts to score, the fairness number is 0 until more start history exists.
 

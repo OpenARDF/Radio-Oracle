@@ -9,8 +9,8 @@ import org.openardf.radiooracle.shared.time.DurationFormatter
  *
  * These settings are part of the portable Event File data, not desktop-local
  * preferences. A race opened on another machine should show the same interval,
- * seed, club handling, and starters-per-time controls that were last saved with
- * the event.
+ * seed, club handling, starters-per-time controls, and series-optimization lock
+ * state that were last saved with the event.
  */
 @Serializable
 data class StartDrawSettings(
