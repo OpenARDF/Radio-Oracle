@@ -22,6 +22,7 @@ import org.openardf.radiooracle.shared.event.EventSeriesFile
 import org.openardf.radiooracle.shared.event.EventSeriesLink
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
+import org.openardf.radiooracle.shared.event.StartDrawSettings
 import java.nio.file.Path
 
 class DesktopEventSeriesTest {
@@ -676,6 +677,50 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun optimizeStartFairnessSkipsLockedEventFiles() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val seriesFile = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-1", "events/day-1.rom.json", 0, "Day 1"),
+                EventSeriesEvent("day-2", "events/day-2.rom.json", 1, "Day 2"),
+                EventSeriesEvent("day-3", "events/day-3.rom.json", 2, "Day 3"),
+                EventSeriesEvent("day-4", "events/day-4.rom.json", 3, "Day 4")
+            )
+        )
+        val lockedDayOne = startOptimizableProject("Day 1", "day-1", lockedForSeriesOptimization = true)
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile),
+            eventFiles = mapOf(
+                Path.of("/source/events/day-1.rom.json") to lockedDayOne,
+                Path.of("/source/events/day-2.rom.json") to startOptimizableProject("Day 2", "day-2"),
+                Path.of("/source/events/day-3.rom.json") to startOptimizableProject("Day 3", "day-3"),
+                Path.of("/source/events/day-4.rom.json") to startOptimizableProject("Day 4", "day-4")
+            )
+        )
+
+        val summary = requireNotNull(
+            DesktopEventSeriesActions.startFairnessSummary(
+                store = store,
+                manifestPath = manifestPath,
+                currentEventPath = Path.of("/source/events/day-4.rom.json"),
+                currentProjectFile = startOptimizableProject("Day 4", "day-4")
+            )
+        )
+        val result = DesktopEventSeriesActions.optimizeStartFairness(
+            store = store,
+            manifestPath = manifestPath,
+            currentEventPath = Path.of("/source/events/day-4.rom.json"),
+            maxPasses = 2,
+            candidatesPerEvent = 24
+        )
+
+        assertEquals(1, summary.lockedForOptimizationEventCount)
+        assertEquals(3, summary.unlockedForOptimizationEventCount)
+        assertFalse(result.updatedEventFiles.any { it.seriesEventId == "day-1" })
+        assertTrue(result.updatedEventFiles.isNotEmpty())
+    }
+
+    @Test
     fun optimizeStartFairnessCanAcceptAlternateSameScoreStartAssignments() {
         val manifestPath = Path.of("/source/series.radio-oracle.json")
         val seriesFile = seriesFile(
@@ -956,7 +1001,12 @@ class DesktopEventSeriesTest {
             )
         )
 
-    private fun startOptimizableProject(name: String, eventId: String, siBase: Int = 1000): EventProjectFile {
+    private fun startOptimizableProject(
+        name: String,
+        eventId: String,
+        siBase: Int = 1000,
+        lockedForSeriesOptimization: Boolean = false
+    ): EventProjectFile {
         val category = eventCategory(id = "cat-$eventId", raceId = eventId)
         val competitors = (1..9).map { index ->
             competitorData(
@@ -968,7 +1018,7 @@ class DesktopEventSeriesTest {
                 raceId = eventId
             )
         }
-        return projectFile(
+        val project = projectFile(
             name = name,
             eventId = eventId,
             competitors = competitors,
@@ -977,6 +1027,13 @@ class DesktopEventSeriesTest {
                     category = category,
                     controlPoints = emptyList(),
                     competitors = competitors.map { it.competitorCategory.competitor }
+                )
+            )
+        )
+        return project.copy(
+            raceData = project.raceData.copy(
+                startDrawSettings = StartDrawSettings(
+                    lockedForSeriesOptimization = lockedForSeriesOptimization
                 )
             )
         )

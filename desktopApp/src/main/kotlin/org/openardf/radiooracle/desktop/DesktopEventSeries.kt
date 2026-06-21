@@ -336,6 +336,20 @@ object DesktopEventSeriesActions {
             missingEventFileCount = eventsWithPaths.count { (_, path) ->
                 path.toAbsolutePath().normalize() != normalizedCurrentPath && !store.exists(path)
             },
+            lockedForOptimizationEventCount = eventsWithPaths.count { (_, path) ->
+                when {
+                    path.toAbsolutePath().normalize() == normalizedCurrentPath -> currentProject.isLockedForSeriesStartOptimization()
+                    store.exists(path) -> store.readEvent(path).isLockedForSeriesStartOptimization()
+                    else -> false
+                }
+            },
+            unlockedForOptimizationEventCount = eventsWithPaths.count { (_, path) ->
+                when {
+                    path.toAbsolutePath().normalize() == normalizedCurrentPath -> !currentProject.isLockedForSeriesStartOptimization()
+                    store.exists(path) -> !store.readEvent(path).isLockedForSeriesStartOptimization()
+                    else -> false
+                }
+            },
             eventsWithGeneratedStartsCount = eventStarts.count { it.second.isNotEmpty() },
             eventsWithoutGeneratedStartsCount = sortedEvents.size - eventStarts.count { it.second.isNotEmpty() },
             generatedStartRowCount = generatedStarts.size,
@@ -409,6 +423,9 @@ object DesktopEventSeriesActions {
             var passAcceptedCandidate = false
             events.indices.forEach { eventIndex ->
                 val baseEvent = events[eventIndex]
+                if (baseEvent.projectFile.isLockedForSeriesStartOptimization()) {
+                    return@forEach
+                }
                 val baseStartAssignment = startAssignmentSignature(baseEvent.projectFile)
                 val settings = baseEvent.projectFile.raceData.effectiveStartDrawSettings()
                 var bestEvent = baseEvent
@@ -592,6 +609,9 @@ object DesktopEventSeriesActions {
             2 -> "M"
             else -> "L"
         }
+
+    private fun EventProjectFile.isLockedForSeriesStartOptimization(): Boolean =
+        raceData.effectiveStartDrawSettings().lockedForSeriesOptimization
 
     private fun Int?.orZero(): Int = this ?: 0
 
@@ -969,6 +989,8 @@ data class DesktopEventSeriesStartFairnessSummary(
     val currentEventOrder: Int,
     val historyOrderDescription: String,
     val missingEventFileCount: Int,
+    val lockedForOptimizationEventCount: Int,
+    val unlockedForOptimizationEventCount: Int,
     val eventsWithGeneratedStartsCount: Int,
     val eventsWithoutGeneratedStartsCount: Int,
     val generatedStartRowCount: Int,

@@ -859,6 +859,8 @@ object DesktopAutomationCli {
                     "currentEventOrder" to summary?.currentEventOrder,
                     "historyOrderDescription" to summary?.historyOrderDescription,
                     "missingEventFileCount" to summary?.missingEventFileCount,
+                    "lockedForOptimizationEventCount" to summary?.lockedForOptimizationEventCount,
+                    "unlockedForOptimizationEventCount" to summary?.unlockedForOptimizationEventCount,
                     "eventsWithGeneratedStartsCount" to summary?.eventsWithGeneratedStartsCount,
                     "eventsWithoutGeneratedStartsCount" to summary?.eventsWithoutGeneratedStartsCount,
                     "generatedStartRowCount" to summary?.generatedStartRowCount,

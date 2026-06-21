@@ -2751,6 +2751,26 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun updateStartDrawSeriesOptimizationLockPersistsAcrossSettingsChanges() {
+        val locked = EventProjectEditor.updateStartDrawSeriesOptimizationLock(projectFile(), true)
+        val updatedSettings = EventProjectEditor.updateStartDrawSettings(
+            locked,
+            "03:00",
+            StartDrawOptions(clubHandling = StartDrawClubHandling.IGNORE)
+        )
+
+        assertEquals(true, locked.raceData.effectiveStartDrawSettings().lockedForSeriesOptimization)
+        assertEquals(true, updatedSettings.raceData.effectiveStartDrawSettings().lockedForSeriesOptimization)
+        assertEquals(
+            false,
+            EventProjectEditor.updateStartDrawSeriesOptimizationLock(updatedSettings, false)
+                .raceData
+                .effectiveStartDrawSettings()
+                .lockedForSeriesOptimization
+        )
+    }
+
+    @Test
     fun nationalStartListDefaultsOnlyChangeNationalProfileFields() {
         val original = StartDrawOptions(
             clubHandling = StartDrawClubHandling.AVOID_BACK_TO_BACK,

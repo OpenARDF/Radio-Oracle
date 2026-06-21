@@ -265,6 +265,7 @@ private enum class SeriesStartFairnessStatus(val label: String) {
     GenerateStarts("Generate start lists before checking fairness"),
     AddIdentityData("Add SI, bib, or call sign identity data"),
     MoreHistoryNeeded("More identified start history needed"),
+    AllEventsLocked("All Event Files are locked for Series optimization"),
     NoOptimizationNeeded("No optimization needed"),
     ManualReviewRecommended("Manual start-parameter review recommended"),
     NoBetterOptimizationsFound("No better optimizations found"),
@@ -672,7 +673,7 @@ fun main(args: Array<String>) = application {
             val settings = raceData.effectiveStartDrawSettings()
             return "startDraw interval=${settings.intervalText} club=${settings.options.clubHandling.name} " +
                 "starters=${settings.options.startersPerStartTime} groups=${settings.options.startGroupMode.name} " +
-                "seed=${settings.options.seed}"
+                "seed=${settings.options.seed} seriesLock=${settings.lockedForSeriesOptimization}"
         }
 
         fun deleteControlAfterProtectedRouteCheck(controlId: String, promptIfLocked: Boolean = true): Boolean {
@@ -5067,6 +5068,26 @@ fun main(args: Array<String>) = application {
                     DesktopDebugLog.error("StartList", projectStatusText)
                 }
             },
+            onUpdateStartDrawSeriesOptimizationLock = { locked ->
+                runCatching {
+                    val updatedProject = projectSession.updateCurrentProject { currentProject ->
+                        EventProjectEditor.updateStartDrawSeriesOptimizationLock(currentProject, locked)
+                    }
+                    projectFile = updatedProject
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    seriesStartFairnessOptimizationResult = null
+                    syncProjectState()
+                    projectStatusText = if (locked) {
+                        "Start list locked for Series optimization."
+                    } else {
+                        "Start list unlocked for Series optimization."
+                    }
+                    DesktopDebugLog.info("StartList", projectStatusText)
+                }.onFailure { error ->
+                    projectStatusText = "Start list lock failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("StartList", projectStatusText)
+                }
+            },
             onDrawStartList = { interval, options ->
                 runCatching {
                     val currentProject = requireNotNull(projectSession.currentProject) {
@@ -7543,6 +7564,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateCompetitorBirthYear: (String, String) -> Unit = { _, _ -> },
     onUpdateCompetitorStartTime: (String, String) -> Unit = { _, _ -> },
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit = { _, _ -> },
+    onUpdateStartDrawSeriesOptimizationLock: (Boolean) -> Unit = {},
     onDrawStartList: (String, StartDrawOptions) -> Unit = { _, _ -> },
     onAddCompetitor: (String, String, String, String, String, String, String?, String, String) -> Boolean = { _, _, _, _, _, _, _, _, _ -> false },
     onAssignCompetitorCategory: (String, String?) -> Unit = { _, _ -> },
@@ -7779,6 +7801,7 @@ private fun RadioOManagerDesktopApp(
                                     onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
                                     onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
                                     onUpdateStartDrawSettings = onUpdateStartDrawSettings,
+                                    onUpdateStartDrawSeriesOptimizationLock = onUpdateStartDrawSeriesOptimizationLock,
                                     onDrawStartList = onDrawStartList,
                                     onAddCompetitor = onAddCompetitor,
                                     onAssignCompetitorCategory = onAssignCompetitorCategory,
@@ -8588,6 +8611,7 @@ private fun SectionWorkspace(
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit,
+    onUpdateStartDrawSeriesOptimizationLock: (Boolean) -> Unit,
     onDrawStartList: (String, StartDrawOptions) -> Unit,
     onAddCompetitor: (String, String, String, String, String, String, String?, String, String) -> Boolean,
     onAssignCompetitorCategory: (String, String?) -> Unit,
@@ -8802,6 +8826,7 @@ private fun SectionWorkspace(
                 seriesStartFairnessSummary = seriesStartFairnessSummary,
                 eventStartListDrawNumbering = eventStartListDrawNumbering,
                 onUpdateStartDrawSettings = onUpdateStartDrawSettings,
+                onUpdateStartDrawSeriesOptimizationLock = onUpdateStartDrawSeriesOptimizationLock,
                 onDrawStartList = onDrawStartList
             )
         }
@@ -9673,6 +9698,7 @@ private fun StartListDetailsPanel(
     seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary?,
     eventStartListDrawNumbering: DesktopStartListDrawNumbering?,
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit,
+    onUpdateStartDrawSeriesOptimizationLock: (Boolean) -> Unit,
     onDrawStartList: (String, StartDrawOptions) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
@@ -9801,6 +9827,18 @@ private fun StartListDetailsPanel(
                     fontWeight = FontWeight.SemiBold
                 )
             }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = settings.lockedForSeriesOptimization,
+                onCheckedChange = onUpdateStartDrawSeriesOptimizationLock
+            )
+            Text(
+                text = "Lock this start list for Series optimization",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
         }
         DetailHeaderRow(listOf("Scheduled", "No start time"))
         DetailGridRow(listOf(details.scheduledCount.toString(), details.unscheduledCount.toString()))
@@ -10056,6 +10094,18 @@ private fun EventSeriesStartFairnessPanel(
                 color = DesktopPalette.Disconnected,
                 fontSize = 13.sp
             )
+            Text(
+                text = if (it.lockedForOptimizationEventCount == 0) {
+                    "All ${it.unlockedForOptimizationEventCount} readable Event Files are available to Series optimization."
+                } else {
+                    "Series optimization can adjust ${it.unlockedForOptimizationEventCount} unlocked Event File" +
+                        "${if (it.unlockedForOptimizationEventCount == 1) "" else "s"}; " +
+                        "${it.lockedForOptimizationEventCount} locked Event File" +
+                        "${if (it.lockedForOptimizationEventCount == 1) " is" else "s are"} preserved."
+                },
+                color = if (it.lockedForOptimizationEventCount == 0) DesktopPalette.Disconnected else DesktopPalette.Reading,
+                fontSize = 13.sp
+            )
         }
         Text(
             text = "Balance Open Event for Series redraws only the open Event File, using other series events with generated starts as start-third history.",
@@ -10082,7 +10132,9 @@ private fun EventSeriesStartFairnessPanel(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(
                         onClick = onOptimizeStartFairness,
-                        enabled = summary.generatedStartRowCount > 0 && summary.identifiedGeneratedStartRowCount > 0
+                        enabled = summary.generatedStartRowCount > 0 &&
+                            summary.identifiedGeneratedStartRowCount > 0 &&
+                            summary.unlockedForOptimizationEventCount > 0
                     ) {
                         Text("Optimize Series Starts")
                     }
@@ -10229,6 +10281,7 @@ private fun DesktopEventSeriesStartFairnessSummary.seriesStartFairnessStatus(
         generatedStartRowCount == 0 -> SeriesStartFairnessStatus.GenerateStarts
         identifiedGeneratedStartRowCount == 0 -> SeriesStartFairnessStatus.AddIdentityData
         fairnessScoreCompetitorCount == 0 -> SeriesStartFairnessStatus.MoreHistoryNeeded
+        unlockedForOptimizationEventCount == 0 -> SeriesStartFairnessStatus.AllEventsLocked
         fairnessNumber >= SeriesStartFairnessGoodThreshold -> SeriesStartFairnessStatus.NoOptimizationNeeded
         optimizationResult != null && !optimizationResult.improved &&
             fairnessNumber < SeriesStartFairnessManualReviewThreshold ->

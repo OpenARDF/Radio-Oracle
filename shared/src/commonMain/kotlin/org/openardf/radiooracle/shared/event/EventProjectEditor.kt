@@ -1018,7 +1018,25 @@ object EventProjectEditor {
             raceData = projectFile.raceData.copy(
                 startDrawSettings = StartDrawSettings(
                     intervalSeconds = intervalSeconds,
-                    options = options.withDefaultSeed().copy(idealFirstFoxByCategoryId = emptyMap())
+                    options = options.withDefaultSeed().copy(idealFirstFoxByCategoryId = emptyMap()),
+                    lockedForSeriesOptimization = projectFile.raceData
+                        .startDrawSettings
+                        ?.lockedForSeriesOptimization
+                        ?: false
+                )
+            )
+        )
+    }
+
+    fun updateStartDrawSeriesOptimizationLock(
+        projectFile: EventProjectFile,
+        lockedForSeriesOptimization: Boolean
+    ): EventProjectFile {
+        val settings = projectFile.raceData.effectiveStartDrawSettings()
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                startDrawSettings = settings.copy(
+                    lockedForSeriesOptimization = lockedForSeriesOptimization
                 )
             )
         )

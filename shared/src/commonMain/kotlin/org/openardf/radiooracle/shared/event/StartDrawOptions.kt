@@ -15,7 +15,8 @@ import org.openardf.radiooracle.shared.time.DurationFormatter
 @Serializable
 data class StartDrawSettings(
     val intervalSeconds: Long = DEFAULT_CLASSIC_INTERVAL_SECONDS,
-    val options: StartDrawOptions = StartDrawOptions()
+    val options: StartDrawOptions = StartDrawOptions(),
+    val lockedForSeriesOptimization: Boolean = false
 ) {
     init {
         require(intervalSeconds > 0) {
