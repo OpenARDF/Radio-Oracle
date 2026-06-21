@@ -197,7 +197,7 @@ class DesktopLocalResultServerTest {
             assertTrue(html.contains("<title>Radio-Oracle Starts</title>"))
             assertTrue(html.contains("<a href=\"/in-forest\">In Forest</a>"))
             assertTrue(html.contains("<a href=\"/starts.json\">starts</a>"))
-            assertTrue(html.contains("<th>No.</th><th>Start</th><th>Competitor</th>"))
+            assertTrue(html.contains("<th>Start</th><th>Time</th><th>Competitor</th>"))
             assertTrue(html.contains("<td>RUNNER Alice</td>"))
         } finally {
             server.stop()

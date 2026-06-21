@@ -62,6 +62,7 @@ data class EventStartListDetails(
                             .thenBy { it.startSeconds ?: Long.MAX_VALUE }
                             .thenBy { it.categoryName }
                             .thenBy { it.startNumber }
+                            .thenBy { it.row.competitorName }
                     )
                     .withStartSequences(),
                 scheduledCount = rowsWithStart.count { it.startSeconds != null },
@@ -89,8 +90,10 @@ private fun List<StartListSortRow>.withStartSequences(): List<EventStartListRow>
             if (previousStartSeconds != startSeconds) {
                 sequence += 1
                 previousStartSeconds = startSeconds
+                sequence.toString()
+            } else {
+                ""
             }
-            sequence.toString()
         }
         sortedRow.row.copy(startSequenceText = sequenceText)
     }
@@ -194,19 +197,19 @@ data class EventStartListQuality(
             scheduled.groupBy { it.startSeconds }.forEach { (startSeconds, starters) ->
                 if (starters.size > settings.options.startersPerStartTime) {
                     redCount += starters.size - settings.options.startersPerStartTime
-                    messages += "Start time ${formatSeconds(startSeconds)} has ${starters.size} starters; limit is ${settings.options.startersPerStartTime}."
+                    messages += "Start ${startText(starters.first())} has ${starters.size} starters; limit is ${settings.options.startersPerStartTime}."
                     starters.forEach {
                         rowFindings += EventStartListRowFinding(
                             competitorId = it.competitorId,
                             severity = EventStartListRuleSeverity.RED,
-                            text = "Too many starters at ${formatSeconds(startSeconds)}"
+                            text = "Too many starters at start ${startText(it)}"
                         )
                     }
                 }
                 val repeatedCategories = starters.groupBy { it.categoryId }.filterKeys { it != null }.filterValues { it.size > 1 }
                 repeatedCategories.forEach { (_, rows) ->
                     orangeCount += rows.size - 1
-                    messages += "Start time ${formatSeconds(startSeconds)} has multiple ${rows.first().categoryName} competitors."
+                    messages += "Start ${startText(rows.first())} has multiple ${rows.first().categoryName} competitors."
                     rows.forEach {
                         rowFindings += EventStartListRowFinding(
                             competitorId = it.competitorId,
@@ -220,7 +223,7 @@ data class EventStartListQuality(
             scheduled.zipWithNext().forEach { (previous, current) ->
                 if (previous.categoryId != null && previous.categoryId == current.categoryId) {
                     orangeCount += 1
-                    messages += "Consecutive starts include ${current.categoryName} competitors at ${formatSeconds(previous.startSeconds)} and ${formatSeconds(current.startSeconds)}."
+                    messages += "Consecutive starts include ${current.categoryName} competitors at ${startText(previous)} and ${startText(current)}."
                     rowFindings += EventStartListRowFinding(
                         competitorId = previous.competitorId,
                         severity = EventStartListRuleSeverity.ORANGE,
@@ -238,7 +241,7 @@ data class EventStartListQuality(
                     previous.club == current.club
                 ) {
                     orangeCount += 1
-                    messages += "Consecutive starts include ${current.club} club competitors at ${formatSeconds(previous.startSeconds)} and ${formatSeconds(current.startSeconds)}."
+                    messages += "Consecutive starts include ${current.club} club competitors at ${startText(previous)} and ${startText(current)}."
                     rowFindings += EventStartListRowFinding(
                         competitorId = previous.competitorId,
                         severity = EventStartListRuleSeverity.ORANGE,
@@ -275,6 +278,9 @@ data class EventStartListQuality(
 
         private fun formatSeconds(seconds: Long): String =
             DurationFormatter.secondsToFormattedString(seconds, useMinutes = true)
+
+        private fun startText(row: StartListEvaluationRow): String =
+            row.startNumber?.toString() ?: formatSeconds(row.startSeconds)
 
         private fun startGroupForSlotIndex(startSlotIndex: Int, totalStartSlots: Int): Int =
             ((startSlotIndex * 3) / totalStartSlots + 1).coerceIn(1, 3)

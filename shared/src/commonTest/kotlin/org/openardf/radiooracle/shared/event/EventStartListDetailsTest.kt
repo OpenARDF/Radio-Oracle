@@ -13,15 +13,20 @@ class EventStartListDetailsTest {
 
         assertEquals(3, details.scheduledCount)
         assertEquals(1, details.unscheduledCount)
-        assertEquals(listOf("early", "same-time", "late", "unscheduled"), details.rows.map { it.competitorId })
-        assertEquals(listOf("1", "2", "2", ""), details.rows.map { it.startSequenceText })
+        assertEquals(listOf("early", "late", "same-time", "unscheduled"), details.rows.map { it.competitorId })
+        assertEquals(listOf("1", "2", "", ""), details.rows.map { it.startSequenceText })
 
         assertEquals("05:00", details.rows[0].startTimeText)
-        assertEquals("8", details.rows[0].startNumberText)
+        assertEquals("1", details.rows[0].startNumberText)
         assertEquals("RUNNER Early", details.rows[0].competitorName)
         assertEquals("M21", details.rows[0].categoryName)
-        assertEquals("1118", details.rows[0].siNumberText)
+        assertEquals("1111", details.rows[0].siNumberText)
         assertEquals("", details.rows.last().startTimeText)
+        assertEquals("", details.rows.last().startSequenceText)
+        assertEquals(
+            true,
+            details.quality.messages.any { it == "Consecutive starts include M21 competitors at 1 and 2." }
+        )
     }
 
     private fun raceData(): EventRaceData {
@@ -54,9 +59,9 @@ class EventStartListDetailsTest {
             categories = listOf(EventCategoryData(category, emptyList(), emptyList())),
             aliases = emptyList(),
             competitorData = listOf(
-                competitorData("late", "Late", 5, 15 * 60),
-                competitorData("unscheduled", "Unscheduled", 4, null),
-                competitorData("early", "Early", 8, 5 * 60),
+                competitorData("late", "Late", 2, 15 * 60),
+                competitorData("unscheduled", "Unscheduled", null, null),
+                competitorData("early", "Early", 1, 5 * 60),
                 competitorData("same-time", "Same", 2, 15 * 60)
             ),
             unmatchedReadoutData = emptyList()
@@ -66,7 +71,7 @@ class EventStartListDetailsTest {
     private fun competitorData(
         id: String,
         firstName: String,
-        startNumber: Int,
+        startNumber: Int?,
         startTimeSeconds: Long?
     ): EventCompetitorData =
         EventCompetitorData(
@@ -81,7 +86,7 @@ class EventStartListDetailsTest {
                     index = "",
                     isMan = true,
                     birthYear = null,
-                    siNumber = 1110 + startNumber,
+                    siNumber = startNumber?.let { 1110 + it },
                     siRent = false,
                     startNumber = startNumber,
                     drawnStartTimeSeconds = startTimeSeconds

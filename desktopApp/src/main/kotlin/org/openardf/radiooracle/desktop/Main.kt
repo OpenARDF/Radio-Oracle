@@ -330,8 +330,8 @@ private val ReadoutTableColumns = listOf(
 )
 
 private val StartListTableColumns = listOf(
-    FixedTableColumn("No.", 72.dp),
-    FixedTableColumn("Start", 96.dp),
+    FixedTableColumn("Start", 72.dp),
+    FixedTableColumn("Time", 96.dp),
     FixedTableColumn("Competitor", 260.dp),
     FixedTableColumn("Category", 120.dp),
     FixedTableColumn("SI no.", 112.dp)
@@ -9712,6 +9712,7 @@ private fun StartListDetailsPanel(
     var startGroupMode by remember(settings.options.startGroupMode) {
         mutableStateOf(settings.options.forEventStartListGeneration().startGroupMode)
     }
+    val startListLocked = settings.lockedForSeriesOptimization
     fun startDrawOptions(
         clubHandlingValue: StartDrawClubHandling = clubHandling,
         startersPerStartTimeValue: Int = startersPerStartTime,
@@ -9742,6 +9743,7 @@ private fun StartListDetailsPanel(
         ) {
             TextField(
                 value = intervalDraft,
+                enabled = !startListLocked,
                 onValueChange = {
                     intervalDraft = it
                     persistSettingsIfIntervalIsValid(it, startDrawOptions())
@@ -9765,7 +9767,8 @@ private fun StartListDetailsPanel(
                         fallbackToSavedInterval = true
                     )
                 },
-                modifier = Modifier.width(190.dp)
+                modifier = Modifier.width(190.dp),
+                enabled = !startListLocked
             )
             EnumPicker(
                 selectedValue = startersPerStartTime,
@@ -9779,7 +9782,8 @@ private fun StartListDetailsPanel(
                         fallbackToSavedInterval = true
                     )
                 },
-                modifier = Modifier.width(132.dp)
+                modifier = Modifier.width(132.dp),
+                enabled = !startListLocked
             )
         }
         Row(
@@ -9798,7 +9802,8 @@ private fun StartListDetailsPanel(
                         fallbackToSavedInterval = true
                     )
                 },
-                modifier = Modifier.width(190.dp)
+                modifier = Modifier.width(190.dp),
+                enabled = !startListLocked
             )
         }
         Row(
@@ -9806,7 +9811,7 @@ private fun StartListDetailsPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Button(
-                enabled = !settings.lockedForSeriesOptimization,
+                enabled = !startListLocked,
                 onClick = {
                     onDrawStartList(
                         intervalDraft,
@@ -15441,14 +15446,16 @@ private fun <T> EnumPicker(
     values: List<T>,
     label: (T) -> String,
     onValueSelected: (T) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     Box(modifier = modifier) {
         Button(
             onClick = { expanded = true },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled
         ) {
             Text(label(selectedValue))
         }

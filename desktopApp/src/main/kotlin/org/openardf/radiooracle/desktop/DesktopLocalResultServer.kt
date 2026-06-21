@@ -323,7 +323,7 @@ class DesktopLocalResultServer(
             appendHtml((details?.scheduledCount ?: 0).toString())
             append(" | Unscheduled: ")
             appendHtml((details?.unscheduledCount ?: 0).toString())
-            append("</p><table><thead><tr><th>No.</th><th>Start</th><th>Competitor</th><th>Category</th><th>SI</th></tr></thead><tbody>")
+            append("</p><table><thead><tr><th>Start</th><th>Time</th><th>Competitor</th><th>Category</th><th>SI</th></tr></thead><tbody>")
             details?.rows?.forEach { row ->
                 append("<tr><td>")
                 appendHtml(row.startSequenceText)
