@@ -169,6 +169,7 @@ object DesktopAutomationCli {
             "event-series-list" -> eventSeriesList(commandArgs, out, err)
             "event-series-add-event" -> eventSeriesAddEvent(commandArgs, out, err)
             "event-series-validate" -> eventSeriesValidate(commandArgs, out, err)
+            "event-series-export" -> eventSeriesExport(commandArgs, out, err)
             "event-series-match" -> eventSeriesMatch(commandArgs, out, err)
             "event-series-start-fairness" -> eventSeriesStartFairness(commandArgs, out, err)
             "event-series-optimize-start-fairness" -> eventSeriesOptimizeStartFairness(commandArgs, out, err)
@@ -1020,6 +1021,38 @@ object DesktopAutomationCli {
         }
     }
 
+    private fun eventSeriesExport(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val manifestText = args.getOrNull(0)
+        val targetFolderText = args.getOrNull(1)
+        if (manifestText.isNullOrBlank() || targetFolderText.isNullOrBlank()) {
+            err.println("event-series-export requires Event Series manifest and target folder paths.")
+            return 64
+        }
+        return runCatching {
+            val manifestPath = Path.of(manifestText)
+            val targetFolder = Path.of(targetFolderText)
+            val result = DesktopEventSeriesActions.exportSeries(
+                store = DesktopEventSeriesFiles,
+                manifestPath = manifestPath,
+                targetFolder = targetFolder
+            )
+            out.println(
+                jsonObject(
+                    "command" to "event-series-export",
+                    "manifest" to manifestPath.toAbsolutePath().normalize().toString(),
+                    "targetFolder" to targetFolder.toAbsolutePath().normalize().toString(),
+                    "exportedManifest" to result.manifestPath.toAbsolutePath().normalize().toString(),
+                    "eventFileCount" to result.eventFilePaths.size,
+                    "eventFiles" to result.eventFilePaths.map { it.toAbsolutePath().normalize().toString() }
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Event Series export failed: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
     private fun eventSeriesMatch(args: List<String>, out: PrintStream, err: PrintStream): Int {
         val manifestText = args.getOrNull(0)
         val currentEventText = args.getOrNull(1)
@@ -1791,6 +1824,8 @@ object DesktopAutomationCli {
                                           Add an Event File to a series manifest and write its backlink.
           event-series-validate <manifest-path>
                                           Validate a series manifest and linked Event Files.
+          event-series-export <manifest-path> <target-folder>
+                                          Copy the manifest and only manifest-listed Event Files to a clean folder.
           event-series-match <manifest-path> <current-event-path>
                                           Print competitor matching diagnostics for the current series event.
           event-series-start-fairness <manifest-path> <current-event-path>

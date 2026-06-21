@@ -652,6 +652,43 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun eventSeriesExportCommandCopiesOnlyEssentialSeriesFiles() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-series-export")
+        val sourceDirectory = directory.resolve("source")
+        val eventDirectory = sourceDirectory.resolve("events")
+        val exportDirectory = directory.resolve("clean-export")
+        Files.createDirectories(eventDirectory)
+        val manifestPath = sourceDirectory.resolve("series.radio-oracle.json")
+        val dayOnePath = eventDirectory.resolve("day-1.json")
+        val dayTwoPath = eventDirectory.resolve("day-2.json")
+        val clutterPath = sourceDirectory.resolve("draft-trash.json")
+        DesktopEventSeriesFiles.write(
+            manifestPath,
+            EventSeriesFile(
+                seriesId = "series-1",
+                name = "Championship",
+                events = listOf(
+                    EventSeriesEvent("day-1", "events/day-1.json", 0, "Day 1"),
+                    EventSeriesEvent("day-2", "events/day-2.json", 1, "Day 2")
+                )
+            )
+        )
+        DesktopProjectFiles.write(dayOnePath, projectFile("Day 1", eventId = "day-1"))
+        DesktopProjectFiles.write(dayTwoPath, projectFile("Day 2", eventId = "day-2"))
+        Files.writeString(clutterPath, "not part of the series")
+
+        val result = runAutomation("event-series-export", manifestPath.toString(), exportDirectory.toString())
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"event-series-export\""))
+        assertTrue(result.stdout.contains("\"eventFileCount\":2"))
+        assertTrue(Files.exists(exportDirectory.resolve("series.radio-oracle.json")))
+        assertTrue(Files.exists(exportDirectory.resolve("events/day-1.json")))
+        assertTrue(Files.exists(exportDirectory.resolve("events/day-2.json")))
+        assertFalse(Files.exists(exportDirectory.resolve("draft-trash.json")))
+    }
+
+    @Test
     fun eventSeriesStartFairnessCommandReportsHistoryInputs() {
         val directory = Files.createTempDirectory("radio-oracle-automation-series-start-fairness")
         val manifestPath = directory.resolve("series.radio-oracle.json")

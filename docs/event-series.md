@@ -19,6 +19,8 @@ Each linked Event File may also contain a `seriesLink` with the series ID and ev
 
 The export validates that required Event Files exist before writing the backup. Exported manifests keep their relative paths pointing at the copied Event Files.
 
+For CLI smoke testing, use `just series-export <manifest> <target-folder>`. The command runs the same clean-export path and reports the copied manifest and Event File paths as JSON.
+
 ## Scope
 
 The first implementation supports manifest storage, Event File backlinks, contextual navigation, clean export helpers, competitor matching diagnostics, and series-based start fairness inputs. Championship scoring and overall standings remain a later phase.
