@@ -81,6 +81,22 @@ data class StartDrawOptions(
             startGroupMode == StartDrawStartGroupMode.DISABLED
 
     /**
+     * Returns the options an event-level Generate Start List action should use.
+     *
+     * Series balancing may store generated preferred thirds in the Event File so
+     * the Series workflow can inspect its own target. Those series targets are
+     * not event-level constraints: when an organizer redraws from the Event
+     * Start List page, the event rules should govern and the separate Series
+     * Start Fairness score should show the series tradeoff.
+     */
+    fun forEventStartListGeneration(): StartDrawOptions =
+        if (startGroupMode == StartDrawStartGroupMode.BALANCED_MULTI_DAY_THIRDS) {
+            copy(startGroupMode = StartDrawStartGroupMode.DISABLED)
+        } else {
+            this
+        }
+
+    /**
      * Applies the Start List policy Radio-Oracle expects for National events.
      *
      * The race-level default is intentionally limited to the three values that

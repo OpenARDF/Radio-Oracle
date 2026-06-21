@@ -135,7 +135,12 @@ data class EventStartListQuality(
             var redCount = 0
             var orangeCount = 0
 
-            if (settings.options.startGroupMode != StartDrawStartGroupMode.DISABLED) {
+            /*
+             * Only explicit Preferred thirds are event-level start-list rules.
+             * BALANCED_MULTI_DAY_THIRDS is a Series workflow target and is
+             * scored by the Series Start Fairness tools, not by this event score.
+             */
+            if (settings.options.startGroupMode == StartDrawStartGroupMode.PREFERRED_THIRDS) {
                 val startSlotIndexBySeconds = scheduled.map { it.startSeconds }
                     .distinct()
                     .sorted()

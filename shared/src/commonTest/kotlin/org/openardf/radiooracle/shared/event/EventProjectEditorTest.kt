@@ -2772,6 +2772,25 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun eventStartListGenerationDoesNotUseSeriesBalancedThirdsAsEventRule() {
+        val seriesOptions = StartDrawOptions(
+            clubHandling = StartDrawClubHandling.IGNORE,
+            startersPerStartTime = 2,
+            seed = "series-seed",
+            startGroupMode = StartDrawStartGroupMode.BALANCED_MULTI_DAY_THIRDS
+        )
+        val preferredOptions = seriesOptions.copy(startGroupMode = StartDrawStartGroupMode.PREFERRED_THIRDS)
+
+        val eventOptions = seriesOptions.forEventStartListGeneration()
+
+        assertEquals(StartDrawStartGroupMode.DISABLED, eventOptions.startGroupMode)
+        assertEquals(StartDrawClubHandling.IGNORE, eventOptions.clubHandling)
+        assertEquals(2, eventOptions.startersPerStartTime)
+        assertEquals("series-seed", eventOptions.seed)
+        assertEquals(StartDrawStartGroupMode.PREFERRED_THIRDS, preferredOptions.forEventStartListGeneration().startGroupMode)
+    }
+
+    @Test
     fun drawStartListHonorsPreferredStartThirdsBeforeSpacingBestPractices() {
         val m21 = category("cat-m21", "M21", order = 0)
         val m40 = category("cat-m40", "M40", order = 1)
@@ -2905,6 +2924,39 @@ class EventProjectEditorTest {
         assertEquals(EventStartListRuleSeverity.RED, quality.severity)
         assertEquals(true, quality.rowFindings.any { it.competitorId == "early" && it.text == "Outside preferred start third" })
         assertEquals(true, quality.rowFindings.any { it.competitorId == "late" && it.text == "Outside preferred start third" })
+    }
+
+    @Test
+    fun startListQualityTreatsSeriesBalancedThirdsAsSeriesOverlay() {
+        val m21 = category("cat-m21", "M21", order = 0)
+        val m40 = category("cat-m40", "M40", order = 1)
+        val w21 = category("cat-w21", "W21", order = 2)
+        val raceData = projectFile(
+            categories = listOf(
+                categoryData(m21.id, m21.name, order = m21.order),
+                categoryData(m40.id, m40.name, order = m40.order),
+                categoryData(w21.id, w21.name, order = w21.order)
+            ),
+            competitors = listOf(
+                competitorData("early", "Alice", "Alpha", startNumber = 1, category = m21, preferredStartGroup = 3)
+                    .withStartTime(0),
+                competitorData("middle", "Bob", "Bravo", startNumber = 2, category = m40, preferredStartGroup = 2)
+                    .withStartTime(60),
+                competitorData("late", "Cara", "Charlie", startNumber = 3, category = w21, preferredStartGroup = 1)
+                    .withStartTime(120)
+            )
+        ).raceData.copy(
+            startDrawSettings = StartDrawSettings(
+                intervalSeconds = 60,
+                options = StartDrawOptions(startGroupMode = StartDrawStartGroupMode.BALANCED_MULTI_DAY_THIRDS)
+            )
+        )
+
+        val quality = EventStartListDetails.from(raceData).quality
+
+        assertEquals(EventStartListRuleSeverity.GREEN, quality.severity)
+        assertEquals(100, quality.score)
+        assertEquals(false, quality.rowFindings.any { it.text == "Outside preferred start third" })
     }
 
     @Test

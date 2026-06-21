@@ -461,11 +461,12 @@ object DesktopAutomationCli {
         visit(0)
         val generatedSignatures = linkedSetOf<String>()
         val generatedPerfectSignatures = linkedSetOf<String>()
+        val generatorOptions = settings.options.forEventStartListGeneration()
         repeat(generatorSamples) { index ->
             val generated = EventProjectEditor.drawStartList(
                 projectFile = projectFile,
                 intervalText = settings.intervalText,
-                options = settings.options.copy(seed = "verify-generator-${index + 1}")
+                options = generatorOptions.copy(seed = "verify-generator-${index + 1}")
             )
             val signature = drawnOrderSignature(generated, competitorData)
             generatedSignatures += signature

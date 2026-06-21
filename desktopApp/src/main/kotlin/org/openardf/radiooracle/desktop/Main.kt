@@ -5075,7 +5075,7 @@ fun main(args: Array<String>) = application {
                     val currentPath = projectSession.currentPath
                     val protectedOptions = options.copy(
                         idealFirstFoxByCategoryId = unlockedIdealFirstFoxByCategoryId()
-                    )
+                    ).forEventStartListGeneration()
                     val drawContextKey = DesktopStartListDrawNumbers.drawContextKey(interval, protectedOptions)
                     val currentEventKey = DesktopStartListDrawNumbers.eventKey(currentPath, currentProject)
                     val currentDrawExhaustedKey = "$currentEventKey|context:$drawContextKey"
@@ -9683,7 +9683,9 @@ private fun StartListDetailsPanel(
     var startersPerStartTime by remember(settings.options.startersPerStartTime) {
         mutableStateOf(settings.options.startersPerStartTime)
     }
-    var startGroupMode by remember(settings.options.startGroupMode) { mutableStateOf(settings.options.startGroupMode) }
+    var startGroupMode by remember(settings.options.startGroupMode) {
+        mutableStateOf(settings.options.forEventStartListGeneration().startGroupMode)
+    }
     fun startDrawOptions(
         clubHandlingValue: StartDrawClubHandling = clubHandling,
         startersPerStartTimeValue: Int = startersPerStartTime,
