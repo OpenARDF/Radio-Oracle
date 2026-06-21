@@ -27,7 +27,7 @@ Start List settings are stored in the event project data, not desktop-local pref
 - `seed`
 - `startGroupMode`
 
-The default seed is `default`. That value is visible and persisted, but it preserves deterministic category/start-number ordering. Any non-default seed activates repeatable pseudo-random tie-breaking. Blank seeds are normalized back to `default` before settings are saved or a draw is run.
+The seed is persisted for compatibility and repeatable internal generation, but it is not shown on the desktop Start List screen. The desktop `Generate Start List` button supplies a hidden non-default seed on each press and tries to find a start order that has not already been generated for that Event File during the current desktop session. Radio-Oracle numbers distinct generated start orders and shows the current start order number next to the button. If the event constraints only produce a previously seen order, the repeated order number is reported instead.
 
 `startGroupMode` defaults to `No start groups`. In that mode, no start-third rule is applied and the generator behaves like a normal single-event draw. When changed to `Preferred thirds`, the generator uses each competitor's optional `preferredStartGroup` value. The canonical competitor CSV column is `preferred_start_group`; blank means no assignment, and accepted values are `1`, `2`, and `3`.
 
@@ -121,7 +121,7 @@ The goodness factor evaluates whether the saved start order honored the balanced
 
 ## Seeded Randomization
 
-Seeded randomization uses a stable hash function instead of platform random APIs. This is intentional: a given seed should produce the same start order across supported platforms and future runtime versions.
+Seeded randomization uses a stable hash function instead of platform random APIs. This is intentional: a given internal seed should produce the same start order across supported platforms and future runtime versions.
 
 The seed only breaks flexible choices. It does not bypass rule filters. For example, a seeded draw can change which compatible category is selected first, but it still avoids same-category same-time starts when another compatible category exists.
 

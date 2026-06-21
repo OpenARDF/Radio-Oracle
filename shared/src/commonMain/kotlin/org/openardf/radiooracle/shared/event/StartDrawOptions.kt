@@ -46,8 +46,8 @@ data class StartDrawSettings(
  *
  * The generator has two modes:
  * - `DEFAULT_SEED` keeps the traditional deterministic order based on category
- *   order, start number, and name. It is still visible and persisted so the UI
- *   never has an empty seed field.
+ *   order, start number, and name. Desktop generation normally supplies a hidden
+ *   non-default seed so each button press can look for a fresh start order.
  * - Any non-default seed activates repeatable pseudo-random tie-breaking. The
  *   rule filters are applied before seeded tie-breaks, so seeded draws remain
  *   constrained by category, club, starters-per-time, and first-fox safety rules
@@ -70,7 +70,7 @@ data class StartDrawOptions(
         }
     }
 
-    /** Normalizes old files or UI edits that left the seed blank. */
+    /** Normalizes old files or UI paths that left the internal seed blank. */
     fun withDefaultSeed(): StartDrawOptions =
         if (seed.isBlank()) copy(seed = DEFAULT_SEED) else this
 

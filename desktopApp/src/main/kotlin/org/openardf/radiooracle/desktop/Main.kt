@@ -259,6 +259,7 @@ private val CategoryWomenBackground = Color(0xFFFFECEC)
 private val ControlStatsOkColor = Color(0xFF1B5E20)
 private const val SeriesStartFairnessGoodThreshold = 90
 private const val SeriesStartFairnessManualReviewThreshold = 70
+private const val EventStartListUniqueDrawMaxAttempts = 64
 
 private enum class SeriesStartFairnessStatus(val label: String) {
     GenerateStarts("Generate start lists before checking fairness"),
@@ -440,6 +441,9 @@ fun main(args: Array<String>) = application {
             mutableStateOf<DesktopEventSeriesStartFairnessOptimizationResult?>(null)
         }
         var seriesStartFairnessSolutionNumbers by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+        var eventStartListDrawNumbers by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+        var eventStartListDrawNumbering by remember { mutableStateOf<DesktopStartListDrawNumbering?>(null) }
+        var eventStartListDrawEventPath by remember { mutableStateOf<Path?>(null) }
         var seriesCompetitorMatchSummaries by remember {
             mutableStateOf<List<DesktopEventSeriesCompetitorMatchSummary>>(emptyList())
         }
@@ -623,6 +627,20 @@ fun main(args: Array<String>) = application {
             if (eventSeriesValidationEventPath != currentEventPath) {
                 eventSeriesValidationState = null
                 eventSeriesValidationEventPath = currentEventPath
+            }
+            if (eventStartListDrawEventPath != currentEventPath) {
+                eventStartListDrawNumbering = null
+                eventStartListDrawEventPath = currentEventPath
+            } else {
+                val currentProject = projectSession.currentProject
+                val currentNumbering = eventStartListDrawNumbering
+                if (
+                    currentProject != null &&
+                    currentNumbering != null &&
+                    currentNumbering.assignmentSignature != DesktopStartListDrawNumbers.startAssignmentSignature(currentProject)
+                ) {
+                    eventStartListDrawNumbering = null
+                }
             }
         }
 
@@ -1670,6 +1688,7 @@ fun main(args: Array<String>) = application {
                 )
                 projectFile = projectSession.updateCurrentProject { balanced }
                 seriesStartFairnessOptimizationResult = null
+                eventStartListDrawNumbering = null
                 syncProjectState()
                 projectStatusText = "Balanced the open Event File for its series. Save the Event File to keep the draw."
                 recordActivity(projectStatusText)
@@ -4724,6 +4743,7 @@ fun main(args: Array<String>) = application {
             seriesEventSummaries = seriesEventSummaries,
             seriesStartFairnessSummary = seriesStartFairnessSummary,
             seriesStartFairnessOptimizationResult = seriesStartFairnessOptimizationResult,
+            eventStartListDrawNumbering = eventStartListDrawNumbering,
             seriesCompetitorMatchSummaries = seriesCompetitorMatchSummaries,
             eventSeriesValidationState = eventSeriesValidationState,
             projectStatusText = projectStatusText,
@@ -5000,6 +5020,7 @@ fun main(args: Array<String>) = application {
                         EventProjectEditor.updateCompetitorStartTime(currentProject, competitorId, startTime)
                     }
                     seriesStartFairnessOptimizationResult = null
+                    eventStartListDrawNumbering = null
                     syncProjectState()
                     projectStatusText = "Unsaved changes."
                 }.onFailure { error ->
@@ -5020,15 +5041,49 @@ fun main(args: Array<String>) = application {
             },
             onDrawStartList = { interval, options ->
                 runCatching {
+                    val currentProject = requireNotNull(projectSession.currentProject) {
+                        "Open or create an Event File before generating starts."
+                    }
+                    val currentPath = projectSession.currentPath
                     val protectedOptions = options.copy(
                         idealFirstFoxByCategoryId = unlockedIdealFirstFoxByCategoryId()
                     )
-                    val drawnProject = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.drawStartList(currentProject, interval, protectedOptions)
+                    var chosenProject: EventProjectFile? = null
+                    var chosenNumbering: DesktopStartListDrawNumbering? = null
+                    var attemptCount = 0
+                    for (attempt in 1..EventStartListUniqueDrawMaxAttempts) {
+                        attemptCount = attempt
+                        val candidateProject = EventProjectEditor.drawStartList(
+                            currentProject,
+                            interval,
+                            protectedOptions.copy(seed = "event-draw-${UUID.randomUUID()}")
+                        )
+                        val candidateNumbering = DesktopStartListDrawNumbers.assign(
+                            existingNumbers = eventStartListDrawNumbers,
+                            eventPath = currentPath,
+                            projectFile = candidateProject
+                        )
+                        chosenProject = candidateProject
+                        chosenNumbering = candidateNumbering
+                        if (!candidateNumbering.repeatedOrder) {
+                            break
+                        }
                     }
+                    val drawnProject = requireNotNull(chosenProject)
+                    val drawNumbering = requireNotNull(chosenNumbering)
+                    projectSession.updateCurrentProject { drawnProject }
+                    eventStartListDrawNumbers = drawNumbering.orderNumbers
+                    eventStartListDrawNumbering = drawNumbering
+                    eventStartListDrawEventPath = currentPath?.toAbsolutePath()?.normalize()
                     seriesStartFairnessOptimizationResult = null
                     syncProjectState()
-                    projectStatusText = startListDrawStatusText(EventStartListDetails.from(drawnProject.raceData))
+                    val drawStatus = startListDrawStatusText(EventStartListDetails.from(drawnProject.raceData))
+                    val orderStatus = if (drawNumbering.repeatedOrder) {
+                        "Repeated start order #${drawNumbering.orderNumber}; no unique new order found after $attemptCount attempts."
+                    } else {
+                        "Start order #${drawNumbering.orderNumber}."
+                    }
+                    projectStatusText = "$drawStatus $orderStatus"
                 }.onFailure { error ->
                     projectStatusText = "Draw failed: ${error.message ?: error::class.simpleName}"
                 }
@@ -5056,6 +5111,7 @@ fun main(args: Array<String>) = application {
                         )
                     }
                     seriesStartFairnessOptimizationResult = null
+                    eventStartListDrawNumbering = null
                     syncProjectState()
                     projectStatusText = "Balanced starts from ${paths.size} prior CSV file(s); " +
                         startListDrawStatusText(EventStartListDetails.from(drawnProject.raceData))
@@ -7387,6 +7443,7 @@ private fun RadioOManagerDesktopApp(
     seriesEventSummaries: List<DesktopEventSeriesEventSummary> = emptyList(),
     seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary? = null,
     seriesStartFairnessOptimizationResult: DesktopEventSeriesStartFairnessOptimizationResult? = null,
+    eventStartListDrawNumbering: DesktopStartListDrawNumbering? = null,
     seriesCompetitorMatchSummaries: List<DesktopEventSeriesCompetitorMatchSummary> = emptyList(),
     eventSeriesValidationState: EventSeriesValidationUiState? = null,
     projectStatusText: String = "No Event File open.",
@@ -7639,6 +7696,7 @@ private fun RadioOManagerDesktopApp(
                 seriesEventSummaries = seriesEventSummaries,
                 seriesStartFairnessSummary = seriesStartFairnessSummary,
                 seriesStartFairnessOptimizationResult = seriesStartFairnessOptimizationResult,
+                eventStartListDrawNumbering = eventStartListDrawNumbering,
                 seriesCompetitorMatchSummaries = seriesCompetitorMatchSummaries,
                 eventSeriesValidationState = eventSeriesValidationState,
                 projectStatusText = projectStatusText,
@@ -8448,6 +8506,7 @@ private fun SectionWorkspace(
     seriesEventSummaries: List<DesktopEventSeriesEventSummary>,
     seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary?,
     seriesStartFairnessOptimizationResult: DesktopEventSeriesStartFairnessOptimizationResult?,
+    eventStartListDrawNumbering: DesktopStartListDrawNumbering?,
     seriesCompetitorMatchSummaries: List<DesktopEventSeriesCompetitorMatchSummary>,
     eventSeriesValidationState: EventSeriesValidationUiState?,
     projectStatusText: String,
@@ -8681,6 +8740,7 @@ private fun SectionWorkspace(
             StartListDetailsPanel(
                 details = EventStartListDetails.from(projectFile.raceData),
                 seriesStartFairnessSummary = seriesStartFairnessSummary,
+                eventStartListDrawNumbering = eventStartListDrawNumbering,
                 onUpdateStartDrawSettings = onUpdateStartDrawSettings,
                 onDrawStartList = onDrawStartList,
                 onDrawBalancedStartList = onDrawBalancedStartList
@@ -9552,6 +9612,7 @@ private fun ResultDetailRow(
 private fun StartListDetailsPanel(
     details: EventStartListDetails,
     seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary?,
+    eventStartListDrawNumbering: DesktopStartListDrawNumbering?,
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit,
     onDrawStartList: (String, StartDrawOptions) -> Unit,
     onDrawBalancedStartList: (String, StartDrawOptions) -> Unit
@@ -9564,18 +9625,16 @@ private fun StartListDetailsPanel(
     var startersPerStartTime by remember(settings.options.startersPerStartTime) {
         mutableStateOf(settings.options.startersPerStartTime)
     }
-    var seedDraft by remember(settings.options.seed) { mutableStateOf(settings.options.seed) }
     var startGroupMode by remember(settings.options.startGroupMode) { mutableStateOf(settings.options.startGroupMode) }
     fun startDrawOptions(
         clubHandlingValue: StartDrawClubHandling = clubHandling,
         startersPerStartTimeValue: Int = startersPerStartTime,
-        seedValue: String = seedDraft,
         startGroupModeValue: StartDrawStartGroupMode = startGroupMode
     ): StartDrawOptions =
         StartDrawOptions(
             clubHandling = clubHandlingValue,
             startersPerStartTime = startersPerStartTimeValue,
-            seed = seedValue,
+            seed = settings.options.seed,
             startGroupMode = startGroupModeValue
         )
     fun persistSettingsIfIntervalIsValid(intervalValue: String, options: StartDrawOptions) {
@@ -9627,21 +9686,6 @@ private fun StartListDetailsPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextField(
-                value = seedDraft,
-                onValueChange = {
-                    seedDraft = it
-                    if (it.isNotBlank()) {
-                        persistSettingsIfIntervalIsValid(intervalDraft, startDrawOptions(seedValue = it))
-                    }
-                },
-                label = { Text("Seed") },
-                modifier = Modifier
-                    .width(180.dp)
-                    .commitOnEnter {
-                        persistSettingsIfIntervalIsValid(intervalDraft, startDrawOptions(seedValue = seedDraft))
-                    }
-            )
             EnumPicker(
                 selectedValue = startGroupMode,
                 values = listOf(StartDrawStartGroupMode.DISABLED, StartDrawStartGroupMode.PREFERRED_THIRDS),
@@ -9681,6 +9725,18 @@ private fun StartListDetailsPanel(
                 )
             ) {
                 Text("Generate Start List")
+            }
+            eventStartListDrawNumbering?.let { numbering ->
+                Text(
+                    text = if (numbering.repeatedOrder) {
+                        "Repeated start order #${numbering.orderNumber}"
+                    } else {
+                        "Start order #${numbering.orderNumber}"
+                    },
+                    color = if (numbering.repeatedOrder) DesktopPalette.Disconnected else DesktopPalette.Black,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
         DetailHeaderRow(listOf("Scheduled", "No start time"))

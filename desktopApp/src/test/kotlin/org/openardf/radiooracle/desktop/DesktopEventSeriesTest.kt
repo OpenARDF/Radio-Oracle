@@ -734,6 +734,55 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun startListDrawNumberingNumbersUniqueEventStartOrdersAndFlagsRepeats() {
+        val eventPath = Path.of("/source/day-1.rom.json")
+        val firstProject = projectWithTargetThird("Day 1", targetThird = 1)
+        val repeatedProject = projectWithTargetThird("Day 1", targetThird = 1)
+        val secondProject = projectWithTargetThird("Day 1", targetThird = 2)
+
+        val first = DesktopStartListDrawNumbers.assign(
+            existingNumbers = emptyMap(),
+            eventPath = eventPath,
+            projectFile = firstProject
+        )
+        val repeated = DesktopStartListDrawNumbers.assign(
+            existingNumbers = first.orderNumbers,
+            eventPath = eventPath,
+            projectFile = repeatedProject
+        )
+        val second = DesktopStartListDrawNumbers.assign(
+            existingNumbers = repeated.orderNumbers,
+            eventPath = eventPath,
+            projectFile = secondProject
+        )
+
+        assertEquals(1, first.orderNumber)
+        assertFalse(first.repeatedOrder)
+        assertEquals(1, repeated.orderNumber)
+        assertTrue(repeated.repeatedOrder)
+        assertEquals(2, second.orderNumber)
+        assertFalse(second.repeatedOrder)
+    }
+
+    @Test
+    fun startListDrawNumberingIsScopedByEventFile() {
+        val firstEvent = DesktopStartListDrawNumbers.assign(
+            existingNumbers = emptyMap(),
+            eventPath = Path.of("/source/day-1.rom.json"),
+            projectFile = projectWithTargetThird("Day 1", targetThird = 1)
+        )
+        val secondEvent = DesktopStartListDrawNumbers.assign(
+            existingNumbers = firstEvent.orderNumbers,
+            eventPath = Path.of("/source/day-2.rom.json"),
+            projectFile = projectWithTargetThird("Day 2", targetThird = 1)
+        )
+
+        assertEquals(1, firstEvent.orderNumber)
+        assertEquals(1, secondEvent.orderNumber)
+        assertFalse(secondEvent.repeatedOrder)
+    }
+
+    @Test
     fun seriesContextIsAvailableForManifestListedCurrentEventWithoutBacklink() {
         assertEquals(
             true,
