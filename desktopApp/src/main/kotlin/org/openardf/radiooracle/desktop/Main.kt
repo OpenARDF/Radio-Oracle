@@ -9802,10 +9802,11 @@ private fun StartListDetailsPanel(
             )
         }
         Row(
-            horizontalArrangement = Arrangement.Start,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Button(
+                enabled = !settings.lockedForSeriesOptimization,
                 onClick = {
                     onDrawStartList(
                         intervalDraft,
@@ -9821,7 +9822,7 @@ private fun StartListDetailsPanel(
             }
             eventStartListDrawNumbering?.let { numbering ->
                 Text(
-                    text = "Start order #${numbering.orderNumber}",
+                    text = "List #${numbering.orderNumber}",
                     color = DesktopPalette.Black,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
@@ -9834,7 +9835,7 @@ private fun StartListDetailsPanel(
                 onCheckedChange = onUpdateStartDrawSeriesOptimizationLock
             )
             Text(
-                text = "Lock this start list for Series optimization",
+                text = "Lock this start list",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold
