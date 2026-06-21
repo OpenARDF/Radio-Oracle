@@ -155,7 +155,7 @@ class EventValidationRulesTest {
 
     private fun competitorData(
         id: String,
-        startNumber: Int = 1,
+        startNumber: Int? = null,
         siNumber: Int? = 123,
         bibNumber: String = "",
         callSign: String = "",

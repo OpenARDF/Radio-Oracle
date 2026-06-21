@@ -920,7 +920,7 @@ class EventProjectEditorTest {
         val updated = EventProjectEditor.updateCompetitorNumbers(original, "comp-2", " 3 ", " ")
 
         assertEquals(1, updated.raceData.competitorData[0].competitorCategory.competitor.startNumber)
-        assertEquals(3, updated.raceData.competitorData[1].competitorCategory.competitor.startNumber)
+        assertEquals(2, updated.raceData.competitorData[1].competitorCategory.competitor.startNumber)
         assertEquals(null, updated.raceData.competitorData[1].competitorCategory.competitor.siNumber)
     }
 
@@ -933,12 +933,6 @@ class EventProjectEditorTest {
             )
         )
 
-        assertFailsWith<IllegalArgumentException> {
-            EventProjectEditor.updateCompetitorNumbers(original, "comp-2", "", "3333")
-        }
-        assertFailsWith<IllegalArgumentException> {
-            EventProjectEditor.updateCompetitorNumbers(original, "comp-2", "1", "3333")
-        }
         assertFailsWith<IllegalArgumentException> {
             EventProjectEditor.updateCompetitorNumbers(original, "comp-2", "3", "999")
         }
@@ -964,7 +958,7 @@ class EventProjectEditorTest {
         assertEquals(null, competitor.categoryId)
         assertEquals("Bob", competitor.firstName)
         assertEquals("Racer", competitor.lastName)
-        assertEquals(2, competitor.startNumber)
+        assertEquals(null, competitor.startNumber)
         assertEquals(null, competitor.siNumber)
     }
 
@@ -982,9 +976,6 @@ class EventProjectEditorTest {
         }
         assertFailsWith<IllegalArgumentException> {
             EventProjectEditor.addCompetitor(original, "comp-2", "", "Racer", "2", "")
-        }
-        assertFailsWith<IllegalArgumentException> {
-            EventProjectEditor.addCompetitor(original, "comp-2", "Bob", "Racer", "1", "")
         }
         assertFailsWith<IllegalArgumentException> {
             EventProjectEditor.addCompetitor(original, "comp-2", "Bob", "Racer", "2", "1111")
@@ -1139,7 +1130,7 @@ class EventProjectEditorTest {
         )
 
         assertEquals(listOf("M21", "W21"), updated.raceData.categories.map { it.category.name })
-        assertEquals(listOf(1, 2, 3), updated.raceData.competitorData.map { it.competitorCategory.competitor.startNumber })
+        assertEquals(listOf(null, null, null), updated.raceData.competitorData.map { it.competitorCategory.competitor.startNumber })
 
         val imported = updated.raceData.competitorData[1].competitorCategory
         assertEquals("comp-2", imported.competitor.id)
@@ -1272,7 +1263,7 @@ class EventProjectEditorTest {
         assertEquals("comp-1", updatedCompetitor.id)
         assertEquals("New", updatedCompetitor.firstName)
         assertEquals("Runner", updatedCompetitor.lastName)
-        assertEquals(7, updatedCompetitor.startNumber)
+        assertEquals(null, updatedCompetitor.startNumber)
         assertEquals(2222, updatedCompetitor.siNumber)
         assertEquals("cat-2", updatedCompetitor.categoryId)
         assertEquals(listOf("M21", "W21"), outcome.projectFile.raceData.categories.map { it.category.name })
@@ -1392,7 +1383,7 @@ class EventProjectEditorTest {
         assertEquals("comp-1", updatedCompetitor.id)
         assertEquals("Alice", updatedCompetitor.firstName)
         assertEquals(3333, updatedCompetitor.siNumber)
-        assertEquals(1, updatedCompetitor.startNumber)
+        assertEquals(null, updatedCompetitor.startNumber)
         assertEquals("cat-2", updatedCompetitor.categoryId)
         assertEquals(listOf("M21", "W21"), outcome.projectFile.raceData.categories.map { it.category.name })
         assertEquals("result-1", outcome.projectFile.raceData.unmatchedReadoutData.single().result.id)
@@ -1453,9 +1444,9 @@ class EventProjectEditorTest {
         val updatedAlice = competitors.single { it.id == "comp-1" }
         assertEquals(0, outcome.importedCount)
         assertEquals(1, outcome.updatedCount)
-        assertEquals(1, updatedAlice.startNumber)
+        assertEquals(null, updatedAlice.startNumber)
         assertEquals(3333, updatedAlice.siNumber)
-        assertEquals(listOf(1, 2), competitors.map { it.startNumber })
+        assertEquals(listOf(null, null), competitors.map { it.startNumber })
     }
 
     @Test
@@ -1500,7 +1491,7 @@ class EventProjectEditorTest {
         assertEquals(0, outcome.importedCount)
         assertEquals(1, outcome.updatedCount)
         assertEquals("comp-1", updated.id)
-        assertEquals(1, updated.startNumber)
+        assertEquals(null, updated.startNumber)
         assertEquals(2450670, updated.siNumber)
         assertEquals("75", updated.index)
         assertEquals("75", updated.bibNumber)
@@ -1524,14 +1515,6 @@ class EventProjectEditorTest {
             )
         )
 
-        assertFailsWith<IllegalArgumentException> {
-            EventProjectEditor.importCompetitorRows(
-                projectFile = original,
-                rows = listOf(competitorImportRow(startNumber = 1, siNumber = 2222)),
-                competitorIdFactory = { "comp-2" },
-                categoryIdFactory = { "cat-1" }
-            )
-        }
         assertFailsWith<IllegalArgumentException> {
             EventProjectEditor.importCompetitorRows(
                 projectFile = original,

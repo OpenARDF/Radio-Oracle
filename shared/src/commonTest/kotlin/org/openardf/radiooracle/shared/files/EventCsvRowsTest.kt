@@ -100,7 +100,7 @@ class EventCsvRowsTest {
             drawnStartTimeSeconds = null
         )
 
-        assertEquals(";Pavel;Kolsky;;0;;OK;OK001;;0;;OK001;", EventCsvRows.competitorRow(competitor, ""))
+        assertEquals(";;Pavel;Kolsky;;0;;OK;OK001;;0;;OK001;", EventCsvRows.competitorRow(competitor, ""))
         assertEquals(";Kolsky;Pavel;;;;OK001;;OK;", EventCsvRows.competitorStartRow(competitor, "", null))
     }
 
