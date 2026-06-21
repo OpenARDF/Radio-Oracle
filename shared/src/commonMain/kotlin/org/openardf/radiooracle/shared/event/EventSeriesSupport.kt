@@ -98,18 +98,22 @@ object EventSeriesSupport {
         return issues
     }
 
-    fun priorStartRowsForCurrentEvent(
+    /**
+     * Returns generated-start histories from every manifest-listed series event except the
+     * event being redrawn. Series fairness is a whole-series problem once other draws exist;
+     * calendar dates and manifest order are intentionally not used to exclude later events.
+     */
+    fun otherSeriesStartRowsForCurrentEvent(
         seriesFile: EventSeriesFile,
         linkedEvents: List<EventSeriesLinkedEvent>,
         currentSeriesEventId: String
     ): List<List<CompetitorStartCsvImportRow>> {
-        val currentOrder = seriesFile.events
-            .firstOrNull { it.seriesEventId == currentSeriesEventId }
-            ?.order
-            ?: return emptyList()
+        if (seriesFile.events.none { it.seriesEventId == currentSeriesEventId }) {
+            return emptyList()
+        }
         val linkedByEventId = linkedEvents.associateBy { it.event.seriesEventId }
         return seriesFile.sortedEvents()
-            .filter { it.order < currentOrder }
+            .filterNot { it.seriesEventId == currentSeriesEventId }
             .mapNotNull { event ->
                 linkedByEventId[event.seriesEventId]?.projectFile?.let(::startRowsFromEventFile)
             }
@@ -128,7 +132,7 @@ object EventSeriesSupport {
             projectFile = currentProjectFile,
             intervalText = intervalText,
             options = options,
-            previousStartLists = priorStartRowsForCurrentEvent(seriesFile, linkedEvents, currentSeriesEventId)
+            previousStartLists = otherSeriesStartRowsForCurrentEvent(seriesFile, linkedEvents, currentSeriesEventId)
         )
 
     fun matchCompetitors(

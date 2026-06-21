@@ -48,6 +48,9 @@ series-match manifest current:
 series-start-fairness manifest current:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-start-fairness "{{manifest}}" "{{current}}"'
 
+series-optimize-start-fairness manifest current flags="":
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-optimize-start-fairness "{{manifest}}" "{{current}}" {{flags}}'
+
 desktop-check: compile test
 
 desktop-package:

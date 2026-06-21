@@ -77,15 +77,19 @@ Many championships have four separate competitions on consecutive days. Fairness
 
 Radio-Oracle supports this with two desktop workflows:
 
-- `Balance from Event Series` reads prior starts directly from earlier Event Files listed in the open Event Series manifest.
+- `Balance Open Event for Series` redraws only the open Event File, using other series Event Files that already have generated starts.
 - `Balance from CSVs` remains the manual fallback when the series manifest is not available or prior starts arrive as exported CSV files.
+
+`Optimize Series Starts` can be pressed repeatedly to look for alternate randomized solutions. Radio-Oracle numbers distinct whole-series start assignments found during the current desktop session and reports when a press repeats an earlier solution.
+
+The Series Events list and the Start Fairness History column are ordered by event date/time when every series event has a usable date. If any series event is missing a date or has an invalid date, Radio-Oracle falls back to the stored series order.
 
 For series-based balancing:
 
 1. Link the Event File to an Event Series from Event File > Settings > Event Series.
 2. Open the Event File for the next day.
-3. Use the contextual Series workflow or Start List area to select `Balance from Event Series`.
-4. Radio-Oracle reads only prior events listed earlier in the manifest order, computes preferred thirds, saves those assignments, and draws the start list in `Balanced thirds` mode.
+3. Use the contextual Series workflow to select `Balance Open Event for Series`.
+4. Radio-Oracle reads other series events that already have generated starts, computes preferred thirds, saves those assignments, and draws the open event's start list in `Balanced thirds` mode.
 
 For CSV-based balancing:
 
@@ -97,7 +101,7 @@ For CSV-based balancing:
 
 Prior starts from linked Event Files are matched to current competitors by persistent identity fields: SI number, bib number, then call sign. Prior starts CSV files currently carry SI numbers but not bib numbers or call signs, so CSV-based balancing can only match competitors that have SI numbers in the starts file. Start/order numbers are not used as competitor identity keys.
 
-Each selected prior starts CSV, or each prior Event File selected by the series manifest, is converted into first, middle, and late thirds by sorting its distinct start times and applying the same third-boundary rule used by the draw. The current-day assignment heuristic then evaluates each competitor's history:
+Each selected prior starts CSV, or each other generated-start Event File selected by the series manifest, is converted into first, middle, and late thirds by sorting its distinct start times and applying the same third-boundary rule used by the draw. The current-day assignment heuristic then evaluates each competitor's history:
 
 - A third already used twice by that competitor receives a large penalty.
 - If the competitor has three prior starts and none were early, non-early choices receive a large penalty.
@@ -107,7 +111,7 @@ Each selected prior starts CSV, or each prior Event File selected by the series 
 
 The algorithm is a deterministic heuristic, not an exhaustive optimizer. It is intended to produce reviewable, fair assignments when participant lists differ between days. If the field is too constrained, the draw still completes and the quality evaluator flags any saved current-day start-third violations in red.
 
-The goodness factor evaluates whether the saved start order honored the balanced assignments produced by `Balance from Event Series` or `Balance from CSVs`. It does not re-read the prior Event Files or CSV files during scoring, and it does not separately prove that the balanced assignment was globally optimal across every day. In balanced mode, the multi-day fairness work happens when Radio-Oracle computes the current-day preferred thirds; the quality score then verifies that the final drawn start order stayed inside those computed thirds.
+The goodness factor evaluates whether the saved start order honored the balanced assignments produced by `Balance Open Event for Series` or `Balance from CSVs`. It does not re-read the other Event Files or prior CSV files during scoring, and it does not separately prove that the balanced assignment was globally optimal across every day. In balanced mode, the multi-day fairness work happens when Radio-Oracle computes the current-day preferred thirds; the quality score then verifies that the final drawn start order stayed inside those computed thirds.
 
 ## Seeded Randomization
 

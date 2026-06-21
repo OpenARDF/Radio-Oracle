@@ -104,6 +104,7 @@ object DesktopAutomationCli {
             "event-series-validate" -> eventSeriesValidate(commandArgs, out, err)
             "event-series-match" -> eventSeriesMatch(commandArgs, out, err)
             "event-series-start-fairness" -> eventSeriesStartFairness(commandArgs, out, err)
+            "event-series-optimize-start-fairness" -> eventSeriesOptimizeStartFairness(commandArgs, out, err)
             "readiness-summary" -> readinessSummary(commandArgs, out, err)
             "recalculate-results" -> recalculateResults(commandArgs, out, err)
             "export-public-results-site" -> exportPublicResultsSite(commandArgs, out, err)
@@ -634,6 +635,7 @@ object DesktopAutomationCli {
                     "seriesEventCount" to summary?.seriesEventCount,
                     "currentEventName" to summary?.currentEventName,
                     "currentEventOrder" to summary?.currentEventOrder,
+                    "historyOrderDescription" to summary?.historyOrderDescription,
                     "missingEventFileCount" to summary?.missingEventFileCount,
                     "eventsWithGeneratedStartsCount" to summary?.eventsWithGeneratedStartsCount,
                     "eventsWithoutGeneratedStartsCount" to summary?.eventsWithoutGeneratedStartsCount,
@@ -659,11 +661,11 @@ object DesktopAutomationCli {
                             "recommendation" to history.recommendation
                         )
                     },
-                    "priorEventCount" to summary?.priorEventCount,
-                    "missingPriorEventFileCount" to summary?.missingPriorEventFileCount,
-                    "priorEventsWithStartsCount" to summary?.priorEventsWithStartsCount,
-                    "priorStartRowCount" to summary?.priorStartRowCount,
-                    "identifiedPriorStartRowCount" to summary?.identifiedPriorStartRowCount,
+                    "balanceHistoryEventCount" to summary?.balanceHistoryEventCount,
+                    "missingBalanceHistoryEventFileCount" to summary?.missingBalanceHistoryEventFileCount,
+                    "balanceHistoryEventsWithStartsCount" to summary?.balanceHistoryEventsWithStartsCount,
+                    "balanceHistoryStartRowCount" to summary?.balanceHistoryStartRowCount,
+                    "identifiedBalanceHistoryStartRowCount" to summary?.identifiedBalanceHistoryStartRowCount,
                     "currentCompetitorCount" to summary?.currentCompetitorCount,
                     "identifiedCurrentCompetitorCount" to summary?.identifiedCurrentCompetitorCount
                 )
@@ -671,6 +673,67 @@ object DesktopAutomationCli {
             0
         }.getOrElse { error ->
             err.println("Event Series start fairness summary failed: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
+    private fun eventSeriesOptimizeStartFairness(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val manifestText = args.getOrNull(0)
+        val currentEventText = args.getOrNull(1)
+        if (manifestText.isNullOrBlank() || currentEventText.isNullOrBlank()) {
+            err.println("event-series-optimize-start-fairness requires Event Series manifest and current Event File paths.")
+            return 64
+        }
+        val writeChanges = "--write" in args
+        val seedSalt = optionValue(args, "--seed-salt") ?: "cli-default"
+        return runCatching {
+            val manifestPath = Path.of(manifestText)
+            val currentEventPath = Path.of(currentEventText)
+            val result = DesktopEventSeriesActions.optimizeStartFairness(
+                store = DesktopEventSeriesFiles,
+                manifestPath = manifestPath,
+                currentEventPath = currentEventPath,
+                seedSalt = seedSalt
+            )
+            if (writeChanges) {
+                // CLI writes every changed file directly because it has no open desktop session.
+                result.updatedEventFiles.forEach { updated ->
+                    DesktopProjectFiles.write(updated.path, updated.projectFile)
+                }
+            }
+            out.println(
+                jsonObject(
+                    "command" to "event-series-optimize-start-fairness",
+                    "manifest" to manifestPath.toAbsolutePath().normalize().toString(),
+                    "currentEvent" to currentEventPath.toAbsolutePath().normalize().toString(),
+                    "write" to writeChanges,
+                    "seedSalt" to seedSalt,
+                    "improved" to result.improved,
+                    "alternateSolution" to result.alternateSolution,
+                    "solutionSignature" to result.solutionSignature,
+                    "initialScore" to result.initialScore,
+                    "finalScore" to result.finalScore,
+                    "initialUnevenHistoryCount" to result.initialUnevenHistoryCount,
+                    "finalUnevenHistoryCount" to result.finalUnevenHistoryCount,
+                    "initialSpreadSum" to result.initialSpreadSum,
+                    "finalSpreadSum" to result.finalSpreadSum,
+                    "attemptedCandidateCount" to result.attemptedCandidateCount,
+                    "acceptedCandidateCount" to result.acceptedCandidateCount,
+                    "completedPassCount" to result.completedPassCount,
+                    "optimizedEventCount" to result.optimizedEventCount,
+                    "updatedEvents" to result.updatedEventFiles.map { updated ->
+                        mapOf(
+                            "seriesEventId" to updated.seriesEventId,
+                            "displayName" to updated.displayName,
+                            "path" to updated.path.toAbsolutePath().normalize().toString(),
+                            "current" to updated.isCurrentEvent
+                        )
+                    }
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Event Series start fairness optimization failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -1072,6 +1135,8 @@ object DesktopAutomationCli {
                                           Print competitor matching diagnostics for the current series event.
           event-series-start-fairness <manifest-path> <current-event-path>
                                           Print start fairness input diagnostics for the current series event.
+          event-series-optimize-start-fairness <manifest-path> <current-event-path> [--write] [--seed-salt <text>]
+                                          Try to improve or preserve series start fairness with randomized candidates; writes changed Event Files only with --write.
           readiness-summary [--require-ready] <event-path>
                                           Print validation and readiness issues as JSON.
           recalculate-results [--write] <event-path>

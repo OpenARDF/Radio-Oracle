@@ -424,6 +424,10 @@ fun main(args: Array<String>) = application {
         var recentActivityLog by remember { mutableStateOf<List<String>>(emptyList()) }
         var seriesEventSummaries by remember { mutableStateOf<List<DesktopEventSeriesEventSummary>>(emptyList()) }
         var seriesStartFairnessSummary by remember { mutableStateOf<DesktopEventSeriesStartFairnessSummary?>(null) }
+        var seriesStartFairnessOptimizationResult by remember {
+            mutableStateOf<DesktopEventSeriesStartFairnessOptimizationResult?>(null)
+        }
+        var seriesStartFairnessSolutionNumbers by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
         var seriesCompetitorMatchSummaries by remember {
             mutableStateOf<List<DesktopEventSeriesCompetitorMatchSummary>>(emptyList())
         }
@@ -528,6 +532,38 @@ fun main(args: Array<String>) = application {
         fun currentSeriesManifestPath(): Path? {
             val currentPath = projectSession.currentPath ?: return null
             return DesktopEventSeriesActions.findManifestNearEvent(currentPath)
+        }
+
+        fun refreshSavedEventSeriesMetadata(savedProject: EventProjectFile, savedPath: Path): String? {
+            if (savedProject.seriesLink == null) {
+                return null
+            }
+            val manifestPath = DesktopEventSeriesActions.findManifestNearEvent(savedPath)
+                ?: return "Event Series metadata was not refreshed because no series manifest was found near this Event File."
+            return runCatching {
+                val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+                val seriesFolder = requireNotNull(manifestPath.parent) {
+                    "Event Series manifest has no parent folder."
+                }
+                val refreshedSeriesFile = DesktopEventSeriesActions.refreshLinkedEventMetadata(
+                    seriesFile = seriesFile,
+                    eventPath = savedPath,
+                    seriesFolder = seriesFolder,
+                    eventProjectFile = savedProject
+                )
+                if (refreshedSeriesFile != seriesFile) {
+                    DesktopEventSeriesFiles.write(manifestPath, refreshedSeriesFile)
+                    DesktopDebugLog.info(
+                        "EventSeries",
+                        "Refreshed saved Event File metadata in ${manifestPath.fileName} for ${savedPath.fileName}."
+                    )
+                }
+                null
+            }.getOrElse { error ->
+                val message = error.message ?: error::class.simpleName ?: "Unknown error"
+                DesktopDebugLog.error("EventSeries", "Failed to refresh saved Event File metadata: $message")
+                "Event Series metadata refresh failed: $message"
+            }
         }
 
         fun refreshSeriesEventSummaries() {
@@ -1340,12 +1376,21 @@ fun main(args: Array<String>) = application {
                 ) ?: return false
                 return runCatching {
                     projectSession.saveAs(path)
+                    val seriesRefreshWarning = projectSession.currentProject?.let { savedProject ->
+                        refreshSavedEventSeriesMetadata(savedProject, path)
+                    }
                     newEventDraftProject = null
                     hasUnsavedEventDefinitionChanges = false
                     isEventDefinitionSaveDialogVisible = false
                     syncProjectState()
                     DesktopLastEventFilePreferences.rememberEventFile(path)
-                    projectStatusText = "Saved ${path.fileName}"
+                    projectStatusText = buildString {
+                        append("Saved ${path.fileName}")
+                        if (seriesRefreshWarning != null) {
+                            append(". ")
+                            append(seriesRefreshWarning)
+                        }
+                    }
                     DesktopDebugLog.info("EventFile", "Saved ${path.fileName}")
                 }.onFailure { error ->
                     projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
@@ -1365,12 +1410,26 @@ fun main(args: Array<String>) = application {
             }
             return runCatching {
                 projectSession.save()
+                val savedPath = projectSession.currentPath
+                val seriesRefreshWarning = if (savedPath != null) {
+                    projectSession.currentProject?.let { savedProject ->
+                        refreshSavedEventSeriesMetadata(savedProject, savedPath)
+                    }
+                } else {
+                    null
+                }
                 newEventDraftProject = null
                 hasUnsavedEventDefinitionChanges = false
                 isEventDefinitionSaveDialogVisible = false
                 syncProjectState()
                 projectSession.currentPath?.let(DesktopLastEventFilePreferences::rememberEventFile)
-                projectStatusText = "Saved ${projectSession.currentPath?.fileName ?: "Event File"}"
+                projectStatusText = buildString {
+                    append("Saved ${projectSession.currentPath?.fileName ?: "Event File"}")
+                    if (seriesRefreshWarning != null) {
+                        append(". ")
+                        append(seriesRefreshWarning)
+                    }
+                }
                 DesktopDebugLog.info("EventFile", "Saved ${projectSession.currentPath?.fileName ?: "Event File"}")
             }.onFailure { error ->
                 projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
@@ -1569,11 +1628,11 @@ fun main(args: Array<String>) = application {
 
         fun balanceStartListFromEventSeries() {
             val currentProject = projectSession.currentProject ?: run {
-                projectStatusText = "Open or create an Event File before balancing starts from an Event Series."
+                projectStatusText = "Open or create an Event File before balancing the open event for its series."
                 return
             }
             val link = currentProject.seriesLink ?: run {
-                projectStatusText = "Link this Event File to an Event Series before balancing starts from the series."
+                projectStatusText = "Link this Event File to an Event Series before balancing the open event for its series."
                 return
             }
             val manifestPath = currentSeriesManifestPath() ?: run {
@@ -1599,10 +1658,79 @@ fun main(args: Array<String>) = application {
                 )
                 projectFile = projectSession.updateCurrentProject { balanced }
                 syncProjectState()
-                projectStatusText = "Balanced Start List from Event Series. Save the Event File to keep the draw."
+                projectStatusText = "Balanced the open Event File for its series. Save the Event File to keep the draw."
                 recordActivity(projectStatusText)
             }.onFailure { error ->
-                projectStatusText = "Balance from Event Series failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Balance Open Event for Series failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
+        fun optimizeSeriesStartFairness() {
+            val currentPath = projectSession.currentPath ?: run {
+                projectStatusText = "Open and save an Event File in this Event Series before optimizing series starts."
+                return
+            }
+            if (projectSession.hasUnsavedChanges) {
+                projectStatusText = "Save the current Event File before optimizing series starts."
+                return
+            }
+            val manifestPath = currentSeriesManifestPath() ?: run {
+                projectStatusText = "Series manifest not found near this Event File."
+                return
+            }
+            runCatching {
+                val result = DesktopEventSeriesActions.optimizeStartFairness(
+                    store = DesktopEventSeriesFiles,
+                    manifestPath = manifestPath,
+                    currentEventPath = currentPath,
+                    seedSalt = UUID.randomUUID().toString()
+                )
+                val normalizedCurrentPath = currentPath.toAbsolutePath().normalize()
+                val currentEventUpdate = result.updatedEventFiles.firstOrNull { updated ->
+                    updated.path.toAbsolutePath().normalize() == normalizedCurrentPath
+                }
+
+                // The optimizer evaluates the series as one problem, but each Event File remains
+                // independently stored. Write non-open files directly and route the open file
+                // through the project session so dirty-state and in-memory UI state stay coherent.
+                result.updatedEventFiles
+                    .filterNot { updated -> updated.path.toAbsolutePath().normalize() == normalizedCurrentPath }
+                    .forEach { updated ->
+                        DesktopEventSeriesFiles.writeEvent(updated.path, updated.projectFile)
+                    }
+                currentEventUpdate?.let { updated ->
+                    projectFile = projectSession.updateCurrentProject { updated.projectFile }
+                    projectSession.save()
+                }
+
+                val solutionNumbering = DesktopEventSeriesStartFairnessSolutionNumbers.assign(
+                    existingNumbers = seriesStartFairnessSolutionNumbers,
+                    manifestPath = manifestPath,
+                    solutionSignature = result.solutionSignature
+                )
+                seriesStartFairnessSolutionNumbers = solutionNumbering.solutionNumbers
+                val numberedResult = result.copy(
+                    solutionNumber = solutionNumbering.solutionNumber,
+                    repeatedSolution = solutionNumbering.repeatedSolution
+                )
+
+                seriesStartFairnessOptimizationResult = numberedResult
+                syncProjectState()
+                projectStatusText = when {
+                    numberedResult.improved ->
+                        "Optimized Series Start Fairness: ${numberedResult.initialUnevenHistoryCount} -> " +
+                            "${numberedResult.finalUnevenHistoryCount} uneven histories across ${numberedResult.optimizedEventCount} updated events. " +
+                            "${numberedResult.solutionLabel()}."
+                    numberedResult.alternateSolution ->
+                        "Found an alternate Series Start Fairness solution with the same fairness score across ${numberedResult.optimizedEventCount} updated events. " +
+                            "${numberedResult.solutionLabel()}."
+                    else ->
+                        "Series Start Fairness optimizer found no alternate or improved start lists after ${numberedResult.attemptedCandidateCount} candidates. " +
+                            "${numberedResult.solutionLabel()}."
+                }
+                recordActivity(projectStatusText)
+            }.onFailure { error ->
+                projectStatusText = "Series Start Fairness optimizer failed: ${error.message ?: error::class.simpleName}"
             }
         }
 
@@ -3534,12 +3662,20 @@ fun main(args: Array<String>) = application {
                 ?: return false
             return runCatching {
                 projectSession.saveAs(path)
-                projectFile = projectSession.currentProject
-                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                val seriesRefreshWarning = projectSession.currentProject?.let { savedProject ->
+                    refreshSavedEventSeriesMetadata(savedProject, path)
+                }
                 hasUnsavedEventDefinitionChanges = false
                 isEventDefinitionSaveDialogVisible = false
+                syncProjectState()
                 DesktopLastEventFilePreferences.rememberEventFile(path)
-                projectStatusText = "Saved ${path.fileName}"
+                projectStatusText = buildString {
+                    append("Saved ${path.fileName}")
+                    if (seriesRefreshWarning != null) {
+                        append(". ")
+                        append(seriesRefreshWarning)
+                    }
+                }
                 DesktopDebugLog.info("EventFile", "Saved As ${path.fileName}")
             }.onFailure { error ->
                 projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
@@ -4574,6 +4710,7 @@ fun main(args: Array<String>) = application {
             eventFilePath = projectSession.currentPath,
             seriesEventSummaries = seriesEventSummaries,
             seriesStartFairnessSummary = seriesStartFairnessSummary,
+            seriesStartFairnessOptimizationResult = seriesStartFairnessOptimizationResult,
             seriesCompetitorMatchSummaries = seriesCompetitorMatchSummaries,
             eventSeriesValidationState = eventSeriesValidationState,
             projectStatusText = projectStatusText,
@@ -4596,6 +4733,7 @@ fun main(args: Array<String>) = application {
             raceClockTick = raceClockTick,
             isNavActionEnabled = ::isNavActionEnabled,
             disabledNavActionReason = ::disabledNavActionReason,
+            onOptimizeSeriesStartFairness = ::optimizeSeriesStartFairness,
             onOpenSeriesEvent = ::openSeriesEvent,
             onInsertTestControls = ::insertTestControls,
             onInsertTestCategories = ::insertTestCategories,
@@ -7234,6 +7372,7 @@ private fun RadioOManagerDesktopApp(
     eventFilePath: Path? = null,
     seriesEventSummaries: List<DesktopEventSeriesEventSummary> = emptyList(),
     seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary? = null,
+    seriesStartFairnessOptimizationResult: DesktopEventSeriesStartFairnessOptimizationResult? = null,
     seriesCompetitorMatchSummaries: List<DesktopEventSeriesCompetitorMatchSummary> = emptyList(),
     eventSeriesValidationState: EventSeriesValidationUiState? = null,
     projectStatusText: String = "No Event File open.",
@@ -7323,6 +7462,7 @@ private fun RadioOManagerDesktopApp(
     onLockProtectedCourseOrder: () -> Unit = {},
     isNavActionEnabled: (DesktopNavAction) -> Boolean = { false },
     disabledNavActionReason: (DesktopNavAction) -> String? = { null },
+    onOptimizeSeriesStartFairness: () -> Unit = {},
     onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit = {},
     onInsertTestControls: () -> Unit = {},
     onInsertTestCategories: () -> Unit = {},
@@ -7484,6 +7624,7 @@ private fun RadioOManagerDesktopApp(
                 eventFilePath = eventFilePath,
                 seriesEventSummaries = seriesEventSummaries,
                 seriesStartFairnessSummary = seriesStartFairnessSummary,
+                seriesStartFairnessOptimizationResult = seriesStartFairnessOptimizationResult,
                 seriesCompetitorMatchSummaries = seriesCompetitorMatchSummaries,
                 eventSeriesValidationState = eventSeriesValidationState,
                 projectStatusText = projectStatusText,
@@ -7573,6 +7714,7 @@ private fun RadioOManagerDesktopApp(
                                     onSetUpdateCheckingEnabled = onSetUpdateCheckingEnabled,
                                     onSetCloudflarePagesPublishSettings = onSetCloudflarePagesPublishSettings,
                                     isNavActionEnabled = isNavActionEnabled,
+                                    onOptimizeSeriesStartFairness = onOptimizeSeriesStartFairness,
                                     onOpenSeriesEvent = onOpenSeriesEvent,
                                     onInsertTestControls = onInsertTestControls,
                                     onInsertTestCategories = onInsertTestCategories,
@@ -8291,6 +8433,7 @@ private fun SectionWorkspace(
     eventFilePath: Path?,
     seriesEventSummaries: List<DesktopEventSeriesEventSummary>,
     seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary?,
+    seriesStartFairnessOptimizationResult: DesktopEventSeriesStartFairnessOptimizationResult?,
     seriesCompetitorMatchSummaries: List<DesktopEventSeriesCompetitorMatchSummary>,
     eventSeriesValidationState: EventSeriesValidationUiState?,
     projectStatusText: String,
@@ -8379,6 +8522,7 @@ private fun SectionWorkspace(
     onSetUpdateCheckingEnabled: (Boolean) -> Unit,
     onSetCloudflarePagesPublishSettings: (DesktopCloudflarePagesPublishSettings) -> Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
+    onOptimizeSeriesStartFairness: () -> Unit,
     onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit,
     onInsertTestControls: () -> Unit,
     onInsertTestCategories: () -> Unit,
@@ -8534,7 +8678,11 @@ private fun SectionWorkspace(
             )
         }
         if (section == DesktopSection.SeriesStartFairness) {
-            EventSeriesStartFairnessPanel(seriesStartFairnessSummary)
+            EventSeriesStartFairnessPanel(
+                summary = seriesStartFairnessSummary,
+                optimizationResult = seriesStartFairnessOptimizationResult,
+                onOptimizeStartFairness = onOptimizeSeriesStartFairness
+            )
         }
         if (section == DesktopSection.SeriesValidation) {
             EventSeriesValidationPanel(
@@ -9728,7 +9876,9 @@ private fun EventSeriesValidationIssueRow(issue: EventSeriesValidationIssue) {
 /** Summarizes generated start-list fairness across all Event Files in the active Event Series. */
 @Composable
 private fun EventSeriesStartFairnessPanel(
-    summary: DesktopEventSeriesStartFairnessSummary?
+    summary: DesktopEventSeriesStartFairnessSummary?,
+    optimizationResult: DesktopEventSeriesStartFairnessOptimizationResult?,
+    onOptimizeStartFairness: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -9741,6 +9891,18 @@ private fun EventSeriesStartFairnessPanel(
             color = DesktopPalette.Disconnected,
             fontSize = 13.sp
         )
+        summary?.let {
+            Text(
+                text = "History is shown left to right by ${it.historyOrderDescription}. Event Series > Events uses the same ordering.",
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
+        Text(
+            text = "Balance Open Event for Series redraws only the open Event File, using other series events with generated starts as start-third history.",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
         if (summary == null) {
             Text(
                 text = "No start fairness summary is available for this Event File.",
@@ -9748,6 +9910,41 @@ private fun EventSeriesStartFairnessPanel(
                 fontSize = 13.sp
             )
             return@Column
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(
+                onClick = onOptimizeStartFairness,
+                enabled = summary.generatedStartRowCount > 0 && summary.identifiedGeneratedStartRowCount > 0
+            ) {
+                Text("Optimize Series Starts")
+            }
+            Text(
+                text = "Tries randomized valid starts for each Event File, keeps only changes that improve or preserve whole-series fairness, and numbers distinct solutions found this session.",
+                modifier = Modifier.weight(1f),
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
+
+        optimizationResult?.let { result ->
+            val solutionText = result.solutionLabel()
+            val resultText = when {
+                result.improved ->
+                    "Optimizer improved uneven histories from ${result.initialUnevenHistoryCount} to " +
+                        "${result.finalUnevenHistoryCount}, with ${result.optimizedEventCount} Event File" +
+                        "${if (result.optimizedEventCount == 1) "" else "s"} updated."
+                result.alternateSolution ->
+                    "Optimizer found an alternate valid draw with the same fairness score, with " +
+                        "${result.optimizedEventCount} Event File${if (result.optimizedEventCount == 1) "" else "s"} updated."
+                else ->
+                    "Optimizer did not find an alternate or improved valid draw after ${result.attemptedCandidateCount} candidates."
+            }
+            Text(
+                text = "$solutionText. $resultText Accepted ${result.acceptedCandidateCount} of ${result.attemptedCandidateCount} candidates across ${result.completedPassCount} pass${if (result.completedPassCount == 1) "" else "es"}.",
+                color = if (result.improved || result.alternateSolution) DesktopPalette.Black else DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
         }
 
         if (summary.generatedStartRowCount == 0) {
@@ -9802,11 +9999,15 @@ private fun EventSeriesStartFairnessPanel(
                 EventSeriesStartFairnessHistoryRow(history)
             }
         }
-        Text(
-            text = "Balance From Event Series still uses earlier manifest-ordered events as history for the current event. Current event: ${summary.currentEventName} (order ${summary.currentEventOrder}).",
-            color = DesktopPalette.Disconnected,
-            fontSize = 13.sp
-        )
+    }
+}
+
+private fun DesktopEventSeriesStartFairnessOptimizationResult.solutionLabel(): String {
+    val number = solutionNumber ?: return "Unnumbered solution"
+    return if (repeatedSolution) {
+        "Repeated solution #$number"
+    } else {
+        "Solution #$number"
     }
 }
 
@@ -9983,7 +10184,7 @@ private fun EventSeriesEventHeaderRow() {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("Order", modifier = Modifier.width(64.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Seq", modifier = Modifier.width(64.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text("Event", modifier = Modifier.weight(1.2f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text("Start", modifier = Modifier.width(160.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text("File", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -10012,7 +10213,7 @@ private fun EventSeriesEventRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text((summary.order + 1).toString(), modifier = Modifier.width(64.dp), color = DesktopPalette.Black, fontSize = 13.sp)
+        Text(summary.displayPosition.toString(), modifier = Modifier.width(64.dp), color = DesktopPalette.Black, fontSize = 13.sp)
         Text(summary.displayName, modifier = Modifier.weight(1.2f), color = DesktopPalette.Black, fontSize = 13.sp)
         Text(
             summary.startDateTimeIso?.let(DesktopDateTimeText::displayIsoOrRaw).orEmpty(),

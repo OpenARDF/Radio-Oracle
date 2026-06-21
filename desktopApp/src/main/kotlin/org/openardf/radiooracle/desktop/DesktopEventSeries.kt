@@ -11,6 +11,7 @@ import org.openardf.radiooracle.shared.event.EventSeriesLinkedEvent
 import org.openardf.radiooracle.shared.event.EventSeriesSupport
 import org.openardf.radiooracle.shared.event.EventSeriesValidationIssue
 import org.openardf.radiooracle.shared.event.EventSeriesIssueSeverity
+import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -49,6 +50,33 @@ object DesktopEventSeriesFiles : EventSeriesStore {
     override fun copyFile(source: Path, target: Path) {
         target.parent?.let { Files.createDirectories(it) }
         Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING)
+    }
+}
+
+object DesktopEventSeriesStartFairnessSolutionNumbers {
+    fun assign(
+        existingNumbers: Map<String, Int>,
+        manifestPath: Path,
+        solutionSignature: String
+    ): DesktopEventSeriesStartFairnessSolutionNumbering {
+        val manifestKey = manifestPath.toAbsolutePath().normalize().toString()
+        val solutionKey = "$manifestKey|$solutionSignature"
+        val existingNumber = existingNumbers[solutionKey]
+        val solutionNumber = existingNumber
+            ?: (existingNumbers
+                .filterKeys { it.startsWith("$manifestKey|") }
+                .values
+                .maxOrNull()
+                ?: 0) + 1
+        return DesktopEventSeriesStartFairnessSolutionNumbering(
+            solutionNumber = solutionNumber,
+            repeatedSolution = existingNumber != null,
+            solutionNumbers = if (existingNumber == null) {
+                existingNumbers + (solutionKey to solutionNumber)
+            } else {
+                existingNumbers
+            }
+        )
     }
 }
 
@@ -176,12 +204,13 @@ object DesktopEventSeriesActions {
         val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize()
         // The Events screen should be cheap and tolerant: list manifest entries and file presence
         // without reading every Event File just to render the workflow panel.
-        return seriesFile.sortedEvents().map { event ->
+        return seriesFile.sortedEvents().mapIndexed { index, event ->
             val resolvedPath = seriesFolder.resolve(event.eventFilePath).normalize()
             DesktopEventSeriesEventSummary(
                 seriesEventId = event.seriesEventId,
                 displayName = event.displayName,
                 order = event.order,
+                displayPosition = index + 1,
                 eventFilePath = event.eventFilePath,
                 resolvedPath = resolvedPath,
                 exists = store.exists(resolvedPath),
@@ -261,7 +290,9 @@ object DesktopEventSeriesActions {
         }?.first ?: return null
         val eventStarts = eventsWithPaths
             .filter { (_, path) -> store.exists(path) }
-            .map { (event, path) -> event to startFairnessStarts(event, store.readEvent(path)) }
+            .mapIndexed { index, (event, path) ->
+                event to startFairnessStarts(event, eventSequenceIndex = index, store.readEvent(path))
+            }
         val generatedStarts = eventStarts.flatMap { it.second }
         val identifiedStarts = generatedStarts.filter { it.identityKey != null }
         val startThirdCounts = generatedStarts
@@ -277,18 +308,25 @@ object DesktopEventSeriesActions {
                     .thenBy { it.competitorName }
             )
         val competitorsWithUnevenHistoryCount = competitorFairnessRows.count { it.isUneven }
-        val priorEvents = eventsWithPaths.filter { (event, _) -> event.order < currentEvent.order }
-        val priorRowsByEvent = priorEvents
+        val balanceHistoryEvents = eventsWithPaths.filter { (event, _) ->
+            event.seriesEventId != currentEvent.seriesEventId
+        }
+        val balanceHistoryRowsByEvent = balanceHistoryEvents
             .filter { (_, path) -> store.exists(path) }
             .map { (_, path) -> EventSeriesSupport.startRowsFromEventFile(store.readEvent(path)) }
 
         val currentCompetitors = currentProject.raceData.competitorData
             .map { it.competitorCategory.competitor }
-        val priorStartRows = priorRowsByEvent.flatten()
+        val balanceHistoryStartRows = balanceHistoryRowsByEvent.flatten()
         return DesktopEventSeriesStartFairnessSummary(
             seriesEventCount = sortedEvents.size,
             currentEventName = currentEvent.displayName,
             currentEventOrder = currentEvent.order,
+            historyOrderDescription = if (seriesFile.usesDateTimeEventOrder()) {
+                "event date/time"
+            } else {
+                "stored series order"
+            },
             missingEventFileCount = eventsWithPaths.count { (_, path) -> !store.exists(path) },
             eventsWithGeneratedStartsCount = eventStarts.count { it.second.isNotEmpty() },
             eventsWithoutGeneratedStartsCount = sortedEvents.size - eventStarts.count { it.second.isNotEmpty() },
@@ -301,11 +339,11 @@ object DesktopEventSeriesActions {
             middleThirdStartCount = startThirdCounts[2].orZero(),
             lateThirdStartCount = startThirdCounts[3].orZero(),
             competitorHistories = competitorFairnessRows,
-            priorEventCount = priorEvents.size,
-            missingPriorEventFileCount = priorEvents.count { (_, path) -> !store.exists(path) },
-            priorEventsWithStartsCount = priorRowsByEvent.count { it.isNotEmpty() },
-            priorStartRowCount = priorStartRows.size,
-            identifiedPriorStartRowCount = priorStartRows.count {
+            balanceHistoryEventCount = balanceHistoryEvents.size,
+            missingBalanceHistoryEventFileCount = balanceHistoryEvents.count { (_, path) -> !store.exists(path) },
+            balanceHistoryEventsWithStartsCount = balanceHistoryRowsByEvent.count { it.isNotEmpty() },
+            balanceHistoryStartRowCount = balanceHistoryStartRows.size,
+            identifiedBalanceHistoryStartRowCount = balanceHistoryStartRows.count {
                 it.siNumber?.takeIf { value -> value > 0 } != null ||
                     it.bibNumber.isNotBlank() ||
                     it.callSign.isNotBlank()
@@ -319,8 +357,116 @@ object DesktopEventSeriesActions {
         )
     }
 
+    fun optimizeStartFairness(
+        store: EventSeriesStore,
+        manifestPath: Path,
+        currentEventPath: Path?,
+        maxPasses: Int = 3,
+        candidatesPerEvent: Int = 32,
+        seedSalt: String = "default"
+    ): DesktopEventSeriesStartFairnessOptimizationResult {
+        require(maxPasses > 0) {
+            "Start fairness optimizer must run at least one pass."
+        }
+        require(candidatesPerEvent > 0) {
+            "Start fairness optimizer must try at least one candidate per event."
+        }
+        val seriesFile = store.read(manifestPath)
+        val seriesFolder = requireNotNull(manifestPath.parent) {
+            "Event Series manifest must have a parent folder."
+        }
+        val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize()
+        val events = seriesFile.sortedEvents().map { event ->
+            val path = seriesFolder.resolve(event.eventFilePath).normalize()
+            require(store.exists(path)) {
+                "Event File '${event.displayName}' is missing."
+            }
+            DesktopEventSeriesStartFairnessOptimizationEvent(event, path, store.readEvent(path))
+        }.toMutableList()
+        require(events.size >= 2) {
+            "At least two Event Files are needed to optimize series start fairness."
+        }
+
+        val initialScore = startFairnessScore(events)
+        var bestScore = initialScore
+        val updatedIndexes = mutableSetOf<Int>()
+        var acceptedCandidateCount = 0
+        var attemptedCandidateCount = 0
+        var completedPassCount = 0
+
+        for (passIndex in 0 until maxPasses) {
+            var passAcceptedCandidate = false
+            events.indices.forEach { eventIndex ->
+                val baseEvent = events[eventIndex]
+                val baseStartAssignment = startAssignmentSignature(baseEvent.projectFile)
+                val settings = baseEvent.projectFile.raceData.effectiveStartDrawSettings()
+                var bestEvent = baseEvent
+                var bestEventScore = bestScore
+                var bestStartAssignment = baseStartAssignment
+                repeat(candidatesPerEvent) { candidateIndex ->
+                    attemptedCandidateCount++
+                    val candidateSeed =
+                        "series-opt-$seedSalt-${passIndex + 1}-${candidateIndex + 1}-${baseEvent.event.seriesEventId}"
+                    val candidateProject = EventProjectEditor.drawStartList(
+                        projectFile = baseEvent.projectFile,
+                        intervalText = settings.intervalText,
+                        options = settings.options.copy(seed = candidateSeed)
+                    )
+                    val candidateEvent = baseEvent.copy(projectFile = candidateProject)
+                    val candidateScore = startFairnessScore(events.withReplacement(eventIndex, candidateEvent))
+                    val candidateStartAssignment = startAssignmentSignature(candidateProject)
+                    if (
+                        candidateScore < bestEventScore ||
+                        candidateScore == bestEventScore && candidateStartAssignment != bestStartAssignment
+                    ) {
+                        bestEvent = candidateEvent
+                        bestEventScore = candidateScore
+                        bestStartAssignment = candidateStartAssignment
+                    }
+                }
+                if (bestEventScore < bestScore || bestEventScore == bestScore && bestStartAssignment != baseStartAssignment) {
+                    events[eventIndex] = bestEvent
+                    bestScore = bestEventScore
+                    updatedIndexes += eventIndex
+                    acceptedCandidateCount++
+                    passAcceptedCandidate = true
+                }
+            }
+            completedPassCount = passIndex + 1
+            if (!passAcceptedCandidate) {
+                break
+            }
+        }
+
+        val updatedFiles = updatedIndexes.sorted().map { index ->
+            val event = events[index]
+            DesktopEventSeriesStartFairnessOptimizedEventFile(
+                seriesEventId = event.event.seriesEventId,
+                displayName = event.event.displayName,
+                path = event.path,
+                projectFile = event.projectFile,
+                isCurrentEvent = normalizedCurrentPath != null && event.path.toAbsolutePath().normalize() == normalizedCurrentPath
+            )
+        }
+        return DesktopEventSeriesStartFairnessOptimizationResult(
+            initialScore = initialScore.value,
+            finalScore = bestScore.value,
+            initialUnevenHistoryCount = initialScore.unevenHistoryCount,
+            finalUnevenHistoryCount = bestScore.unevenHistoryCount,
+            initialSpreadSum = initialScore.spreadSum,
+            finalSpreadSum = bestScore.spreadSum,
+            attemptedCandidateCount = attemptedCandidateCount,
+            acceptedCandidateCount = acceptedCandidateCount,
+            completedPassCount = completedPassCount,
+            optimizedEventCount = updatedFiles.size,
+            updatedEventFiles = updatedFiles,
+            solutionSignature = seriesStartAssignmentSignature(events)
+        )
+    }
+
     private fun startFairnessStarts(
         event: EventSeriesEvent,
+        eventSequenceIndex: Int,
         projectFile: EventProjectFile
     ): List<DesktopEventSeriesStartFairnessStart> {
         val competitorsWithStarts = projectFile.raceData.competitorData
@@ -339,7 +485,7 @@ object DesktopEventSeriesActions {
                 identityKey = identity?.key,
                 identityLabel = identity?.label ?: "Unidentified",
                 competitorName = competitor.fullName(),
-                eventOrder = event.order,
+                eventSequenceIndex = eventSequenceIndex,
                 startThird = startThirdForSlot(index, competitorsWithStarts.size)
             )
         }
@@ -375,7 +521,7 @@ object DesktopEventSeriesActions {
             identityLabel = history.first().identityLabel,
             generatedStartCount = history.size,
             thirdHistoryText = history
-                .sortedBy { it.eventOrder }
+                .sortedBy { it.eventSequenceIndex }
                 .joinToString(" ") { it.startThird.shortStartThirdLabel() },
             firstThirdCount = firstThirdCount,
             middleThirdCount = middleThirdCount,
@@ -408,6 +554,55 @@ object DesktopEventSeriesActions {
         }
 
     private fun Int?.orZero(): Int = this ?: 0
+
+    private fun startFairnessScore(
+        events: List<DesktopEventSeriesStartFairnessOptimizationEvent>
+    ): DesktopEventSeriesStartFairnessScore {
+        val histories = events
+            .flatMapIndexed { index, event ->
+                startFairnessStarts(event.event, eventSequenceIndex = index, event.projectFile)
+            }
+            .filter { it.identityKey != null }
+            .groupBy { it.identityKey }
+            .values
+        var unevenHistoryCount = 0
+        var spreadSum = 0
+        var squaredSpreadSum = 0
+        histories.forEach { history ->
+            val counts = (1..3).map { third -> history.count { it.startThird == third } }
+            val spread = counts.maxOrNull().orZero() - counts.minOrNull().orZero()
+            if (history.size >= 2 && spread > 1) {
+                unevenHistoryCount++
+            }
+            spreadSum += spread
+            squaredSpreadSum += spread * spread
+        }
+        return DesktopEventSeriesStartFairnessScore(
+            unevenHistoryCount = unevenHistoryCount,
+            spreadSum = spreadSum,
+            squaredSpreadSum = squaredSpreadSum
+        )
+    }
+
+    private fun <T> List<T>.withReplacement(index: Int, value: T): List<T> =
+        mapIndexed { itemIndex, item -> if (itemIndex == index) value else item }
+
+    private fun startAssignmentSignature(projectFile: EventProjectFile): List<Pair<String, Long?>> =
+        projectFile.raceData.competitorData
+            .map { data ->
+                val competitor = data.competitorCategory.competitor
+                competitor.id to competitor.drawnStartTimeSeconds
+            }
+            .sortedBy { it.first }
+
+    private fun seriesStartAssignmentSignature(
+        events: List<DesktopEventSeriesStartFairnessOptimizationEvent>
+    ): String =
+        events.joinToString("|") { event ->
+            event.event.seriesEventId + ":" +
+                startAssignmentSignature(event.projectFile)
+                    .joinToString(",") { (competitorId, startSeconds) -> "$competitorId=${startSeconds ?: "none"}" }
+        }
 
     fun createSeriesWithEvent(
         seriesFolder: Path,
@@ -479,6 +674,43 @@ object DesktopEventSeriesActions {
         )
         val linkedProjectFile = EventProjectEditor.updateSeriesLink(eventProjectFile, seriesFile.seriesId, resolvedSeriesEventId)
         return DesktopEventSeriesLinkResult(updatedSeriesFile, linkedProjectFile)
+    }
+
+    fun refreshLinkedEventMetadata(
+        seriesFile: EventSeriesFile,
+        eventPath: Path,
+        seriesFolder: Path,
+        eventProjectFile: EventProjectFile
+    ): EventSeriesFile {
+        val link = eventProjectFile.seriesLink ?: return seriesFile
+        if (link.seriesId != seriesFile.seriesId) {
+            return seriesFile
+        }
+        val relativeEventPath = relativeEventPath(seriesFolder, eventPath)
+        val existingEvent = seriesFile.events.firstOrNull { it.seriesEventId == link.seriesEventId }
+            ?: seriesFile.events.firstOrNull { it.eventFilePath == relativeEventPath }
+            ?: return seriesFile
+        val conflictingPath = seriesFile.events.firstOrNull {
+            it.seriesEventId != existingEvent.seriesEventId && it.eventFilePath == relativeEventPath
+        }
+        require(conflictingPath == null) {
+            "Cannot refresh Event Series metadata because ${relativeEventPath} is already assigned to ${conflictingPath?.displayName}."
+        }
+        val race = eventProjectFile.raceData.race
+        val refreshedEvent = existingEvent.copy(
+            eventFilePath = relativeEventPath,
+            displayName = race.name,
+            startDateTimeIso = race.startDateTimeIso,
+            formatLabel = race.raceType.name
+        )
+        // The manifest carries planning metadata for the workflow, but the Event File remains the
+        // race-day source of truth. Refreshing on save lets harmless Event Name/date tweaks flow into
+        // series screens without asking organizers to manually edit the manifest.
+        return seriesFile.copy(
+            events = seriesFile.events.map { event ->
+                if (event.seriesEventId == existingEvent.seriesEventId) refreshedEvent else event
+            }
+        )
     }
 
     fun removeCurrentEvent(seriesFile: EventSeriesFile, eventProjectFile: EventProjectFile): DesktopEventSeriesLinkResult {
@@ -577,6 +809,7 @@ data class DesktopEventSeriesEventSummary(
     val seriesEventId: String,
     val displayName: String,
     val order: Int,
+    val displayPosition: Int,
     val eventFilePath: String,
     val resolvedPath: Path,
     val exists: Boolean,
@@ -605,7 +838,7 @@ private data class DesktopEventSeriesStartFairnessStart(
     val identityKey: String?,
     val identityLabel: String,
     val competitorName: String,
-    val eventOrder: Int,
+    val eventSequenceIndex: Int,
     val startThird: Int
 )
 
@@ -627,10 +860,68 @@ data class DesktopEventSeriesStartFairnessCompetitorHistory(
     val recommendation: String
 )
 
+private data class DesktopEventSeriesStartFairnessOptimizationEvent(
+    val event: EventSeriesEvent,
+    val path: Path,
+    val projectFile: EventProjectFile
+)
+
+private data class DesktopEventSeriesStartFairnessScore(
+    val unevenHistoryCount: Int,
+    val spreadSum: Int,
+    val squaredSpreadSum: Int
+) : Comparable<DesktopEventSeriesStartFairnessScore> {
+    val value: Int =
+        unevenHistoryCount * 100_000 +
+            spreadSum * 1_000 +
+            squaredSpreadSum
+
+    override fun compareTo(other: DesktopEventSeriesStartFairnessScore): Int =
+        value.compareTo(other.value)
+}
+
+data class DesktopEventSeriesStartFairnessOptimizedEventFile(
+    val seriesEventId: String,
+    val displayName: String,
+    val path: Path,
+    val projectFile: EventProjectFile,
+    val isCurrentEvent: Boolean
+)
+
+data class DesktopEventSeriesStartFairnessSolutionNumbering(
+    val solutionNumber: Int,
+    val repeatedSolution: Boolean,
+    val solutionNumbers: Map<String, Int>
+)
+
+data class DesktopEventSeriesStartFairnessOptimizationResult(
+    val initialScore: Int,
+    val finalScore: Int,
+    val initialUnevenHistoryCount: Int,
+    val finalUnevenHistoryCount: Int,
+    val initialSpreadSum: Int,
+    val finalSpreadSum: Int,
+    val attemptedCandidateCount: Int,
+    val acceptedCandidateCount: Int,
+    val completedPassCount: Int,
+    val optimizedEventCount: Int,
+    val updatedEventFiles: List<DesktopEventSeriesStartFairnessOptimizedEventFile>,
+    val solutionSignature: String,
+    val solutionNumber: Int? = null,
+    val repeatedSolution: Boolean = false
+) {
+    val improved: Boolean
+        get() = finalScore < initialScore
+
+    val alternateSolution: Boolean
+        get() = finalScore == initialScore && updatedEventFiles.isNotEmpty()
+}
+
 data class DesktopEventSeriesStartFairnessSummary(
     val seriesEventCount: Int,
     val currentEventName: String,
     val currentEventOrder: Int,
+    val historyOrderDescription: String,
     val missingEventFileCount: Int,
     val eventsWithGeneratedStartsCount: Int,
     val eventsWithoutGeneratedStartsCount: Int,
@@ -643,11 +934,11 @@ data class DesktopEventSeriesStartFairnessSummary(
     val middleThirdStartCount: Int,
     val lateThirdStartCount: Int,
     val competitorHistories: List<DesktopEventSeriesStartFairnessCompetitorHistory>,
-    val priorEventCount: Int,
-    val missingPriorEventFileCount: Int,
-    val priorEventsWithStartsCount: Int,
-    val priorStartRowCount: Int,
-    val identifiedPriorStartRowCount: Int,
+    val balanceHistoryEventCount: Int,
+    val missingBalanceHistoryEventFileCount: Int,
+    val balanceHistoryEventsWithStartsCount: Int,
+    val balanceHistoryStartRowCount: Int,
+    val identifiedBalanceHistoryStartRowCount: Int,
     val currentCompetitorCount: Int,
     val identifiedCurrentCompetitorCount: Int
 )

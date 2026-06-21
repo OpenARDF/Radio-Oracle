@@ -63,6 +63,41 @@ class EventSeriesFileTest {
         }
     }
 
+    @Test
+    fun sortedEventsUsesDateTimeWhenEveryEventHasUsableDate() {
+        val series = seriesFile(
+            events = listOf(
+                event("day-2", "day-2.rom.json", 0, startDateTimeIso = "2026-06-02T10:00"),
+                event("day-1", "day-1.rom.json", 1, startDateTimeIso = "2026-06-01T10:00"),
+                event("day-3", "day-3.rom.json", 2, startDateTimeIso = "2026-06-03T10:00:00")
+            )
+        )
+
+        assertTrue(series.usesDateTimeEventOrder())
+        assertEquals(listOf("day-1", "day-2", "day-3"), series.sortedEvents().map { it.seriesEventId })
+    }
+
+    @Test
+    fun sortedEventsFallsBackToStoredOrderWhenAnyDateIsMissingOrInvalid() {
+        val missingDate = seriesFile(
+            events = listOf(
+                event("day-2", "day-2.rom.json", 0, startDateTimeIso = "2026-06-02T10:00"),
+                event("day-1", "day-1.rom.json", 1, startDateTimeIso = "")
+            )
+        )
+        val invalidDate = seriesFile(
+            events = listOf(
+                event("day-2", "day-2.rom.json", 0, startDateTimeIso = "2026-06-02T10:00"),
+                event("day-1", "day-1.rom.json", 1, startDateTimeIso = "not-a-date")
+            )
+        )
+
+        assertEquals(listOf("day-2", "day-1"), missingDate.sortedEvents().map { it.seriesEventId })
+        assertEquals(false, missingDate.usesDateTimeEventOrder())
+        assertEquals(listOf("day-2", "day-1"), invalidDate.sortedEvents().map { it.seriesEventId })
+        assertEquals(false, invalidDate.usesDateTimeEventOrder())
+    }
+
     private fun seriesFile(events: List<EventSeriesEvent> = listOf(event("day-1", "day-1.rom.json", 0))): EventSeriesFile =
         EventSeriesFile(
             seriesId = "series-1",
@@ -70,11 +105,12 @@ class EventSeriesFileTest {
             events = events
         )
 
-    private fun event(id: String, path: String, order: Int): EventSeriesEvent =
+    private fun event(id: String, path: String, order: Int, startDateTimeIso: String = ""): EventSeriesEvent =
         EventSeriesEvent(
             seriesEventId = id,
             eventFilePath = path,
             order = order,
-            displayName = id
+            displayName = id,
+            startDateTimeIso = startDateTimeIso
         )
 }

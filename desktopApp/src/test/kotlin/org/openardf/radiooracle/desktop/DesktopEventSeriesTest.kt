@@ -2,12 +2,15 @@ package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.EventCategory
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
@@ -137,6 +140,69 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun refreshLinkedEventMetadataUpdatesDisplayFieldsWithoutChangingOrder() {
+        val originalSeries = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"),
+                EventSeriesEvent(
+                    seriesEventId = "day-2",
+                    eventFilePath = "day-2.rom.json",
+                    order = 1,
+                    displayName = "Imported Name",
+                    startDateTimeIso = "2026-06-02T10:00",
+                    formatLabel = RaceType.CLASSIC.name
+                )
+            )
+        )
+        val linkedProject = projectFile("Printable Day 2", eventId = "race-id")
+            .copy(seriesLink = EventSeriesLink("series-1", "day-2"))
+            .let { project ->
+                project.copy(
+                    raceData = project.raceData.copy(
+                        race = project.raceData.race.copy(
+                            startDateTimeIso = "2026-06-05T11:30",
+                            raceType = RaceType.SPRINT
+                        )
+                    )
+                )
+            }
+
+        val updatedSeries = DesktopEventSeriesActions.refreshLinkedEventMetadata(
+            seriesFile = originalSeries,
+            seriesFolder = Path.of("/work/championship"),
+            eventPath = Path.of("/work/championship/day-2.rom.json"),
+            eventProjectFile = linkedProject
+        )
+        val day2 = updatedSeries.events.single { it.seriesEventId == "day-2" }
+
+        assertEquals("Printable Day 2", day2.displayName)
+        assertEquals("2026-06-05T11:30", day2.startDateTimeIso)
+        assertEquals(RaceType.SPRINT.name, day2.formatLabel)
+        assertEquals(1, day2.order)
+    }
+
+    @Test
+    fun refreshLinkedEventMetadataRejectsPathCollision() {
+        val originalSeries = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"),
+                EventSeriesEvent("day-2", "day-2.rom.json", 1, "Day 2")
+            )
+        )
+        val linkedProject = projectFile("Printable Day 1")
+            .copy(seriesLink = EventSeriesLink("series-1", "day-1"))
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DesktopEventSeriesActions.refreshLinkedEventMetadata(
+                seriesFile = originalSeries,
+                seriesFolder = Path.of("/work/championship"),
+                eventPath = Path.of("/work/championship/day-2.rom.json"),
+                eventProjectFile = linkedProject
+            )
+        }
+    }
+
+    @Test
     fun addEventToSeriesRequiresEventFileInsideSeriesFolder() {
         assertThrows(IllegalArgumentException::class.java) {
             DesktopEventSeriesActions.addEventToSeries(
@@ -173,6 +239,28 @@ class DesktopEventSeriesTest {
         assertEquals(false, summaries.first { it.seriesEventId == "day-1" }.exists)
         assertEquals(true, summaries.first { it.seriesEventId == "day-2" }.exists)
         assertEquals(true, summaries.first { it.seriesEventId == "day-2" }.isCurrentEvent)
+    }
+
+    @Test
+    fun eventSummariesUseDateOrderWhenEverySeriesEventHasADate() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val seriesFile = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-2", "events/day-2.rom.json", 0, "Day 2", startDateTimeIso = "2026-06-02T10:00"),
+                EventSeriesEvent("day-1", "events/day-1.rom.json", 1, "Day 1", startDateTimeIso = "2026-06-01T10:00")
+            )
+        )
+        val store = InMemoryEventSeriesStore(seriesFiles = mapOf(manifestPath to seriesFile))
+
+        val summaries = DesktopEventSeriesActions.eventSummaries(
+            store = store,
+            manifestPath = manifestPath,
+            currentEventPath = null
+        )
+
+        assertEquals(listOf("day-1", "day-2"), summaries.map { it.seriesEventId })
+        assertEquals(listOf(1, 2), summaries.map { it.displayPosition })
+        assertEquals(listOf(1, 0), summaries.map { it.order })
     }
 
     @Test
@@ -296,11 +384,11 @@ class DesktopEventSeriesTest {
         assertEquals(2, summary.firstThirdStartCount)
         assertEquals(1, summary.middleThirdStartCount)
         assertEquals(0, summary.lateThirdStartCount)
-        assertEquals(2, summary.priorEventCount)
-        assertEquals(0, summary.missingPriorEventFileCount)
-        assertEquals(2, summary.priorEventsWithStartsCount)
-        assertEquals(3, summary.priorStartRowCount)
-        assertEquals(2, summary.identifiedPriorStartRowCount)
+        assertEquals(2, summary.balanceHistoryEventCount)
+        assertEquals(0, summary.missingBalanceHistoryEventFileCount)
+        assertEquals(2, summary.balanceHistoryEventsWithStartsCount)
+        assertEquals(3, summary.balanceHistoryStartRowCount)
+        assertEquals(2, summary.identifiedBalanceHistoryStartRowCount)
         assertEquals(3, summary.currentCompetitorCount)
         assertEquals(2, summary.identifiedCurrentCompetitorCount)
         val siHistory = summary.competitorHistories.single { it.identityLabel == "SI 111" }
@@ -389,6 +477,156 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun startFairnessHistoryUsesDateOrderWhenEverySeriesEventHasADate() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val seriesFile = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-2", "day-2.rom.json", 0, "Day 2", startDateTimeIso = "2026-06-02T10:00"),
+                EventSeriesEvent("day-1", "day-1.rom.json", 1, "Day 1", startDateTimeIso = "2026-06-01T10:00")
+            )
+        )
+        val dayOne = projectFile(
+            name = "Day 1",
+            competitors = (1..9).map { index ->
+                competitorData(
+                    id = "day-1-$index",
+                    startNumber = index,
+                    siNumber = if (index == 9) 111 else 1000 + index,
+                    drawnStartTimeSeconds = ((index - 1) * 60L)
+                )
+            }
+        )
+        val dayTwo = projectFile(
+            name = "Day 2",
+            competitors = (1..9).map { index ->
+                competitorData(
+                    id = "day-2-$index",
+                    startNumber = index,
+                    siNumber = if (index == 1) 111 else 2000 + index,
+                    drawnStartTimeSeconds = ((index - 1) * 60L)
+                )
+            }
+        )
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile),
+            eventFiles = mapOf(
+                Path.of("/source/day-1.rom.json") to dayOne,
+                Path.of("/source/day-2.rom.json") to dayTwo
+            )
+        )
+
+        val summary = requireNotNull(
+            DesktopEventSeriesActions.startFairnessSummary(
+                store = store,
+                manifestPath = manifestPath,
+                currentEventPath = Path.of("/source/day-2.rom.json"),
+                currentProjectFile = dayTwo
+            )
+        )
+
+        val history = summary.competitorHistories.single { it.identityLabel == "SI 111" }
+        assertEquals("event date/time", summary.historyOrderDescription)
+        assertEquals("L E", history.thirdHistoryText)
+    }
+
+    @Test
+    fun optimizeStartFairnessImprovesSeriesByRegeneratingEventStarts() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val seriesFile = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-1", "events/day-1.rom.json", 0, "Day 1"),
+                EventSeriesEvent("day-2", "events/day-2.rom.json", 1, "Day 2"),
+                EventSeriesEvent("day-3", "events/day-3.rom.json", 2, "Day 3"),
+                EventSeriesEvent("day-4", "events/day-4.rom.json", 3, "Day 4")
+            )
+        )
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile),
+            eventFiles = mapOf(
+                Path.of("/source/events/day-1.rom.json") to startOptimizableProject("Day 1", "day-1"),
+                Path.of("/source/events/day-2.rom.json") to startOptimizableProject("Day 2", "day-2"),
+                Path.of("/source/events/day-3.rom.json") to startOptimizableProject("Day 3", "day-3"),
+                Path.of("/source/events/day-4.rom.json") to startOptimizableProject("Day 4", "day-4")
+            )
+        )
+
+        val result = DesktopEventSeriesActions.optimizeStartFairness(
+            store = store,
+            manifestPath = manifestPath,
+            currentEventPath = Path.of("/source/events/day-4.rom.json"),
+            maxPasses = 2,
+            candidatesPerEvent = 24
+        )
+
+        assertTrue(result.improved)
+        assertTrue(result.finalScore < result.initialScore)
+        assertTrue(result.finalUnevenHistoryCount < result.initialUnevenHistoryCount || result.finalSpreadSum < result.initialSpreadSum)
+        assertTrue(result.attemptedCandidateCount > 0)
+        assertTrue(result.acceptedCandidateCount > 0)
+        assertTrue(result.updatedEventFiles.isNotEmpty())
+    }
+
+    @Test
+    fun optimizeStartFairnessCanAcceptAlternateSameScoreStartAssignments() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val seriesFile = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-1", "events/day-1.rom.json", 0, "Day 1"),
+                EventSeriesEvent("day-2", "events/day-2.rom.json", 1, "Day 2")
+            )
+        )
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile),
+            eventFiles = mapOf(
+                Path.of("/source/events/day-1.rom.json") to startOptimizableProject("Day 1", "day-1", siBase = 1000),
+                Path.of("/source/events/day-2.rom.json") to startOptimizableProject("Day 2", "day-2", siBase = 2000)
+            )
+        )
+
+        val result = DesktopEventSeriesActions.optimizeStartFairness(
+            store = store,
+            manifestPath = manifestPath,
+            currentEventPath = Path.of("/source/events/day-2.rom.json"),
+            maxPasses = 1,
+            candidatesPerEvent = 12,
+            seedSalt = "alternate-test"
+        )
+
+        assertFalse(result.improved)
+        assertTrue(result.alternateSolution)
+        assertEquals(result.initialScore, result.finalScore)
+        assertTrue(result.acceptedCandidateCount > 0)
+        assertTrue(result.updatedEventFiles.isNotEmpty())
+    }
+
+    @Test
+    fun solutionNumberingNumbersUniqueSeriesSolutionsAndFlagsRepeats() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val first = DesktopEventSeriesStartFairnessSolutionNumbers.assign(
+            existingNumbers = emptyMap(),
+            manifestPath = manifestPath,
+            solutionSignature = "solution-a"
+        )
+        val repeated = DesktopEventSeriesStartFairnessSolutionNumbers.assign(
+            existingNumbers = first.solutionNumbers,
+            manifestPath = manifestPath,
+            solutionSignature = "solution-a"
+        )
+        val second = DesktopEventSeriesStartFairnessSolutionNumbers.assign(
+            existingNumbers = repeated.solutionNumbers,
+            manifestPath = manifestPath,
+            solutionSignature = "solution-b"
+        )
+
+        assertEquals(1, first.solutionNumber)
+        assertFalse(first.repeatedSolution)
+        assertEquals(1, repeated.solutionNumber)
+        assertTrue(repeated.repeatedSolution)
+        assertEquals(2, second.solutionNumber)
+        assertFalse(second.repeatedSolution)
+    }
+
+    @Test
     fun seriesContextIsAvailableForManifestListedCurrentEventWithoutBacklink() {
         assertEquals(
             true,
@@ -474,6 +712,7 @@ class DesktopEventSeriesTest {
             seriesEventId = seriesEventId,
             displayName = seriesEventId,
             order = 0,
+            displayPosition = 1,
             eventFilePath = "$seriesEventId.rom.json",
             resolvedPath = Path.of("/work/championship/$seriesEventId.rom.json"),
             exists = true,
@@ -483,7 +722,8 @@ class DesktopEventSeriesTest {
     private fun projectFile(
         name: String,
         eventId: String = name,
-        competitors: List<EventCompetitorData> = emptyList()
+        competitors: List<EventCompetitorData> = emptyList(),
+        categories: List<EventCategoryData> = emptyList()
     ): EventProjectFile =
         EventProjectFile(
             raceData = EventRaceData(
@@ -497,11 +737,54 @@ class DesktopEventSeriesTest {
                     raceBand = RaceBand.M80,
                     timeLimitSeconds = 7200
                 ),
-                categories = emptyList(),
+                categories = categories,
                 aliases = emptyList(),
                 competitorData = competitors,
                 unmatchedReadoutData = emptyList()
             )
+        )
+
+    private fun startOptimizableProject(name: String, eventId: String, siBase: Int = 1000): EventProjectFile {
+        val category = eventCategory(id = "cat-$eventId", raceId = eventId)
+        val competitors = (1..9).map { index ->
+            competitorData(
+                id = "$eventId-competitor-$index",
+                startNumber = index,
+                siNumber = siBase + index,
+                drawnStartTimeSeconds = ((index - 1) * 60L),
+                category = category,
+                raceId = eventId
+            )
+        }
+        return projectFile(
+            name = name,
+            eventId = eventId,
+            competitors = competitors,
+            categories = listOf(
+                EventCategoryData(
+                    category = category,
+                    controlPoints = emptyList(),
+                    competitors = competitors.map { it.competitorCategory.competitor }
+                )
+            )
+        )
+    }
+
+    private fun eventCategory(id: String, raceId: String): EventCategory =
+        EventCategory(
+            id = id,
+            raceId = raceId,
+            name = "M21",
+            isMan = true,
+            maxAge = null,
+            lengthMeters = 0,
+            climbMeters = 0,
+            order = 0,
+            differentProperties = false,
+            raceType = null,
+            raceBand = null,
+            timeLimitSeconds = null,
+            controlPointsString = ""
         )
 
     private fun competitorData(
@@ -510,13 +793,15 @@ class DesktopEventSeriesTest {
         siNumber: Int?,
         drawnStartTimeSeconds: Long? = null,
         bibNumber: String = "",
-        callSign: String = ""
+        callSign: String = "",
+        category: EventCategory? = null,
+        raceId: String = "race"
     ): EventCompetitorData =
         EventCompetitorData(
             competitorCategory = EventCompetitorCategory(
                 competitor = EventCompetitor(
                     id = id,
-                    raceId = "race",
+                    raceId = raceId,
                     categoryId = null,
                     firstName = id,
                     lastName = "Runner",
@@ -531,7 +816,7 @@ class DesktopEventSeriesTest {
                     bibNumber = bibNumber,
                     callSign = callSign
                 ),
-                category = null
+                category = category
             ),
             readoutData = null
         )

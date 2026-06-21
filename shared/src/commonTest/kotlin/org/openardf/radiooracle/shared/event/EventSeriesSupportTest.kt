@@ -49,8 +49,10 @@ class EventSeriesSupportTest {
     }
 
     @Test
-    fun extractsPriorStartRowsInManifestOrder() {
-        val series = seriesFile()
+    fun extractsOtherSeriesStartRowsWithGeneratedStartsInManifestOrder() {
+        val series = seriesFile(
+            events = listOf(seriesEvent("day-1", 0), seriesEvent("day-2", 1), seriesEvent("day-3", 2), seriesEvent("day-4", 3))
+        )
         val linkedEvents = listOf(
             linkedEvent(
                 "day-1",
@@ -67,15 +69,32 @@ class EventSeriesSupportTest {
                     competitors = listOf(competitorData("alice-2", 11, 123456, drawnStartTimeSeconds = 1200)),
                     seriesLink = EventSeriesLink("series-1", "day-2")
                 )
+            ),
+            linkedEvent(
+                "day-3",
+                projectFile(
+                    "Day 3",
+                    competitors = listOf(competitorData("current-alice", 11, 123456, drawnStartTimeSeconds = 1800)),
+                    seriesLink = EventSeriesLink("series-1", "day-3")
+                )
+            ),
+            linkedEvent(
+                "day-4",
+                projectFile(
+                    "Day 4",
+                    competitors = listOf(competitorData("alice-4", 11, 123456, drawnStartTimeSeconds = 2400)),
+                    seriesLink = EventSeriesLink("series-1", "day-4")
+                )
             )
         )
 
-        val rows = EventSeriesSupport.priorStartRowsForCurrentEvent(series, linkedEvents, "day-3")
+        val rows = EventSeriesSupport.otherSeriesStartRowsForCurrentEvent(series, linkedEvents, "day-3")
 
         assertEquals(
             listOf(
                 listOf(CompetitorStartCsvImportRow(startNumber = 11, startTimeText = "10:00", siNumber = 123456)),
-                listOf(CompetitorStartCsvImportRow(startNumber = 11, startTimeText = "20:00", siNumber = 123456))
+                listOf(CompetitorStartCsvImportRow(startNumber = 11, startTimeText = "20:00", siNumber = 123456)),
+                listOf(CompetitorStartCsvImportRow(startNumber = 11, startTimeText = "40:00", siNumber = 123456))
             ),
             rows
         )
@@ -139,11 +158,16 @@ class EventSeriesSupportTest {
 
     @Test
     fun seriesBalancedDrawUsesSameHistoryAsCsvBalancedDraw() {
-        val previousRows = listOf(
+        val otherSeriesRows = listOf(
             listOf(
                 CompetitorStartCsvImportRow(startNumber = 1, startTimeText = "00:00", siNumber = 111),
                 CompetitorStartCsvImportRow(startNumber = 2, startTimeText = "10:00", siNumber = 222),
                 CompetitorStartCsvImportRow(startNumber = 3, startTimeText = "20:00", siNumber = 333)
+            ),
+            listOf(
+                CompetitorStartCsvImportRow(startNumber = 1, startTimeText = "20:00", siNumber = 111),
+                CompetitorStartCsvImportRow(startNumber = 2, startTimeText = "00:00", siNumber = 222),
+                CompetitorStartCsvImportRow(startNumber = 3, startTimeText = "10:00", siNumber = 333)
             )
         )
         val currentProject = projectFile(
@@ -155,7 +179,7 @@ class EventSeriesSupportTest {
             ),
             seriesLink = EventSeriesLink("series-1", "day-2")
         )
-        val series = seriesFile(events = listOf(seriesEvent("day-1", 0), seriesEvent("day-2", 1)))
+        val series = seriesFile(events = listOf(seriesEvent("day-1", 0), seriesEvent("day-2", 1), seriesEvent("day-3", 2)))
         val linkedEvents = listOf(
             linkedEvent(
                 "day-1",
@@ -169,14 +193,26 @@ class EventSeriesSupportTest {
                     seriesLink = EventSeriesLink("series-1", "day-1")
                 )
             ),
-            linkedEvent("day-2", currentProject)
+            linkedEvent("day-2", currentProject),
+            linkedEvent(
+                "day-3",
+                projectFile(
+                    "Day 3",
+                    competitors = listOf(
+                        competitorData("other-1", 1, 111, drawnStartTimeSeconds = 1200),
+                        competitorData("other-2", 2, 222, drawnStartTimeSeconds = 0),
+                        competitorData("other-3", 3, 333, drawnStartTimeSeconds = 600)
+                    ),
+                    seriesLink = EventSeriesLink("series-1", "day-3")
+                )
+            )
         )
 
         val csvDraw = EventProjectEditor.drawStartListWithBalancedStartGroups(
             projectFile = currentProject,
             intervalText = "10:00",
             options = StartDrawOptions(seed = "series-test"),
-            previousStartLists = previousRows
+            previousStartLists = otherSeriesRows
         )
         val seriesDraw = EventSeriesSupport.drawStartListWithSeriesBalancedStartGroups(
             seriesFile = series,

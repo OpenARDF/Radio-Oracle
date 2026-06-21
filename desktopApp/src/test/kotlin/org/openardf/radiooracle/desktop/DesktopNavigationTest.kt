@@ -67,7 +67,7 @@ class DesktopNavigationTest {
         val roots = DesktopNavigation.rootItems(DesktopWorkflow.Series)
 
         assertEquals(
-            listOf("Balance From Event Series"),
+            listOf("Balance Open Event for Series"),
             roots.first { it.label == "Start Fairness" }.children.map { it.label }
         )
         assertEquals(

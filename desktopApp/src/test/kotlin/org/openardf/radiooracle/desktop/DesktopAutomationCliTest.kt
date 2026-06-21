@@ -469,6 +469,7 @@ class DesktopAutomationCliTest {
         assertTrue(result.stdout.contains("\"command\":\"event-series-start-fairness\""))
         assertTrue(result.stdout.contains("\"available\":true"))
         assertTrue(result.stdout.contains("\"seriesEventCount\":3"))
+        assertTrue(result.stdout.contains("\"historyOrderDescription\":\"stored series order\""))
         assertTrue(result.stdout.contains("\"eventsWithGeneratedStartsCount\":2"))
         assertTrue(result.stdout.contains("\"eventsWithoutGeneratedStartsCount\":1"))
         assertTrue(result.stdout.contains("\"generatedStartRowCount\":3"))
@@ -482,11 +483,58 @@ class DesktopAutomationCliTest {
         assertTrue(result.stdout.contains("\"identityLabel\":\"SI 111\""))
         assertTrue(result.stdout.contains("\"thirdHistoryText\":\"E\""))
         assertTrue(result.stdout.contains("\"recommendation\":\"Needs more history\""))
-        assertTrue(result.stdout.contains("\"priorEventCount\":2"))
-        assertTrue(result.stdout.contains("\"priorStartRowCount\":3"))
-        assertTrue(result.stdout.contains("\"identifiedPriorStartRowCount\":2"))
+        assertTrue(result.stdout.contains("\"balanceHistoryEventCount\":2"))
+        assertTrue(result.stdout.contains("\"balanceHistoryStartRowCount\":3"))
+        assertTrue(result.stdout.contains("\"identifiedBalanceHistoryStartRowCount\":2"))
         assertTrue(result.stdout.contains("\"currentCompetitorCount\":3"))
         assertTrue(result.stdout.contains("\"identifiedCurrentCompetitorCount\":2"))
+    }
+
+    @Test
+    fun eventSeriesOptimizeStartFairnessCommandReportsDryRunResult() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-series-start-optimizer")
+        val manifestPath = directory.resolve("series.radio-oracle.json")
+        val dayOnePath = directory.resolve("day-1.json")
+        val dayTwoPath = directory.resolve("day-2.json")
+        DesktopEventSeriesFiles.write(
+            manifestPath,
+            EventSeriesFile(
+                seriesId = "series-1",
+                name = "Championship",
+                events = listOf(
+                    EventSeriesEvent("day-1", "day-1.json", 0, "Day 1"),
+                    EventSeriesEvent("day-2", "day-2.json", 1, "Day 2")
+                )
+            )
+        )
+        DesktopProjectFiles.write(
+            dayOnePath,
+            projectFile(
+                "Day 1",
+                eventId = "day-1",
+                competitors = listOf(competitorData(id = "day-1-alice", startNumber = 1, siNumber = 111, drawnStartTimeSeconds = 0))
+            )
+        )
+        DesktopProjectFiles.write(
+            dayTwoPath,
+            projectFile(
+                "Day 2",
+                eventId = "day-2",
+                competitors = listOf(competitorData(id = "day-2-alice", startNumber = 1, siNumber = 111, drawnStartTimeSeconds = 0))
+            )
+        )
+
+        val result = runAutomation("event-series-optimize-start-fairness", manifestPath.toString(), dayTwoPath.toString())
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"event-series-optimize-start-fairness\""))
+        assertTrue(result.stdout.contains("\"write\":false"))
+        assertTrue(result.stdout.contains("\"seedSalt\":\"cli-default\""))
+        assertTrue(result.stdout.contains("\"alternateSolution\":false"))
+        assertTrue(result.stdout.contains("\"solutionSignature\":"))
+        assertTrue(result.stdout.contains("\"initialUnevenHistoryCount\":1"))
+        assertTrue(result.stdout.contains("\"attemptedCandidateCount\":64"))
+        assertTrue(result.stdout.contains("\"updatedEvents\":[]"))
     }
 
     @Test

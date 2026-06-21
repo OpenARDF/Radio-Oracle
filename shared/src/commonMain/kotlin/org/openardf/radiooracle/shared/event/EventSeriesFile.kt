@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.time.LocalDateTime
 
 /** Manifest file name used inside a Radio-Oracle Event Series folder. */
 const val EVENT_SERIES_FILE_NAME = "series.radio-oracle.json"
@@ -33,8 +34,25 @@ data class EventSeriesFile(
     fun isSupportedSchema(): Boolean =
         EventSeriesFileFormat.isSupportedSchema(schemaVersion)
 
-    fun sortedEvents(): List<EventSeriesEvent> =
-        events.sortedWith(compareBy({ it.order }, { it.displayName }, { it.seriesEventId }))
+    fun sortedEvents(): List<EventSeriesEvent> {
+        val eventsWithDates = events.map { event -> event to event.seriesStartDateTimeOrNull() }
+        /*
+         * Championship history is easier to read by event date, but only when every
+         * manifest entry has a parseable date. Partial date sorting would move some
+         * entries while leaving undated events ambiguous, so stored order remains the
+         * predictable fallback.
+         */
+        return if (eventsWithDates.isNotEmpty() && eventsWithDates.all { it.second != null }) {
+            eventsWithDates
+                .sortedWith(compareBy({ it.second }, { it.first.order }, { it.first.displayName }, { it.first.seriesEventId }))
+                .map { it.first }
+        } else {
+            events.sortedWith(compareBy({ it.order }, { it.displayName }, { it.seriesEventId }))
+        }
+    }
+
+    fun usesDateTimeEventOrder(): Boolean =
+        events.isNotEmpty() && events.all { it.seriesStartDateTimeOrNull() != null }
 
     private fun validateMembership() {
         val duplicateEventIds = events.groupBy { it.seriesEventId }.filterValues { it.size > 1 }.keys
@@ -90,6 +108,11 @@ data class EventSeriesEvent(
         }
     }
 }
+
+private fun EventSeriesEvent.seriesStartDateTimeOrNull(): LocalDateTime? =
+    runCatching {
+        LocalDateTime.parse(startDateTimeIso.trim().replace(' ', 'T'))
+    }.getOrNull()
 
 /** Operator-approved identity match for one competitor across two series events. */
 @Serializable

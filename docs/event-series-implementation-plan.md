@@ -30,7 +30,8 @@ Event Series support is an opt-in championship and multi-day layer above existin
 - Match competitors across events by SI number, bib number, call sign, and operator-approved overrides.
 - Report ambiguous, missing, duplicate, and conflicting matches without blocking ordinary Event File work.
 - Reuse the existing balanced-thirds start-list algorithm for series-aware fairness.
-- Derive prior starts from earlier manifest-ordered linked Event Files for `Balance from Event Series`.
+- Derive history from other linked Event Files with generated starts for `Balance Open Event for Series`.
+- Order series Events and Start Fairness histories by event date/time when all series events have usable dates, with stored manifest order as the fallback.
 - Keep `Balance from CSVs` as a manual fallback for workflows without an available series manifest.
 
 ## Export And Documentation
@@ -54,7 +55,7 @@ Event Series support is an opt-in championship and multi-day layer above existin
   - A single-day event behaves exactly as before.
   - A linked championship event shows the Series workflow.
   - Extra Event Files in the folder are ignored unless listed in the manifest.
-  - A later-day Event File can balance starts from prior linked events without selecting CSVs.
+  - An open Event File can balance starts from other linked events with generated starts without selecting CSVs.
   - Export Series produces a clean backup folder without unrelated clutter.
 
 ## Deferred Scope
