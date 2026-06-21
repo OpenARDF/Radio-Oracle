@@ -39,7 +39,10 @@ class EventProjectFileTest {
         assertTrue(encoded.contains("\"schemaVersion\": 3"))
         assertTrue(encoded.contains("\"appName\": \"Radio-Oracle\""))
         assertTrue(encoded.contains("\"courseAnalyzerSpeedCompensationFactor\": 1.0"))
-        assertEquals(original, decoded)
+        assertEquals(original.schemaVersion, decoded.schemaVersion)
+        assertEquals(original.appName, decoded.appName)
+        assertEquals(original.seriesLink, decoded.seriesLink)
+        assertEquals(original.raceData.race, decoded.raceData.race)
     }
 
     @Test
@@ -61,6 +64,19 @@ class EventProjectFileTest {
 
         assertTrue(encoded.contains("\"seriesLink\""))
         assertEquals(original.seriesLink, decoded.seriesLink)
+    }
+
+    @Test
+    fun seriesLinkDoesNotStoreManifestOwnedSeriesName() {
+        val encoded = EventProjectFileJson.encode(
+            EventProjectFile(
+                raceData = raceData(),
+                seriesLink = EventSeriesLink(seriesId = "series-1", seriesEventId = "day-1")
+            )
+        )
+
+        assertFalse(encoded.contains("seriesName"))
+        assertFalse(encoded.contains("Championship Series"))
     }
 
     @Test

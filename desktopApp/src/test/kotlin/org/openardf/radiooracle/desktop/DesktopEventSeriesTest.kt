@@ -87,6 +87,19 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun createSeriesWithEventDefaultsToNeutralSeriesName() {
+        val result = DesktopEventSeriesActions.createSeriesWithEvent(
+            seriesFolder = Path.of("/work/championship"),
+            seriesId = "series-1",
+            eventPath = Path.of("/work/championship/day-1.rom.json"),
+            eventProjectFile = projectFile("Day 1"),
+            seriesEventId = "day-1"
+        )
+
+        assertEquals(DesktopEventSeriesActions.DEFAULT_SERIES_NAME, result.seriesFile.name)
+    }
+
+    @Test
     fun renameSeriesTrimsNameAndRejectsBlank() {
         val renamed = DesktopEventSeriesActions.renameSeries(seriesFile(), "  Championship Week  ")
 

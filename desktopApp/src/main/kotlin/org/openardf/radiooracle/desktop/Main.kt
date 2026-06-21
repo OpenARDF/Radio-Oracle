@@ -1524,7 +1524,7 @@ fun main(args: Array<String>) = application {
                 val result = DesktopEventSeriesActions.createSeriesWithEvent(
                     seriesFolder = seriesFolder,
                     seriesId = "${currentProject.raceData.race.id}-series",
-                    seriesName = "${currentProject.raceData.race.name} Series",
+                    seriesName = DesktopEventSeriesActions.DEFAULT_SERIES_NAME,
                     eventPath = currentPath,
                     eventProjectFile = currentProject
                 )

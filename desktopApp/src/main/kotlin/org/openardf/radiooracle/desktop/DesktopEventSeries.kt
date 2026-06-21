@@ -183,6 +183,8 @@ class DesktopEventSeriesSession(private val store: EventSeriesStore) {
 
 /** High-level desktop operations for Event Series membership and clean export. */
 object DesktopEventSeriesActions {
+    const val DEFAULT_SERIES_NAME = "New Series"
+
     fun findManifestNearEvent(
         eventPath: Path,
         maxAncestorDepth: Int = 6,
@@ -764,7 +766,7 @@ object DesktopEventSeriesActions {
     fun createSeriesWithEvent(
         seriesFolder: Path,
         seriesId: String,
-        seriesName: String,
+        seriesName: String = DEFAULT_SERIES_NAME,
         eventPath: Path,
         eventProjectFile: EventProjectFile,
         seriesEventId: String = eventProjectFile.raceData.race.id
