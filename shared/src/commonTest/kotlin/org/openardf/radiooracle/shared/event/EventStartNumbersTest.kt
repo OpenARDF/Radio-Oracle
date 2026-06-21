@@ -45,12 +45,15 @@ class EventStartNumbersTest {
                 categories = listOf(
                     EventCategoryData(
                         category = category,
+                        controlPoints = emptyList(),
                         competitors = listOf(alice, bob, cara, drew)
                     )
                 ),
+                aliases = emptyList(),
                 competitorData = listOf(alice, bob, cara, drew).map {
-                    EventCompetitorData(EventCompetitorCategory(it, category))
-                }
+                    EventCompetitorData(EventCompetitorCategory(it, category), readoutData = null)
+                },
+                unmatchedReadoutData = emptyList()
             )
         )
 

@@ -92,9 +92,9 @@ class EventSeriesSupportTest {
 
         assertEquals(
             listOf(
-                listOf(CompetitorStartCsvImportRow(startNumber = 11, startTimeText = "10:00", siNumber = 123456)),
-                listOf(CompetitorStartCsvImportRow(startNumber = 11, startTimeText = "20:00", siNumber = 123456)),
-                listOf(CompetitorStartCsvImportRow(startNumber = 11, startTimeText = "40:00", siNumber = 123456))
+                listOf(CompetitorStartCsvImportRow(startNumber = 1, startTimeText = "10:00", siNumber = 123456)),
+                listOf(CompetitorStartCsvImportRow(startNumber = 1, startTimeText = "20:00", siNumber = 123456)),
+                listOf(CompetitorStartCsvImportRow(startNumber = 1, startTimeText = "40:00", siNumber = 123456))
             ),
             rows
         )
@@ -227,10 +227,10 @@ class EventSeriesSupportTest {
     }
 
     private fun EventProjectFile.preferredGroupsByStartNumber(): Map<Int, Int?> =
-        raceData.competitorData.associate {
+        raceData.competitorData.mapNotNull {
             val competitor = it.competitorCategory.competitor
-            competitor.startNumber to competitor.preferredStartGroup
-        }
+            competitor.startNumber?.let { startNumber -> startNumber to competitor.preferredStartGroup }
+        }.toMap()
 
     private fun seriesFile(events: List<EventSeriesEvent> = listOf(seriesEvent("day-1", 0), seriesEvent("day-2", 1), seriesEvent("day-3", 2))): EventSeriesFile =
         EventSeriesFile(seriesId = "series-1", name = "Championship", events = events)

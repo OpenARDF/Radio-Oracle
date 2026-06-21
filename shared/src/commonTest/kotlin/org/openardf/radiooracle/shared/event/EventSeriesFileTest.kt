@@ -64,6 +64,52 @@ class EventSeriesFileTest {
     }
 
     @Test
+    fun validatesCompetitorMatchOverrideEventIds() {
+        val valid = seriesFile(
+            events = listOf(
+                event("day-1", "day-1.rom.json", 0),
+                event("day-2", "day-2.rom.json", 1)
+            ),
+            competitorMatchOverrides = listOf(
+                EventSeriesCompetitorMatchOverride(
+                    fromSeriesEventId = "day-1",
+                    fromCompetitorId = "alice-1",
+                    toSeriesEventId = "day-2",
+                    toCompetitorId = "alice-2"
+                )
+            )
+        )
+
+        assertEquals(1, valid.competitorMatchOverrides.size)
+        assertFailsWith<IllegalArgumentException> {
+            seriesFile(
+                events = listOf(event("day-1", "day-1.rom.json", 0)),
+                competitorMatchOverrides = listOf(
+                    EventSeriesCompetitorMatchOverride(
+                        fromSeriesEventId = "day-1",
+                        fromCompetitorId = "alice-1",
+                        toSeriesEventId = "missing-day",
+                        toCompetitorId = "alice-2"
+                    )
+                )
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            seriesFile(
+                events = listOf(event("day-1", "day-1.rom.json", 0)),
+                competitorMatchOverrides = listOf(
+                    EventSeriesCompetitorMatchOverride(
+                        fromSeriesEventId = "day-1",
+                        fromCompetitorId = "alice-1",
+                        toSeriesEventId = "day-1",
+                        toCompetitorId = "alice-2"
+                    )
+                )
+            )
+        }
+    }
+
+    @Test
     fun sortedEventsUsesDateTimeWhenEveryEventHasUsableDate() {
         val series = seriesFile(
             events = listOf(
@@ -98,11 +144,15 @@ class EventSeriesFileTest {
         assertEquals(false, invalidDate.usesDateTimeEventOrder())
     }
 
-    private fun seriesFile(events: List<EventSeriesEvent> = listOf(event("day-1", "day-1.rom.json", 0))): EventSeriesFile =
+    private fun seriesFile(
+        events: List<EventSeriesEvent> = listOf(event("day-1", "day-1.rom.json", 0)),
+        competitorMatchOverrides: List<EventSeriesCompetitorMatchOverride> = emptyList()
+    ): EventSeriesFile =
         EventSeriesFile(
             seriesId = "series-1",
             name = "Championship",
-            events = events
+            events = events,
+            competitorMatchOverrides = competitorMatchOverrides
         )
 
     private fun event(id: String, path: String, order: Int, startDateTimeIso: String = ""): EventSeriesEvent =

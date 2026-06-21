@@ -74,6 +74,21 @@ data class EventSeriesFile(
         require(duplicateOverrides.isEmpty()) {
             "Series contains duplicate competitor match overrides: ${duplicateOverrides.joinToString()}"
         }
+        val eventIds = events.map { it.seriesEventId }.toSet()
+        val overridesWithUnknownEvents = competitorMatchOverrides.filter {
+            it.fromSeriesEventId !in eventIds || it.toSeriesEventId !in eventIds
+        }
+        require(overridesWithUnknownEvents.isEmpty()) {
+            "Series contains competitor match overrides for unknown event ids: " +
+                overridesWithUnknownEvents.joinToString { it.eventKey() }
+        }
+        val sameEventOverrides = competitorMatchOverrides.filter {
+            it.fromSeriesEventId == it.toSeriesEventId
+        }
+        require(sameEventOverrides.isEmpty()) {
+            "Series contains competitor match overrides within the same event: " +
+                sameEventOverrides.joinToString { it.eventKey() }
+        }
     }
 }
 
@@ -139,6 +154,9 @@ data class EventSeriesCompetitorMatchOverride(
 
     fun competitorKey(): String =
         listOf(fromSeriesEventId, fromCompetitorId, toSeriesEventId, toCompetitorId).joinToString("|")
+
+    fun eventKey(): String =
+        "$fromSeriesEventId->$toSeriesEventId"
 }
 
 /** JSON codec for portable Event Series manifests. */
