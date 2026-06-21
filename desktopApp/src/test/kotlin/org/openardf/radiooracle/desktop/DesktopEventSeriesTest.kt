@@ -474,6 +474,113 @@ class DesktopEventSeriesTest {
         assertEquals(0, summary.firstThirdStartCount)
         assertEquals(0, summary.middleThirdStartCount)
         assertEquals(0, summary.lateThirdStartCount)
+        assertEquals(0, summary.fairnessNumber)
+        assertEquals(0, summary.fairnessScoreCompetitorCount)
+    }
+
+    @Test
+    fun startFairnessSummaryRatesBalancedThirdHistoryAsOneHundred() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val seriesFile = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"),
+                EventSeriesEvent("day-2", "day-2.rom.json", 1, "Day 2"),
+                EventSeriesEvent("day-3", "day-3.rom.json", 2, "Day 3")
+            )
+        )
+        val dayOne = projectWithTargetThird("Day 1", targetThird = 1)
+        val dayTwo = projectWithTargetThird("Day 2", targetThird = 2)
+        val dayThree = projectWithTargetThird("Day 3", targetThird = 3)
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile),
+            eventFiles = mapOf(
+                Path.of("/source/day-1.rom.json") to dayOne,
+                Path.of("/source/day-2.rom.json") to dayTwo,
+                Path.of("/source/day-3.rom.json") to dayThree
+            )
+        )
+
+        val summary = requireNotNull(
+            DesktopEventSeriesActions.startFairnessSummary(
+                store = store,
+                manifestPath = manifestPath,
+                currentEventPath = Path.of("/source/day-3.rom.json"),
+                currentProjectFile = dayThree
+            )
+        )
+
+        assertEquals(100, summary.fairnessNumber)
+        assertEquals(1, summary.fairnessScoreCompetitorCount)
+        assertEquals(0, summary.fairnessExcessSpread)
+        assertEquals("E M L", summary.competitorHistories.single { it.identityLabel == "SI 111" }.thirdHistoryText)
+    }
+
+    @Test
+    fun startFairnessSummaryRatesRepeatedSameThirdHistoryAsLow() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val seriesFile = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"),
+                EventSeriesEvent("day-2", "day-2.rom.json", 1, "Day 2")
+            )
+        )
+        val dayOne = projectWithTargetThird("Day 1", targetThird = 1)
+        val dayTwo = projectWithTargetThird("Day 2", targetThird = 1)
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile),
+            eventFiles = mapOf(
+                Path.of("/source/day-1.rom.json") to dayOne,
+                Path.of("/source/day-2.rom.json") to dayTwo
+            )
+        )
+
+        val summary = requireNotNull(
+            DesktopEventSeriesActions.startFairnessSummary(
+                store = store,
+                manifestPath = manifestPath,
+                currentEventPath = Path.of("/source/day-2.rom.json"),
+                currentProjectFile = dayTwo
+            )
+        )
+
+        assertEquals(0, summary.fairnessNumber)
+        assertEquals(1, summary.fairnessScoreCompetitorCount)
+        assertEquals(1, summary.fairnessExcessSpread)
+        assertEquals(1, summary.competitorsWithUnevenHistoryCount)
+    }
+
+    @Test
+    fun startFairnessSummaryUsesOpenCurrentProjectStartsBeforeTheyAreSaved() {
+        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val currentEventPath = Path.of("/source/day-2.rom.json")
+        val seriesFile = seriesFile(
+            events = listOf(
+                EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"),
+                EventSeriesEvent("day-2", "day-2.rom.json", 1, "Day 2")
+            )
+        )
+        val dayOne = projectWithTargetThird("Day 1", targetThird = 1)
+        val staleSavedDayTwo = projectWithTargetThird("Day 2 saved", targetThird = 1)
+        val unsavedOpenDayTwo = projectWithTargetThird("Day 2 open", targetThird = 2)
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile),
+            eventFiles = mapOf(
+                Path.of("/source/day-1.rom.json") to dayOne,
+                currentEventPath to staleSavedDayTwo
+            )
+        )
+
+        val summary = requireNotNull(
+            DesktopEventSeriesActions.startFairnessSummary(
+                store = store,
+                manifestPath = manifestPath,
+                currentEventPath = currentEventPath,
+                currentProjectFile = unsavedOpenDayTwo
+            )
+        )
+
+        assertEquals(100, summary.fairnessNumber)
+        assertEquals("E M", summary.competitorHistories.single { it.identityLabel == "SI 111" }.thirdHistoryText)
     }
 
     @Test
@@ -768,6 +875,20 @@ class DesktopEventSeriesTest {
                 )
             )
         )
+    }
+
+    private fun projectWithTargetThird(name: String, targetThird: Int): EventProjectFile {
+        val targetIndex = (targetThird - 1).coerceIn(0, 2)
+        val competitors = (0..2).map { index ->
+            val isTarget = index == targetIndex
+            competitorData(
+                id = if (isTarget) "$name-target" else "$name-other-$index",
+                startNumber = index + 1,
+                siNumber = if (isTarget) 111 else null,
+                drawnStartTimeSeconds = index * 60L
+            )
+        }
+        return projectFile(name = name, competitors = competitors)
     }
 
     private fun eventCategory(id: String, raceId: String): EventCategory =

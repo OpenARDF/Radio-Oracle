@@ -257,6 +257,18 @@ private val CategoryTableColumnHints = mapOf(
 private val CategoryMenBackground = Color(0xFFE8F3FF)
 private val CategoryWomenBackground = Color(0xFFFFECEC)
 private val ControlStatsOkColor = Color(0xFF1B5E20)
+private const val SeriesStartFairnessGoodThreshold = 90
+private const val SeriesStartFairnessManualReviewThreshold = 70
+
+private enum class SeriesStartFairnessStatus(val label: String) {
+    GenerateStarts("Generate start lists before checking fairness"),
+    AddIdentityData("Add SI, bib, or call sign identity data"),
+    MoreHistoryNeeded("More identified start history needed"),
+    NoOptimizationNeeded("No optimization needed"),
+    ManualReviewRecommended("Manual start-parameter review recommended"),
+    NoBetterOptimizationsFound("No better optimizations found"),
+    OptimizationRecommended("Optimization recommended")
+}
 
 private val ProtectedCourseOrderTableColumns = listOf(
     FixedTableColumn("Category", 120.dp),
@@ -1657,6 +1669,7 @@ fun main(args: Array<String>) = application {
                     options = settings.options
                 )
                 projectFile = projectSession.updateCurrentProject { balanced }
+                seriesStartFairnessOptimizationResult = null
                 syncProjectState()
                 projectStatusText = "Balanced the open Event File for its series. Save the Event File to keep the draw."
                 recordActivity(projectStatusText)
@@ -4983,10 +4996,11 @@ fun main(args: Array<String>) = application {
             },
             onUpdateCompetitorStartTime = { competitorId, startTime ->
                 runCatching {
-                    projectFile = projectSession.updateCurrentProject { currentProject ->
+                    projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.updateCompetitorStartTime(currentProject, competitorId, startTime)
                     }
-                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    seriesStartFairnessOptimizationResult = null
+                    syncProjectState()
                     projectStatusText = "Unsaved changes."
                 }.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
@@ -5012,8 +5026,8 @@ fun main(args: Array<String>) = application {
                     val drawnProject = projectSession.updateCurrentProject { currentProject ->
                         EventProjectEditor.drawStartList(currentProject, interval, protectedOptions)
                     }
-                    projectFile = drawnProject
-                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    seriesStartFairnessOptimizationResult = null
+                    syncProjectState()
                     projectStatusText = startListDrawStatusText(EventStartListDetails.from(drawnProject.raceData))
                 }.onFailure { error ->
                     projectStatusText = "Draw failed: ${error.message ?: error::class.simpleName}"
@@ -5041,8 +5055,8 @@ fun main(args: Array<String>) = application {
                             previousStartLists
                         )
                     }
-                    projectFile = drawnProject
-                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    seriesStartFairnessOptimizationResult = null
+                    syncProjectState()
                     projectStatusText = "Balanced starts from ${paths.size} prior CSV file(s); " +
                         startListDrawStatusText(EventStartListDetails.from(drawnProject.raceData))
                 }.onFailure { error ->
@@ -8666,6 +8680,7 @@ private fun SectionWorkspace(
         if (section == DesktopSection.StartList && projectFile != null) {
             StartListDetailsPanel(
                 details = EventStartListDetails.from(projectFile.raceData),
+                seriesStartFairnessSummary = seriesStartFairnessSummary,
                 onUpdateStartDrawSettings = onUpdateStartDrawSettings,
                 onDrawStartList = onDrawStartList,
                 onDrawBalancedStartList = onDrawBalancedStartList
@@ -9536,6 +9551,7 @@ private fun ResultDetailRow(
 @Composable
 private fun StartListDetailsPanel(
     details: EventStartListDetails,
+    seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary?,
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit,
     onDrawStartList: (String, StartDrawOptions) -> Unit,
     onDrawBalancedStartList: (String, StartDrawOptions) -> Unit
@@ -9670,11 +9686,19 @@ private fun StartListDetailsPanel(
         DetailHeaderRow(listOf("Scheduled", "No start time"))
         DetailGridRow(listOf(details.scheduledCount.toString(), details.unscheduledCount.toString()))
         Text(
-            text = "Score ${details.quality.score}/100 - ${details.quality.summary}",
+            text = "Event Start Fairness Score: ${details.quality.score}/100 - ${details.quality.summary}",
             color = details.quality.severity.toStartListColor(),
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold
         )
+        seriesStartFairnessSummary?.let { summary ->
+            Text(
+                text = "Series Start Fairness Score: ${summary.fairnessNumber}/100 - ${summary.seriesStartFairnessStatus(null).label}",
+                color = summary.seriesStartFairnessNumberColor(),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
         details.quality.messages.take(3).forEach { message ->
             Text(
                 text = message,
@@ -9912,19 +9936,54 @@ private fun EventSeriesStartFairnessPanel(
             return@Column
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(
-                onClick = onOptimizeStartFairness,
-                enabled = summary.generatedStartRowCount > 0 && summary.identifiedGeneratedStartRowCount > 0
-            ) {
-                Text("Optimize Series Starts")
+        val fairnessStatus = summary.seriesStartFairnessStatus(optimizationResult)
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Fairness",
+                    color = DesktopPalette.Disconnected,
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = summary.fairnessNumber.toString(),
+                    color = summary.seriesStartFairnessNumberColor(),
+                    fontSize = 42.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "/100",
+                    color = DesktopPalette.Disconnected,
+                    fontSize = 12.sp
+                )
             }
-            Text(
-                text = "Tries randomized valid starts for each Event File, keeps only changes that improve or preserve whole-series fairness, and numbers distinct solutions found this session.",
-                modifier = Modifier.weight(1f),
-                color = DesktopPalette.Disconnected,
-                fontSize = 13.sp
-            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(
+                        onClick = onOptimizeStartFairness,
+                        enabled = summary.generatedStartRowCount > 0 && summary.identifiedGeneratedStartRowCount > 0
+                    ) {
+                        Text("Optimize Series Starts")
+                    }
+                    Text(
+                        text = fairnessStatus.label,
+                        color = summary.seriesStartFairnessStatusColor(optimizationResult),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Text(
+                    text = "Tries randomized valid starts for each Event File, keeps only changes that improve or preserve whole-series fairness, and numbers distinct solutions found this session.",
+                    color = DesktopPalette.Disconnected,
+                    fontSize = 13.sp
+                )
+                if (fairnessStatus == SeriesStartFairnessStatus.ManualReviewRecommended) {
+                    Text(
+                        text = "The optimizer could not find a fairer draw with the current event start settings. Consider adjusting one or more event start-list settings, such as start interval, competitors per start time, or inserted empty starts, then optimize again.",
+                        color = DesktopPalette.Error,
+                        fontSize = 13.sp
+                    )
+                }
+            }
         }
 
         optimizationResult?.let { result ->
@@ -10010,6 +10069,39 @@ private fun DesktopEventSeriesStartFairnessOptimizationResult.solutionLabel(): S
         "Solution #$number"
     }
 }
+
+private fun DesktopEventSeriesStartFairnessSummary.seriesStartFairnessStatus(
+    optimizationResult: DesktopEventSeriesStartFairnessOptimizationResult?
+): SeriesStartFairnessStatus =
+    when {
+        generatedStartRowCount == 0 -> SeriesStartFairnessStatus.GenerateStarts
+        identifiedGeneratedStartRowCount == 0 -> SeriesStartFairnessStatus.AddIdentityData
+        fairnessScoreCompetitorCount == 0 -> SeriesStartFairnessStatus.MoreHistoryNeeded
+        fairnessNumber >= SeriesStartFairnessGoodThreshold -> SeriesStartFairnessStatus.NoOptimizationNeeded
+        optimizationResult != null && !optimizationResult.improved &&
+            fairnessNumber < SeriesStartFairnessManualReviewThreshold ->
+            SeriesStartFairnessStatus.ManualReviewRecommended
+        optimizationResult != null && !optimizationResult.improved -> SeriesStartFairnessStatus.NoBetterOptimizationsFound
+        else -> SeriesStartFairnessStatus.OptimizationRecommended
+    }
+
+private fun DesktopEventSeriesStartFairnessSummary.seriesStartFairnessNumberColor(): Color =
+    when {
+        fairnessScoreCompetitorCount == 0 -> DesktopPalette.Disconnected
+        fairnessNumber >= SeriesStartFairnessGoodThreshold -> ControlStatsOkColor
+        fairnessNumber >= SeriesStartFairnessManualReviewThreshold -> Color(0xFFC46A00)
+        else -> DesktopPalette.Error
+    }
+
+private fun DesktopEventSeriesStartFairnessSummary.seriesStartFairnessStatusColor(
+    optimizationResult: DesktopEventSeriesStartFairnessOptimizationResult?
+): Color =
+    when (seriesStartFairnessStatus(optimizationResult)) {
+        SeriesStartFairnessStatus.NoOptimizationNeeded -> ControlStatsOkColor
+        SeriesStartFairnessStatus.ManualReviewRecommended -> DesktopPalette.Error
+        SeriesStartFairnessStatus.OptimizationRecommended -> Color(0xFFC46A00)
+        else -> DesktopPalette.Disconnected
+    }
 
 @Composable
 private fun EventSeriesStartFairnessHistoryHeaderRow() {

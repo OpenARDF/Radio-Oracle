@@ -82,6 +82,12 @@ Radio-Oracle supports this with two desktop workflows:
 
 `Optimize Series Starts` can be pressed repeatedly to look for alternate randomized solutions. Radio-Oracle numbers distinct whole-series start assignments found during the current desktop session and reports when a press repeats an earlier solution.
 
+The Start Fairness panel reports a 0-100 fairness number. A score of 100 means every identified competitor with at least two generated starts is balanced as well as mathematically possible across early, middle, and late thirds. For example, one start in each third is perfect across three events, and a 2/1/1 split is perfect across four events. If no identified competitor has enough generated starts to score, the fairness number is 0 until more start history exists.
+
+If the score is high enough, the panel reports that no optimization is needed. If optimization has already been attempted and no better result was found, a low score reports that manual start-parameter review may be needed. Possible interventions include changing one or more event start intervals, changing competitors per start time, or inserting empty starts before optimizing again.
+
+For an Event File linked to a series, the Start List page shows both `Event Start Fairness Score` and `Series Start Fairness Score`. The series score uses the open in-memory Event File for the current event, so manual start-time edits are reflected before the Event File is saved. Other series events still contribute from their saved Event Files.
+
 The Series Events list and the Start Fairness History column are ordered by event date/time when every series event has a usable date. If any series event is missing a date or has an invalid date, Radio-Oracle falls back to the stored series order.
 
 For series-based balancing:

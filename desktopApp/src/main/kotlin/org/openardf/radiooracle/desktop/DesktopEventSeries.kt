@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import kotlin.math.roundToInt
 
 /** Storage boundary used by desktop Event Series session logic. */
 interface EventSeriesStore {
@@ -289,9 +290,13 @@ object DesktopEventSeriesActions {
             path.toAbsolutePath().normalize() == normalizedCurrentPath
         }?.first ?: return null
         val eventStarts = eventsWithPaths
-            .filter { (_, path) -> store.exists(path) }
-            .mapIndexed { index, (event, path) ->
-                event to startFairnessStarts(event, eventSequenceIndex = index, store.readEvent(path))
+            .mapIndexedNotNull { index, (event, path) ->
+                val isCurrentEvent = path.toAbsolutePath().normalize() == normalizedCurrentPath
+                when {
+                    isCurrentEvent -> event to startFairnessStarts(event, eventSequenceIndex = index, currentProject)
+                    store.exists(path) -> event to startFairnessStarts(event, eventSequenceIndex = index, store.readEvent(path))
+                    else -> null
+                }
             }
         val generatedStarts = eventStarts.flatMap { it.second }
         val identifiedStarts = generatedStarts.filter { it.identityKey != null }
@@ -307,6 +312,7 @@ object DesktopEventSeriesActions {
                     .thenByDescending { it.spread }
                     .thenBy { it.competitorName }
             )
+        val fairnessRating = startFairnessRating(competitorFairnessRows)
         val competitorsWithUnevenHistoryCount = competitorFairnessRows.count { it.isUneven }
         val balanceHistoryEvents = eventsWithPaths.filter { (event, _) ->
             event.seriesEventId != currentEvent.seriesEventId
@@ -327,7 +333,9 @@ object DesktopEventSeriesActions {
             } else {
                 "stored series order"
             },
-            missingEventFileCount = eventsWithPaths.count { (_, path) -> !store.exists(path) },
+            missingEventFileCount = eventsWithPaths.count { (_, path) ->
+                path.toAbsolutePath().normalize() != normalizedCurrentPath && !store.exists(path)
+            },
             eventsWithGeneratedStartsCount = eventStarts.count { it.second.isNotEmpty() },
             eventsWithoutGeneratedStartsCount = sortedEvents.size - eventStarts.count { it.second.isNotEmpty() },
             generatedStartRowCount = generatedStarts.size,
@@ -335,6 +343,9 @@ object DesktopEventSeriesActions {
             unidentifiedGeneratedStartRowCount = generatedStarts.size - identifiedStarts.size,
             competitorsWithIdentifiedHistoryCount = competitorHistories.size,
             competitorsWithUnevenHistoryCount = competitorsWithUnevenHistoryCount,
+            fairnessNumber = fairnessRating.fairnessNumber,
+            fairnessScoreCompetitorCount = fairnessRating.scoreableCompetitorCount,
+            fairnessExcessSpread = fairnessRating.excessSpread,
             firstThirdStartCount = startThirdCounts[1].orZero(),
             middleThirdStartCount = startThirdCounts[2].orZero(),
             lateThirdStartCount = startThirdCounts[3].orZero(),
@@ -545,6 +556,35 @@ object DesktopEventSeriesActions {
             .joinToString("/")
         return "Prefer $neededThirds"
     }
+
+    private fun startFairnessRating(
+        histories: List<DesktopEventSeriesStartFairnessCompetitorHistory>
+    ): DesktopEventSeriesStartFairnessRating {
+        val scoreableHistories = histories.filter { it.generatedStartCount >= 2 }
+        val possibleExcessSpread = scoreableHistories.sumOf {
+            maximumExcessSpreadForStartCount(it.generatedStartCount)
+        }
+        val excessSpread = scoreableHistories.sumOf { history ->
+            (history.spread - idealSpreadForStartCount(history.generatedStartCount)).coerceAtLeast(0)
+        }
+        val fairnessNumber = if (possibleExcessSpread <= 0) {
+            0
+        } else {
+            (100 - ((excessSpread.toDouble() / possibleExcessSpread.toDouble()) * 100.0).roundToInt())
+                .coerceIn(0, 100)
+        }
+        return DesktopEventSeriesStartFairnessRating(
+            fairnessNumber = fairnessNumber,
+            scoreableCompetitorCount = scoreableHistories.size,
+            excessSpread = excessSpread
+        )
+    }
+
+    private fun idealSpreadForStartCount(startCount: Int): Int =
+        if (startCount % 3 == 0) 0 else 1
+
+    private fun maximumExcessSpreadForStartCount(startCount: Int): Int =
+        (startCount - idealSpreadForStartCount(startCount)).coerceAtLeast(0)
 
     private fun Int.shortStartThirdLabel(): String =
         when (this) {
@@ -860,6 +900,12 @@ data class DesktopEventSeriesStartFairnessCompetitorHistory(
     val recommendation: String
 )
 
+private data class DesktopEventSeriesStartFairnessRating(
+    val fairnessNumber: Int,
+    val scoreableCompetitorCount: Int,
+    val excessSpread: Int
+)
+
 private data class DesktopEventSeriesStartFairnessOptimizationEvent(
     val event: EventSeriesEvent,
     val path: Path,
@@ -930,6 +976,9 @@ data class DesktopEventSeriesStartFairnessSummary(
     val unidentifiedGeneratedStartRowCount: Int,
     val competitorsWithIdentifiedHistoryCount: Int,
     val competitorsWithUnevenHistoryCount: Int,
+    val fairnessNumber: Int,
+    val fairnessScoreCompetitorCount: Int,
+    val fairnessExcessSpread: Int,
     val firstThirdStartCount: Int,
     val middleThirdStartCount: Int,
     val lateThirdStartCount: Int,
