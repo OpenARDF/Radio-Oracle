@@ -304,9 +304,8 @@ Goal: add platform-specific capabilities after the event-admin beta is stable.
   menu structure and menu complexity do not grow by default.
 - Continue the opt-in competition context started by the contextual Series
   workflow so cross-event tools remain additive to the current event workflow.
-- Reuse and extend the existing multi-day `Balance from CSVs` workflow as the
-  first competition-aware start fairness input rather than creating a separate
-  competing balancing path immediately.
+- Reuse the shared balanced-thirds start-list engine through Event Series tools
+  rather than exposing a separate file-import balancing workflow.
 - Add explicit cross-event competitor identity and reconciliation support so the
   app can confidently match the same person across days even when SI numbers,
   start numbers, categories, or registration details are incomplete or change.

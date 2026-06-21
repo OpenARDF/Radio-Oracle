@@ -1,21 +1,23 @@
 package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.StartDrawOptions
 import java.nio.file.Path
 
 object DesktopStartListDrawNumbers {
     fun assign(
         existingNumbers: Map<String, Int>,
         eventPath: Path?,
-        projectFile: EventProjectFile
+        projectFile: EventProjectFile,
+        drawContextKey: String? = null
     ): DesktopStartListDrawNumbering {
-        val eventKey = eventKey(eventPath, projectFile)
+        val orderPrefix = orderPrefix(eventPath, projectFile, drawContextKey)
         val assignmentSignature = startAssignmentSignature(projectFile)
-        val solutionKey = "$eventKey|$assignmentSignature"
+        val solutionKey = "$orderPrefix|$assignmentSignature"
         val existingNumber = existingNumbers[solutionKey]
         val orderNumber = existingNumber
             ?: (existingNumbers
-                .filterKeys { it.startsWith("$eventKey|") }
+                .filterKeys { it.startsWith("$orderPrefix|") }
                 .values
                 .maxOrNull()
                 ?: 0) + 1
@@ -31,12 +33,45 @@ object DesktopStartListDrawNumbers {
         )
     }
 
-    fun orderProjectKey(eventPath: Path?, projectFile: EventProjectFile, orderNumber: Int): String =
-        "${eventKey(eventPath, projectFile)}|order:$orderNumber"
+    fun orderProjectKey(
+        eventPath: Path?,
+        projectFile: EventProjectFile,
+        orderNumber: Int,
+        drawContextKey: String? = null
+    ): String =
+        "${orderPrefix(eventPath, projectFile, drawContextKey)}|order:$orderNumber"
 
-    private fun eventKey(eventPath: Path?, projectFile: EventProjectFile): String =
+    fun eventKey(eventPath: Path?, projectFile: EventProjectFile): String =
         eventPath?.toAbsolutePath()?.normalize()?.toString()
             ?: "unsaved:${projectFile.raceData.race.id}"
+
+    fun knownOrderCount(
+        existingNumbers: Map<String, Int>,
+        eventPath: Path?,
+        projectFile: EventProjectFile,
+        drawContextKey: String? = null
+    ): Int =
+        existingNumbers
+            .filterKeys { it.startsWith("${orderPrefix(eventPath, projectFile, drawContextKey)}|") }
+            .values
+            .maxOrNull()
+            ?: 0
+
+    fun drawContextKey(intervalText: String, options: StartDrawOptions): String =
+        listOf(
+            "interval=${intervalText.trim()}",
+            "club=${options.clubHandling.name}",
+            "starters=${options.startersPerStartTime}",
+            "groups=${options.startGroupMode.name}",
+            "firstFox=${options.idealFirstFoxByCategoryId.toSortedMap().entries.joinToString(";") { "${it.key}:${it.value}" }}"
+        ).joinToString("|")
+
+    private fun orderPrefix(eventPath: Path?, projectFile: EventProjectFile, drawContextKey: String?): String =
+        if (drawContextKey.isNullOrBlank()) {
+            eventKey(eventPath, projectFile)
+        } else {
+            "${eventKey(eventPath, projectFile)}|context:$drawContextKey"
+        }
 
     fun startAssignmentSignature(projectFile: EventProjectFile): String =
         projectFile.raceData.competitorData

@@ -12,7 +12,7 @@ The generator assigns relative start times to competitors while balancing hard l
 - Avoid same-club starts when `Avoid same club` is enabled.
 - Avoid same first-fox conflicts for similarly fast categories when protected course-order data is available.
 - Honor assigned championship start thirds when `Preferred thirds` mode is enabled.
-- Balance start thirds across multiple competition days when prior starts CSVs are supplied.
+- Balance start thirds across multiple competition days through the Event Series tools.
 - Make non-default seeded draws repeatable across machines and runs.
 
 Some events do not have enough categories or clubs to satisfy every best practice. In that case the generator completes the draw, and the evaluator reports the remaining compromises as orange or red findings.
@@ -31,7 +31,7 @@ The seed is persisted for compatibility and repeatable internal generation, but 
 
 `startGroupMode` defaults to `No start groups`. In that mode, no start-third rule is applied and the generator behaves like a normal single-event draw. When changed to `Preferred thirds`, the generator uses each competitor's optional `preferredStartGroup` value. The canonical competitor CSV column is `preferred_start_group`; blank means no assignment, and accepted values are `1`, `2`, and `3`.
 
-`Balanced thirds` is selected automatically when the desktop Start List panel's `Balance from CSVs` action is used. It derives current-day preferred thirds from one or more prior starts CSV files, saves those assignments into the current Event File, then runs the same constrained draw as `Preferred thirds`.
+`Balanced thirds` is an internal mode used by series balancing tools. It derives current-day preferred thirds from other series Event Files with generated starts, saves those assignments into the current Event File, then runs the same constrained draw as `Preferred thirds`.
 
 ## Draw Model
 
@@ -75,10 +75,10 @@ This support is intentionally limited to explicit preferred-third assignments. T
 
 Many championships have four separate competitions on consecutive days. Fairness across the series matters because the start thirds are not equally desirable: the middle third is usually best, the late third is next, and the early third is least desirable. A fair series should avoid assigning a competitor to the same third more than twice over four days, and should avoid giving one competitor only middle and late starts for the entire series when alternatives exist.
 
-Radio-Oracle supports this with two desktop workflows:
+Radio-Oracle supports this with series-aware desktop workflows:
 
 - `Balance Open Event for Series` redraws only the open Event File, using other series Event Files that already have generated starts.
-- `Balance from CSVs` remains the manual fallback when the series manifest is not available or prior starts arrive as exported CSV files.
+- `Optimize Series Starts` searches for improved randomized start-list combinations across the series.
 
 `Optimize Series Starts` can be pressed repeatedly to look for alternate randomized solutions. Radio-Oracle numbers distinct whole-series start assignments found during the current desktop session and reports when a press repeats an earlier solution.
 
@@ -97,17 +97,9 @@ For series-based balancing:
 3. Use the contextual Series workflow to select `Balance Open Event for Series`.
 4. Radio-Oracle reads other series events that already have generated starts, computes preferred thirds, saves those assignments, and draws the open event's start list in `Balanced thirds` mode.
 
-For CSV-based balancing:
+Prior starts from linked Event Files are matched to current competitors by persistent identity fields: SI number, bib number, then call sign. Start/order numbers are not used as competitor identity keys.
 
-1. Draw and export the starts CSV for each completed event day.
-2. Open the Event File for the next day.
-3. Select `Balance from CSVs`.
-4. Select the prior starts CSV files for the same multi-day competition.
-5. Radio-Oracle computes a preferred third for every current competitor, saves those assignments, and draws the start list in `Balanced thirds` mode.
-
-Prior starts from linked Event Files are matched to current competitors by persistent identity fields: SI number, bib number, then call sign. Prior starts CSV files currently carry SI numbers but not bib numbers or call signs, so CSV-based balancing can only match competitors that have SI numbers in the starts file. Start/order numbers are not used as competitor identity keys.
-
-Each selected prior starts CSV, or each other generated-start Event File selected by the series manifest, is converted into first, middle, and late thirds by sorting its distinct start times and applying the same third-boundary rule used by the draw. The current-day assignment heuristic then evaluates each competitor's history:
+Each other generated-start Event File selected by the series manifest is converted into first, middle, and late thirds by sorting its distinct start times and applying the same third-boundary rule used by the draw. The current-day assignment heuristic then evaluates each competitor's history:
 
 - A third already used twice by that competitor receives a large penalty.
 - If the competitor has three prior starts and none were early, non-early choices receive a large penalty.
@@ -117,7 +109,7 @@ Each selected prior starts CSV, or each other generated-start Event File selecte
 
 The algorithm is a deterministic heuristic, not an exhaustive optimizer. It is intended to produce reviewable, fair assignments when participant lists differ between days. If the field is too constrained, the draw still completes and the quality evaluator flags any saved current-day start-third violations in red.
 
-The goodness factor evaluates whether the saved start order honored the balanced assignments produced by `Balance Open Event for Series` or `Balance from CSVs`. It does not re-read the other Event Files or prior CSV files during scoring, and it does not separately prove that the balanced assignment was globally optimal across every day. In balanced mode, the multi-day fairness work happens when Radio-Oracle computes the current-day preferred thirds; the quality score then verifies that the final drawn start order stayed inside those computed thirds.
+The goodness factor evaluates whether the saved start order honored the balanced assignments produced by `Balance Open Event for Series`. It does not re-read the other Event Files during scoring, and it does not separately prove that the balanced assignment was globally optimal across every day. In balanced mode, the multi-day fairness work happens when Radio-Oracle computes the current-day preferred thirds; the quality score then verifies that the final drawn start order stayed inside those computed thirds.
 
 ## Seeded Randomization
 

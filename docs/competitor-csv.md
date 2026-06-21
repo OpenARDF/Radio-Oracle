@@ -70,12 +70,7 @@ incoming SI number belongs to a different competitor, the import is rejected.
 Missing categories create placeholder categories and are reported as warnings;
 empty categories leave competitors category-less and are also reported.
 
-## Multi-Day Starts CSV
-
-The desktop Start List panel can balance start thirds across a multi-day
-competition by reading one or more previously exported starts CSV files. Use
-`Export Starts CSV` after each completed event day, then use `Balance from CSVs`
-on the next day's Event File and select those prior starts files.
+## Starts CSV
 
 The starts CSV is the existing three-column start-list import/export format; it
 does not include a header row. The field order is:

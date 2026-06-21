@@ -20,6 +20,8 @@ import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFile
 import org.openardf.radiooracle.shared.event.EventSeriesLink
+import org.openardf.radiooracle.shared.event.StartDrawClubHandling
+import org.openardf.radiooracle.shared.event.StartDrawOptions
 import java.nio.file.Path
 
 class DesktopEventSeriesTest {
@@ -762,6 +764,14 @@ class DesktopEventSeriesTest {
         assertTrue(repeated.repeatedOrder)
         assertEquals(2, second.orderNumber)
         assertFalse(second.repeatedOrder)
+        assertEquals(
+            2,
+            DesktopStartListDrawNumbers.knownOrderCount(
+                existingNumbers = second.orderNumbers,
+                eventPath = eventPath,
+                projectFile = firstProject
+            )
+        )
     }
 
     @Test
@@ -780,6 +790,52 @@ class DesktopEventSeriesTest {
         assertEquals(1, firstEvent.orderNumber)
         assertEquals(1, secondEvent.orderNumber)
         assertFalse(secondEvent.repeatedOrder)
+    }
+
+    @Test
+    fun startListDrawNumberingIsScopedByDrawSettings() {
+        val eventPath = Path.of("/source/day-1.rom.json")
+        val avoidClubsContext = DesktopStartListDrawNumbers.drawContextKey(
+            "05:00",
+            StartDrawOptions(clubHandling = StartDrawClubHandling.AVOID_BACK_TO_BACK)
+        )
+        val ignoreClubsContext = DesktopStartListDrawNumbers.drawContextKey(
+            "05:00",
+            StartDrawOptions(clubHandling = StartDrawClubHandling.IGNORE)
+        )
+        val firstProject = projectWithTargetThird("Day 1", targetThird = 1)
+        val secondProject = projectWithTargetThird("Day 1", targetThird = 2)
+
+        val avoidFirst = DesktopStartListDrawNumbers.assign(
+            existingNumbers = emptyMap(),
+            eventPath = eventPath,
+            projectFile = firstProject,
+            drawContextKey = avoidClubsContext
+        )
+        val avoidSecond = DesktopStartListDrawNumbers.assign(
+            existingNumbers = avoidFirst.orderNumbers,
+            eventPath = eventPath,
+            projectFile = secondProject,
+            drawContextKey = avoidClubsContext
+        )
+        val ignoreFirst = DesktopStartListDrawNumbers.assign(
+            existingNumbers = avoidSecond.orderNumbers,
+            eventPath = eventPath,
+            projectFile = firstProject,
+            drawContextKey = ignoreClubsContext
+        )
+
+        assertEquals(2, avoidSecond.orderNumber)
+        assertEquals(1, ignoreFirst.orderNumber)
+        assertEquals(
+            2,
+            DesktopStartListDrawNumbers.knownOrderCount(
+                existingNumbers = ignoreFirst.orderNumbers,
+                eventPath = eventPath,
+                projectFile = firstProject,
+                drawContextKey = avoidClubsContext
+            )
+        )
     }
 
     @Test

@@ -445,6 +445,7 @@ fun main(args: Array<String>) = application {
         var eventStartListDrawProjects by remember { mutableStateOf<Map<String, EventProjectFile>>(emptyMap()) }
         var eventStartListDrawNumbering by remember { mutableStateOf<DesktopStartListDrawNumbering?>(null) }
         var eventStartListDrawEventPath by remember { mutableStateOf<Path?>(null) }
+        var eventStartListDrawExhaustedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
         var seriesCompetitorMatchSummaries by remember {
             mutableStateOf<List<DesktopEventSeriesCompetitorMatchSummary>>(emptyList())
         }
@@ -645,6 +646,13 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun clearEventStartListDrawHistory() {
+            eventStartListDrawNumbers = emptyMap()
+            eventStartListDrawProjects = emptyMap()
+            eventStartListDrawNumbering = null
+            eventStartListDrawExhaustedKeys = emptySet()
+        }
+
         LaunchedEffect(Unit) {
             refreshSeriesEventSummaries()
         }
@@ -658,6 +666,13 @@ fun main(args: Array<String>) = application {
         fun recordActivity(message: String) {
             val timestamp = LocalTime.now().withNano(0).toString()
             recentActivityLog = (listOf("$timestamp - $message") + recentActivityLog).take(12)
+        }
+
+        fun EventProjectFile.startDrawSettingsLogText(): String {
+            val settings = raceData.effectiveStartDrawSettings()
+            return "startDraw interval=${settings.intervalText} club=${settings.options.clubHandling.name} " +
+                "starters=${settings.options.startersPerStartTime} groups=${settings.options.startGroupMode.name} " +
+                "seed=${settings.options.seed}"
         }
 
         fun deleteControlAfterProtectedRouteCheck(controlId: String, promptIfLocked: Boolean = true): Boolean {
@@ -1422,7 +1437,8 @@ fun main(args: Array<String>) = application {
                             append(seriesRefreshWarning)
                         }
                     }
-                    DesktopDebugLog.info("EventFile", "Saved ${path.fileName}")
+                    val settingsLog = projectSession.currentProject?.startDrawSettingsLogText().orEmpty()
+                    DesktopDebugLog.info("EventFile", "Saved ${path.fileName} $settingsLog")
                 }.onFailure { error ->
                     projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
                     DesktopDebugLog.error("EventFile", "Save failed: ${error.message ?: error::class.simpleName}")
@@ -1461,7 +1477,11 @@ fun main(args: Array<String>) = application {
                         append(seriesRefreshWarning)
                     }
                 }
-                DesktopDebugLog.info("EventFile", "Saved ${projectSession.currentPath?.fileName ?: "Event File"}")
+                val settingsLog = projectSession.currentProject?.startDrawSettingsLogText().orEmpty()
+                DesktopDebugLog.info(
+                    "EventFile",
+                    "Saved ${projectSession.currentPath?.fileName ?: "Event File"} $settingsLog"
+                )
             }.onFailure { error ->
                 projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
                 DesktopDebugLog.error("EventFile", "Save failed: ${error.message ?: error::class.simpleName}")
@@ -1679,6 +1699,7 @@ fun main(args: Array<String>) = application {
                     validationIssues.first().message
                 }
                 val settings = currentProject.raceData.effectiveStartDrawSettings()
+                DesktopDebugLog.info("StartList", "Balance Open Event for Series using ${currentProject.startDrawSettingsLogText()}")
                 val balanced = EventSeriesSupport.drawStartListWithSeriesBalancedStartGroups(
                     seriesFile = seriesFile,
                     linkedEvents = linkedEvents,
@@ -1689,12 +1710,14 @@ fun main(args: Array<String>) = application {
                 )
                 projectFile = projectSession.updateCurrentProject { balanced }
                 seriesStartFairnessOptimizationResult = null
-                eventStartListDrawNumbering = null
+                clearEventStartListDrawHistory()
                 syncProjectState()
                 projectStatusText = "Balanced the open Event File for its series. Save the Event File to keep the draw."
                 recordActivity(projectStatusText)
+                DesktopDebugLog.info("StartList", "Balanced open event for series ${balanced.startDrawSettingsLogText()}")
             }.onFailure { error ->
                 projectStatusText = "Balance Open Event for Series failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("StartList", projectStatusText)
             }
         }
 
@@ -3709,7 +3732,8 @@ fun main(args: Array<String>) = application {
                         append(seriesRefreshWarning)
                     }
                 }
-                DesktopDebugLog.info("EventFile", "Saved As ${path.fileName}")
+                val settingsLog = projectSession.currentProject?.startDrawSettingsLogText().orEmpty()
+                DesktopDebugLog.info("EventFile", "Saved As ${path.fileName} $settingsLog")
             }.onFailure { error ->
                 projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
                 DesktopDebugLog.error("EventFile", "Save As failed: ${error.message ?: error::class.simpleName}")
@@ -5021,7 +5045,7 @@ fun main(args: Array<String>) = application {
                         EventProjectEditor.updateCompetitorStartTime(currentProject, competitorId, startTime)
                     }
                     seriesStartFairnessOptimizationResult = null
-                    eventStartListDrawNumbering = null
+                    clearEventStartListDrawHistory()
                     syncProjectState()
                     projectStatusText = "Unsaved changes."
                 }.onFailure { error ->
@@ -5035,9 +5059,12 @@ fun main(args: Array<String>) = application {
                     }
                     projectFile = updatedProject
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    eventStartListDrawNumbering = null
                     projectStatusText = "Unsaved changes."
+                    DesktopDebugLog.info("StartList", "Updated settings ${updatedProject.startDrawSettingsLogText()}")
                 }.onFailure { error ->
                     projectStatusText = "Start list settings failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("StartList", projectStatusText)
                 }
             },
             onDrawStartList = { interval, options ->
@@ -5049,52 +5076,97 @@ fun main(args: Array<String>) = application {
                     val protectedOptions = options.copy(
                         idealFirstFoxByCategoryId = unlockedIdealFirstFoxByCategoryId()
                     )
-                    var chosenProject: EventProjectFile? = null
-                    var chosenNumbering: DesktopStartListDrawNumbering? = null
-                    for (attempt in 1..EventStartListUniqueDrawMaxAttempts) {
-                        val candidateProject = EventProjectEditor.drawStartList(
-                            currentProject,
-                            interval,
-                            protectedOptions.copy(seed = "event-draw-${UUID.randomUUID()}")
-                        )
-                        val candidateNumbering = DesktopStartListDrawNumbers.assign(
-                            existingNumbers = eventStartListDrawNumbers,
-                            eventPath = currentPath,
-                            projectFile = candidateProject
-                        )
-                        chosenProject = candidateProject
-                        chosenNumbering = candidateNumbering
-                        if (!candidateNumbering.repeatedOrder) {
-                            eventStartListDrawProjects = eventStartListDrawProjects + (
-                                DesktopStartListDrawNumbers.orderProjectKey(
-                                    eventPath = currentPath,
-                                    projectFile = candidateProject,
-                                    orderNumber = candidateNumbering.orderNumber
-                                ) to candidateProject
-                                )
-                            break
+                    val drawContextKey = DesktopStartListDrawNumbers.drawContextKey(interval, protectedOptions)
+                    val currentEventKey = DesktopStartListDrawNumbers.eventKey(currentPath, currentProject)
+                    val currentDrawExhaustedKey = "$currentEventKey|context:$drawContextKey"
+                    val knownOrderCount = DesktopStartListDrawNumbers.knownOrderCount(
+                        existingNumbers = eventStartListDrawNumbers,
+                        eventPath = currentPath,
+                        projectFile = currentProject,
+                        drawContextKey = drawContextKey
+                    )
+
+                    fun knownOrderProject(orderNumber: Int): EventProjectFile? =
+                        eventStartListDrawProjects[
+                            DesktopStartListDrawNumbers.orderProjectKey(
+                                eventPath = currentPath,
+                                projectFile = currentProject,
+                                orderNumber = orderNumber,
+                                drawContextKey = drawContextKey
+                            )
+                        ]
+
+                    fun nextKnownOrderNumber(orderCount: Int): Int {
+                        val currentOrderNumber = eventStartListDrawNumbering?.orderNumber ?: 0
+                        return if (currentOrderNumber in 1 until orderCount) {
+                            currentOrderNumber + 1
+                        } else {
+                            1
                         }
                     }
-                    val candidateProject = requireNotNull(chosenProject)
-                    val candidateNumbering = requireNotNull(chosenNumbering)
-                    val firstOrderProject = eventStartListDrawProjects[
-                        DesktopStartListDrawNumbers.orderProjectKey(
-                            eventPath = currentPath,
-                            projectFile = currentProject,
-                            orderNumber = 1
-                        )
-                    ]
-                    val drewNewOrder = !candidateNumbering.repeatedOrder
-                    val drawnProject = if (drewNewOrder) candidateProject else firstOrderProject ?: candidateProject
-                    val drawNumbering = if (drewNewOrder) {
-                        candidateNumbering
-                    } else {
+
+                    fun numberingFor(project: EventProjectFile): DesktopStartListDrawNumbering =
                         DesktopStartListDrawNumbers.assign(
                             existingNumbers = eventStartListDrawNumbers,
                             eventPath = currentPath,
-                            projectFile = drawnProject
+                            projectFile = project,
+                            drawContextKey = drawContextKey
                         )
+
+                    val drawResult = if (currentDrawExhaustedKey in eventStartListDrawExhaustedKeys && knownOrderCount > 0) {
+                        // Once all discoverable orders are known, button presses should cycle those orders predictably.
+                        val nextOrderNumber = nextKnownOrderNumber(knownOrderCount)
+                        val nextProject = knownOrderProject(nextOrderNumber) ?: currentProject
+                        nextProject to numberingFor(nextProject)
+                    } else {
+                        var chosenProject: EventProjectFile? = null
+                        var chosenNumbering: DesktopStartListDrawNumbering? = null
+                        for (attempt in 1..EventStartListUniqueDrawMaxAttempts) {
+                            val candidateProject = EventProjectEditor.drawStartList(
+                                currentProject,
+                                interval,
+                                protectedOptions.copy(seed = "event-draw-${UUID.randomUUID()}")
+                            )
+                            val candidateNumbering = DesktopStartListDrawNumbers.assign(
+                                existingNumbers = eventStartListDrawNumbers,
+                                eventPath = currentPath,
+                                projectFile = candidateProject,
+                                drawContextKey = drawContextKey
+                            )
+                            chosenProject = candidateProject
+                            chosenNumbering = candidateNumbering
+                            if (!candidateNumbering.repeatedOrder) {
+                                eventStartListDrawProjects = eventStartListDrawProjects + (
+                                    DesktopStartListDrawNumbers.orderProjectKey(
+                                        eventPath = currentPath,
+                                        projectFile = candidateProject,
+                                        orderNumber = candidateNumbering.orderNumber,
+                                        drawContextKey = drawContextKey
+                                    ) to candidateProject
+                                    )
+                                eventStartListDrawExhaustedKeys = eventStartListDrawExhaustedKeys - currentDrawExhaustedKey
+                                break
+                            }
+                        }
+                        val candidateProject = requireNotNull(chosenProject)
+                        val candidateNumbering = requireNotNull(chosenNumbering)
+                        if (!candidateNumbering.repeatedOrder) {
+                            candidateProject to candidateNumbering
+                        } else {
+                            val updatedKnownOrderCount = DesktopStartListDrawNumbers.knownOrderCount(
+                                existingNumbers = eventStartListDrawNumbers,
+                                eventPath = currentPath,
+                                projectFile = currentProject,
+                                drawContextKey = drawContextKey
+                            )
+                            eventStartListDrawExhaustedKeys = eventStartListDrawExhaustedKeys + currentDrawExhaustedKey
+                            val nextOrderNumber = nextKnownOrderNumber(updatedKnownOrderCount)
+                            val nextProject = knownOrderProject(nextOrderNumber) ?: candidateProject
+                            nextProject to numberingFor(nextProject)
+                        }
                     }
+                    val drawnProject = drawResult.first
+                    val drawNumbering = drawResult.second
                     projectSession.updateCurrentProject { drawnProject }
                     eventStartListDrawNumbers = drawNumbering.orderNumbers
                     eventStartListDrawNumbering = drawNumbering
@@ -5104,39 +5176,10 @@ fun main(args: Array<String>) = application {
                     val drawStatus = startListDrawStatusText(EventStartListDetails.from(drawnProject.raceData))
                     val orderStatus = "Start order #${drawNumbering.orderNumber}."
                     projectStatusText = "$drawStatus $orderStatus"
+                    DesktopDebugLog.info("StartList", "Generated $orderStatus ${drawnProject.startDrawSettingsLogText()}")
                 }.onFailure { error ->
                     projectStatusText = "Draw failed: ${error.message ?: error::class.simpleName}"
-                }
-            },
-            onDrawBalancedStartList = { interval, options ->
-                val paths = DesktopFileDialogs.chooseImportCsvFiles("Select Previous Starts CSV Files")
-                if (paths.isNotEmpty()) runCatching {
-                    val previousStartLists = paths.map { path ->
-                        EventCsvImports.parseAndroidCompetitorStartRows(Files.readString(path)).also { result ->
-                            require(result.invalidLines.isEmpty()) {
-                                "${path.fileName} has ${result.invalidLines.size} invalid start rows."
-                            }
-                        }.rows
-                    }
-                    val protectedOptions = options.copy(
-                        startGroupMode = StartDrawStartGroupMode.BALANCED_MULTI_DAY_THIRDS,
-                        idealFirstFoxByCategoryId = unlockedIdealFirstFoxByCategoryId()
-                    )
-                    val drawnProject = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.drawStartListWithBalancedStartGroups(
-                            currentProject,
-                            interval,
-                            protectedOptions,
-                            previousStartLists
-                        )
-                    }
-                    seriesStartFairnessOptimizationResult = null
-                    eventStartListDrawNumbering = null
-                    syncProjectState()
-                    projectStatusText = "Balanced starts from ${paths.size} prior CSV file(s); " +
-                        startListDrawStatusText(EventStartListDetails.from(drawnProject.raceData))
-                }.onFailure { error ->
-                    projectStatusText = "Balanced draw failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("StartList", projectStatusText)
                 }
             },
             onAddCompetitor = { firstName, lastName, club, bibNumber, callSign, birthYear, categoryId, startNumber, siNumber ->
@@ -7501,7 +7544,6 @@ private fun RadioOManagerDesktopApp(
     onUpdateCompetitorStartTime: (String, String) -> Unit = { _, _ -> },
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit = { _, _ -> },
     onDrawStartList: (String, StartDrawOptions) -> Unit = { _, _ -> },
-    onDrawBalancedStartList: (String, StartDrawOptions) -> Unit = { _, _ -> },
     onAddCompetitor: (String, String, String, String, String, String, String?, String, String) -> Boolean = { _, _, _, _, _, _, _, _, _ -> false },
     onAssignCompetitorCategory: (String, String?) -> Unit = { _, _ -> },
     onRemoveCompetitor: (String, Boolean) -> Unit = { _, _ -> },
@@ -7738,7 +7780,6 @@ private fun RadioOManagerDesktopApp(
                                     onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
                                     onUpdateStartDrawSettings = onUpdateStartDrawSettings,
                                     onDrawStartList = onDrawStartList,
-                                    onDrawBalancedStartList = onDrawBalancedStartList,
                                     onAddCompetitor = onAddCompetitor,
                                     onAssignCompetitorCategory = onAssignCompetitorCategory,
                                     onRemoveCompetitor = onRemoveCompetitor,
@@ -8548,7 +8589,6 @@ private fun SectionWorkspace(
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit,
     onDrawStartList: (String, StartDrawOptions) -> Unit,
-    onDrawBalancedStartList: (String, StartDrawOptions) -> Unit,
     onAddCompetitor: (String, String, String, String, String, String, String?, String, String) -> Boolean,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit,
@@ -8762,8 +8802,7 @@ private fun SectionWorkspace(
                 seriesStartFairnessSummary = seriesStartFairnessSummary,
                 eventStartListDrawNumbering = eventStartListDrawNumbering,
                 onUpdateStartDrawSettings = onUpdateStartDrawSettings,
-                onDrawStartList = onDrawStartList,
-                onDrawBalancedStartList = onDrawBalancedStartList
+                onDrawStartList = onDrawStartList
             )
         }
         if (section == DesktopSection.SeriesEvents) {
@@ -9634,8 +9673,7 @@ private fun StartListDetailsPanel(
     seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary?,
     eventStartListDrawNumbering: DesktopStartListDrawNumbering?,
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit,
-    onDrawStartList: (String, StartDrawOptions) -> Unit,
-    onDrawBalancedStartList: (String, StartDrawOptions) -> Unit
+    onDrawStartList: (String, StartDrawOptions) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(StartListTableColumns)
@@ -9657,9 +9695,15 @@ private fun StartListDetailsPanel(
             seed = settings.options.seed,
             startGroupMode = startGroupModeValue
         )
-    fun persistSettingsIfIntervalIsValid(intervalValue: String, options: StartDrawOptions) {
+    fun persistSettingsIfIntervalIsValid(
+        intervalValue: String,
+        options: StartDrawOptions,
+        fallbackToSavedInterval: Boolean = false
+    ) {
         if (isValidStartListInterval(intervalValue)) {
             onUpdateStartDrawSettings(intervalValue, options)
+        } else if (fallbackToSavedInterval) {
+            onUpdateStartDrawSettings(settings.intervalText, options)
         }
     }
 
@@ -9687,7 +9731,11 @@ private fun StartListDetailsPanel(
                 label = StartDrawClubHandling::toDisplayLabel,
                 onValueSelected = {
                     clubHandling = it
-                    persistSettingsIfIntervalIsValid(intervalDraft, startDrawOptions(clubHandlingValue = it))
+                    persistSettingsIfIntervalIsValid(
+                        intervalDraft,
+                        startDrawOptions(clubHandlingValue = it),
+                        fallbackToSavedInterval = true
+                    )
                 },
                 modifier = Modifier.width(190.dp)
             )
@@ -9697,7 +9745,11 @@ private fun StartListDetailsPanel(
                 label = { "$it per time" },
                 onValueSelected = {
                     startersPerStartTime = it
-                    persistSettingsIfIntervalIsValid(intervalDraft, startDrawOptions(startersPerStartTimeValue = it))
+                    persistSettingsIfIntervalIsValid(
+                        intervalDraft,
+                        startDrawOptions(startersPerStartTimeValue = it),
+                        fallbackToSavedInterval = true
+                    )
                 },
                 modifier = Modifier.width(132.dp)
             )
@@ -9712,21 +9764,14 @@ private fun StartListDetailsPanel(
                 label = StartDrawStartGroupMode::toDisplayLabel,
                 onValueSelected = {
                     startGroupMode = it
-                    persistSettingsIfIntervalIsValid(intervalDraft, startDrawOptions(startGroupModeValue = it))
+                    persistSettingsIfIntervalIsValid(
+                        intervalDraft,
+                        startDrawOptions(startGroupModeValue = it),
+                        fallbackToSavedInterval = true
+                    )
                 },
                 modifier = Modifier.width(190.dp)
             )
-            Button(
-                onClick = {
-                    onDrawBalancedStartList(
-                        intervalDraft,
-                        startDrawOptions(startGroupModeValue = StartDrawStartGroupMode.BALANCED_MULTI_DAY_THIRDS)
-                    )
-                },
-                enabled = startGroupMode != StartDrawStartGroupMode.PREFERRED_THIRDS
-            ) {
-                Text("Balance from CSVs")
-            }
         }
         Row(
             horizontalArrangement = Arrangement.Start,
@@ -9757,19 +9802,35 @@ private fun StartListDetailsPanel(
         }
         DetailHeaderRow(listOf("Scheduled", "No start time"))
         DetailGridRow(listOf(details.scheduledCount.toString(), details.unscheduledCount.toString()))
-        Text(
-            text = "Event Start Fairness Score: ${details.quality.score}/100 - ${details.quality.summary}",
-            color = details.quality.severity.toStartListColor(),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-        seriesStartFairnessSummary?.let { summary ->
-            Text(
-                text = "Series Start Fairness Score: ${summary.fairnessNumber}/100 - ${summary.seriesStartFairnessStatus(null).label}",
-                color = summary.seriesStartFairnessNumberColor(),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.Top) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.width(210.dp)) {
+                FairnessScoreBlock(
+                    label = "Event Start Fairness Score",
+                    score = details.quality.score,
+                    color = details.quality.severity.toStartListColor()
+                )
+                Text(
+                    text = details.quality.summary,
+                    color = details.quality.severity.toStartListColor(),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            seriesStartFairnessSummary?.let { summary ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.width(230.dp)) {
+                    FairnessScoreBlock(
+                        label = "Series Start Fairness Score",
+                        score = summary.fairnessNumber,
+                        color = summary.seriesStartFairnessNumberColor()
+                    )
+                    Text(
+                        text = summary.seriesStartFairnessStatus(null).label,
+                        color = summary.seriesStartFairnessStatusColor(null),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
         }
         details.quality.messages.take(3).forEach { message ->
             Text(
@@ -10010,24 +10071,11 @@ private fun EventSeriesStartFairnessPanel(
 
         val fairnessStatus = summary.seriesStartFairnessStatus(optimizationResult)
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "Fairness",
-                    color = DesktopPalette.Disconnected,
-                    fontSize = 12.sp
-                )
-                Text(
-                    text = summary.fairnessNumber.toString(),
-                    color = summary.seriesStartFairnessNumberColor(),
-                    fontSize = 42.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "/100",
-                    color = DesktopPalette.Disconnected,
-                    fontSize = 12.sp
-                )
-            }
+            FairnessScoreBlock(
+                label = "Fairness",
+                score = summary.fairnessNumber,
+                color = summary.seriesStartFairnessNumberColor()
+            )
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(
@@ -10130,6 +10178,36 @@ private fun EventSeriesStartFairnessPanel(
                 EventSeriesStartFairnessHistoryRow(history)
             }
         }
+    }
+}
+
+@Composable
+private fun FairnessScoreBlock(
+    label: String,
+    score: Int,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+    ) {
+        Text(
+            text = label,
+            color = DesktopPalette.Disconnected,
+            fontSize = 12.sp
+        )
+        Text(
+            text = score.toString(),
+            color = color,
+            fontSize = 42.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "/100",
+            color = DesktopPalette.Disconnected,
+            fontSize = 12.sp
+        )
     }
 }
 

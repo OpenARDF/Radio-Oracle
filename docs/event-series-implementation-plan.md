@@ -32,7 +32,7 @@ Event Series support is an opt-in championship and multi-day layer above existin
 - Reuse the existing balanced-thirds start-list algorithm for series-aware fairness.
 - Derive history from other linked Event Files with generated starts for `Balance Open Event for Series`.
 - Order series Events and Start Fairness histories by event date/time when all series events have usable dates, with stored manifest order as the fallback.
-- Keep `Balance from CSVs` as a manual fallback for workflows without an available series manifest.
+- Keep Event Series as the organizer-facing workflow for multi-day start fairness.
 
 ## Export And Documentation
 
@@ -50,7 +50,7 @@ Event Series support is an opt-in championship and multi-day layer above existin
 - Test desktop series create/open/save/close, dirty-state isolation, link/unlink, validation, and clean export.
 - Test contextual Series workflow visibility and default single-event navigation behavior.
 - Test competitor identity matching by SI number, bib number, call sign, and override.
-- Test series-based start balancing against equivalent CSV-based balancing history.
+- Test series-based start balancing against equivalent generated-start history.
 - Acceptance scenarios:
   - A single-day event behaves exactly as before.
   - A linked championship event shows the Series workflow.
