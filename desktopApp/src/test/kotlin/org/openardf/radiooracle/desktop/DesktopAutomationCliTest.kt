@@ -13,6 +13,8 @@ import org.openardf.radiooracle.desktop.usb.DesktopSerialPortProvider
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.EventCategory
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
@@ -55,6 +57,36 @@ class DesktopAutomationCliTest {
         assertTrue(result.stdout.contains("\"command\":\"open-event-file\""))
         assertTrue(result.stdout.contains("\"raceName\":\"Automation Event\""))
         assertTrue(result.stdout.contains("\"validationErrorCount\":0"))
+    }
+
+    @Test
+    fun eventStartListVerifyCountsPerfectOrders() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-start-verify")
+        val path = directory.resolve("Automation Event.json")
+        DesktopProjectFiles.write(
+            path,
+            projectFile(
+                "Automation Event",
+                categories = listOf(
+                    categoryData("cat-a", "M21", 1),
+                    categoryData("cat-b", "M40", 2),
+                    categoryData("cat-c", "W21", 3)
+                ),
+                competitors = listOf(
+                    competitorData(id = "Alice", startNumber = 1, siNumber = 1111, categoryId = "cat-a", club = "A"),
+                    competitorData(id = "Bob", startNumber = 2, siNumber = 2222, categoryId = "cat-b", club = "B"),
+                    competitorData(id = "Cara", startNumber = 3, siNumber = 3333, categoryId = "cat-c", club = "C")
+                )
+            )
+        )
+
+        val result = runAutomation("event-start-list-verify", path.toString())
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"event-start-list-verify\""))
+        assertTrue(result.stdout.contains("\"drawableCompetitorCount\":3"))
+        assertTrue(result.stdout.contains("\"totalOrderCount\":6"))
+        assertTrue(result.stdout.contains("\"perfectOrderCount\":6"))
     }
 
     @Test
@@ -760,6 +792,7 @@ class DesktopAutomationCliTest {
         name: String,
         eventId: String = "race",
         seriesLink: EventSeriesLink? = null,
+        categories: List<EventCategoryData> = emptyList(),
         competitors: List<EventCompetitorData> = emptyList()
     ): EventProjectFile =
         EventProjectFile(
@@ -774,12 +807,33 @@ class DesktopAutomationCliTest {
                     raceBand = RaceBand.M80,
                     timeLimitSeconds = 7_200
                 ),
-                categories = emptyList(),
+                categories = categories,
                 aliases = emptyList(),
                 competitorData = competitors,
                 unmatchedReadoutData = emptyList()
             ),
             seriesLink = seriesLink
+        )
+
+    private fun categoryData(id: String, name: String, order: Int): EventCategoryData =
+        EventCategoryData(
+            category = EventCategory(
+                id = id,
+                raceId = "race",
+                name = name,
+                isMan = true,
+                maxAge = null,
+                lengthMeters = 0,
+                climbMeters = 0,
+                order = order,
+                differentProperties = false,
+                raceType = null,
+                raceBand = null,
+                timeLimitSeconds = null,
+                controlPointsString = ""
+            ),
+            controlPoints = emptyList(),
+            competitors = emptyList()
         )
 
     private fun competitorData(
@@ -788,17 +842,19 @@ class DesktopAutomationCliTest {
         siNumber: Int?,
         drawnStartTimeSeconds: Long? = null,
         bibNumber: String = "",
-        callSign: String = ""
+        callSign: String = "",
+        categoryId: String? = null,
+        club: String = "OPEN"
     ): EventCompetitorData =
         EventCompetitorData(
             competitorCategory = EventCompetitorCategory(
                 competitor = EventCompetitor(
                     id = id,
                     raceId = "race",
-                    categoryId = null,
+                    categoryId = categoryId,
                     firstName = id,
                     lastName = "Runner",
-                    club = "OPEN",
+                    club = club,
                     index = "",
                     isMan = true,
                     birthYear = null,

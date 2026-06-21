@@ -13,15 +13,33 @@ import org.openardf.radiooracle.desktop.usb.DesktopSerialPortProvider
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
 import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
 import org.openardf.radiooracle.shared.event.CompetitorCsvImportDuplicatePolicy
+import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventProjectEditor
+import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventSeriesIssueSeverity
+import org.openardf.radiooracle.shared.event.EventStartListDetails
+import org.openardf.radiooracle.shared.event.EventStartListRuleSeverity
 import org.openardf.radiooracle.shared.event.EventValidationRules
+import org.openardf.radiooracle.shared.event.StartDrawSettings
+import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportProfile
 import org.openardf.radiooracle.shared.files.EventCsvImports
 
 fun main(args: Array<String>) {
     exitProcess(DesktopAutomationCli.run(args))
 }
+
+private data class EventStartListVerificationResult(
+    val totalOrderCount: Long,
+    val nonRedOrderCount: Long,
+    val perfectOrderCount: Long,
+    val currentOrderScore: Int,
+    val currentOrderPerfect: Boolean,
+    val currentOrderSignature: String,
+    val currentOrderInPerfectSet: Boolean,
+    val samplePerfectOrderSignatures: List<String>,
+    val samplePerfectOrders: List<List<String>>
+)
 
 /**
  * Command-line hooks for automated desktop checks and local debugging.
@@ -105,6 +123,7 @@ object DesktopAutomationCli {
             "event-series-match" -> eventSeriesMatch(commandArgs, out, err)
             "event-series-start-fairness" -> eventSeriesStartFairness(commandArgs, out, err)
             "event-series-optimize-start-fairness" -> eventSeriesOptimizeStartFairness(commandArgs, out, err)
+            "event-start-list-verify" -> eventStartListVerify(commandArgs, out, err)
             "readiness-summary" -> readinessSummary(commandArgs, out, err)
             "recalculate-results" -> recalculateResults(commandArgs, out, err)
             "export-public-results-site" -> exportPublicResultsSite(commandArgs, out, err)
@@ -312,6 +331,174 @@ object DesktopAutomationCli {
             err.println("Failed to open Event File: ${error.message ?: error::class.simpleName}")
             66
         }
+    }
+
+    private fun eventStartListVerify(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val pathText = args.firstOrNull { !it.startsWith("--") }
+        if (pathText.isNullOrBlank()) {
+            err.println("event-start-list-verify requires an Event File path.")
+            return 64
+        }
+        val maxCompetitors = optionValue(args, "--max-competitors")?.toIntOrNull() ?: 10
+        val sampleLimit = optionValue(args, "--sample-limit")?.toIntOrNull() ?: 12
+        return runCatching {
+            val path = Path.of(pathText)
+            val projectFile = DesktopProjectFiles.read(path)
+            val settings = projectFile.raceData.effectiveStartDrawSettings()
+            val competitorData = projectFile.raceData.competitorData
+                .filter { data ->
+                    val competitor = data.competitorCategory.competitor
+                    val categoryId = data.competitorCategory.category?.id ?: competitor.categoryId
+                    categoryId != null
+                }
+                .sortedWith(
+                    compareBy<EventCompetitorData> { it.competitorCategory.competitor.startNumber }
+                        .thenBy { it.competitorCategory.competitor.id }
+                )
+            require(maxCompetitors >= 1) {
+                "--max-competitors must be at least 1."
+            }
+            require(competitorData.size <= maxCompetitors) {
+                "Event has ${competitorData.size} drawable competitors; refusing exhaustive ${competitorData.size}! search. " +
+                    "Pass a larger --max-competitors value if this is intentional."
+            }
+
+            val result = verifyEventStartLists(projectFile, competitorData, settings, sampleLimit.coerceAtLeast(0))
+            out.println(
+                jsonObject(
+                    "command" to "event-start-list-verify",
+                    "path" to path.toAbsolutePath().normalize().toString(),
+                    "raceName" to projectFile.raceData.race.name,
+                    "drawableCompetitorCount" to competitorData.size,
+                    "totalOrderCount" to result.totalOrderCount,
+                    "nonRedOrderCount" to result.nonRedOrderCount,
+                    "perfectOrderCount" to result.perfectOrderCount,
+                    "currentOrderScore" to result.currentOrderScore,
+                    "currentOrderPerfect" to result.currentOrderPerfect,
+                    "currentOrderSignature" to result.currentOrderSignature,
+                    "currentOrderInPerfectSet" to result.currentOrderInPerfectSet,
+                    "settings" to mapOf(
+                        "intervalSeconds" to settings.intervalSeconds,
+                        "clubHandling" to settings.options.clubHandling.name,
+                        "startersPerStartTime" to settings.options.startersPerStartTime,
+                        "startGroupMode" to settings.options.startGroupMode.name
+                    ),
+                    "samplePerfectOrderSignatures" to result.samplePerfectOrderSignatures,
+                    "samplePerfectOrders" to result.samplePerfectOrders
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Event start-list verification failed: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
+    private fun verifyEventStartLists(
+        projectFile: EventProjectFile,
+        competitorData: List<EventCompetitorData>,
+        settings: StartDrawSettings,
+        sampleLimit: Int
+    ): EventStartListVerificationResult {
+        val currentQuality = EventStartListDetails.from(projectFile.raceData).quality
+        val currentSignature = drawnOrderSignature(projectFile, competitorData)
+        val mutableOrder = competitorData.toMutableList()
+        var totalOrderCount = 0L
+        var nonRedOrderCount = 0L
+        var perfectOrderCount = 0L
+        var currentOrderInPerfectSet = false
+        val samplePerfectOrderSignatures = mutableListOf<String>()
+        val samplePerfectOrders = mutableListOf<List<String>>()
+
+        fun visit(index: Int) {
+            if (index == mutableOrder.size) {
+                totalOrderCount += 1
+                val orderedIds = mutableOrder.map { it.competitorCategory.competitor.id }
+                val candidate = projectFile.withDrawnOrder(orderedIds, settings)
+                val quality = EventStartListDetails.from(candidate.raceData).quality
+                val signature = drawnOrderSignature(candidate, competitorData)
+                if (quality.severity != EventStartListRuleSeverity.RED) {
+                    nonRedOrderCount += 1
+                }
+                if (quality.score == 100) {
+                    perfectOrderCount += 1
+                    if (signature == currentSignature) {
+                        currentOrderInPerfectSet = true
+                    }
+                    if (samplePerfectOrderSignatures.size < sampleLimit) {
+                        samplePerfectOrderSignatures += signature
+                        samplePerfectOrders += mutableOrder.map { data ->
+                            val competitor = data.competitorCategory.competitor
+                            "${competitor.startNumber} ${competitor.firstName} ${competitor.lastName}".trim()
+                        }
+                    }
+                }
+                return
+            }
+            for (candidateIndex in index until mutableOrder.size) {
+                mutableOrder.swap(index, candidateIndex)
+                visit(index + 1)
+                mutableOrder.swap(index, candidateIndex)
+            }
+        }
+
+        visit(0)
+        return EventStartListVerificationResult(
+            totalOrderCount = totalOrderCount,
+            nonRedOrderCount = nonRedOrderCount,
+            perfectOrderCount = perfectOrderCount,
+            currentOrderScore = currentQuality.score,
+            currentOrderPerfect = currentQuality.score == 100,
+            currentOrderSignature = currentSignature,
+            currentOrderInPerfectSet = currentOrderInPerfectSet,
+            samplePerfectOrderSignatures = samplePerfectOrderSignatures,
+            samplePerfectOrders = samplePerfectOrders
+        )
+    }
+
+    private fun EventProjectFile.withDrawnOrder(
+        orderedCompetitorIds: List<String>,
+        settings: StartDrawSettings
+    ): EventProjectFile {
+        val startSecondsByCompetitorId = orderedCompetitorIds.withIndex().associate { (index, competitorId) ->
+            competitorId to (index / settings.options.startersPerStartTime).toLong() * settings.intervalSeconds
+        }
+        return copy(
+            raceData = raceData.copy(
+                competitorData = raceData.competitorData.map { data ->
+                    val competitor = data.competitorCategory.competitor
+                    val startSeconds = startSecondsByCompetitorId[competitor.id]
+                    data.copy(
+                        competitorCategory = data.competitorCategory.copy(
+                            competitor = competitor.copy(drawnStartTimeSeconds = startSeconds)
+                        )
+                    )
+                }
+            )
+        )
+    }
+
+    private fun drawnOrderSignature(projectFile: EventProjectFile, competitorData: List<EventCompetitorData>): String {
+        val competitorById = competitorData.associateBy { it.competitorCategory.competitor.id }
+        return projectFile.raceData.competitorData
+            .mapNotNull { data ->
+                val competitor = data.competitorCategory.competitor
+                competitor.drawnStartTimeSeconds?.let { startSeconds ->
+                    startSeconds to competitor
+                }
+            }
+            .sortedWith(compareBy({ it.first }, { it.second.startNumber }, { it.second.id }))
+            .mapNotNull { (_, competitor) ->
+                competitorById[competitor.id]?.competitorCategory?.competitor?.id
+            }
+            .joinToString(">")
+    }
+
+    private fun <T> MutableList<T>.swap(firstIndex: Int, secondIndex: Int) {
+        if (firstIndex == secondIndex) return
+        val first = this[firstIndex]
+        this[firstIndex] = this[secondIndex]
+        this[secondIndex] = first
     }
 
     private fun importAndroidEventFile(args: List<String>, out: PrintStream, err: PrintStream): Int {
@@ -1140,6 +1327,8 @@ object DesktopAutomationCli {
                                           Print start fairness input diagnostics for the current series event.
           event-series-optimize-start-fairness <manifest-path> <current-event-path> [--write] [--seed-salt <text>]
                                           Try to improve or preserve series start fairness with randomized candidates; writes changed Event Files only with --write.
+          event-start-list-verify <event-path> [--max-competitors <n>] [--sample-limit <n>]
+                                          Exhaustively count event start orders that score 100/100.
           readiness-summary [--require-ready] <event-path>
                                           Print validation and readiness issues as JSON.
           recalculate-results [--write] <event-path>
