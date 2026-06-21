@@ -36,6 +36,7 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.EventSeriesLink
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.sportident.SITime
 import org.junit.Assert.assertEquals
@@ -134,9 +135,10 @@ class RaceJsonTests {
     }
 
     @Test
-    fun importsRadioOracleEventFileJson() {
+    fun importsRadioOracleEventFileJsonWithSeriesMetadataIgnored() {
         val eventFileJson = EventProjectFileJson.encode(
             EventProjectFile(
+                seriesLink = EventSeriesLink(seriesId = "series-1", seriesEventId = "day-1"),
                 raceData = EventRaceData(
                     race = EventRace(
                         id = "desktop-race",
