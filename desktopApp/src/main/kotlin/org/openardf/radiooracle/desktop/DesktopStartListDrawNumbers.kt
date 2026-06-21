@@ -31,6 +31,9 @@ object DesktopStartListDrawNumbers {
         )
     }
 
+    fun orderProjectKey(eventPath: Path?, projectFile: EventProjectFile, orderNumber: Int): String =
+        "${eventKey(eventPath, projectFile)}|order:$orderNumber"
+
     private fun eventKey(eventPath: Path?, projectFile: EventProjectFile): String =
         eventPath?.toAbsolutePath()?.normalize()?.toString()
             ?: "unsaved:${projectFile.raceData.race.id}"

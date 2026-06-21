@@ -27,7 +27,7 @@ Start List settings are stored in the event project data, not desktop-local pref
 - `seed`
 - `startGroupMode`
 
-The seed is persisted for compatibility and repeatable internal generation, but it is not shown on the desktop Start List screen. The desktop `Generate Start List` button supplies a hidden non-default seed on each press and tries to find a start order that has not already been generated for that Event File during the current desktop session. Radio-Oracle numbers distinct generated start orders and shows the current start order number next to the button. If the event constraints only produce a previously seen order, the repeated order number is reported instead.
+The seed is persisted for compatibility and repeatable internal generation, but it is not shown on the desktop Start List screen. The desktop `Generate Start List` button supplies a hidden non-default seed on each press and tries to find a start order that has not already been generated for that Event File during the current desktop session. Radio-Oracle numbers distinct generated start orders and shows the current start order number next to the button. If the event constraints do not produce another unique order, the draw returns to start order #1.
 
 `startGroupMode` defaults to `No start groups`. In that mode, no start-third rule is applied and the generator behaves like a normal single-event draw. When changed to `Preferred thirds`, the generator uses each competitor's optional `preferredStartGroup` value. The canonical competitor CSV column is `preferred_start_group`; blank means no assignment, and accepted values are `1`, `2`, and `3`.
 

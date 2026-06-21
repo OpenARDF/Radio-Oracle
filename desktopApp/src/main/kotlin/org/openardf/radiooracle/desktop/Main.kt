@@ -442,6 +442,7 @@ fun main(args: Array<String>) = application {
         }
         var seriesStartFairnessSolutionNumbers by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
         var eventStartListDrawNumbers by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+        var eventStartListDrawProjects by remember { mutableStateOf<Map<String, EventProjectFile>>(emptyMap()) }
         var eventStartListDrawNumbering by remember { mutableStateOf<DesktopStartListDrawNumbering?>(null) }
         var eventStartListDrawEventPath by remember { mutableStateOf<Path?>(null) }
         var seriesCompetitorMatchSummaries by remember {
@@ -5050,9 +5051,7 @@ fun main(args: Array<String>) = application {
                     )
                     var chosenProject: EventProjectFile? = null
                     var chosenNumbering: DesktopStartListDrawNumbering? = null
-                    var attemptCount = 0
                     for (attempt in 1..EventStartListUniqueDrawMaxAttempts) {
-                        attemptCount = attempt
                         val candidateProject = EventProjectEditor.drawStartList(
                             currentProject,
                             interval,
@@ -5066,11 +5065,36 @@ fun main(args: Array<String>) = application {
                         chosenProject = candidateProject
                         chosenNumbering = candidateNumbering
                         if (!candidateNumbering.repeatedOrder) {
+                            eventStartListDrawProjects = eventStartListDrawProjects + (
+                                DesktopStartListDrawNumbers.orderProjectKey(
+                                    eventPath = currentPath,
+                                    projectFile = candidateProject,
+                                    orderNumber = candidateNumbering.orderNumber
+                                ) to candidateProject
+                                )
                             break
                         }
                     }
-                    val drawnProject = requireNotNull(chosenProject)
-                    val drawNumbering = requireNotNull(chosenNumbering)
+                    val candidateProject = requireNotNull(chosenProject)
+                    val candidateNumbering = requireNotNull(chosenNumbering)
+                    val firstOrderProject = eventStartListDrawProjects[
+                        DesktopStartListDrawNumbers.orderProjectKey(
+                            eventPath = currentPath,
+                            projectFile = currentProject,
+                            orderNumber = 1
+                        )
+                    ]
+                    val drewNewOrder = !candidateNumbering.repeatedOrder
+                    val drawnProject = if (drewNewOrder) candidateProject else firstOrderProject ?: candidateProject
+                    val drawNumbering = if (drewNewOrder) {
+                        candidateNumbering
+                    } else {
+                        DesktopStartListDrawNumbers.assign(
+                            existingNumbers = eventStartListDrawNumbers,
+                            eventPath = currentPath,
+                            projectFile = drawnProject
+                        )
+                    }
                     projectSession.updateCurrentProject { drawnProject }
                     eventStartListDrawNumbers = drawNumbering.orderNumbers
                     eventStartListDrawNumbering = drawNumbering
@@ -5078,11 +5102,7 @@ fun main(args: Array<String>) = application {
                     seriesStartFairnessOptimizationResult = null
                     syncProjectState()
                     val drawStatus = startListDrawStatusText(EventStartListDetails.from(drawnProject.raceData))
-                    val orderStatus = if (drawNumbering.repeatedOrder) {
-                        "Repeated start order #${drawNumbering.orderNumber}; no unique new order found after $attemptCount attempts."
-                    } else {
-                        "Start order #${drawNumbering.orderNumber}."
-                    }
+                    val orderStatus = "Start order #${drawNumbering.orderNumber}."
                     projectStatusText = "$drawStatus $orderStatus"
                 }.onFailure { error ->
                     projectStatusText = "Draw failed: ${error.message ?: error::class.simpleName}"
@@ -9728,12 +9748,8 @@ private fun StartListDetailsPanel(
             }
             eventStartListDrawNumbering?.let { numbering ->
                 Text(
-                    text = if (numbering.repeatedOrder) {
-                        "Repeated start order #${numbering.orderNumber}"
-                    } else {
-                        "Start order #${numbering.orderNumber}"
-                    },
-                    color = if (numbering.repeatedOrder) DesktopPalette.Disconnected else DesktopPalette.Black,
+                    text = "Start order #${numbering.orderNumber}",
+                    color = DesktopPalette.Black,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
                 )
