@@ -3347,7 +3347,7 @@ object EventProjectEditor {
         } else {
             categorySafe
         }
-        return clubSafe.sortedWith(categoryStartQueueComparator(options)).firstOrNull()
+        return clubSafe.sortedWith(categoryStartQueueComparator(options, preferredStartGroup)).firstOrNull()
     }
 
     private fun CategoryStartQueue.hasFirstFoxSpeedConflict(selectedQueues: List<CategoryStartQueue>): Boolean =
@@ -3397,6 +3397,13 @@ object EventProjectEditor {
 
     private fun CategoryStartQueue.hasPreferredStartGroupCandidate(preferredStartGroup: Int?): Boolean =
         preferredStartGroup == null || competitors.any { it.isAllowedInPreferredStartGroup(preferredStartGroup) }
+
+    private fun CategoryStartQueue.preferredStartGroupCandidateCount(preferredStartGroup: Int?): Int =
+        if (preferredStartGroup == null) {
+            competitors.size
+        } else {
+            competitors.count { it.isAllowedInPreferredStartGroup(preferredStartGroup) }
+        }
 
     private fun drawClubRotatedCategory(
         competitors: List<EventCompetitor>,
@@ -3480,17 +3487,38 @@ object EventProjectEditor {
         SLOW
     }
 
-    private fun categoryStartQueueComparator(options: StartDrawOptions): Comparator<CategoryStartQueue> =
+    private fun categoryStartQueueComparator(
+        options: StartDrawOptions,
+        preferredStartGroup: Int?
+    ): Comparator<CategoryStartQueue> =
         if (!options.usesSeededRandomization()) {
             compareBy<CategoryStartQueue> { it.category.order }
                 .thenBy { it.category.name }
                 .thenBy { it.competitors.firstOrNull()?.startNumber ?: Int.MAX_VALUE }
+        } else if (preferredStartGroup != null) {
+            /*
+             * In start-third mode, total category size is too blunt as the
+             * first seeded tiebreaker: it can make every valid randomized draw
+             * start with the largest category even when smaller categories have
+             * equally valid competitors for the current third. Rank first by
+             * current-third pressure, then let the seed explore safe equals,
+             * keeping total size as a later fallback to avoid starving large
+             * queues when the current-third pressure is not equal.
+             */
+            compareByDescending<CategoryStartQueue> { it.preferredStartGroupCandidateCount(preferredStartGroup) }
+                .thenBy { seededRank(options.seed, "category:${it.category.id}:${it.competitorsSeedScope()}") }
+                .thenByDescending { it.competitors.size }
+                .thenBy { it.category.order }
+                .thenBy { it.category.name }
         } else {
             compareByDescending<CategoryStartQueue> { it.competitors.size }
                 .thenBy { seededRank(options.seed, "category:${it.category.id}:${it.competitors.firstOrNull()?.id ?: ""}") }
                 .thenBy { it.category.order }
                 .thenBy { it.category.name }
         }
+
+    private fun CategoryStartQueue.competitorsSeedScope(): String =
+        competitors.joinToString(",") { it.id }
 
     private fun competitorStartDrawComparator(options: StartDrawOptions, scope: String): Comparator<EventCompetitor> =
         if (!options.usesSeededRandomization()) {

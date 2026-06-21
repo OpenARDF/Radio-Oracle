@@ -2957,6 +2957,51 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun seededStartThirdDrawExploresEqualPressureCategoriesBeforeTotalCategorySize() {
+        val m60 = category("cat-m60", "M60", order = 0)
+        val m50 = category("cat-m50", "M50", order = 1)
+        val w65 = category("cat-w65", "W65", order = 2)
+        val m21 = category("cat-m21", "M21", order = 3)
+        val w21 = category("cat-w21", "W21", order = 4)
+        val original = projectFile(
+            categories = listOf(
+                categoryData(m60.id, m60.name, order = m60.order),
+                categoryData(m50.id, m50.name, order = m50.order),
+                categoryData(w65.id, w65.name, order = w65.order),
+                categoryData(m21.id, m21.name, order = m21.order),
+                categoryData(w21.id, w21.name, order = w21.order)
+            ),
+            competitors = listOf(
+                competitorData("m60-g1", "Alice", "Alpha", startNumber = 1, category = m60, preferredStartGroup = 1),
+                competitorData("m60-g2", "Aaron", "Alpha", startNumber = 2, category = m60, preferredStartGroup = 2),
+                competitorData("m60-g3", "Ava", "Alpha", startNumber = 3, category = m60, preferredStartGroup = 3),
+                competitorData("m50-g1", "Bob", "Bravo", startNumber = 4, category = m50, preferredStartGroup = 1),
+                competitorData("w65-g1", "Cara", "Charlie", startNumber = 5, category = w65, preferredStartGroup = 1),
+                competitorData("m21-g2", "Drew", "Delta", startNumber = 6, category = m21, preferredStartGroup = 2),
+                competitorData("m21-g3", "Dana", "Delta", startNumber = 7, category = m21, preferredStartGroup = 3),
+                competitorData("w21-g2", "Evan", "Echo", startNumber = 8, category = w21, preferredStartGroup = 2),
+                competitorData("w21-g3", "Fran", "Foxtrot", startNumber = 9, category = w21, preferredStartGroup = 3)
+            )
+        )
+
+        val firstStarterCategories = (1..300)
+            .map { seedIndex ->
+                EventProjectEditor.drawStartList(
+                    original,
+                    "01:00",
+                    StartDrawOptions(
+                        clubHandling = StartDrawClubHandling.IGNORE,
+                        seed = "category-pressure-$seedIndex",
+                        startGroupMode = StartDrawStartGroupMode.PREFERRED_THIRDS
+                    )
+                ).startOrderCategories().first()
+            }
+            .toSet()
+
+        assertEquals(setOf(m60.id, m50.id, w65.id), firstStarterCategories)
+    }
+
+    @Test
     fun drawStartListAvoidsConsecutiveSameCategoryWhenPossible() {
         val m21 = category("cat-m21", "M21", order = 0)
         val m40 = category("cat-m40", "M40", order = 1)

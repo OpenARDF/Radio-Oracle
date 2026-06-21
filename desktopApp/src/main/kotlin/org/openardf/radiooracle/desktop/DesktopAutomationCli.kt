@@ -38,7 +38,11 @@ private data class EventStartListVerificationResult(
     val currentOrderSignature: String,
     val currentOrderInPerfectSet: Boolean,
     val samplePerfectOrderSignatures: List<String>,
-    val samplePerfectOrders: List<List<String>>
+    val samplePerfectOrders: List<List<String>>,
+    val generatorSampleCount: Int,
+    val generatedUniqueOrderCount: Int,
+    val generatedPerfectOrderCount: Int,
+    val generatedPerfectOrderSignatures: List<String>
 )
 
 /**
@@ -341,6 +345,7 @@ object DesktopAutomationCli {
         }
         val maxCompetitors = optionValue(args, "--max-competitors")?.toIntOrNull() ?: 10
         val sampleLimit = optionValue(args, "--sample-limit")?.toIntOrNull() ?: 12
+        val generatorSamples = optionValue(args, "--generator-samples")?.toIntOrNull() ?: 0
         return runCatching {
             val path = Path.of(pathText)
             val projectFile = DesktopProjectFiles.read(path)
@@ -363,7 +368,13 @@ object DesktopAutomationCli {
                     "Pass a larger --max-competitors value if this is intentional."
             }
 
-            val result = verifyEventStartLists(projectFile, competitorData, settings, sampleLimit.coerceAtLeast(0))
+            val result = verifyEventStartLists(
+                projectFile = projectFile,
+                competitorData = competitorData,
+                settings = settings,
+                sampleLimit = sampleLimit.coerceAtLeast(0),
+                generatorSamples = generatorSamples.coerceAtLeast(0)
+            )
             out.println(
                 jsonObject(
                     "command" to "event-start-list-verify",
@@ -377,6 +388,10 @@ object DesktopAutomationCli {
                     "currentOrderPerfect" to result.currentOrderPerfect,
                     "currentOrderSignature" to result.currentOrderSignature,
                     "currentOrderInPerfectSet" to result.currentOrderInPerfectSet,
+                    "generatorSampleCount" to result.generatorSampleCount,
+                    "generatedUniqueOrderCount" to result.generatedUniqueOrderCount,
+                    "generatedPerfectOrderCount" to result.generatedPerfectOrderCount,
+                    "generatedPerfectOrderSignatures" to result.generatedPerfectOrderSignatures,
                     "settings" to mapOf(
                         "intervalSeconds" to settings.intervalSeconds,
                         "clubHandling" to settings.options.clubHandling.name,
@@ -398,7 +413,8 @@ object DesktopAutomationCli {
         projectFile: EventProjectFile,
         competitorData: List<EventCompetitorData>,
         settings: StartDrawSettings,
-        sampleLimit: Int
+        sampleLimit: Int,
+        generatorSamples: Int
     ): EventStartListVerificationResult {
         val currentQuality = EventStartListDetails.from(projectFile.raceData).quality
         val currentSignature = drawnOrderSignature(projectFile, competitorData)
@@ -443,6 +459,20 @@ object DesktopAutomationCli {
         }
 
         visit(0)
+        val generatedSignatures = linkedSetOf<String>()
+        val generatedPerfectSignatures = linkedSetOf<String>()
+        repeat(generatorSamples) { index ->
+            val generated = EventProjectEditor.drawStartList(
+                projectFile = projectFile,
+                intervalText = settings.intervalText,
+                options = settings.options.copy(seed = "verify-generator-${index + 1}")
+            )
+            val signature = drawnOrderSignature(generated, competitorData)
+            generatedSignatures += signature
+            if (EventStartListDetails.from(generated.raceData).quality.score == 100) {
+                generatedPerfectSignatures += signature
+            }
+        }
         return EventStartListVerificationResult(
             totalOrderCount = totalOrderCount,
             nonRedOrderCount = nonRedOrderCount,
@@ -452,7 +482,11 @@ object DesktopAutomationCli {
             currentOrderSignature = currentSignature,
             currentOrderInPerfectSet = currentOrderInPerfectSet,
             samplePerfectOrderSignatures = samplePerfectOrderSignatures,
-            samplePerfectOrders = samplePerfectOrders
+            samplePerfectOrders = samplePerfectOrders,
+            generatorSampleCount = generatorSamples,
+            generatedUniqueOrderCount = generatedSignatures.size,
+            generatedPerfectOrderCount = generatedPerfectSignatures.size,
+            generatedPerfectOrderSignatures = generatedPerfectSignatures.take(sampleLimit)
         )
     }
 
@@ -1327,7 +1361,7 @@ object DesktopAutomationCli {
                                           Print start fairness input diagnostics for the current series event.
           event-series-optimize-start-fairness <manifest-path> <current-event-path> [--write] [--seed-salt <text>]
                                           Try to improve or preserve series start fairness with randomized candidates; writes changed Event Files only with --write.
-          event-start-list-verify <event-path> [--max-competitors <n>] [--sample-limit <n>]
+          event-start-list-verify <event-path> [--max-competitors <n>] [--sample-limit <n>] [--generator-samples <n>]
                                           Exhaustively count event start orders that score 100/100.
           readiness-summary [--require-ready] <event-path>
                                           Print validation and readiness issues as JSON.
