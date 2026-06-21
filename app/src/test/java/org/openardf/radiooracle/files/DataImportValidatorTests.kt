@@ -86,12 +86,14 @@ class DataImportValidatorTests {
     }
 
     @Test
-    fun testValidateThrowsOnDuplicateCompetitorStartNumber() {
+    fun testValidateAllowsDuplicateCompetitorStartNumber() {
         val competitor1 = Competitor()
         competitor1.startNumber = 1
+        competitor1.siNumber = 10001
 
         val competitor2 = Competitor()
         competitor2.startNumber = 1
+        competitor2.siNumber = 10002
 
         val wrapper = DataImportWrapper(
             competitorCategories = listOf(
@@ -100,15 +102,13 @@ class DataImportValidatorTests {
             ), categories = emptyList(), invalidLines = arrayListOf()
         )
 
-        assertThrows(IllegalArgumentException::class.java) {
-            DataImportValidator.validateDataImport(
-                wrapper,
-                raceId,
-                DataType.COMPETITORS,
-                dataProcessor,
-                context
-            )
-        }
+        DataImportValidator.validateDataImport(
+            wrapper,
+            raceId,
+            DataType.COMPETITORS,
+            dataProcessor,
+            context
+        )
     }
 
     @Test

@@ -327,16 +327,7 @@ class CompetitorEditDialogFragment : DialogFragment() {
         //Check if the start number is valid
         if (startNumberTextView.text.toString().trim().isNotEmpty()) {
             try {
-                val startNumber = startNumberTextView.text.toString().trim().toInt()
-                if (startNumber != origStartNumber && selectedRaceViewModel.checkIfStartNumberExists(
-                        startNumber
-                    )
-                ) {
-                    valid = false
-                    startNumberTextView.error =
-                        getString(R.string.general_duplicate)
-                }
-
+                startNumberTextView.text.toString().trim().toInt()
             } catch (e: Exception) {
                 valid = false
                 startNumberTextView.error = getString(R.string.general_invalid)

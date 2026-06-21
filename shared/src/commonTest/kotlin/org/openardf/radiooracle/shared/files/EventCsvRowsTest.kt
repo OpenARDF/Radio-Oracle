@@ -83,6 +83,28 @@ class EventCsvRowsTest {
     }
 
     @Test
+    fun formatsBlankStartNumberWhenCompetitorHasNoDrawnStart() {
+        val competitor = EventCompetitor(
+            id = "competitor",
+            raceId = "race",
+            categoryId = null,
+            firstName = "Pavel",
+            lastName = "Kolsky",
+            club = "OK",
+            index = "OK001",
+            isMan = true,
+            birthYear = null,
+            siNumber = null,
+            siRent = false,
+            startNumber = null,
+            drawnStartTimeSeconds = null
+        )
+
+        assertEquals(";Pavel;Kolsky;;0;;OK;OK001;;0;;OK001;", EventCsvRows.competitorRow(competitor, ""))
+        assertEquals(";Kolsky;Pavel;;;;OK001;;OK;", EventCsvRows.competitorStartRow(competitor, "", null))
+    }
+
+    @Test
     fun formatsCompetitorStartRows() {
         val competitor = EventCompetitor(
             id = "competitor",

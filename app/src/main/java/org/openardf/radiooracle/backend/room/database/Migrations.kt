@@ -135,3 +135,13 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_race_import_source_id` ON `race` (`import_source_id`)")
     }
 }
+
+// Migration from version 6 -> 7: start numbers are event-local start order
+// slots, so simultaneous starters may share one. Keep the lookup index but
+// remove the uniqueness constraint that treated start numbers as competitors.
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP INDEX IF EXISTS `index_competitor_start_number_race_id`")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_competitor_start_number_race_id` ON `competitor` (`start_number`, `race_id`)")
+    }
+}

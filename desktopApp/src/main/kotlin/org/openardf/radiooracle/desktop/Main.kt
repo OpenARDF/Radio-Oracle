@@ -330,8 +330,8 @@ private val ReadoutTableColumns = listOf(
 )
 
 private val StartListTableColumns = listOf(
-    FixedTableColumn("Start", 96.dp),
     FixedTableColumn("No.", 72.dp),
+    FixedTableColumn("Start", 96.dp),
     FixedTableColumn("Competitor", 260.dp),
     FixedTableColumn("Category", 120.dp),
     FixedTableColumn("SI no.", 112.dp)
@@ -9913,8 +9913,8 @@ private fun StartListDetailRow(row: EventStartListRow) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         val rowColor = row.ruleSeverity.toStartListColor()
-        FixedTableText(row.startTimeText, StartListTableColumns[0].width, rowColor)
-        FixedTableText(row.startNumberText, StartListTableColumns[1].width, rowColor)
+        FixedTableText(row.startSequenceText, StartListTableColumns[0].width, rowColor)
+        FixedTableText(row.startTimeText, StartListTableColumns[1].width, rowColor)
         FixedTableText(row.competitorName, StartListTableColumns[2].width, rowColor)
         FixedTableText(row.categoryName, StartListTableColumns[3].width, rowColor)
         FixedTableText(row.siNumberText, StartListTableColumns[4].width, rowColor)
@@ -11325,7 +11325,6 @@ private fun CompetitorDetailsPanel(
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(CompetitorTableColumns)
     val orderedCompetitors = rememberEditableRowOrder(competitors) { it.id }
-    val nextStartNumber = remember(competitors) { nextCompetitorStartNumber(competitors) }
     var firstNameDraft by remember { mutableStateOf("") }
     var lastNameDraft by remember { mutableStateOf("") }
     var clubDraft by remember { mutableStateOf("") }
@@ -11333,13 +11332,12 @@ private fun CompetitorDetailsPanel(
     var callSignDraft by remember { mutableStateOf("") }
     var birthYearDraft by remember { mutableStateOf("") }
     var selectedCategoryId by remember { mutableStateOf<String?>(null) }
-    var startNumberDraft by remember(nextStartNumber) { mutableStateOf(nextStartNumber) }
+    var startNumberDraft by remember { mutableStateOf("") }
     var siNumberDraft by remember { mutableStateOf("") }
     var isReadingSiCardForAdd by remember { mutableStateOf(false) }
     var readSiCardStatusText by remember { mutableStateOf<String?>(null) }
     val canAddCompetitor = firstNameDraft.isNotBlank() &&
-            lastNameDraft.isNotBlank() &&
-            startNumberDraft.isNotBlank()
+            lastNameDraft.isNotBlank()
     fun addCompetitor() {
         val didAdd = onAddCompetitor(
             firstNameDraft,
@@ -11360,7 +11358,7 @@ private fun CompetitorDetailsPanel(
             callSignDraft = ""
             birthYearDraft = ""
             selectedCategoryId = null
-            startNumberDraft = nextCompetitorStartNumber(competitors)
+            startNumberDraft = ""
             siNumberDraft = ""
         }
     }
@@ -11588,15 +11586,7 @@ private fun CompetitorAddRow(
             onCategorySelected = onCategorySelected,
             modifier = Modifier.width(CompetitorTableColumns[6].width)
         )
-        TextField(
-            value = startNumberDraft,
-            onValueChange = onStartNumberChange,
-            modifier = Modifier
-                .width(CompetitorTableColumns[7].width)
-                .commitOnEnter(onCommit),
-            singleLine = true,
-            label = { Text("Start") }
-        )
+        Spacer(modifier = Modifier.width(CompetitorTableColumns[7].width))
         Spacer(modifier = Modifier.width(CompetitorTableColumns[8].width))
         TextField(
             value = siNumberDraft,
@@ -11644,10 +11634,8 @@ private fun CompetitorDetailRow(
                 onRenameCompetitor(competitor.id, firstNameDraft, lastNameDraft)
             }
         }
-        if (startNumberDraft != competitor.startNumberText || siNumberDraft != competitor.siNumberText) {
-            if (startNumberDraft.trim().toIntOrNull() != null &&
-                (siNumberDraft.isBlank() || siNumberDraft.trim().toIntOrNull() != null)
-            ) {
+        if (siNumberDraft != competitor.siNumberText) {
+            if (siNumberDraft.isBlank() || siNumberDraft.trim().toIntOrNull() != null) {
                 onUpdateCompetitorNumbers(competitor.id, startNumberDraft, siNumberDraft)
             }
         }
@@ -11778,20 +11766,7 @@ private fun CompetitorDetailRow(
             },
             modifier = Modifier.width(CompetitorTableColumns[6].width)
         )
-        TextField(
-            value = startNumberDraft,
-            onValueChange = { startNumberDraft = it },
-            modifier = Modifier
-                .width(CompetitorTableColumns[7].width)
-                .onFocusChanged { focusState ->
-                    if (!focusState.isFocused) {
-                        applyPendingDrafts()
-                    }
-                }
-                .commitOnEnter(::applyPendingDrafts),
-            singleLine = true,
-            label = { Text("Start") }
-        )
+        FixedTableText(competitor.startNumberText, CompetitorTableColumns[7].width)
         TextField(
             value = startTimeDraft,
             onValueChange = { startTimeDraft = it },
@@ -15865,9 +15840,6 @@ private fun genericEditErrorText(error: Throwable): String =
 private fun fixedTableWidth(columns: List<FixedTableColumn>): Dp =
     columns.fold(0.dp) { total, column -> total + column.width } +
             TableColumnGap * (columns.size - 1)
-
-private fun nextCompetitorStartNumber(competitors: List<EventCompetitorDetails>): String =
-    ((competitors.maxOfOrNull { it.startNumber } ?: 0) + 1).toString()
 
 private fun importStatusText(action: String, importedRows: Int, invalidRows: Int, fileName: String): String =
     if (invalidRows == 0) {

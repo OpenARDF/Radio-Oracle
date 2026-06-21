@@ -157,7 +157,7 @@ class DesktopSmokeSampleTest {
                 .first { it.competitorCategory.competitor.id == competitorId }
                 .competitorCategory.competitor.categoryId
         )
-        assertEquals(501, readBack.raceData.competitorData.first().competitorCategory.competitor.startNumber)
+        assertEquals(1, readBack.raceData.competitorData.first().competitorCategory.competitor.startNumber)
         assertEquals(7_654_321, readBack.raceData.competitorData.first().competitorCategory.competitor.siNumber)
         assertEquals("F1", readBack.raceData.controls.first { it.id == controlId }.label)
         assertEquals("Edited control", readBack.raceData.controls.first { it.id == controlId }.notes)
@@ -275,10 +275,10 @@ class DesktopSmokeSampleTest {
         assertEquals(2, Files.readAllLines(startsByMinute).size)
         assertEquals(2, Files.readAllLines(readouts).size)
         assertEquals(1, Files.readAllLines(results).size)
-        assertTrue(Files.readString(competitors).contains("123456;101;Alice;Runner;M21"))
-        assertTrue(Files.readString(starts).contains("101;Runner;Alice;M21;;10:00"))
-        assertTrue(Files.readString(startsByCategory).contains("101;Runner;Alice;M21;;10:00"))
-        assertTrue(Files.readString(startsByMinute).contains("101;Runner;Alice;M21;;10:00"))
+        assertTrue(Files.readString(competitors).contains("123456;1;Alice;Runner;M21"))
+        assertTrue(Files.readString(starts).contains("1;Runner;Alice;M21;;10:00"))
+        assertTrue(Files.readString(startsByCategory).contains("1;Runner;Alice;M21;;10:00"))
+        assertTrue(Files.readString(startsByMinute).contains("1;Runner;Alice;M21;;10:00"))
         assertTrue(Files.readString(readouts).contains("123456;;00:10:00;00:30:00;0"))
         assertTrue(Files.readString(results).contains("RUNNER Alice;OK;3;00:20:00"))
     }

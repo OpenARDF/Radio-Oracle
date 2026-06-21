@@ -330,12 +330,6 @@ class DataProcessor private constructor(context: Context) {
         }
     }
 
-    fun checkIfStartNumberExists(startNumber: Int, raceId: UUID): Boolean {
-        return runBlocking {
-            return@runBlocking ardfRepository.checkIfStartNumberExists(startNumber, raceId) > 0
-        }
-    }
-
     suspend fun getHighestStartNumberByRace(raceId: UUID) =
         ardfRepository.getHighestStartNumberByRace(raceId)
 

@@ -14,12 +14,13 @@ class EventStartListDetailsTest {
         assertEquals(3, details.scheduledCount)
         assertEquals(1, details.unscheduledCount)
         assertEquals(listOf("early", "same-time", "late", "unscheduled"), details.rows.map { it.competitorId })
+        assertEquals(listOf("1", "2", "2", ""), details.rows.map { it.startSequenceText })
 
         assertEquals("05:00", details.rows[0].startTimeText)
-        assertEquals("1", details.rows[0].startNumberText)
+        assertEquals("8", details.rows[0].startNumberText)
         assertEquals("RUNNER Early", details.rows[0].competitorName)
         assertEquals("M21", details.rows[0].categoryName)
-        assertEquals("1111", details.rows[0].siNumberText)
+        assertEquals("1118", details.rows[0].siNumberText)
         assertEquals("", details.rows.last().startTimeText)
     }
 
@@ -53,9 +54,9 @@ class EventStartListDetailsTest {
             categories = listOf(EventCategoryData(category, emptyList(), emptyList())),
             aliases = emptyList(),
             competitorData = listOf(
-                competitorData("late", "Late", 3, 15 * 60),
+                competitorData("late", "Late", 5, 15 * 60),
                 competitorData("unscheduled", "Unscheduled", 4, null),
-                competitorData("early", "Early", 1, 5 * 60),
+                competitorData("early", "Early", 8, 5 * 60),
                 competitorData("same-time", "Same", 2, 15 * 60)
             ),
             unmatchedReadoutData = emptyList()

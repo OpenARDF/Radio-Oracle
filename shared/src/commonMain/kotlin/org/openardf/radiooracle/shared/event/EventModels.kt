@@ -177,7 +177,7 @@ data class EventCompetitor(
     val birthYear: Int?,
     val siNumber: Int?,
     val siRent: Boolean,
-    val startNumber: Int,
+    val startNumber: Int? = null,
     val drawnStartTimeSeconds: Long?,
     val preferredStartGroup: Int? = null,
     val bibNumber: String = index,
@@ -192,8 +192,9 @@ data class EventCompetitor(
     /** Formats the competitor name in the app's existing LASTNAME Firstname style. */
     fun fullName(): String = "${lastName.uppercase()} $firstName"
 
-    /** Formats the competitor name with the assigned start number appended. */
-    fun nameWithStartNumber(): String = "${fullName()} ($startNumber)"
+    /** Formats the competitor name with the assigned start number appended when starts have been assigned. */
+    fun nameWithStartNumber(): String =
+        startNumber?.let { "${fullName()} ($it)" } ?: fullName()
 }
 
 /** Portable raw punch record, with SportIdent times represented as absolute seconds. */

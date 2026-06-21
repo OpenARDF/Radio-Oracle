@@ -137,7 +137,7 @@ class DesktopProjectDiagnosticsTest {
             birthYear = null,
             siNumber = null,
             siRent = false,
-            startNumber = 1,
+            startNumber = null,
             drawnStartTimeSeconds = null
         )
 

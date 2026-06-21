@@ -239,6 +239,12 @@ object CsvProcessor : FormatProcessor {
         val parsedRows = EventCsvImports.parseAndroidCompetitorRows(inStream.bufferedReader().readText())
         val invalidLines = parsedRows.invalidLines
             .mapTo(ArrayList()) { it.lineIndex to it.message }
+        val startNumberByDrawnStartTime = parsedRows.rows
+            .mapNotNull { row -> row.startTimeText?.let { runCatching { TimeProcessor.minuteStringToDuration(it) }.getOrNull() } }
+            .distinct()
+            .sorted()
+            .withIndex()
+            .associate { (index, startTime) -> startTime to index + 1 }
 
         for ((index, row) in parsedRows.rows.withIndex()) {
             try {
@@ -249,13 +255,19 @@ object CsvProcessor : FormatProcessor {
                 }
 
                 val categoryId = category?.category?.id
-                val startNumber = row.startNumber ?: currStartNum++
+                val drawnRelativeStartTime: Duration? =
+                    row.startTimeText?.let { TimeProcessor.minuteStringToDuration(it) }
+                /*
+                 * A start number is a start-time slot, not a competitor identity.
+                 * When import rows include start times, simultaneous starters share
+                 * the number derived from that unique time.
+                 */
+                val startNumber = drawnRelativeStartTime?.let(startNumberByDrawnStartTime::get)
+                    ?: row.startNumber
+                    ?: currStartNum++
                 if (startNumber >= currStartNum) {
                     currStartNum = startNumber + 1
                 }
-
-                val drawnRelativeStartTime: Duration? =
-                    row.startTimeText?.let { TimeProcessor.minuteStringToDuration(it) }
 
                 val competitor = Competitor(
                     UUID.randomUUID(),

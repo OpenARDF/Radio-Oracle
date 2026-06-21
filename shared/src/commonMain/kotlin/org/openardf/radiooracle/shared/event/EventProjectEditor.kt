@@ -809,9 +809,9 @@ object EventProjectEditor {
             "Competitor was not found: $competitorId"
         }
 
-        return projectFile.copy(
+        return EventStartNumbers.assignFromDrawnStartTimes(projectFile.copy(
             raceData = projectFile.raceData.copy(competitorData = competitorData)
-        )
+        ))
     }
 
     /** Returns a copy of the Event File with one competitor assigned to a category, or to no category. */
@@ -1080,14 +1080,14 @@ object EventProjectEditor {
             }
         }
 
-        return projectFile.copy(
+        return EventStartNumbers.assignFromDrawnStartTimes(projectFile.copy(
             raceData = projectFile.raceData.copy(
                 competitorData = competitorData,
                 startDrawSettings = updateStartDrawSettings(projectFile, intervalText, drawOptions)
                     .raceData
                     .startDrawSettings
             )
-        )
+        ))
     }
 
     /**
@@ -1223,7 +1223,7 @@ object EventProjectEditor {
         }
     }
 
-    /** Returns a copy of the Event File with one competitor's validated numbers changed. */
+    /** Returns a copy of the Event File with one competitor's SI number changed. */
     fun updateCompetitorNumbers(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -1235,20 +1235,6 @@ object EventProjectEditor {
         }
         require(competitorPosition >= 0) {
             "Competitor was not found: $competitorId"
-        }
-
-        val trimmedStartNumber = startNumber.trim()
-        require(trimmedStartNumber.isNotEmpty()) {
-            "Start number is required."
-        }
-        val startNumberValue = trimmedStartNumber.toIntOrNull()
-            ?: throw IllegalArgumentException("Start number is invalid.")
-        require(
-            projectFile.raceData.competitorData.noneIndexed { index, data ->
-                index != competitorPosition && data.competitorCategory.competitor.startNumber == startNumberValue
-            }
-        ) {
-            "Start number must be unique."
         }
 
         val trimmedSiNumber = siNumber.trim()
@@ -1275,7 +1261,6 @@ object EventProjectEditor {
                 data.copy(
                     competitorCategory = competitorCategory.copy(
                         competitor = competitorCategory.competitor.copy(
-                            startNumber = startNumberValue,
                             siNumber = siNumberValue
                         )
                     )
@@ -1471,7 +1456,6 @@ object EventProjectEditor {
         val competitors = projectFile.raceData.competitorData.toMutableList()
         val warnings = mutableListOf<String>()
         var nextCategoryOrder = (categories.maxOfOrNull { it.category.order } ?: -1) + 1
-        var nextStartNumber = (competitors.maxOfOrNull { it.competitorCategory.competitor.startNumber } ?: 0) + 1
         var importedCount = 0
         var updatedCount = 0
         var skippedCount = 0
@@ -1520,25 +1504,6 @@ object EventProjectEditor {
                 }
             }
 
-            val startNumber = if (existingPosition >= 0) {
-                /*
-                 * Keep the internal competitor start/order number stable when a
-                 * roster CSV updates an existing competitor. Older exports and
-                 * EventReg-derived files often used this field like a bib number,
-                 * while modern imports carry bib numbers separately.
-                 */
-                competitors[existingPosition].competitorCategory.competitor.startNumber
-            } else {
-                row.startNumber ?: nextStartNumber++
-            }
-            if (startNumber >= nextStartNumber) {
-                nextStartNumber = startNumber + 1
-            }
-            require(competitors.noneIndexed { index, data ->
-                index != existingPosition && data.competitorCategory.competitor.startNumber == startNumber
-            }) {
-                "Start number must be unique."
-            }
             require(
                 row.siNumber == null || competitors.noneIndexed { index, data ->
                     index != existingPosition && data.competitorCategory.competitor.siNumber == row.siNumber
@@ -1584,7 +1549,6 @@ object EventProjectEditor {
                     birthYear = row.birthYear,
                     siNumber = row.siNumber ?: existingCompetitor.siNumber,
                     siRent = row.siRent,
-                    startNumber = startNumber,
                     drawnStartTimeSeconds = row.startTimeText?.let(DurationFormatter::minuteStringToSeconds)
                         ?: existingCompetitor.drawnStartTimeSeconds,
                     preferredStartGroup = row.preferredStartGroup ?: existingCompetitor.preferredStartGroup
@@ -1613,7 +1577,6 @@ object EventProjectEditor {
                 birthYear = row.birthYear,
                 siNumber = row.siNumber,
                 siRent = row.siRent,
-                startNumber = startNumber,
                 drawnStartTimeSeconds = row.startTimeText?.let(DurationFormatter::minuteStringToSeconds),
                 preferredStartGroup = row.preferredStartGroup
             )
@@ -1686,8 +1649,8 @@ object EventProjectEditor {
             competitorData = competitors,
             unmatchedReadoutData = unmatchedReadouts
         )
-        return CompetitorCsvImportOutcome(
-            projectFile = projectFile.copy(
+        val importedProjectFile = EventStartNumbers.assignFromDrawnStartTimes(
+            projectFile.copy(
                 raceData = raceData.copy(
                     categories = raceData.categories.map { categoryData ->
                         categoryData.copy(
@@ -1697,7 +1660,10 @@ object EventProjectEditor {
                         )
                     }
                 )
-            ),
+            )
+        )
+        return CompetitorCsvImportOutcome(
+            projectFile = importedProjectFile,
             importedCount = importedCount,
             updatedCount = updatedCount,
             skippedCount = skippedCount,
@@ -1706,7 +1672,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Applies parsed Android-format competitor-start rows to existing competitors by start number. */
+    /** Applies parsed start rows to existing competitors, preferring SI identity over legacy start-number matching. */
     fun importCompetitorStartRows(
         projectFile: EventProjectFile,
         rows: List<CompetitorStartCsvImportRow>
@@ -1714,10 +1680,15 @@ object EventProjectEditor {
         var competitorData = projectFile.raceData.competitorData
 
         rows.forEach { row ->
-            val competitorPosition = competitorData.indexOfFirst {
-                it.competitorCategory.competitor.startNumber == row.startNumber
-            }
-            if (competitorPosition >= 0) {
+            val competitorPosition = row.siNumber?.let { siNumber ->
+                competitorData.indexOfFirst { it.competitorCategory.competitor.siNumber == siNumber }
+            }?.takeIf { it >= 0 }
+                ?: competitorData
+                    .withIndex()
+                    .filter { (_, data) -> data.competitorCategory.competitor.startNumber == row.startNumber }
+                    .singleOrNull()
+                    ?.index
+            if (competitorPosition != null) {
                 val siNumber = row.siNumber
                 require(
                     siNumber == null || competitorData.noneIndexed { index, data ->
@@ -1746,9 +1717,9 @@ object EventProjectEditor {
             }
         }
 
-        return projectFile.copy(
+        return EventStartNumbers.assignFromDrawnStartTimes(projectFile.copy(
             raceData = projectFile.raceData.copy(competitorData = competitorData)
-        )
+        ))
     }
 
     /**
@@ -3223,20 +3194,6 @@ object EventProjectEditor {
             "Competitor last name cannot be blank."
         }
 
-        val trimmedStartNumber = startNumber.trim()
-        require(trimmedStartNumber.isNotEmpty()) {
-            "Start number is required."
-        }
-        val startNumberValue = trimmedStartNumber.toIntOrNull()
-            ?: throw IllegalArgumentException("Start number is invalid.")
-        require(
-            existingCompetitors.noneIndexed { index, data ->
-                index != existingCompetitorPosition && data.competitorCategory.competitor.startNumber == startNumberValue
-            }
-        ) {
-            "Start number must be unique."
-        }
-
         val trimmedSiNumber = siNumber.trim()
         val siNumberValue = if (trimmedSiNumber.isEmpty()) {
             null
@@ -3267,7 +3224,6 @@ object EventProjectEditor {
             birthYear = null,
             siNumber = siNumberValue,
             siRent = false,
-            startNumber = startNumberValue,
             drawnStartTimeSeconds = null
         )
     }
@@ -3540,11 +3496,11 @@ object EventProjectEditor {
 
     private fun competitorStartDrawComparator(options: StartDrawOptions, scope: String): Comparator<EventCompetitor> =
         if (!options.usesSeededRandomization()) {
-            compareBy<EventCompetitor> { it.startNumber }
+            compareBy<EventCompetitor> { it.startNumber ?: Int.MAX_VALUE }
                 .thenBy { it.fullName() }
         } else {
             compareBy<EventCompetitor> { seededRank(options.seed, "$scope:${it.id}:${it.startNumber}:${it.fullName()}") }
-                .thenBy { it.startNumber }
+                .thenBy { it.startNumber ?: Int.MAX_VALUE }
                 .thenBy { it.fullName() }
         }
 

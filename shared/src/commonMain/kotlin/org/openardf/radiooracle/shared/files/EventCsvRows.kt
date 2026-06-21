@@ -33,7 +33,7 @@ object EventCsvRows {
     fun competitorRow(competitor: EventCompetitor, categoryName: String): String {
         return listOf(
             competitor.siNumber ?: "",
-            competitor.startNumber,
+            competitor.startNumber ?: "",
             competitor.firstName,
             competitor.lastName,
             categoryName,
@@ -55,7 +55,7 @@ object EventCsvRows {
         categoryName: String,
         startTimeText: String?
     ): String {
-        return "${competitor.startNumber};${competitor.lastName};${competitor.firstName};" +
+        return "${competitor.startNumber ?: ""};${competitor.lastName};${competitor.firstName};" +
                 "$categoryName;;${startTimeText ?: ""};${competitor.index};;" +
                 "${competitor.club};${competitor.siNumber ?: ""}"
     }

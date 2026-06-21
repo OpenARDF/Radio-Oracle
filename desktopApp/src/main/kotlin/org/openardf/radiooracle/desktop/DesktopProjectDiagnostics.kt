@@ -88,8 +88,8 @@ data class DesktopProjectDiagnostics(
                     "Duplicate control IDs: ${issue.ids.joinToString()}."
                 is EventValidationIssue.DuplicateControlLabels ->
                     "Duplicate control labels: ${issue.labels.joinToString()}."
-                is EventValidationIssue.DuplicateStartNumbers ->
-                    "Duplicate start numbers: ${issue.startNumbers.joinToString()}."
+                is EventValidationIssue.InvalidStartNumberAssignments ->
+                    "Start numbers do not match assigned start times for ${issue.competitorIds.size} competitor(s)."
                 is EventValidationIssue.DuplicateSINumbers ->
                     "Duplicate SI numbers: ${issue.siNumbers.joinToString()}."
                 is EventValidationIssue.DuplicateBibNumbers ->

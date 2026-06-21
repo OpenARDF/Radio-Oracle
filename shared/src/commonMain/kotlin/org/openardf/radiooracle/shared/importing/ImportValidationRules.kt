@@ -13,9 +13,6 @@ object ImportValidationRules {
     /** Returns alias SI codes that occur more than once. */
     fun duplicateAliasCodes(codes: List<Int>): Set<Int> = duplicateValues(codes)
 
-    /** Returns start numbers that occur more than once. */
-    fun duplicateStartNumbers(startNumbers: List<Int>): Set<Int> = duplicateValues(startNumbers)
-
     /** Returns non-null SI numbers that occur more than once. */
     fun duplicateSINumbers(siNumbers: List<Int?>): Set<Int> = duplicateValues(siNumbers.filterNotNull())
 

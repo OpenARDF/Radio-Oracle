@@ -4,6 +4,7 @@ import org.openardf.radiooracle.shared.time.DurationFormatter
 
 data class EventStartListRow(
     val competitorId: String,
+    val startSequenceText: String,
     val startTimeText: String,
     val startNumberText: String,
     val competitorName: String,
@@ -40,10 +41,11 @@ data class EventStartListDetails(
                     startNumber = competitor.startNumber,
                     row = EventStartListRow(
                         competitorId = competitor.id,
+                        startSequenceText = "",
                         startTimeText = competitor.drawnStartTimeSeconds?.let {
                             DurationFormatter.secondsToFormattedString(it, useMinutes = true)
                         } ?: "",
-                        startNumberText = competitor.startNumber.toString(),
+                        startNumberText = competitor.startNumber?.toString() ?: "",
                         competitorName = competitor.fullName(),
                         categoryName = categoryName,
                         siNumberText = competitor.siNumber?.toString() ?: "",
@@ -61,13 +63,36 @@ data class EventStartListDetails(
                             .thenBy { it.categoryName }
                             .thenBy { it.startNumber }
                     )
-                    .map { it.row },
+                    .withStartSequences(),
                 scheduledCount = rowsWithStart.count { it.startSeconds != null },
                 unscheduledCount = rowsWithStart.count { it.startSeconds == null },
                 settings = settings,
                 quality = quality
             )
         }
+    }
+}
+
+/**
+ * Assigns the user-facing start number by start-time slot rather than by row.
+ * Competitors starting together share the same start number; unscheduled rows
+ * stay blank so they are not mistaken for finalized start slots.
+ */
+private fun List<StartListSortRow>.withStartSequences(): List<EventStartListRow> {
+    var previousStartSeconds: Long? = null
+    var sequence = 0
+    return map { sortedRow ->
+        val startSeconds = sortedRow.startSeconds
+        val sequenceText = if (startSeconds == null) {
+            ""
+        } else {
+            if (previousStartSeconds != startSeconds) {
+                sequence += 1
+                previousStartSeconds = startSeconds
+            }
+            sequence.toString()
+        }
+        sortedRow.row.copy(startSequenceText = sequenceText)
     }
 }
 
@@ -271,14 +296,14 @@ data class EventStartListRowFinding(
 private data class StartListSortRow(
     val startSeconds: Long?,
     val categoryName: String,
-    val startNumber: Int,
+    val startNumber: Int?,
     val row: EventStartListRow
 )
 
 private data class StartListEvaluationRow(
     val competitorId: String,
     val startSeconds: Long,
-    val startNumber: Int,
+    val startNumber: Int?,
     val categoryId: String?,
     val categoryName: String,
     val club: String?,

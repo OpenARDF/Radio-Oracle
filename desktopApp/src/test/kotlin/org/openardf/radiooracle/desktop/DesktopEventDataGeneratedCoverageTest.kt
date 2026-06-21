@@ -202,7 +202,7 @@ class DesktopEventDataGeneratedCoverageTest {
         assertEquals(4, outcome.importedCount)
         assertEquals(1, outcome.warnings.count { it.contains("created placeholder category 'W50'") })
         assertEquals(4, imported.raceData.competitorData.size)
-        assertEquals(104, imported.raceData.competitorData.single { it.competitorCategory.competitor.lastName == "Newcat" }.competitorCategory.competitor.startNumber)
+        assertEquals(null, imported.raceData.competitorData.single { it.competitorCategory.competitor.lastName == "Newcat" }.competitorCategory.competitor.startNumber)
 
         val ardf = EventCsvImports.parseAndroidCompetitorRows(
             """
@@ -255,8 +255,9 @@ class DesktopEventDataGeneratedCoverageTest {
         val startRows = EventCsvImports.parseAndroidCompetitorStartRows("101;15:00;123456\n102;17:00;123457\n999;19:00;123999")
         val withStarts = EventProjectEditor.importCompetitorStartRows(withArdf, startRows.rows)
         scenarios++
-        assertEquals(900L, withStarts.raceData.competitorData.single { it.competitorCategory.competitor.startNumber == 101 }.competitorCategory.competitor.drawnStartTimeSeconds)
-        assertEquals(null, withStarts.raceData.competitorData.single { it.competitorCategory.competitor.startNumber == 103 }.competitorCategory.competitor.drawnStartTimeSeconds)
+        assertEquals(900L, withStarts.raceData.competitorData.single { it.competitorCategory.competitor.siNumber == 123456 }.competitorCategory.competitor.drawnStartTimeSeconds)
+        assertEquals(1, withStarts.raceData.competitorData.single { it.competitorCategory.competitor.siNumber == 123456 }.competitorCategory.competitor.startNumber)
+        assertEquals(null, withStarts.raceData.competitorData.single { it.competitorCategory.competitor.lastName == "NoCard" }.competitorCategory.competitor.drawnStartTimeSeconds)
 
         return scenarios
     }
@@ -373,14 +374,14 @@ class DesktopEventDataGeneratedCoverageTest {
             )
         )
 
-    private fun EventProjectFile.startOrder(): List<Int> =
+    private fun EventProjectFile.startOrder(): List<String> =
         raceData.competitorData
             .sortedWith(
                 compareBy<EventCompetitorData> {
                     it.competitorCategory.competitor.drawnStartTimeSeconds ?: Long.MAX_VALUE
-                }.thenBy { it.competitorCategory.competitor.startNumber }
+                }.thenBy { it.competitorCategory.competitor.id }
             )
-            .map { it.competitorCategory.competitor.startNumber }
+            .map { it.competitorCategory.competitor.id }
 
     private fun emptyProject(raceType: RaceType): EventProjectFile =
         EventProjectFile(

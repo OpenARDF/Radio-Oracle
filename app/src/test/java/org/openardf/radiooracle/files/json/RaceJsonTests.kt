@@ -112,7 +112,7 @@ class RaceJsonTests {
 
         val competitors = raceData.competitorData.map { it.competitorCategory.competitor }
         val startNumbers = competitors.map { it.startNumber }.sorted()
-        assertEquals(listOf(40, 41, 42, 43, 44, 45, 46), startNumbers)
+        assertEquals(listOf(0, 0, 0, 0, 0, 0, 40), startNumbers)
 
         val comp1 =
             raceData.competitorData.find { it.competitorCategory.competitor.siNumber == 10000 }

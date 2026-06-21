@@ -301,7 +301,7 @@ object ArdfJsonExports {
         @SerialName("birth_year") val birthYear: Int? = null,
         @SerialName("si_number") val siNumber: Int? = null,
         @SerialName("si_rent") val siRent: Boolean = false,
-        @SerialName("start_number") val startNumber: Int,
+        @SerialName("start_number") val startNumber: Int? = null,
         @SerialName("competitor_start_time") val competitorStartTime: String? = null,
         val result: ArdfResult? = null
     )

@@ -249,7 +249,7 @@ class DesktopAutomationCliTest {
     }
 
     @Test
-    fun importCompetitorsCsvCommandCanUpdateExistingSiNumbersWithoutChangingInternalStartNumbers() {
+    fun importCompetitorsCsvCommandCanUpdateExistingSiNumbersWithoutInventingStartNumbers() {
         val directory = Files.createTempDirectory("radio-oracle-automation-update-competitors")
         val eventFilePath = directory.resolve("Automation Event.json")
         val csvPath = directory.resolve("competitors.csv")
@@ -280,7 +280,7 @@ class DesktopAutomationCliTest {
         assertEquals(3333, updated.single { it.id == "Alice" }.siNumber)
         assertEquals("75", updated.single { it.id == "Alice" }.index)
         assertEquals("75", updated.single { it.id == "Alice" }.bibNumber)
-        assertEquals(listOf(1, 2), updated.map { it.startNumber })
+        assertEquals(listOf(null, null), updated.map { it.startNumber })
     }
 
     @Test

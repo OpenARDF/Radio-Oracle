@@ -226,13 +226,13 @@ object EventSeriesSupport {
     }
 
     fun startRowsFromEventFile(projectFile: EventProjectFile): List<CompetitorStartCsvImportRow> =
-        projectFile.raceData.competitorData
+        EventStartNumbers.assignFromDrawnStartTimes(projectFile).raceData.competitorData
             .map { it.competitorCategory.competitor }
             .filter { it.drawnStartTimeSeconds != null }
-            .sortedWith(compareBy({ it.startNumber }, { it.fullName() }))
+            .sortedWith(compareBy({ it.drawnStartTimeSeconds ?: Long.MAX_VALUE }, { it.fullName() }))
             .map { competitor ->
                 CompetitorStartCsvImportRow(
-                    startNumber = competitor.startNumber,
+                    startNumber = requireNotNull(competitor.startNumber),
                     startTimeText = DurationFormatter.secondsToFormattedString(
                         totalSeconds = requireNotNull(competitor.drawnStartTimeSeconds),
                         useMinutes = true

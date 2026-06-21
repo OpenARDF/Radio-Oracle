@@ -102,7 +102,7 @@ fun Competitor.toEventCompetitor(): EventCompetitor =
         birthYear = birthYear,
         siNumber = siNumber,
         siRent = siRent,
-        startNumber = startNumber,
+        startNumber = startNumber.takeIf { it > 0 },
         drawnStartTimeSeconds = drawnRelativeStartTime?.seconds
     )
 
@@ -284,7 +284,7 @@ private fun EventCompetitor.toRoomCompetitor(idMapper: RoomIdMapper): Competitor
         birthYear = birthYear,
         siNumber = siNumber,
         siRent = siRent,
-        startNumber = startNumber,
+        startNumber = startNumber ?: 0,
         drawnRelativeStartTime = drawnStartTimeSeconds?.let(Duration::ofSeconds)
     )
 

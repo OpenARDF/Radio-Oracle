@@ -9,6 +9,7 @@ import org.openardf.radiooracle.backend.room.database.MIGRATION_2_3
 import org.openardf.radiooracle.backend.room.database.MIGRATION_3_4
 import org.openardf.radiooracle.backend.room.database.MIGRATION_4_5
 import org.openardf.radiooracle.backend.room.database.MIGRATION_5_6
+import org.openardf.radiooracle.backend.room.database.MIGRATION_6_7
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Category
@@ -32,7 +33,7 @@ class ARDFRepository private constructor(context: Context) {
             EventDatabase::class.java,
             "event-database"
         )
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
         .build()
 
     //-------------------Races-------------------
@@ -157,9 +158,6 @@ class ARDFRepository private constructor(context: Context) {
 
     suspend fun checkIfSINumberExists(siNumber: Int, raceId: UUID): Int =
         eventDatabase.competitorDao().checkIfSINumberExists(siNumber, raceId)
-
-    suspend fun checkIfStartNumberExists(startNumber: Int, raceId: UUID): Int =
-        eventDatabase.competitorDao().checkIfStartNumberExists(startNumber, raceId)
 
     //-------------------Results-------------------
     suspend fun getResult(id: UUID) = eventDatabase.resultDao().getResult(id)

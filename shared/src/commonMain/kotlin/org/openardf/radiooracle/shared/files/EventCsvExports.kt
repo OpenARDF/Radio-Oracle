@@ -46,7 +46,7 @@ object EventCsvExports {
 
     fun competitors(raceData: EventRaceData): String =
         EventCsvFormat.Competitor.HEADER_ROW + "\n" + raceData.competitorData
-            .sortedWith(compareBy({ it.competitorCategory.competitor.startNumber }, { it.competitorCategory.competitor.fullName() }))
+            .sortedWith(compareBy({ it.competitorCategory.competitor.startNumber ?: Int.MAX_VALUE }, { it.competitorCategory.competitor.fullName() }))
             .joinRows { competitorData ->
                 val competitorCategory = competitorData.competitorCategory
                 EventCsvRows.competitorRow(
@@ -70,7 +70,7 @@ object EventCsvExports {
 
     fun competitorStarts(raceData: EventRaceData): String =
         raceData.competitorData
-            .sortedWith(compareBy({ it.competitorCategory.competitor.startNumber }, { it.competitorCategory.competitor.fullName() }))
+            .sortedWith(compareBy({ it.competitorCategory.competitor.startNumber ?: Int.MAX_VALUE }, { it.competitorCategory.competitor.fullName() }))
             .joinCompetitorStartRows(raceData)
 
     fun competitorStartsByCategory(raceData: EventRaceData): String =
@@ -79,7 +79,7 @@ object EventCsvExports {
                 compareBy<EventCompetitorData>(
                     { raceData.categoryNameFor(it.competitorCategory.competitor.categoryId) },
                     { it.competitorCategory.competitor.startTimeSortKey() },
-                    { it.competitorCategory.competitor.startNumber },
+                    { it.competitorCategory.competitor.startNumber ?: Int.MAX_VALUE },
                     { it.competitorCategory.competitor.fullName() }
                 )
             )
@@ -91,7 +91,7 @@ object EventCsvExports {
                 compareBy<EventCompetitorData>(
                     { it.competitorCategory.competitor.startTimeSortKey() },
                     { raceData.categoryNameFor(it.competitorCategory.competitor.categoryId) },
-                    { it.competitorCategory.competitor.startNumber },
+                    { it.competitorCategory.competitor.startNumber ?: Int.MAX_VALUE },
                     { it.competitorCategory.competitor.fullName() }
                 )
             )
@@ -103,7 +103,7 @@ object EventCsvExports {
                 compareBy<EventCompetitorData>(
                     { raceData.categoryNameFor(it.competitorCategory.competitor.categoryId) },
                     { it.competitorCategory.competitor.startTimeSortKey() },
-                    { it.competitorCategory.competitor.startNumber },
+                    { it.competitorCategory.competitor.startNumber ?: Int.MAX_VALUE },
                     { it.competitorCategory.competitor.fullName() }
                 )
             )

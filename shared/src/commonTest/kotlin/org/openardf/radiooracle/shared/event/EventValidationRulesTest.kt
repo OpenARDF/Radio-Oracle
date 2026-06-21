@@ -34,7 +34,6 @@ class EventValidationRulesTest {
         assertTrue(issues.contains(EventValidationIssue.DuplicateCategoryNames(setOf("M21"))))
         assertTrue(issues.contains(EventValidationIssue.DuplicateAliasNames(setOf("F1"))))
         assertTrue(issues.contains(EventValidationIssue.DuplicateAliasCodes(setOf(31))))
-        assertTrue(issues.contains(EventValidationIssue.DuplicateStartNumbers(setOf(1))))
         assertTrue(issues.contains(EventValidationIssue.DuplicateSINumbers(setOf(123))))
         assertTrue(issues.contains(EventValidationIssue.DuplicateBibNumbers(setOf("B1"))))
         assertTrue(issues.contains(EventValidationIssue.DuplicateCallSigns(setOf("K0ABC"))))

@@ -127,10 +127,6 @@ object EventValidationRules {
     private fun validateCompetitors(competitors: List<EventCompetitorData>): List<EventValidationIssue> {
         val eventCompetitors = competitors.map { it.competitorCategory.competitor }
         return buildList {
-            ImportValidationRules.duplicateStartNumbers(
-                eventCompetitors.map { it.startNumber }
-            ).takeIf { it.isNotEmpty() }?.let { add(EventValidationIssue.DuplicateStartNumbers(it)) }
-
             ImportValidationRules.duplicateSINumbers(
                 eventCompetitors.map { it.siNumber }
             ).takeIf { it.isNotEmpty() }?.let { add(EventValidationIssue.DuplicateSINumbers(it)) }
@@ -142,6 +138,20 @@ object EventValidationRules {
             ImportValidationRules.duplicateCallSigns(
                 eventCompetitors.map { it.callSign }
             ).takeIf { it.isNotEmpty() }?.let { add(EventValidationIssue.DuplicateCallSigns(it)) }
+
+            val expectedByStartTime = competitors
+                .mapNotNull { it.competitorCategory.competitor.drawnStartTimeSeconds }
+                .distinct()
+                .sorted()
+                .withIndex()
+                .associate { (index, startSeconds) -> startSeconds to index + 1 }
+            eventCompetitors
+                .filter { competitor ->
+                    val expected = competitor.drawnStartTimeSeconds?.let(expectedByStartTime::get)
+                    competitor.startNumber != expected
+                }
+                .takeIf { it.isNotEmpty() }
+                ?.let { mismatched -> add(EventValidationIssue.InvalidStartNumberAssignments(mismatched.map { it.id }.toSet())) }
         }
     }
 
@@ -171,7 +181,7 @@ sealed interface EventValidationIssue {
     data class DuplicateAliasCodes(val codes: Set<Int>) : EventValidationIssue
     data class DuplicateControlIds(val ids: Set<String>) : EventValidationIssue
     data class DuplicateControlLabels(val labels: Set<String>) : EventValidationIssue
-    data class DuplicateStartNumbers(val startNumbers: Set<Int>) : EventValidationIssue
+    data class InvalidStartNumberAssignments(val competitorIds: Set<String>) : EventValidationIssue
     data class DuplicateSINumbers(val siNumbers: Set<Int>) : EventValidationIssue
     data class DuplicateBibNumbers(val bibNumbers: Set<String>) : EventValidationIssue
     data class DuplicateCallSigns(val callSigns: Set<String>) : EventValidationIssue

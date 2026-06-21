@@ -11,7 +11,6 @@ class ImportValidationRulesTest {
         assertEquals(setOf("M21", "W21"), ImportValidationRules.duplicateCategoryNames(listOf("M21", "W21", "M21", "W21")))
         assertEquals(setOf("F1"), ImportValidationRules.duplicateAliasNames(listOf("F1", "F2", "F1")))
         assertEquals(setOf(31), ImportValidationRules.duplicateAliasCodes(listOf(31, 32, 31)))
-        assertEquals(setOf(101), ImportValidationRules.duplicateStartNumbers(listOf(101, 102, 101)))
         assertEquals(setOf(123456), ImportValidationRules.duplicateSINumbers(listOf(123456, null, 123456)))
     }
 

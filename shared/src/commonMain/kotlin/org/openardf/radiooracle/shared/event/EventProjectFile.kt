@@ -82,7 +82,7 @@ object EventProjectFileJson {
         } else {
             backfilledProjectFile
         }
-        return clearPublicControlLocations(migratedProjectFile)
+        return EventStartNumbers.assignFromDrawnStartTimes(clearPublicControlLocations(migratedProjectFile))
     }
 
     private fun clearPublicControlLocations(projectFile: EventProjectFile): EventProjectFile {

@@ -296,13 +296,6 @@ class SelectedRaceViewModel : ViewModel() {
         return true
     }
 
-    fun checkIfStartNumberExists(siNumber: Int): Boolean {
-        if (race.value != null) {
-            return dataProcessor.checkIfStartNumberExists(siNumber, race.value!!.id)
-        }
-        return true
-    }
-
     fun getLastReadCard() = dataProcessor.getLastReadCard()
 
     suspend fun processManualPunchData(

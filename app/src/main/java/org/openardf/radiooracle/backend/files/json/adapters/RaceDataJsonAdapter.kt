@@ -6,6 +6,7 @@ import com.squareup.moshi.ToJson
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.json.temps.AliasJson
 import org.openardf.radiooracle.backend.files.json.temps.RaceJson
+import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
@@ -78,11 +79,19 @@ class RaceDataJsonAdapter(val dataProcessor: DataProcessor) {
         }
 
         val competitorData = ArrayList<CompetitorData>()
-        var highestStartingNum = raceJson.competitors
-            .maxByOrNull { c -> c.start_number ?: 0 }
-            ?.start_number ?: 0
+        val startNumberByDrawnStartTime = raceJson.competitors
+            .mapNotNull { json ->
+                json.competitor_start_time
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { runCatching { TimeProcessor.minuteStringToDuration(it) }.getOrNull() }
+            }
+            .distinct()
+            .sorted()
+            .withIndex()
+            .associate { (index, startTime) -> startTime to index + 1 }
 
-        // Preserve provided start numbers and assign stable new numbers to imported competitors missing one.
+        // Start numbers are departure slots. Recompute them from start times when
+        // the backup contains starts so simultaneous starters share a number.
         for (compJson in raceJson.competitors) {
             val cd = competitorAdapter.fromJson(compJson)
                 .also { it.competitorCategory.competitor.raceId = race.id }
@@ -92,10 +101,9 @@ class RaceDataJsonAdapter(val dataProcessor: DataProcessor) {
                     categories.find { compJson.competitor_category == it.category.name }?.category?.id
             }
 
-            if (cd.competitorCategory.competitor.startNumber == 0) {
-                highestStartingNum++
-                cd.competitorCategory.competitor.startNumber = highestStartingNum
-            }
+            cd.competitorCategory.competitor.drawnRelativeStartTime
+                ?.let(startNumberByDrawnStartTime::get)
+                ?.let { cd.competitorCategory.competitor.startNumber = it }
             competitorData.add(cd)
         }
 

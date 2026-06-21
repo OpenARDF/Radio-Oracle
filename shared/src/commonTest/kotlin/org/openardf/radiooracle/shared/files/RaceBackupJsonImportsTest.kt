@@ -43,6 +43,7 @@ class RaceBackupJsonImportsTest {
         assertEquals("Alice", competitor.firstName)
         assertEquals("Runner", competitor.lastName)
         assertEquals(1, competitor.startNumber)
+        assertEquals(1, category.competitors.single().startNumber)
         assertEquals(600, competitor.drawnStartTimeSeconds)
         assertEquals("M21", competitorData.competitorCategory.category?.name)
 

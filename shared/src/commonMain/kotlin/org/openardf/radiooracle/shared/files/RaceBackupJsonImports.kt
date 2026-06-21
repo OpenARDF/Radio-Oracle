@@ -34,6 +34,7 @@ import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
+import org.openardf.radiooracle.shared.event.EventStartNumbers
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** Imports Android `.ardfjs` full race backup JSON into the shared desktop project model. */
@@ -70,16 +71,9 @@ object RaceBackupJsonImports {
             )
         }
 
-        var highestStartNumber = root.array("competitors")
-            .maxOfOrNull { it.jsonObject.int("start_number") ?: 0 } ?: 0
         val competitorData = root.array("competitors").map { element ->
             val competitorJson = element.jsonObject
             val category = categoriesByName[competitorJson.string("competitor_category") ?: ""]
-            var startNumber = competitorJson.int("start_number") ?: 0
-            if (startNumber == 0) {
-                highestStartNumber += 1
-                startNumber = highestStartNumber
-            }
 
             val competitor = EventCompetitor(
                 id = idFactory(),
@@ -93,7 +87,7 @@ object RaceBackupJsonImports {
                 birthYear = competitorJson.int("birth_year"),
                 siNumber = competitorJson.int("si_number"),
                 siRent = competitorJson.boolean("si_rent") ?: false,
-                startNumber = startNumber,
+                startNumber = null,
                 drawnStartTimeSeconds = competitorJson.durationSeconds("competitor_start_time")
             )
             category?.let { categoryCompetitors[it.category.id]?.add(competitor) }
@@ -112,7 +106,7 @@ object RaceBackupJsonImports {
             parseUnmatchedReadout(element.jsonObject, raceId, raceStart, idFactory)
         }
 
-        return EventProjectFile(
+        return EventStartNumbers.assignFromDrawnStartTimes(EventProjectFile(
             raceData = EventRaceData(
                 race = race,
                 categories = categoriesWithCompetitors,
@@ -129,7 +123,7 @@ object RaceBackupJsonImports {
                     )
                 )
             )
-        )
+        ))
     }
 
     private fun parseCategory(

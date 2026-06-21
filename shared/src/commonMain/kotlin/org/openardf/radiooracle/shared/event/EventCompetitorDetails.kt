@@ -15,7 +15,7 @@ data class EventCompetitorDetails(
     val birthYearText: String,
     val categoryId: String?,
     val categoryName: String,
-    val startNumber: Int,
+    val startNumber: Int?,
     val startNumberText: String,
     val startTimeText: String,
     val siNumberText: String,
@@ -44,7 +44,7 @@ data class EventCompetitorDetails(
                             ?: competitor.categoryId?.let { categoryNamesById[it] }
                             ?: "",
                         startNumber = competitor.startNumber,
-                        startNumberText = competitor.startNumber.toString(),
+                        startNumberText = competitor.startNumber?.toString() ?: "",
                         startTimeText = competitor.drawnStartTimeSeconds?.let {
                             DurationFormatter.secondsToFormattedString(it, useMinutes = true)
                         } ?: "",
@@ -52,7 +52,7 @@ data class EventCompetitorDetails(
                         hasReadout = competitorData.readoutData != null
                     )
                 }
-                .sortedWith(compareBy<EventCompetitorDetails> { it.startNumber }.thenBy { it.fullName })
+                .sortedWith(compareBy<EventCompetitorDetails> { it.startNumber ?: Int.MAX_VALUE }.thenBy { it.fullName })
         }
     }
 }

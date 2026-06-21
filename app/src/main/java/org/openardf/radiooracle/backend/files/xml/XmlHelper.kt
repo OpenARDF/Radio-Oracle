@@ -272,7 +272,7 @@ object XmlHelper {
 
         // IOF StartTime is absolute, while competitors store starts relative to race start.
         serializer.startTag(null, "Start")
-        writeTextElement(serializer, "BibNumber", competitor.startNumber.toString())
+        writeTextElement(serializer, "StartNumber", competitor.startNumber.toString())
 
         val start = startZero + (competitor.drawnRelativeStartTime ?: Duration.ZERO)
         writeTextElement(serializer, "StartTime", TimeProcessor.formatIsoLocalDateTime(start))

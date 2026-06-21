@@ -47,10 +47,6 @@ interface CompetitorDao {
     @Query("SELECT COUNT(*) FROM competitor WHERE si_number=(:siNumber) AND race_id =(:raceId)  LIMIT 1")
     suspend fun checkIfSINumberExists(siNumber: Int, raceId: UUID): Int
 
-    /** Counts competitors using the start number in a race. */
-    @Query("SELECT COUNT(*) FROM competitor WHERE start_number=(:startNumber) AND race_id =(:raceId)  LIMIT 1")
-    suspend fun checkIfStartNumberExists(startNumber: Int, raceId: UUID): Int
-
     /** Inserts or updates a competitor. */
     @Upsert
     suspend fun createCompetitor(competitor: Competitor)

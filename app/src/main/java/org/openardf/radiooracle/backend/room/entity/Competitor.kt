@@ -15,10 +15,11 @@ import java.util.UUID
 
 /** Room entity for a registered competitor in a race. */
 @Entity(
-    tableName = "competitor", indices = [Index(
-        value = ["start_number", "race_id"],
-        unique = true
-    ), Index("race_id"), Index("category_id")],
+    tableName = "competitor", indices = [
+        Index(value = ["start_number", "race_id"]),
+        Index("race_id"),
+        Index("category_id")
+    ],
     foreignKeys = [
         ForeignKey(
             entity = Category::class,
