@@ -51,6 +51,9 @@ series-start-fairness manifest current:
 series-optimize-start-fairness manifest current flags="":
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-optimize-start-fairness "{{manifest}}" "{{current}}" {{flags}}'
 
+series-start-fairness-verify manifest current flags="":
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-start-fairness-verify "{{manifest}}" "{{current}}" {{flags}}'
+
 event-start-list-verify event flags="":
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-start-list-verify "{{event}}" {{flags}}'
 

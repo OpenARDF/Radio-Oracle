@@ -13,9 +13,11 @@ import org.openardf.radiooracle.desktop.usb.DesktopSerialPortProvider
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
 import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
 import org.openardf.radiooracle.shared.event.CompetitorCsvImportDuplicatePolicy
+import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesIssueSeverity
 import org.openardf.radiooracle.shared.event.EventStartListDetails
 import org.openardf.radiooracle.shared.event.EventStartListRuleSeverity
@@ -43,6 +45,47 @@ private data class EventStartListVerificationResult(
     val generatedUniqueOrderCount: Int,
     val generatedPerfectOrderCount: Int,
     val generatedPerfectOrderSignatures: List<String>
+)
+
+private data class SeriesStartFairnessVerificationEvent(
+    val event: EventSeriesEvent,
+    val path: Path,
+    val projectFile: EventProjectFile,
+    val lockedForOptimization: Boolean,
+    val signatures: List<SeriesStartFairnessThirdSignature>,
+    val exhaustedOrderCount: Long,
+    val eventPerfectOrderCount: Long
+)
+
+private data class SeriesStartFairnessThirdSignature(
+    val identityThirds: Map<String, Int>,
+    val signature: String
+)
+
+private data class SeriesStartFairnessVerificationScore(
+    val unevenHistoryCount: Int,
+    val spreadSum: Int,
+    val squaredSpreadSum: Int
+) : Comparable<SeriesStartFairnessVerificationScore> {
+    val value: Int =
+        unevenHistoryCount * 100_000 +
+            spreadSum * 1_000 +
+            squaredSpreadSum
+
+    override fun compareTo(other: SeriesStartFairnessVerificationScore): Int =
+        compareValuesBy(
+            this,
+            other,
+            SeriesStartFairnessVerificationScore::unevenHistoryCount,
+            SeriesStartFairnessVerificationScore::spreadSum,
+            SeriesStartFairnessVerificationScore::squaredSpreadSum
+        )
+}
+
+private data class SeriesStartFairnessExhaustiveResult(
+    val bestScore: SeriesStartFairnessVerificationScore,
+    val optimalCombinationCount: Long,
+    val sampleOptimalCombinationSignatures: List<String>
 )
 
 /**
@@ -127,6 +170,7 @@ object DesktopAutomationCli {
             "event-series-match" -> eventSeriesMatch(commandArgs, out, err)
             "event-series-start-fairness" -> eventSeriesStartFairness(commandArgs, out, err)
             "event-series-optimize-start-fairness" -> eventSeriesOptimizeStartFairness(commandArgs, out, err)
+            "event-series-start-fairness-verify" -> eventSeriesStartFairnessVerify(commandArgs, out, err)
             "event-start-list-verify" -> eventStartListVerify(commandArgs, out, err)
             "readiness-summary" -> readinessSummary(commandArgs, out, err)
             "recalculate-results" -> recalculateResults(commandArgs, out, err)
@@ -491,6 +535,187 @@ object DesktopAutomationCli {
         )
     }
 
+    private fun verifySeriesEventStartSignatures(
+        event: EventSeriesEvent,
+        path: Path,
+        projectFile: EventProjectFile,
+        maxEventCompetitors: Int,
+        maxEventOrders: Long
+    ): SeriesStartFairnessVerificationEvent {
+        val locked = projectFile.raceData.effectiveStartDrawSettings().lockedForSeriesOptimization
+        if (locked) {
+            return SeriesStartFairnessVerificationEvent(
+                event = event,
+                path = path,
+                projectFile = projectFile,
+                lockedForOptimization = true,
+                signatures = listOf(currentSeriesThirdSignature(projectFile)),
+                exhaustedOrderCount = 0,
+                eventPerfectOrderCount = 0
+            )
+        }
+        val settings = projectFile.raceData.effectiveStartDrawSettings()
+        val competitorData = drawableCompetitorData(projectFile)
+        require(competitorData.size <= maxEventCompetitors) {
+            "Event '${event.displayName}' has ${competitorData.size} drawable competitors; refusing exhaustive search above " +
+                "--max-event-competitors $maxEventCompetitors."
+        }
+        val possibleOrderCount = factorial(competitorData.size)
+        require(possibleOrderCount <= maxEventOrders) {
+            "Event '${event.displayName}' has $possibleOrderCount possible start orders; refusing exhaustive search above " +
+                "--max-event-orders $maxEventOrders."
+        }
+
+        val mutableOrder = competitorData.toMutableList()
+        val signatures = linkedMapOf<String, SeriesStartFairnessThirdSignature>()
+        var exhaustedOrderCount = 0L
+        var eventPerfectOrderCount = 0L
+
+        fun visit(index: Int) {
+            if (index == mutableOrder.size) {
+                exhaustedOrderCount++
+                val orderedIds = mutableOrder.map { it.competitorCategory.competitor.id }
+                val candidate = projectFile.withDrawnOrder(orderedIds, settings)
+                if (EventStartListDetails.from(candidate.raceData).quality.score == 100) {
+                    eventPerfectOrderCount++
+                    val signature = currentSeriesThirdSignature(candidate)
+                    signatures.putIfAbsent(signature.signature, signature)
+                }
+                return
+            }
+            for (candidateIndex in index until mutableOrder.size) {
+                mutableOrder.swap(index, candidateIndex)
+                visit(index + 1)
+                mutableOrder.swap(index, candidateIndex)
+            }
+        }
+
+        visit(0)
+        return SeriesStartFairnessVerificationEvent(
+            event = event,
+            path = path,
+            projectFile = projectFile,
+            lockedForOptimization = false,
+            signatures = signatures.values.toList(),
+            exhaustedOrderCount = exhaustedOrderCount,
+            eventPerfectOrderCount = eventPerfectOrderCount
+        )
+    }
+
+    private fun exhaustiveSeriesStartFairnessSearch(
+        events: List<SeriesStartFairnessVerificationEvent>,
+        sampleLimit: Int
+    ): SeriesStartFairnessExhaustiveResult {
+        var bestScore: SeriesStartFairnessVerificationScore? = null
+        var optimalCombinationCount = 0L
+        val selected = mutableListOf<SeriesStartFairnessThirdSignature>()
+        val samples = mutableListOf<String>()
+
+        fun visit(eventIndex: Int) {
+            if (eventIndex == events.size) {
+                val score = seriesVerificationScore(selected)
+                val currentBest = bestScore
+                if (currentBest == null || score < currentBest) {
+                    bestScore = score
+                    optimalCombinationCount = 1
+                    samples.clear()
+                    if (samples.size < sampleLimit) {
+                        samples += selected.joinToString("|") { it.signature }
+                    }
+                } else if (score == currentBest) {
+                    optimalCombinationCount++
+                    if (samples.size < sampleLimit) {
+                        samples += selected.joinToString("|") { it.signature }
+                    }
+                }
+                return
+            }
+            events[eventIndex].signatures.forEach { signature ->
+                selected += signature
+                visit(eventIndex + 1)
+                selected.removeAt(selected.lastIndex)
+            }
+        }
+
+        visit(0)
+        return SeriesStartFairnessExhaustiveResult(
+            bestScore = requireNotNull(bestScore) { "No series start-third combinations were available." },
+            optimalCombinationCount = optimalCombinationCount,
+            sampleOptimalCombinationSignatures = samples
+        )
+    }
+
+    private fun seriesVerificationScore(
+        signatures: List<SeriesStartFairnessThirdSignature>
+    ): SeriesStartFairnessVerificationScore {
+        val histories = signatures
+            .flatMap { signature -> signature.identityThirds.map { (identity, third) -> identity to third } }
+            .groupBy({ it.first }, { it.second })
+            .values
+        var unevenHistoryCount = 0
+        var spreadSum = 0
+        var squaredSpreadSum = 0
+        histories.forEach { history ->
+            val counts = (1..3).map { third -> history.count { it == third } }
+            val spread = counts.maxOrNull().orZero() - counts.minOrNull().orZero()
+            if (history.size >= 2 && spread > 1) {
+                unevenHistoryCount++
+            }
+            spreadSum += spread
+            squaredSpreadSum += spread * spread
+        }
+        return SeriesStartFairnessVerificationScore(
+            unevenHistoryCount = unevenHistoryCount,
+            spreadSum = spreadSum,
+            squaredSpreadSum = squaredSpreadSum
+        )
+    }
+
+    private fun currentSeriesThirdSignature(projectFile: EventProjectFile): SeriesStartFairnessThirdSignature {
+        val scheduled = projectFile.raceData.competitorData
+            .mapNotNull { data ->
+                val competitor = data.competitorCategory.competitor
+                val startSeconds = competitor.drawnStartTimeSeconds ?: return@mapNotNull null
+                startSeconds to competitor
+            }
+            .sortedWith(compareBy({ it.first }, { it.second.startNumber }, { it.second.id }))
+        val identityThirds = scheduled.mapIndexedNotNull { index, (_, competitor) ->
+            val identity = seriesStartFairnessIdentityKey(competitor) ?: return@mapIndexedNotNull null
+            identity to startThirdForSlot(index, scheduled.size)
+        }.toMap()
+        val signature = identityThirds.toSortedMap()
+            .entries
+            .joinToString(",") { "${it.key}:${it.value}" }
+        return SeriesStartFairnessThirdSignature(identityThirds, signature)
+    }
+
+    private fun drawableCompetitorData(projectFile: EventProjectFile): List<EventCompetitorData> =
+        projectFile.raceData.competitorData
+            .filter { data ->
+                val competitor = data.competitorCategory.competitor
+                val categoryId = data.competitorCategory.category?.id ?: competitor.categoryId
+                categoryId != null
+            }
+            .sortedWith(
+                compareBy<EventCompetitorData> { it.competitorCategory.competitor.startNumber }
+                    .thenBy { it.competitorCategory.competitor.id }
+            )
+
+    private fun seriesStartFairnessIdentityKey(competitor: EventCompetitor): String? =
+        competitor.siNumber?.takeIf { it > 0 }?.let { "si:$it" }
+            ?: competitor.bibNumber.trim().takeIf { it.isNotEmpty() }?.let { "bib:${it.uppercase()}" }
+            ?: competitor.callSign.trim().takeIf { it.isNotEmpty() }?.let { "call:${it.uppercase()}" }
+
+    private fun startThirdForSlot(slotIndex: Int, slotCount: Int): Int =
+        if (slotCount <= 0) {
+            1
+        } else {
+            (((slotIndex * 3) / slotCount) + 1).coerceIn(1, 3)
+        }
+
+    private fun factorial(value: Int): Long =
+        (2..value).fold(1L) { product, item -> product * item }
+
     private fun EventProjectFile.withDrawnOrder(
         orderedCompetitorIds: List<String>,
         settings: StartDrawSettings
@@ -535,6 +760,8 @@ object DesktopAutomationCli {
         this[firstIndex] = this[secondIndex]
         this[secondIndex] = first
     }
+
+    private fun Int?.orZero(): Int = this ?: 0
 
     private fun importAndroidEventFile(args: List<String>, out: PrintStream, err: PrintStream): Int {
         val sourceText = args.getOrNull(0)
@@ -965,6 +1192,128 @@ object DesktopAutomationCli {
         }
     }
 
+    private fun eventSeriesStartFairnessVerify(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val manifestText = args.getOrNull(0)
+        val currentEventText = args.getOrNull(1)
+        if (manifestText.isNullOrBlank() || currentEventText.isNullOrBlank()) {
+            err.println("event-series-start-fairness-verify requires Event Series manifest and current Event File paths.")
+            return 64
+        }
+        val maxEvents = optionValue(args, "--max-events")?.toIntOrNull() ?: 4
+        val maxEventCompetitors = optionValue(args, "--max-event-competitors")?.toIntOrNull() ?: 9
+        val maxEventOrders = optionValue(args, "--max-event-orders")?.toLongOrNull() ?: 500_000L
+        val maxCombinations = optionValue(args, "--max-combinations")?.toLongOrNull() ?: 1_000_000L
+        val optimizerSamples = optionValue(args, "--optimizer-samples")?.toIntOrNull() ?: 0
+        val optimizerPasses = optionValue(args, "--optimizer-passes")?.toIntOrNull() ?: 3
+        val optimizerCandidates = optionValue(args, "--optimizer-candidates")?.toIntOrNull() ?: 32
+        val sampleLimit = optionValue(args, "--sample-limit")?.toIntOrNull() ?: 12
+        return runCatching {
+            require(maxEvents >= 1) { "--max-events must be at least 1." }
+            require(maxEventCompetitors >= 1) { "--max-event-competitors must be at least 1." }
+            require(maxEventOrders >= 1L) { "--max-event-orders must be at least 1." }
+            require(maxCombinations >= 1L) { "--max-combinations must be at least 1." }
+            require(optimizerSamples >= 0) { "--optimizer-samples must be zero or greater." }
+            require(optimizerPasses >= 1) { "--optimizer-passes must be at least 1." }
+            require(optimizerCandidates >= 1) { "--optimizer-candidates must be at least 1." }
+
+            val manifestPath = Path.of(manifestText)
+            val currentEventPath = Path.of(currentEventText)
+            val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+            val seriesFolder = requireNotNull(manifestPath.parent) {
+                "Event Series manifest must have a parent folder."
+            }
+            val sortedEvents = seriesFile.sortedEvents()
+            require(sortedEvents.size <= maxEvents) {
+                "Series has ${sortedEvents.size} events; refusing exhaustive search above --max-events $maxEvents."
+            }
+            val verificationEvents = sortedEvents.map { event ->
+                val eventPath = seriesFolder.resolve(event.eventFilePath).normalize()
+                require(DesktopEventSeriesFiles.exists(eventPath)) {
+                    "Event File '${event.displayName}' is missing."
+                }
+                val projectFile = DesktopEventSeriesFiles.readEvent(eventPath)
+                verifySeriesEventStartSignatures(
+                    event = event,
+                    path = eventPath,
+                    projectFile = projectFile,
+                    maxEventCompetitors = maxEventCompetitors,
+                    maxEventOrders = maxEventOrders
+                )
+            }
+            val combinationCount = verificationEvents.fold(1L) { product, event ->
+                val size = event.signatures.size.coerceAtLeast(1).toLong()
+                require(product <= maxCombinations / size) {
+                    "Series signature search would exceed --max-combinations $maxCombinations."
+                }
+                product * size
+            }
+            val currentScore = seriesVerificationScore(
+                verificationEvents.map { currentSeriesThirdSignature(it.projectFile) }
+            )
+            val exhaustive = exhaustiveSeriesStartFairnessSearch(
+                events = verificationEvents,
+                sampleLimit = sampleLimit.coerceAtLeast(0)
+            )
+            val optimizerResults = (1..optimizerSamples).map { sampleIndex ->
+                val result = DesktopEventSeriesActions.optimizeStartFairness(
+                    store = DesktopEventSeriesFiles,
+                    manifestPath = manifestPath,
+                    currentEventPath = currentEventPath,
+                    maxPasses = optimizerPasses,
+                    candidatesPerEvent = optimizerCandidates,
+                    seedSalt = "verify-$sampleIndex"
+                )
+                val optimizedProjectsByEventId = result.updatedEventFiles
+                    .associate { it.seriesEventId to it.projectFile }
+                val optimizedSignatures = verificationEvents.map { event ->
+                    currentSeriesThirdSignature(optimizedProjectsByEventId[event.event.seriesEventId] ?: event.projectFile)
+                }
+                seriesVerificationScore(optimizedSignatures)
+            }
+            val bestOptimizerScore = optimizerResults.minOrNull()
+            val optimizerFoundOptimalCount = optimizerResults.count { it == exhaustive.bestScore }
+            out.println(
+                jsonObject(
+                    "command" to "event-series-start-fairness-verify",
+                    "manifest" to manifestPath.toAbsolutePath().normalize().toString(),
+                    "currentEvent" to currentEventPath.toAbsolutePath().normalize().toString(),
+                    "eventCount" to verificationEvents.size,
+                    "exhaustiveSearchComplete" to true,
+                    "combinationCount" to combinationCount,
+                    "currentScore" to currentScore.value,
+                    "currentUnevenHistoryCount" to currentScore.unevenHistoryCount,
+                    "currentSpreadSum" to currentScore.spreadSum,
+                    "bestPossibleScore" to exhaustive.bestScore.value,
+                    "bestPossibleUnevenHistoryCount" to exhaustive.bestScore.unevenHistoryCount,
+                    "bestPossibleSpreadSum" to exhaustive.bestScore.spreadSum,
+                    "optimalCombinationCount" to exhaustive.optimalCombinationCount,
+                    "currentIsOptimal" to (currentScore == exhaustive.bestScore),
+                    "optimizerSampleCount" to optimizerSamples,
+                    "optimizerFoundOptimalCount" to optimizerFoundOptimalCount,
+                    "optimizerFoundOptimal" to (optimizerFoundOptimalCount > 0),
+                    "bestOptimizerScore" to bestOptimizerScore?.value,
+                    "bestOptimizerUnevenHistoryCount" to bestOptimizerScore?.unevenHistoryCount,
+                    "bestOptimizerSpreadSum" to bestOptimizerScore?.spreadSum,
+                    "events" to verificationEvents.map { event ->
+                        mapOf(
+                            "seriesEventId" to event.event.seriesEventId,
+                            "displayName" to event.event.displayName,
+                            "lockedForOptimization" to event.lockedForOptimization,
+                            "exhaustedOrderCount" to event.exhaustedOrderCount,
+                            "eventPerfectOrderCount" to event.eventPerfectOrderCount,
+                            "uniqueThirdSignatureCount" to event.signatures.size
+                        )
+                    },
+                    "sampleOptimalCombinationSignatures" to exhaustive.sampleOptimalCombinationSignatures
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Event Series start fairness verification failed: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
     private fun readinessSummary(args: List<String>, out: PrintStream, err: PrintStream): Int {
         val pathText = args.firstOrNull { !it.startsWith("--") }
         if (pathText.isNullOrBlank()) {
@@ -1364,6 +1713,8 @@ object DesktopAutomationCli {
                                           Print start fairness input diagnostics for the current series event.
           event-series-optimize-start-fairness <manifest-path> <current-event-path> [--write] [--seed-salt <text>]
                                           Try to improve or preserve series start fairness with randomized candidates; writes changed Event Files only with --write.
+          event-series-start-fairness-verify <manifest-path> <current-event-path> [--max-events <n>] [--max-event-competitors <n>] [--max-event-orders <n>] [--max-combinations <n>] [--optimizer-samples <n>]
+                                          Exhaustively verify small series start-third combinations and compare optimizer reach.
           event-start-list-verify <event-path> [--max-competitors <n>] [--sample-limit <n>] [--generator-samples <n>]
                                           Exhaustively count event start orders that score 100/100.
           readiness-summary [--require-ready] <event-path>
