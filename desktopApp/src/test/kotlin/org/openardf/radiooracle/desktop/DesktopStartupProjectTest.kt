@@ -89,6 +89,15 @@ class DesktopStartupProjectTest {
         )
     }
 
+    @Test
+    fun eventFilePageShowsParentSeriesName() {
+        assertEquals(
+            "Parent Series: USA Championships 2026",
+            desktopParentSeriesText(EventSeriesUiContext(Path.of("series.radio-oracle.json"), "USA Championships 2026"))
+        )
+        assertNull(desktopParentSeriesText(null))
+    }
+
     private fun projectFile(name: String): EventProjectFile =
         EventProjectFile(
             raceData = EventRaceData(

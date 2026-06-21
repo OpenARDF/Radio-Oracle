@@ -8124,6 +8124,11 @@ internal fun desktopTopBarEventText(projectFile: EventProjectFile?): String =
 internal fun desktopTopBarSeriesText(seriesContext: EventSeriesUiContext): String =
     "Series: ${seriesContext.seriesName.ifBlank { "Untitled Series" }}"
 
+internal fun desktopParentSeriesText(seriesContext: EventSeriesUiContext?): String? =
+    seriesContext?.seriesName
+        ?.ifBlank { "Untitled Series" }
+        ?.let { "Parent Series: $it" }
+
 private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEditDraft? {
     competitorData.forEach { data ->
         val readoutData = data.readoutData ?: return@forEach
@@ -8811,6 +8816,7 @@ private fun SectionWorkspace(
             RaceDetailsPanel(
                 details = EventRaceDetails.from(projectFile.raceData.race),
                 eventFilePath = eventFilePath,
+                parentSeriesText = desktopParentSeriesText(eventSeriesUiContext),
                 onRenameRace = onRenameRace,
                 onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
                 onUpdateRaceSettings = onUpdateRaceSettings,
@@ -15214,6 +15220,7 @@ private fun CategoryDeleteButton(
 private fun RaceDetailsPanel(
     details: EventRaceDetails,
     eventFilePath: Path?,
+    parentSeriesText: String?,
     onRenameRace: (String) -> Unit,
     onUpdateRaceStartDateTime: (String) -> Unit,
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
@@ -15295,6 +15302,16 @@ private fun RaceDetailsPanel(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        parentSeriesText?.let {
+            Text(
+                text = it,
+                color = DesktopPalette.SeriesNavigation,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
