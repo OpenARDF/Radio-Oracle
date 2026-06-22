@@ -663,6 +663,7 @@ class DesktopCourseKmlImportTest {
         assertEquals("S", protectedCourseInfo.controlPoints.single { it.type == ControlPointType.SEPARATOR }.label)
         assertEquals(-94.9960, spectator.longitude, 0.000001)
         assertEquals(listOf("End Corridor_Strt", "End Corridor_S"), waypoints)
+        assertEquals(-94.99575, protectedCourseInfo.courseObjects.single { it.label == "End Corridor_S" }.longitude, 0.000001)
     }
 
     @Test
@@ -1994,7 +1995,7 @@ class DesktopCourseKmlImportTest {
                   -94.9980,39.0000,0
                   -94.9970,39.0000,0
                   -94.9960,39.0000,0
-                  -94.9950,39.0000,0
+                  -94.99575,39.0000,0
                 </coordinates>
               </LineString>
             </Placemark>
@@ -2285,7 +2286,7 @@ class DesktopCourseKmlImportTest {
             </Placemark>
             <Placemark>
               <name>End Corridor_S</name>
-              <Point><coordinates>-94.9950,39.0000,0</coordinates></Point>
+              <Point><coordinates>-94.99575,39.0000,0</coordinates></Point>
             </Placemark>
             <Placemark>
               <name>F1</name>

@@ -1635,7 +1635,9 @@ object DesktopCourseKmlImporter {
             .filterNot { it.name.isCourseEndpointName() }
             .filterNot { importedPoint ->
                 matchedControls.any { control ->
-                    importedPoint.point.distanceMetersTo(control.point) <= CONTROL_ROUTE_TOLERANCE_METERS ||
+                    // A corridor or similar mandatory waypoint can legitimately sit close to a
+                    // control; suppress only true duplicates, not merely nearby named points.
+                    importedPoint.point.locationKey() == control.point.locationKey() ||
                         importedPoint.name.normalizedCourseName() == control.displayLabel.normalizedCourseName() ||
                         importedPoint.name.normalizedCourseName() == control.label.normalizedCourseName()
                 }
