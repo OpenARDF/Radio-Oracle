@@ -385,7 +385,7 @@ object DesktopCourseAnalyzer {
         val providedControls = idealOrderText
             ?.let { idealOrder ->
                 runCatching {
-                    val ids = ProtectedIdealOrderRules.resolveControlIds(idealOrder, assignedControls)
+                    val ids = resolveProtectedIdealOrderControlIds(idealOrder, assignedControls, protectedCourseInfo)
                     ids.mapNotNull { id -> assignedControls.firstOrNull { it.id == id } }
                 }.getOrNull()
             }
@@ -560,7 +560,7 @@ object DesktopCourseAnalyzer {
         val providedControlsFromOrder = idealOrderText
             ?.let { idealOrder ->
                 runCatching {
-                    val ids = ProtectedIdealOrderRules.resolveControlIds(idealOrder, assignedControls)
+                    val ids = resolveProtectedIdealOrderControlIds(idealOrder, assignedControls, protectedCourseInfo)
                     ids.mapNotNull { id -> assignedControls.firstOrNull { it.id == id } }
                 }.getOrElse { error ->
                     missing += "Imported route order could not be resolved: ${error.message ?: error::class.simpleName}."
@@ -1151,13 +1151,57 @@ object DesktopCourseAnalyzer {
             ?.let { idealOrder ->
                 runCatching {
                     val controlsByProtectedOrder = protectedControls.associateBy { it.id }
-                    ProtectedIdealOrderRules.resolveControlIds(idealOrder, protectedControls)
+                    resolveProtectedIdealOrderControlIds(idealOrder, protectedControls, courseInfo)
                         .mapNotNull { controlsByProtectedOrder[it] }
                         .distinctBy { it.id }
                 }.getOrNull()
             }
             ?.takeIf { it.isNotEmpty() }
             ?: protectedControls
+    }
+
+    private fun resolveProtectedIdealOrderControlIds(
+        idealOrderText: String,
+        controls: List<EventControl>,
+        courseInfo: ProtectedCourseInfo?
+    ): List<String> {
+        return runCatching {
+            ProtectedIdealOrderRules.resolveControlIds(idealOrderText, controls)
+        }.getOrElse { originalError ->
+            val controlsWithStoredImportLabels = controls + protectedCourseInfoAliasControls(controls, courseInfo)
+            if (controlsWithStoredImportLabels.size == controls.size) {
+                throw originalError
+            }
+            runCatching {
+                ProtectedIdealOrderRules.resolveControlIds(idealOrderText, controlsWithStoredImportLabels)
+            }.getOrElse {
+                throw originalError
+            }
+        }
+    }
+
+    private fun protectedCourseInfoAliasControls(
+        controls: List<EventControl>,
+        courseInfo: ProtectedCourseInfo?
+    ): List<EventControl> {
+        if (courseInfo == null) {
+            return emptyList()
+        }
+        val controlsById = controls.associateBy { it.id }
+        // Imported course data stores the labels that were present in the source file. Keep those
+        // labels available for resolving older protected ideal orders after a user edits a control's
+        // current public label.
+        return courseInfo.controlPoints.map { protectedControl ->
+            val currentControl = controlsById[protectedControl.controlId]
+            if (currentControl != null) {
+                currentControl.copy(
+                    label = protectedControl.label,
+                    publicLabel = protectedControl.label
+                )
+            } else {
+                protectedControl.toEventControl("")
+            }
+        }
     }
 
     private fun EventControl.matchesProtectedControl(protectedControl: ProtectedCourseControlPoint): Boolean {

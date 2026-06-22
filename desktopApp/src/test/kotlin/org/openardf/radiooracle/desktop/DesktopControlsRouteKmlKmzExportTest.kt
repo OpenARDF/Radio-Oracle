@@ -47,7 +47,8 @@ class DesktopControlsRouteKmlKmzExportTest {
         assertTrue(kml.contains("<Style id=\"courseControlDoughnutStyle\">"))
         assertTrue(kml.contains("<Style id=\"courseStartStyle\">"))
         assertTrue(kml.contains("<Style id=\"courseFinishStyle\">"))
-        assertTrue(kml.contains("<scale>1.2</scale><color>ffef72ed</color>"))
+        assertTrue(kml.contains("<scale>1.2</scale><color>ffef72ed</color><colorMode>normal</colorMode>"))
+        assertTrue(kml.contains("<LabelStyle><color>ffef72ed</color><colorMode>normal</colorMode></LabelStyle>"))
         assertTrue(kml.contains("<href>http://maps.google.com/mapfiles/kml/shapes/donut.png</href>"))
         assertTrue(kml.contains("<href>http://maps.google.com/mapfiles/kml/shapes/triangle.png</href>"))
         assertTrue(kml.contains("<href>http://maps.google.com/mapfiles/kml/shapes/target.png</href>"))
@@ -58,6 +59,10 @@ class DesktopControlsRouteKmlKmzExportTest {
         assertTrue(kml.contains("<name>Start</name>"))
         assertTrue(kml.contains("<name>Finish</name>"))
         assertTrue(kml.contains("<name>Spectator</name>"))
+        assertTrue(kml.placemarkNamed("Start").contains("<styleUrl>#courseStartStyle</styleUrl>"))
+        assertTrue(kml.placemarkNamed("Finish").contains("<styleUrl>#courseFinishStyle</styleUrl>"))
+        assertTrue(kml.placemarkNamed("Spectator").contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
+        assertTrue(kml.placemarkNamed("1").contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
         val routeColor = extractRouteColorByCategoryId(kml, "cat-m21")
         assertNotEquals("ffffffff", routeColor)
         assertNotEquals("ff00ffff", routeColor)
@@ -201,6 +206,14 @@ class DesktopControlsRouteKmlKmzExportTest {
         val colorRegex = Regex("<Style id=\"$routeStyleId\">[\\s\\S]*?<color>([0-9a-fA-F]{8})</color>")
         val match = colorRegex.find(kml) ?: error("Missing route style for category $categoryId")
         return match.groupValues[1].lowercase()
+    }
+
+    private fun String.placemarkNamed(name: String): String {
+        val escapedName = Regex.escape(name)
+        return Regex("<Placemark>[\\s\\S]*?<name>$escapedName</name>[\\s\\S]*?</Placemark>")
+            .find(this)
+            ?.value
+            ?: error("Missing Placemark named $name")
     }
 
     private fun sampleCourseInfo() = ProtectedCourseInfo(

@@ -874,6 +874,7 @@ class DesktopCourseAnalyzerTest {
         assertTrue(kmlText.contains("<href>http://maps.google.com/mapfiles/kml/shapes/triangle.png</href>"))
         assertTrue(kmlText.contains("<href>http://maps.google.com/mapfiles/kml/shapes/target.png</href>"))
         assertTrue(kmlText.contains("<color>ffef72ed</color>"))
+        assertTrue(kmlText.contains("<LabelStyle><color>ffef72ed</color><colorMode>normal</colorMode></LabelStyle>"))
         assertTrue(kmlText.contains("<scale>1.2</scale>"))
         assertTrue(kmlText.contains("<styleUrl>#courseStartStyle</styleUrl>"))
         assertTrue(kmlText.contains("<styleUrl>#courseFinishStyle</styleUrl>"))
@@ -882,6 +883,10 @@ class DesktopCourseAnalyzerTest {
         assertTrue(kmlText.contains("<name>Finish</name>"))
         assertTrue(kmlText.contains("<name>31</name>"))
         assertTrue(kmlText.contains("<name>B</name>"))
+        assertTrue(kmlText.placemarkNamed("Start").contains("<styleUrl>#courseStartStyle</styleUrl>"))
+        assertTrue(kmlText.placemarkNamed("Finish").contains("<styleUrl>#courseFinishStyle</styleUrl>"))
+        assertTrue(kmlText.placemarkNamed("31").contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
+        assertTrue(kmlText.placemarkNamed("B").contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
         assertEquals(
             List(summary.kmlFolders.size) { expectedFileStem },
             kmlLineStringPlacemarkNames(kmlText)
@@ -940,6 +945,23 @@ class DesktopCourseAnalyzerTest {
         val kmlText = Files.readString(kmlPath)
         assertTrue(kmlText.contains("<name>B</name>"))
         assertTrue(kmlLineStringCoordinateLines(kmlText).flatten().any { it.startsWith("-94.96000000,39.01000000") })
+    }
+
+    @Test
+    fun importedRouteAnalysisSurvivesPublicLabelChangeAfterImport() {
+        val protectedInfo = protectedInfo(foxCount = 3)
+        val project = projectFile(foxCount = 3).withControlPublicLabel("control-beacon", "B")
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = project,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = protectedInfo.idealOrder
+        )
+
+        assertTrue(summary.missingElements.none { it.contains("Imported route order") })
+        assertEquals(listOf("S", "31", "32", "33", "B", "F"), summary.providedIdealOrder)
+        assertEquals("B", summary.kmlFolders.single { it.title == "Imported foxes and route" }.routeStops.single { it.label == "B" }.label)
     }
 
     @Test
@@ -1616,6 +1638,19 @@ class DesktopCourseAnalyzerTest {
         )
     }
 
+    private fun EventProjectFile.withControlPublicLabel(controlId: String, publicLabel: String): EventProjectFile =
+        copy(
+            raceData = raceData.copy(
+                controls = raceData.controls.map { control ->
+                    if (control.id == controlId) {
+                        control.copy(publicLabel = publicLabel)
+                    } else {
+                        control
+                    }
+                }
+            )
+        )
+
     private fun projectFile(
         foxCount: Int,
         publicLabels: List<String>? = null,
@@ -1833,6 +1868,14 @@ class DesktopCourseAnalyzerTest {
                     ?.get(1)
             }
             .toList()
+
+    private fun String.placemarkNamed(name: String): String {
+        val escapedName = Regex.escape(name)
+        return Regex("<Placemark>[\\s\\S]*?<name>$escapedName</name>[\\s\\S]*?</Placemark>")
+            .find(this)
+            ?.value
+            ?: error("Missing Placemark named $name")
+    }
 
     private fun pdfRouteMapLineCommand(
         from: DesktopCourseRouteMapPoint,

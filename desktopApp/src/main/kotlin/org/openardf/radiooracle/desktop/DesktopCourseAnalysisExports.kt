@@ -301,8 +301,10 @@ object DesktopCourseAnalysisExports {
         appendLine("      <IconStyle>")
         appendLine("        <scale>${DesktopCourseKmlStyle.MarkerScale}</scale>")
         appendLine("        <color>${DesktopCourseKmlStyle.MarkerColor}</color>")
+        appendLine("        <colorMode>normal</colorMode>")
         appendLine("        <Icon><href>$iconUrl</href></Icon>")
         appendLine("      </IconStyle>")
+        appendLine("      <LabelStyle><color>${DesktopCourseKmlStyle.MarkerColor}</color><colorMode>normal</colorMode></LabelStyle>")
         appendLine("    </Style>")
     }
 
