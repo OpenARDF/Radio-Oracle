@@ -61,20 +61,20 @@ class DesktopCourseKmlImportTest {
         assertEquals("31 32", summary.categoryAssignmentUpdates.single().controlPointsText)
         assertNotNull(category.encryptedIdealOrder)
         assertNotNull(category.encryptedCourseInfo)
-        assertEquals("1 2", DesktopProtectedCourseOrder.decrypt(category.encryptedIdealOrder!!, "course-key"))
+        assertEquals("31 32", DesktopProtectedCourseOrder.decrypt(category.encryptedIdealOrder!!, "course-key"))
 
         val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
             category.encryptedCourseInfo!!,
             "course-key"
         )
-        assertEquals("1 2", protectedCourseInfo.idealOrder)
+        assertEquals("31 32", protectedCourseInfo.idealOrder)
         assertTrue(protectedCourseInfo.lengthMeters!! > 100)
         assertTrue(protectedCourseInfo.climbMeters!! >= 12)
         assertEquals(kmlPath.fileName.toString(), protectedCourseInfo.sourceName)
         assertEquals(summary.sourceSha256, protectedCourseInfo.sourceSha256)
         assertEquals(64, protectedCourseInfo.sourceSha256.length)
         assertTrue(protectedCourseInfo.route.isNotEmpty())
-        assertEquals(listOf("Start", "1", "2", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
+        assertEquals(listOf("Start", "31", "32", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
         assertTrue(protectedCourseInfo.courseObjects.all { it.elevationMeters != null })
         assertTrue(updated.raceData.controls.all { it.latitude == null && it.longitude == null })
     }
@@ -102,9 +102,9 @@ class DesktopCourseKmlImportTest {
             "course-key"
         )
         assertEquals(1, summary.importedCategoryCount)
-        assertEquals("1 2", protectedCourseInfo.idealOrder)
+        assertEquals("31 32", protectedCourseInfo.idealOrder)
         assertEquals(
-            listOf("Start", "1", "Gate A", "2", "Finish"),
+            listOf("Start", "31", "Gate A", "32", "Finish"),
             protectedCourseInfo.courseObjects.map { it.label }
         )
         val waypoint = protectedCourseInfo.courseObjects.single { it.label == "Gate A" }
@@ -137,9 +137,9 @@ class DesktopCourseKmlImportTest {
         assertEquals(1, summary.routeCount)
         assertEquals(1, summary.importedCategoryCount)
         assertEquals(2, summary.matchedControlPointCount)
-        assertEquals("1 2", protectedCourseInfo.idealOrder)
+        assertEquals("31 32", protectedCourseInfo.idealOrder)
         assertEquals(gpxPath.fileName.toString(), protectedCourseInfo.sourceName)
-        assertEquals(listOf("1", "2"), protectedCourseInfo.controlPoints.map { it.label })
+        assertEquals(listOf("31", "32"), protectedCourseInfo.controlPoints.map { it.label })
         assertEquals("31 32", summary.categoryAssignmentUpdates.single().controlPointsText)
     }
 
@@ -187,8 +187,8 @@ class DesktopCourseKmlImportTest {
             updated.raceData.categories.single().category.encryptedCourseInfo!!,
             "course-key"
         )
-        assertEquals("1 2 M", protectedCourseInfo.idealOrder)
-        assertEquals(listOf("Start", "1", "2", "M", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
+        assertEquals("31 32 M", protectedCourseInfo.idealOrder)
+        assertEquals(listOf("Start", "31", "32", "M", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
         assertEquals(-94.9960, protectedCourseInfo.route.last().longitude, 0.000001)
         assertTrue(protectedCourseInfo.route.any { kotlin.math.abs(it.longitude - -94.9970) < 0.000001 })
         assertTrue(protectedCourseInfo.lengthMeters!! > 250)
@@ -215,7 +215,7 @@ class DesktopCourseKmlImportTest {
             updated.raceData.categories.single().category.encryptedCourseInfo!!,
             "course-key"
         )
-        assertEquals("1 2 M", protectedCourseInfo.idealOrder)
+        assertEquals("31 32 M", protectedCourseInfo.idealOrder)
         assertEquals(-94.9960, protectedCourseInfo.route.last().longitude, 0.000001)
         assertTrue(protectedCourseInfo.route.dropLast(1).any { kotlin.math.abs(it.longitude - -94.9970) < 0.000001 })
         assertEquals("Finish", protectedCourseInfo.courseObjects.last().label)
@@ -312,9 +312,9 @@ class DesktopCourseKmlImportTest {
 
         assertEquals(3, summary.importedCategoryCount)
         assertEquals(14, summary.assignedCategoryControlCount)
-        assertEquals(listOf("1", "2", "3", "4", "5", "M"), protectedInfo("M21").controlPoints.map { it.label })
-        assertEquals(listOf("1", "3", "5", "M"), protectedInfo("M50").controlPoints.map { it.label })
-        assertEquals(listOf("2", "4", "5", "M"), protectedInfo("W65").controlPoints.map { it.label })
+        assertEquals(listOf("31", "32", "33", "34", "35", "M"), protectedInfo("M21").controlPoints.map { it.label })
+        assertEquals(listOf("31", "33", "35", "M"), protectedInfo("M50").controlPoints.map { it.label })
+        assertEquals(listOf("32", "34", "35", "M"), protectedInfo("W65").controlPoints.map { it.label })
         assertEquals(8, protectedInfo("M50").courseObjects.size)
     }
 
@@ -540,6 +540,10 @@ class DesktopCourseKmlImportTest {
             listOf("M", "S", "1", "2", "F1"),
             updatedProject.raceData.controls.map { it.label }
         )
+        assertEquals(
+            listOf("Beacon", "S", "1", "2", "1F"),
+            updatedProject.raceData.controls.map { it.publicLabel }
+        )
         val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
             requireNotNull(updatedProject.raceData.categories.single().category.encryptedCourseInfo),
             "course-key"
@@ -659,7 +663,7 @@ class DesktopCourseKmlImportTest {
             .map { it.label }
 
         assertEquals(1, summary.importedCategoryCount)
-        assertEquals("1 S F1 M", protectedCourseInfo.idealOrder)
+        assertEquals("1 S F1 Beacon", protectedCourseInfo.idealOrder)
         assertEquals("S", protectedCourseInfo.controlPoints.single { it.type == ControlPointType.SEPARATOR }.label)
         assertEquals(-94.9960, spectator.longitude, 0.000001)
         assertEquals(listOf("End Corridor_Strt", "End Corridor_S"), waypoints)
@@ -860,7 +864,7 @@ class DesktopCourseKmlImportTest {
 
         val category = updated.raceData.categories.single().category
         assertEquals(2, summary.matchedControlPointCount)
-        assertEquals("1 M", DesktopProtectedCourseOrder.decrypt(category.encryptedIdealOrder!!, "course-key"))
+        assertEquals("31 M", DesktopProtectedCourseOrder.decrypt(category.encryptedIdealOrder!!, "course-key"))
     }
 
     @Test
@@ -898,6 +902,30 @@ class DesktopCourseKmlImportTest {
         assertEquals("Fox 1", updated.raceData.controls.single { it.siCode == 31 }.publicLabel)
         assertEquals("2", updated.raceData.controls.single { it.siCode == 32 }.label)
         assertEquals("Fox 2", updated.raceData.controls.single { it.siCode == 32 }.publicLabel)
+    }
+
+    @Test
+    fun importFillsBlankPublicLabelsFromMatchedCoursePointNames() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithCompactFoxLabels())
+        val project = EventProjectEditor.addCategory(
+            classicPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val category = updated.raceData.categories.single().category
+        assertEquals(2, summary.matchedControlPointCount)
+        assertEquals("Transmitter 1", updated.raceData.controls.single { it.siCode == 31 }.publicLabel)
+        assertEquals("FOX2", updated.raceData.controls.single { it.siCode == 32 }.publicLabel)
+        assertEquals("'Transmitter 1' FOX2", DesktopProtectedCourseOrder.decrypt(category.encryptedIdealOrder!!, "course-key"))
     }
 
     @Test
@@ -1035,7 +1063,7 @@ class DesktopCourseKmlImportTest {
         )
         assertEquals(2, summary.matchedControlPointCount)
         assertEquals(0, summary.missingControlNames.count { it.equals("st", ignoreCase = true) || it.contains("finish", ignoreCase = true) })
-        assertEquals("1 2", protectedCourseInfo.idealOrder)
+        assertEquals("31 32", protectedCourseInfo.idealOrder)
         assertEquals(-95.0000, protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.START }.longitude, 0.000001)
         assertEquals(-94.9940, protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.FINISH }.longitude, 0.000001)
     }
@@ -1069,7 +1097,7 @@ class DesktopCourseKmlImportTest {
         )
         assertEquals(2, summary.matchedControlPointCount)
         assertEquals(emptyList<String>(), summary.missingControlNames)
-        assertEquals("1 2", protectedCourseInfo.idealOrder)
+        assertEquals("31 32", protectedCourseInfo.idealOrder)
         assertEquals(-95.0000, protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.START }.longitude, 0.000001)
         assertEquals(-94.9940, protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.FINISH }.longitude, 0.000001)
     }
@@ -1404,7 +1432,7 @@ class DesktopCourseKmlImportTest {
         assertEquals(0, summary.duplicateCategoryCount)
         assertEquals(false, summary.isDuplicateOnly)
         assertEquals(2, protectedCourseInfo.controlPoints.size)
-        assertEquals(listOf("Start", "1", "2", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
+        assertEquals(listOf("Start", "31", "32", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
         assertEquals(elevatedCourseInfo.route.size, protectedCourseInfo.route.size)
         assertTrue(protectedCourseInfo.route.all { it.elevationMeters == 100.0 })
     }
@@ -1523,7 +1551,7 @@ class DesktopCourseKmlImportTest {
         assertEquals(elevationResult.sampledPointCount, elevationResult.resolvedPointCount)
         assertTrue(protectedCourseInfo.route.all { it.elevationMeters != null })
         assertTrue(protectedCourseInfo.controlPoints.all { it.elevationMeters != null })
-        assertEquals(listOf("Start", "1", "2", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
+        assertEquals(listOf("Start", "31", "32", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
         assertTrue(protectedCourseInfo.courseObjects.all { it.elevationMeters != null })
         assertTrue(protectedCourseInfo.climbMeters!! >= 12)
         assertEquals(

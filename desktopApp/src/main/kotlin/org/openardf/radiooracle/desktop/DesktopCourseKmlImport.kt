@@ -269,9 +269,11 @@ object DesktopCourseKmlImporter {
         val matchedControlResult = matchedControls(importedControlsForControlMatching, projectWithMissingControls.raceData.controls)
         val hintedProject = applyControlSiHints(projectWithMissingControls, matchedControlResult.controls)
         val matchedControlsForHintedProject = matchedControls(importedControlsForControlMatching, hintedProject.raceData.controls)
-        val controls = matchedControlsForHintedProject.controls
-        val categories = hintedProject.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
-        val courseInfoByCategoryId = hintedProject.raceData.categories.mapNotNull { categoryData ->
+        val labeledProject = applyControlPublicLabelHints(hintedProject, matchedControlsForHintedProject.controls)
+        val matchedControlsForLabeledProject = matchedControls(importedControlsForControlMatching, labeledProject.raceData.controls)
+        val controls = matchedControlsForLabeledProject.controls
+        val categories = labeledProject.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
+        val courseInfoByCategoryId = labeledProject.raceData.categories.mapNotNull { categoryData ->
             categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
                 categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
             }
@@ -283,8 +285,8 @@ object DesktopCourseKmlImporter {
             categoryOverrideId = categoryOverrideId
         )
         val hasSprintRouteTargets = routeCategoryTargets.targets.values.flatten().any { categoryData ->
-            categoryData.category.effectiveRaceType(hintedProject.raceData.race) == RaceType.SPRINT
-        } || isSprintCourseImport(hintedProject, courseData)
+            categoryData.category.effectiveRaceType(labeledProject.raceData.race) == RaceType.SPRINT
+        } || isSprintCourseImport(labeledProject, courseData)
         val controlsForLocationUpdates = if (hasSprintRouteTargets) {
             controls.filterNot { it.type == ControlPointType.SEPARATOR && it.point.isNearAnyRouteEndpoint(courseData.routes) }
         } else {
@@ -293,7 +295,7 @@ object DesktopCourseKmlImporter {
         val sameSourceDuplicateCategoryIds = sameSourceDuplicateCategoryIds(
             routes = courseData.routes,
             routeCategoryTargets = routeCategoryTargets,
-            eventRace = hintedProject.raceData.race,
+            eventRace = labeledProject.raceData.race,
             courseInfoByCategoryId = courseInfoByCategoryId,
             sourceSha256 = sourceSha256,
             importedControls = courseData.controls,
@@ -306,7 +308,7 @@ object DesktopCourseKmlImporter {
         )
         val locationUpdateResult = controlLocationUpdates.takeIf { it.isNotEmpty() }?.let { updates ->
             DesktopProtectedControlLocationUpdater.applyControlLocations(
-                projectFile = projectWithMissingControls,
+                projectFile = labeledProject,
                 courseInfoByCategoryId = courseInfoByCategoryId,
                 updates = updates,
                 password = password,
@@ -314,7 +316,7 @@ object DesktopCourseKmlImporter {
                 invalidateAllReferencedProtectedCourses = false
             )
         }
-        var updatedProject = hintedProject
+        var updatedProject = labeledProject
         locationUpdateResult?.let { result ->
             updatedProject = result.projectFile
         }
@@ -1181,6 +1183,7 @@ object DesktopCourseKmlImporter {
                     controlId = control.id,
                     label = control.idealOrderToken(),
                     displayLabel = control.displayCourseLabel(),
+                    importedName = imported.name.trim(),
                     siCode = control.siCode,
                     siCodeHint = imported.siCodeHint,
                     type = control.type,
@@ -1225,7 +1228,7 @@ object DesktopCourseKmlImporter {
             label = label,
             siCode = siCode,
             type = type,
-            publicLabel = name.trim().takeIf { it.isNotBlank() && it != label },
+            publicLabel = name.trim().takeIf { it.isNotBlank() },
             latitude = point.latitude,
             longitude = point.longitude
         )
@@ -1296,6 +1299,37 @@ object DesktopCourseKmlImporter {
                 type = control.type,
                 scored = control.scored,
                 publicLabel = control.publicLabel.orEmpty(),
+                notes = control.notes.orEmpty()
+            )
+        }
+    }
+
+    private fun applyControlPublicLabelHints(
+        projectFile: EventProjectFile,
+        matchedControls: List<CourseMatchedControl>
+    ): EventProjectFile {
+        // Preserve organizer-authored course-file names as public labels, but do not
+        // overwrite labels the Event File already owns.
+        val updates = matchedControls
+            .filter { matchedControl -> matchedControl.importedName.isNotBlank() }
+            .distinctBy { it.controlId }
+        if (updates.isEmpty()) {
+            return projectFile
+        }
+        return updates.fold(projectFile) { currentProject, matchedControl ->
+            val control = currentProject.raceData.controls.firstOrNull { it.id == matchedControl.controlId }
+                ?: return@fold currentProject
+            if (!control.publicLabel.isNullOrBlank()) {
+                return@fold currentProject
+            }
+            EventProjectEditor.updateControl(
+                projectFile = currentProject,
+                controlId = control.id,
+                label = control.label,
+                siCode = control.siCode.toString(),
+                type = control.type,
+                scored = control.scored,
+                publicLabel = matchedControl.importedName,
                 notes = control.notes.orEmpty()
             )
         }
@@ -1965,6 +1999,7 @@ private data class CourseMatchedControl(
     val controlId: String,
     val label: String,
     val displayLabel: String,
+    val importedName: String,
     val siCode: Int,
     val siCodeHint: Int?,
     val type: ControlPointType,
