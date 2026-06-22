@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import java.nio.file.Files
 import java.nio.file.Path
 
 class DesktopProjectFilePathsTest {
@@ -50,7 +52,37 @@ class DesktopProjectFilePathsTest {
         assertTrue(DesktopProjectFilePaths.isOpenableEventFileName("event.rom.json"))
         assertTrue(DesktopProjectFilePaths.isOpenableEventFileName("event.ardfjs"))
         assertTrue(DesktopProjectFilePaths.isOpenableEventFileName("event.ARDFJS"))
+        assertTrue(DesktopProjectFilePaths.isOpenableEventFileName("series.radio-oracle.json"))
+        assertTrue(DesktopProjectFilePaths.isOpenableEventFileName("Championship Week.series.radio-oracle.json"))
         assertFalse(DesktopProjectFilePaths.isOpenableEventFileName("event.csv"))
+    }
+
+    @Test
+    fun openEventFileChooserAcceptsDesktopAndAndroidEventFiles() {
+        val filter = DesktopEventFileChooserFilters.openableEventFiles()
+        val directory = Files.createTempDirectory("radio-oracle-event-file-filter").toFile()
+
+        assertTrue(filter.accept(File("event.json")))
+        assertTrue(filter.accept(File("event.rom.json")))
+        assertTrue(filter.accept(File("event.ardfjs")))
+        assertTrue(filter.accept(File("series.radio-oracle.json")))
+        assertTrue(filter.accept(File("Championship Week.series.radio-oracle.json")))
+        assertTrue(filter.accept(directory))
+        assertFalse(filter.accept(File("event.csv")))
+    }
+
+    @Test
+    fun seriesMemberChooserAcceptsOnlyDesktopEventFiles() {
+        val filter = DesktopEventFileChooserFilters.desktopEventFiles()
+        val directory = Files.createTempDirectory("radio-oracle-desktop-event-file-filter").toFile()
+
+        assertTrue(filter.accept(File("event.json")))
+        assertTrue(filter.accept(File("event.rom.json")))
+        assertTrue(filter.accept(directory))
+        assertFalse(filter.accept(File("event.ardfjs")))
+        assertFalse(filter.accept(File("series.radio-oracle.json")))
+        assertFalse(filter.accept(File("Championship Week.series.radio-oracle.json")))
+        assertFalse(filter.accept(File("event.csv")))
     }
 
     @Test

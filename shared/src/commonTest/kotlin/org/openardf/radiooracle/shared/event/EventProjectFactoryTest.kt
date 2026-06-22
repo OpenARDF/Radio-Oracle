@@ -1,7 +1,6 @@
 package org.openardf.radiooracle.shared.event
 
 import org.openardf.radiooracle.shared.domain.RaceBand
-import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import kotlin.test.Test
@@ -30,9 +29,7 @@ class EventProjectFactoryTest {
         assertEquals(emptyList(), projectFile.raceData.aliases)
         assertEquals(emptyList(), projectFile.raceData.competitorData)
         assertEquals(emptyList(), projectFile.raceData.unmatchedReadoutData)
-        assertEquals(listOf("1", "2", "3", "4", "5", "M"), projectFile.raceData.controls.map { it.label })
-        assertEquals(listOf(31, 32, 33, 34, 35, 99), projectFile.raceData.controls.map { it.siCode })
-        assertEquals(ControlPointType.BEACON, projectFile.raceData.controls.last().type)
+        assertEquals(emptyList(), projectFile.raceData.controls)
     }
 
     @Test

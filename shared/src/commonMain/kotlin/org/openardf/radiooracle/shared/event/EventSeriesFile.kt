@@ -7,8 +7,16 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.time.LocalDateTime
 
-/** Manifest file name used inside a Radio-Oracle Event Series folder. */
+/** Legacy manifest file name used inside a Radio-Oracle Event Series folder. */
 const val EVENT_SERIES_FILE_NAME = "series.radio-oracle.json"
+
+/** Suffix for user-named Event Series manifests, for example `Championship.series.radio-oracle.json`. */
+const val EVENT_SERIES_NAMED_FILE_SUFFIX = ".series.radio-oracle.json"
+
+/** Returns true for the legacy fixed manifest name and the newer user-named manifest convention. */
+fun isEventSeriesFileName(fileName: String): Boolean =
+    fileName == EVENT_SERIES_FILE_NAME ||
+        fileName.endsWith(EVENT_SERIES_NAMED_FILE_SUFFIX, ignoreCase = true)
 
 /** Portable manifest for a multi-event competition or championship. */
 @Serializable

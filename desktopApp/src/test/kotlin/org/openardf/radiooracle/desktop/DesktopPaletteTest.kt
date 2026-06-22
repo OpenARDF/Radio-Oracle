@@ -25,6 +25,7 @@ class DesktopPaletteTest {
                 "Course Analyzer",
                 "Elevation Data",
                 "Import Elevation Data",
+                "KML Tools",
                 "Import/Export",
                 "Import Controls KML/KMZ",
                 "Readouts",

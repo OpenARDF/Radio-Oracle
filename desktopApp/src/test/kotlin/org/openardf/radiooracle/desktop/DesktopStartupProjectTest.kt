@@ -98,6 +98,28 @@ class DesktopStartupProjectTest {
         assertNull(desktopParentSeriesText(null))
     }
 
+    @Test
+    fun eventFilePageShowsSavedEventFileFolder() {
+        assertEquals(
+            "Event File Folder: /Users/example/Documents/Radio-Oracle",
+            desktopEventFileFolderText(
+                eventFilePath = Path.of("/Users/example/Documents/Radio-Oracle/Day 1.json"),
+                workingFolder = Path.of("/Users/example/Documents/Other")
+            )
+        )
+    }
+
+    @Test
+    fun eventFilePageShowsFirstSaveDefaultFolderForUnsavedEvent() {
+        assertEquals(
+            "Event File Folder: /Users/example/Documents/Radio-Oracle (first save default)",
+            desktopEventFileFolderText(
+                eventFilePath = null,
+                workingFolder = Path.of("/Users/example/Documents/Radio-Oracle")
+            )
+        )
+    }
+
     private fun projectFile(name: String): EventProjectFile =
         EventProjectFile(
             raceData = EventRaceData(

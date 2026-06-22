@@ -7,6 +7,8 @@ import org.junit.Assert.fail
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
+import org.openardf.radiooracle.shared.event.EventControlCatalog
+import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
@@ -21,7 +23,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -80,7 +82,7 @@ class DesktopCourseKmlImportTest {
         val gpxPath = Files.createTempFile("radio-oracle-course", ".gpx")
         Files.writeString(gpxPath, sampleGpx())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -111,7 +113,7 @@ class DesktopCourseKmlImportTest {
         val controlsOnlyPath = Files.createTempFile("radio-oracle-controls", ".kml")
         Files.writeString(controlsOnlyPath, controlsOnlyKml(longitude31 = -95.0000, longitude32 = -94.9980))
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -134,7 +136,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithExplicitBeaconAndFinishAfterRoute())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -162,7 +164,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithBeaconAndInferredFinish())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -190,7 +192,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithRouteName("Course"))
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -213,7 +215,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithUnnamedRoutes(listOf("Course A", "Course B", "Course C")))
         val project = listOf("M21", "M40", "W21").fold(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00")
+            classicPresetProject()
         ) { currentProject, categoryName ->
             EventProjectEditor.addCategory(
                 currentProject,
@@ -247,7 +249,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithThreeCategoryRoutes())
         val project = listOf("M21", "M50", "W65").fold(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00")
+            classicPresetProject()
         ) { currentProject, categoryName ->
             EventProjectEditor.addCategory(
                 currentProject,
@@ -282,7 +284,7 @@ class DesktopCourseKmlImportTest {
         Files.writeString(kmlPath, sampleKmlWithSprintCategoryRouteNames())
         val expectedCategoryNames = listOf("M21", "M50", "W35", "M60", "W55", "M16", "W19", "W75", "M70")
         val project = (expectedCategoryNames + "W21").fold(
-            EventProjectFactory.createEmptyProject("race", "Sprint Test", "2026-06-11T09:00")
+            classicPresetProject(raceName = "Sprint Test", startDateTimeIso = "2026-06-11T09:00")
         ) { currentProject, categoryName ->
             EventProjectEditor.addCategory(
                 currentProject,
@@ -328,7 +330,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("Sprint", ".kml")
         Files.writeString(kmlPath, sampleKmlWithSprintCategoryRouteNames())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Sprint Test", "2026-06-11T09:00"),
+            classicPresetProject(raceName = "Sprint Test", startDateTimeIso = "2026-06-11T09:00"),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -382,7 +384,7 @@ class DesktopCourseKmlImportTest {
         val categoryId = "cat-m21"
         val project = EventProjectEditor.updateCategoryControlPoints(
             projectFile = EventProjectEditor.addCategory(
-                EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+                classicPresetProject(),
                 categoryId = categoryId,
                 name = "M21"
             ),
@@ -417,7 +419,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithClassicControlsInReversePublicLabelOrder())
         val categoryId = "cat-m21"
-        val baseProject = EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00")
+        val baseProject = classicPresetProject()
             .withControlPublicLabel(siCode = 31, publicLabel = "Fox 5")
             .withControlPublicLabel(siCode = 32, publicLabel = "Fox 4")
             .withControlPublicLabel(siCode = 33, publicLabel = "Fox 3")
@@ -454,7 +456,7 @@ class DesktopCourseKmlImportTest {
         Files.writeString(kmlPath, sampleKmlWithRouteName("M21"))
         val project = EventProjectEditor.addCategory(
             EventProjectEditor.addCategory(
-                EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+                classicPresetProject(),
                 categoryId = "cat-m21",
                 name = "M-21"
             ),
@@ -480,7 +482,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("W21 route", ".kml")
         Files.writeString(kmlPath, sampleKmlWithRouteName("Exported route"))
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-w21",
             name = "W21"
         )
@@ -502,7 +504,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("route-export", ".kml")
         Files.writeString(kmlPath, sampleKmlWithRouteName("Exported route"))
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-w21",
             name = "W21"
         )
@@ -525,7 +527,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithBeacon())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -546,7 +548,7 @@ class DesktopCourseKmlImportTest {
     fun reportsLikelyControlLabelConversionsBeforeImportIsKept() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithCompactFoxLabels())
-        val baseProject = EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00")
+        val baseProject = classicPresetProject()
             .withControlPublicLabel(siCode = 31, publicLabel = "Fox 1")
             .withControlPublicLabel(siCode = 32, publicLabel = "Fox 2")
         val project = EventProjectEditor.addCategory(
@@ -583,7 +585,7 @@ class DesktopCourseKmlImportTest {
     fun importsClassic80PrefixedFoxNamesUsingLineStringRouteOrder() {
         val kmlPath = Files.createTempFile("80m Classic 2025", ".kml")
         Files.writeString(kmlPath, sampleClassic80KmlWithPrefixedFoxNames())
-        val baseProject = EventProjectFactory.createEmptyProject("race", "Classic 80m Test", "2026-06-12T09:00")
+        val baseProject = classicPresetProject(raceName = "Classic 80m Test", startDateTimeIso = "2026-06-12T09:00")
             .withControlIdentity(oldSiCode = 31, newSiCode = 131, label = "131", publicLabel = "Fox1")
             .withControlIdentity(oldSiCode = 32, newSiCode = 132, label = "132", publicLabel = "Fox2")
             .withControlIdentity(oldSiCode = 33, newSiCode = 133, label = "133", publicLabel = "Fox3")
@@ -624,7 +626,7 @@ class DesktopCourseKmlImportTest {
     fun importsControlSiCodesFromKmlDescriptionLines() {
         val kmlPath = Files.createTempFile("description-si-controls", ".kml")
         Files.writeString(kmlPath, sampleKmlWithDescriptionSiLines())
-        val baseProject = EventProjectFactory.createEmptyProject("race", "Description SI Test", "2026-06-12T09:00")
+        val baseProject = classicPresetProject(raceName = "Description SI Test", startDateTimeIso = "2026-06-12T09:00")
             .withControlIdentity(oldSiCode = 31, newSiCode = 131, label = "131", publicLabel = "Fox1")
             .withControlIdentity(oldSiCode = 32, newSiCode = 132, label = "132", publicLabel = "Fox2")
         val project = EventProjectEditor.addCategory(
@@ -651,7 +653,7 @@ class DesktopCourseKmlImportTest {
     fun doesNotMatchBandNamedStartOrFinishAsNumberedFoxControls() {
         val kmlPath = Files.createTempFile("2m Classic 2025", ".kml")
         Files.writeString(kmlPath, sampleClassic2mKmlWithEndpointNames())
-        val baseProject = EventProjectFactory.createEmptyProject("race", "Classic 2m Test", "2026-06-12T09:00")
+        val baseProject = classicPresetProject(raceName = "Classic 2m Test", startDateTimeIso = "2026-06-12T09:00")
             .withControlIdentity(oldSiCode = 31, newSiCode = 221, label = "221", publicLabel = "Fox1")
             .withControlIdentity(oldSiCode = 32, newSiCode = 222, label = "222", publicLabel = "Fox2")
             .withControlIdentity(oldSiCode = 33, newSiCode = 223, label = "223", publicLabel = "Fox3")
@@ -696,7 +698,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithAmbiguousControlNumber())
         val baseProject = EventProjectEditor.addControl(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             controlId = "control-fast-1",
             label = "F1",
             siCode = "41",
@@ -726,7 +728,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -755,7 +757,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -793,7 +795,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -849,7 +851,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -898,7 +900,7 @@ class DesktopCourseKmlImportTest {
         val routeKmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(routeKmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -944,7 +946,7 @@ class DesktopCourseKmlImportTest {
         val routeKmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(routeKmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -976,7 +978,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -1031,7 +1033,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -1067,7 +1069,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -1099,7 +1101,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -1156,7 +1158,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -1209,7 +1211,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -1249,7 +1251,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -1289,7 +1291,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())
         val project = EventProjectEditor.addCategory(
-            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
@@ -1946,6 +1948,19 @@ class DesktopCourseKmlImportTest {
           </Document>
         </kml>
         """.trimIndent()
+
+    private fun classicPresetProject(
+        raceId: String = "race",
+        raceName: String = "Course Test",
+        startDateTimeIso: String = "2026-06-05T09:00"
+    ): EventProjectFile {
+        val project = EventProjectFactory.createEmptyProject(raceId, raceName, startDateTimeIso)
+        return project.copy(
+            raceData = project.raceData.copy(
+                controls = EventControlCatalog.classicPreset(raceId)
+            )
+        )
+    }
 
     private fun org.openardf.radiooracle.shared.event.EventProjectFile.withControlPublicLabel(
         siCode: Int,

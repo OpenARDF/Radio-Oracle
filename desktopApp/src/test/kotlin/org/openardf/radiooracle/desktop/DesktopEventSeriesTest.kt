@@ -23,6 +23,7 @@ import org.openardf.radiooracle.shared.event.EventSeriesLink
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
 import org.openardf.radiooracle.shared.event.StartDrawSettings
+import java.nio.file.Files
 import java.nio.file.Path
 
 class DesktopEventSeriesTest {
@@ -81,7 +82,7 @@ class DesktopEventSeriesTest {
             seriesEventId = "day-1"
         )
 
-        assertEquals(Path.of("/work/championship/series.radio-oracle.json"), result.manifestPath)
+        assertEquals(Path.of("/work/championship/Championship.series.radio-oracle.json"), result.manifestPath)
         assertEquals("day-1.rom.json", result.seriesFile.events.single().eventFilePath)
         assertEquals(EventSeriesLink("series-1", "day-1"), result.eventProjectFile.seriesLink)
     }
@@ -97,6 +98,57 @@ class DesktopEventSeriesTest {
         )
 
         assertEquals(DesktopEventSeriesActions.DEFAULT_SERIES_NAME, result.seriesFile.name)
+        assertEquals(Path.of("/work/championship/Day 1.series.radio-oracle.json"), result.manifestPath)
+    }
+
+    @Test
+    fun renameSeriesManifestFileUsesIndependentFileStem() {
+        val manifestPath = Path.of("/work/championship/series.radio-oracle.json")
+        val renamedManifestPath = Path.of("/work/championship/2026 USA and R2 Champs.series.radio-oracle.json")
+        val seriesFile = DesktopEventSeriesActions.renameSeries(
+            seriesFile(),
+            "25th USA and 13th IARU Region 2 Radio Orienteering Championships"
+        )
+        val store = InMemoryEventSeriesStore(seriesFiles = mapOf(manifestPath to seriesFile))
+
+        val result = DesktopEventSeriesActions.renameSeriesManifestFile(
+            store = store,
+            manifestPath = manifestPath,
+            seriesFile = seriesFile,
+            fileNameStem = "2026 USA and R2 Champs"
+        )
+
+        assertEquals(renamedManifestPath, result)
+        assertEquals(
+            "25th USA and 13th IARU Region 2 Radio Orienteering Championships",
+            store.read(renamedManifestPath).name
+        )
+        assertFalse(store.exists(manifestPath))
+    }
+
+    @Test
+    fun manifestFileDisplayStemRemovesOnlyManifestSuffix() {
+        assertEquals(
+            "2026 USA and R2 Champs",
+            DesktopEventSeriesActions.manifestFileDisplayStem(
+                Path.of("/work/championship/2026 USA and R2 Champs.series.radio-oracle.json")
+            )
+        )
+        assertEquals(
+            "series",
+            DesktopEventSeriesActions.manifestFileDisplayStem(Path.of("/work/championship/series.radio-oracle.json"))
+        )
+    }
+
+    @Test
+    fun findManifestNearEventRecognizesNamedSeriesManifest() {
+        val folder = Files.createTempDirectory("radio-oracle-named-series")
+        val eventPath = folder.resolve("day-1.rom.json")
+        val manifestPath = folder.resolve("Championship Week.series.radio-oracle.json")
+        Files.writeString(eventPath, "{}")
+        Files.writeString(manifestPath, "{}")
+
+        assertEquals(manifestPath, DesktopEventSeriesActions.findManifestNearEvent(eventPath))
     }
 
     @Test
@@ -243,7 +295,7 @@ class DesktopEventSeriesTest {
 
     @Test
     fun eventSummariesReportCurrentAndMissingFilesWithoutLoadingEvents() {
-        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val manifestPath = Path.of("/source/Championship Week.series.radio-oracle.json")
         val seriesFile = seriesFile(
             events = listOf(
                 EventSeriesEvent("day-1", "events/day-1.rom.json", 0, "Day 1"),
@@ -269,7 +321,7 @@ class DesktopEventSeriesTest {
 
     @Test
     fun eventSummariesUseDateOrderWhenEverySeriesEventHasADate() {
-        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val manifestPath = Path.of("/source/Championship Week.series.radio-oracle.json")
         val seriesFile = seriesFile(
             events = listOf(
                 EventSeriesEvent("day-2", "events/day-2.rom.json", 0, "Day 2", startDateTimeIso = "2026-06-02T10:00"),
@@ -993,7 +1045,7 @@ class DesktopEventSeriesTest {
 
     @Test
     fun exportSeriesCopiesOnlyManifestListedFiles() {
-        val manifestPath = Path.of("/source/series.radio-oracle.json")
+        val manifestPath = Path.of("/source/Championship Week.series.radio-oracle.json")
         val seriesFile = seriesFile(
             events = listOf(
                 EventSeriesEvent("day-1", "events/day-1.rom.json", 0, "Day 1"),
@@ -1011,7 +1063,7 @@ class DesktopEventSeriesTest {
 
         val result = DesktopEventSeriesActions.exportSeries(store, manifestPath, Path.of("/backup"))
 
-        assertEquals(Path.of("/backup/series.radio-oracle.json"), result.manifestPath)
+        assertEquals(Path.of("/backup/Championship Week.series.radio-oracle.json"), result.manifestPath)
         assertEquals(
             listOf(Path.of("/backup/events/day-1.rom.json"), Path.of("/backup/events/day-2.rom.json")),
             result.eventFilePaths
@@ -1034,6 +1086,77 @@ class DesktopEventSeriesTest {
         assertThrows(IllegalArgumentException::class.java) {
             DesktopEventSeriesActions.exportSeries(store, manifestPath, Path.of("/backup"))
         }
+    }
+
+    @Test
+    fun openingSeriesManifestUsesRememberedMemberEvent() {
+        val manifestPath = Path.of("/work/championship/series.radio-oracle.json")
+        val dayOnePath = Path.of("/work/championship/day-1.rom.json")
+        val dayTwoPath = Path.of("/work/championship/day-2.rom.json")
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(
+                manifestPath to seriesFile(
+                    events = listOf(
+                        EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"),
+                        EventSeriesEvent("day-2", "day-2.rom.json", 1, "Day 2")
+                    )
+                )
+            ),
+            eventFiles = mapOf(
+                dayOnePath to projectFile("Day 1"),
+                dayTwoPath to projectFile("Day 2")
+            )
+        )
+        val lastSeriesEvents = InMemoryLastSeriesEventStore(mapOf(manifestPath to dayTwoPath))
+
+        assertEquals(
+            dayTwoPath,
+            DesktopEventSeriesActions.eventPathToOpenFromManifest(store, manifestPath, lastSeriesEvents)
+        )
+    }
+
+    @Test
+    fun openingSeriesManifestFallsBackToFirstExistingSortedMemberEvent() {
+        val manifestPath = Path.of("/work/championship/series.radio-oracle.json")
+        val dayTwoPath = Path.of("/work/championship/day-2.rom.json")
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(
+                manifestPath to seriesFile(
+                    events = listOf(
+                        EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"),
+                        EventSeriesEvent("day-2", "day-2.rom.json", 1, "Day 2")
+                    )
+                )
+            ),
+            eventFiles = mapOf(dayTwoPath to projectFile("Day 2"))
+        )
+
+        assertEquals(
+            dayTwoPath,
+            DesktopEventSeriesActions.eventPathToOpenFromManifest(store, manifestPath, InMemoryLastSeriesEventStore())
+        )
+    }
+
+    @Test
+    fun openingSeriesMemberRemembersItForTheManifest() {
+        val manifestPath = Path.of("/work/championship/series.radio-oracle.json")
+        val dayTwoPath = Path.of("/work/championship/day-2.rom.json")
+        val lastSeriesEvents = InMemoryLastSeriesEventStore()
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(
+                manifestPath to seriesFile(
+                    events = listOf(
+                        EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"),
+                        EventSeriesEvent("day-2", "day-2.rom.json", 1, "Day 2")
+                    )
+                )
+            ),
+            eventFiles = mapOf(dayTwoPath to projectFile("Day 2"))
+        )
+
+        DesktopEventSeriesActions.rememberOpenedSeriesEvent(store, dayTwoPath, lastSeriesEvents)
+
+        assertEquals(dayTwoPath, lastSeriesEvents.lastEventPath(manifestPath))
     }
 
     private fun seriesFile(events: List<EventSeriesEvent> = listOf(EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"))): EventSeriesFile =
@@ -1220,5 +1343,23 @@ private class InMemoryEventSeriesStore(
 
     override fun copyFile(source: Path, target: Path) {
         copiedFiles += source to target
+    }
+
+    override fun moveManifest(source: Path, target: Path, seriesFile: EventSeriesFile) {
+        seriesFiles.remove(source)
+        seriesFiles[target] = seriesFile
+    }
+}
+
+private class InMemoryLastSeriesEventStore(
+    initialEvents: Map<Path, Path> = emptyMap()
+) : DesktopLastSeriesEventStore {
+    private val eventsByManifestPath = initialEvents.toMutableMap()
+
+    override fun lastEventPath(manifestPath: Path): Path? =
+        eventsByManifestPath[manifestPath]
+
+    override fun rememberEventPath(manifestPath: Path, eventPath: Path) {
+        eventsByManifestPath[manifestPath] = eventPath
     }
 }

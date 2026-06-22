@@ -1,6 +1,9 @@
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.domain.RaceBand
+import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.toDisplayLabel
 
 private const val MaxSubmenuDepth = 3
 
@@ -25,6 +28,14 @@ enum class DesktopWorkflow(
             } else {
                 bottomBarEntries
             }
+
+        fun bottomBarLabel(workflow: DesktopWorkflow, readiness: DesktopNavigationReadiness): String {
+            if (!readiness.hasSeriesContext || workflow == Series || workflow == SettingsHelp) {
+                return workflow.shortLabel
+            }
+            val formatPrefix = readiness.eventFormatLabel ?: return workflow.shortLabel
+            return "$formatPrefix\n${workflow.shortLabel}"
+        }
     }
 }
 
@@ -105,6 +116,8 @@ data class DesktopNavigationReadiness(
     val hasStartList: Boolean = false,
     val hasRaceOpsData: Boolean = false,
     val hasSeriesContext: Boolean = false,
+    val raceType: RaceType? = null,
+    val raceBand: RaceBand? = null,
     val competitorCount: Int = 0,
     val unassignedCompetitorCount: Int = 0,
     val unscheduledCompetitorCount: Int = 0
@@ -115,6 +128,9 @@ data class DesktopNavigationReadiness(
             hasCategories &&
             hasAssignedCompetitors &&
             hasStartList
+
+    val eventFormatLabel: String?
+        get() = raceType?.toEventWorkflowPrefix(raceBand)
 
     companion object {
         fun from(projectFile: EventProjectFile?): DesktopNavigationReadiness {
@@ -139,6 +155,8 @@ data class DesktopNavigationReadiness(
                 hasRaceOpsData = raceData.competitorData.any { it.readoutData != null } ||
                     raceData.unmatchedReadoutData.isNotEmpty(),
                 hasSeriesContext = projectFile.seriesLink != null,
+                raceType = raceData.race.raceType,
+                raceBand = raceData.race.raceBand,
                 competitorCount = competitors.size,
                 unassignedCompetitorCount = unassignedCompetitorCount,
                 unscheduledCompetitorCount = unscheduledCompetitorCount
@@ -146,6 +164,16 @@ data class DesktopNavigationReadiness(
         }
     }
 }
+
+private fun RaceType.toEventWorkflowPrefix(raceBand: RaceBand?): String =
+    when (this) {
+        RaceType.CLASSIC -> when (raceBand) {
+            RaceBand.M80 -> "80m Classic"
+            RaceBand.M2 -> "2m Classic"
+            else -> "Classic"
+        }
+        else -> toDisplayLabel()
+    }
 
 data class DesktopNavItem(
     val id: String,
@@ -286,6 +314,21 @@ object DesktopNavigation {
                                 )
                             ),
                             DesktopSection.CourseAnalysis
+                        ),
+                        group(
+                            "setup.controls.kml-tools",
+                            "KML Tools",
+                            workflow,
+                            listOf(
+                                item(
+                                    "setup.controls.kml-tools.move-course",
+                                    "Move Course",
+                                    workflow,
+                                    DesktopSection.KmlTools,
+                                    requiresEventFile = false
+                                )
+                            ),
+                            requiresEventFile = false
                         ),
                         group(
                             "setup.controls.import-export",
@@ -1024,6 +1067,10 @@ object DesktopNavigation {
             "Use Import Course KML/KMZ to bring in control placemarks and required category route lines for course analysis and category course assignments.",
         "setup.controls.course-analysis.import-gpx" to
             "Use Import Course GPX to bring in control waypoints and required category routes or tracks for course analysis and category course assignments.",
+        "setup.controls.kml-tools" to
+            "Use KML Tools to analyze or modify KML and KMZ files without changing the open Event File.",
+        "setup.controls.kml-tools.move-course" to
+            "Use Move Course to create a translated KML/KMZ copy where the Start point is moved to a new latitude and longitude and all other coordinates move by the same offset.",
         "setup.controls.import-export" to
             "Use Import/Export to synchronize control CSV files and protected controls/route KML/KMZ or GPX files with the current Event File.",
         "setup.controls.import-controls" to

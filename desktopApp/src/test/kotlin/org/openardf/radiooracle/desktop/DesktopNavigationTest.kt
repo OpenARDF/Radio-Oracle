@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.openardf.radiooracle.shared.domain.RaceBand
+import org.openardf.radiooracle.shared.domain.RaceType
 
 class DesktopNavigationTest {
     private val eventFileMenuLabels = listOf(
@@ -39,6 +41,52 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(DesktopWorkflow.Series, DesktopWorkflow.Setup, DesktopWorkflow.RaceOps, DesktopWorkflow.ResultsExport),
             DesktopWorkflow.bottomBarEntries(DesktopNavigationReadiness(hasEventFile = true, hasSeriesContext = true))
+        )
+    }
+
+    @Test
+    fun bottomBarPrefixesEventWorkflowLabelsWithFormatOnlyForSeriesEvents() {
+        val standaloneClassic = DesktopNavigationReadiness(
+            hasEventFile = true,
+            raceType = RaceType.CLASSIC,
+            raceBand = RaceBand.M80
+        )
+        val seriesClassic = standaloneClassic.copy(hasSeriesContext = true)
+
+        assertEquals("Setup", DesktopWorkflow.bottomBarLabel(DesktopWorkflow.Setup, standaloneClassic))
+        assertEquals("80m Classic\nSetup", DesktopWorkflow.bottomBarLabel(DesktopWorkflow.Setup, seriesClassic))
+        assertEquals("80m Classic\nRace Ops", DesktopWorkflow.bottomBarLabel(DesktopWorkflow.RaceOps, seriesClassic))
+        assertEquals("80m Classic\nResults", DesktopWorkflow.bottomBarLabel(DesktopWorkflow.ResultsExport, seriesClassic))
+        assertEquals("Series", DesktopWorkflow.bottomBarLabel(DesktopWorkflow.Series, seriesClassic))
+    }
+
+    @Test
+    fun bottomBarFormatPrefixDistinguishesSeriesEventFormats() {
+        assertEquals(
+            "Sprint\nSetup",
+            DesktopWorkflow.bottomBarLabel(
+                DesktopWorkflow.Setup,
+                DesktopNavigationReadiness(hasEventFile = true, hasSeriesContext = true, raceType = RaceType.SPRINT)
+            )
+        )
+        assertEquals(
+            "Foxoring\nRace Ops",
+            DesktopWorkflow.bottomBarLabel(
+                DesktopWorkflow.RaceOps,
+                DesktopNavigationReadiness(hasEventFile = true, hasSeriesContext = true, raceType = RaceType.FOXORING)
+            )
+        )
+        assertEquals(
+            "2m Classic\nResults",
+            DesktopWorkflow.bottomBarLabel(
+                DesktopWorkflow.ResultsExport,
+                DesktopNavigationReadiness(
+                    hasEventFile = true,
+                    hasSeriesContext = true,
+                    raceType = RaceType.CLASSIC,
+                    raceBand = RaceBand.M2
+                )
+            )
         )
     }
 
@@ -772,6 +820,7 @@ class DesktopNavigationTest {
             listOf(
                 "Elevation Data",
                 "Course Analyzer",
+                "KML Tools",
                 "Import/Export",
                 "Delete All Controls..."
             ),

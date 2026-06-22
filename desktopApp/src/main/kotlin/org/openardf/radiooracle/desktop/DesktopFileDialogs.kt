@@ -2,6 +2,7 @@ package org.openardf.radiooracle.desktop
 
 import java.awt.FileDialog
 import java.awt.Frame
+import java.io.File
 import java.io.FilenameFilter
 import java.nio.file.Files
 import java.nio.file.Path
@@ -9,7 +10,10 @@ import java.util.prefs.Preferences
 import javax.swing.JFileChooser
 import javax.swing.JOptionPane
 import javax.swing.filechooser.FileNameExtensionFilter
+import javax.swing.filechooser.FileFilter
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_FILE_NAME
+import org.openardf.radiooracle.shared.event.EVENT_SERIES_NAMED_FILE_SUFFIX
+import org.openardf.radiooracle.shared.event.isEventSeriesFileName
 
 /** Event File path helpers shared by desktop file dialogs and tests. */
 object DesktopProjectFilePaths {
@@ -76,11 +80,14 @@ object DesktopProjectFilePaths {
         fileName.endsWith(PROJECT_EXTENSION, ignoreCase = true) ||
             fileName.endsWith(LEGACY_PROJECT_EXTENSION, ignoreCase = true)
 
+    fun isEventSeriesManifestName(fileName: String): Boolean =
+        isEventSeriesFileName(fileName)
+
     fun isAndroidRaceBackupJsonFileName(fileName: String): Boolean =
         fileName.endsWith(ANDROID_RACE_BACKUP_JSON_EXTENSION, ignoreCase = true)
 
     fun isOpenableEventFileName(fileName: String): Boolean =
-        isProjectFileName(fileName) || isAndroidRaceBackupJsonFileName(fileName)
+        isProjectFileName(fileName) || isAndroidRaceBackupJsonFileName(fileName) || isEventSeriesManifestName(fileName)
 
     fun withCsvExtension(path: Path): Path =
         if (path.fileName.toString().endsWith(CSV_EXTENSION)) {
@@ -155,6 +162,35 @@ object DesktopFileOverwriteConfirmation {
         if (!exists(path) || confirmOverwrite(path)) path else null
 }
 
+/** File filters for selectable Event Files; directories stay visible so users can browse normally. */
+object DesktopEventFileChooserFilters {
+    fun openableEventFiles(): FileFilter =
+        EventFileFilter(
+            description = "Radio-Oracle Event Files (*.json, *.rom.json, *.ardfjs, *.series.radio-oracle.json)",
+            acceptsFileName = DesktopProjectFilePaths::isOpenableEventFileName
+        )
+
+    fun desktopEventFiles(): FileFilter =
+        EventFileFilter(
+            description = "Radio-Oracle Desktop Event Files (*.json, *.rom.json)",
+            acceptsFileName = { name ->
+                DesktopProjectFilePaths.isProjectFileName(name) &&
+                    !DesktopProjectFilePaths.isEventSeriesManifestName(name)
+            }
+        )
+
+    private class EventFileFilter(
+        private val description: String,
+        private val acceptsFileName: (String) -> Boolean
+    ) : FileFilter() {
+        override fun accept(file: File): Boolean =
+            file.isDirectory || acceptsFileName(file.name)
+
+        override fun getDescription(): String =
+            description
+    }
+}
+
 /** Remembers and prepares the desktop directory used for user-visible Event Files. */
 object DesktopEventFileLocations {
     private const val APP_DOCUMENTS_FOLDER = "Radio-Oracle"
@@ -190,11 +226,11 @@ object DesktopEventFileLocations {
 object DesktopFileDialogs {
     /** Lets the user choose an existing Event File, returning null when cancelled. */
     fun chooseOpenProject(): Path? =
-        chooseEventFile("Open Radio-Oracle Event File", FileDialog.LOAD)
+        chooseLoadEventFile("Open Radio-Oracle Event File", DesktopEventFileChooserFilters.openableEventFiles())
 
     /** Lets the user choose an existing desktop Event File to add to an Event Series. */
     fun chooseEventSeriesMemberEventFile(): Path? =
-        chooseDesktopEventFile("Add Event File to Event Series")
+        chooseLoadEventFile("Add Event File to Event Series", DesktopEventFileChooserFilters.desktopEventFiles())
 
     /** Lets the user choose an existing Event Series manifest, returning null when cancelled. */
     fun chooseOpenEventSeries(): Path? =
@@ -308,6 +344,19 @@ object DesktopFileDialogs {
 
     fun chooseImportKmlKmz(): Path? {
         val dialog = FileDialog(null as Frame?, "Import Controls KML/KMZ", FileDialog.LOAD)
+        dialog.filenameFilter = FilenameFilter { _, name ->
+            name.endsWith(".kml", ignoreCase = true) || name.endsWith(".kmz", ignoreCase = true)
+        }
+        dialog.file = "*.kml;*.kmz"
+        dialog.isVisible = true
+
+        val directory = dialog.directory ?: return null
+        val file = dialog.file ?: return null
+        return Path.of(directory, file)
+    }
+
+    fun chooseKmlToolsFile(): Path? {
+        val dialog = FileDialog(null as Frame?, "Choose KML/KMZ File", FileDialog.LOAD)
         dialog.filenameFilter = FilenameFilter { _, name ->
             name.endsWith(".kml", ignoreCase = true) || name.endsWith(".kmz", ignoreCase = true)
         }
@@ -494,25 +543,26 @@ object DesktopFileDialogs {
         return Path.of(selectedDirectory, file).also(DesktopEventFileLocations::rememberEventFileDirectory)
     }
 
-    private fun chooseDesktopEventFile(title: String): Path? {
+    private fun chooseLoadEventFile(title: String, fileFilter: FileFilter): Path? {
         val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
-        val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD)
-        dialog.filenameFilter = FilenameFilter { _, name -> DesktopProjectFilePaths.isProjectFileName(name) }
-        dialog.directory = directory.toString()
-        dialog.file = "*${DesktopProjectFilePaths.PROJECT_EXTENSION}"
-        dialog.isVisible = true
-
-        val selectedDirectory = dialog.directory ?: return null
-        val file = dialog.file ?: return null
-        return Path.of(selectedDirectory, file).also(DesktopEventFileLocations::rememberEventFileDirectory)
+        val chooser = JFileChooser(directory.toFile())
+        chooser.dialogTitle = title
+        chooser.fileSelectionMode = JFileChooser.FILES_ONLY
+        chooser.fileFilter = fileFilter
+        chooser.isAcceptAllFileFilterUsed = false
+        chooser.approveButtonText = "Open"
+        if (chooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) {
+            return null
+        }
+        return chooser.selectedFile?.toPath()?.also(DesktopEventFileLocations::rememberEventFileDirectory)
     }
 
     private fun chooseSeriesManifest(title: String): Path? {
         val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
         val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD)
-        dialog.filenameFilter = FilenameFilter { _, name -> name == EVENT_SERIES_FILE_NAME }
+        dialog.filenameFilter = FilenameFilter { _, name -> DesktopProjectFilePaths.isEventSeriesManifestName(name) }
         dialog.directory = directory.toString()
-        dialog.file = EVENT_SERIES_FILE_NAME
+        dialog.file = listOf("*$EVENT_SERIES_NAMED_FILE_SUFFIX", EVENT_SERIES_FILE_NAME).joinToString(";")
         dialog.isVisible = true
 
         val selectedDirectory = dialog.directory ?: return null

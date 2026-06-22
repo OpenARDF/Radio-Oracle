@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_FILE_NAME
+import org.openardf.radiooracle.shared.event.EVENT_SERIES_NAMED_FILE_SUFFIX
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
@@ -12,10 +13,14 @@ import org.openardf.radiooracle.shared.event.EventSeriesSupport
 import org.openardf.radiooracle.shared.event.EventSeriesValidationIssue
 import org.openardf.radiooracle.shared.event.EventSeriesIssueSeverity
 import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
+import org.openardf.radiooracle.shared.event.isEventSeriesFileName
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import java.util.Base64
+import java.util.prefs.Preferences
 import kotlin.math.roundToInt
 
 /** Storage boundary used by desktop Event Series session logic. */
@@ -26,6 +31,9 @@ interface EventSeriesStore {
     fun writeEvent(path: Path, projectFile: EventProjectFile)
     fun exists(path: Path): Boolean
     fun copyFile(source: Path, target: Path)
+    fun moveManifest(source: Path, target: Path, seriesFile: EventSeriesFile) {
+        write(target, seriesFile)
+    }
 }
 
 /** Desktop filesystem adapter for Radio-Oracle Event Series manifests. */
@@ -51,6 +59,49 @@ object DesktopEventSeriesFiles : EventSeriesStore {
     override fun copyFile(source: Path, target: Path) {
         target.parent?.let { Files.createDirectories(it) }
         Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING)
+    }
+
+    override fun moveManifest(source: Path, target: Path, seriesFile: EventSeriesFile) {
+        val normalizedSource = source.toAbsolutePath().normalize()
+        val normalizedTarget = target.toAbsolutePath().normalize()
+        target.parent?.let { Files.createDirectories(it) }
+        if (normalizedSource != normalizedTarget && Files.exists(target)) {
+            error("Event Series manifest already exists at ${target.fileName}.")
+        }
+        if (normalizedSource != normalizedTarget && Files.exists(source)) {
+            Files.move(source, target)
+        }
+        write(target, seriesFile)
+    }
+}
+
+interface DesktopLastSeriesEventStore {
+    fun lastEventPath(manifestPath: Path): Path?
+    fun rememberEventPath(manifestPath: Path, eventPath: Path)
+}
+
+object DesktopLastSeriesEventPreferences : DesktopLastSeriesEventStore {
+    private const val LAST_SERIES_EVENT_KEY_PREFIX = "lastSeriesEvent."
+    private val preferences: Preferences =
+        Preferences.userNodeForPackage(DesktopLastSeriesEventPreferences::class.java)
+
+    override fun lastEventPath(manifestPath: Path): Path? =
+        runCatching {
+            preferences.get(lastEventKey(manifestPath), null)
+                ?.takeIf { it.isNotBlank() }
+                ?.let(Path::of)
+        }.getOrNull()
+
+    override fun rememberEventPath(manifestPath: Path, eventPath: Path) {
+        runCatching {
+            preferences.put(lastEventKey(manifestPath), eventPath.toAbsolutePath().normalize().toString())
+        }
+    }
+
+    private fun lastEventKey(manifestPath: Path): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(manifestPath.toAbsolutePath().normalize().toString().toByteArray(StandardCharsets.UTF_8))
+        return LAST_SERIES_EVENT_KEY_PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(digest)
     }
 }
 
@@ -192,8 +243,114 @@ object DesktopEventSeriesActions {
     ): Path? =
         generateSequence(eventPath.parent) { it.parent }
             .take(maxAncestorDepth)
-            .map { it.resolve(EVENT_SERIES_FILE_NAME) }
-            .firstOrNull(exists)
+            .flatMap { eventSeriesManifestCandidates(it, exists).asSequence() }
+            .firstOrNull()
+
+    fun manifestPathForSeriesName(
+        seriesFolder: Path,
+        seriesName: String,
+        fallbackName: String = DEFAULT_SERIES_NAME,
+        exists: (Path) -> Boolean = Files::exists
+    ): Path {
+        val preferredName = seriesName.trim()
+            .takeUnless { it.isBlank() || it == DEFAULT_SERIES_NAME }
+            ?: fallbackName
+        return manifestPathForSeriesFileName(
+            seriesFolder = seriesFolder,
+            fileNameStem = preferredName,
+            exists = exists
+        )
+    }
+
+    fun manifestPathForSeriesFileName(
+        seriesFolder: Path,
+        fileNameStem: String,
+        exists: (Path) -> Boolean = Files::exists
+    ): Path {
+        val stem = seriesFileStem(fileNameStem)
+        var candidate = seriesFolder.resolve("$stem$EVENT_SERIES_NAMED_FILE_SUFFIX")
+        var index = 2
+        while (exists(candidate)) {
+            candidate = seriesFolder.resolve("$stem $index$EVENT_SERIES_NAMED_FILE_SUFFIX")
+            index += 1
+        }
+        return candidate
+    }
+
+    fun manifestFileDisplayStem(manifestPath: Path): String {
+        val fileName = manifestPath.fileName.toString()
+        return when {
+            fileName.endsWith(EVENT_SERIES_NAMED_FILE_SUFFIX, ignoreCase = true) ->
+                fileName.dropLast(EVENT_SERIES_NAMED_FILE_SUFFIX.length)
+            fileName == EVENT_SERIES_FILE_NAME ->
+                fileName.removeSuffix(".radio-oracle.json")
+            else -> fileName
+        }
+    }
+
+    fun renameSeriesManifestFile(
+        store: EventSeriesStore,
+        manifestPath: Path,
+        seriesFile: EventSeriesFile,
+        fileNameStem: String
+    ): Path {
+        val seriesFolder = requireNotNull(manifestPath.parent) {
+            "Event Series manifest must have a parent folder."
+        }
+        val normalizedCurrentPath = manifestPath.toAbsolutePath().normalize()
+        val targetPath = manifestPathForSeriesFileName(
+            seriesFolder = seriesFolder,
+            fileNameStem = fileNameStem,
+            exists = { candidate ->
+                candidate.toAbsolutePath().normalize() != normalizedCurrentPath && store.exists(candidate)
+            }
+        )
+        if (targetPath.toAbsolutePath().normalize() == normalizedCurrentPath) {
+            return manifestPath
+        }
+        store.moveManifest(manifestPath, targetPath, seriesFile)
+        return targetPath
+    }
+
+    fun eventPathToOpenFromManifest(
+        store: EventSeriesStore,
+        manifestPath: Path,
+        lastSeriesEventStore: DesktopLastSeriesEventStore
+    ): Path {
+        val seriesFile = store.read(manifestPath)
+        val seriesFolder = requireNotNull(manifestPath.parent) {
+            "Event Series manifest must have a parent folder."
+        }
+        val memberPaths = seriesFile.sortedEvents().map { event ->
+            seriesFolder.resolve(event.eventFilePath).normalize()
+        }
+        val memberPathKeys = memberPaths.map { it.toAbsolutePath().normalize() }.toSet()
+        val rememberedPath = lastSeriesEventStore.lastEventPath(manifestPath)
+            ?.toAbsolutePath()
+            ?.normalize()
+        if (rememberedPath != null && rememberedPath in memberPathKeys && store.exists(rememberedPath)) {
+            return rememberedPath
+        }
+        return memberPaths.firstOrNull(store::exists)
+            ?: error("Event Series contains no readable Event Files.")
+    }
+
+    fun rememberOpenedSeriesEvent(
+        store: EventSeriesStore,
+        eventPath: Path,
+        lastSeriesEventStore: DesktopLastSeriesEventStore
+    ) {
+        val manifestPath = findManifestNearEvent(eventPath, exists = store::exists) ?: return
+        val seriesFile = store.read(manifestPath)
+        val seriesFolder = manifestPath.parent ?: return
+        val openedPath = eventPath.toAbsolutePath().normalize()
+        val isManifestMember = seriesFile.events.any { event ->
+            seriesFolder.resolve(event.eventFilePath).normalize().toAbsolutePath().normalize() == openedPath
+        }
+        if (isManifestMember) {
+            lastSeriesEventStore.rememberEventPath(manifestPath, eventPath)
+        }
+    }
 
     fun eventSummaries(
         store: EventSeriesStore,
@@ -771,7 +928,11 @@ object DesktopEventSeriesActions {
         eventProjectFile: EventProjectFile,
         seriesEventId: String = eventProjectFile.raceData.race.id
     ): DesktopEventSeriesCreateResult {
-        val manifestPath = seriesFolder.resolve(EVENT_SERIES_FILE_NAME)
+        val manifestPath = manifestPathForSeriesName(
+            seriesFolder = seriesFolder,
+            seriesName = seriesName,
+            fallbackName = eventProjectFile.raceData.race.name
+        )
         val relativeEventPath = relativeEventPath(seriesFolder, eventPath)
         val event = EventSeriesEvent(
             seriesEventId = seriesEventId,
@@ -904,7 +1065,7 @@ object DesktopEventSeriesActions {
             "Cannot export Event Series because required Event Files are missing: ${missingFiles.joinToString()}"
         }
 
-        val targetManifest = targetFolder.resolve(EVENT_SERIES_FILE_NAME)
+        val targetManifest = targetFolder.resolve(manifestPath.fileName)
         store.write(targetManifest, seriesFile)
         seriesFile.sortedEvents().forEach { event ->
             val source = sourceFolder.resolve(event.eventFilePath).normalize()
@@ -916,6 +1077,40 @@ object DesktopEventSeriesActions {
             eventFilePaths = seriesFile.sortedEvents().map { targetFolder.resolve(it.eventFilePath).normalize() }
         )
     }
+
+    private fun eventSeriesManifestCandidates(directory: Path, exists: (Path) -> Boolean): List<Path> {
+        val legacyManifest = directory.resolve(EVENT_SERIES_FILE_NAME).takeIf(exists)
+        /*
+         * Folder contents are not authoritative series membership. This scan only finds
+         * possible manifest containers; the manifest entries still decide which Event Files
+         * belong to the series, and unrelated JSON clutter is ignored.
+         */
+        val namedManifests = runCatching {
+            val stream = Files.list(directory)
+            try {
+                stream.iterator().asSequence()
+                    .filter { Files.isRegularFile(it) }
+                    .filter { isEventSeriesFileName(it.fileName.toString()) }
+                    .filterNot { it.fileName.toString() == EVENT_SERIES_FILE_NAME }
+                    .sortedBy { it.fileName.toString().lowercase() }
+                    .toList()
+            } finally {
+                stream.close()
+            }
+        }.getOrDefault(emptyList())
+        return listOfNotNull(legacyManifest) + namedManifests
+    }
+
+    private fun seriesFileStem(name: String): String =
+        name
+            .trim()
+            .map { character ->
+                if (character.isISOControl() || character in """\/:*?"<>|""") ' ' else character
+            }
+            .joinToString("")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .ifBlank { "Event Series" }
 
     private fun relativeEventPath(seriesFolder: Path, eventPath: Path): String {
         val normalizedFolder = seriesFolder.toAbsolutePath().normalize()

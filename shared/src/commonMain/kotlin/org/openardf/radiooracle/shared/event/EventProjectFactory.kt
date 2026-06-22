@@ -44,7 +44,12 @@ object EventProjectFactory {
                 aliases = emptyList(),
                 competitorData = emptyList(),
                 unmatchedReadoutData = emptyList(),
-                controls = EventControlCatalog.classicPreset(raceId)
+                /*
+                 * New Event Files should expose missing course setup immediately. Preset controls
+                 * can mask an incomplete Event File as valid-looking data, so organizers add or
+                 * import the real controls before setup can be considered complete.
+                 */
+                controls = emptyList()
             )
         )
     }

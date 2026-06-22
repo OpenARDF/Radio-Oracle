@@ -80,6 +80,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -916,6 +917,18 @@ fun main(args: Array<String>) = application {
                 isEventDefinitionSaveDialogVisible = false
                 syncProjectState()
                 DesktopLastEventFilePreferences.rememberEventFile(path)
+                runCatching {
+                    DesktopEventSeriesActions.rememberOpenedSeriesEvent(
+                        store = DesktopEventSeriesFiles,
+                        eventPath = path,
+                        lastSeriesEventStore = DesktopLastSeriesEventPreferences
+                    )
+                }.onFailure { error ->
+                    DesktopDebugLog.error(
+                        "EventSeries",
+                        "Could not remember last opened Event Series member: ${error.message ?: error::class.simpleName}"
+                    )
+                }
                 projectStatusText = "Opened ${path.fileName}"
                 DesktopDebugLog.info("EventFile", "Opened ${path.fileName}")
             }.onFailure { error ->
@@ -1718,6 +1731,34 @@ fun main(args: Array<String>) = application {
                 true
             }.getOrElse { error ->
                 projectStatusText = "Rename Event Series failed: ${error.message ?: error::class.simpleName}"
+                false
+            }
+        }
+
+        fun updateCurrentEventSeriesFileName(fileNameStem: String): Boolean {
+            val trimmedFileNameStem = fileNameStem.trim()
+            if (trimmedFileNameStem.isBlank()) {
+                projectStatusText = "Series file name was not changed because it cannot be blank."
+                return false
+            }
+            val manifestPath = currentSeriesManifestPath() ?: run {
+                projectStatusText = "Series manifest not found near this Event File."
+                return false
+            }
+            return runCatching {
+                val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+                val updatedManifestPath = DesktopEventSeriesActions.renameSeriesManifestFile(
+                    store = DesktopEventSeriesFiles,
+                    manifestPath = manifestPath,
+                    seriesFile = seriesFile,
+                    fileNameStem = trimmedFileNameStem
+                )
+                refreshSeriesEventSummaries()
+                projectStatusText = "Renamed Event Series file to ${updatedManifestPath.fileName}."
+                recordActivity(projectStatusText)
+                true
+            }.getOrElse { error ->
+                projectStatusText = "Rename Event Series file failed: ${error.message ?: error::class.simpleName}"
                 false
             }
         }
@@ -2593,6 +2634,28 @@ fun main(args: Array<String>) = application {
                 projectStatusText = "Opened elevation cache folder: $directory"
             }.onFailure { error ->
                 projectStatusText = "Could not open elevation cache folder: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
+        fun currentEventFileWorkingFolder(): Path =
+            projectSession.currentPath?.parent ?: DesktopEventFileLocations.preferredEventFileDirectory()
+
+        fun openEventFileWorkingFolder() {
+            val directory = currentEventFileWorkingFolder()
+            runCatching {
+                Files.createDirectories(directory)
+                if (!Desktop.isDesktopSupported()) {
+                    error("Opening folders is not supported on this system.")
+                }
+                val desktop = Desktop.getDesktop()
+                if (!desktop.isSupported(Desktop.Action.OPEN)) {
+                    error("Opening folders is not supported on this system.")
+                }
+                desktop.open(directory.toFile())
+            }.onSuccess {
+                projectStatusText = "Opened Event File folder: $directory"
+            }.onFailure { error ->
+                projectStatusText = "Could not open Event File folder: ${error.message ?: error::class.simpleName}"
             }
         }
 
@@ -3640,6 +3703,21 @@ fun main(args: Array<String>) = application {
         }
 
         fun openOrImportSelectedEventFile(path: Path) {
+            if (DesktopProjectFilePaths.isEventSeriesManifestName(path.fileName.toString())) {
+                runCatching {
+                    DesktopEventSeriesActions.eventPathToOpenFromManifest(
+                        store = DesktopEventSeriesFiles,
+                        manifestPath = path,
+                        lastSeriesEventStore = DesktopLastSeriesEventPreferences
+                    )
+                }.onSuccess { eventPath ->
+                    openOrImportSelectedEventFile(eventPath)
+                }.onFailure { error ->
+                    projectStatusText = "Open Event Series failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("EventSeries", projectStatusText)
+                }
+                return
+            }
             val action = when {
                 DesktopProjectFilePaths.isAndroidRaceBackupJsonFileName(path.fileName.toString()) ->
                     PendingDirtyProjectAction.ImportAndroidRaceBackup(path)
@@ -4810,6 +4888,7 @@ fun main(args: Array<String>) = application {
         RadioOManagerDesktopApp(
             projectFile = projectFile,
             eventFilePath = projectSession.currentPath,
+            eventFileWorkingFolder = currentEventFileWorkingFolder(),
             eventSeriesUiContext = eventSeriesUiContext,
             seriesEventSummaries = seriesEventSummaries,
             seriesStartFairnessSummary = seriesStartFairnessSummary,
@@ -4841,6 +4920,7 @@ fun main(args: Array<String>) = application {
             onOptimizeSeriesStartFairness = ::optimizeSeriesStartFairness,
             onOpenSeriesEvent = ::openSeriesEvent,
             onUpdateEventSeriesName = ::updateCurrentEventSeriesName,
+            onUpdateEventSeriesFileName = ::updateCurrentEventSeriesFileName,
             onInsertTestControls = ::insertTestControls,
             onInsertTestCategories = ::insertTestCategories,
             onInsertTestCompetitors = ::insertTestCompetitors,
@@ -4858,6 +4938,7 @@ fun main(args: Array<String>) = application {
             onDownloadMissingCourseAnalysisElevations = ::downloadMissingCourseAnalysisElevations,
             onDownloadVenueElevationCache = ::startVenueElevationCacheDownload,
             onOpenVenueElevationCacheFolder = ::openVenueElevationCacheFolder,
+            onOpenEventFileWorkingFolder = ::openEventFileWorkingFolder,
             elevationCacheRefreshToken = venueElevationCacheRefreshToken,
             onUnlockProtectedCourseOrder = ::unlockProtectedCourseOrder,
             onUpdateProtectedIdealOrder = ::updateProtectedIdealOrder,
@@ -7576,6 +7657,7 @@ internal data class EventSeriesUiContext(
 private fun RadioOManagerDesktopApp(
     projectFile: EventProjectFile? = null,
     eventFilePath: Path? = null,
+    eventFileWorkingFolder: Path = DesktopEventFileLocations.preferredEventFileDirectory(),
     eventSeriesUiContext: EventSeriesUiContext? = null,
     seriesEventSummaries: List<DesktopEventSeriesEventSummary> = emptyList(),
     seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary? = null,
@@ -7653,6 +7735,7 @@ private fun RadioOManagerDesktopApp(
     onDownloadMissingCourseAnalysisElevations: suspend (String, DesktopCourseAnalysisSummary) -> CourseAnalysisElevationPreparationResult? = { _, _ -> null },
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox?, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit = { _, _, _, _, _, _ -> },
     onOpenVenueElevationCacheFolder: () -> Unit = {},
+    onOpenEventFileWorkingFolder: () -> Unit = {},
     onOpenPublishedPublicResultsSite: (String) -> Unit = {},
     onCopyPublishedPublicResultsSite: (String) -> Unit = {},
     elevationCacheRefreshToken: Int = 0,
@@ -7674,6 +7757,7 @@ private fun RadioOManagerDesktopApp(
     onOptimizeSeriesStartFairness: () -> Unit = {},
     onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit = {},
     onUpdateEventSeriesName: (String) -> Boolean = { false },
+    onUpdateEventSeriesFileName: (String) -> Boolean = { false },
     onInsertTestControls: () -> Unit = {},
     onInsertTestCategories: () -> Unit = {},
     onInsertTestCompetitors: () -> Unit = {},
@@ -7835,6 +7919,7 @@ private fun RadioOManagerDesktopApp(
                                     menuDescription = DesktopNavigation.selectedDescription(navState),
                 projectFile = projectFile,
                 eventFilePath = eventFilePath,
+                eventFileWorkingFolder = eventFileWorkingFolder,
                 eventSeriesUiContext = eventSeriesUiContext.takeIf { hasValidSeriesContext },
                 seriesEventSummaries = seriesEventSummaries,
                 seriesStartFairnessSummary = seriesStartFairnessSummary,
@@ -7849,6 +7934,7 @@ private fun RadioOManagerDesktopApp(
                                     onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
                                     onUpdateRaceSettings = onUpdateRaceSettings,
                                     onUpdateEventFileName = onUpdateEventFileName,
+                                    onOpenEventFileWorkingFolder = onOpenEventFileWorkingFolder,
                                     onRenameCategory = onRenameCategory,
                                     onUpdateCategoryGender = onUpdateCategoryGender,
                                     onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
@@ -7933,6 +8019,7 @@ private fun RadioOManagerDesktopApp(
                                     onOptimizeSeriesStartFairness = onOptimizeSeriesStartFairness,
                                     onOpenSeriesEvent = onOpenSeriesEvent,
                                     onUpdateEventSeriesName = onUpdateEventSeriesName,
+                                    onUpdateEventSeriesFileName = onUpdateEventSeriesFileName,
                                     onInsertTestControls = onInsertTestControls,
                                     onInsertTestCategories = onInsertTestCategories,
                                     onInsertTestCompetitors = onInsertTestCompetitors,
@@ -8128,6 +8215,16 @@ internal fun desktopParentSeriesText(seriesContext: EventSeriesUiContext?): Stri
     seriesContext?.seriesName
         ?.ifBlank { "Untitled Series" }
         ?.let { "Parent Series: $it" }
+
+internal fun desktopEventFileFolderText(eventFilePath: Path?, workingFolder: Path): String {
+    val directory = eventFilePath?.parent ?: workingFolder
+    val directoryText = directory.toAbsolutePath().normalize().toString()
+    return if (eventFilePath == null) {
+        "Event File Folder: $directoryText (first save default)"
+    } else {
+        "Event File Folder: $directoryText"
+    }
+}
 
 private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEditDraft? {
     competitorData.forEach { data ->
@@ -8516,10 +8613,10 @@ private fun WorkflowBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(64.dp)
             .background(Color(0xFFE7E7E7))
             .border(2.dp, DesktopPalette.Disconnected)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         DesktopWorkflow.bottomBarEntries(navigationReadiness).forEach { workflow ->
@@ -8529,6 +8626,7 @@ private fun WorkflowBar(
             val isBypassedDisabled = bypassedDisabledNavigation?.workflow == workflow
             Box(
                 modifier = Modifier
+                    .fillMaxHeight()
                     .weight(1f)
                     .disabledMenuLongClickOverride(canLongClickOverride) { onWorkflowSelected(workflow, true) }
             ) {
@@ -8540,16 +8638,22 @@ private fun WorkflowBar(
                         enabled = isEnabled,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .fillMaxHeight()
                             .border(
                                 width = if (isSelected) 2.dp else 1.dp,
                                 color = if (isSelected) DesktopPalette.Black else DesktopPalette.LightGrey
                             ),
-                        colors = workflowButtonColors(workflow, isBypassedDisabled)
+                        colors = workflowButtonColors(workflow, isBypassedDisabled),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = workflow.shortLabel,
-                            fontSize = 13.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            text = DesktopWorkflow.bottomBarLabel(workflow, navigationReadiness),
+                            fontSize = 12.sp,
+                            lineHeight = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -8670,6 +8774,7 @@ private fun SectionWorkspace(
     menuDescription: String,
     projectFile: EventProjectFile?,
     eventFilePath: Path?,
+    eventFileWorkingFolder: Path,
     eventSeriesUiContext: EventSeriesUiContext?,
     seriesEventSummaries: List<DesktopEventSeriesEventSummary>,
     seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary?,
@@ -8684,6 +8789,7 @@ private fun SectionWorkspace(
     onUpdateRaceStartDateTime: (String) -> Unit,
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
     onUpdateEventFileName: (String) -> Boolean,
+    onOpenEventFileWorkingFolder: () -> Unit,
     onRenameCategory: (String, String) -> Unit,
     onUpdateCategoryGender: (String, Boolean) -> Unit,
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
@@ -8767,6 +8873,7 @@ private fun SectionWorkspace(
     onOptimizeSeriesStartFairness: () -> Unit,
     onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit,
     onUpdateEventSeriesName: (String) -> Boolean,
+    onUpdateEventSeriesFileName: (String) -> Boolean,
     onInsertTestControls: () -> Unit,
     onInsertTestCategories: () -> Unit,
     onInsertTestCompetitors: () -> Unit,
@@ -8816,11 +8923,13 @@ private fun SectionWorkspace(
             RaceDetailsPanel(
                 details = EventRaceDetails.from(projectFile.raceData.race),
                 eventFilePath = eventFilePath,
+                eventFileWorkingFolder = eventFileWorkingFolder,
                 parentSeriesText = desktopParentSeriesText(eventSeriesUiContext),
                 onRenameRace = onRenameRace,
                 onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
                 onUpdateRaceSettings = onUpdateRaceSettings,
-                onUpdateEventFileName = onUpdateEventFileName
+                onUpdateEventFileName = onUpdateEventFileName,
+                onOpenEventFileWorkingFolder = onOpenEventFileWorkingFolder
             )
         }
         if (section == DesktopSection.Categories && projectFile != null) {
@@ -8891,6 +9000,9 @@ private fun SectionWorkspace(
                 onUpdateSpeedFactor = onUpdateCourseAnalyzerSpeedFactor
             )
         }
+        if (section == DesktopSection.KmlTools) {
+            KmlToolsPanel()
+        }
         if (section == DesktopSection.ElevationCache && projectFile != null) {
             VenueElevationCachePanel(
                 refreshToken = elevationCacheRefreshToken,
@@ -8945,7 +9057,8 @@ private fun SectionWorkspace(
         if (section == DesktopSection.SeriesSettings) {
             EventSeriesSettingsPanel(
                 seriesContext = eventSeriesUiContext,
-                onUpdateSeriesName = onUpdateEventSeriesName
+                onUpdateSeriesName = onUpdateEventSeriesName,
+                onUpdateSeriesFileName = onUpdateEventSeriesFileName
             )
         }
         if (section == DesktopSection.Readouts && projectFile != null) {
@@ -10684,7 +10797,8 @@ private fun EventSeriesCompetitorMatchingRow(summary: DesktopEventSeriesCompetit
 @Composable
 private fun EventSeriesSettingsPanel(
     seriesContext: EventSeriesUiContext?,
-    onUpdateSeriesName: (String) -> Boolean
+    onUpdateSeriesName: (String) -> Boolean,
+    onUpdateSeriesFileName: (String) -> Boolean
 ) {
     if (seriesContext == null) {
         Text(
@@ -10697,7 +10811,11 @@ private fun EventSeriesSettingsPanel(
 
     var nameDraft by remember(seriesContext.seriesName) { mutableStateOf(seriesContext.seriesName) }
     val trimmedName = nameDraft.trim()
-    val canApply = trimmedName.isNotBlank() && trimmedName != seriesContext.seriesName
+    val canApplyName = trimmedName.isNotBlank() && trimmedName != seriesContext.seriesName
+    val currentFileNameStem = DesktopEventSeriesActions.manifestFileDisplayStem(seriesContext.manifestPath)
+    var fileNameDraft by remember(seriesContext.manifestPath) { mutableStateOf(currentFileNameStem) }
+    val trimmedFileName = fileNameDraft.trim()
+    val canApplyFileName = trimmedFileName.isNotBlank() && trimmedFileName != currentFileNameStem
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = "Manifest: ${seriesContext.manifestPath}",
@@ -10717,14 +10835,14 @@ private fun EventSeriesSettingsPanel(
                 modifier = Modifier
                     .widthIn(min = 360.dp, max = 640.dp)
                     .commitOnEnter {
-                        if (canApply && onUpdateSeriesName(trimmedName)) {
+                        if (canApplyName && onUpdateSeriesName(trimmedName)) {
                             nameDraft = trimmedName
                         }
                     },
                 singleLine = true
             )
             Button(
-                enabled = canApply,
+                enabled = canApplyName,
                 onClick = {
                     if (onUpdateSeriesName(trimmedName)) {
                         nameDraft = trimmedName
@@ -10735,7 +10853,44 @@ private fun EventSeriesSettingsPanel(
                     contentColor = DesktopPalette.Black
                 )
             ) {
-                Text("Apply")
+                Text("Apply Name")
+            }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = fileNameDraft,
+                onValueChange = { fileNameDraft = it },
+                label = { Text("Series file name") },
+                modifier = Modifier
+                    .widthIn(min = 320.dp, max = 520.dp)
+                    .commitOnEnter {
+                        if (canApplyFileName && onUpdateSeriesFileName(trimmedFileName)) {
+                            fileNameDraft = trimmedFileName
+                        }
+                    },
+                singleLine = true
+            )
+            Text(
+                text = ".series.radio-oracle.json",
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+            Button(
+                enabled = canApplyFileName,
+                onClick = {
+                    if (onUpdateSeriesFileName(trimmedFileName)) {
+                        fileNameDraft = trimmedFileName
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    backgroundColor = DesktopPalette.SeriesNavigation,
+                    contentColor = DesktopPalette.Black
+                )
+            ) {
+                Text("Rename File")
             }
         }
     }
@@ -12389,6 +12544,121 @@ private fun String.sprintFastNumber(): Int? {
 
 private fun String.sprintLabelNumber(): Int? =
     Regex("""\b([1-5])\b""").find(this)?.groupValues?.get(1)?.toIntOrNull()
+
+@Composable
+private fun KmlToolsPanel() {
+    var selectedPath by remember { mutableStateOf<Path?>(null) }
+    var latitudeDraft by remember { mutableStateOf("") }
+    var longitudeDraft by remember { mutableStateOf("") }
+    var statusText by remember { mutableStateOf<String?>(null) }
+    val parsedLatitude = latitudeDraft.trim().toDoubleOrNull()
+    val parsedLongitude = longitudeDraft.trim().toDoubleOrNull()
+    val canApply = selectedPath != null &&
+        parsedLatitude != null &&
+        parsedLatitude in -90.0..90.0 &&
+        parsedLongitude != null &&
+        parsedLongitude in -180.0..180.0
+
+    fun chooseFile() {
+        DesktopFileDialogs.chooseKmlToolsFile()?.let { path ->
+            selectedPath = path
+            statusText = null
+        }
+    }
+
+    fun openOutputFolder(path: Path): String? =
+        runCatching {
+            val directory = path.parent ?: Path.of(".").toAbsolutePath()
+            if (!Desktop.isDesktopSupported()) {
+                error("Opening folders is not supported on this system.")
+            }
+            val desktop = Desktop.getDesktop()
+            if (!desktop.isSupported(Desktop.Action.OPEN)) {
+                error("Opening folders is not supported on this system.")
+            }
+            desktop.open(directory.toFile())
+        }.exceptionOrNull()?.let { error ->
+            " Could not open output folder: ${error.message ?: error::class.simpleName}"
+        }
+
+    fun applyMoveCourse() {
+        val path = selectedPath ?: return
+        val latitude = parsedLatitude ?: return
+        val longitude = parsedLongitude ?: return
+        runCatching {
+            DesktopKmlTools.moveCourse(
+                sourcePath = path,
+                newStart = DesktopKmlToolsPoint(latitude = latitude, longitude = longitude)
+            )
+        }.onSuccess { result ->
+            val folderStatus = openOutputFolder(result.outputPath).orEmpty()
+            statusText = "Created ${result.outputPath.fileName}; moved ${result.translatedCoordinateCount} coordinates.$folderStatus"
+        }.onFailure { error ->
+            statusText = "Move Course failed: ${error.message ?: error::class.simpleName}"
+        }
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = "Move Course",
+            color = DesktopPalette.Black,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(onClick = ::chooseFile) {
+                ButtonLabel("Choose KML/KMZ...")
+            }
+            Text(
+                text = selectedPath?.fileName?.toString() ?: "No file selected",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = latitudeDraft,
+                onValueChange = { latitudeDraft = it },
+                label = { Text("New Start latitude") },
+                singleLine = true,
+                modifier = Modifier
+                    .width(180.dp)
+                    .commitOnEnter(::applyMoveCourse)
+            )
+            TextField(
+                value = longitudeDraft,
+                onValueChange = { longitudeDraft = it },
+                label = { Text("New Start longitude") },
+                singleLine = true,
+                modifier = Modifier
+                    .width(180.dp)
+                    .commitOnEnter(::applyMoveCourse)
+            )
+            Button(
+                onClick = ::applyMoveCourse,
+                enabled = canApply
+            ) {
+                ButtonLabel("Apply")
+            }
+        }
+        statusText?.let { text ->
+            Text(
+                text = text,
+                color = if (text.startsWith("Move Course failed")) DesktopPalette.Error else DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
+    }
+}
 
 @Composable
 private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
@@ -15220,11 +15490,13 @@ private fun CategoryDeleteButton(
 private fun RaceDetailsPanel(
     details: EventRaceDetails,
     eventFilePath: Path?,
+    eventFileWorkingFolder: Path,
     parentSeriesText: String?,
     onRenameRace: (String) -> Unit,
     onUpdateRaceStartDateTime: (String) -> Unit,
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
-    onUpdateEventFileName: (String) -> Boolean
+    onUpdateEventFileName: (String) -> Boolean,
+    onOpenEventFileWorkingFolder: () -> Unit
 ) {
     var raceNameDraft by remember(details.name) { mutableStateOf(details.name) }
     var startDateTimeDraft by remember(details.startDateTimeIso) {
@@ -15418,6 +15690,24 @@ private fun RaceDetailsPanel(
                 modifier = Modifier.weight(1f),
                 label = { Text("Limit (min.)") }
             )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SelectionContainer(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = desktopEventFileFolderText(eventFilePath, eventFileWorkingFolder),
+                    color = DesktopPalette.Disconnected,
+                    fontSize = 13.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Button(onClick = onOpenEventFileWorkingFolder) {
+                ButtonLabel("Open Folder")
+            }
         }
     }
 
