@@ -253,12 +253,28 @@ object DesktopEventSeriesActions {
     ): Path? {
         val candidates = manifestCandidatesNearEvent(eventPath, maxAncestorDepth, store::exists).toList()
         if (seriesLink != null) {
-            candidates.firstOrNull { candidate ->
-                runCatching { store.read(candidate).seriesId == seriesLink.seriesId }
-                    .getOrDefault(false)
-            }?.let { return it }
+            val candidateSeries = candidates.mapNotNull { candidate ->
+                runCatching { candidate to store.read(candidate) }.getOrNull()
+            }
+            candidateSeries.firstOrNull { (candidate, seriesFile) ->
+                seriesFile.seriesId == seriesLink.seriesId &&
+                    seriesFile.events.any { event ->
+                        event.seriesEventId == seriesLink.seriesEventId &&
+                            eventPathMatches(candidate, event.eventFilePath, eventPath)
+                    }
+            }?.let { return it.first }
+            candidateSeries.firstOrNull { (_, seriesFile) ->
+                seriesFile.seriesId == seriesLink.seriesId
+            }?.let { return it.first }
         }
         return candidates.firstOrNull()
+    }
+
+    private fun eventPathMatches(manifestPath: Path, eventFilePath: String, eventPath: Path): Boolean {
+        val seriesFolder = manifestPath.parent ?: return false
+        val resolvedEventPath = seriesFolder.resolve(eventFilePath).normalize().toAbsolutePath().normalize()
+        val openedEventPath = eventPath.toAbsolutePath().normalize()
+        return resolvedEventPath == openedEventPath
     }
 
     private fun manifestCandidatesNearEvent(

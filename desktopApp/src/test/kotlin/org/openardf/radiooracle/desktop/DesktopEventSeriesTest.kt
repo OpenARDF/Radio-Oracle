@@ -190,6 +190,43 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun findManifestNearEventPrefersManifestEntryWhenSeriesIdsAreDuplicated() {
+        val folder = Files.createTempDirectory("radio-oracle-duplicate-series-id")
+        val eventPath = folder.resolve("Sprint Practice.json")
+        val emptyManifestPath = folder.resolve("2m Classic Practice.series.radio-oracle.json")
+        val linkedManifestPath = folder.resolve("Umstead West Practices.series.radio-oracle.json")
+        Files.writeString(eventPath, "{}")
+        Files.writeString(
+            emptyManifestPath,
+            EventSeriesFileJson.encode(
+                EventSeriesFile(
+                    seriesId = "duplicated-series",
+                    name = "2m Classic Practice",
+                    events = emptyList()
+                )
+            )
+        )
+        Files.writeString(
+            linkedManifestPath,
+            EventSeriesFileJson.encode(
+                EventSeriesFile(
+                    seriesId = "duplicated-series",
+                    name = "Umstead West Practices",
+                    events = listOf(EventSeriesEvent("sprint-event", "Sprint Practice.json", 0, "Sprint Practice"))
+                )
+            )
+        )
+
+        val manifestPath = DesktopEventSeriesActions.findManifestNearEvent(
+            eventPath = eventPath,
+            seriesLink = EventSeriesLink("duplicated-series", "sprint-event"),
+            store = DesktopEventSeriesFiles
+        )
+
+        assertEquals(linkedManifestPath, manifestPath)
+    }
+
+    @Test
     fun renameSeriesTrimsNameAndRejectsBlank() {
         val renamed = DesktopEventSeriesActions.renameSeries(seriesFile(), "  Championship Week  ")
 

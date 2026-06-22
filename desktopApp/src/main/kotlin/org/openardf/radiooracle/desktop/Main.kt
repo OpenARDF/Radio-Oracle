@@ -1550,7 +1550,7 @@ fun main(args: Array<String>) = application {
             runCatching {
                 val result = DesktopEventSeriesActions.createSeriesWithEvent(
                     seriesFolder = seriesFolder,
-                    seriesId = "${currentProject.raceData.race.id}-series",
+                    seriesId = "${UUID.randomUUID()}-series",
                     seriesName = DesktopEventSeriesActions.DEFAULT_SERIES_NAME,
                     eventPath = currentPath,
                     eventProjectFile = currentProject
@@ -1560,9 +1560,16 @@ fun main(args: Array<String>) = application {
                 projectSession.save()
                 syncProjectState()
                 projectStatusText = "Created Event Series ${result.manifestPath.fileName} and linked this Event File."
+                DesktopDebugLog.info(
+                    "EventSeries",
+                    "Created ${result.manifestPath.fileName} for ${currentPath.fileName} " +
+                        "seriesId=${result.seriesFile.seriesId} " +
+                        "seriesEventId=${result.eventProjectFile.seriesLink?.seriesEventId.orEmpty()}"
+                )
                 recordActivity(projectStatusText)
             }.onFailure { error ->
                 projectStatusText = "Create Event Series failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("EventSeries", projectStatusText)
             }
         }
 
@@ -1592,9 +1599,16 @@ fun main(args: Array<String>) = application {
                 projectSession.save()
                 syncProjectState()
                 projectStatusText = "Linked this Event File to ${manifestPath.fileName}."
+                DesktopDebugLog.info(
+                    "EventSeries",
+                    "Linked ${currentPath.fileName} to ${manifestPath.fileName} " +
+                        "seriesId=${result.seriesFile.seriesId} " +
+                        "seriesEventId=${result.eventProjectFile.seriesLink?.seriesEventId.orEmpty()}"
+                )
                 recordActivity(projectStatusText)
             }.onFailure { error ->
                 projectStatusText = "Link Event Series failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("EventSeries", projectStatusText)
             }
         }
 
