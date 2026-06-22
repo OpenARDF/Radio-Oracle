@@ -7625,6 +7625,59 @@ private data class CourseAnalysisMissingDataPrompt(
     val summary: DesktopCourseAnalysisSummary
 )
 
+internal data class RetainedCourseAnalysisCourseInfo(
+    val encryptedCourseInfo: String,
+    val courseInfo: ProtectedCourseInfo
+)
+
+internal fun retainedCourseAnalysisCourseInfo(
+    projectFile: EventProjectFile,
+    currentCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    previousRetainedCourseInfoByCategoryId: Map<String, RetainedCourseAnalysisCourseInfo>
+): Map<String, RetainedCourseAnalysisCourseInfo> {
+    val currentCategoriesById = projectFile.raceData.categories.associateBy { it.category.id }
+    val retained = previousRetainedCourseInfoByCategoryId
+        .filter { (categoryId, retainedInfo) ->
+            currentCategoriesById[categoryId]
+                ?.category
+                ?.encryptedCourseInfo
+                ?.takeIf { it.isNotBlank() } == retainedInfo.encryptedCourseInfo
+        }
+        .toMutableMap()
+    projectFile.raceData.categories.forEach { categoryData ->
+        val encryptedCourseInfo = categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }
+            ?: return@forEach
+        val courseInfo = currentCourseInfoByCategoryId[categoryData.category.id]
+            ?.takeIf { it.route.size >= 2 }
+            ?: return@forEach
+        retained[categoryData.category.id] = RetainedCourseAnalysisCourseInfo(
+            encryptedCourseInfo = encryptedCourseInfo,
+            courseInfo = courseInfo
+        )
+    }
+    return retained
+}
+
+internal fun effectiveCourseAnalysisCourseInfoByCategoryId(
+    projectFile: EventProjectFile,
+    currentCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    retainedCourseInfoByCategoryId: Map<String, RetainedCourseAnalysisCourseInfo>
+): Map<String, ProtectedCourseInfo> =
+    projectFile.raceData.categories.mapNotNull { categoryData ->
+        val categoryId = categoryData.category.id
+        currentCourseInfoByCategoryId[categoryId]
+            ?.takeIf { it.route.size >= 2 }
+            ?.let { return@mapNotNull categoryId to it }
+        val encryptedCourseInfo = categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }
+            ?: return@mapNotNull null
+        val retainedCourseInfo = retainedCourseInfoByCategoryId[categoryId]
+            ?.takeIf { it.encryptedCourseInfo == encryptedCourseInfo }
+            ?.courseInfo
+            ?.takeIf { it.route.size >= 2 }
+            ?: return@mapNotNull null
+        categoryId to retainedCourseInfo
+    }.toMap()
+
 private data class CourseAnalysisElevationPreparationResult(
     val projectFile: EventProjectFile,
     val protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
@@ -13309,9 +13362,33 @@ private fun CourseAnalysisPanel(
         return
     }
 
+    val courseInfoRetentionKey = projectFile.raceData.categories.map { categoryData ->
+        categoryData.category.id to categoryData.category.encryptedCourseInfo.orEmpty()
+    }
+    var retainedCourseInfoByCategoryId by remember(projectFile.raceData.race.id) {
+        mutableStateOf(
+            retainedCourseAnalysisCourseInfo(
+                projectFile = projectFile,
+                currentCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                previousRetainedCourseInfoByCategoryId = emptyMap()
+            )
+        )
+    }
+    LaunchedEffect(courseInfoRetentionKey, protectedCourseInfoByCategoryId) {
+        retainedCourseInfoByCategoryId = retainedCourseAnalysisCourseInfo(
+            projectFile = projectFile,
+            currentCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+            previousRetainedCourseInfoByCategoryId = retainedCourseInfoByCategoryId
+        )
+    }
+    val analysisCourseInfoByCategoryId = effectiveCourseAnalysisCourseInfoByCategoryId(
+        projectFile = projectFile,
+        currentCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+        retainedCourseInfoByCategoryId = retainedCourseInfoByCategoryId
+    )
     val categories = projectFile.raceData.categories
         .filter { categoryData ->
-            protectedCourseInfoByCategoryId[categoryData.category.id]?.route.orEmpty().size >= 2
+            analysisCourseInfoByCategoryId[categoryData.category.id]?.route.orEmpty().size >= 2
         }
         .sortedWith(EventCategorySort.byDisplayName)
     var selectedCategoryId by remember(projectFile.raceData.race.id, categories.map { it.category.id }) {
@@ -13357,7 +13434,7 @@ private fun CourseAnalysisPanel(
     suspend fun analyzeSelectedCourse(
         categoryId: String,
         analysisProjectFile: EventProjectFile = projectFile,
-        analysisProtectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = protectedCourseInfoByCategoryId
+        analysisProtectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = analysisCourseInfoByCategoryId
     ): DesktopCourseAnalysisSummary =
         withContext(Dispatchers.Default) {
             DesktopCourseAnalyzer.analyze(
@@ -13369,6 +13446,14 @@ private fun CourseAnalysisPanel(
                 elevationLookup = DesktopVenueElevationCache::elevationMeters,
                 elevationCacheNotes = DesktopVenueElevationCache::analysisSourceNotes
             )
+        }
+    fun analyzeDisabledReason(categoryId: String?): String? =
+        when {
+            categoryId == null ->
+                "Import controls/route KML/KMZ or GPX data for a category before running analysis."
+            analysisCourseInfoByCategoryId[categoryId]?.route.orEmpty().size < 2 ->
+                "Stored course route data is unavailable for the selected category. Import course KML/KMZ or GPX data before running analysis."
+            else -> null
         }
 
     suspend fun analyzeWithLocalCachePreparation(categoryId: String): DesktopCourseAnalysisSummary {
@@ -13449,11 +13534,7 @@ private fun CourseAnalysisPanel(
                     .commitOnEnter(::applySpeedFactorDraft)
             )
             DisabledReasonTooltip(
-                when {
-                    effectiveSelectedCategoryId == null ->
-                        "Import controls/route KML/KMZ or GPX data for a category before running analysis."
-                    else -> null
-                }
+                analyzeDisabledReason(effectiveSelectedCategoryId)
             ) {
                 Button(
                     onClick = {
@@ -13481,7 +13562,7 @@ private fun CourseAnalysisPanel(
                             }
                         }
                     },
-                    enabled = effectiveSelectedCategoryId != null && !isAnalyzing
+                    enabled = analyzeDisabledReason(effectiveSelectedCategoryId) == null && !isAnalyzing
                 ) {
                     ButtonLabel("Analyze")
                 }
