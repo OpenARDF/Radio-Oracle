@@ -228,10 +228,21 @@ object DesktopCourseKmlImporter {
                 )
             )
         }
+        val sprintContext = isSprintCourseImport(projectWithMissingCategories, courseData)
+        val endpointAwareControlsForMatching = if (sprintContext) {
+            // Sprint maps may use one "S" as a route endpoint and another "S"/"Sp" as spectator;
+            // keep those points route-specific so one course cannot reclassify another course's spectator.
+            courseData.controls
+        } else {
+            endpointAwareImportedControlsForRoutes(
+                routes = courseData.routes,
+                importedControls = courseData.controls
+            )
+        }
         val importedControlsForControlMatching = controlMatchingCourseControls(
-            importedControls = courseData.controls,
+            importedControls = endpointAwareControlsForMatching,
             routes = courseData.routes,
-            sprintContext = isSprintCourseImport(projectWithMissingCategories, courseData)
+            sprintContext = sprintContext
         )
         val missingControls = missingCourseControls(
             importedControls = importedControlsForControlMatching,
@@ -330,7 +341,7 @@ object DesktopCourseKmlImporter {
                 // is only for route/elevation facts; assignment matching should reflect the controls
                 // intentionally placed near the imported category route.
                 val raceType = categoryData.category.effectiveRaceType(updatedProject.raceData.race)
-                val routeImportedControls = endpointAwareImportedControls(route.points, courseData.controls, raceType)
+                val routeImportedControls = endpointAwareImportedControls(route.points, importedControlsForControlMatching)
                 val routeMatchedControls = matchedControlsForRoute(raceType, route.points, controls)
                 val orientedRouteGeometry = orientedRoutePoints(route.points, routeImportedControls)
                 val routeGeometry = normalizedRouteGeometry(route.points, routeImportedControls, routeMatchedControls)
@@ -367,7 +378,7 @@ object DesktopCourseKmlImporter {
                     categoryId = categoryData.category.id,
                     controls = assignmentControls
                 )?.let(categoryAssignmentUpdates::add)
-                val routeWaypoints = waypointsOnRoute(routeGeometry, courseData.controls, routeMatchedControls)
+                val routeWaypoints = waypointsOnRoute(routeGeometry, routeImportedControls, routeMatchedControls)
                 val duplicateRouteControlIdValues = routeLineControls.map { it.controlId }
                 val duplicateRouteWaypointLabels = routeWaypoints.map { it.label }
                 val storedRouteControlIds = sameSourceCourseInfo?.controlPoints.orEmpty()
@@ -705,24 +716,35 @@ object DesktopCourseKmlImporter {
             val last = route.points.lastOrNull() ?: return@any false
             val firstControls = importedControls.filter { it.point.sameRoutePoint(first) }
             val lastControls = importedControls.filter { it.point.sameRoutePoint(last) }
-            (firstControls.any { it.name.isBareSprintStartLabel() } && lastControls.any { it.isCourseFinishPoint() }) ||
-                (lastControls.any { it.name.isBareSprintStartLabel() } && firstControls.any { it.isCourseFinishPoint() })
+            (firstControls.any { it.name.isEndpointStartName() } && lastControls.any { it.name.isEndpointFinishName() }) ||
+                (lastControls.any { it.name.isEndpointStartName() } && firstControls.any { it.name.isEndpointFinishName() })
+        }
+    }
+
+    private fun endpointAwareImportedControlsForRoutes(
+        routes: List<CourseRoute>,
+        importedControls: List<CourseControlPoint>
+    ): List<CourseControlPoint> {
+        if (routes.isEmpty()) return importedControls
+        return importedControls.map { control ->
+            routes.fold(control) { current, route ->
+                endpointAwareImportedControls(route.points, listOf(current)).single()
+            }
         }
     }
 
     private fun endpointAwareImportedControls(
         routePoints: List<CourseGeoPoint>,
-        importedControls: List<CourseControlPoint>,
-        raceType: RaceType
+        importedControls: List<CourseControlPoint>
     ): List<CourseControlPoint> {
-        if (raceType != RaceType.SPRINT) {
-            return importedControls
-        }
         return importedControls.map { control ->
-            if (control.name.isBareSprintStartLabel() && control.point.isNearRouteEndpoint(routePoints)) {
-                control.copy(name = "Start")
-            } else {
-                control
+            if (!control.point.isNearRouteEndpoint(routePoints)) {
+                return@map control
+            }
+            when {
+                control.name.isEndpointStartName() -> control.copy(name = "Start")
+                control.name.isEndpointFinishName() -> control.copy(name = "Finish")
+                else -> control
             }
         }
     }
@@ -1399,7 +1421,7 @@ object DesktopCourseKmlImporter {
         routes.forEach { route ->
             routeCategoryTargets.targets[route].orEmpty().forEach { categoryData ->
                 val raceType = categoryData.category.effectiveRaceType(eventRace)
-                val routeImportedControls = endpointAwareImportedControls(route.points, importedControls, raceType)
+                val routeImportedControls = endpointAwareImportedControls(route.points, importedControls)
                 val routeMatchedControls = matchedControlsForRoute(raceType, route.points, matchedControls)
                 val routeGeometry = normalizedRouteGeometry(route.points, routeImportedControls, routeMatchedControls)
                 val routeLineControlIds = controlsOnRoute(routeGeometry, routeMatchedControls).map { it.controlId }
@@ -2018,9 +2040,6 @@ private fun String.normalizedCourseName(): String =
 private fun String.compactCourseName(): String =
     normalizedCourseName().replace(" ", "")
 
-private fun String.isBareSprintStartLabel(): Boolean =
-    categoryMatchText() == "s"
-
 private fun String.singleEmbeddedNumber(): Int? {
     val numbers = Regex("\\d+").findAll(this).mapNotNull { it.value.toIntOrNull() }.toList()
     return numbers.singleOrNull()
@@ -2059,13 +2078,30 @@ private fun String.isCourseEndpointName(): Boolean =
 
 private fun String.isCourseStartName(): Boolean {
     val normalized = categoryMatchText()
-    return Regex("""\bstart\b""").containsMatchIn(normalized)
+    return Regex("""\bstart\b""").containsMatchIn(normalized) ||
+        leadingLettersToken() == "start"
 }
 
 private fun String.isCourseFinishName(): Boolean {
     val normalized = categoryMatchText()
-    return Regex("""\bfinish\b""").containsMatchIn(normalized)
+    return Regex("""\bfinish\b""").containsMatchIn(normalized) ||
+        leadingLettersToken() == "finish"
 }
+
+private fun String.isEndpointStartName(): Boolean =
+    isCourseStartName() || leadingLettersToken() in EndpointStartTokens
+
+private fun String.isEndpointFinishName(): Boolean =
+    isCourseFinishName() || leadingLettersToken() in EndpointFinishTokens
+
+private val EndpointStartTokens = setOf("s", "st", "sta", "star", "start")
+
+private val EndpointFinishTokens = setOf("f", "fi", "fin", "fini", "finis", "finish")
+
+private fun String.leadingLettersToken(): String =
+    trim()
+        .takeWhile { it.isLetter() }
+        .lowercase()
 
 private fun String.isSpectatorPrefixOnlyName(): Boolean {
     val letters = lowercase().filter { it in 'a'..'z' }

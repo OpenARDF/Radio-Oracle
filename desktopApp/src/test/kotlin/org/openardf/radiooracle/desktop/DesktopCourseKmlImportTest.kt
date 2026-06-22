@@ -1013,6 +1013,68 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun classicImportTreatsEndpointStartAndFinishAbbreviationsAsCourseEndpoints() {
+        val kmlPath = Files.createTempFile("classic-endpoint-abbreviations", ".kml")
+        Files.writeString(kmlPath, sampleEndpointAbbreviationKml(startName = "st", finishName = "Finish-2m"))
+        val project = EventProjectEditor.addCategory(
+            classicPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals(2, summary.matchedControlPointCount)
+        assertEquals(0, summary.missingControlNames.count { it.equals("st", ignoreCase = true) || it.contains("finish", ignoreCase = true) })
+        assertEquals("1 2", protectedCourseInfo.idealOrder)
+        assertEquals(-95.0000, protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.START }.longitude, 0.000001)
+        assertEquals(-94.9940, protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.FINISH }.longitude, 0.000001)
+    }
+
+    @Test
+    fun foxoringImportTreatsEndpointStartAndFinishAbbreviationsAsCourseEndpoints() {
+        val kmlPath = Files.createTempFile("foxoring-endpoint-abbreviations", ".kml")
+        Files.writeString(kmlPath, sampleEndpointAbbreviationKml(startName = "STAR-80m", finishName = "f-80m"))
+        val baseProject = classicPresetProject()
+        val foxoringProject = baseProject.copy(
+            raceData = baseProject.raceData.copy(
+                race = baseProject.raceData.race.copy(raceType = RaceType.FOXORING)
+            )
+        )
+        val project = EventProjectEditor.addCategory(
+            foxoringProject,
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals(2, summary.matchedControlPointCount)
+        assertEquals(emptyList<String>(), summary.missingControlNames)
+        assertEquals("1 2", protectedCourseInfo.idealOrder)
+        assertEquals(-95.0000, protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.START }.longitude, 0.000001)
+        assertEquals(-94.9940, protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.FINISH }.longitude, 0.000001)
+    }
+
+    @Test
     fun doesNotGuessNumberBasedControlMatchWhenAmbiguous() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithAmbiguousControlNumber())
@@ -2617,6 +2679,42 @@ class DesktopCourseKmlImportTest {
                   -94.9900,39.0000,0
                   -95.0000,39.0000,0
                   -95.0100,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleEndpointAbbreviationKml(startName: String, finishName: String): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>$startName</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>-94.9960,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>$finishName</name>
+              <Point><coordinates>-94.9940,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9980,39.0000,0
+                  -94.9960,39.0000,0
+                  -94.9940,39.0000,0
                 </coordinates>
               </LineString>
             </Placemark>
