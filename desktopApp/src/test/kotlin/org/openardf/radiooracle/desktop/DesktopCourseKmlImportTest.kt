@@ -546,6 +546,52 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun sprintImportKeepsMiddleSAsSpectatorWhenAnotherRouteEndpointTouchesIt() {
+        val kmlPath = Files.createTempFile("Sprint Multi Route Two S", ".kml")
+        Files.writeString(kmlPath, sampleSprintKmlWithOtherRouteEndpointAtMiddleS())
+        val project = listOf("M21", "W55", "M60").fold(sprintPresetProject()) { currentProject, categoryName ->
+            EventProjectEditor.addCategory(
+                currentProject,
+                categoryId = "cat-${categoryName.lowercase()}",
+                name = categoryName
+            )
+        }
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val m21 = updated.raceData.categories.single { it.category.name == "M21" }
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(m21.category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals(3, summary.matchedCategoryCount)
+        assertEquals("1 S F1 M", protectedCourseInfo.idealOrder)
+        assertEquals(-94.9960, protectedCourseInfo.controlPoints.single { it.label == "S" }.longitude, 0.000001)
+        assertEquals(-94.9960, protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.SPECTATOR }.longitude, 0.000001)
+        assertEquals(-94.9920, protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.BEACON }.longitude, 0.000001)
+
+        val analysis = DesktopCourseAnalyzer.analyze(
+            projectFile = updated,
+            categoryId = m21.category.id,
+            protectedCourseInfo = protectedCourseInfo,
+            protectedIdealOrderText = protectedCourseInfo.idealOrder
+        )
+        val importedRouteStops = analysis.kmlFolders
+            .single { it.title == "Imported foxes and route" }
+            .routeStops
+        val spectatorStop = importedRouteStops.single { it.label == "S" && kotlin.math.abs(it.point.longitude - -94.9960) < 0.000001 }
+        assertEquals(-94.9960, spectatorStop.point.longitude, 0.000001)
+        assertEquals("B", importedRouteStops.single { it.label == "B" }.label)
+        assertEquals(-94.9920, importedRouteStops.single { it.label == "B" }.point.longitude, 0.000001)
+        assertEquals(listOf("Calculated ideal route matches imported route"), requireNotNull(analysis.calculatedRouteSection).routeOrder)
+    }
+
+    @Test
     fun importReplacesExistingCategoryAssignmentsWithImportedControls() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithReversedControlPlacemarkOrder())
@@ -2189,6 +2235,68 @@ class DesktopCourseKmlImportTest {
                   -94.9300,39.0100,0
                 </coordinates>
               </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleSprintKmlWithOtherRouteEndpointAtMiddleS(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9980,39.0000,0
+                  -94.9960,39.0000,0
+                  -94.9940,39.0000,0
+                  -94.9920,39.0000,0
+                  -94.9900,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>W55</name>
+              <LineString>
+                <coordinates>
+                  -94.9960,39.0000,0
+                  -94.9860,39.0100,0
+                  -94.9900,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>M60</name>
+              <LineString>
+                <coordinates>
+                  -94.9960,39.0000,0
+                  -94.9840,39.0120,0
+                  -94.9900,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>S</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>1</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>S</name>
+              <Point><coordinates>-94.9960,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>F1</name>
+              <Point><coordinates>-94.9940,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M</name>
+              <Point><coordinates>-94.9920,39.0000,0</coordinates></Point>
             </Placemark>
           </Document>
         </kml>

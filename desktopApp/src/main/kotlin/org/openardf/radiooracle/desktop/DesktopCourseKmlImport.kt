@@ -646,17 +646,20 @@ object DesktopCourseKmlImporter {
         projectFile.raceData.race.raceType == RaceType.SPRINT ||
             courseData.routes.any { route -> route.name.contains("sprint", ignoreCase = true) }
 
+    @Suppress("UNUSED_PARAMETER")
     private fun controlMatchingCourseControls(
         importedControls: List<CourseControlPoint>,
         routes: List<CourseRoute>,
         sprintContext: Boolean
     ): List<CourseControlPoint> {
-        if (!sprintContext) {
-            return importedControls
-        }
-        return importedControls.filterNot { control ->
-            control.name.isBareSprintStartLabel() && control.point.isNearAnyRouteEndpoint(routes)
-        }
+        /*
+         * Sprint maps can legitimately contain two bare "S" points: one at the route endpoint for
+         * start and one mid-route for spectator. Do not globally discard endpoint-looking S points
+         * here because a bad or unrelated LineString can have an endpoint near the real spectator.
+         * The per-route matcher below decides which S is start vs spectator using the route being
+         * imported.
+         */
+        return importedControls
     }
 
     private fun endpointAwareImportedControls(
