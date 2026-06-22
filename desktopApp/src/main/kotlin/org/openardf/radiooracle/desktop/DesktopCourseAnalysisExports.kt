@@ -95,7 +95,7 @@ object DesktopCourseAnalysisExports {
             appendLine("Estimated ideal time: ${secondsText(section.estimatedIdealSeconds)}")
             appendTimingBreakdown(section.legRows, section.estimatedIdealSeconds)
             appendLegRows(section.legRows)
-            if (includeRenumbering) {
+            if (section.includeWaitAnalysis && includeRenumbering) {
                 appendLine()
                 appendLine("Imported-route wait-time analysis")
                 appendWrapped(
@@ -103,7 +103,7 @@ object DesktopCourseAnalysisExports {
                 )
                 appendWaitRows("Current wait times", section.waitRows)
                 section.waitRenumbering?.let { appendWaitRenumbering(it) }
-            } else {
+            } else if (section.includeWaitAnalysis) {
                 appendWaitRows("Optimized wait times", section.waitRows)
             }
         }
@@ -720,11 +720,13 @@ object DesktopCourseAnalysisExports {
         appendLine("0.25 0.25 0.25 RG")
         appendLine("${pdfNumber(left)} ${pdfNumber(bottom)} ${pdfNumber(width)} ${pdfNumber(height)} re S")
         val byLabel = routeMap.points.associateBy { it.label }
+        val routeLinePoints = routeMap.routePointIndexes
+            .mapNotNull { routeMap.points.getOrNull(it) }
+            .takeIf { it.size >= 2 }
+            ?: routeMap.routeLabels.mapNotNull { byLabel[it] }
         appendLine("0.00 0.35 0.72 RG")
         appendLine("2 w")
-        routeMap.routeLabels.zipWithNext().forEach { (fromLabel, toLabel) ->
-            val from = byLabel[fromLabel] ?: return@forEach
-            val to = byLabel[toLabel] ?: return@forEach
+        routeLinePoints.zipWithNext().forEach { (from, to) ->
             appendLine("${pdfNumber(x(from))} ${pdfNumber(y(from))} m ${pdfNumber(x(to))} ${pdfNumber(y(to))} l S")
         }
         routeMap.points.forEach { point ->

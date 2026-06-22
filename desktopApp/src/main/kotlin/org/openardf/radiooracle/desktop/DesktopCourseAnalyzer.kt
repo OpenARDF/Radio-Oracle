@@ -108,6 +108,7 @@ data class DesktopCourseAnalysisSection(
     val effectiveLengthMeters: Int?,
     val estimatedIdealSeconds: Int?,
     val speedModel: DesktopCourseSpeedModel? = null,
+    val includeWaitAnalysis: Boolean = true,
     val legRows: List<DesktopCourseLegRow>,
     val waitRows: List<DesktopCourseWaitRow>,
     val waitRenumbering: DesktopCourseWaitRenumbering?,
@@ -302,6 +303,8 @@ object DesktopCourseAnalyzer {
         "Elevation Cache resolution is the local sample-grid spacing; USGS 3DEP source DEM resolution varies, so a 3 m cache does not guarantee 3 m source terrain data everywhere."
     private const val MAP_KNOWLEDGE_LIMITATION_NOTE =
         "The analyzer does not currently know map passability, so out-of-bounds areas, dense vegetation, water, uncrossable features, and other impediments can make the true on-foot route and wait timing differ from this estimate."
+    private const val MAP_KNOWLEDGE_NO_WAIT_LIMITATION_NOTE =
+        "The analyzer does not currently know map passability, so out-of-bounds areas, dense vegetation, water, uncrossable features, and other impediments can make the true on-foot route and timing differ from this estimate."
     private const val SPEED_MODEL_NOTE =
         "Estimated times use an elite-competitor baseline pace by race format, then apply a category age/gender multiplier and the event-wide Course Analyzer speed factor. When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not part of ideal-route selection; it can affect ideal time, but this estimate does not apply a separate accumulated-fatigue adjustment."
     private const val CLASSIC_WAIT_TIMING_NOTE =
@@ -438,6 +441,7 @@ object DesktopCourseAnalyzer {
         val categoryData = projectFile.raceData.categories.first { it.category.id == categoryId }
         val category = categoryData.category
         val raceType = category.effectiveRaceType(projectFile.raceData.race)
+        val includeWaitAnalysis = raceType.includesClassicWaitAnalysis()
         val speedModel = speedModel(
             raceType = raceType,
             categoryName = category.name,
@@ -615,14 +619,14 @@ object DesktopCourseAnalyzer {
         )
         val providedLegRows = providedTiming.legRows
         val waitRows = providedTiming.waitRows
-        if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
+        if (includeWaitAnalysis) {
             providedControls
                 .filter { it.type == ControlPointType.CONTROL && classicSlotIndex(it) == null }
                 .forEach { control ->
                     missing += "Transmit slot could not be determined for control ${control.publicDisplayLabel()}."
                 }
         }
-        val waitRenumbering = if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
+        val waitRenumbering = if (includeWaitAnalysis) {
             waitRenumbering(providedControls) { slotOverrides ->
                 routeGeometryTiming(
                     route = route,
@@ -649,7 +653,7 @@ object DesktopCourseAnalyzer {
         } else {
             null
         }
-        val calculatedWaitRenumbering = if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
+        val calculatedWaitRenumbering = if (includeWaitAnalysis) {
             calculatedRoute?.let { routeCandidate ->
                 waitRenumbering(routeCandidate.controls.map { it.control }) { slotOverrides ->
                     straightLineTiming(
@@ -735,13 +739,13 @@ object DesktopCourseAnalyzer {
         }.orEmpty()
         val calculatedSection = calculatedRoute?.let { routeCandidate ->
             val optimizedAssignments = calculatedWaitRenumbering
-                ?.takeIf { raceType == RaceType.CLASSIC || raceType == RaceType.SHORT }
+                ?.takeIf { includeWaitAnalysis }
                 ?.assignments
                 .orEmpty()
             if (calculatedRouteMatchesStored) {
                 DesktopCourseAnalysisSection(
                     title = "Section 2: Calculated ideal route",
-                    explanation = "The analyzer determined the ideal route from the start, finish, controls, beacon, and spectator if assigned. The calculated ideal route matches the imported route, so no separate calculated-route leg, wait, elevation-profile, or map analysis is repeated in this section. Section 3 still summarizes the route comparison.",
+                    explanation = calculatedRouteMatchesStoredExplanation(includeWaitAnalysis),
                     routeOrder = listOf("Calculated ideal route matches imported route"),
                     routeOrderLabel = "Result",
                     summaryOnly = true,
@@ -753,6 +757,7 @@ object DesktopCourseAnalyzer {
                     effectiveLengthMeters = null,
                     estimatedIdealSeconds = null,
                     speedModel = null,
+                    includeWaitAnalysis = includeWaitAnalysis,
                     legRows = emptyList(),
                     waitRows = emptyList(),
                     waitRenumbering = null,
@@ -768,7 +773,8 @@ object DesktopCourseAnalyzer {
                         routeCount = routeCandidate.routeCount,
                         routeCalculationNote = routeCandidate.calculationNote,
                         providedAssignments = waitRenumbering?.assignments.orEmpty(),
-                        calculatedAssignments = optimizedAssignments
+                        calculatedAssignments = optimizedAssignments,
+                        includeWaitAnalysis = includeWaitAnalysis
                     ),
                     routeOrder = calculatedRouteLabels(routeCandidate.controls, includeFinish = true),
                     routeOrderLabel = "Route order (imported fox numbering)",
@@ -782,6 +788,7 @@ object DesktopCourseAnalyzer {
                     effectiveLengthMeters = calculatedRouteAnalysis?.effectiveLengthMeters?.roundToInt(),
                     estimatedIdealSeconds = calculatedRouteAnalysis?.estimatedSeconds?.roundToInt(),
                     speedModel = speedModel,
+                    includeWaitAnalysis = includeWaitAnalysis,
                     legRows = calculatedLegRows,
                     waitRows = calculatedWaitRows,
                     waitRenumbering = calculatedWaitRenumbering,
@@ -801,7 +808,7 @@ object DesktopCourseAnalyzer {
         val providedSection = providedRouteAnalysis?.let { analysis ->
             DesktopCourseAnalysisSection(
                 title = "Section 1: Imported route analysis",
-                explanation = providedSectionExplanation(analysis),
+                explanation = providedSectionExplanation(analysis, includeWaitAnalysis),
                 routeOrder = eventControlRouteLabels(providedControls, includeFinish = true),
                 comparisonLengthMeters = analysis.comparisonLengthMeters.roundToInt(),
                 comparisonLengthLabel = analysis.measurementLabel,
@@ -811,6 +818,7 @@ object DesktopCourseAnalyzer {
                 effectiveLengthMeters = analysis.effectiveLengthMeters?.roundToInt(),
                 estimatedIdealSeconds = analysis.estimatedSeconds?.roundToInt(),
                 speedModel = speedModel,
+                includeWaitAnalysis = includeWaitAnalysis,
                 legRows = providedLegRows,
                 waitRows = waitRows,
                 waitRenumbering = waitRenumbering,
@@ -986,7 +994,7 @@ object DesktopCourseAnalyzer {
             categorySpeedFactors = CATEGORY_SPEED_FACTOR_TABLE.categoryFactors,
             providedRouteSection = providedSection,
             calculatedRouteSection = calculatedSection,
-            summaryExplanation = summaryExplanation(providedSection, calculatedSection, waitRenumbering, speedModel),
+            summaryExplanation = summaryExplanation(providedSection, calculatedSection, waitRenumbering, speedModel, includeWaitAnalysis),
             summaryGroups = summaryGroups,
             courseRecommendation = courseRecommendation,
             goodnessMetrics = goodnessMetrics,
@@ -1018,6 +1026,9 @@ object DesktopCourseAnalyzer {
             metrics = metrics
         )
     }
+
+    private fun RaceType.includesClassicWaitAnalysis(): Boolean =
+        this == RaceType.CLASSIC || this == RaceType.SHORT
 
     @Suppress("DEPRECATION")
     private fun assignedControls(projectFile: EventProjectFile, categoryId: String): List<EventControl> {
@@ -1246,21 +1257,42 @@ object DesktopCourseAnalyzer {
         )
     }
 
-    private fun providedSectionExplanation(analysis: RouteAnalysis): String =
-            "This section analyzes the route supplied by the imported controls/routes file for the category. Leg lengths are taken from the imported route geometry, and estimated splits combine movement time with any Classic fox wait and find/punch time. " +
+    private fun providedSectionExplanation(analysis: RouteAnalysis, includeWaitAnalysis: Boolean): String {
+        val splitText = if (includeWaitAnalysis) {
+            "Estimated splits combine movement time with any Classic fox wait and find/punch time."
+        } else {
+            "Estimated splits use movement time only for this competition format."
+        }
+        val waitTimingNote = if (includeWaitAnalysis) "$CLASSIC_WAIT_TIMING_NOTE " else ""
+        val mapKnowledgeNote = mapKnowledgeLimitationNote(includeWaitAnalysis)
+        return "This section analyzes the route supplied by the imported controls/routes file for the category. Leg lengths are taken from the imported route geometry, and $splitText " +
             "The primary comparison value is ${analysis.measurementLabel.lowercase()}; " +
             if (analysis.effectiveLengthMeters != null) {
-                "the Elevation Cache data is complete, so effective length is calculated as horizontal length plus ten times total climb. $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE $ELEVATION_CACHE_RESOLUTION_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE"
+                "the Elevation Cache data is complete, so effective length is calculated as horizontal length plus ten times total climb. $SPEED_MODEL_NOTE $waitTimingNote$ELEVATION_CACHE_RESOLUTION_NOTE $mapKnowledgeNote"
             } else {
-                "local elevation data is incomplete, so horizontal length is used instead of effective length. $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE $ELEVATION_CACHE_RESOLUTION_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE"
+                "local elevation data is incomplete, so horizontal length is used instead of effective length. $SPEED_MODEL_NOTE $waitTimingNote$ELEVATION_CACHE_RESOLUTION_NOTE $mapKnowledgeNote"
             }
+    }
+
+    private fun mapKnowledgeLimitationNote(includeWaitAnalysis: Boolean): String =
+        if (includeWaitAnalysis) MAP_KNOWLEDGE_LIMITATION_NOTE else MAP_KNOWLEDGE_NO_WAIT_LIMITATION_NOTE
+
+    private fun calculatedRouteMatchesStoredExplanation(includeWaitAnalysis: Boolean): String {
+        val omittedDetails = if (includeWaitAnalysis) {
+            "leg, wait, elevation-profile, or map analysis"
+        } else {
+            "leg, elevation-profile, or map analysis"
+        }
+        return "The analyzer determined the ideal route from the start, finish, controls, beacon, and spectator if assigned. The calculated ideal route matches the imported route, so no separate calculated-route $omittedDetails is repeated in this section. Section 3 still summarizes the route comparison."
+    }
 
     private fun calculatedSectionExplanation(
         analysis: RouteAnalysis?,
         routeCount: Int,
         routeCalculationNote: String?,
         providedAssignments: List<DesktopCourseWaitRenumberingAssignment>,
-        calculatedAssignments: List<DesktopCourseWaitRenumberingAssignment>
+        calculatedAssignments: List<DesktopCourseWaitRenumberingAssignment>,
+        includeWaitAnalysis: Boolean
     ): String {
         val measurement = analysis?.measurementLabel?.lowercase() ?: "the available distance metric"
         val elevationText = if (analysis?.effectiveLengthMeters != null) {
@@ -1268,7 +1300,16 @@ object DesktopCourseAnalyzer {
         } else {
             "Elevation data was incomplete along the calculated straight-line legs, so horizontal length was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
         }
-        val assignmentText = assignmentDifferenceText(providedAssignments, calculatedAssignments)
+        val assignmentText = if (includeWaitAnalysis) {
+            " " + assignmentDifferenceText(providedAssignments, calculatedAssignments)
+        } else {
+            ""
+        }
+        val waitTimingText = if (includeWaitAnalysis) {
+            " $CLASSIC_WAIT_TIMING_NOTE Large differences in estimated ideal time can come from fox wait-time optimization as well as horizontal length; compare the movement, wait, and find/punch timing breakdown rows."
+        } else {
+            ""
+        }
         val routeCalculationText = routeCalculationNote?.let { " $it" }.orEmpty()
         val isNonExhaustiveSearch = routeCalculationNote?.contains("non-exhaustive", ignoreCase = true) == true
         val opening = if (routeCalculationNote == null) {
@@ -1284,7 +1325,7 @@ object DesktopCourseAnalyzer {
             else ->
                 "Within the stated format-specific route model, the route with the shortest $measurement is the ideal route; an imported route that is longer is not ideal."
         }
-        return "$opening $routeDefinitionText$routeCalculationText $elevationText $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE Large differences in estimated ideal time can come from fox wait-time optimization as well as horizontal length; compare the movement, wait, and find/punch timing breakdown rows. $MAP_KNOWLEDGE_LIMITATION_NOTE $assignmentText"
+        return "$opening $routeDefinitionText$routeCalculationText $elevationText $SPEED_MODEL_NOTE$waitTimingText ${mapKnowledgeLimitationNote(includeWaitAnalysis)}$assignmentText"
     }
 
     private fun assignmentDifferenceText(
@@ -1310,14 +1351,16 @@ object DesktopCourseAnalyzer {
         providedSection: DesktopCourseAnalysisSection?,
         calculatedSection: DesktopCourseAnalysisSection?,
         waitRenumbering: DesktopCourseWaitRenumbering?,
-        speedModel: DesktopCourseSpeedModel
+        speedModel: DesktopCourseSpeedModel,
+        includeWaitAnalysis: Boolean
     ): String {
         val speedText =
             " Assumed running speed is ${twoDecimals(speedModel.effectiveSpeedMetersPerSecond)} m/s: " +
                 "${twoDecimals(speedModel.formatSpeedMetersPerSecond)} m/s race-format baseline x " +
                 "${speedModel.categoryModelLabel} category multiplier ${twoDecimals(speedModel.categorySpeedMultiplier)} x " +
                 "event speed factor ${twoDecimals(speedModel.compensationFactor)}. The event speed factor is the single event-wide adjustment for terrain, weather, or other conditions; below 1.00 slows all category estimates, and above 1.00 speeds them."
-        val waitImprovementText = waitRenumbering
+        val waitImprovementText = if (includeWaitAnalysis) {
+            waitRenumbering
             ?.takeIf { it.improvesWait }
             ?.let { renumbering ->
                 val improvementSeconds = (renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)
@@ -1325,8 +1368,16 @@ object DesktopCourseAnalyzer {
                 " Section 1 identifies a fox-renumbering option that may reduce imported-route wait time by ${compactDurationText(improvementSeconds)}; see Section 1 for the assignment details."
             }
             .orEmpty()
+        } else {
+            ""
+        }
         val baseText = if (providedSection != null && calculatedSection != null) {
-            "This summary compares the imported route with the independently calculated candidate, including checks against the cited USA rules document, their primary distance metric, route order, estimated time, wait-time optimization, elevation profiles, and 2D point depictions."
+            val comparisonDetails = if (includeWaitAnalysis) {
+                "estimated time, wait-time optimization, elevation profiles, and 2D point depictions"
+            } else {
+                "estimated time, elevation profiles, and 2D point depictions"
+            }
+            "This summary compares the imported route with the independently calculated candidate, including checks against the cited USA rules document, their primary distance metric, route order, $comparisonDetails."
         } else {
             "This summary reports checks against the cited USA rules document and the independently calculated route candidate because no imported route was available for Section 1."
         }
@@ -1583,7 +1634,8 @@ object DesktopCourseAnalyzer {
                     shortestComparisonLengthMeters = comparisonSection?.comparisonLengthMeters
                 ),
                 targetSeconds = targetSeconds,
-                appliesClimbLimit = appliesClimbLimit
+                appliesClimbLimit = appliesClimbLimit,
+                includeWaitAnalysis = section.includeWaitAnalysis
             )
         }.orEmpty()
         val calculatedMetricSection = calculatedSection
@@ -1600,7 +1652,8 @@ object DesktopCourseAnalyzer {
                     shortestComparisonLengthMeters = comparisonSection?.comparisonLengthMeters
                 ),
                 targetSeconds = targetSeconds,
-                appliesClimbLimit = appliesClimbLimit
+                appliesClimbLimit = appliesClimbLimit,
+                includeWaitAnalysis = section.includeWaitAnalysis
             )
         }.orEmpty()
         return DesktopCourseGoodnessMetrics(
@@ -1617,47 +1670,52 @@ object DesktopCourseAnalyzer {
         section: DesktopCourseAnalysisSection,
         shortestRouteMetric: DesktopCourseGoodnessMetric,
         targetSeconds: Int,
-        appliesClimbLimit: Boolean
+        appliesClimbLimit: Boolean,
+        includeWaitAnalysis: Boolean
     ): List<DesktopCourseGoodnessMetric> =
         buildList {
             add(shortestRouteMetric)
             add(climbPercentMetric(section, appliesClimbLimit))
-            add(waitTotalMetric(section.waitRows))
-            section.waitRenumbering
-                ?.takeIf { it.improvesWait }
-                ?.let { renumbering ->
-                    add(
-                        DesktopCourseGoodnessMetric(
-                            "Total ideal-route wait time with renumbering",
-                            compactDurationText(renumbering.bestTotalWaitSeconds),
-                            if (renumbering.bestTotalWaitSeconds == 0) {
-                                DesktopCourseMetricStatus.Good
-                            } else {
-                                DesktopCourseMetricStatus.Warning
-                            }
+            if (includeWaitAnalysis) {
+                add(waitTotalMetric(section.waitRows))
+                section.waitRenumbering
+                    ?.takeIf { it.improvesWait }
+                    ?.let { renumbering ->
+                        add(
+                            DesktopCourseGoodnessMetric(
+                                "Total ideal-route wait time with renumbering",
+                                compactDurationText(renumbering.bestTotalWaitSeconds),
+                                if (renumbering.bestTotalWaitSeconds == 0) {
+                                    DesktopCourseMetricStatus.Good
+                                } else {
+                                    DesktopCourseMetricStatus.Warning
+                                }
+                            )
                         )
-                    )
-                }
+                    }
+            }
             add(challengeMetric(section.estimatedIdealSeconds, targetSeconds))
-            section.waitRenumbering
-                ?.takeIf { it.improvesWait && section.estimatedIdealSeconds != null }
-                ?.let { renumbering ->
-                    val improvementSeconds = (renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)
-                        .coerceAtLeast(0)
-                    val renumberedIdealSeconds = (requireNotNull(section.estimatedIdealSeconds) - improvementSeconds)
-                        .coerceAtLeast(0)
-                    add(
-                        DesktopCourseGoodnessMetric(
-                            "$title route finish time with renumbering",
-                            "${compactDurationText(renumberedIdealSeconds)} / ${compactDurationText(targetSeconds)}",
-                            if (abs(renumberedIdealSeconds - targetSeconds) <= targetSeconds * 0.15) {
-                                DesktopCourseMetricStatus.Good
-                            } else {
-                                DesktopCourseMetricStatus.Warning
-                            }
+            if (includeWaitAnalysis) {
+                section.waitRenumbering
+                    ?.takeIf { it.improvesWait && section.estimatedIdealSeconds != null }
+                    ?.let { renumbering ->
+                        val improvementSeconds = (renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)
+                            .coerceAtLeast(0)
+                        val renumberedIdealSeconds = (requireNotNull(section.estimatedIdealSeconds) - improvementSeconds)
+                            .coerceAtLeast(0)
+                        add(
+                            DesktopCourseGoodnessMetric(
+                                "$title route finish time with renumbering",
+                                "${compactDurationText(renumberedIdealSeconds)} / ${compactDurationText(targetSeconds)}",
+                                if (abs(renumberedIdealSeconds - targetSeconds) <= targetSeconds * 0.15) {
+                                    DesktopCourseMetricStatus.Good
+                                } else {
+                                    DesktopCourseMetricStatus.Warning
+                                }
+                            )
                         )
-                    )
-                }
+                    }
+            }
             section.ruleChecks
                 .filterNot { it.isSharedGoodnessMetric() }
                 .forEach(::add)

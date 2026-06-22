@@ -13414,7 +13414,7 @@ private fun CourseAnalysisPanel(
     var speedStatusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
     var isAnalyzing by remember(projectFile.raceData.race.id) { mutableStateOf(false) }
     var analysisProgressMessage by remember(projectFile.raceData.race.id) {
-        mutableStateOf("Calculating route metrics, route optimization, wait times, rule checks, and report graphics.")
+        mutableStateOf("Calculating route metrics, route optimization, route timing, rule checks, and report graphics.")
     }
     val analysisScope = rememberCoroutineScope()
     var speedFactorDraft by remember(
@@ -13561,7 +13561,7 @@ private fun CourseAnalysisPanel(
                                 // begins; Foxoring hybrid search can otherwise make the UI appear
                                 // unresponsive on slower machines.
                                 delay(100)
-                                analysisProgressMessage = "Calculating route metrics, route optimization, wait times, rule checks, and report graphics."
+                                analysisProgressMessage = "Calculating route metrics, route optimization, route timing, rule checks, and report graphics."
                                 val summary = analyzeWithLocalCachePreparation(categoryId)
                                 acceptAnalysisSummary(categoryId, summary)
                             } catch (error: Throwable) {
@@ -13736,7 +13736,7 @@ private fun CourseAnalysisPanel(
                             } finally {
                                 isAnalyzing = false
                                 analysisProgressMessage =
-                                    "Calculating route metrics, route optimization, wait times, rule checks, and report graphics."
+                                    "Calculating route metrics, route optimization, route timing, rule checks, and report graphics."
                             }
                         }
                     }
@@ -13915,9 +13915,9 @@ private fun CourseAnalysisSectionView(
         CourseAnalysisRow("Estimated ideal time", secondsText(section.estimatedIdealSeconds))
         CourseAnalysisTimingBreakdown(section.legRows, section.estimatedIdealSeconds)
         CourseAnalysisLegRows("Leg analysis", section.legRows)
-        if (includeRenumbering) {
+        if (section.includeWaitAnalysis && includeRenumbering) {
             CourseAnalysisProvidedRouteWaitAnalysis(section.waitRows, section.waitRenumbering)
-        } else {
+        } else if (section.includeWaitAnalysis) {
             CourseAnalysisWaitRows("Optimized wait times", section.waitRows)
         }
         CourseAnalysisSectionSummaryRows(summaryGroup)

@@ -33,6 +33,7 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
 import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Locale
 import kotlin.math.roundToInt
 
 class DesktopCourseAnalyzerTest {
@@ -544,6 +545,60 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun pdfRouteDepictionUsesRoutePointIndexesWhenStartAndSpectatorShareLabel() {
+        val projectFile = sprintProjectFile().copy(
+            raceData = sprintProjectFile().raceData.copy(
+                controls = sprintProjectFile().raceData.controls.map { control ->
+                    if (control.type == ControlPointType.SEPARATOR) {
+                        control.copy(label = "S", publicLabel = "S")
+                    } else {
+                        control
+                    }
+                }
+            )
+        )
+        val baseInfo = sprintProtectedInfo()
+        val protectedInfo = baseInfo.copy(
+            controlPoints = baseInfo.controlPoints.map { controlPoint ->
+                if (controlPoint.type == ControlPointType.SEPARATOR) {
+                    controlPoint.copy(label = "S")
+                } else {
+                    controlPoint
+                }
+            },
+            courseObjects = baseInfo.courseObjects.map { courseObject ->
+                if (courseObject.type == ProtectedCourseObjectType.SPECTATOR) {
+                    courseObject.copy(label = "S")
+                } else {
+                    courseObject
+                }
+            }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "1 2 S F1 F2 Beacon"
+        )
+
+        val routeMap = requireNotNull(summary.routeMaps.firstOrNull { it.title == "Imported route" })
+        assertEquals("S", routeMap.points[routeMap.routePointIndexes.first()].label)
+        assertEquals(DesktopCourseRouteMapPointType.Start, routeMap.points[routeMap.routePointIndexes.first()].type)
+        assertTrue(routeMap.points.any { it.label == "S" && it.type == DesktopCourseRouteMapPointType.Spectator })
+
+        val pdfPath = Files.createTempFile("course-analysis-duplicate-s-route-map", ".pdf")
+        DesktopCourseAnalysisExports.exportPdf(pdfPath, summary)
+        val pdfText = String(Files.readAllBytes(pdfPath))
+        val routeLinePoints = routeMap.routePointIndexes.mapNotNull { routeMap.points.getOrNull(it) }
+        val correctFirstLine = pdfRouteMapLineCommand(routeLinePoints[0], routeLinePoints[1])
+        val spectatorPoint = routeMap.points.single { it.label == "S" && it.type == DesktopCourseRouteMapPointType.Spectator }
+        val wrongFirstLine = pdfRouteMapLineCommand(spectatorPoint, routeLinePoints[1])
+        assertTrue("PDF should draw first route leg from true Start: $correctFirstLine", pdfText.contains(correctFirstLine))
+        assertFalse("PDF should not draw first route leg from spectator: $wrongFirstLine", pdfText.contains(wrongFirstLine))
+    }
+
+    @Test
     fun importedRouteEndingAtStartIsReversedBeforeAnalysis() {
         val protectedInfo = sprintProtectedInfo().copy(
             route = sprintProtectedInfo().route.reversed()
@@ -621,6 +676,22 @@ class DesktopCourseAnalyzerTest {
             assertEquals("raceType=$raceType", emptyList<DesktopCourseWaitRow>(), summary.calculatedRouteSection?.waitRows)
             assertTrue("raceType=$raceType", summary.providedLegRows.all { it.waitSeconds == null && it.findPunchSeconds == null })
             assertTrue("raceType=$raceType", summary.calculatedLegRows.all { it.waitSeconds == null && it.findPunchSeconds == null })
+            assertFalse("raceType=$raceType", summary.providedRouteSection?.includeWaitAnalysis ?: true)
+            assertFalse("raceType=$raceType", summary.calculatedRouteSection?.includeWaitAnalysis ?: true)
+            assertFalse(
+                "raceType=$raceType metrics=${summary.goodnessMetrics}",
+                summary.goodnessMetrics.groups
+                    .flatMap { it.metrics }
+                    .any { it.label.contains("wait", ignoreCase = true) }
+            )
+            val reportText = DesktopCourseAnalysisExports.reportText(summary)
+            assertFalse("raceType=$raceType report=$reportText", reportText.contains("wait", ignoreCase = true))
+            assertFalse("raceType=$raceType report=$reportText", reportText.contains("find/punch", ignoreCase = true))
+            val pdfPath = Files.createTempFile("course-analysis-no-wait-$raceType", ".pdf")
+            DesktopCourseAnalysisExports.exportPdf(pdfPath, summary)
+            val pdfText = String(Files.readAllBytes(pdfPath))
+            assertFalse("raceType=$raceType", pdfText.contains("wait", ignoreCase = true))
+            assertFalse("raceType=$raceType", pdfText.contains("find/punch", ignoreCase = true))
             assertFalse(
                 "raceType=$raceType missing=${summary.missingElements}",
                 summary.missingElements.any { it.contains("Transmit-slot wait analysis") }
@@ -1649,6 +1720,22 @@ class DesktopCourseAnalyzerTest {
                     ?.get(1)
             }
             .toList()
+
+    private fun pdfRouteMapLineCommand(
+        from: DesktopCourseRouteMapPoint,
+        to: DesktopCourseRouteMapPoint,
+        left: Double = 54.0,
+        bottom: Double = 405.0,
+        width: Double = 225.0,
+        height: Double = 185.0
+    ): String {
+        fun x(point: DesktopCourseRouteMapPoint): Double = left + point.xFraction.coerceIn(0.0, 1.0) * width
+        fun y(point: DesktopCourseRouteMapPoint): Double = bottom + (1.0 - point.yFraction.coerceIn(0.0, 1.0)) * height
+        return "${pdfNumber(x(from))} ${pdfNumber(y(from))} m ${pdfNumber(x(to))} ${pdfNumber(y(to))} l S"
+    }
+
+    private fun pdfNumber(value: Double): String =
+        String.format(Locale.US, "%.2f", value)
 
     private fun sprintProjectFile(includeSpectator: Boolean = true, includeBeacon: Boolean = true): EventProjectFile {
         val controls = listOfNotNull(
