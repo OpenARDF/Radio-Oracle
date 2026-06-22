@@ -9,6 +9,7 @@ import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFile
 import org.openardf.radiooracle.shared.event.EventSeriesFileJson
 import org.openardf.radiooracle.shared.event.EventSeriesLinkedEvent
+import org.openardf.radiooracle.shared.event.EventSeriesLink
 import org.openardf.radiooracle.shared.event.EventSeriesSupport
 import org.openardf.radiooracle.shared.event.EventSeriesValidationIssue
 import org.openardf.radiooracle.shared.event.EventSeriesIssueSeverity
@@ -241,10 +242,33 @@ object DesktopEventSeriesActions {
         maxAncestorDepth: Int = 6,
         exists: (Path) -> Boolean = Files::exists
     ): Path? =
+        manifestCandidatesNearEvent(eventPath, maxAncestorDepth, exists)
+            .firstOrNull()
+
+    fun findManifestNearEvent(
+        eventPath: Path,
+        seriesLink: EventSeriesLink?,
+        store: EventSeriesStore,
+        maxAncestorDepth: Int = 6
+    ): Path? {
+        val candidates = manifestCandidatesNearEvent(eventPath, maxAncestorDepth, store::exists).toList()
+        if (seriesLink != null) {
+            candidates.firstOrNull { candidate ->
+                runCatching { store.read(candidate).seriesId == seriesLink.seriesId }
+                    .getOrDefault(false)
+            }?.let { return it }
+        }
+        return candidates.firstOrNull()
+    }
+
+    private fun manifestCandidatesNearEvent(
+        eventPath: Path,
+        maxAncestorDepth: Int,
+        exists: (Path) -> Boolean
+    ): Sequence<Path> =
         generateSequence(eventPath.parent) { it.parent }
             .take(maxAncestorDepth)
             .flatMap { eventSeriesManifestCandidates(it, exists).asSequence() }
-            .firstOrNull()
 
     fun manifestPathForSeriesName(
         seriesFolder: Path,

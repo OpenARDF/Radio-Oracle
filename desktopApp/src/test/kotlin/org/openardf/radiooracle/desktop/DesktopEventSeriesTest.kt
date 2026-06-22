@@ -19,6 +19,7 @@ import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFile
+import org.openardf.radiooracle.shared.event.EventSeriesFileJson
 import org.openardf.radiooracle.shared.event.EventSeriesLink
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
@@ -149,6 +150,43 @@ class DesktopEventSeriesTest {
         Files.writeString(manifestPath, "{}")
 
         assertEquals(manifestPath, DesktopEventSeriesActions.findManifestNearEvent(eventPath))
+    }
+
+    @Test
+    fun findManifestNearEventPrefersManifestMatchingEventSeriesLink() {
+        val folder = Files.createTempDirectory("radio-oracle-multi-series")
+        val eventPath = folder.resolve("Sprint Practice.json")
+        val otherManifestPath = folder.resolve("2m Classic Practice.series.radio-oracle.json")
+        val linkedManifestPath = folder.resolve("Umstead West Practices.series.radio-oracle.json")
+        Files.writeString(eventPath, "{}")
+        Files.writeString(
+            otherManifestPath,
+            EventSeriesFileJson.encode(
+                EventSeriesFile(
+                    seriesId = "other-series",
+                    name = "2m Classic Practice",
+                    events = listOf(EventSeriesEvent("other-event", "2m Classic Practice.json", 0, "2m Classic Practice"))
+                )
+            )
+        )
+        Files.writeString(
+            linkedManifestPath,
+            EventSeriesFileJson.encode(
+                EventSeriesFile(
+                    seriesId = "linked-series",
+                    name = "Umstead West Practices",
+                    events = listOf(EventSeriesEvent("sprint-event", "Sprint Practice.json", 0, "Sprint Practice"))
+                )
+            )
+        )
+
+        val manifestPath = DesktopEventSeriesActions.findManifestNearEvent(
+            eventPath = eventPath,
+            seriesLink = EventSeriesLink("linked-series", "sprint-event"),
+            store = DesktopEventSeriesFiles
+        )
+
+        assertEquals(linkedManifestPath, manifestPath)
     }
 
     @Test

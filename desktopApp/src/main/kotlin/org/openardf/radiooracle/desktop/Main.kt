@@ -555,14 +555,22 @@ fun main(args: Array<String>) = application {
 
         fun currentSeriesManifestPath(): Path? {
             val currentPath = projectSession.currentPath ?: return null
-            return DesktopEventSeriesActions.findManifestNearEvent(currentPath)
+            return DesktopEventSeriesActions.findManifestNearEvent(
+                eventPath = currentPath,
+                seriesLink = projectSession.currentProject?.seriesLink,
+                store = DesktopEventSeriesFiles
+            )
         }
 
         fun refreshSavedEventSeriesMetadata(savedProject: EventProjectFile, savedPath: Path): String? {
             if (savedProject.seriesLink == null) {
                 return null
             }
-            val manifestPath = DesktopEventSeriesActions.findManifestNearEvent(savedPath)
+            val manifestPath = DesktopEventSeriesActions.findManifestNearEvent(
+                eventPath = savedPath,
+                seriesLink = savedProject.seriesLink,
+                store = DesktopEventSeriesFiles
+            )
                 ?: return "Event Series metadata was not refreshed because no series manifest was found near this Event File."
             return runCatching {
                 val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
@@ -592,7 +600,13 @@ fun main(args: Array<String>) = application {
 
         fun refreshSeriesEventSummaries() {
             val currentPath = projectSession.currentPath
-            val manifestPath = currentPath?.let { DesktopEventSeriesActions.findManifestNearEvent(it) }
+            val manifestPath = currentPath?.let {
+                DesktopEventSeriesActions.findManifestNearEvent(
+                    eventPath = it,
+                    seriesLink = projectSession.currentProject?.seriesLink,
+                    store = DesktopEventSeriesFiles
+                )
+            }
             if (manifestPath == null) {
                 seriesEventSummaries = emptyList()
                 seriesStartFairnessSummary = null
