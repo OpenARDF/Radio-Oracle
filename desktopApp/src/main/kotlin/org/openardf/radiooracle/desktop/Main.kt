@@ -2838,6 +2838,7 @@ fun main(args: Array<String>) = application {
                     "${selectedSummary.changedControlLocationCount} control locations updated.",
                     "${selectedSummary.categoryAssignmentUpdates.size.takeIf { applyCategoryAssignments } ?: 0} assigned-control lists replaced.",
                     "${selectedSummary.createdCategoryNames.size} missing categories created.",
+                    "${selectedSummary.createdControlNames.size} missing controls created.",
                     "${selectedSummary.missingCategoryNames.size} category names were missing before review."
                 ) + listOf(updatedProject.resultImpactWarning("Course data changed").trim()).filter { it.isNotBlank() } +
                     selectedSummary.categoryAssumptions.map { assumption ->
@@ -2863,6 +2864,10 @@ fun main(args: Array<String>) = application {
                         .takeIf { it.isNotEmpty() }
                         ?.let { " Created ${it.size} categories without competitors." }
                         .orEmpty()
+                    val createdControlsText = selectedSummary.createdControlNames
+                        .takeIf { it.isNotEmpty() }
+                        ?.let { " Created ${it.size} controls." }
+                        .orEmpty()
                     val assignedText = if (applyCategoryAssignments) {
                         selectedSummary.categoryAssignmentUpdates.size
                             .takeIf { it > 0 }
@@ -2872,15 +2877,15 @@ fun main(args: Array<String>) = application {
                         ""
                     }
                     if (selectedSummary.importedCategoryCount == 0 && selectedSummary.changedControlLocationCount > 0) {
-                        "Updated ${selectedSummary.changedControlLocationCount} control locations.$assignedText$duplicateText$createdText Unsaved changes."
+                        "Updated ${selectedSummary.changedControlLocationCount} control locations.$assignedText$duplicateText$createdText$createdControlsText Unsaved changes."
                     } else if (
                         selectedSummary.importedCategoryCount == 0 &&
                         selectedSummary.assignedCategoryControlCount > 0 &&
                         applyCategoryAssignments
                     ) {
-                        "Updated assigned controls for ${selectedSummary.categoryAssignmentUpdates.size} categories.$duplicateText$createdText Unsaved changes."
+                        "Updated assigned controls for ${selectedSummary.categoryAssignmentUpdates.size} categories.$duplicateText$createdText$createdControlsText Unsaved changes."
                     } else {
-                        "Imported controls/route data for ${selectedSummary.importedCategoryCount} categories.$locationText$assignedText$duplicateText$createdText Unsaved changes."
+                        "Imported controls/route data for ${selectedSummary.importedCategoryCount} categories.$locationText$assignedText$duplicateText$createdText$createdControlsText Unsaved changes."
                     }
                 }
             }
@@ -2915,8 +2920,8 @@ fun main(args: Array<String>) = application {
                         categoryOverrideId = categoryOverrideId,
                         requireRoutes = requireRoutes
                     )
-                    val createdPreview = preview.second.missingCategoryNames
-                        .takeIf { it.isNotEmpty() }
+                    val createdPreview = preview.second
+                        .takeIf { it.missingCategoryNames.isNotEmpty() || it.missingControlNames.isNotEmpty() }
                         ?.let {
                             DesktopCourseKmlImporter.importProtectedCourseInfo(
                                 path = path,
@@ -2924,6 +2929,7 @@ fun main(args: Array<String>) = application {
                                 password = password,
                                 categoryOverrideId = categoryOverrideId,
                                 createMissingCategories = true,
+                                createMissingControls = true,
                                 requireRoutes = requireRoutes
                             )
                         }
@@ -6070,8 +6076,13 @@ private fun CourseKmlKmzImportReviewDialog(
 ) {
     val summary = review.summary
     val formatLabel = controlsRouteImportFormatLabel(review.sourceName)
-    var createMissingCategories by remember(review.sourceName, summary.sourceSha256, summary.missingCategoryNames) {
-        mutableStateOf(summary.missingCategoryNames.isNotEmpty())
+    var createMissingCategories by remember(
+        review.sourceName,
+        summary.sourceSha256,
+        summary.missingCategoryNames,
+        summary.missingControlNames
+    ) {
+        mutableStateOf(summary.missingCategoryNames.isNotEmpty() || summary.missingControlNames.isNotEmpty())
     }
     val selectedSummary = if (createMissingCategories) {
         review.createdMissingCategorySummary ?: summary
@@ -6149,8 +6160,13 @@ private fun CourseKmlKmzImportReviewDialog(
                         }
                         Text("Matched categories: ${selectedSummary.matchedCategoryCount} of ${selectedSummary.routeCount} routes")
                         Text("Categories: $categoriesText")
-                        if (summary.missingCategoryNames.isNotEmpty()) {
-                            Text("Categories listed in $formatLabel but not in the Event File: ${summary.missingCategoryNames.joinToString()}")
+                        if (summary.missingCategoryNames.isNotEmpty() || summary.missingControlNames.isNotEmpty()) {
+                            if (summary.missingCategoryNames.isNotEmpty()) {
+                                Text("Categories listed in $formatLabel but not in the Event File: ${summary.missingCategoryNames.joinToString()}")
+                            }
+                            if (summary.missingControlNames.isNotEmpty()) {
+                                Text("Controls listed in $formatLabel but not in the Event File: ${summary.missingControlNames.joinToString()}")
+                            }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -6159,13 +6175,13 @@ private fun CourseKmlKmzImportReviewDialog(
                                     checked = createMissingCategories,
                                     onCheckedChange = { createMissingCategories = it }
                                 )
-                                Text("Create missing categories and save their course data")
+                                Text("Create missing categories and controls, then save course data")
                             }
                             Text(
                                 text = if (createMissingCategories) {
-                                    "Created categories will be saved without competitors. Competitors imported later with the same category names will use this stored course data."
+                                    "Created categories will be saved without competitors. Created controls will be added to Setup > Controls so route analysis and category assignments can use them."
                                 } else {
-                                    "Missing categories will be left out of this import. Add those categories or reimport the $formatLabel later to store their course data."
+                                    "Missing categories or controls will be left out of this import. Add them or reimport the $formatLabel later to store full course data."
                                 },
                                 fontSize = 12.sp,
                                 color = Color.DarkGray
@@ -8369,10 +8385,14 @@ private fun saveEventButtonColors() =
     )
 
 @Composable
-private fun navigationItemButtonColors(workflow: DesktopWorkflow, action: DesktopNavAction?) =
+private fun navigationItemButtonColors(
+    workflow: DesktopWorkflow,
+    action: DesktopNavAction?,
+    useSeriesNavigationColor: Boolean = workflow == DesktopWorkflow.Series
+) =
     when {
         action == DesktopNavAction.SaveEventFile -> saveEventButtonColors()
-        workflow == DesktopWorkflow.Series -> seriesNavigationButtonColors()
+        useSeriesNavigationColor -> seriesNavigationButtonColors()
         else -> ButtonDefaults.buttonColors()
     }
 
@@ -8500,7 +8520,11 @@ private fun NavigationRail(
                                 .fillMaxWidth()
                                 .heightIn(min = 34.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            colors = navigationItemButtonColors(navState.workflow, item.action)
+                            colors = navigationItemButtonColors(
+                                navState.workflow,
+                                item.action,
+                                DesktopNavigation.usesSeriesNavigationColor(navState, item)
+                            )
                         ) {
                             Text(
                                 text = if (DesktopNavigation.showsMenuIndicator(item)) "${item.label} >" else item.label,

@@ -7,10 +7,12 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
@@ -65,6 +67,8 @@ data class DesktopCourseKmlImportSummary(
     val duplicateMissingElevationPointCount: Int,
     val missingCategoryNames: List<String>,
     val createdCategoryNames: List<String>,
+    val missingControlNames: List<String> = emptyList(),
+    val createdControlNames: List<String> = emptyList(),
     val categoryAssumptions: List<DesktopCourseKmlCategoryAssumption>,
     val eventTypeWarnings: List<String>,
     val sourceSha256: String,
@@ -163,6 +167,7 @@ object DesktopCourseKmlImporter {
         categoryOverrideId: String? = null,
         elevationProvider: (CourseGeoPoint) -> Double? = { point -> DesktopVenueElevationCache.elevationMeters(point) },
         createMissingCategories: Boolean = false,
+        createMissingControls: Boolean = false,
         missingCategoryIdFactory: (String) -> String = { UUID.randomUUID().toString() },
         requireRoutes: Boolean = true
     ): Pair<EventProjectFile, DesktopCourseKmlImportSummary> {
@@ -215,8 +220,30 @@ object DesktopCourseKmlImporter {
                 )
             )
         }
-        val matchedControlResult = matchedControls(courseData.controls, projectWithMissingCategories.raceData.controls)
-        val hintedProject = applyControlSiHints(projectWithMissingCategories, matchedControlResult.controls)
+        val missingControls = missingCourseControls(
+            importedControls = courseData.controls,
+            eventControls = projectWithMissingCategories.raceData.controls,
+            raceId = projectWithMissingCategories.raceData.race.id
+        )
+        val createdControlNames = if (createMissingControls) {
+            missingControls.map { it.displayCourseLabel() }
+        } else {
+            emptyList()
+        }
+        val projectWithMissingControls = if (createdControlNames.isEmpty()) {
+            projectWithMissingCategories
+        } else {
+            projectWithMissingCategories.copy(
+                raceData = projectWithMissingCategories.raceData.copy(
+                    controls = EventControlCatalog.mergeControls(
+                        projectWithMissingCategories.raceData.controls,
+                        missingControls
+                    )
+                )
+            )
+        }
+        val matchedControlResult = matchedControls(courseData.controls, projectWithMissingControls.raceData.controls)
+        val hintedProject = applyControlSiHints(projectWithMissingControls, matchedControlResult.controls)
         val matchedControlsForHintedProject = matchedControls(courseData.controls, hintedProject.raceData.controls)
         val controls = matchedControlsForHintedProject.controls
         val controlsByLabel = controls.associateBy { it.label.normalizedCourseName() }
@@ -247,7 +274,7 @@ object DesktopCourseKmlImporter {
         )
         val locationUpdateResult = controlLocationUpdates.takeIf { it.isNotEmpty() }?.let { updates ->
             DesktopProtectedControlLocationUpdater.applyControlLocations(
-                projectFile = projectWithMissingCategories,
+                projectFile = projectWithMissingControls,
                 courseInfoByCategoryId = courseInfoByCategoryId,
                 updates = updates,
                 password = password,
@@ -431,6 +458,8 @@ object DesktopCourseKmlImporter {
             duplicateMissingElevationPointCount = duplicateMissingElevationPointCount,
             missingCategoryNames = missingCategoryNames,
             createdCategoryNames = createdCategoryNames,
+            missingControlNames = missingControls.map { it.displayCourseLabel() },
+            createdControlNames = createdControlNames,
             categoryAssumptions = routeCategoryTargets.assumptions,
             eventTypeWarnings = DesktopImportPreviews.eventTypeWarnings(
                 eventRaceType = projectFile.raceData.race.raceType,
@@ -444,7 +473,7 @@ object DesktopCourseKmlImporter {
         )
         DesktopDebugLog.info(
             "CourseKml",
-            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} assignedCategoryControls=${summary.assignedCategoryControlCount} changedControlLocations=${summary.changedControlLocationCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} labelConversions=${summary.labelConversions.size} missingElevationPoints=${summary.missingElevationPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
+            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} assignedCategoryControls=${summary.assignedCategoryControlCount} changedControlLocations=${summary.changedControlLocationCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} missingControls=${summary.missingControlNames.size} createdControls=${summary.createdControlNames.size} labelConversions=${summary.labelConversions.size} missingElevationPoints=${summary.missingElevationPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
         )
         return updatedProject to summary
     }
@@ -992,6 +1021,87 @@ object DesktopCourseKmlImporter {
             controls = controls,
             labelConversions = labelConversions.distinct()
         )
+    }
+
+    private fun missingCourseControls(
+        importedControls: List<CourseControlPoint>,
+        eventControls: List<EventControl>,
+        raceId: String
+    ): List<EventControl> {
+        val existingControlKeys = eventControls
+            .mapTo(mutableSetOf()) { it.siCode to it.type }
+        val existingLabels = eventControls
+            .mapTo(mutableSetOf()) { it.label.normalizedCourseName() }
+        return importedControls
+            .mapNotNull { it.toInferredEventControl(raceId) }
+            .distinctBy { it.siCode to it.type }
+            .filter { control ->
+                (control.siCode to control.type) !in existingControlKeys &&
+                    control.label.normalizedCourseName() !in existingLabels
+            }
+    }
+
+    private fun CourseControlPoint.toInferredEventControl(raceId: String): EventControl? {
+        if (name.isCourseEndpointName()) {
+            return null
+        }
+        val type = ControlRoleLabelRules.inferredRole(name) ?: ControlPointType.CONTROL
+        val siCode = inferredControlSiCode(name, type, siCodeHint) ?: return null
+        val label = inferredControlLabel(name, type, siCode)
+        return EventControl(
+            id = EventControlCatalog.stableId(label, siCode, type),
+            raceId = raceId,
+            label = label,
+            siCode = siCode,
+            type = type,
+            publicLabel = name.trim().takeIf { it.isNotBlank() && it != label },
+            latitude = point.latitude,
+            longitude = point.longitude
+        )
+    }
+
+    private fun inferredControlSiCode(
+        name: String,
+        type: ControlPointType,
+        siCodeHint: Int?
+    ): Int? {
+        siCodeHint?.takeIf(SportIdentCodes::isSICodeValid)?.let { return it }
+        sprintFastFoxNumber(name)?.let { return 40 + it }
+        if (type == ControlPointType.SEPARATOR) {
+            return name.singleEmbeddedNumber()?.takeIf(SportIdentCodes::isSICodeValid) ?: 46
+        }
+        if (type == ControlPointType.BEACON) {
+            return name.singleEmbeddedNumber()?.takeIf(SportIdentCodes::isSICodeValid) ?: 99
+        }
+        val number = name.controlKeywordNumber() ?: name.singleEmbeddedNumber() ?: return null
+        val siCode = if (number in 1..5) 30 + number else number
+        return siCode.takeIf(SportIdentCodes::isSICodeValid)
+    }
+
+    private fun inferredControlLabel(
+        name: String,
+        type: ControlPointType,
+        siCode: Int
+    ): String {
+        sprintFastFoxNumber(name)?.let { return "F$it" }
+        return when (type) {
+            ControlPointType.SEPARATOR -> "S"
+            ControlPointType.BEACON -> "M"
+            ControlPointType.CONTROL -> {
+                val number = name.controlKeywordNumber() ?: name.singleEmbeddedNumber()
+                if (number != null && siCode == 30 + number) {
+                    number.toString()
+                } else {
+                    name.trim().takeIf { it.isNotBlank() } ?: EventControlCatalog.defaultLabel(siCode, type)
+                }
+            }
+        }
+    }
+
+    private fun sprintFastFoxNumber(name: String): Int? {
+        val compactName = name.compactCourseName().uppercase()
+        val match = Regex("""^(?:F([1-5])|([1-5])F)$""").matchEntire(compactName) ?: return null
+        return match.groupValues.drop(1).firstOrNull { it.isNotBlank() }?.toIntOrNull()
     }
 
     private fun applyControlSiHints(

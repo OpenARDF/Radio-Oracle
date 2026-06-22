@@ -236,6 +236,17 @@ class DesktopNavigationTest {
         val eventSeries = DesktopNavigation.currentItems(settingsState).first { it.label == "Event Series" }
         val eventSeriesState = settingsState.enter(eventSeries)
 
+        assertTrue(DesktopNavigation.usesSeriesNavigationColor(settingsState, eventSeries))
+        assertTrue(
+            DesktopNavigation.currentItems(eventSeriesState)
+                .all { DesktopNavigation.usesSeriesNavigationColor(eventSeriesState, it) }
+        )
+        assertFalse(
+            DesktopNavigation.usesSeriesNavigationColor(
+                settingsState,
+                DesktopNavigation.currentItems(settingsState).first { it.label == "App Settings" }
+            )
+        )
         assertEquals(
             listOf("setup.event-file", "setup.event-file.settings", "setup.event-file.series-settings"),
             eventSeriesState.submenuStack

@@ -424,6 +424,59 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun createsMissingControlsBeforeImportingCreatedCategoryRoutes() {
+        val kmlPath = Files.createTempFile("Sprint Practice", ".kml")
+        Files.writeString(kmlPath, sampleSprintKmlWithSiDescriptions())
+        val project = EventProjectFactory.createEmptyProject(
+            raceId = "race",
+            raceName = "Sprint Practice",
+            startDateTimeIso = "2026-06-11T09:00"
+        )
+
+        val (previewProject, previewSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+        val (updatedProject, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null },
+            createMissingCategories = true,
+            createMissingControls = true,
+            missingCategoryIdFactory = { name -> "cat-${name.lowercase()}" }
+        )
+
+        assertEquals(listOf("M21"), previewSummary.missingCategoryNames)
+        assertEquals(listOf("1", "2", "S", "1F", "Beacon"), previewSummary.missingControlNames)
+        assertEquals(emptyList<String>(), previewProject.raceData.controls.map { it.label })
+
+        assertEquals(listOf("M21"), summary.createdCategoryNames)
+        assertEquals(listOf("1", "2", "S", "1F", "Beacon"), summary.createdControlNames)
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals(5, summary.matchedControlPointCount)
+        assertEquals(5, summary.assignedCategoryControlCount)
+        assertEquals("161 171 162 137! 136B", summary.categoryAssignmentUpdates.single().controlPointsText)
+        assertEquals(
+            listOf("M21"),
+            updatedProject.raceData.categories.map { it.category.name }
+        )
+        assertEquals(
+            listOf("M", "S", "1", "2", "F1"),
+            updatedProject.raceData.controls.map { it.label }
+        )
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updatedProject.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals(5, protectedCourseInfo.controlPoints.size)
+        assertEquals("1 2 S 1F Beacon", protectedCourseInfo.idealOrder)
+        assertNotNull(updatedProject.raceData.categories.single().category.encryptedIdealOrder)
+    }
+
+    @Test
     fun importReplacesExistingCategoryAssignmentsWithImportedControls() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithReversedControlPlacemarkOrder())
@@ -1788,6 +1841,56 @@ class DesktopCourseKmlImportTest {
                   -94.9960,39.0000,0
                 </coordinates>
               </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleSprintKmlWithSiDescriptions(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9980,39.0000,0
+                  -94.9960,39.0000,0
+                  -94.9940,39.0000,0
+                  -94.9920,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>1</name>
+              <description>SI=161</description>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>2</name>
+              <description>SI=162</description>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>S</name>
+              <description>SI=137</description>
+              <Point><coordinates>-94.9960,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>1F</name>
+              <description>SI=171</description>
+              <Point><coordinates>-94.9940,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Beacon</name>
+              <description>SI=136</description>
+              <Point><coordinates>-94.9920,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Start</name>
+              <Point><coordinates>-95.0010,39.0000,0</coordinates></Point>
             </Placemark>
           </Document>
         </kml>

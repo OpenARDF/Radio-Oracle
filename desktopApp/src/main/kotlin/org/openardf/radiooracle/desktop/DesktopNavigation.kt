@@ -256,6 +256,8 @@ data class DesktopNavState(
 }
 
 object DesktopNavigation {
+    private const val EventSeriesSettingsMenuId = "setup.event-file.series-settings"
+
     val roots: Map<DesktopWorkflow, List<DesktopNavItem>> =
         DesktopWorkflow.entries.associateWith(::rootItems)
 
@@ -754,6 +756,11 @@ object DesktopNavigation {
 
     fun showsMenuIndicator(item: DesktopNavItem): Boolean =
         item.action == null
+
+    fun usesSeriesNavigationColor(state: DesktopNavState, item: DesktopNavItem): Boolean =
+        item.workflow == DesktopWorkflow.Series ||
+            item.id == EventSeriesSettingsMenuId ||
+            state.submenuStack.contains(EventSeriesSettingsMenuId)
 
     fun menuItemsForStack(workflow: DesktopWorkflow, submenuStack: List<String>): List<DesktopNavItem> =
         submenuStack.fold(roots.getValue(workflow)) { items, id ->
