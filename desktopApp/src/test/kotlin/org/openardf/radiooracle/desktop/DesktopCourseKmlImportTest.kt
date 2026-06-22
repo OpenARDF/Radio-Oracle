@@ -2,10 +2,12 @@ package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.ControlPointType
+import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventProjectFile
@@ -211,7 +213,7 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
-    fun assumesOlderMaleThenFemaleCategoriesForMultipleRoutesWithoutCategoryIndicators() {
+    fun assumesCategoriesButSkipsAssumedRoutesWithoutMatchedControls() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithUnnamedRoutes(listOf("Course A", "Course B", "Course C")))
         val project = listOf("M21", "M40", "W21").fold(
@@ -232,7 +234,10 @@ class DesktopCourseKmlImportTest {
         )
 
         assertEquals(3, summary.matchedCategoryCount)
-        assertEquals(listOf("M21", "M40", "W21"), summary.matchedCategoryNames)
+        assertEquals(listOf("M21"), summary.matchedCategoryNames)
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals(2, summary.rejectedRoutes.size)
+        assertEquals(setOf("M40", "W21"), summary.rejectedRoutes.map { it.categoryName }.toSet())
         assertEquals(
             listOf(
                 DesktopCourseKmlCategoryAssumption("Course A", "M21"),
@@ -241,7 +246,9 @@ class DesktopCourseKmlImportTest {
             ),
             summary.categoryAssumptions
         )
-        assertTrue(updated.raceData.categories.all { it.category.encryptedCourseInfo != null })
+        assertNotNull(updated.raceData.categories.single { it.category.name == "M21" }.category.encryptedCourseInfo)
+        assertNull(updated.raceData.categories.single { it.category.name == "M40" }.category.encryptedCourseInfo)
+        assertNull(updated.raceData.categories.single { it.category.name == "W21" }.category.encryptedCourseInfo)
     }
 
     @Test
@@ -323,6 +330,39 @@ class DesktopCourseKmlImportTest {
         assertTrue(sprint10Length < sprint8Length)
         assertTrue(sprint8Length < sprint7Length)
         assertTrue(sprint7Length < sprint6Length)
+    }
+
+    @Test
+    fun skipsMatchedRoutesWhoseLineStringsDoNotMatchCourseControls() {
+        val kmlPath = Files.createTempFile("radio-oracle-mixed-routes", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithMixedValidAndInvalidRoutes())
+        val project = listOf("M21", "M50", "W65").fold(classicPresetProject()) { currentProject, categoryName ->
+            EventProjectEditor.addCategory(
+                currentProject,
+                categoryId = "cat-${categoryName.lowercase()}",
+                name = categoryName
+            )
+        }
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { 100.0 }
+        )
+
+        assertEquals(3, summary.matchedCategoryCount)
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals(listOf("M21"), summary.matchedCategoryNames)
+        assertEquals(2, summary.rejectedRoutes.size)
+        assertEquals(setOf("M50", "W65"), summary.rejectedRoutes.map { it.categoryName }.toSet())
+        assertTrue(summary.rejectedRoutes.any { it.reason.contains("start endpoint") })
+        assertTrue(summary.rejectedRoutes.any { it.reason.contains("does not pass near any matched fox controls") })
+        assertNotNull(updated.raceData.categories.single { it.category.name == "M21" }.category.encryptedCourseInfo)
+        assertNull(updated.raceData.categories.single { it.category.name == "M50" }.category.encryptedCourseInfo)
+        assertNull(updated.raceData.categories.single { it.category.name == "W65" }.category.encryptedCourseInfo)
+        assertEquals(1, summary.categoryAssignmentUpdates.size)
+        assertEquals("M21", summary.categoryAssignmentUpdates.single().categoryName)
     }
 
     @Test
@@ -474,6 +514,35 @@ class DesktopCourseKmlImportTest {
         assertEquals(5, protectedCourseInfo.controlPoints.size)
         assertEquals("1 2 S 1F Beacon", protectedCourseInfo.idealOrder)
         assertNotNull(updatedProject.raceData.categories.single().category.encryptedIdealOrder)
+    }
+
+    @Test
+    fun sprintImportTreatsEndpointSAsStartAndMiddleSAsSpectator() {
+        val kmlPath = Files.createTempFile("Sprint Two S", ".kml")
+        Files.writeString(kmlPath, sampleSprintKmlWithEndpointAndMiddleS())
+        val project = EventProjectEditor.addCategory(
+            sprintPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals("1 S F1 M", protectedCourseInfo.idealOrder)
+        assertEquals(listOf("1", "S", "F1", "M"), protectedCourseInfo.controlPoints.map { it.label })
+        assertEquals(-94.9960, protectedCourseInfo.controlPoints.single { it.label == "S" }.longitude, 0.000001)
+        assertEquals(-95.0000, protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.START }.longitude, 0.000001)
+        assertEquals("31 46! 41 99B", summary.categoryAssignmentUpdates.single().controlPointsText)
     }
 
     @Test
@@ -1518,6 +1587,66 @@ class DesktopCourseKmlImportTest {
         </kml>
         """.trimIndent()
 
+    private fun sampleKmlWithMixedValidAndInvalidRoutes(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>Start</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Finish</name>
+              <Point><coordinates>-94.9900,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>-94.9960,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>33</name>
+              <Point><coordinates>-94.9940,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9980,39.0000,0
+                  -94.9960,39.0000,0
+                  -94.9900,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>M50</name>
+              <LineString>
+                <coordinates>
+                  -96.0000,39.5000,0
+                  -95.9000,39.5000,0
+                  -95.8000,39.5000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>W65</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -95.4000,39.3000,0
+                  -94.9900,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
     private fun sampleKmlWithExplicitBeaconAndFinishAfterRoute(): String =
         """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -1896,6 +2025,47 @@ class DesktopCourseKmlImportTest {
         </kml>
         """.trimIndent()
 
+    private fun sampleSprintKmlWithEndpointAndMiddleS(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>Sprint M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9980,39.0000,0
+                  -94.9960,39.0000,0
+                  -94.9940,39.0000,0
+                  -94.9920,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>S</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>1</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>S</name>
+              <Point><coordinates>-94.9960,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>F1</name>
+              <Point><coordinates>-94.9940,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M</name>
+              <Point><coordinates>-94.9920,39.0000,0</coordinates></Point>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
     private fun sampleKmlWithBeacon(): String =
         """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -2134,6 +2304,20 @@ class DesktopCourseKmlImportTest {
         return project.copy(
             raceData = project.raceData.copy(
                 controls = EventControlCatalog.classicPreset(raceId)
+            )
+        )
+    }
+
+    private fun sprintPresetProject(
+        raceId: String = "race",
+        raceName: String = "Sprint Course Test",
+        startDateTimeIso: String = "2026-06-05T09:00"
+    ): EventProjectFile {
+        val project = EventProjectFactory.createEmptyProject(raceId, raceName, startDateTimeIso)
+        return project.copy(
+            raceData = project.raceData.copy(
+                race = project.raceData.race.copy(raceType = RaceType.SPRINT),
+                controls = EventControlCatalog.sprintPreset(raceId)
             )
         )
     }

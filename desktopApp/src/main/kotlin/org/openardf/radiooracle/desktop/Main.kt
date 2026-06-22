@@ -2844,6 +2844,9 @@ fun main(args: Array<String>) = application {
                     selectedSummary.categoryAssumptions.map { assumption ->
                         "No category indication was found for route ${assumption.routeName}; assumed ${assumption.categoryName}."
                     } +
+                    selectedSummary.rejectedRoutes.map { rejected ->
+                        "Skipped route ${rejected.routeName} for ${rejected.categoryName}: ${rejected.reason}"
+                    } +
                     selectedSummary.eventTypeWarnings)
             )
             if (fetchElevations) {
@@ -6155,6 +6158,13 @@ private fun CourseKmlKmzImportReviewDialog(
                             Text(
                                 text = "No category indication was found for route ${assumption.routeName}; assuming ${assumption.categoryName}.",
                                 color = Color(0xFFC46A00),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        selectedSummary.rejectedRoutes.forEach { rejected ->
+                            Text(
+                                text = "Skipped route ${rejected.routeName} for ${rejected.categoryName}: ${rejected.reason}",
+                                color = DesktopPalette.Error,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -13448,13 +13458,12 @@ private fun CourseAnalysisPanel(
             )
         }
     fun analyzeDisabledReason(categoryId: String?): String? =
-        when {
-            categoryId == null ->
-                "Import controls/route KML/KMZ or GPX data for a category before running analysis."
-            analysisCourseInfoByCategoryId[categoryId]?.route.orEmpty().size < 2 ->
-                "Stored course route data is unavailable for the selected category. Import course KML/KMZ or GPX data before running analysis."
-            else -> null
-        }
+        DesktopCourseAnalyzer.analysisUnavailableReason(
+            projectFile = projectFile,
+            categoryId = categoryId,
+            protectedCourseInfo = categoryId?.let(analysisCourseInfoByCategoryId::get),
+            protectedIdealOrderText = categoryId?.let(protectedIdealOrderByCategoryId::get)
+        )
 
     suspend fun analyzeWithLocalCachePreparation(categoryId: String): DesktopCourseAnalysisSummary {
         var summary = analyzeSelectedCourse(categoryId)
@@ -13499,6 +13508,7 @@ private fun CourseAnalysisPanel(
             )
             return@Column
         }
+        val currentAnalyzeDisabledReason = analyzeDisabledReason(effectiveSelectedCategoryId)
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -13534,7 +13544,7 @@ private fun CourseAnalysisPanel(
                     .commitOnEnter(::applySpeedFactorDraft)
             )
             DisabledReasonTooltip(
-                analyzeDisabledReason(effectiveSelectedCategoryId)
+                currentAnalyzeDisabledReason
             ) {
                 Button(
                     onClick = {
@@ -13562,7 +13572,7 @@ private fun CourseAnalysisPanel(
                             }
                         }
                     },
-                    enabled = analyzeDisabledReason(effectiveSelectedCategoryId) == null && !isAnalyzing
+                    enabled = currentAnalyzeDisabledReason == null && !isAnalyzing
                 ) {
                     ButtonLabel("Analyze")
                 }
@@ -13598,6 +13608,13 @@ private fun CourseAnalysisPanel(
                     ButtonLabel("Export Analysis...")
                 }
             }
+        }
+        currentAnalyzeDisabledReason?.let { disabledReason ->
+            Text(
+                text = disabledReason,
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
         }
         if (isAnalyzing) {
             IndeterminateProgressDialog(

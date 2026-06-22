@@ -338,6 +338,83 @@ object DesktopCourseAnalyzer {
         "M80" to CourseRuleRequirement(4, 7, 3_000, 4_000)
     )
 
+    /**
+     * Mirrors the analyzer's Section 1/Section 2 prerequisites without running the route search.
+     * A stored route polyline alone can still produce only Section 3, which should not make the
+     * desktop Analyze button look actionable.
+     */
+    fun analysisUnavailableReason(
+        projectFile: EventProjectFile,
+        categoryId: String?,
+        protectedCourseInfo: ProtectedCourseInfo?,
+        protectedIdealOrderText: String?
+    ): String? {
+        if (categoryId == null) {
+            return "Import controls/route KML/KMZ or GPX data for a category before running analysis."
+        }
+        val categoryData = projectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
+            ?: return "Select a category before running analysis."
+        if (protectedCourseInfo == null || protectedCourseInfo.route.size < 2) {
+            return "Stored course route data is unavailable for the selected category. Import course KML/KMZ or GPX data before running analysis."
+        }
+
+        val idealOrderText = protectedIdealOrderText?.takeIf { it.isNotBlank() }
+            ?: protectedCourseInfo.idealOrder.takeIf { it.isNotBlank() }
+        val categoryAssignedControls = assignedControls(projectFile, categoryId)
+        val allProtectedControls = protectedAssignedControls(projectFile, protectedCourseInfo, null)
+        val terminalBeaconControl = allProtectedControls.firstOrNull { it.type == ControlPointType.BEACON }
+            ?: categoryAssignedControls.firstOrNull { it.type == ControlPointType.BEACON }
+        val protectedRouteControls = protectedAssignedControls(projectFile, protectedCourseInfo, idealOrderText)
+            .withTerminalBeacon(terminalBeaconControl)
+        val assignedControls = protectedRouteControls.ifEmpty { categoryAssignedControls.withTerminalBeacon(terminalBeaconControl) }
+        val providedControls = idealOrderText
+            ?.let { idealOrder ->
+                runCatching {
+                    val ids = ProtectedIdealOrderRules.resolveControlIds(idealOrder, assignedControls)
+                    ids.mapNotNull { id -> assignedControls.firstOrNull { it.id == id } }
+                }.getOrNull()
+            }
+            .orEmpty()
+            .withTerminalBeacon(terminalBeaconControl)
+        val canBuildImportedRouteSection = providedControls.isNotEmpty()
+
+        val courseObjectPoints = protectedCourseInfo.courseObjects
+        val route = normalizedImportedRoute(
+            protectedCourseInfo.route.map { CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters) },
+            courseObjectPoints
+        )
+        val protectedControlPointsById = protectedCourseInfo.controlPoints.associateBy { it.controlId }
+        val protectedCoordinateLookup = protectedCoordinateLookup(protectedCourseInfo)
+        val controlsWithPoints = assignedControls.map { control ->
+            ControlAnalysisPoint(
+                control = control,
+                point = protectedControlPointsById[control.id]?.toGeoPoint()
+                    ?: protectedPointForControl(control, protectedCoordinateLookup)
+            )
+        }
+        val start = route.firstOrNull() ?: courseObjectPoints
+            .firstOrNull { it.type == ProtectedCourseObjectType.START }
+            ?.toGeoPoint()
+        val finish = route.lastOrNull() ?: courseObjectPoints
+            .firstOrNull { it.type == ProtectedCourseObjectType.FINISH }
+            ?.toGeoPoint()
+        val foxes = controlsWithPoints.filter { it.control.type == ControlPointType.CONTROL && it.point != null }
+        val spectator = controlsWithPoints.firstOrNull { it.control.type == ControlPointType.SEPARATOR && it.point != null }
+        val canBuildCalculatedRouteSection = canAttemptCalculatedRoute(
+            raceType = categoryData.category.effectiveRaceType(projectFile.raceData.race),
+            start = start,
+            finish = finish,
+            foxes = foxes,
+            spectator = spectator
+        )
+
+        return if (canBuildImportedRouteSection || canBuildCalculatedRouteSection) {
+            null
+        } else {
+            "The selected category has route geometry, but no usable control order or located controls. Import route data with control assignments/locations before running analysis."
+        }
+    }
+
     fun analyze(
         projectFile: EventProjectFile,
         categoryId: String,
@@ -1064,6 +1141,23 @@ object DesktopCourseAnalyzer {
             type = type,
             publicLabel = label
         )
+
+    private fun canAttemptCalculatedRoute(
+        raceType: RaceType,
+        start: CourseGeoPoint?,
+        finish: CourseGeoPoint?,
+        foxes: List<ControlAnalysisPoint>,
+        spectator: ControlAnalysisPoint?
+    ): Boolean {
+        if (start == null || finish == null || foxes.isEmpty()) {
+            return false
+        }
+        return when (raceType) {
+            RaceType.SPRINT,
+            RaceType.FOXORING -> true
+            else -> foxes.size + listOfNotNull(spectator).size <= MAX_PERMUTATION_CONTROLS
+        }
+    }
 
     /**
      * Section 1 analyzes the imported route. The imported route geometry is used for
@@ -2398,7 +2492,12 @@ object DesktopCourseAnalyzer {
         if (route.isEmpty()) {
             return route
         }
-        val start = courseObjects.firstOrNull { it.type == ProtectedCourseObjectType.START }?.toGeoPoint()
+        val start = courseObjects
+            .firstOrNull { it.type == ProtectedCourseObjectType.START }
+            ?.toGeoPoint()
+            // A bad or ambiguous import must not let the spectator masquerade as the course start.
+            // When that happens, trust the route LineString endpoint instead of prepending spectator.
+            ?.takeUnless { it.matchesCourseObjectType(ProtectedCourseObjectType.SPECTATOR, courseObjects) }
         val finish = courseObjects.firstOrNull { it.type == ProtectedCourseObjectType.FINISH }?.toGeoPoint()
         val beacon = courseObjects.firstOrNull { it.type == ProtectedCourseObjectType.BEACON }?.toGeoPoint()
         val orientedRoute = when {
@@ -2457,6 +2556,12 @@ object DesktopCourseAnalyzer {
 
     private fun CourseGeoPoint.sameRouteStop(other: CourseGeoPoint): Boolean =
         distanceMetersTo(other) <= ROUTE_STOP_TOLERANCE_METERS
+
+    private fun CourseGeoPoint.matchesCourseObjectType(
+        type: ProtectedCourseObjectType,
+        courseObjects: List<ProtectedCourseObjectPoint>
+    ): Boolean =
+        courseObjects.any { it.type == type && distanceMetersTo(it.toGeoPoint()) <= ROUTE_STOP_TOLERANCE_METERS }
 
     private fun calculatedElevationMarkers(
         start: CourseGeoPoint?,

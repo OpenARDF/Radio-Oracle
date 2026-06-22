@@ -15,6 +15,7 @@ import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
@@ -70,6 +71,7 @@ data class DesktopCourseKmlImportSummary(
     val missingControlNames: List<String> = emptyList(),
     val createdControlNames: List<String> = emptyList(),
     val categoryAssumptions: List<DesktopCourseKmlCategoryAssumption>,
+    val rejectedRoutes: List<DesktopCourseKmlRejectedRoute> = emptyList(),
     val eventTypeWarnings: List<String>,
     val sourceSha256: String,
     val controlIdentityUpdateCount: Int = 0
@@ -112,6 +114,12 @@ data class DesktopCourseKmlLabelConversion(
 data class DesktopCourseKmlCategoryAssumption(
     val routeName: String,
     val categoryName: String
+)
+
+data class DesktopCourseKmlRejectedRoute(
+    val routeName: String,
+    val categoryName: String,
+    val reason: String
 )
 
 data class DesktopCourseKmlAssignedControl(
@@ -220,8 +228,13 @@ object DesktopCourseKmlImporter {
                 )
             )
         }
-        val missingControls = missingCourseControls(
+        val importedControlsForControlMatching = controlMatchingCourseControls(
             importedControls = courseData.controls,
+            routes = courseData.routes,
+            sprintContext = isSprintCourseImport(projectWithMissingCategories, courseData)
+        )
+        val missingControls = missingCourseControls(
+            importedControls = importedControlsForControlMatching,
             eventControls = projectWithMissingCategories.raceData.controls,
             raceId = projectWithMissingCategories.raceData.race.id
         )
@@ -242,11 +255,10 @@ object DesktopCourseKmlImporter {
                 )
             )
         }
-        val matchedControlResult = matchedControls(courseData.controls, projectWithMissingControls.raceData.controls)
+        val matchedControlResult = matchedControls(importedControlsForControlMatching, projectWithMissingControls.raceData.controls)
         val hintedProject = applyControlSiHints(projectWithMissingControls, matchedControlResult.controls)
-        val matchedControlsForHintedProject = matchedControls(courseData.controls, hintedProject.raceData.controls)
+        val matchedControlsForHintedProject = matchedControls(importedControlsForControlMatching, hintedProject.raceData.controls)
         val controls = matchedControlsForHintedProject.controls
-        val controlsByLabel = controls.associateBy { it.label.normalizedCourseName() }
         val categories = hintedProject.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
         val courseInfoByCategoryId = hintedProject.raceData.categories.mapNotNull { categoryData ->
             categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
@@ -259,16 +271,25 @@ object DesktopCourseKmlImporter {
             sourceName = path.fileName.toString(),
             categoryOverrideId = categoryOverrideId
         )
+        val hasSprintRouteTargets = routeCategoryTargets.targets.values.flatten().any { categoryData ->
+            categoryData.category.effectiveRaceType(hintedProject.raceData.race) == RaceType.SPRINT
+        } || isSprintCourseImport(hintedProject, courseData)
+        val controlsForLocationUpdates = if (hasSprintRouteTargets) {
+            controls.filterNot { it.type == ControlPointType.SEPARATOR && it.point.isNearAnyRouteEndpoint(courseData.routes) }
+        } else {
+            controls
+        }
         val sameSourceDuplicateCategoryIds = sameSourceDuplicateCategoryIds(
             routes = courseData.routes,
             routeCategoryTargets = routeCategoryTargets,
+            eventRace = hintedProject.raceData.race,
             courseInfoByCategoryId = courseInfoByCategoryId,
             sourceSha256 = sourceSha256,
             importedControls = courseData.controls,
-            matchedControls = controlsByLabel.values.toList()
+            matchedControls = controls
         )
         val controlLocationUpdates = controlLocationUpdates(
-            matchedControls = controls,
+            matchedControls = controlsForLocationUpdates,
             courseInfoByCategoryId = courseInfoByCategoryId,
             ignoredCategoryIds = sameSourceDuplicateCategoryIds
         )
@@ -295,12 +316,11 @@ object DesktopCourseKmlImporter {
         val matchedCategoryIds = mutableListOf<String>()
         val matchedCategoryNames = mutableListOf<String>()
         val categoryAssignmentUpdates = mutableListOf<DesktopCourseKmlCategoryAssignmentUpdate>()
+        val rejectedRoutes = mutableListOf<DesktopCourseKmlRejectedRoute>()
 
         courseData.routes.forEach { route ->
             routeCategoryTargets.targets[route].orEmpty().forEach { categoryData ->
                 matchedCategoryCount++
-                matchedCategoryIds += categoryData.category.id
-                matchedCategoryNames += categoryData.category.name
 
                 val existingCourseInfo = categoryData.category.encryptedCourseInfo
                     ?.takeIf { it.isNotBlank() }
@@ -310,13 +330,37 @@ object DesktopCourseKmlImporter {
                 // is only for route/elevation facts; assignment matching should reflect the controls
                 // intentionally placed near the imported category route.
                 val raceType = categoryData.category.effectiveRaceType(updatedProject.raceData.race)
-                val routeGeometry = normalizedRouteGeometry(route.points, courseData.controls, controlsByLabel.values.toList())
-                val routeLineControls = controlsOnRoute(routeGeometry, controlsByLabel.values.toList())
+                val routeImportedControls = endpointAwareImportedControls(route.points, courseData.controls, raceType)
+                val routeMatchedControls = matchedControlsForRoute(raceType, route.points, controls)
+                val orientedRouteGeometry = orientedRoutePoints(route.points, routeImportedControls)
+                val routeGeometry = normalizedRouteGeometry(route.points, routeImportedControls, routeMatchedControls)
+                val routeLineControls = controlsOnRoute(routeGeometry, routeMatchedControls)
                 val explicitAssignmentControls = if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
                     controlsFromExplicitClassicRouteOrder(route.name, controls)
                 } else {
                     null
                 }
+                routeGeometryRejectionReason(
+                    route = route,
+                    categoryName = categoryData.category.name,
+                    orientedRoute = orientedRouteGeometry,
+                    routeLineControls = routeLineControls,
+                    matchedControls = routeMatchedControls,
+                    importedControls = routeImportedControls
+                )?.let { reason ->
+                    rejectedRoutes += DesktopCourseKmlRejectedRoute(
+                        routeName = route.name,
+                        categoryName = categoryData.category.name,
+                        reason = reason
+                    )
+                    DesktopDebugLog.warn(
+                        "CourseKml",
+                        "Import skipped invalid route category=${categoryData.category.name}: route=${route.name} reason=$reason"
+                    )
+                    return@forEach
+                }
+                matchedCategoryIds += categoryData.category.id
+                matchedCategoryNames += categoryData.category.name
                 val assignmentControls = routeLineControls.ifEmpty { explicitAssignmentControls.orEmpty() }
                 categoryAssignmentUpdate(
                     projectFile = updatedProject,
@@ -374,10 +418,10 @@ object DesktopCourseKmlImporter {
                         )
                     }
                     ?: importedSampledRoute
-                val routeControls = controlsOnRoute(sampledRoute, controlsByLabel.values.toList())
+                val routeControls = controlsOnRoute(sampledRoute, routeMatchedControls)
 
                 val idealOrder = routeControls.joinToString(" ") { it.label }
-                val allProtectedControlPoints = controls.map { control ->
+                val allProtectedControlPoints = routeMatchedControls.map { control ->
                     val elevation = sameSourceCourseInfo?.elevationFor(control) ?: elevationProvider(control.point)
                     control.controlId to ProtectedCourseControlPoint(
                         controlId = control.controlId,
@@ -392,7 +436,7 @@ object DesktopCourseKmlImporter {
                 val courseObjects = courseObjectsForRoute(sampledRoute, allProtectedControlPoints.values.toList())
                 DesktopDebugLog.info(
                     "CourseKml",
-                    "Import matched category=${categoryData.category.name}: route=${route.name} sampledRoutePoints=${sampledRoute.size} idealOrder='${idealOrder.ifBlank { "none" }}' routeControls=${controlPoints.size} visibleControls=${allProtectedControlPoints.size} courseObjects=${courseObjects.size} routeElevations=${sampledRoute.count { it.elevationMeters != null }} controlElevations=${controlPoints.count { it.elevationMeters != null }}"
+                    "Import matched category=${categoryData.category.name}: route=${route.name} sampledRoutePoints=${sampledRoute.size} idealOrder='${idealOrder.ifBlank { "none" }}' routeControls=${controlPoints.size} visibleControls=${routeMatchedControls.size} courseObjects=${courseObjects.size} routeElevations=${sampledRoute.count { it.elevationMeters != null }} controlElevations=${controlPoints.count { it.elevationMeters != null }}"
                 )
                 // Route-derived length and climb facts are competition-sensitive. Store them only in
                 // the encrypted category payload; assigned controls are updated separately from the
@@ -461,6 +505,7 @@ object DesktopCourseKmlImporter {
             missingControlNames = missingControls.map { it.displayCourseLabel() },
             createdControlNames = createdControlNames,
             categoryAssumptions = routeCategoryTargets.assumptions,
+            rejectedRoutes = rejectedRoutes,
             eventTypeWarnings = DesktopImportPreviews.eventTypeWarnings(
                 eventRaceType = projectFile.raceData.race.raceType,
                 sourceName = path.fileName.toString(),
@@ -595,6 +640,59 @@ object DesktopCourseKmlImporter {
         return categories
             .filter { categoryData -> filenameText.containsCategoryName(categoryData.category.name) }
             .singleOrNull()
+    }
+
+    private fun isSprintCourseImport(projectFile: EventProjectFile, courseData: DesktopCourseKmlData): Boolean =
+        projectFile.raceData.race.raceType == RaceType.SPRINT ||
+            courseData.routes.any { route -> route.name.contains("sprint", ignoreCase = true) }
+
+    private fun controlMatchingCourseControls(
+        importedControls: List<CourseControlPoint>,
+        routes: List<CourseRoute>,
+        sprintContext: Boolean
+    ): List<CourseControlPoint> {
+        if (!sprintContext) {
+            return importedControls
+        }
+        return importedControls.filterNot { control ->
+            control.name.isBareSprintStartLabel() && control.point.isNearAnyRouteEndpoint(routes)
+        }
+    }
+
+    private fun endpointAwareImportedControls(
+        routePoints: List<CourseGeoPoint>,
+        importedControls: List<CourseControlPoint>,
+        raceType: RaceType
+    ): List<CourseControlPoint> {
+        if (raceType != RaceType.SPRINT) {
+            return importedControls
+        }
+        return importedControls.map { control ->
+            if (control.name.isBareSprintStartLabel() && control.point.isNearRouteEndpoint(routePoints)) {
+                control.copy(name = "Start")
+            } else {
+                control
+            }
+        }
+    }
+
+    private fun matchedControlsForRoute(
+        raceType: RaceType,
+        routePoints: List<CourseGeoPoint>,
+        matchedControls: List<CourseMatchedControl>
+    ): List<CourseMatchedControl> {
+        if (raceType != RaceType.SPRINT) {
+            return matchedControls.distinctBy { it.controlId }
+        }
+        return matchedControls
+            .groupBy { it.controlId }
+            .mapNotNull { (_, matches) ->
+                if (matches.any { it.type == ControlPointType.SEPARATOR }) {
+                    matches.firstOrNull { !it.point.isNearRouteEndpoint(routePoints) }
+                } else {
+                    matches.first()
+                }
+            }
     }
 
     suspend fun fetchProtectedCourseElevations(
@@ -1240,6 +1338,7 @@ object DesktopCourseKmlImporter {
     private fun sameSourceDuplicateCategoryIds(
         routes: List<CourseRoute>,
         routeCategoryTargets: RouteCategoryTargetResult,
+        eventRace: EventRace,
         courseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
         sourceSha256: String,
         importedControls: List<CourseControlPoint>,
@@ -1247,9 +1346,12 @@ object DesktopCourseKmlImporter {
     ): Set<String> {
         val duplicateCategoryIds = linkedSetOf<String>()
         routes.forEach { route ->
-            val routeGeometry = normalizedRouteGeometry(route.points, importedControls, matchedControls)
-            val routeLineControlIds = controlsOnRoute(routeGeometry, matchedControls).map { it.controlId }
             routeCategoryTargets.targets[route].orEmpty().forEach { categoryData ->
+                val raceType = categoryData.category.effectiveRaceType(eventRace)
+                val routeImportedControls = endpointAwareImportedControls(route.points, importedControls, raceType)
+                val routeMatchedControls = matchedControlsForRoute(raceType, route.points, matchedControls)
+                val routeGeometry = normalizedRouteGeometry(route.points, routeImportedControls, routeMatchedControls)
+                val routeLineControlIds = controlsOnRoute(routeGeometry, routeMatchedControls).map { it.controlId }
                 val sameSourceCourseInfo = courseInfoByCategoryId[categoryData.category.id]
                     ?.takeIf { it.sourceSha256 == sourceSha256 }
                     ?: return@forEach
@@ -1395,8 +1497,61 @@ object DesktopCourseKmlImporter {
         }
     }
 
+    private fun routeGeometryRejectionReason(
+        route: CourseRoute,
+        categoryName: String,
+        orientedRoute: List<CourseGeoPoint>,
+        routeLineControls: List<CourseMatchedControl>,
+        matchedControls: List<CourseMatchedControl>,
+        importedControls: List<CourseControlPoint>
+    ): String? {
+        if (orientedRoute.size < 2) {
+            return "LineString has fewer than two points."
+        }
+        val issues = mutableListOf<String>()
+        val explicitStart = importedControls.firstOrNull { it.isCourseStartPoint() }
+        val explicitFinish = importedControls.firstOrNull { it.isCourseFinishPoint() }
+        explicitStart?.let { start ->
+            val distance = orientedRoute.first().distanceMetersTo(start.point)
+            if (
+                distance > CONTROL_ROUTE_TOLERANCE_METERS &&
+                orientedRoute.first().isNotNearAnyMatchedControl(matchedControls)
+            ) {
+                issues += "start endpoint is ${distance.roundToInt()} m from ${start.name}"
+            }
+        }
+        explicitFinish?.let { finish ->
+            val distance = orientedRoute.last().distanceMetersTo(finish.point)
+            if (
+                distance > CONTROL_ROUTE_TOLERANCE_METERS &&
+                orientedRoute.last().isNotNearAnyMatchedControl(matchedControls)
+            ) {
+                issues += "finish endpoint is ${distance.roundToInt()} m from ${finish.name}"
+            }
+        }
+        if (matchedControls.any { it.type == ControlPointType.CONTROL } &&
+            routeLineControls.none { it.type == ControlPointType.CONTROL }
+        ) {
+            issues += "LineString does not pass near any matched fox controls for $categoryName"
+        }
+        return issues.takeIf { it.isNotEmpty() }?.joinToString("; ", prefix = "Route ${route.name}: ")
+    }
+
+    private fun CourseGeoPoint.isNotNearAnyMatchedControl(controls: List<CourseMatchedControl>): Boolean =
+        controls.none { distanceMetersTo(it.point) <= CONTROL_ROUTE_TOLERANCE_METERS }
+
     private fun CourseGeoPoint.sameRoutePoint(other: CourseGeoPoint): Boolean =
         distanceMetersTo(other) <= ROUTE_ORIENTATION_TOLERANCE_METERS
+
+    private fun CourseGeoPoint.isNearAnyRouteEndpoint(routes: List<CourseRoute>): Boolean =
+        routes.any { route -> isNearRouteEndpoint(route.points) }
+
+    private fun CourseGeoPoint.isNearRouteEndpoint(routePoints: List<CourseGeoPoint>): Boolean {
+        val first = routePoints.firstOrNull()
+        val last = routePoints.lastOrNull()
+        return first?.let { distanceMetersTo(it) <= CONTROL_ROUTE_TOLERANCE_METERS } == true ||
+            last?.let { distanceMetersTo(it) <= CONTROL_ROUTE_TOLERANCE_METERS } == true
+    }
 
     private fun ProtectedCourseInfo.routeMatches(routeGeometry: List<CourseGeoPoint>): Boolean {
         if (route.isEmpty() || routeGeometry.isEmpty()) {
@@ -1753,6 +1908,9 @@ private fun String.normalizedCourseName(): String =
 
 private fun String.compactCourseName(): String =
     normalizedCourseName().replace(" ", "")
+
+private fun String.isBareSprintStartLabel(): Boolean =
+    categoryMatchText() == "s"
 
 private fun String.singleEmbeddedNumber(): Int? {
     val numbers = Regex("\\d+").findAll(this).mapNotNull { it.value.toIntOrNull() }.toList()

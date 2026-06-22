@@ -3,6 +3,7 @@ package org.openardf.radiooracle.desktop
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.ControlPointType
@@ -35,6 +36,55 @@ import java.nio.file.Path
 import kotlin.math.roundToInt
 
 class DesktopCourseAnalyzerTest {
+    @Test
+    fun analysisIsUnavailableWhenRouteGeometryCannotProduceRouteSections() {
+        val routeOnlyInfo = protectedInfo(foxCount = 3).copy(
+            idealOrder = "31 32 33 Beacon",
+            controlPoints = emptyList(),
+            courseObjects = emptyList()
+        )
+
+        val reason = DesktopCourseAnalyzer.analysisUnavailableReason(
+            projectFile = projectFile(foxCount = 3, assignControls = false),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = routeOnlyInfo,
+            protectedIdealOrderText = null
+        )
+
+        assertEquals(
+            "The selected category has route geometry, but no usable control order or located controls. Import route data with control assignments/locations before running analysis.",
+            reason
+        )
+    }
+
+    @Test
+    fun analysisIsAvailableWhenImportedRouteSectionCanBeBuilt() {
+        val protectedInfo = protectedInfo(foxCount = 3)
+
+        val reason = DesktopCourseAnalyzer.analysisUnavailableReason(
+            projectFile = projectFile(foxCount = 3),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "31 32 33 Beacon"
+        )
+
+        assertNull(reason)
+    }
+
+    @Test
+    fun analysisIsAvailableWhenOnlyCalculatedRouteSectionCanBeBuilt() {
+        val protectedInfo = protectedInfo(foxCount = 3).copy(idealOrder = "")
+
+        val reason = DesktopCourseAnalyzer.analysisUnavailableReason(
+            projectFile = projectFile(foxCount = 3),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = null
+        )
+
+        assertNull(reason)
+    }
+
     @Test
     fun calculatesShortestRouteAndFlagsProvidedOrderMismatch() {
         val projectFile = projectFile(foxCount = 5)
@@ -450,6 +500,38 @@ class DesktopCourseAnalyzerTest {
         assertEquals("S", importedRoute.routeStops.first().label)
         assertEquals(-95.0, importedRoute.routeStops.first().point.longitude, 0.000001)
         assertEquals("Spectator", importedRoute.routeStops.first { it.label == "Spectator" }.label)
+    }
+
+    @Test
+    fun importedRouteDoesNotUseSpectatorAsStartWhenLineStringStartsCorrectly() {
+        val baseInfo = sprintProtectedInfo()
+        val spectatorPoint = baseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.SPECTATOR }
+        val protectedInfo = baseInfo.copy(
+            courseObjects = baseInfo.courseObjects.map { courseObject ->
+                if (courseObject.type == ProtectedCourseObjectType.START) {
+                    courseObject.copy(
+                        latitude = spectatorPoint.latitude,
+                        longitude = spectatorPoint.longitude,
+                        elevationMeters = spectatorPoint.elevationMeters
+                    )
+                } else {
+                    courseObject
+                }
+            }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = sprintProjectFile(),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "1 2 Spectator F1 F2 Beacon"
+        )
+
+        val importedRoute = summary.kmlFolders.single { it.title == "Imported foxes and route" }
+        assertEquals(-95.0, importedRoute.routePoints.first().longitude, 0.000001)
+        assertEquals("S", importedRoute.routeStops.first().label)
+        assertEquals(-95.0, importedRoute.routeStops.first().point.longitude, 0.000001)
+        assertEquals(-94.9605, importedRoute.routeStops.first { it.label == "Spectator" }.point.longitude, 0.000001)
     }
 
     @Test
