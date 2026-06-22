@@ -426,6 +426,53 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun importedRouteUsesExplicitStartInsteadOfSpectatorEndpoint() {
+        val protectedInfo = sprintProtectedInfo().copy(
+            route = listOf(
+                ProtectedCourseRoutePoint(39.0, -94.9605, 100.0),
+                ProtectedCourseRoutePoint(39.0, -94.96, 100.0),
+                ProtectedCourseRoutePoint(39.0, -94.95, 100.0),
+                ProtectedCourseRoutePoint(39.0, -94.94, 100.0),
+                ProtectedCourseRoutePoint(39.0, -94.93, 100.0)
+            )
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = sprintProjectFile(),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "1 2 Spectator F1 F2 Beacon"
+        )
+
+        val importedRoute = summary.kmlFolders.single { it.title == "Imported foxes and route" }
+        assertEquals(-95.0, importedRoute.routePoints.first().longitude, 0.000001)
+        assertEquals(-94.93, importedRoute.routePoints.last().longitude, 0.000001)
+        assertEquals("S", importedRoute.routeStops.first().label)
+        assertEquals(-95.0, importedRoute.routeStops.first().point.longitude, 0.000001)
+        assertEquals("Spectator", importedRoute.routeStops.first { it.label == "Spectator" }.label)
+    }
+
+    @Test
+    fun importedRouteEndingAtStartIsReversedBeforeAnalysis() {
+        val protectedInfo = sprintProtectedInfo().copy(
+            route = sprintProtectedInfo().route.reversed()
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = sprintProjectFile(),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "1 2 Spectator F1 F2 Beacon"
+        )
+
+        val importedRoute = summary.kmlFolders.single { it.title == "Imported foxes and route" }
+        assertEquals(-95.0, importedRoute.routePoints.first().longitude, 0.000001)
+        assertEquals(-94.93, importedRoute.routePoints.last().longitude, 0.000001)
+        assertEquals("S", importedRoute.routeStops.first().label)
+        assertEquals("F", importedRoute.routeStops.last().label)
+    }
+
+    @Test
     fun calculatesSprintRouteUsingBeaconTransitionWhenNoSpectatorIsAssigned() {
         val summary = DesktopCourseAnalyzer.analyze(
             projectFile = sprintProjectFile(includeSpectator = false),

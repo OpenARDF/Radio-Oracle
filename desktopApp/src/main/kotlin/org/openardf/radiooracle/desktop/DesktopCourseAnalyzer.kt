@@ -285,6 +285,7 @@ object DesktopCourseAnalyzer {
     private const val FOXORING_ROLLING_WINDOW_CONTROLS = 5
     private const val MAX_SPRINT_LOOP_PERMUTATIONS = 120
     private const val CALCULATED_ROUTE_SAMPLE_METERS = 25.0
+    private const val ROUTE_ENDPOINT_EXACT_TOLERANCE_METERS = 0.5
     private const val ROUTE_STOP_TOLERANCE_METERS = 5.0
     private const val COURSE_RECOMMENDATION_WAIT_SECONDS = 30
     private const val ELEVATION_CACHE_RESOLUTION_NOTE =
@@ -2397,12 +2398,33 @@ object DesktopCourseAnalyzer {
         if (route.isEmpty()) {
             return route
         }
+        val start = courseObjects.firstOrNull { it.type == ProtectedCourseObjectType.START }?.toGeoPoint()
         val finish = courseObjects.firstOrNull { it.type == ProtectedCourseObjectType.FINISH }?.toGeoPoint()
         val beacon = courseObjects.firstOrNull { it.type == ProtectedCourseObjectType.BEACON }?.toGeoPoint()
-        val routeEndingAtFinish = if (finish == null || route.last().sameRouteStop(finish)) {
-            route
+        val orientedRoute = when {
+            start != null &&
+                route.last().matchesCourseEndpoint(start, ProtectedCourseObjectType.START, courseObjects) &&
+                !route.first().matchesCourseEndpoint(start, ProtectedCourseObjectType.START, courseObjects) ->
+                route.asReversed()
+            finish != null &&
+                route.first().matchesCourseEndpoint(finish, ProtectedCourseObjectType.FINISH, courseObjects) &&
+                !route.last().matchesCourseEndpoint(finish, ProtectedCourseObjectType.FINISH, courseObjects) ->
+                route.asReversed()
+            else -> route
+        }
+        val routeStartingAtStart = if (start == null) {
+            orientedRoute
+        } else if (orientedRoute.first().matchesCourseEndpoint(start, ProtectedCourseObjectType.START, courseObjects)) {
+            listOf(start) + orientedRoute.drop(1)
         } else {
-            route + finish
+            listOf(start) + orientedRoute
+        }
+        val routeEndingAtFinish = if (finish == null) {
+            routeStartingAtStart
+        } else if (routeStartingAtStart.last().matchesCourseEndpoint(finish, ProtectedCourseObjectType.FINISH, courseObjects)) {
+            routeStartingAtStart.dropLast(1) + finish
+        } else {
+            routeStartingAtStart + finish
         }
         if (beacon == null || routeEndingAtFinish.any { it.sameRouteStop(beacon) }) {
             return routeEndingAtFinish
@@ -2412,6 +2434,25 @@ object DesktopCourseAnalyzer {
         } else {
             routeEndingAtFinish.dropLast(1) + beacon + routeEndingAtFinish.last()
         }
+    }
+
+    private fun CourseGeoPoint.matchesCourseEndpoint(
+        endpoint: CourseGeoPoint,
+        endpointType: ProtectedCourseObjectType,
+        courseObjects: List<ProtectedCourseObjectPoint>
+    ): Boolean {
+        val endpointDistance = distanceMetersTo(endpoint)
+        if (endpointDistance > ROUTE_STOP_TOLERANCE_METERS) {
+            return false
+        }
+        val closerCourseObjectDistance = courseObjects
+            .asSequence()
+            .filterNot { it.type == endpointType }
+            .map { distanceMetersTo(it.toGeoPoint()) }
+            .minOrNull()
+        return endpointDistance <= ROUTE_ENDPOINT_EXACT_TOLERANCE_METERS ||
+            closerCourseObjectDistance == null ||
+            endpointDistance < closerCourseObjectDistance
     }
 
     private fun CourseGeoPoint.sameRouteStop(other: CourseGeoPoint): Boolean =
