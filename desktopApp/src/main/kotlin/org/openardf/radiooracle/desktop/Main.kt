@@ -14338,6 +14338,7 @@ private fun routeMapPointColor(type: DesktopCourseRouteMapPointType): Color =
         DesktopCourseRouteMapPointType.Control -> DesktopPalette.Primary
         DesktopCourseRouteMapPointType.Beacon -> DesktopPalette.Warning
         DesktopCourseRouteMapPointType.Spectator -> DesktopPalette.Disconnected
+        DesktopCourseRouteMapPointType.Waypoint -> DesktopPalette.SeriesNavigation
     }
 
 @Composable

@@ -173,7 +173,8 @@ enum class DesktopCourseKmlExportPointType {
     FINISH,
     CONTROL,
     BEACON,
-    SPECTATOR
+    SPECTATOR,
+    WAYPOINT
 }
 
 data class DesktopCourseCalculatedRouteApplication(
@@ -206,7 +207,8 @@ enum class DesktopCourseRouteMapPointType {
     Finish,
     Control,
     Beacon,
-    Spectator
+    Spectator,
+    Waypoint
 }
 
 data class DesktopCourseWaitRow(
@@ -831,7 +833,9 @@ object DesktopCourseAnalyzer {
                     controls = displayControlsWithPoints,
                     routeControls = providedControls.mapNotNull { control ->
                         controlsWithPoints.firstOrNull { it.control.id == control.id }
-                    }
+                    },
+                    waypoints = courseObjectPoints.filter { it.type == ProtectedCourseObjectType.WAYPOINT },
+                    routePoints = route
                 )
             )
         }
@@ -893,8 +897,18 @@ object DesktopCourseAnalyzer {
                         title = "Imported foxes and route",
                         routeName = "Imported route",
                         routePoints = route,
-                        routeStops = providedKmlRouteStops(route, providedControls, controlsWithPoints),
-                        courseObjects = providedKmlCourseObjects(route, providedControls, controlsWithPoints)
+                        routeStops = providedKmlRouteStops(
+                            route = route,
+                            controls = providedControls,
+                            controlsWithPoints = controlsWithPoints,
+                            courseObjectPoints = courseObjectPoints
+                        ),
+                        courseObjects = providedKmlCourseObjects(
+                            route = route,
+                            controls = providedControls,
+                            controlsWithPoints = controlsWithPoints,
+                            courseObjectPoints = courseObjectPoints
+                        )
                     )
                 )
             }
@@ -2672,7 +2686,8 @@ object DesktopCourseAnalyzer {
     private fun providedKmlCourseObjects(
         route: List<CourseGeoPoint>,
         controls: List<EventControl>,
-        controlsWithPoints: List<ControlAnalysisPoint>
+        controlsWithPoints: List<ControlAnalysisPoint>,
+        courseObjectPoints: List<ProtectedCourseObjectPoint>
     ): List<DesktopCourseKmlExportPoint> =
         buildList {
             route.firstOrNull()?.let { start ->
@@ -2694,6 +2709,21 @@ object DesktopCourseAnalyzer {
                     )
                 }
                 .forEach(::add)
+            courseObjectPoints
+                .filter { it.type == ProtectedCourseObjectType.WAYPOINT }
+                .mapNotNull { waypoint ->
+                    val point = waypoint.toGeoPoint()
+                    val routeIndex = route.indices.minByOrNull { route[it].distanceMetersTo(point) } ?: return@mapNotNull null
+                    routeIndex to DesktopCourseKmlExportPoint(
+                        label = waypoint.label,
+                        originalLabel = null,
+                        point = point,
+                        type = DesktopCourseKmlExportPointType.WAYPOINT
+                    )
+                }
+                .sortedBy { it.first }
+                .map { it.second }
+                .forEach(::add)
             route.lastOrNull()?.let { finish ->
                 add(DesktopCourseKmlExportPoint("Finish", null, finish, DesktopCourseKmlExportPointType.FINISH))
             }
@@ -2702,17 +2732,25 @@ object DesktopCourseAnalyzer {
     private fun providedKmlRouteStops(
         route: List<CourseGeoPoint>,
         controls: List<EventControl>,
-        controlsWithPoints: List<ControlAnalysisPoint>
+        controlsWithPoints: List<ControlAnalysisPoint>,
+        courseObjectPoints: List<ProtectedCourseObjectPoint>
     ): List<DesktopCourseKmlRouteStop> =
         buildList {
             route.firstOrNull()?.let { start ->
                 add(DesktopCourseKmlRouteStop("S", start))
             }
-            controls.mapNotNull { control ->
+            val routeObjects = controls.mapNotNull { control ->
                 val point = controlsWithPoints.firstOrNull { it.control.id == control.id }?.point ?: return@mapNotNull null
                 val routeIndex = route.indices.minByOrNull { route[it].distanceMetersTo(point) } ?: return@mapNotNull null
                 routeIndex to DesktopCourseKmlRouteStop(control.analysisRouteLabel(), point)
-            }
+            } + courseObjectPoints
+                .filter { it.type == ProtectedCourseObjectType.WAYPOINT }
+                .mapNotNull { waypoint ->
+                    val point = waypoint.toGeoPoint()
+                    val routeIndex = route.indices.minByOrNull { route[it].distanceMetersTo(point) } ?: return@mapNotNull null
+                    routeIndex to DesktopCourseKmlRouteStop(waypoint.label, point)
+                }
+            routeObjects
                 .sortedBy { it.first }
                 .map { it.second }
                 .forEach(::add)
@@ -2845,7 +2883,9 @@ object DesktopCourseAnalyzer {
         finish: CourseGeoPoint?,
         controls: List<ControlAnalysisPoint>,
         routeControls: List<ControlAnalysisPoint> = controls,
-        labelOverrides: Map<String, String> = emptyMap()
+        labelOverrides: Map<String, String> = emptyMap(),
+        waypoints: List<ProtectedCourseObjectPoint> = emptyList(),
+        routePoints: List<CourseGeoPoint> = emptyList()
     ): DesktopCourseRouteMap? {
         fun labelFor(controlPoint: ControlAnalysisPoint): String =
             labelOverrides[controlPoint.control.id] ?: controlPoint.control.analysisRouteLabel()
@@ -2862,33 +2902,29 @@ object DesktopCourseAnalyzer {
                     )
                 )
             }
+            waypoints.forEach { waypoint ->
+                add(RouteMapSourcePoint(waypoint.label, waypoint.toGeoPoint(), DesktopCourseRouteMapPointType.Waypoint))
+            }
             finish?.let { add(RouteMapSourcePoint("F", it, DesktopCourseRouteMapPointType.Finish)) }
         }
+        val routeIntermediateSources = routeIntermediateSources(
+            routePoints = routePoints,
+            routeControls = routeControls,
+            waypoints = waypoints,
+            labelFor = ::labelFor
+        )
         val routeLabels = buildList {
             if (start != null) {
                 add("S")
             }
-            routeControls.forEach { controlPoint ->
-                if (controlPoint.point != null) {
-                    add(labelFor(controlPoint))
-                }
-            }
+            routeIntermediateSources.map { it.label }.forEach(::add)
             if (finish != null) {
                 add("F")
             }
         }
         val routeSources = buildList {
             start?.let { add(RouteMapSourcePoint("S", it, DesktopCourseRouteMapPointType.Start)) }
-            routeControls.forEach { controlPoint ->
-                val point = controlPoint.point ?: return@forEach
-                add(
-                    RouteMapSourcePoint(
-                        labelFor(controlPoint),
-                        point,
-                        controlPoint.control.routeMapType()
-                    )
-                )
-            }
+            addAll(routeIntermediateSources)
             finish?.let { add(RouteMapSourcePoint("F", it, DesktopCourseRouteMapPointType.Finish)) }
         }
         val routePointIndexes = routeSources.mapNotNull { routeSource ->
@@ -2920,6 +2956,26 @@ object DesktopCourseAnalyzer {
             routeLabels = routeLabels,
             routePointIndexes = routePointIndexes
         )
+    }
+
+    private fun routeIntermediateSources(
+        routePoints: List<CourseGeoPoint>,
+        routeControls: List<ControlAnalysisPoint>,
+        waypoints: List<ProtectedCourseObjectPoint>,
+        labelFor: (ControlAnalysisPoint) -> String
+    ): List<RouteMapSourcePoint> {
+        val sources = routeControls.mapNotNull { controlPoint ->
+            val point = controlPoint.point ?: return@mapNotNull null
+            RouteMapSourcePoint(labelFor(controlPoint), point, controlPoint.control.routeMapType())
+        } + waypoints.map { waypoint ->
+            RouteMapSourcePoint(waypoint.label, waypoint.toGeoPoint(), DesktopCourseRouteMapPointType.Waypoint)
+        }
+        if (routePoints.isEmpty()) {
+            return sources
+        }
+        return sources.sortedBy { source ->
+            routePoints.indices.minByOrNull { index -> routePoints[index].distanceMetersTo(source.point) } ?: Int.MAX_VALUE
+        }
     }
 
     private fun segmentSeconds(start: CourseGeoPoint, end: CourseGeoPoint, speedModel: DesktopCourseSpeedModel): Double {

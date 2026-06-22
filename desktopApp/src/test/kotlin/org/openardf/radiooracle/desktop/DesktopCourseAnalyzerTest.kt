@@ -868,6 +868,44 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun importedRouteAnalysisExportsMandatoryWaypointsWithCircleStyle() {
+        val baseInfo = protectedInfo(foxCount = 3)
+        val waypoint = ProtectedCourseObjectPoint(
+            id = "waypoint-gate-a",
+            label = "Gate A",
+            type = ProtectedCourseObjectType.WAYPOINT,
+            latitude = 39.0,
+            longitude = -94.985,
+            elevationMeters = 100.0
+        )
+        val protectedInfo = baseInfo.copy(
+            courseObjects = baseInfo.courseObjects.take(2) + waypoint + baseInfo.courseObjects.drop(2)
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 3),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = protectedInfo.idealOrder
+        )
+
+        val importedFolder = summary.kmlFolders.single { it.title == "Imported foxes and route" }
+        assertEquals("Gate A", importedFolder.courseObjects.single { it.type == DesktopCourseKmlExportPointType.WAYPOINT }.label)
+        assertTrue(importedFolder.routeStops.map { it.label }.contains("Gate A"))
+        val routeMap = requireNotNull(summary.providedRouteSection).routeMap!!
+        assertTrue(routeMap.points.any { it.label == "Gate A" })
+        assertEquals(listOf("S", "31", "Gate A", "32", "33", "B", "F"), routeMap.routeLabels)
+
+        val kmlPath = Files.createTempFile("course-analysis-waypoint-route", ".kml")
+        DesktopCourseAnalysisExports.exportKml(kmlPath, summary)
+        val kmlText = Files.readString(kmlPath)
+        assertTrue(kmlText.contains("http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png"))
+        assertTrue(kmlText.contains("<name>Gate A</name>"))
+        assertTrue(kmlText.contains("<styleUrl>#courseWaypointCircleStyle</styleUrl>"))
+        assertTrue(kmlLineStringCoordinateLines(kmlText).flatten().any { it.startsWith("-94.98500000,39.00000000") })
+    }
+
+    @Test
     fun checksWhetherRenumberingCanReduceClassicWaitTime() {
         val projectFile = projectFile(
             foxCount = 3,

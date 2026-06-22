@@ -111,7 +111,8 @@ enum class ProtectedCourseObjectType {
     FINISH,
     CONTROL,
     BEACON,
-    SPECTATOR
+    SPECTATOR,
+    WAYPOINT
 }
 
 fun ProtectedCourseInfo.effectiveLengthMeters(): Int? {

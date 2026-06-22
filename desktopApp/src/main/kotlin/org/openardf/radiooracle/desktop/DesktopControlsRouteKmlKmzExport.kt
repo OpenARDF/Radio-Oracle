@@ -26,6 +26,7 @@ private const val COURSE_ROUTE_STYLE_LINE_WIDTH = 4
 private val COURSE_CONTROL_DONUT_STYLE_ID = DesktopCourseKmlStyle.DonutStyleId
 private val COURSE_START_STYLE_ID = DesktopCourseKmlStyle.StartStyleId
 private val COURSE_FINISH_STYLE_ID = DesktopCourseKmlStyle.FinishStyleId
+private val COURSE_WAYPOINT_STYLE_ID = DesktopCourseKmlStyle.WaypointStyleId
 
 enum class DesktopControlsRouteKmlKmzExportFormat(
     val contentExtension: String,
@@ -123,6 +124,11 @@ object DesktopControlsRouteKmlKmzExporter {
         appendLine("    <Style id=\"$COURSE_START_STYLE_ID\">")
         appendLine("      <IconStyle><scale>${DesktopCourseKmlStyle.MarkerScale}</scale><color>${DesktopCourseKmlStyle.MarkerColor}</color>")
         appendLine("        <Icon><href>${DesktopCourseKmlStyle.StartIconUrl}</href></Icon>")
+        appendLine("      </IconStyle>")
+        appendLine("    </Style>")
+        appendLine("    <Style id=\"$COURSE_WAYPOINT_STYLE_ID\">")
+        appendLine("      <IconStyle><scale>${DesktopCourseKmlStyle.MarkerScale}</scale><color>${DesktopCourseKmlStyle.MarkerColor}</color>")
+        appendLine("        <Icon><href>${DesktopCourseKmlStyle.WaypointIconUrl}</href></Icon>")
         appendLine("      </IconStyle>")
         appendLine("    </Style>")
         projectFile.raceData.categories.forEachIndexed { categoryIndex, categoryData ->
@@ -400,6 +406,7 @@ object DesktopControlsRouteKmlKmzExporter {
         ProtectedCourseObjectType.CONTROL,
         ProtectedCourseObjectType.BEACON,
         ProtectedCourseObjectType.SPECTATOR -> COURSE_CONTROL_DONUT_STYLE_ID
+        ProtectedCourseObjectType.WAYPOINT -> COURSE_WAYPOINT_STYLE_ID
     }
 
     private fun categoryLineColor(categoryIndex: Int): String {

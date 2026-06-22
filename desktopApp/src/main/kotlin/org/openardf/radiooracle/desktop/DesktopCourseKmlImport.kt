@@ -367,14 +367,20 @@ object DesktopCourseKmlImporter {
                     categoryId = categoryData.category.id,
                     controls = assignmentControls
                 )?.let(categoryAssignmentUpdates::add)
+                val routeWaypoints = waypointsOnRoute(routeGeometry, courseData.controls, routeMatchedControls)
                 val duplicateRouteControlIdValues = routeLineControls.map { it.controlId }
+                val duplicateRouteWaypointLabels = routeWaypoints.map { it.label }
                 val storedRouteControlIds = sameSourceCourseInfo?.controlPoints.orEmpty()
                     .map { it.controlId }
+                val storedRouteWaypointLabels = sameSourceCourseInfo?.courseObjects.orEmpty()
+                    .filter { it.type == ProtectedCourseObjectType.WAYPOINT }
+                    .map { it.label }
                 val storedRouteMatchesImported = sameSourceCourseInfo?.routeMatches(routeGeometry) == true
                 if (
                     sameSourceCourseInfo != null &&
                     sameSourceCourseInfo.hasImportedLocationRecords() &&
                     storedRouteControlIds == duplicateRouteControlIdValues &&
+                    storedRouteWaypointLabels == duplicateRouteWaypointLabels &&
                     storedRouteMatchesImported
                 ) {
                     val missingElevationCount = missingElevationCount(sameSourceCourseInfo)
@@ -396,7 +402,9 @@ object DesktopCourseKmlImporter {
                             "existingCourseObjects=${sameSourceCourseInfo.courseObjects.size} " +
                             "storedRouteMatchesImported=$storedRouteMatchesImported " +
                             "storedRouteControls=${storedRouteControlIds.joinToString()} " +
-                            "importRouteControls=${duplicateRouteControlIdValues.joinToString()}"
+                            "importRouteControls=${duplicateRouteControlIdValues.joinToString()} " +
+                            "storedRouteWaypoints=${storedRouteWaypointLabels.joinToString()} " +
+                            "importRouteWaypoints=${duplicateRouteWaypointLabels.joinToString()}"
                     )
                 }
                 val importedSampledRoute = sampledRoute(routeGeometry, ROUTE_SAMPLE_METERS).map { point ->
@@ -433,7 +441,22 @@ object DesktopCourseKmlImporter {
                     )
                 }.toMap()
                 val controlPoints = routeControls.mapNotNull { allProtectedControlPoints[it.controlId] }
-                val courseObjects = courseObjectsForRoute(sampledRoute, allProtectedControlPoints.values.toList())
+                val protectedRouteWaypoints = routeWaypoints.mapIndexed { index, waypoint ->
+                    ProtectedCourseObjectPoint(
+                        id = "waypoint-${index + 1}-${waypoint.point.locationKey()}",
+                        label = waypoint.label,
+                        type = ProtectedCourseObjectType.WAYPOINT,
+                        latitude = waypoint.point.latitude,
+                        longitude = waypoint.point.longitude,
+                        elevationMeters = sameSourceCourseInfo?.elevationForWaypoint(waypoint)
+                            ?: elevationProvider(waypoint.point)
+                    )
+                }
+                val courseObjects = courseObjectsForRoute(
+                    route = sampledRoute,
+                    controls = allProtectedControlPoints.values.toList(),
+                    waypoints = protectedRouteWaypoints
+                )
                 DesktopDebugLog.info(
                     "CourseKml",
                     "Import matched category=${categoryData.category.name}: route=${route.name} sampledRoutePoints=${sampledRoute.size} idealOrder='${idealOrder.ifBlank { "none" }}' routeControls=${controlPoints.size} visibleControls=${routeMatchedControls.size} courseObjects=${courseObjects.size} routeElevations=${sampledRoute.count { it.elevationMeters != null }} controlElevations=${controlPoints.count { it.elevationMeters != null }}"
@@ -1577,9 +1600,36 @@ object DesktopCourseKmlImporter {
             .sortedBy { it.first }
             .map { it.second }
 
+    private fun waypointsOnRoute(
+        route: List<CourseGeoPoint>,
+        importedPoints: List<CourseControlPoint>,
+        matchedControls: List<CourseMatchedControl>
+    ): List<CourseRouteWaypoint> =
+        importedPoints
+            .asSequence()
+            .filterNot { it.name.isCourseEndpointName() }
+            .filterNot { importedPoint ->
+                matchedControls.any { control ->
+                    importedPoint.point.distanceMetersTo(control.point) <= CONTROL_ROUTE_TOLERANCE_METERS ||
+                        importedPoint.name.normalizedCourseName() == control.displayLabel.normalizedCourseName() ||
+                        importedPoint.name.normalizedCourseName() == control.label.normalizedCourseName()
+                }
+            }
+            .mapNotNull { importedPoint ->
+                // Non-control KML points are mandatory course objects only for routes that
+                // actually pass through them. Keep them out of idealOrder so they cannot become
+                // scored controls or public category assignments.
+                distanceAlongRouteOrNull(route, importedPoint.point, CONTROL_ROUTE_TOLERANCE_METERS)
+                    ?.let { alongDistance -> CourseRouteWaypoint(importedPoint.name, importedPoint.point, alongDistance) }
+            }
+            .sortedBy { it.alongDistanceMeters }
+            .distinctBy { "${it.label.normalizedCourseName()}|${it.point.locationKey()}" }
+            .toList()
+
     private fun courseObjectsForRoute(
         route: List<CourseGeoPoint>,
-        controls: List<ProtectedCourseControlPoint>
+        controls: List<ProtectedCourseControlPoint>,
+        waypoints: List<ProtectedCourseObjectPoint> = emptyList()
     ): List<ProtectedCourseObjectPoint> =
         buildList {
             route.firstOrNull()?.let { start ->
@@ -1594,18 +1644,24 @@ object DesktopCourseKmlImporter {
                     )
                 )
             }
-            controls.forEach { control ->
-                add(
-                    ProtectedCourseObjectPoint(
-                        id = control.controlId,
-                        label = control.label,
-                        type = control.type.toProtectedCourseObjectType(),
-                        latitude = control.latitude,
-                        longitude = control.longitude,
-                        elevationMeters = control.elevationMeters
-                    )
+            val routeObjects = controls.map { control ->
+                ProtectedCourseObjectPoint(
+                    id = control.controlId,
+                    label = control.label,
+                    type = control.type.toProtectedCourseObjectType(),
+                    latitude = control.latitude,
+                    longitude = control.longitude,
+                    elevationMeters = control.elevationMeters
                 )
-            }
+            } + waypoints
+            routeObjects
+                .map { courseObject ->
+                    val point = CourseGeoPoint(courseObject.latitude, courseObject.longitude, courseObject.elevationMeters)
+                    (distanceAlongRouteOrNull(route, point, CONTROL_ROUTE_TOLERANCE_METERS) ?: Double.MAX_VALUE) to courseObject
+                }
+                .sortedBy { it.first }
+                .map { it.second }
+                .forEach(::add)
             route.lastOrNull()?.let { finish ->
                 add(
                     ProtectedCourseObjectPoint(
@@ -1740,6 +1796,16 @@ object DesktopCourseKmlImporter {
         }?.elevationMeters
     }
 
+    private fun ProtectedCourseInfo.elevationForWaypoint(waypoint: CourseRouteWaypoint): Double? =
+        courseObjects.firstOrNull {
+            it.type == ProtectedCourseObjectType.WAYPOINT &&
+                it.label.normalizedCourseName() == waypoint.label.normalizedCourseName()
+        }?.elevationMeters
+            ?: courseObjects.firstOrNull {
+                it.type == ProtectedCourseObjectType.WAYPOINT &&
+                    CourseGeoPoint(it.latitude, it.longitude).locationKey() == waypoint.point.locationKey()
+            }?.elevationMeters
+
     private fun routeLengthMeters(points: List<CourseGeoPoint>): Double =
         points.zipWithNext().sumOf { (start, end) -> start.distanceMetersTo(end) }
 
@@ -1859,6 +1925,12 @@ private data class CourseMatchedControl(
 private data class CourseMatchedControlResult(
     val controls: List<CourseMatchedControl>,
     val labelConversions: List<DesktopCourseKmlLabelConversion>
+)
+
+private data class CourseRouteWaypoint(
+    val label: String,
+    val point: CourseGeoPoint,
+    val alongDistanceMeters: Double
 )
 
 private data class ControlMatchToken(

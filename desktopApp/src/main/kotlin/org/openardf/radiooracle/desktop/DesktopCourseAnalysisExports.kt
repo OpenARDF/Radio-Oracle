@@ -242,6 +242,10 @@ object DesktopCourseAnalysisExports {
                 styleId = DesktopCourseKmlStyle.FinishStyleId,
                 iconUrl = DesktopCourseKmlStyle.FinishIconUrl
             )
+            appendCoursePointStyle(
+                styleId = DesktopCourseKmlStyle.WaypointStyleId,
+                iconUrl = DesktopCourseKmlStyle.WaypointIconUrl
+            )
             result.kmlFolders.forEach { folder ->
                 val routeStyleId = if (folder.title.startsWith("Imported")) {
                     "storedRouteStyle"
@@ -309,6 +313,7 @@ object DesktopCourseAnalysisExports {
             DesktopCourseKmlExportPointType.CONTROL,
             DesktopCourseKmlExportPointType.BEACON,
             DesktopCourseKmlExportPointType.SPECTATOR -> DesktopCourseKmlStyle.DonutStyleId
+            DesktopCourseKmlExportPointType.WAYPOINT -> DesktopCourseKmlStyle.WaypointStyleId
         }
 
     private fun kmlRouteCoordinates(folder: DesktopCourseKmlExportFolder): List<CourseGeoPoint> =
@@ -744,6 +749,7 @@ object DesktopCourseAnalysisExports {
             DesktopCourseRouteMapPointType.Control -> Triple(0.00, 0.35, 0.72)
             DesktopCourseRouteMapPointType.Beacon -> Triple(1.00, 0.54, 0.00)
             DesktopCourseRouteMapPointType.Spectator -> Triple(0.38, 0.38, 0.38)
+            DesktopCourseRouteMapPointType.Waypoint -> Triple(0.55, 0.24, 0.75)
         }
 
     private fun StringBuilder.appendCircle(centerX: Double, centerY: Double, radius: Double, fill: Boolean) {

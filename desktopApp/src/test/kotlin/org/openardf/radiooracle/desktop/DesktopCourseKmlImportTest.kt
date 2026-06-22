@@ -80,6 +80,39 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun importsNonControlPointsVisitedByRouteAsMandatoryWaypoints() {
+        val kmlPath = Files.createTempFile("radio-oracle-course-waypoint", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithMandatoryWaypoint())
+        val project = EventProjectEditor.addCategory(
+            classicPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val category = updated.raceData.categories.single().category
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals("1 2", protectedCourseInfo.idealOrder)
+        assertEquals(
+            listOf("Start", "1", "Gate A", "2", "Finish"),
+            protectedCourseInfo.courseObjects.map { it.label }
+        )
+        val waypoint = protectedCourseInfo.courseObjects.single { it.label == "Gate A" }
+        assertEquals(ProtectedCourseObjectType.WAYPOINT, waypoint.type)
+        assertEquals("31 32", summary.categoryAssignmentUpdates.single().controlPointsText)
+    }
+
+    @Test
     fun importsGpxWaypointsAndRoutesIntoProtectedFields() {
         val gpxPath = Files.createTempFile("radio-oracle-course", ".gpx")
         Files.writeString(gpxPath, sampleGpx())
@@ -1629,6 +1662,37 @@ class DesktopCourseKmlImportTest {
             </Placemark>
             <Placemark>
               <name>$routeName</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9990,39.0000,0
+                  -94.9980,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleKmlWithMandatoryWaypoint(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Gate A</name>
+              <Point><coordinates>-94.9990,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
               <LineString>
                 <coordinates>
                   -95.0000,39.0000,0
