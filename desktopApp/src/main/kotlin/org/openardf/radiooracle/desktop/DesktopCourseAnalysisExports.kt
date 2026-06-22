@@ -738,7 +738,9 @@ object DesktopCourseAnalysisExports {
             val (red, green, blue) = routeMapPointRgb(point.type)
             appendLine("${pdfNumber(red)} ${pdfNumber(green)} ${pdfNumber(blue)} rg")
             appendCircle(x(point), y(point), 4.0, fill = true)
-            appendText(x(point) + 5.0, y(point) + 5.0, 8, point.label)
+            if (point.type != DesktopCourseRouteMapPointType.Waypoint) {
+                appendText(x(point) + 5.0, y(point) + 5.0, 8, point.label)
+            }
         }
     }
 

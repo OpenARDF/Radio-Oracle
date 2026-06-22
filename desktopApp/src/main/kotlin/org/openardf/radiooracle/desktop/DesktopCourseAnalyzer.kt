@@ -1656,7 +1656,7 @@ object DesktopCourseAnalyzer {
             ?.takeUnless { it.summaryOnly }
             ?: providedSection
         val targetSeconds = targetSecondsFor(raceType)
-        val appliesClimbLimit = raceType == RaceType.CLASSIC || raceType == RaceType.SHORT
+        val appliesClimbLimit = raceType.hasCourseAnalyzerClimbLimit()
         val importedMetrics = providedSection?.let { section ->
             routeGoodnessMetrics(
                 title = "Imported",
@@ -2484,7 +2484,12 @@ object DesktopCourseAnalyzer {
         stops: List<CalculatedRouteStop>,
         includeFinish: Boolean = false
     ): List<String> =
-        routeLabelsWithFinish(listOf("S") + stops.map { it.label }, includeFinish)
+        routeLabelsWithFinish(
+            listOf("S") + stops
+                .filterNot { it.type == DesktopCourseKmlExportPointType.WAYPOINT }
+                .map { it.label },
+            includeFinish
+        )
 
     private fun eventControlRouteLabels(controls: List<EventControl>, includeFinish: Boolean = false): List<String> =
         routeLabelsWithFinish(listOf("S") + controls.map { it.analysisRouteLabel() }, includeFinish)
@@ -2946,7 +2951,10 @@ object DesktopCourseAnalyzer {
             if (start != null) {
                 add("S")
             }
-            routeIntermediateSources.map { it.label }.forEach(::add)
+            routeIntermediateSources
+                .filterNot { it.type == DesktopCourseRouteMapPointType.Waypoint }
+                .map { it.label }
+                .forEach(::add)
             if (finish != null) {
                 add("F")
             }
@@ -3376,6 +3384,15 @@ object DesktopCourseAnalyzer {
             RaceType.SPRINT, RaceType.ORIENTEERING -> null
         }
 
+    private fun RaceType.hasCourseAnalyzerClimbLimit(): Boolean =
+        when (this) {
+            RaceType.CLASSIC,
+            RaceType.SHORT,
+            RaceType.SPRINT,
+            RaceType.FOXORING -> true
+            RaceType.ORIENTEERING -> false
+        }
+
     private fun spacingRuleSet(raceType: RaceType, categoryName: String): CourseSpacingRuleSet? {
         val key = categoryRuleKey(categoryName)
         return when (raceType) {
@@ -3543,7 +3560,7 @@ object DesktopCourseAnalyzer {
             } else {
                 null
             }
-            val appliesClimbLimit = raceType == RaceType.CLASSIC || raceType == RaceType.SHORT
+            val appliesClimbLimit = raceType.hasCourseAnalyzerClimbLimit()
             add(
                 DesktopCourseGoodnessMetric(
                     "Climb percent of horizontal length",

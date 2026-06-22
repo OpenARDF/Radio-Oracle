@@ -441,6 +441,15 @@ class DesktopCourseAnalyzerTest {
         assertTrue(section.explanation.contains("Sprint route calculated as separate first and fast loops"))
         assertTrue(section.ruleChecks.any { it.label == "Calculated route Sprint target time" })
         assertTrue(section.ruleChecks.any { it.label == "Sprint minimum transmitter spacing" && it.value.contains("closest pair F1-Spectator") })
+        assertTrue(
+            "Metrics were ${summary.goodnessMetrics.groups}",
+            summary.goodnessMetrics.groups
+                .flatMap { it.metrics }
+                .any {
+                    it.label == "Climb percent of horizontal length" &&
+                        it.value.contains("(limit 6.0%)")
+                }
+        )
     }
 
     @Test
@@ -483,10 +492,17 @@ class DesktopCourseAnalyzerTest {
 
         val section = requireNotNull(summary.calculatedRouteSection)
         assertEquals(
-            listOf("S", "End Corridor_Strt", "1", "2", "Spectator", "End Corridor_S", "F1", "F2", "B", "F"),
+            listOf("S", "1", "2", "Spectator", "F1", "F2", "B", "F"),
             section.routeOrder
         )
         assertTrue(section.explanation.contains("using the assigned spectator"))
+        val routeMap = requireNotNull(section.routeMap)
+        assertEquals(
+            listOf("S", "1", "2", "Spectator", "F1", "F2", "B", "F"),
+            routeMap.routeLabels
+        )
+        assertTrue(routeMap.points.any { it.label == "End Corridor_Strt" && it.type == DesktopCourseRouteMapPointType.Waypoint })
+        assertTrue(routeMap.points.any { it.label == "End Corridor_S" && it.type == DesktopCourseRouteMapPointType.Waypoint })
 
         val calculatedFolder = summary.kmlFolders.single { it.title == "Calculated foxes and route" }
         assertEquals(
@@ -953,7 +969,7 @@ class DesktopCourseAnalyzerTest {
         assertTrue(importedFolder.routeStops.map { it.label }.contains("Gate A"))
         val routeMap = requireNotNull(summary.providedRouteSection).routeMap!!
         assertTrue(routeMap.points.any { it.label == "Gate A" })
-        assertEquals(listOf("S", "31", "Gate A", "32", "33", "B", "F"), routeMap.routeLabels)
+        assertEquals(listOf("S", "31", "32", "33", "B", "F"), routeMap.routeLabels)
 
         val kmlPath = Files.createTempFile("course-analysis-waypoint-route", ".kml")
         DesktopCourseAnalysisExports.exportKml(kmlPath, summary)

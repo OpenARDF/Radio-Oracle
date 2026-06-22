@@ -14317,6 +14317,9 @@ private fun CourseAnalysisRouteMap(routeMap: DesktopCourseRouteMap) {
                 }
             }
             routeMap.points.forEach { point ->
+                if (point.type == DesktopCourseRouteMapPointType.Waypoint) {
+                    return@forEach
+                }
                 Text(
                     text = point.label,
                     color = DesktopPalette.Black,
