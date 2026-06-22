@@ -152,7 +152,7 @@ data class DesktopCourseKmlExportFolder(
     val routeName: String,
     val routePoints: List<CourseGeoPoint>,
     val routeStops: List<DesktopCourseKmlRouteStop>,
-    val foxes: List<DesktopCourseKmlExportPoint>
+    val courseObjects: List<DesktopCourseKmlExportPoint>
 )
 
 data class DesktopCourseKmlRouteStop(
@@ -163,8 +163,17 @@ data class DesktopCourseKmlRouteStop(
 data class DesktopCourseKmlExportPoint(
     val label: String,
     val originalLabel: String?,
-    val point: CourseGeoPoint
+    val point: CourseGeoPoint,
+    val type: DesktopCourseKmlExportPointType
 )
+
+enum class DesktopCourseKmlExportPointType {
+    START,
+    FINISH,
+    CONTROL,
+    BEACON,
+    SPECTATOR
+}
 
 data class DesktopCourseCalculatedRouteApplication(
     val categoryId: String,
@@ -379,7 +388,7 @@ object DesktopCourseAnalyzer {
             .withTerminalBeacon(terminalBeaconControl)
         val canBuildImportedRouteSection = providedControls.isNotEmpty()
 
-        val courseObjectPoints = protectedCourseInfo.courseObjects
+        val courseObjectPoints = protectedCourseInfo.effectiveCourseObjectPoints()
         val route = normalizedImportedRoute(
             protectedCourseInfo.route.map { CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters) },
             courseObjectPoints
@@ -455,7 +464,7 @@ object DesktopCourseAnalyzer {
         if (protectedCourseInfo == null) {
             missing += "Route data is locked by the Event Password or has not been imported for ${category.name}."
         }
-        val courseObjectPoints = protectedCourseInfo?.courseObjects.orEmpty()
+        val courseObjectPoints = protectedCourseInfo?.effectiveCourseObjectPoints().orEmpty()
         val route = normalizedImportedRoute(
             protectedCourseInfo?.route.orEmpty().map {
                 CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters)
@@ -877,7 +886,7 @@ object DesktopCourseAnalyzer {
                         routeName = "Imported route",
                         routePoints = route,
                         routeStops = providedKmlRouteStops(route, providedControls, controlsWithPoints),
-                        foxes = providedKmlFoxes(providedControls, controlsWithPoints)
+                        courseObjects = providedKmlCourseObjects(route, providedControls, controlsWithPoints)
                     )
                 )
             }
@@ -899,7 +908,12 @@ object DesktopCourseAnalyzer {
                                 finish = finish,
                                 labelOverrides = calculatedLabelOverrides
                             ),
-                            foxes = calculatedKmlFoxes(routeCandidate.controls, calculatedWaitRenumbering)
+                            courseObjects = calculatedKmlCourseObjects(
+                                start = start,
+                                controls = routeCandidate.controls,
+                                finish = finish,
+                                renumbering = calculatedWaitRenumbering
+                            )
                         )
                     )
                 }
@@ -1164,8 +1178,8 @@ object DesktopCourseAnalyzer {
      * Section 1 analyzes the imported route. The imported route geometry is used for
      * actual length, climb, profile, and split estimates; if every route sample has elevation, the
      * comparison metric becomes effective length, defined by the referenced course-design guide as
-     * length plus ten times total climb. If elevations are incomplete, the analyzer still runs and
-     * falls back to horizontal route length.
+     * horizontal length plus ten times total climb. If elevations are incomplete, the analyzer still
+     * runs and falls back to horizontal length.
      */
     private fun providedRouteAnalysis(
         route: List<CourseGeoPoint>,
@@ -1179,7 +1193,7 @@ object DesktopCourseAnalyzer {
         val effectiveLengthMeters = if (hasCompleteElevation) routeLengthMeters + 10.0 * requireNotNull(climbMeters) else null
         return RouteAnalysis(
             comparisonLengthMeters = effectiveLengthMeters ?: routeLengthMeters,
-            measurementLabel = if (effectiveLengthMeters != null) "Effective length" else "Horizontal route length",
+            measurementLabel = if (effectiveLengthMeters != null) "Effective length" else "Horizontal length",
             routeLengthMeters = routeLengthMeters,
             straightLineMeters = providedRoutePoints.takeIf { it.size >= 2 }?.straightLineMeters(),
             climbMeters = climbMeters,
@@ -1194,7 +1208,7 @@ object DesktopCourseAnalyzer {
      * Section 2 determines the ideal route from the known course points when the route search is
      * exhaustive. Scored controls and an optional spectator are permuted, the beacon is kept as the
      * last radio point before the finish, and the shortest effective length defines the ideal route.
-     * Complete point elevations use effective length; otherwise straight-line horizontal distance is
+     * Complete point elevations use effective length; otherwise horizontal length is
      * used as a fallback comparison metric.
      */
     private fun calculatedRouteAnalysis(
@@ -1221,7 +1235,7 @@ object DesktopCourseAnalyzer {
         val effectiveLengthMeters = climbMeters?.let { routeLengthMeters + 10.0 * it }
         return RouteAnalysis(
             comparisonLengthMeters = effectiveLengthMeters ?: routeLengthMeters,
-            measurementLabel = if (effectiveLengthMeters != null) "Effective length" else "Horizontal straight-line distance",
+            measurementLabel = if (effectiveLengthMeters != null) "Effective length" else "Horizontal length",
             routeLengthMeters = routeLengthMeters,
             straightLineMeters = routeLengthMeters,
             climbMeters = climbMeters,
@@ -1236,9 +1250,9 @@ object DesktopCourseAnalyzer {
             "This section analyzes the route supplied by the imported controls/routes file for the category. Leg lengths are taken from the imported route geometry, and estimated splits combine movement time with any Classic fox wait and find/punch time. " +
             "The primary comparison value is ${analysis.measurementLabel.lowercase()}; " +
             if (analysis.effectiveLengthMeters != null) {
-                "the Elevation Cache data is complete, so effective length is calculated as route length plus ten times total climb. $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE $ELEVATION_CACHE_RESOLUTION_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE"
+                "the Elevation Cache data is complete, so effective length is calculated as horizontal length plus ten times total climb. $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE $ELEVATION_CACHE_RESOLUTION_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE"
             } else {
-                "local elevation data is incomplete, so horizontal route length is used instead of effective length. $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE $ELEVATION_CACHE_RESOLUTION_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE"
+                "local elevation data is incomplete, so horizontal length is used instead of effective length. $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE $ELEVATION_CACHE_RESOLUTION_NOTE $MAP_KNOWLEDGE_LIMITATION_NOTE"
             }
 
     private fun calculatedSectionExplanation(
@@ -1252,7 +1266,7 @@ object DesktopCourseAnalyzer {
         val elevationText = if (analysis?.effectiveLengthMeters != null) {
             "Complete Elevation Cache samples were available along the calculated straight-line legs, so effective length was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
         } else {
-            "Elevation data was incomplete along the calculated straight-line legs, so straight-line horizontal distance was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
+            "Elevation data was incomplete along the calculated straight-line legs, so horizontal length was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
         }
         val assignmentText = assignmentDifferenceText(providedAssignments, calculatedAssignments)
         val routeCalculationText = routeCalculationNote?.let { " $it" }.orEmpty()
@@ -1270,7 +1284,7 @@ object DesktopCourseAnalyzer {
             else ->
                 "Within the stated format-specific route model, the route with the shortest $measurement is the ideal route; an imported route that is longer is not ideal."
         }
-        return "$opening $routeDefinitionText$routeCalculationText $elevationText $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE Large differences in estimated ideal time can come from fox wait-time optimization as well as route length; compare the movement, wait, and find/punch timing breakdown rows. $MAP_KNOWLEDGE_LIMITATION_NOTE $assignmentText"
+        return "$opening $routeDefinitionText$routeCalculationText $elevationText $SPEED_MODEL_NOTE $CLASSIC_WAIT_TIMING_NOTE Large differences in estimated ideal time can come from fox wait-time optimization as well as horizontal length; compare the movement, wait, and find/punch timing breakdown rows. $MAP_KNOWLEDGE_LIMITATION_NOTE $assignmentText"
     }
 
     private fun assignmentDifferenceText(
@@ -1336,9 +1350,7 @@ object DesktopCourseAnalyzer {
                         add(DesktopCourseAnalysisSummaryRow("Imported route", "Unavailable"))
                     } else {
                         add(DesktopCourseAnalysisSummaryRow("Imported route", providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }))
-                        add(DesktopCourseAnalysisSummaryRow(providedSection.comparisonLengthLabel, summaryLengthText(providedSection.comparisonLengthMeters)))
-                        add(DesktopCourseAnalysisSummaryRow("Horizontal length", summaryLengthText(providedSection.straightLineMeters)))
-                        add(DesktopCourseAnalysisSummaryRow("Route length", summaryLengthText(providedSection.routeLengthMeters)))
+                        add(DesktopCourseAnalysisSummaryRow("Horizontal length", summaryLengthText(providedSection.routeLengthMeters)))
                         add(DesktopCourseAnalysisSummaryRow("Climb", summaryClimbText(providedSection.climbMeters)))
                         add(DesktopCourseAnalysisSummaryRow("Effective length", summaryLengthText(providedSection.effectiveLengthMeters)))
                         add(DesktopCourseAnalysisSummaryRow("Estimated ideal time", summaryDurationText(providedSection.estimatedIdealSeconds)))
@@ -1382,9 +1394,7 @@ object DesktopCourseAnalyzer {
                             add(DesktopCourseAnalysisSummaryRow("Result", calculatedSection.routeOrder.joinToString(" -> ").ifBlank { "Unknown" }))
                         } else {
                             add(DesktopCourseAnalysisSummaryRow("Ideal route", calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }))
-                            add(DesktopCourseAnalysisSummaryRow(calculatedSection.comparisonLengthLabel, summaryLengthText(calculatedSection.comparisonLengthMeters)))
-                            add(DesktopCourseAnalysisSummaryRow("Horizontal length", summaryLengthText(calculatedSection.straightLineMeters)))
-                            add(DesktopCourseAnalysisSummaryRow("Route length", summaryLengthText(calculatedSection.routeLengthMeters)))
+                            add(DesktopCourseAnalysisSummaryRow("Horizontal length", summaryLengthText(calculatedSection.routeLengthMeters)))
                             add(DesktopCourseAnalysisSummaryRow("Climb", summaryClimbText(calculatedSection.climbMeters)))
                             add(DesktopCourseAnalysisSummaryRow("Effective length", summaryLengthText(calculatedSection.effectiveLengthMeters)))
                             add(DesktopCourseAnalysisSummaryRow("Estimated ideal time", summaryDurationText(calculatedSection.estimatedIdealSeconds)))
@@ -1424,7 +1434,7 @@ object DesktopCourseAnalyzer {
                 }
                 val percentText = percentLonger?.let { " ($it%)" }.orEmpty()
                 val routeOrderText = calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }
-                "The imported route is ${summaryLengthText(shorterByMeters)}$percentText longer than the ideal route. The calculated ideal route length (${summaryLengthText(calculatedLength)}) should therefore be used as the course's effective length for $categoryName, and the ideal route order is $routeOrderText with calculated fox numbering as shown in the 2D route depiction graphic below."
+                "The imported route is ${summaryLengthText(shorterByMeters)}$percentText longer than the ideal route. The calculated ideal route effective length (${summaryLengthText(calculatedLength)}) should therefore be used as the course's effective length for $categoryName, and the ideal route order is $routeOrderText with calculated fox numbering as shown in the 2D route depiction graphic below."
             } else {
                 "The calculated solution differs from the imported route under the current model, so applying it will replace the imported route and numbering with the calculated candidate."
             }
@@ -1516,7 +1526,7 @@ object DesktopCourseAnalyzer {
                 ?: providedSection?.comparisonLengthLabel
                 ?: "comparison length"
             ).lowercase()
-        return "Caveat: the calculated ideal route's $measurement is ${summaryLengthText(calculatedLength)}, outside the ${requirement.lengthRangeText()} rules range. The calculated ideal route is still the honest representation of the course's overall difficulty and should be used when describing the course length. The better course-design action is to redesign the course by moving the start, finish, or foxes until the calculated ideal route length falls inside the rules range for the category."
+        return "Caveat: the calculated ideal route's $measurement is ${summaryLengthText(calculatedLength)}, outside the ${requirement.lengthRangeText()} rules range. The calculated ideal route is still the honest representation of the course's overall difficulty and should be used when describing the course length. The better course-design action is to redesign the course by moving the start, finish, or foxes until the calculated ideal route effective length falls inside the rules range for the category."
     }
 
     private fun waitTimeRecommendationCaveat(
@@ -1562,8 +1572,6 @@ object DesktopCourseAnalyzer {
             ?: providedSection
         val targetSeconds = targetSecondsFor(raceType)
         val appliesClimbLimit = raceType == RaceType.CLASSIC || raceType == RaceType.SHORT
-        val lengthRequirement = categoryRequirement(categoryName, raceType)
-            ?.takeIf { raceType == RaceType.CLASSIC || raceType == RaceType.SHORT || raceType == RaceType.FOXORING }
         val importedMetrics = providedSection?.let { section ->
             routeGoodnessMetrics(
                 title = "Imported",
@@ -1575,8 +1583,7 @@ object DesktopCourseAnalyzer {
                     shortestComparisonLengthMeters = comparisonSection?.comparisonLengthMeters
                 ),
                 targetSeconds = targetSeconds,
-                appliesClimbLimit = appliesClimbLimit,
-                lengthRequirement = lengthRequirement
+                appliesClimbLimit = appliesClimbLimit
             )
         }.orEmpty()
         val calculatedMetricSection = calculatedSection
@@ -1593,8 +1600,7 @@ object DesktopCourseAnalyzer {
                     shortestComparisonLengthMeters = comparisonSection?.comparisonLengthMeters
                 ),
                 targetSeconds = targetSeconds,
-                appliesClimbLimit = appliesClimbLimit,
-                lengthRequirement = lengthRequirement
+                appliesClimbLimit = appliesClimbLimit
             )
         }.orEmpty()
         return DesktopCourseGoodnessMetrics(
@@ -1611,13 +1617,11 @@ object DesktopCourseAnalyzer {
         section: DesktopCourseAnalysisSection,
         shortestRouteMetric: DesktopCourseGoodnessMetric,
         targetSeconds: Int,
-        appliesClimbLimit: Boolean,
-        lengthRequirement: CourseRuleRequirement?
+        appliesClimbLimit: Boolean
     ): List<DesktopCourseGoodnessMetric> =
         buildList {
             add(shortestRouteMetric)
             add(climbPercentMetric(section, appliesClimbLimit))
-            add(effectiveLengthMetric(section, lengthRequirement))
             add(waitTotalMetric(section.waitRows))
             section.waitRenumbering
                 ?.takeIf { it.improvesWait }
@@ -1668,7 +1672,7 @@ object DesktopCourseAnalyzer {
             null
         }
         return DesktopCourseGoodnessMetric(
-            "Climb percent of route length",
+            "Climb percent of horizontal length",
             if (percent == null || routeLengthMeters == null || climbMeters == null) {
                 if (appliesClimbLimit) "Unknown (limit 6.0%)" else "Unknown"
             } else {
@@ -1683,29 +1687,6 @@ object DesktopCourseAnalyzer {
             }
         )
     }
-
-    private fun effectiveLengthMetric(
-        section: DesktopCourseAnalysisSection,
-        lengthRequirement: CourseRuleRequirement?
-    ): DesktopCourseGoodnessMetric =
-        DesktopCourseGoodnessMetric(
-            "Effective length",
-            section.effectiveLengthMeters?.let { effectiveLength ->
-                val measured = "${twoDecimals(effectiveLength / 1000.0)} km"
-                if (lengthRequirement == null) {
-                    measured
-                } else {
-                    "$measured (required ${lengthRequirement.lengthRangeText()})"
-                }
-            } ?: lengthRequirement?.let { "Unknown (required ${it.lengthRangeText()})" } ?: "Unknown",
-            when {
-                section.effectiveLengthMeters == null -> DesktopCourseMetricStatus.Unknown
-                lengthRequirement == null -> DesktopCourseMetricStatus.Good
-                section.effectiveLengthMeters in lengthRequirement.minLengthMeters..lengthRequirement.maxLengthMeters ->
-                    DesktopCourseMetricStatus.Good
-                else -> DesktopCourseMetricStatus.Warning
-            }
-        )
 
     private fun waitTotalMetric(waitRows: List<DesktopCourseWaitRow>): DesktopCourseGoodnessMetric {
         val totalWait = waitRows.sumOf { it.waitSeconds }
@@ -2486,6 +2467,27 @@ object DesktopCourseAnalyzer {
             this + beacon
         }
 
+    private fun ProtectedCourseInfo.effectiveCourseObjectPoints(): List<ProtectedCourseObjectPoint> =
+        buildList {
+            addAll(courseObjects)
+            val existingIds = courseObjects.mapTo(mutableSetOf()) { it.id }
+            controlPoints.forEach { controlPoint ->
+                if (controlPoint.controlId in existingIds) {
+                    return@forEach
+                }
+                add(
+                    ProtectedCourseObjectPoint(
+                        id = controlPoint.controlId,
+                        label = controlPoint.label,
+                        type = controlPoint.type.toProtectedCourseObjectType(),
+                        latitude = controlPoint.latitude,
+                        longitude = controlPoint.longitude,
+                        elevationMeters = controlPoint.elevationMeters
+                    )
+                )
+            }
+        }
+
     private fun normalizedImportedRoute(
         route: List<CourseGeoPoint>,
         courseObjects: List<ProtectedCourseObjectPoint>
@@ -2529,6 +2531,8 @@ object DesktopCourseAnalyzer {
         if (beacon == null || routeEndingAtFinish.any { it.sameRouteStop(beacon) }) {
             return routeEndingAtFinish
         }
+        // A provided beacon is a mandatory course point even if the imported route LineString
+        // omitted it, so force it into the measured route immediately before the finish.
         return if (routeEndingAtFinish.size == 1) {
             listOf(beacon, routeEndingAtFinish.last())
         } else {
@@ -2607,20 +2611,35 @@ object DesktopCourseAnalyzer {
         return markers
     }
 
-    private fun providedKmlFoxes(
+    private fun providedKmlCourseObjects(
+        route: List<CourseGeoPoint>,
         controls: List<EventControl>,
         controlsWithPoints: List<ControlAnalysisPoint>
     ): List<DesktopCourseKmlExportPoint> =
-        controls
-            .filter { it.type == ControlPointType.CONTROL }
-            .mapNotNull { control ->
-                val point = controlsWithPoints.firstOrNull { it.control.id == control.id }?.point ?: return@mapNotNull null
-                DesktopCourseKmlExportPoint(
-                    label = control.analysisRouteLabel(),
-                    originalLabel = null,
-                    point = point
-                )
+        buildList {
+            route.firstOrNull()?.let { start ->
+                add(DesktopCourseKmlExportPoint("Start", null, start, DesktopCourseKmlExportPointType.START))
             }
+            controls
+                .filter {
+                    it.type == ControlPointType.CONTROL ||
+                        it.type == ControlPointType.BEACON ||
+                        it.type == ControlPointType.SEPARATOR
+                }
+                .mapNotNull { control ->
+                    val point = controlsWithPoints.firstOrNull { it.control.id == control.id }?.point ?: return@mapNotNull null
+                    DesktopCourseKmlExportPoint(
+                        label = control.analysisRouteLabel(),
+                        originalLabel = null,
+                        point = point,
+                        type = control.kmlExportPointType()
+                    )
+                }
+                .forEach(::add)
+            route.lastOrNull()?.let { finish ->
+                add(DesktopCourseKmlExportPoint("Finish", null, finish, DesktopCourseKmlExportPointType.FINISH))
+            }
+        }
 
     private fun providedKmlRouteStops(
         route: List<CourseGeoPoint>,
@@ -2662,27 +2681,43 @@ object DesktopCourseAnalyzer {
             add(DesktopCourseKmlRouteStop("F", finish))
         }
 
-    private fun calculatedKmlFoxes(
+    private fun calculatedKmlCourseObjects(
+        start: CourseGeoPoint,
         controls: List<ControlAnalysisPoint>,
+        finish: CourseGeoPoint,
         renumbering: DesktopCourseWaitRenumbering?
     ): List<DesktopCourseKmlExportPoint> {
         val assignmentsByControlLabel = renumbering
             ?.assignments
             .orEmpty()
             .associateBy { it.controlLabel }
-        return controls
-            .filter { it.control.type == ControlPointType.CONTROL }
-            .mapNotNull { controlPoint ->
-                val point = controlPoint.point ?: return@mapNotNull null
-                val originalLabel = controlPoint.control.analysisRouteLabel()
-                val suggestedLabel = assignmentsByControlLabel[controlPoint.control.publicDisplayLabel()]?.suggestedSlotLabel
-                    ?.takeIf { it.isNotBlank() }
-                DesktopCourseKmlExportPoint(
-                    label = suggestedLabel ?: originalLabel,
-                    originalLabel = originalLabel.takeIf { suggestedLabel != null && suggestedLabel != originalLabel },
-                    point = point
-                )
-            }
+        return buildList {
+            add(DesktopCourseKmlExportPoint("Start", null, start, DesktopCourseKmlExportPointType.START))
+            controls
+                .filter {
+                    it.control.type == ControlPointType.CONTROL ||
+                        it.control.type == ControlPointType.BEACON ||
+                        it.control.type == ControlPointType.SEPARATOR
+                }
+                .mapNotNull { controlPoint ->
+                    val point = controlPoint.point ?: return@mapNotNull null
+                    val originalLabel = controlPoint.control.analysisRouteLabel()
+                    val suggestedLabel = if (controlPoint.control.type == ControlPointType.CONTROL) {
+                        assignmentsByControlLabel[controlPoint.control.publicDisplayLabel()]?.suggestedSlotLabel
+                            ?.takeIf { it.isNotBlank() }
+                    } else {
+                        null
+                    }
+                    DesktopCourseKmlExportPoint(
+                        label = suggestedLabel ?: originalLabel,
+                        originalLabel = originalLabel.takeIf { suggestedLabel != null && suggestedLabel != originalLabel },
+                        point = point,
+                        type = controlPoint.control.kmlExportPointType()
+                    )
+                }
+                .forEach(::add)
+            add(DesktopCourseKmlExportPoint("Finish", null, finish, DesktopCourseKmlExportPointType.FINISH))
+        }
     }
 
     private fun calculatedLabelOverrides(
@@ -3305,7 +3340,7 @@ object DesktopCourseAnalyzer {
             val appliesClimbLimit = raceType == RaceType.CLASSIC || raceType == RaceType.SHORT
             add(
                 DesktopCourseGoodnessMetric(
-                    "Climb percent of route length",
+                    "Climb percent of horizontal length",
                     climbMetric?.let { (percent, lengthMeters, climbValueMeters) ->
                         val lengthKm = lengthMeters.toDouble() / 1000.0
                         val result = "$climbValueMeters m / ${twoDecimals(lengthKm)} km = ${oneDecimal(percent)}%"
@@ -3471,6 +3506,13 @@ object DesktopCourseAnalyzer {
             ControlPointType.BEACON -> "B"
             ControlPointType.SEPARATOR -> publicDisplayLabel().takeIf { it.isNotBlank() } ?: "Spectator"
             else -> publicDisplayLabel()
+        }
+
+    private fun EventControl.kmlExportPointType(): DesktopCourseKmlExportPointType =
+        when (type) {
+            ControlPointType.BEACON -> DesktopCourseKmlExportPointType.BEACON
+            ControlPointType.SEPARATOR -> DesktopCourseKmlExportPointType.SPECTATOR
+            ControlPointType.CONTROL -> DesktopCourseKmlExportPointType.CONTROL
         }
 
     private fun EventControl.idealOrderToken(labelOverride: String?): String =

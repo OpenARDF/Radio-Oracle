@@ -186,7 +186,7 @@ class DesktopCourseAnalyzerTest {
         assertTrue(
             "Metrics were ${summary.metrics}",
             summary.metrics.any {
-                it.label == "Climb percent of route length" &&
+                it.label == "Climb percent of horizontal length" &&
                     it.value.contains("(limit 6.0%)") &&
                 it.status == DesktopCourseMetricStatus.Good
             }
@@ -204,8 +204,8 @@ class DesktopCourseAnalyzerTest {
                 it.status == DesktopCourseMetricStatus.Good
         })
         assertFalse(calculatedGoodnessMetrics.any { it.label == "Calculated route agrees with imported route order" })
-        assertTrue(importedGoodnessMetrics.any { it.label == "Climb percent of route length" })
-        assertTrue(importedGoodnessMetrics.any { it.label == "Effective length" })
+        assertTrue(importedGoodnessMetrics.any { it.label == "Climb percent of horizontal length" })
+        assertFalse(importedGoodnessMetrics.any { it.label == "Effective length" })
         assertTrue(importedGoodnessMetrics.any { it.label == "Total ideal-route wait time" })
         assertEquals(
             importedGoodnessMetrics.map(::routeMetricPairingLabel),
@@ -213,11 +213,14 @@ class DesktopCourseAnalyzerTest {
         )
         val reportText = DesktopCourseAnalysisExports.reportText(summary)
         assertEquals("Apply Fox Renumbering Only", summary.courseRecommendation.actionLabel)
-        assertTrue(reportText.contains("Imported\n"))
-        assertTrue(reportText.contains("Calculated\n"))
+        assertTrue(reportText.contains("Imported checks and metrics\n"))
+        assertTrue(reportText.contains("Calculated checks and metrics\n"))
+        assertFalse(reportText.contains("\nImported\n"))
+        assertFalse(reportText.contains("\nCalculated\n"))
         assertTrue(reportText.contains("Order comparison: Imported and calculated routes match"))
         assertFalse(reportText.contains("Calculated ideal route (calculated fox numbering):"))
         assertFalse(reportText.contains("Calculated straight-line length:"))
+        assertFalse(reportText.contains("Route length:"))
         assertTrue(reportText.contains("Effective length: "))
         assertTrue(reportText.contains("(required 9-12 km)"))
         assertTrue(reportText.contains("Course Recommendation"))
@@ -428,6 +431,12 @@ class DesktopCourseAnalyzerTest {
         val section = requireNotNull(summary.calculatedRouteSection)
         assertEquals(4, summary.calculatedRouteCount)
         assertEquals(listOf("S", "1", "2", "Spectator", "F1", "F2", "B", "F"), section.routeOrder)
+        val importedCourseObjects = summary.kmlFolders
+            .single { it.title == "Imported foxes and route" }
+            .courseObjects
+        assertTrue(importedCourseObjects.any { it.label == "Start" && it.type == DesktopCourseKmlExportPointType.START })
+        assertTrue(importedCourseObjects.any { it.label == "Spectator" && it.type == DesktopCourseKmlExportPointType.SPECTATOR })
+        assertTrue(importedCourseObjects.any { it.label == "Finish" && it.type == DesktopCourseKmlExportPointType.FINISH })
         assertTrue(section.explanation.contains("Sprint route calculated as separate first and fast loops"))
         assertTrue(section.ruleChecks.any { it.label == "Calculated route Sprint target time" })
         assertTrue(section.ruleChecks.any { it.label == "Sprint minimum transmitter spacing" && it.value.contains("closest pair F1-Spectator") })
@@ -638,7 +647,7 @@ class DesktopCourseAnalyzerTest {
         assertTrue(
             "Metrics were ${summary.metrics}",
             summary.metrics.any {
-                it.label == "Climb percent of route length" &&
+                it.label == "Climb percent of horizontal length" &&
                     it.value.contains("(limit 6.0%)") &&
                     it.status == DesktopCourseMetricStatus.Warning
             }
@@ -669,10 +678,10 @@ class DesktopCourseAnalyzerTest {
         assertTrue(reportText.contains("Section 2: Calculated ideal route"))
         assertTrue(reportText.contains("Route order (imported fox numbering):"))
         assertTrue(reportText.contains("Route order (calculated fox numbering):"))
-        assertTrue(reportText.contains("Imported\n"))
-        assertTrue(reportText.contains("Calculated\n"))
+        assertTrue(reportText.contains("Imported checks and metrics\n"))
+        assertTrue(reportText.contains("Calculated checks and metrics\n"))
         assertTrue(reportText.contains("Imported route:"))
-        assertTrue(reportText.contains("Ideal route:"))
+        assertFalse(reportText.contains("Ideal route:"))
         assertTrue(reportText.contains("Course Recommendation"))
         assertTrue(reportText.contains("Radio-Oracle recommends"))
         assertTrue(reportText.contains("with calculated fox numbering"))
@@ -715,7 +724,18 @@ class DesktopCourseAnalyzerTest {
         assertTrue(kmlText.contains("<name>Calculated foxes and route</name>"))
         assertTrue(kmlText.contains("<LineString>"))
         assertTrue(kmlText.contains("<Point>"))
+        assertTrue(kmlText.contains("<href>http://maps.google.com/mapfiles/kml/shapes/donut.png</href>"))
+        assertTrue(kmlText.contains("<href>http://maps.google.com/mapfiles/kml/shapes/triangle.png</href>"))
+        assertTrue(kmlText.contains("<href>http://maps.google.com/mapfiles/kml/shapes/target.png</href>"))
+        assertTrue(kmlText.contains("<color>ffef72ed</color>"))
+        assertTrue(kmlText.contains("<scale>1.2</scale>"))
+        assertTrue(kmlText.contains("<styleUrl>#courseStartStyle</styleUrl>"))
+        assertTrue(kmlText.contains("<styleUrl>#courseFinishStyle</styleUrl>"))
+        assertTrue(kmlText.contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
+        assertTrue(kmlText.contains("<name>Start</name>"))
+        assertTrue(kmlText.contains("<name>Finish</name>"))
         assertTrue(kmlText.contains("<name>31</name>"))
+        assertTrue(kmlText.contains("<name>B</name>"))
         assertEquals(
             List(summary.kmlFolders.size) { expectedFileStem },
             kmlLineStringPlacemarkNames(kmlText)
@@ -728,6 +748,52 @@ class DesktopCourseAnalyzerTest {
             "Intermediate imported route sample points should not be written into KML LineStrings",
             lineStringCoordinates.any { it.startsWith("-94.99500000,") || it.startsWith("-94.98500000,") }
         )
+    }
+
+    @Test
+    fun importedRouteAnalysisForcesBeaconFromProtectedControlPointIntoRouteAndKmlExport() {
+        val baseInfo = protectedInfo(foxCount = 3)
+        val beaconPoint = baseInfo.controlPoints.single { it.type == ControlPointType.BEACON }
+            .copy(latitude = 39.01, longitude = -94.96)
+        val finishPoint = baseInfo.route.last().copy(latitude = 39.0, longitude = -94.95)
+        val protectedInfo = baseInfo.copy(
+            route = baseInfo.route.dropLast(1) + finishPoint,
+            controlPoints = baseInfo.controlPoints.map { controlPoint ->
+                if (controlPoint.type == ControlPointType.BEACON) beaconPoint else controlPoint
+            },
+            courseObjects = baseInfo.courseObjects
+                .filterNot { it.type == ProtectedCourseObjectType.BEACON }
+                .map { courseObject ->
+                    if (courseObject.type == ProtectedCourseObjectType.FINISH) {
+                        courseObject.copy(
+                            latitude = finishPoint.latitude,
+                            longitude = finishPoint.longitude,
+                            elevationMeters = finishPoint.elevationMeters
+                        )
+                    } else {
+                        courseObject
+                    }
+                }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 3),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = protectedInfo.idealOrder
+        )
+
+        val importedFolder = summary.kmlFolders.single { it.title == "Imported foxes and route" }
+        assertEquals(listOf("S", "31", "32", "33", "B", "F"), importedFolder.routeStops.map { it.label })
+        assertEquals(39.01, importedFolder.routeStops.single { it.label == "B" }.point.latitude, 0.000001)
+        assertEquals("B", importedFolder.courseObjects.single { it.label == "B" }.label)
+        assertTrue(requireNotNull(summary.providedRouteSection).routeLengthMeters!! > protectedInfo.lengthMeters!!)
+
+        val kmlPath = Files.createTempFile("course-analysis-beacon-route", ".kml")
+        DesktopCourseAnalysisExports.exportKml(kmlPath, summary)
+        val kmlText = Files.readString(kmlPath)
+        assertTrue(kmlText.contains("<name>B</name>"))
+        assertTrue(kmlLineStringCoordinateLines(kmlText).flatten().any { it.startsWith("-94.96000000,39.01000000") })
     }
 
     @Test
@@ -1121,7 +1187,7 @@ class DesktopCourseAnalyzerTest {
         assertTrue(summary.missingElements.any { it.contains("Route elevation samples") })
         assertEquals(true, summary.hasMissingElevationData)
         assertNotNull(summary.estimatedIdealSeconds)
-        assertEquals("Horizontal route length", summary.providedRouteSection?.comparisonLengthLabel)
+        assertEquals("Horizontal length", summary.providedRouteSection?.comparisonLengthLabel)
         assertEquals(emptyList<DesktopCourseElevationProfilePoint>(), summary.elevationProfile)
     }
 

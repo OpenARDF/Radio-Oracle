@@ -21,14 +21,11 @@ import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-private const val COURSE_CONTROL_MARKER_SCALE = 1.1
-private const val COURSE_START_FINISH_MARKER_SCALE = 1.2
 private const val COURSE_ROUTE_STYLE_LINE_WIDTH = 4
-private const val COURSE_MARKER_FUCHSIA = "ffff00ff"
 
-private const val COURSE_CONTROL_DONUT_STYLE_ID = "courseControlDoughnutStyle"
-private const val COURSE_START_STYLE_ID = "courseStartStyle"
-private const val COURSE_FINISH_STYLE_ID = "courseFinishStyle"
+private val COURSE_CONTROL_DONUT_STYLE_ID = DesktopCourseKmlStyle.DonutStyleId
+private val COURSE_START_STYLE_ID = DesktopCourseKmlStyle.StartStyleId
+private val COURSE_FINISH_STYLE_ID = DesktopCourseKmlStyle.FinishStyleId
 
 enum class DesktopControlsRouteKmlKmzExportFormat(
     val contentExtension: String,
@@ -114,18 +111,18 @@ object DesktopControlsRouteKmlKmzExporter {
         appendLine("    <name>${xml(projectFile.raceData.race.name)} controls and routes</name>")
         appendLine("    <open>1</open>")
         appendLine("    <Style id=\"$COURSE_CONTROL_DONUT_STYLE_ID\">")
-        appendLine("      <IconStyle><scale>$COURSE_CONTROL_MARKER_SCALE</scale><color>$COURSE_MARKER_FUCHSIA</color>")
-        appendLine("        <Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon>")
+        appendLine("      <IconStyle><scale>${DesktopCourseKmlStyle.MarkerScale}</scale><color>${DesktopCourseKmlStyle.MarkerColor}</color>")
+        appendLine("        <Icon><href>${DesktopCourseKmlStyle.DonutIconUrl}</href></Icon>")
         appendLine("      </IconStyle>")
         appendLine("    </Style>")
         appendLine("    <Style id=\"$COURSE_FINISH_STYLE_ID\">")
-        appendLine("      <IconStyle><scale>$COURSE_START_FINISH_MARKER_SCALE</scale><color>$COURSE_MARKER_FUCHSIA</color>")
-        appendLine("        <Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle_highlight.png</href></Icon>")
+        appendLine("      <IconStyle><scale>${DesktopCourseKmlStyle.MarkerScale}</scale><color>${DesktopCourseKmlStyle.MarkerColor}</color>")
+        appendLine("        <Icon><href>${DesktopCourseKmlStyle.FinishIconUrl}</href></Icon>")
         appendLine("      </IconStyle>")
         appendLine("    </Style>")
         appendLine("    <Style id=\"$COURSE_START_STYLE_ID\">")
-        appendLine("      <IconStyle><scale>$COURSE_START_FINISH_MARKER_SCALE</scale><color>$COURSE_MARKER_FUCHSIA</color>")
-        appendLine("        <Icon><href>http://maps.google.com/mapfiles/kml/shapes/triangle.png</href></Icon>")
+        appendLine("      <IconStyle><scale>${DesktopCourseKmlStyle.MarkerScale}</scale><color>${DesktopCourseKmlStyle.MarkerColor}</color>")
+        appendLine("        <Icon><href>${DesktopCourseKmlStyle.StartIconUrl}</href></Icon>")
         appendLine("      </IconStyle>")
         appendLine("    </Style>")
         projectFile.raceData.categories.forEachIndexed { categoryIndex, categoryData ->
@@ -185,6 +182,9 @@ object DesktopControlsRouteKmlKmzExporter {
         val latitude = control.latitude
         val longitude = control.longitude
         if (latitude != null && longitude != null) {
+            controlPointStyle(control.type)?.let { styleId ->
+                appendLine("        <styleUrl>#$styleId</styleUrl>")
+            }
             appendLine("        <Point><coordinates>${coordinates(longitude, latitude, null)}</coordinates></Point>")
         }
         appendLine("      </Placemark>")

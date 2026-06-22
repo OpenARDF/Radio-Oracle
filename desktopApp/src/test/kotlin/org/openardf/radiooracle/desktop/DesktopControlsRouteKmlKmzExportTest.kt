@@ -47,9 +47,17 @@ class DesktopControlsRouteKmlKmzExportTest {
         assertTrue(kml.contains("<Style id=\"courseControlDoughnutStyle\">"))
         assertTrue(kml.contains("<Style id=\"courseStartStyle\">"))
         assertTrue(kml.contains("<Style id=\"courseFinishStyle\">"))
+        assertTrue(kml.contains("<scale>1.2</scale><color>ffef72ed</color>"))
+        assertTrue(kml.contains("<href>http://maps.google.com/mapfiles/kml/shapes/donut.png</href>"))
+        assertTrue(kml.contains("<href>http://maps.google.com/mapfiles/kml/shapes/triangle.png</href>"))
+        assertTrue(kml.contains("<href>http://maps.google.com/mapfiles/kml/shapes/target.png</href>"))
         assertTrue(kml.contains("<Style id=\"courseRoute-cat-m21\">"))
         assertTrue(kml.contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
         assertTrue(kml.contains("<styleUrl>#courseStartStyle</styleUrl>"))
+        assertTrue(kml.contains("<styleUrl>#courseFinishStyle</styleUrl>"))
+        assertTrue(kml.contains("<name>Start</name>"))
+        assertTrue(kml.contains("<name>Finish</name>"))
+        assertTrue(kml.contains("<name>Spectator</name>"))
         val routeColor = extractRouteColorByCategoryId(kml, "cat-m21")
         assertNotEquals("ffffffff", routeColor)
         assertNotEquals("ff00ffff", routeColor)
@@ -232,6 +240,22 @@ class DesktopControlsRouteKmlKmzExportTest {
                 latitude = 45.0,
                 longitude = -122.0,
                 elevationMeters = 88.0
+            ),
+            ProtectedCourseObjectPoint(
+                id = "spectator",
+                label = "Spectator",
+                type = ProtectedCourseObjectType.SPECTATOR,
+                latitude = 45.0004,
+                longitude = -122.0004,
+                elevationMeters = 100.0
+            ),
+            ProtectedCourseObjectPoint(
+                id = "finish",
+                label = "Finish",
+                type = ProtectedCourseObjectType.FINISH,
+                latitude = 45.0009,
+                longitude = -122.0009,
+                elevationMeters = 112.0
             )
         )
     )

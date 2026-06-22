@@ -43,12 +43,26 @@ object DesktopCourseAnalysisExports {
             appendLine("Category: ${result.categoryName}")
             appendLine("Rules applied: ${result.rulesDocumentLabel}")
             appendLine()
+            val importedSummaryGroup = result.summaryGroups.firstOrNull { it.title == "Imported" }
+            val calculatedSummaryGroup = result.summaryGroups.firstOrNull { it.title == "Calculated" }
+            val importedMetricGroup = result.goodnessMetrics.groups.firstOrNull { it.title == "Imported" }
+            val calculatedMetricGroup = result.goodnessMetrics.groups.firstOrNull { it.title == "Calculated" }
             result.providedRouteSection?.let { section ->
-                appendSection(section, includeRenumbering = true)
+                appendSection(
+                    section = section,
+                    includeRenumbering = true,
+                    summaryGroup = importedSummaryGroup,
+                    metricGroup = importedMetricGroup
+                )
                 appendLine()
             }
             result.calculatedRouteSection?.let { section ->
-                appendSection(section, includeRenumbering = false)
+                appendSection(
+                    section = section,
+                    includeRenumbering = false,
+                    summaryGroup = calculatedSummaryGroup,
+                    metricGroup = calculatedMetricGroup
+                )
                 appendLine()
             }
             appendSummary(result)
@@ -59,54 +73,53 @@ object DesktopCourseAnalysisExports {
             }
         }.trimEnd() + "\n"
 
-    private fun StringBuilder.appendSection(section: DesktopCourseAnalysisSection, includeRenumbering: Boolean) {
+    private fun StringBuilder.appendSection(
+        section: DesktopCourseAnalysisSection,
+        includeRenumbering: Boolean,
+        summaryGroup: DesktopCourseAnalysisSummaryGroup?,
+        metricGroup: DesktopCourseGoodnessMetricGroup?
+    ) {
         appendLine(section.title)
         appendWrapped(section.explanation)
         appendLine("${section.routeOrderLabel}: ${section.routeOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
-        appendRuleChecks(section.ruleChecks)
-        if (section.summaryOnly) {
-            return
-        }
-        section.secondaryRouteOrderLabel?.let { label ->
-            appendLine("$label: ${section.secondaryRouteOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
-        }
-        appendLine("${section.comparisonLengthLabel}: ${sectionComparisonLengthText(section)}")
-        appendLine("Horizontal length: ${kilometersText(section.straightLineMeters)}")
-        appendLine("Route length: ${kilometersText(section.routeLengthMeters)}")
-        appendLine("Climb: ${climbText(section.climbMeters)}")
-        if (section.comparisonLengthLabel != "Effective length") {
+        if (!section.summaryOnly) {
+            section.secondaryRouteOrderLabel?.let { label ->
+                appendLine("$label: ${section.secondaryRouteOrder.joinToString(" -> ").ifBlank { "Unknown" }}")
+            }
+            appendLine("Horizontal length: ${kilometersText(section.routeLengthMeters)}")
+            appendLine("Climb: ${climbText(section.climbMeters)}")
             appendLine("Effective length: ${kilometersText(section.effectiveLengthMeters)}")
+            section.speedModel?.let { speedModel ->
+                appendLine("Assumed running speed: ${speedModelText(speedModel)}")
+            }
+            appendLine("Estimated ideal time: ${secondsText(section.estimatedIdealSeconds)}")
+            appendTimingBreakdown(section.legRows, section.estimatedIdealSeconds)
+            appendLegRows(section.legRows)
+            if (includeRenumbering) {
+                appendLine()
+                appendLine("Imported-route wait-time analysis")
+                appendWrapped(
+                    "This subsection estimates Classic fox arrival phases on the imported route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure."
+                )
+                appendWaitRows("Current wait times", section.waitRows)
+                section.waitRenumbering?.let { appendWaitRenumbering(it) }
+            } else {
+                appendWaitRows("Optimized wait times", section.waitRows)
+            }
         }
-        section.speedModel?.let { speedModel ->
-            appendLine("Assumed running speed: ${speedModelText(speedModel)}")
-        }
-        appendLine("Estimated ideal time: ${secondsText(section.estimatedIdealSeconds)}")
-        appendTimingBreakdown(section.legRows, section.estimatedIdealSeconds)
-        appendLegRows(section.legRows)
-        if (includeRenumbering) {
-            appendLine()
-            appendLine("Imported-route wait-time analysis")
-            appendWrapped(
-                "This subsection estimates Classic fox arrival phases on the imported route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure."
-            )
-            appendWaitRows("Current wait times", section.waitRows)
-            section.waitRenumbering?.let { appendWaitRenumbering(it) }
-        } else {
-            appendWaitRows("Optimized wait times", section.waitRows)
-        }
+        appendSectionSummaryRows(summaryGroup)
+        appendMetricGroup(metricGroup)
     }
 
     private fun StringBuilder.appendSummary(result: DesktopCourseAnalysisSummary) {
         appendLine("Section 3: Summary")
         appendWrapped(result.summaryExplanation)
-        appendLine()
-        result.summaryGroups.forEachIndexed { index, group ->
-            if (index > 0) {
-                appendLine(PdfDividerLine)
-            }
-            appendLine(group.title)
-            group.rows.forEach { row ->
-                appendLine("${row.label}: ${row.value}")
+        if (result.goodnessMetrics.sharedMetrics.isNotEmpty()) {
+            appendLine()
+            appendLine(PdfDividerLine)
+            appendLine("Goodness metrics")
+            result.goodnessMetrics.sharedMetrics.forEach { metric ->
+                appendLine("${metric.label}: ${metric.value} (${metric.status.name})")
             }
             appendLine()
         }
@@ -120,20 +133,6 @@ object DesktopCourseAnalysisExports {
             appendLine("${factor.categoryCodes.joinToString("/")}: x${twoDecimalText(factor.multiplier)}")
         }
         appendLine("Unmatched categories: x1.00")
-        appendLine()
-        appendLine("Goodness metrics")
-        result.goodnessMetrics.sharedMetrics.forEach { metric ->
-            appendLine("${metric.label}: ${metric.value} (${metric.status.name})")
-        }
-        result.goodnessMetrics.groups.forEachIndexed { index, group ->
-            if (index > 0 || result.goodnessMetrics.sharedMetrics.isNotEmpty()) {
-                appendLine(PdfDividerLine)
-            }
-            appendLine(group.title)
-            group.metrics.forEach { metric ->
-                appendLine("${metric.label}: ${metric.value} (${metric.status.name})")
-            }
-        }
         appendLine()
         appendLine("Elevation profiles")
         result.elevationCacheNotes.forEach { note ->
@@ -176,12 +175,42 @@ object DesktopCourseAnalysisExports {
         }
     }
 
-    private fun summaryMetricValue(
-        result: DesktopCourseAnalysisSummary,
-        label: String,
-        fallback: String
-    ): String =
-        result.metrics.firstOrNull { it.label == label }?.value ?: fallback
+    private fun StringBuilder.appendSectionSummaryRows(group: DesktopCourseAnalysisSummaryGroup?) {
+        val rows = group?.rows
+            .orEmpty()
+            .filterNot { it.label in CourseAnalysisSectionDuplicateSummaryLabels }
+        if (rows.isEmpty()) {
+            return
+        }
+        appendLine()
+        appendLine("Section summary")
+        rows.forEach { row ->
+            appendLine("${row.label}: ${row.value}")
+        }
+    }
+
+    private fun StringBuilder.appendMetricGroup(group: DesktopCourseGoodnessMetricGroup?) {
+        if (group == null || group.metrics.isEmpty()) {
+            return
+        }
+        appendLine()
+        appendLine("${group.title} checks and metrics")
+        group.metrics.forEach { metric ->
+            val prefix = if (metric.isRuleViolationMetric()) "RULE VIOLATION: " else ""
+            appendLine("$prefix${metric.label}: ${metric.value} (${metric.status.name})")
+        }
+    }
+
+    private fun DesktopCourseGoodnessMetric.isRuleViolationMetric(): Boolean =
+        status == DesktopCourseMetricStatus.Warning &&
+            (
+                label.endsWith("fox count") ||
+                    label.endsWith("course length") ||
+                    label.endsWith("Sprint target time") ||
+                    label.contains("minimum transmitter spacing") ||
+                    label.contains("start exclusion zone") ||
+                    label.contains("USA category name")
+                )
 
     private fun speedModelText(speedModel: DesktopCourseSpeedModel): String =
         "${twoDecimalText(speedModel.effectiveSpeedMetersPerSecond)} m/s; " +
@@ -193,26 +222,6 @@ object DesktopCourseAnalysisExports {
             "${speedModel.categoryFactorSourceLabel}: ${speedModel.categoryFactorExplanation} " +
             "The event speed factor is adjustable, saved in the Event File, and applies to every category; the current event factor is x${twoDecimalText(speedModel.compensationFactor)}."
 
-    private fun sectionComparisonLengthText(section: DesktopCourseAnalysisSection): String {
-        val ruleValue = section.ruleChecks
-            .firstOrNull { it.label.endsWith("course length") }
-            ?.value
-            ?.replace("${section.comparisonLengthLabel} ", "")
-        return ruleValue ?: kilometersText(section.comparisonLengthMeters)
-    }
-
-    private fun StringBuilder.appendRuleChecks(ruleChecks: List<DesktopCourseGoodnessMetric>) {
-        if (ruleChecks.isEmpty()) {
-            return
-        }
-        appendLine()
-        appendLine("USA rules checks")
-        ruleChecks.forEach { check ->
-            val prefix = if (check.status == DesktopCourseMetricStatus.Warning) "RULE VIOLATION: " else ""
-            appendLine("$prefix${check.label}: ${check.value} (${check.status.name})")
-        }
-    }
-
     private fun kmlText(result: DesktopCourseAnalysisSummary, kmlFileStem: String): String =
         buildString {
             appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
@@ -221,7 +230,18 @@ object DesktopCourseAnalysisExports {
             appendLine("    <name>${xmlText(kmlFileStem)}</name>")
             appendLine("    <Style id=\"storedRouteStyle\"><LineStyle><color>ff0057b8</color><width>4</width></LineStyle></Style>")
             appendLine("    <Style id=\"calculatedRouteStyle\"><LineStyle><color>ff00a676</color><width>4</width></LineStyle></Style>")
-            appendLine("    <Style id=\"foxStyle\"><IconStyle><scale>1.1</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle></Style>")
+            appendCoursePointStyle(
+                styleId = DesktopCourseKmlStyle.DonutStyleId,
+                iconUrl = DesktopCourseKmlStyle.DonutIconUrl
+            )
+            appendCoursePointStyle(
+                styleId = DesktopCourseKmlStyle.StartStyleId,
+                iconUrl = DesktopCourseKmlStyle.StartIconUrl
+            )
+            appendCoursePointStyle(
+                styleId = DesktopCourseKmlStyle.FinishStyleId,
+                iconUrl = DesktopCourseKmlStyle.FinishIconUrl
+            )
             result.kmlFolders.forEach { folder ->
                 val routeStyleId = if (folder.title.startsWith("Imported")) {
                     "storedRouteStyle"
@@ -257,20 +277,39 @@ object DesktopCourseAnalysisExports {
             appendLine("        </LineString>")
             appendLine("      </Placemark>")
         }
-        folder.foxes.forEach { fox ->
+        folder.courseObjects.forEach { courseObject ->
             appendLine("      <Placemark>")
-            appendLine("        <name>${xmlText(fox.label)}</name>")
-            fox.originalLabel?.let {
+            appendLine("        <name>${xmlText(courseObject.label)}</name>")
+            courseObject.originalLabel?.let {
                 appendLine("        <description>${xmlText("Original label: $it")}</description>")
             }
-            appendLine("        <styleUrl>#foxStyle</styleUrl>")
+            appendLine("        <styleUrl>#${courseObjectStyleId(courseObject.type)}</styleUrl>")
             appendLine("        <Point>")
-            appendLine("          <coordinates>${kmlCoordinate(fox.point)}</coordinates>")
+            appendLine("          <coordinates>${kmlCoordinate(courseObject.point)}</coordinates>")
             appendLine("        </Point>")
             appendLine("      </Placemark>")
         }
         appendLine("    </Folder>")
     }
+
+    private fun StringBuilder.appendCoursePointStyle(styleId: String, iconUrl: String) {
+        appendLine("    <Style id=\"$styleId\">")
+        appendLine("      <IconStyle>")
+        appendLine("        <scale>${DesktopCourseKmlStyle.MarkerScale}</scale>")
+        appendLine("        <color>${DesktopCourseKmlStyle.MarkerColor}</color>")
+        appendLine("        <Icon><href>$iconUrl</href></Icon>")
+        appendLine("      </IconStyle>")
+        appendLine("    </Style>")
+    }
+
+    private fun courseObjectStyleId(type: DesktopCourseKmlExportPointType): String =
+        when (type) {
+            DesktopCourseKmlExportPointType.START -> DesktopCourseKmlStyle.StartStyleId
+            DesktopCourseKmlExportPointType.FINISH -> DesktopCourseKmlStyle.FinishStyleId
+            DesktopCourseKmlExportPointType.CONTROL,
+            DesktopCourseKmlExportPointType.BEACON,
+            DesktopCourseKmlExportPointType.SPECTATOR -> DesktopCourseKmlStyle.DonutStyleId
+        }
 
     private fun kmlRouteCoordinates(folder: DesktopCourseKmlExportFolder): List<CourseGeoPoint> =
         folder.routeStops
@@ -493,14 +532,26 @@ object DesktopCourseAnalysisExports {
         "Optimized wait times",
         "Wait-time renumbering check",
         "Renumbered wait times",
-        "Imported",
-        "Calculated",
+        "Section summary",
+        "Imported checks and metrics",
+        "Calculated checks and metrics",
         "Course Recommendation",
         "Speed model factors",
         "Goodness metrics",
         "Elevation profiles",
         "2D route depictions",
         "Leg analysis"
+    )
+
+    private val CourseAnalysisSectionDuplicateSummaryLabels = setOf(
+        "Imported route",
+        "Calculated route",
+        "Ideal route",
+        "Result",
+        "Horizontal length",
+        "Climb",
+        "Effective length",
+        "Estimated ideal time"
     )
 
     private fun paginatePdfLines(lines: List<PdfTextLine>): List<List<PdfTextLine>> {

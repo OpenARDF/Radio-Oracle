@@ -13846,11 +13846,25 @@ private fun CourseAnalysisResultView(result: DesktopCourseAnalysisSummary?) {
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
+            val importedSummaryGroup = result.summaryGroups.firstOrNull { it.title == "Imported" }
+            val calculatedSummaryGroup = result.summaryGroups.firstOrNull { it.title == "Calculated" }
+            val importedMetricGroup = result.goodnessMetrics.groups.firstOrNull { it.title == "Imported" }
+            val calculatedMetricGroup = result.goodnessMetrics.groups.firstOrNull { it.title == "Calculated" }
             result.providedRouteSection?.let { section ->
-                CourseAnalysisSectionView(section, includeRenumbering = true)
+                CourseAnalysisSectionView(
+                    section = section,
+                    includeRenumbering = true,
+                    summaryGroup = importedSummaryGroup,
+                    metricGroup = importedMetricGroup
+                )
             }
             result.calculatedRouteSection?.let { section ->
-                CourseAnalysisSectionView(section, includeRenumbering = false)
+                CourseAnalysisSectionView(
+                    section = section,
+                    includeRenumbering = false,
+                    summaryGroup = calculatedSummaryGroup,
+                    metricGroup = calculatedMetricGroup
+                )
             }
             CourseAnalysisSummarySection(result)
             if (result.missingElements.isNotEmpty()) {
@@ -13865,7 +13879,12 @@ private fun CourseAnalysisResultView(result: DesktopCourseAnalysisSummary?) {
 }
 
 @Composable
-private fun CourseAnalysisSectionView(section: DesktopCourseAnalysisSection, includeRenumbering: Boolean) {
+private fun CourseAnalysisSectionView(
+    section: DesktopCourseAnalysisSection,
+    includeRenumbering: Boolean,
+    summaryGroup: DesktopCourseAnalysisSummaryGroup?,
+    metricGroup: DesktopCourseGoodnessMetricGroup?
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = section.title,
@@ -13879,20 +13898,17 @@ private fun CourseAnalysisSectionView(section: DesktopCourseAnalysisSection, inc
             fontSize = 13.sp
         )
         CourseAnalysisRow(section.routeOrderLabel, section.routeOrder.joinToString(" -> ").ifBlank { "Unknown" })
-        CourseAnalysisRuleCheckRows(section.ruleChecks)
         if (section.summaryOnly) {
+            CourseAnalysisSectionSummaryRows(summaryGroup)
+            CourseAnalysisMetricGroupRows(metricGroup)
             return@Column
         }
         section.secondaryRouteOrderLabel?.let { label ->
             CourseAnalysisRow(label, section.secondaryRouteOrder.joinToString(" -> ").ifBlank { "Unknown" })
         }
-        CourseAnalysisRow(section.comparisonLengthLabel, sectionComparisonLengthText(section))
-        CourseAnalysisRow("Horizontal length", kilometersText(section.straightLineMeters))
-        CourseAnalysisRow("Route length", kilometersText(section.routeLengthMeters))
+        CourseAnalysisRow("Horizontal length", kilometersText(section.routeLengthMeters))
         CourseAnalysisRow("Climb", climbText(section.climbMeters))
-        if (section.comparisonLengthLabel != "Effective length") {
-            CourseAnalysisRow("Effective length", kilometersText(section.effectiveLengthMeters))
-        }
+        CourseAnalysisRow("Effective length", kilometersText(section.effectiveLengthMeters))
         section.speedModel?.let { speedModel ->
             CourseAnalysisRow("Assumed running speed", courseAnalysisSpeedModelText(speedModel))
         }
@@ -13904,6 +13920,8 @@ private fun CourseAnalysisSectionView(section: DesktopCourseAnalysisSection, inc
         } else {
             CourseAnalysisWaitRows("Optimized wait times", section.waitRows)
         }
+        CourseAnalysisSectionSummaryRows(summaryGroup)
+        CourseAnalysisMetricGroupRows(metricGroup)
     }
 }
 
@@ -13959,11 +13977,10 @@ private fun CourseAnalysisSummarySection(result: DesktopCourseAnalysisSummary) {
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
-        result.summaryGroups.forEachIndexed { index, group ->
-            if (index > 0) {
-                Divider(color = DesktopPalette.LightGrey, modifier = Modifier.padding(vertical = 4.dp))
-            }
-            CourseAnalysisSummaryGroupView(group)
+        val sharedMetrics = result.goodnessMetrics.sharedMetrics
+        if (sharedMetrics.isNotEmpty()) {
+            Divider(color = DesktopPalette.LightGrey, modifier = Modifier.padding(vertical = 4.dp))
+            CourseAnalysisSharedMetricRows(sharedMetrics)
         }
         Divider(color = DesktopPalette.LightGrey, modifier = Modifier.padding(vertical = 4.dp))
         Text(
@@ -13978,26 +13995,42 @@ private fun CourseAnalysisSummarySection(result: DesktopCourseAnalysisSummary) {
             fontSize = 13.sp
         )
         CourseAnalysisSpeedFactorDetails(result)
-        CourseAnalysisMetricRows(result.goodnessMetrics)
         CourseAnalysisProfileComparison(result.profileComparison, result.elevationCacheNotes)
         CourseAnalysisRouteMaps(result.routeMaps)
     }
 }
 
 @Composable
-private fun CourseAnalysisSummaryGroupView(group: DesktopCourseAnalysisSummaryGroup) {
+private fun CourseAnalysisSectionSummaryRows(group: DesktopCourseAnalysisSummaryGroup?) {
+    val rows = group?.rows
+        .orEmpty()
+        .filterNot { it.label in courseAnalysisSectionDuplicateSummaryLabels }
+    if (rows.isEmpty()) {
+        return
+    }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            text = group.title,
+            text = "Section summary",
             color = DesktopPalette.Black,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold
         )
-        group.rows.forEach { row ->
+        rows.forEach { row ->
             CourseAnalysisRow(row.label, row.value)
         }
     }
 }
+
+private val courseAnalysisSectionDuplicateSummaryLabels = setOf(
+    "Imported route",
+    "Calculated route",
+    "Ideal route",
+    "Result",
+    "Horizontal length",
+    "Climb",
+    "Effective length",
+    "Estimated ideal time"
+)
 
 @Composable
 private fun CourseAnalysisSpeedFactorDetails(result: DesktopCourseAnalysisSummary) {
@@ -14041,16 +14074,11 @@ private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
                     null -> "Unknown"
                 }
             )
-            CourseAnalysisRow("Calculated straight-line length", kilometersText(result.calculatedStraightLineMeters))
+            CourseAnalysisRow("Calculated horizontal length", kilometersText(result.calculatedRouteSection?.routeLengthMeters))
         }
-        CourseAnalysisRow("Imported straight-line length", kilometersText(result.providedStraightLineMeters))
-        CourseAnalysisRow("Imported route length", kilometersText(result.routeLengthMeters))
+        CourseAnalysisRow("Horizontal length", kilometersText(result.routeLengthMeters))
         CourseAnalysisRow("Climb", climbText(result.climbMeters))
-        CourseAnalysisRow(
-            "Effective length",
-            result.metrics.firstOrNull { it.label == "Effective length" }?.value
-                ?: kilometersText(result.effectiveLengthMeters)
-        )
+        CourseAnalysisRow("Effective length", kilometersText(result.effectiveLengthMeters))
         CourseAnalysisRow("Assumed running speed", courseAnalysisSpeedModelText(result.speedModel))
         CourseAnalysisRow("Estimated ideal time", secondsText(result.estimatedIdealSeconds))
     }
@@ -14313,7 +14341,7 @@ private fun routeMapPointColor(type: DesktopCourseRouteMapPointType): Color =
     }
 
 @Composable
-private fun CourseAnalysisMetricRows(goodnessMetrics: DesktopCourseGoodnessMetrics) {
+private fun CourseAnalysisSharedMetricRows(metrics: List<DesktopCourseGoodnessMetric>) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = "Goodness metrics",
@@ -14321,22 +14349,26 @@ private fun CourseAnalysisMetricRows(goodnessMetrics: DesktopCourseGoodnessMetri
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold
         )
-        goodnessMetrics.sharedMetrics.forEach { metric ->
+        metrics.forEach { metric ->
             CourseAnalysisMetricRow(metric)
         }
-        goodnessMetrics.groups.forEachIndexed { index, group ->
-            if (index > 0 || goodnessMetrics.sharedMetrics.isNotEmpty()) {
-                Divider(color = DesktopPalette.LightGrey, modifier = Modifier.padding(vertical = 4.dp))
-            }
-            Text(
-                text = group.title,
-                color = DesktopPalette.Black,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
-            )
-            group.metrics.forEach { metric ->
-                CourseAnalysisMetricRow(metric)
-            }
+    }
+}
+
+@Composable
+private fun CourseAnalysisMetricGroupRows(group: DesktopCourseGoodnessMetricGroup?) {
+    if (group == null || group.metrics.isEmpty()) {
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "${group.title} checks and metrics",
+            color = DesktopPalette.Black,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+        group.metrics.forEach { metric ->
+            CourseAnalysisMetricRow(metric)
         }
     }
 }
@@ -14352,39 +14384,6 @@ private fun CourseAnalysisMetricRow(metric: DesktopCourseGoodnessMetric) {
             DesktopCourseMetricStatus.Unknown -> DesktopPalette.Disconnected
         }
     )
-}
-
-private fun sectionComparisonLengthText(section: DesktopCourseAnalysisSection): String =
-    section.ruleChecks
-        .firstOrNull { it.label.endsWith("course length") }
-        ?.value
-        ?.replace("${section.comparisonLengthLabel} ", "")
-        ?: kilometersText(section.comparisonLengthMeters)
-
-@Composable
-private fun CourseAnalysisRuleCheckRows(ruleChecks: List<DesktopCourseGoodnessMetric>) {
-    if (ruleChecks.isEmpty()) {
-        return
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            text = "USA rules checks",
-            color = DesktopPalette.Black,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold
-        )
-        ruleChecks.forEach { check ->
-            CourseAnalysisRow(
-                label = check.label,
-                value = check.value,
-                valueColor = when (check.status) {
-                    DesktopCourseMetricStatus.Good -> DesktopPalette.Connected
-                    DesktopCourseMetricStatus.Warning -> DesktopPalette.Error
-                    DesktopCourseMetricStatus.Unknown -> DesktopPalette.Disconnected
-                }
-            )
-        }
-    }
 }
 
 @Composable
