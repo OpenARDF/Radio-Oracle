@@ -444,6 +444,65 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun calculatedSprintRouteIncludesMandatoryWaypointsAndUsesSpectatorTransition() {
+        val baseInfo = sprintProtectedInfo()
+        val gateAfterStart = ProtectedCourseObjectPoint(
+            id = "waypoint-start-corridor",
+            label = "End Corridor_Strt",
+            type = ProtectedCourseObjectType.WAYPOINT,
+            latitude = 39.0,
+            longitude = -94.995,
+            elevationMeters = 100.0
+        )
+        val gateAfterSpectator = ProtectedCourseObjectPoint(
+            id = "waypoint-spectator-corridor",
+            label = "End Corridor_S",
+            type = ProtectedCourseObjectType.WAYPOINT,
+            latitude = 39.0,
+            longitude = -94.96025,
+            elevationMeters = 100.0
+        )
+        val spectatorIndex = baseInfo.courseObjects.indexOfFirst { it.type == ProtectedCourseObjectType.SPECTATOR }
+        val protectedInfo = baseInfo.copy(
+            courseObjects = buildList {
+                add(baseInfo.courseObjects.first())
+                add(gateAfterStart)
+                addAll(baseInfo.courseObjects.drop(1).take(spectatorIndex - 1))
+                add(baseInfo.courseObjects[spectatorIndex])
+                add(gateAfterSpectator)
+                addAll(baseInfo.courseObjects.drop(spectatorIndex + 1))
+            }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = sprintProjectFile(),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "2 1 Spectator F2 F1 Beacon"
+        )
+
+        val section = requireNotNull(summary.calculatedRouteSection)
+        assertEquals(
+            listOf("S", "End Corridor_Strt", "1", "2", "Spectator", "End Corridor_S", "F1", "F2", "B", "F"),
+            section.routeOrder
+        )
+        assertTrue(section.explanation.contains("using the assigned spectator"))
+
+        val calculatedFolder = summary.kmlFolders.single { it.title == "Calculated foxes and route" }
+        assertEquals(
+            listOf("S", "End Corridor_Strt", "1", "2", "Spectator", "End Corridor_S", "F1", "F2", "B", "F"),
+            calculatedFolder.routeStops.map { it.label }
+        )
+        assertEquals(
+            listOf("End Corridor_Strt", "End Corridor_S"),
+            calculatedFolder.courseObjects
+                .filter { it.type == DesktopCourseKmlExportPointType.WAYPOINT }
+                .map { it.label }
+        )
+        assertTrue(calculatedFolder.routeStops.indexOfFirst { it.label == "Spectator" } < calculatedFolder.routeStops.indexOfFirst { it.label == "B" })
+    }
+
+    @Test
     fun matchingSprintCalculatedRouteUsesStoredRouteTimingForTargetTimeChecks() {
         val protectedInfo = sprintProtectedInfo().copy(
             route = listOf(

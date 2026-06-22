@@ -633,6 +633,69 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun sprintImportTreatsSpectatorPrefixPointAsSpectatorWhenStartIsExplicit() {
+        val kmlPath = Files.createTempFile("Sprint Start Sp Waypoints", ".kml")
+        Files.writeString(kmlPath, sampleSprintKmlWithExplicitStartSpectatorPrefixAndWaypoints())
+        val project = EventProjectEditor.addCategory(
+            sprintPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        val spectator = protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.SPECTATOR }
+        val waypoints = protectedCourseInfo.courseObjects
+            .filter { it.type == ProtectedCourseObjectType.WAYPOINT }
+            .map { it.label }
+
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals("1 S F1 M", protectedCourseInfo.idealOrder)
+        assertEquals("S", protectedCourseInfo.controlPoints.single { it.type == ControlPointType.SEPARATOR }.label)
+        assertEquals(-94.9960, spectator.longitude, 0.000001)
+        assertEquals(listOf("End Corridor_Strt", "End Corridor_S"), waypoints)
+    }
+
+    @Test
+    fun sprintImportTreatsSpectatorPrefixPointAsSpectatorWhenEndpointSAndFinishAreClear() {
+        val kmlPath = Files.createTempFile("Sprint Endpoint S Sp Finish", ".kml")
+        Files.writeString(kmlPath, sampleSprintKmlWithEndpointSAndExplicitFinish())
+        val project = EventProjectEditor.addCategory(
+            sprintPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        val spectator = protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.SPECTATOR }
+
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals("1 S F1 M", protectedCourseInfo.idealOrder)
+        assertEquals(-95.0000, protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.START }.longitude, 0.000001)
+        assertEquals(-94.9960, spectator.longitude, 0.000001)
+        assertEquals(-94.9900, protectedCourseInfo.courseObjects.single { it.type == ProtectedCourseObjectType.FINISH }.longitude, 0.000001)
+    }
+
+    @Test
     fun importReplacesExistingCategoryAssignmentsWithImportedControls() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithReversedControlPlacemarkOrder())
@@ -2179,6 +2242,108 @@ class DesktopCourseKmlImportTest {
             <Placemark>
               <name>M</name>
               <Point><coordinates>-94.9920,39.0000,0</coordinates></Point>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleSprintKmlWithExplicitStartSpectatorPrefixAndWaypoints(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9990,39.0000,0
+                  -94.9980,39.0000,0
+                  -94.9960,39.0000,0
+                  -94.9950,39.0000,0
+                  -94.9940,39.0000,0
+                  -94.9920,39.0000,0
+                  -94.9900,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>Start</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>End Corridor_Strt</name>
+              <Point><coordinates>-94.9990,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>1</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Sp</name>
+              <Point><coordinates>-94.9960,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>End Corridor_S</name>
+              <Point><coordinates>-94.9950,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>F1</name>
+              <Point><coordinates>-94.9940,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Beacon</name>
+              <Point><coordinates>-94.9920,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Finish</name>
+              <Point><coordinates>-94.9900,39.0000,0</coordinates></Point>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleSprintKmlWithEndpointSAndExplicitFinish(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9980,39.0000,0
+                  -94.9960,39.0000,0
+                  -94.9940,39.0000,0
+                  -94.9920,39.0000,0
+                  -94.9900,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>S</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>1</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Sp</name>
+              <Point><coordinates>-94.9960,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>F1</name>
+              <Point><coordinates>-94.9940,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M</name>
+              <Point><coordinates>-94.9920,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Finish</name>
+              <Point><coordinates>-94.9900,39.0000,0</coordinates></Point>
             </Placemark>
           </Document>
         </kml>

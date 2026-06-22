@@ -676,13 +676,38 @@ object DesktopCourseKmlImporter {
         sprintContext: Boolean
     ): List<CourseControlPoint> {
         /*
-         * Sprint maps can legitimately contain two bare "S" points: one at the route endpoint for
-         * start and one mid-route for spectator. Do not globally discard endpoint-looking S points
-         * here because a bad or unrelated LineString can have an endpoint near the real spectator.
-         * The per-route matcher below decides which S is start vs spectator using the route being
-         * imported.
+         * Sprint maps can legitimately contain a clear endpoint start/finish plus a short spectator
+         * label such as "Sp". Treat the prefix label as spectator only after endpoint evidence
+         * proves that start or finish is already accounted for; otherwise a bare "S" still needs
+         * the per-route endpoint check below to decide whether it is start or spectator.
          */
-        return importedControls
+        if (!sprintContext || !hasClearSprintEndpointRole(importedControls, routes)) {
+            return importedControls
+        }
+        return importedControls.map { control ->
+            if (control.name.isSpectatorPrefixOnlyName()) {
+                control.copy(name = "S")
+            } else {
+                control
+            }
+        }
+    }
+
+    private fun hasClearSprintEndpointRole(
+        importedControls: List<CourseControlPoint>,
+        routes: List<CourseRoute>
+    ): Boolean {
+        if (importedControls.any { it.isCourseStartPoint() || it.isCourseFinishPoint() }) {
+            return true
+        }
+        return routes.any { route ->
+            val first = route.points.firstOrNull() ?: return@any false
+            val last = route.points.lastOrNull() ?: return@any false
+            val firstControls = importedControls.filter { it.point.sameRoutePoint(first) }
+            val lastControls = importedControls.filter { it.point.sameRoutePoint(last) }
+            (firstControls.any { it.name.isBareSprintStartLabel() } && lastControls.any { it.isCourseFinishPoint() }) ||
+                (lastControls.any { it.name.isBareSprintStartLabel() } && firstControls.any { it.isCourseFinishPoint() })
+        }
     }
 
     private fun endpointAwareImportedControls(
@@ -1101,7 +1126,7 @@ object DesktopCourseKmlImporter {
                 ControlMatchToken(control.siCode.toString(), control),
                 control.label.takeIf { it.isNotBlank() }?.let { ControlMatchToken(it, control) },
                 control.publicLabel?.takeIf { it.isNotBlank() }?.let { ControlMatchToken(it, control) }
-            )
+            ) + control.roleAliasTokens()
         }
         val labelTokens = eventControls.flatMap { control ->
             listOfNotNull(
@@ -1971,6 +1996,13 @@ private fun EventControl.idealOrderToken(): String {
 private fun EventControl.displayCourseLabel(): String =
     publicLabel?.trim()?.takeIf { it.isNotEmpty() } ?: label
 
+private fun EventControl.roleAliasTokens(): List<ControlMatchToken> =
+    when (type) {
+        ControlPointType.SEPARATOR -> listOf("S", "Spectator", "Separator")
+        ControlPointType.BEACON -> listOf("M", "B", "Beacon")
+        ControlPointType.CONTROL -> emptyList()
+    }.map { ControlMatchToken(it, this) }
+
 private fun CourseMatchedControl.assignedControlToken(): String =
     when (type) {
         ControlPointType.CONTROL -> siCode.toString()
@@ -2031,6 +2063,11 @@ private fun String.isCourseStartName(): Boolean {
 private fun String.isCourseFinishName(): Boolean {
     val normalized = categoryMatchText()
     return Regex("""\bfinish\b""").containsMatchIn(normalized)
+}
+
+private fun String.isSpectatorPrefixOnlyName(): Boolean {
+    val letters = lowercase().filter { it in 'a'..'z' }
+    return letters.isNotEmpty() && "spectator".startsWith(letters)
 }
 
 private fun String.categoryMatchText(): String =
