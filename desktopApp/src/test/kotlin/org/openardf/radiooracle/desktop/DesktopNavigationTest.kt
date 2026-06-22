@@ -850,6 +850,15 @@ class DesktopNavigationTest {
             DesktopNavAction.ImportCourseGpx,
             controlItems.first { it.label == "Course Analyzer" }.children.last().action
         )
+        assertEquals(DesktopSection.KmlTools, controlItems.first { it.label == "KML Tools" }.section)
+        assertEquals(
+            listOf("Move Course"),
+            controlItems.first { it.label == "KML Tools" }.children.map { it.label }
+        )
+        assertEquals(
+            DesktopSection.KmlMoveCourse,
+            controlItems.first { it.label == "KML Tools" }.children.single().section
+        )
         assertEquals(
             DesktopNavAction.ImportControlsKmlKmz,
             controlItems.first { it.label == "Import/Export" }.children.first { it.label == "Import Controls KML/KMZ..." }.action

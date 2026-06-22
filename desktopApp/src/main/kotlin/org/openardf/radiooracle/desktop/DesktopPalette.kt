@@ -67,6 +67,7 @@ enum class DesktopSection(val label: String) {
     ElevationCache("Elevation Data"),
     ElevationCacheImport("Import Elevation Data"),
     KmlTools("KML Tools"),
+    KmlMoveCourse("Move Course"),
     ControlsImportExport("Import/Export"),
     ControlsRouteKmlImport("Import Controls KML/KMZ"),
     Readouts("Readouts"),

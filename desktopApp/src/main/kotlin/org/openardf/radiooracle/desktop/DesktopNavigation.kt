@@ -324,10 +324,11 @@ object DesktopNavigation {
                                     "setup.controls.kml-tools.move-course",
                                     "Move Course",
                                     workflow,
-                                    DesktopSection.KmlTools,
+                                    DesktopSection.KmlMoveCourse,
                                     requiresEventFile = false
                                 )
                             ),
+                            DesktopSection.KmlTools,
                             requiresEventFile = false
                         ),
                         group(

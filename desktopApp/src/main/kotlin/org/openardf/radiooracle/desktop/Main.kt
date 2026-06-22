@@ -9000,7 +9000,7 @@ private fun SectionWorkspace(
                 onUpdateSpeedFactor = onUpdateCourseAnalyzerSpeedFactor
             )
         }
-        if (section == DesktopSection.KmlTools) {
+        if (section == DesktopSection.KmlMoveCourse) {
             KmlToolsPanel()
         }
         if (section == DesktopSection.ElevationCache && projectFile != null) {
