@@ -136,7 +136,8 @@ data class DesktopCourseElevationProfileMarker(
 data class DesktopCourseRouteMap(
     val title: String,
     val points: List<DesktopCourseRouteMapPoint>,
-    val routeLabels: List<String>
+    val routeLabels: List<String>,
+    val routePointIndexes: List<Int> = emptyList()
 )
 
 data class DesktopCourseRouteMapPoint(
@@ -2783,6 +2784,27 @@ object DesktopCourseAnalyzer {
                 add("F")
             }
         }
+        val routeSources = buildList {
+            start?.let { add(RouteMapSourcePoint("S", it, DesktopCourseRouteMapPointType.Start)) }
+            routeControls.forEach { controlPoint ->
+                val point = controlPoint.point ?: return@forEach
+                add(
+                    RouteMapSourcePoint(
+                        labelFor(controlPoint),
+                        point,
+                        controlPoint.control.routeMapType()
+                    )
+                )
+            }
+            finish?.let { add(RouteMapSourcePoint("F", it, DesktopCourseRouteMapPointType.Finish)) }
+        }
+        val routePointIndexes = routeSources.mapNotNull { routeSource ->
+            labeledPoints.indexOfFirst { labeledPoint ->
+                labeledPoint.label == routeSource.label &&
+                    labeledPoint.type == routeSource.type &&
+                    labeledPoint.point.sameRouteStop(routeSource.point)
+            }.takeUnless { it < 0 }
+        }
         if (labeledPoints.size < 2) {
             return null
         }
@@ -2802,7 +2824,8 @@ object DesktopCourseAnalyzer {
                     type = source.type
                 )
             },
-            routeLabels = routeLabels
+            routeLabels = routeLabels,
+            routePointIndexes = routePointIndexes
         )
     }
 

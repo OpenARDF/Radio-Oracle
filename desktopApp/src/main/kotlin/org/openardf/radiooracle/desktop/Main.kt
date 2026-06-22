@@ -14268,9 +14268,11 @@ private fun CourseAnalysisRouteMap(routeMap: DesktopCourseRouteMap) {
                     (point.xFraction.coerceIn(0.0, 1.0) * size.width).toFloat()
                 fun y(point: DesktopCourseRouteMapPoint): Float =
                     (point.yFraction.coerceIn(0.0, 1.0) * size.height).toFloat()
-                routeMap.routeLabels.zipWithNext().forEach { (fromLabel, toLabel) ->
-                    val from = byLabel[fromLabel] ?: return@forEach
-                    val to = byLabel[toLabel] ?: return@forEach
+                val routeLinePoints = routeMap.routePointIndexes
+                    .mapNotNull { routeMap.points.getOrNull(it) }
+                    .takeIf { it.size >= 2 }
+                    ?: routeMap.routeLabels.mapNotNull { byLabel[it] }
+                routeLinePoints.zipWithNext().forEach { (from, to) ->
                     drawLine(
                         color = DesktopPalette.Primary,
                         start = Offset(x(from), y(from)),
