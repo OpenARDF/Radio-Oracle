@@ -406,7 +406,7 @@ object DesktopCourseKmlImporter {
             }
         }
 
-        require(matchedCategoryCount > 0 || controls.isNotEmpty()) {
+        require(matchedCategoryCount > 0 || controls.isNotEmpty() || missingCategoryNames.isNotEmpty()) {
             "No route names matched Event File category names, and no point controls matched existing controls."
         }
 

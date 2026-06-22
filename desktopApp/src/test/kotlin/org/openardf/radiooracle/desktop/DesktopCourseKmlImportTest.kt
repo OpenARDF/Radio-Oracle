@@ -378,6 +378,52 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun previewsMissingCategoriesWhenNoExistingCategoryOrControlMatches() {
+        val kmlPath = Files.createTempFile("Sprint", ".kml")
+        Files.writeString(kmlPath, sampleRouteOnlyKmlWithCategoryNames())
+        val project = classicPresetProject(raceName = "Sprint Test", startDateTimeIso = "2026-06-11T09:00")
+        val expectedMissingCategoryNames = listOf("M21", "W35")
+
+        val (withoutCreatedCategories, withoutCreatedSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+        val (withCreatedCategories, withCreatedSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null },
+            createMissingCategories = true,
+            missingCategoryIdFactory = { name -> "cat-${name.lowercase()}" }
+        )
+
+        assertEquals(expectedMissingCategoryNames, withoutCreatedSummary.missingCategoryNames)
+        assertEquals(emptyList<String>(), withoutCreatedSummary.createdCategoryNames)
+        assertEquals(0, withoutCreatedSummary.matchedCategoryCount)
+        assertEquals(0, withoutCreatedSummary.matchedControlPointCount)
+        assertEquals(0, withoutCreatedSummary.importedCategoryCount)
+        assertEquals(emptyList<String>(), withoutCreatedCategories.raceData.categories.map { it.category.name })
+
+        assertEquals(expectedMissingCategoryNames, withCreatedSummary.missingCategoryNames)
+        assertEquals(expectedMissingCategoryNames, withCreatedSummary.createdCategoryNames)
+        assertEquals(expectedMissingCategoryNames, withCreatedCategories.raceData.categories.map { it.category.name })
+        assertEquals(2, withCreatedSummary.matchedCategoryCount)
+        assertEquals(2, withCreatedSummary.importedCategoryCount)
+        assertNotNull(
+            withCreatedCategories.raceData.categories
+                .single { it.category.name == "M21" }
+                .category.encryptedCourseInfo
+        )
+        assertNotNull(
+            withCreatedCategories.raceData.categories
+                .single { it.category.name == "W35" }
+                .category.encryptedCourseInfo
+        )
+    }
+
+    @Test
     fun importReplacesExistingCategoryAssignmentsWithImportedControls() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithReversedControlPlacemarkOrder())
@@ -1713,6 +1759,33 @@ class DesktopCourseKmlImportTest {
                 <coordinates>
                   -95.0000,39.0000,0
                   -94.9950,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleRouteOnlyKmlWithCategoryNames(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>Alpha</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Bravo</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Sprint course (M21, W35)</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9980,39.0000,0
+                  -94.9960,39.0000,0
                 </coordinates>
               </LineString>
             </Placemark>
