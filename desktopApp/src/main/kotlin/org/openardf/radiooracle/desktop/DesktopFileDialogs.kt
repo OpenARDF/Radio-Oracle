@@ -331,6 +331,16 @@ object DesktopFileDialogs {
             ?.let(DesktopProjectFilePaths::withPdfExtension)
             ?.let(::confirmOverwrite)
 
+    fun chooseExportClassicCourseGeneratorPdf(defaultFileName: String? = null): Path? =
+        chooseFile(
+            title = "Export Classic Course Generator PDF",
+            mode = FileDialog.SAVE,
+            extension = DesktopProjectFilePaths.PDF_EXTENSION,
+            defaultFileName = defaultFileName
+        )
+            ?.let(DesktopProjectFilePaths::withPdfExtension)
+            ?.let(::confirmOverwrite)
+
     fun chooseExportTxt(title: String): Path? =
         chooseFile(title, FileDialog.SAVE, DesktopProjectFilePaths.TXT_EXTENSION)
             ?.let(DesktopProjectFilePaths::withTxtExtension)

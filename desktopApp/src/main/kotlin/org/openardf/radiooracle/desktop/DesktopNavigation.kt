@@ -328,6 +328,13 @@ object DesktopNavigation {
                                     workflow,
                                     DesktopSection.KmlMoveCourse,
                                     requiresEventFile = false
+                                ),
+                                item(
+                                    "setup.controls.kml-tools.classic-course-generator",
+                                    "Classic Course Generator",
+                                    workflow,
+                                    DesktopSection.KmlClassicCourseGenerator,
+                                    requiresEventFile = false
                                 )
                             ),
                             DesktopSection.KmlTools,
@@ -1079,6 +1086,8 @@ object DesktopNavigation {
             "Use KML Tools to analyze or modify KML and KMZ files without changing the open Event File.",
         "setup.controls.kml-tools.move-course" to
             "Use Move Course to create a translated KML/KMZ copy where the Start point is moved to a new latitude and longitude and all other coordinates move by the same offset.",
+        "setup.controls.kml-tools.classic-course-generator" to
+            "Use Classic Course Generator to read Start, Finish, Beacon, and fox point placemarks from a KML/KMZ file and list ideal Classic course combinations with category matches.",
         "setup.controls.import-export" to
             "Use Import/Export to synchronize control CSV files and protected controls/route KML/KMZ or GPX files with the current Event File.",
         "setup.controls.import-controls" to

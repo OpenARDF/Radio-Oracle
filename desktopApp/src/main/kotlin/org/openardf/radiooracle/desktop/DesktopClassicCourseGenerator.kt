@@ -1,0 +1,476 @@
+package org.openardf.radiooracle.desktop
+
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.Locale
+import kotlin.math.max
+import kotlin.math.roundToInt
+
+data class ClassicCourseGeneratorResult(
+    val sourcePath: Path,
+    val start: ClassicCoursePoint,
+    val finish: ClassicCoursePoint,
+    val beacon: ClassicCoursePoint?,
+    val foxes: List<ClassicCoursePoint>,
+    val groups: List<ClassicCourseGeneratorGroup>
+) {
+    val rows: List<ClassicCourseGeneratorRow> = groups.flatMap { it.rows }
+}
+
+data class ClassicCoursePoint(
+    val label: String,
+    val point: CourseGeoPoint
+)
+
+data class ClassicCourseGeneratorGroup(
+    val foxCount: Int,
+    val title: String,
+    val rows: List<ClassicCourseGeneratorRow>
+)
+
+data class ClassicCourseGeneratorRow(
+    val foxCount: Int,
+    val effectiveLengthMeters: Double,
+    val horizontalLengthMeters: Double,
+    val climbMeters: Double?,
+    val coursePoints: List<ClassicCoursePoint>,
+    val orderLabels: List<String>,
+    val matchingCategories: List<String>
+) {
+    val hasCategoryMatch: Boolean = matchingCategories.isNotEmpty()
+}
+
+data class ClassicCourseGeneratorExportPaths(
+    val pdfPath: Path,
+    val kmlPath: Path
+)
+
+object DesktopClassicCourseGenerator {
+    private const val CLASSIC_CLIMB_LIMIT_PERCENT = 6.0
+    private val classicRequirements = linkedMapOf(
+        "W12" to ClassicCourseRequirement(3, 3, 2_000, 3_000),
+        "W14" to ClassicCourseRequirement(4, 4, 2_500, 3_000),
+        "W16" to ClassicCourseRequirement(5, 5, 3_500, 4_000),
+        "W19" to ClassicCourseRequirement(4, 4, 6_000, 8_000),
+        "W21" to ClassicCourseRequirement(4, 4, 7_000, 9_000),
+        "W35" to ClassicCourseRequirement(4, 5, 6_000, 8_000),
+        "W45" to ClassicCourseRequirement(3, 4, 5_000, 7_000),
+        "W55" to ClassicCourseRequirement(3, 4, 4_000, 6_000),
+        "W65" to ClassicCourseRequirement(3, 4, 4_000, 6_000),
+        "W75" to ClassicCourseRequirement(2, 4, 3_000, 5_000),
+        "M12" to ClassicCourseRequirement(3, 3, 2_000, 3_000),
+        "M14" to ClassicCourseRequirement(4, 4, 2_500, 3_000),
+        "M16" to ClassicCourseRequirement(5, 5, 3_500, 4_000),
+        "M19" to ClassicCourseRequirement(4, 4, 8_000, 10_000),
+        "M21" to ClassicCourseRequirement(5, 5, 9_000, 12_000),
+        "M40" to ClassicCourseRequirement(4, 4, 8_000, 10_000),
+        "M50" to ClassicCourseRequirement(4, 5, 6_000, 8_000),
+        "M60" to ClassicCourseRequirement(3, 4, 5_000, 7_000),
+        "M70" to ClassicCourseRequirement(3, 4, 4_000, 6_000),
+        "M80" to ClassicCourseRequirement(2, 4, 3_000, 5_000)
+    )
+
+    fun generate(sourcePath: Path): ClassicCourseGeneratorResult {
+        val fileName = sourcePath.fileName.toString()
+        require(fileName.endsWith(".kml", ignoreCase = true) || fileName.endsWith(".kmz", ignoreCase = true)) {
+            "Choose a .kml or .kmz course points file."
+        }
+        val parsed = DesktopCourseKmlImporter.parse(sourcePath)
+        return generate(sourcePath, parsed)
+    }
+
+    fun generate(sourcePath: Path, courseData: DesktopCourseKmlData): ClassicCourseGeneratorResult {
+        val classified = classifyCoursePoints(courseData.controls)
+        val groups = (3..classified.foxes.size).map { foxCount ->
+            ClassicCourseGeneratorGroup(
+                foxCount = foxCount,
+                title = groupTitle(foxCount),
+                rows = classified.foxes
+                    .combinations(foxCount)
+                    .map { foxSet -> idealRow(foxCount, classified.start, classified.finish, classified.beacon, foxSet) }
+                    .sortedWith(
+                        compareBy<ClassicCourseGeneratorRow> { it.effectiveLengthMeters }
+                            .thenBy { it.orderLabels.joinToString("\u0000") }
+                    )
+            )
+        }
+        return ClassicCourseGeneratorResult(
+            sourcePath = sourcePath,
+            start = classified.start,
+            finish = classified.finish,
+            beacon = classified.beacon,
+            foxes = classified.foxes,
+            groups = groups
+        )
+    }
+
+    fun defaultPdfFileName(result: ClassicCourseGeneratorResult): String {
+        val stem = result.sourcePath.fileName.toString()
+            .removeSuffix(".kmz")
+            .removeSuffix(".KMZ")
+            .removeSuffix(".kml")
+            .removeSuffix(".KML")
+            .ifBlank { "Course Points" }
+        return DesktopProjectFilePaths.defaultPdfFileName(stem, "Classic Course Generator")
+    }
+
+    fun exportPdf(path: Path, result: ClassicCourseGeneratorResult) {
+        path.parent?.let { Files.createDirectories(it) }
+        Files.write(path, pdfBytes(result))
+    }
+
+    fun exportPdfAndKml(path: Path, result: ClassicCourseGeneratorResult): ClassicCourseGeneratorExportPaths {
+        exportPdf(path, result)
+        val kmlPath = path.resolveSibling("${path.fileName.toString().removeSuffix(DesktopProjectFilePaths.PDF_EXTENSION)}.kml")
+        exportKml(kmlPath, result)
+        return ClassicCourseGeneratorExportPaths(pdfPath = path, kmlPath = kmlPath)
+    }
+
+    fun exportKml(path: Path, result: ClassicCourseGeneratorResult) {
+        path.parent?.let { Files.createDirectories(it) }
+        Files.writeString(path, kmlText(result), StandardCharsets.UTF_8)
+    }
+
+    fun reportText(result: ClassicCourseGeneratorResult): String =
+        buildString {
+            appendLine("Classic Course Generator")
+            appendLine("Source: ${result.sourcePath.fileName}")
+            appendLine("Course points: Start, ${result.foxes.size} foxes, ${if (result.beacon == null) "no beacon" else "beacon"}, Finish")
+            appendLine()
+            result.groups.forEach { group ->
+                appendLine(group.title)
+                appendLine("IDEAL EL : Course Order")
+                group.rows.forEach { row ->
+                    appendLine("${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})")
+                }
+                appendLine()
+            }
+        }.trimEnd() + "\n"
+
+    private fun classifyCoursePoints(points: List<CourseControlPoint>): ClassifiedClassicCoursePoints {
+        val startPoints = mutableListOf<ClassicCoursePoint>()
+        val finishPoints = mutableListOf<ClassicCoursePoint>()
+        val beaconPoints = mutableListOf<ClassicCoursePoint>()
+        val foxPoints = mutableListOf<ClassicCoursePoint>()
+        points.forEach { point ->
+            val coursePoint = ClassicCoursePoint(point.name, point.point)
+            when {
+                point.name.isStartLabel() -> startPoints += coursePoint
+                point.name.isFinishLabel() -> finishPoints += coursePoint
+                point.name.isBeaconLabel() -> beaconPoints += coursePoint
+                point.name.isSpectatorLabel() ->
+                    throw IllegalArgumentException("Classic Course Generator does not accept spectator/separator points.")
+                else -> foxPoints += coursePoint
+            }
+        }
+        require(startPoints.size == 1) {
+            "Course points file must contain exactly one Start point."
+        }
+        require(finishPoints.size == 1) {
+            "Course points file must contain exactly one Finish point."
+        }
+        require(beaconPoints.size <= 1) {
+            "Course points file must contain no more than one Beacon point."
+        }
+        require(foxPoints.size in 3..5) {
+            "Course points file must contain between 3 and 5 fox points."
+        }
+        return ClassifiedClassicCoursePoints(
+            start = startPoints.single(),
+            finish = finishPoints.single(),
+            beacon = beaconPoints.singleOrNull(),
+            foxes = foxPoints
+        )
+    }
+
+    private fun idealRow(
+        foxCount: Int,
+        start: ClassicCoursePoint,
+        finish: ClassicCoursePoint,
+        beacon: ClassicCoursePoint?,
+        foxes: List<ClassicCoursePoint>
+    ): ClassicCourseGeneratorRow =
+        foxes.permutations()
+            .map { orderedFoxes ->
+                val orderedPoints = listOf(start) + orderedFoxes + listOfNotNull(beacon) + finish
+                val horizontalLength = orderedPoints.zipWithNext().sumOf { (from, to) -> from.point.distanceMetersTo(to.point) }
+                val climb = orderedPoints.climbMetersOrNull()
+                val effectiveLength = if (climb == null) horizontalLength else horizontalLength + 10.0 * climb
+                val matchingCategories = matchingClassicCategories(
+                    foxCount = foxCount,
+                    effectiveLengthMeters = effectiveLength,
+                    horizontalLengthMeters = horizontalLength,
+                    climbMeters = climb
+                )
+                ClassicCourseGeneratorRow(
+                    foxCount = foxCount,
+                    effectiveLengthMeters = effectiveLength,
+                    horizontalLengthMeters = horizontalLength,
+                    climbMeters = climb,
+                    coursePoints = orderedPoints,
+                    orderLabels = listOf("S") + orderedFoxes.map { it.label } + listOfNotNull(beacon?.let { "B" }) + "F",
+                    matchingCategories = matchingCategories
+                )
+            }
+            .minWith(
+                compareBy<ClassicCourseGeneratorRow> { it.effectiveLengthMeters }
+                    .thenBy { it.orderLabels.joinToString("\u0000") }
+            )
+
+    private fun matchingClassicCategories(
+        foxCount: Int,
+        effectiveLengthMeters: Double,
+        horizontalLengthMeters: Double,
+        climbMeters: Double?
+    ): List<String> {
+        if (climbMeters == null || horizontalLengthMeters <= 0.0) {
+            return emptyList()
+        }
+        val climbPercent = climbMeters / horizontalLengthMeters * 100.0
+        if (climbPercent > CLASSIC_CLIMB_LIMIT_PERCENT) {
+            return emptyList()
+        }
+        return classicRequirements.mapNotNull { (category, requirement) ->
+            category.takeIf {
+                foxCount in requirement.minControls..requirement.maxControls &&
+                    effectiveLengthMeters.roundToInt() in requirement.minLengthMeters..requirement.maxLengthMeters
+            }
+        }
+    }
+
+    private fun List<ClassicCoursePoint>.climbMetersOrNull(): Double? {
+        if (any { it.point.elevationMeters == null }) {
+            return null
+        }
+        return zipWithNext().sumOf { (from, to) ->
+            max(0.0, requireNotNull(to.point.elevationMeters) - requireNotNull(from.point.elevationMeters))
+        }
+    }
+
+    private fun String.isStartLabel(): Boolean {
+        val compact = compactCoursePointLabel()
+        return compact == "start" || compact.endsWith("start")
+    }
+
+    private fun String.isFinishLabel(): Boolean {
+        val compact = compactCoursePointLabel()
+        return compact == "finish" || compact.endsWith("finish")
+    }
+
+    private fun String.isBeaconLabel(): Boolean =
+        compactCoursePointLabel() in setOf("b", "m", "beacon")
+
+    private fun String.isSpectatorLabel(): Boolean =
+        compactCoursePointLabel() in setOf("s", "spectator", "separator")
+
+    private fun String.compactCoursePointLabel(): String =
+        trim().lowercase(Locale.US).replace(Regex("[^a-z0-9]+"), "")
+
+    private fun groupTitle(foxCount: Int): String =
+        when (foxCount) {
+            3 -> "THREE-FOX COURSES"
+            4 -> "FOUR-FOX COURSES"
+            5 -> "FIVE-FOX COURSES"
+            else -> "$foxCount-FOX COURSES"
+        }
+
+    private fun categoryText(row: ClassicCourseGeneratorRow): String =
+        row.matchingCategories.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: "No category match"
+
+    private fun kilometers(meters: Double): String =
+        String.format(Locale.US, "%.2f km", meters / 1000.0)
+
+    private fun pdfBytes(result: ClassicCourseGeneratorResult): ByteArray {
+        val lines = pdfLines(result)
+        val pages = lines.chunked(42).ifEmpty { listOf(listOf(PdfLine("", PdfColor.Body, 12))) }
+        val objects = mutableListOf<String>()
+        objects += "<< /Type /Catalog /Pages 2 0 R >>"
+        val pageObjectIds = pages.indices.map { 3 + it * 2 }
+        objects += "<< /Type /Pages /Kids ${pageObjectIds.joinToString(" ", prefix = "[", postfix = "]") { "$it 0 R" }} /Count ${pages.size} >>"
+        pages.forEachIndexed { index, pageLines ->
+            val pageId = pageObjectIds[index]
+            val contentId = pageId + 1
+            objects += "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >> /Contents $contentId 0 R >>"
+            val content = pdfPageContent(pageLines)
+            objects += "<< /Length ${content.toByteArray(StandardCharsets.UTF_8).size} >>\nstream\n$content\nendstream"
+        }
+        val output = StringBuilder("%PDF-1.4\n")
+        val offsets = mutableListOf(0)
+        objects.forEachIndexed { index, obj ->
+            offsets += output.length
+            output.append("${index + 1} 0 obj\n$obj\nendobj\n")
+        }
+        val xrefOffset = output.length
+        output.append("xref\n0 ${objects.size + 1}\n")
+        output.append("0000000000 65535 f \n")
+        offsets.drop(1).forEach { offset ->
+            output.append(offset.toString().padStart(10, '0')).append(" 00000 n \n")
+        }
+        output.append("trailer\n<< /Size ${objects.size + 1} /Root 1 0 R >>\nstartxref\n$xrefOffset\n%%EOF\n")
+        return output.toString().toByteArray(StandardCharsets.UTF_8)
+    }
+
+    private fun kmlText(result: ClassicCourseGeneratorResult): String {
+        val greenRows = result.rows.filter { it.hasCategoryMatch }
+        val courseObjects = (listOf(result.start) + result.foxes + listOfNotNull(result.beacon) + result.finish)
+            .distinctBy { it.kmlObjectKey() }
+        return buildString {
+            appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
+            appendLine("""<kml xmlns="http://www.opengis.net/kml/2.2">""")
+            appendLine("  <Document>")
+            appendLine("    <name>${xmlText(result.sourcePath.fileName.toString())} Classic Course Generator</name>")
+            appendLine("    <Folder>")
+            appendLine("      <name>Course Objects</name>")
+            courseObjects.forEach { courseObject ->
+                appendLine("      <Placemark>")
+                appendLine("        <name>${xmlText(courseObject.label)}</name>")
+                appendLine("        <Point>")
+                appendLine("          <coordinates>${courseObject.point.kmlCoordinate()}</coordinates>")
+                appendLine("        </Point>")
+                appendLine("      </Placemark>")
+            }
+            appendLine("    </Folder>")
+            appendLine("    <Folder>")
+            appendLine("      <name>Category-matching course candidates</name>")
+            greenRows.forEachIndexed { index, row ->
+                appendLine("      <Placemark>")
+                appendLine("        <name>${xmlText(kmlRouteName(index + 1, row))}</name>")
+                appendLine("        <description>${xmlText(row.matchingCategories.joinToString(", "))}</description>")
+                appendLine("        <LineString>")
+                appendLine("          <tessellate>1</tessellate>")
+                appendLine("          <coordinates>")
+                row.coursePoints.forEach { coursePoint ->
+                    appendLine("            ${coursePoint.point.kmlCoordinate()}")
+                }
+                appendLine("          </coordinates>")
+                appendLine("        </LineString>")
+                appendLine("      </Placemark>")
+            }
+            appendLine("    </Folder>")
+            appendLine("  </Document>")
+            appendLine("</kml>")
+        }
+    }
+
+    private fun kmlRouteName(index: Int, row: ClassicCourseGeneratorRow): String =
+        "${index.toString().padStart(3, '0')} ${row.foxCount}-fox ${kilometers(row.effectiveLengthMeters)} ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})"
+
+    private fun ClassicCoursePoint.kmlObjectKey(): String =
+        "${label.trim().lowercase(Locale.US)}|${point.latitude}|${point.longitude}|${point.elevationMeters}"
+
+    private fun CourseGeoPoint.kmlCoordinate(): String =
+        if (elevationMeters == null) {
+            String.format(Locale.US, "%.8f,%.8f", longitude, latitude)
+        } else {
+            String.format(Locale.US, "%.8f,%.8f,%.2f", longitude, latitude, elevationMeters)
+        }
+
+    private fun xmlText(text: String): String =
+        text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&apos;")
+
+    private fun pdfLines(result: ClassicCourseGeneratorResult): List<PdfLine> =
+        buildList {
+            add(PdfLine("Classic Course Generator", PdfColor.Body, 18, bold = true))
+            add(PdfLine("Source: ${result.sourcePath.fileName}", PdfColor.Body, 11))
+            add(PdfLine("Course points: Start, ${result.foxes.size} foxes, ${if (result.beacon == null) "no beacon" else "beacon"}, Finish", PdfColor.Body, 11))
+            add(PdfLine("", PdfColor.Body, 8))
+            result.groups.forEach { group ->
+                add(PdfLine(group.title, PdfColor.Body, 14, bold = true))
+                add(PdfLine("IDEAL EL : Course Order", PdfColor.Body, 11, bold = true))
+                group.rows.forEach { row ->
+                    add(
+                        PdfLine(
+                            "${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})",
+                            if (row.hasCategoryMatch) PdfColor.MatchGreen else PdfColor.NoMatchGray,
+                            10
+                        )
+                    )
+                }
+                add(PdfLine("", PdfColor.Body, 8))
+            }
+        }
+
+    private fun pdfPageContent(lines: List<PdfLine>): String =
+        buildString {
+            var y = 750.0
+            lines.forEach { line ->
+                appendLine("BT")
+                appendLine("${line.color.r} ${line.color.g} ${line.color.b} rg")
+                appendLine("/${if (line.bold) "F2" else "F1"} ${line.fontSize} Tf")
+                appendLine("50 ${"%.2f".format(Locale.US, y)} Td")
+                appendLine("(${line.text.toPdfText()}) Tj")
+                appendLine("ET")
+                y -= (line.fontSize + 5)
+            }
+        }
+
+    private fun String.toPdfText(): String =
+        replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+    private data class ClassifiedClassicCoursePoints(
+        val start: ClassicCoursePoint,
+        val finish: ClassicCoursePoint,
+        val beacon: ClassicCoursePoint?,
+        val foxes: List<ClassicCoursePoint>
+    )
+
+    private data class ClassicCourseRequirement(
+        val minControls: Int,
+        val maxControls: Int,
+        val minLengthMeters: Int,
+        val maxLengthMeters: Int
+    )
+
+    private data class PdfLine(
+        val text: String,
+        val color: PdfColor,
+        val fontSize: Int,
+        val bold: Boolean = false
+    )
+
+    private enum class PdfColor(val r: String, val g: String, val b: String) {
+        Body("0", "0", "0"),
+        MatchGreen("0.00", "0.30", "0.08"),
+        NoMatchGray("0.45", "0.45", "0.45")
+    }
+}
+
+private fun <T> List<T>.combinations(size: Int): List<List<T>> {
+    if (size == 0) return listOf(emptyList())
+    if (size > this.size) return emptyList()
+    if (size == this.size) return listOf(this)
+    val result = mutableListOf<List<T>>()
+    fun choose(startIndex: Int, selected: List<T>) {
+        if (selected.size == size) {
+            result += selected
+            return
+        }
+        for (index in startIndex..(this.size - (size - selected.size))) {
+            choose(index + 1, selected + this[index])
+        }
+    }
+    choose(0, emptyList())
+    return result
+}
+
+private fun <T> List<T>.permutations(): List<List<T>> {
+    if (size <= 1) return listOf(this)
+    val result = mutableListOf<List<T>>()
+    fun permute(prefix: List<T>, remaining: List<T>) {
+        if (remaining.isEmpty()) {
+            result += prefix
+            return
+        }
+        remaining.indices.forEach { index ->
+            permute(prefix + remaining[index], remaining.take(index) + remaining.drop(index + 1))
+        }
+    }
+    permute(emptyList(), this)
+    return result
+}

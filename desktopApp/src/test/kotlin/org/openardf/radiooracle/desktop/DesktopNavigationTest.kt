@@ -863,12 +863,16 @@ class DesktopNavigationTest {
         )
         assertEquals(DesktopSection.KmlTools, controlItems.first { it.label == "KML Tools" }.section)
         assertEquals(
-            listOf("Move Course"),
+            listOf("Move Course", "Classic Course Generator"),
             controlItems.first { it.label == "KML Tools" }.children.map { it.label }
         )
         assertEquals(
             DesktopSection.KmlMoveCourse,
-            controlItems.first { it.label == "KML Tools" }.children.single().section
+            controlItems.first { it.label == "KML Tools" }.children.first().section
+        )
+        assertEquals(
+            DesktopSection.KmlClassicCourseGenerator,
+            controlItems.first { it.label == "KML Tools" }.children.last().section
         )
         assertEquals(
             DesktopNavAction.ImportControlsKmlKmz,

@@ -9116,7 +9116,10 @@ private fun SectionWorkspace(
             )
         }
         if (section == DesktopSection.KmlMoveCourse) {
-            KmlToolsPanel()
+            KmlMoveCoursePanel()
+        }
+        if (section == DesktopSection.KmlClassicCourseGenerator) {
+            KmlClassicCourseGeneratorPanel()
         }
         if (section == DesktopSection.ElevationCache && projectFile != null) {
             VenueElevationCachePanel(
@@ -12661,7 +12664,7 @@ private fun String.sprintLabelNumber(): Int? =
     Regex("""\b([1-5])\b""").find(this)?.groupValues?.get(1)?.toIntOrNull()
 
 @Composable
-private fun KmlToolsPanel() {
+private fun KmlMoveCoursePanel() {
     var selectedPath by remember { mutableStateOf<Path?>(null) }
     var latitudeDraft by remember { mutableStateOf("") }
     var longitudeDraft by remember { mutableStateOf("") }
@@ -12771,6 +12774,142 @@ private fun KmlToolsPanel() {
                 color = if (text.startsWith("Move Course failed")) DesktopPalette.Error else DesktopPalette.Disconnected,
                 fontSize = 13.sp
             )
+        }
+    }
+}
+
+@Composable
+private fun KmlClassicCourseGeneratorPanel() {
+    var selectedPath by remember { mutableStateOf<Path?>(null) }
+    var result by remember { mutableStateOf<ClassicCourseGeneratorResult?>(null) }
+    var statusText by remember { mutableStateOf<String?>(null) }
+
+    fun chooseFile() {
+        DesktopFileDialogs.chooseKmlToolsFile()?.let { path ->
+            selectedPath = path
+            result = null
+            statusText = null
+        }
+    }
+
+    fun generate() {
+        val path = selectedPath ?: return
+        runCatching {
+            DesktopClassicCourseGenerator.generate(path)
+        }.onSuccess { generated ->
+            result = generated
+            statusText = "Generated ${generated.rows.size} ideal course combinations from ${generated.foxes.size} foxes."
+        }.onFailure { error ->
+            result = null
+            statusText = "Classic Course Generator failed: ${error.message ?: error::class.simpleName}"
+        }
+    }
+
+    fun exportResults() {
+        val generated = result ?: return
+        DesktopFileDialogs.chooseExportClassicCourseGeneratorPdf(
+            defaultFileName = DesktopClassicCourseGenerator.defaultPdfFileName(generated)
+        )?.let { path ->
+            runCatching {
+                DesktopClassicCourseGenerator.exportPdfAndKml(path, generated)
+            }.onSuccess { exports ->
+                statusText = "Exported ${exports.pdfPath.fileName} and ${exports.kmlPath.fileName}"
+            }.onFailure { error ->
+                statusText = "Classic Course Generator export failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = "Classic Course Generator",
+            color = DesktopPalette.Black,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "Choose a KML/KMZ course points file containing one Start, one Finish, and 3-5 fox point placemarks. LineString route placemarks are ignored. If a Beacon is present, it is inserted immediately before Finish.",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(onClick = ::chooseFile) {
+                ButtonLabel("Choose KML/KMZ...")
+            }
+            Button(
+                onClick = ::generate,
+                enabled = selectedPath != null
+            ) {
+                ButtonLabel("Generate")
+            }
+            Button(
+                onClick = ::exportResults,
+                enabled = result != null
+            ) {
+                ButtonLabel("Export PDF/KML...")
+            }
+            Text(
+                text = selectedPath?.fileName?.toString() ?: "No file selected",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        }
+        statusText?.let { text ->
+            Text(
+                text = text,
+                color = if (text.startsWith("Classic Course Generator") && text.contains("failed")) {
+                    DesktopPalette.Error
+                } else {
+                    DesktopPalette.Disconnected
+                },
+                fontSize = 13.sp
+            )
+        }
+        result?.let { generated ->
+            ClassicCourseGeneratorResultView(generated)
+        }
+    }
+}
+
+@Composable
+private fun ClassicCourseGeneratorResultView(result: ClassicCourseGeneratorResult) {
+    SelectionContainer {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                text = "Points: Start, ${result.foxes.size} foxes, ${if (result.beacon == null) "no beacon" else "beacon"}, Finish",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+            result.groups.forEach { group ->
+                Text(
+                    text = group.title,
+                    color = DesktopPalette.Black,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "IDEAL EL : Course Order",
+                    color = DesktopPalette.Black,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                group.rows.forEach { row ->
+                    val categoryText = row.matchingCategories.takeIf { it.isNotEmpty() }?.joinToString(", ")
+                        ?: "No category match"
+                    Text(
+                        text = "${kilometersText(row.effectiveLengthMeters.roundToInt())} : ${row.orderLabels.joinToString(" -> ")} ($categoryText)",
+                        color = if (row.hasCategoryMatch) Color(0xFF0B5D1E) else Color(0xFF777777),
+                        fontSize = 13.sp
+                    )
+                }
+            }
         }
     }
 }
