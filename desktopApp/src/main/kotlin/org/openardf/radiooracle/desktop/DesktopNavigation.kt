@@ -319,7 +319,7 @@ object DesktopNavigation {
                         ),
                         group(
                             "setup.controls.kml-tools",
-                            "KML Tools",
+                            "Course Tools",
                             workflow,
                             listOf(
                                 item(
@@ -1083,7 +1083,7 @@ object DesktopNavigation {
         "setup.controls.course-analysis.import-gpx" to
             "Use Import Course GPX to bring in control waypoints and required category routes or tracks for course analysis and category course assignments.",
         "setup.controls.kml-tools" to
-            "Use KML Tools to analyze or modify KML and KMZ files without changing the open Event File.",
+            "Use Course Tools to analyze or modify course-related files without changing the open Event File.",
         "setup.controls.kml-tools.move-course" to
             "Use Move Course to create a translated KML/KMZ copy where the Start point is moved to a new latitude and longitude and all other coordinates move by the same offset.",
         "setup.controls.kml-tools.classic-course-generator" to

@@ -12798,7 +12798,14 @@ private fun KmlClassicCourseGeneratorPanel() {
             DesktopClassicCourseGenerator.generate(path)
         }.onSuccess { generated ->
             result = generated
-            statusText = "Generated ${generated.rows.size} ideal course combinations from ${generated.foxes.size} foxes."
+            val elevationStatus = when {
+                generated.missingElevationPointCount == 0 && generated.elevationResolvedPointCount > 0 ->
+                    " Filled ${generated.elevationResolvedPointCount} missing elevations from the local cache."
+                generated.missingElevationPointCount > 0 ->
+                    " ${generated.missingElevationPointCount} point elevations are still missing; category matches require complete elevations."
+                else -> ""
+            }
+            statusText = "Generated ${generated.rows.size} ideal course combinations from ${generated.foxes.size} foxes.$elevationStatus"
         }.onFailure { error ->
             result = null
             statusText = "Classic Course Generator failed: ${error.message ?: error::class.simpleName}"
@@ -12886,6 +12893,20 @@ private fun ClassicCourseGeneratorResultView(result: ClassicCourseGeneratorResul
                 color = DesktopPalette.Black,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = when {
+                    result.missingElevationPointCount == 0 && result.elevationResolvedPointCount > 0 ->
+                        "Elevation: filled ${result.elevationResolvedPointCount} missing point elevations from the local cache."
+                    result.missingElevationPointCount == 0 ->
+                        "Elevation: complete point elevations available."
+                    result.elevationResolvedPointCount > 0 ->
+                        "Elevation: filled ${result.elevationResolvedPointCount} missing point elevations from the local cache; ${result.missingElevationPointCount} point elevations remain missing."
+                    else ->
+                        "Elevation: ${result.missingElevationPointCount} point elevations missing; climb, effective length, and category matching are unavailable."
+                },
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
             )
             result.groups.forEach { group ->
                 Text(

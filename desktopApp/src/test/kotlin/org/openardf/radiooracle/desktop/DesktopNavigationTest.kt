@@ -831,7 +831,7 @@ class DesktopNavigationTest {
             listOf(
                 "Elevation Data",
                 "Course Analyzer",
-                "KML Tools",
+                "Course Tools",
                 "Import/Export",
                 "Delete All Controls..."
             ),
@@ -861,18 +861,18 @@ class DesktopNavigationTest {
             DesktopNavAction.ImportCourseGpx,
             controlItems.first { it.label == "Course Analyzer" }.children.last().action
         )
-        assertEquals(DesktopSection.KmlTools, controlItems.first { it.label == "KML Tools" }.section)
+        assertEquals(DesktopSection.KmlTools, controlItems.first { it.label == "Course Tools" }.section)
         assertEquals(
             listOf("Move Course", "Classic Course Generator"),
-            controlItems.first { it.label == "KML Tools" }.children.map { it.label }
+            controlItems.first { it.label == "Course Tools" }.children.map { it.label }
         )
         assertEquals(
             DesktopSection.KmlMoveCourse,
-            controlItems.first { it.label == "KML Tools" }.children.first().section
+            controlItems.first { it.label == "Course Tools" }.children.first().section
         )
         assertEquals(
             DesktopSection.KmlClassicCourseGenerator,
-            controlItems.first { it.label == "KML Tools" }.children.last().section
+            controlItems.first { it.label == "Course Tools" }.children.last().section
         )
         assertEquals(
             DesktopNavAction.ImportControlsKmlKmz,

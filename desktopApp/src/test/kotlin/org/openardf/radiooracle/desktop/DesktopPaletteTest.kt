@@ -25,7 +25,7 @@ class DesktopPaletteTest {
                 "Course Analyzer",
                 "Elevation Data",
                 "Import Elevation Data",
-                "KML Tools",
+                "Course Tools",
                 "Move Course",
                 "Classic Course Generator",
                 "Import/Export",

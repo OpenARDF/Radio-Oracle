@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
+import kotlin.math.roundToInt
 
 class DesktopClassicCourseGeneratorTest {
     @Test
@@ -39,9 +40,31 @@ class DesktopClassicCourseGeneratorTest {
         val path = Files.createTempFile("classic-course-points-no-elev", ".kml")
         Files.writeString(path, coursePointsKml(includeElevations = false))
 
-        val result = DesktopClassicCourseGenerator.generate(path)
+        val result = DesktopClassicCourseGenerator.generate(path, elevationLookup = { null })
 
+        assertEquals(0, result.elevationResolvedPointCount)
+        assertEquals(8, result.missingElevationPointCount)
         assertTrue(result.rows.all { it.matchingCategories.isEmpty() })
+        assertTrue(DesktopClassicCourseGenerator.reportText(result).contains("point elevations missing"))
+    }
+
+    @Test
+    fun fillsMissingPointElevationsBeforeGeneratingCourses() {
+        val path = Files.createTempFile("classic-course-points-cache-elev", ".kml")
+        Files.writeString(path, coursePointsKml(includeElevations = false))
+
+        val result = DesktopClassicCourseGenerator.generate(path) { point ->
+            ((point.longitude + 95.0) * 1_000.0).roundToInt().toDouble()
+        }
+
+        assertEquals(8, result.elevationResolvedPointCount)
+        assertEquals(0, result.missingElevationPointCount)
+        assertTrue(result.start.point.elevationMeters != null)
+        assertTrue(result.finish.point.elevationMeters != null)
+        assertTrue(result.foxes.all { it.point.elevationMeters != null })
+        assertTrue(result.rows.all { it.climbMeters != null })
+        assertTrue(result.rows.any { it.hasCategoryMatch })
+        assertTrue(DesktopClassicCourseGenerator.reportText(result).contains("filled 8 missing point elevations"))
     }
 
     @Test

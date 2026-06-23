@@ -13,7 +13,9 @@ data class ClassicCourseGeneratorResult(
     val finish: ClassicCoursePoint,
     val beacon: ClassicCoursePoint?,
     val foxes: List<ClassicCoursePoint>,
-    val groups: List<ClassicCourseGeneratorGroup>
+    val groups: List<ClassicCourseGeneratorGroup>,
+    val elevationResolvedPointCount: Int,
+    val missingElevationPointCount: Int
 ) {
     val rows: List<ClassicCourseGeneratorRow> = groups.flatMap { it.rows }
 }
@@ -90,24 +92,33 @@ object DesktopClassicCourseGenerator {
         "M80" to ClassicCourseRequirement(2, 4, 3_000, 5_000)
     )
 
-    fun generate(sourcePath: Path): ClassicCourseGeneratorResult {
+    fun generate(
+        sourcePath: Path,
+        elevationLookup: (CourseGeoPoint) -> Double? = DesktopVenueElevationCache::elevationMeters
+    ): ClassicCourseGeneratorResult {
         val fileName = sourcePath.fileName.toString()
         require(fileName.endsWith(".kml", ignoreCase = true) || fileName.endsWith(".kmz", ignoreCase = true)) {
             "Choose a .kml or .kmz course points file."
         }
         val parsed = DesktopCourseKmlImporter.parse(sourcePath)
-        return generate(sourcePath, parsed)
+        return generate(sourcePath, parsed, elevationLookup)
     }
 
-    fun generate(sourcePath: Path, courseData: DesktopCourseKmlData): ClassicCourseGeneratorResult {
+    fun generate(
+        sourcePath: Path,
+        courseData: DesktopCourseKmlData,
+        elevationLookup: (CourseGeoPoint) -> Double? = DesktopVenueElevationCache::elevationMeters
+    ): ClassicCourseGeneratorResult {
         val classified = classifyCoursePoints(courseData.controls)
-        val groups = (3..classified.foxes.size).map { foxCount ->
+        val elevationResult = classified.withMissingElevations(elevationLookup)
+        val elevated = elevationResult.classified
+        val groups = (3..elevated.foxes.size).map { foxCount ->
             ClassicCourseGeneratorGroup(
                 foxCount = foxCount,
                 title = groupTitle(foxCount),
-                rows = classified.foxes
+                rows = elevated.foxes
                     .combinations(foxCount)
-                    .map { foxSet -> idealRow(foxCount, classified.start, classified.finish, classified.beacon, foxSet) }
+                    .map { foxSet -> idealRow(foxCount, elevated.start, elevated.finish, elevated.beacon, foxSet) }
                     .sortedWith(
                         compareBy<ClassicCourseGeneratorRow> { it.effectiveLengthMeters }
                             .thenBy { it.orderLabels.joinToString("\u0000") }
@@ -116,11 +127,13 @@ object DesktopClassicCourseGenerator {
         }
         return ClassicCourseGeneratorResult(
             sourcePath = sourcePath,
-            start = classified.start,
-            finish = classified.finish,
-            beacon = classified.beacon,
-            foxes = classified.foxes,
-            groups = groups
+            start = elevated.start,
+            finish = elevated.finish,
+            beacon = elevated.beacon,
+            foxes = elevated.foxes,
+            groups = groups,
+            elevationResolvedPointCount = elevationResult.resolvedPointCount,
+            missingElevationPointCount = elevated.allPoints().count { it.point.elevationMeters == null }
         )
     }
 
@@ -156,6 +169,7 @@ object DesktopClassicCourseGenerator {
             appendLine("Classic Course Generator")
             appendLine("Source: ${result.sourcePath.fileName}")
             appendLine("Course points: Start, ${result.foxes.size} foxes, ${if (result.beacon == null) "no beacon" else "beacon"}, Finish")
+            appendLine(elevationSummaryText(result))
             appendLine()
             result.groups.forEach { group ->
                 appendLine(group.title)
@@ -200,6 +214,29 @@ object DesktopClassicCourseGenerator {
             finish = finishPoints.single(),
             beacon = beaconPoints.singleOrNull(),
             foxes = foxPoints
+        )
+    }
+
+    private fun ClassifiedClassicCoursePoints.withMissingElevations(
+        elevationLookup: (CourseGeoPoint) -> Double?
+    ): ClassicCourseElevationResult {
+        var resolvedPointCount = 0
+        fun ClassicCoursePoint.withElevation(): ClassicCoursePoint {
+            if (point.elevationMeters != null) {
+                return this
+            }
+            val elevation = elevationLookup(point) ?: return this
+            resolvedPointCount += 1
+            return copy(point = point.copy(elevationMeters = elevation))
+        }
+        return ClassicCourseElevationResult(
+            classified = copy(
+                start = start.withElevation(),
+                finish = finish.withElevation(),
+                beacon = beacon?.withElevation(),
+                foxes = foxes.map { it.withElevation() }
+            ),
+            resolvedPointCount = resolvedPointCount
         )
     }
 
@@ -296,6 +333,18 @@ object DesktopClassicCourseGenerator {
 
     private fun categoryText(row: ClassicCourseGeneratorRow): String =
         row.matchingCategories.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: "No category match"
+
+    private fun elevationSummaryText(result: ClassicCourseGeneratorResult): String =
+        when {
+            result.missingElevationPointCount == 0 && result.elevationResolvedPointCount > 0 ->
+                "Elevation: filled ${result.elevationResolvedPointCount} missing point elevations from the local cache."
+            result.missingElevationPointCount == 0 ->
+                "Elevation: complete point elevations available."
+            result.elevationResolvedPointCount > 0 ->
+                "Elevation: filled ${result.elevationResolvedPointCount} missing point elevations from the local cache; ${result.missingElevationPointCount} point elevations remain missing."
+            else ->
+                "Elevation: ${result.missingElevationPointCount} point elevations missing; climb, effective length, and category matching are unavailable."
+        }
 
     private fun kilometers(meters: Double): String =
         String.format(Locale.US, "%.2f km", meters / 1000.0)
@@ -457,6 +506,7 @@ object DesktopClassicCourseGenerator {
             add(PdfLine("Classic Course Generator", PdfColor.Body, 18, bold = true))
             add(PdfLine("Source: ${result.sourcePath.fileName}", PdfColor.Body, 11))
             add(PdfLine("Course points: Start, ${result.foxes.size} foxes, ${if (result.beacon == null) "no beacon" else "beacon"}, Finish", PdfColor.Body, 11))
+            add(PdfLine(elevationSummaryText(result), PdfColor.Body, 11))
             add(PdfLine("", PdfColor.Body, 8))
             result.groups.forEach { group ->
                 add(PdfLine(group.title, PdfColor.Body, 14, bold = true))
@@ -496,6 +546,14 @@ object DesktopClassicCourseGenerator {
         val finish: ClassicCoursePoint,
         val beacon: ClassicCoursePoint?,
         val foxes: List<ClassicCoursePoint>
+    ) {
+        fun allPoints(): List<ClassicCoursePoint> =
+            listOf(start) + foxes + listOfNotNull(beacon) + finish
+    }
+
+    private data class ClassicCourseElevationResult(
+        val classified: ClassifiedClassicCoursePoints,
+        val resolvedPointCount: Int
     )
 
     private data class ClassicCourseRequirement(
