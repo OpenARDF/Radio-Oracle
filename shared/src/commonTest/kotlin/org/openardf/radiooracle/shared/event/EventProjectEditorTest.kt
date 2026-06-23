@@ -11,6 +11,7 @@ import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorStartCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
+import org.openardf.radiooracle.shared.sportident.SportIdentCardHolder
 import org.openardf.radiooracle.shared.sportident.SportIdentCardPunch
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadout
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
@@ -2288,7 +2289,7 @@ class EventProjectEditorTest {
 
     @Test
     fun addsDownloadedSportIdentReadoutAsUnmatchedWhenNoCompetitorMatches() {
-        val original = projectFile()
+        val original = projectFile(raceLevel = RaceLevel.REGIONAL)
 
         val updated = EventProjectEditor.addDownloadedSportIdentReadout(
             projectFile = original,
@@ -2304,6 +2305,58 @@ class EventProjectEditorTest {
         assertEquals(2005010, readout.result.siNumber)
         assertEquals(ResultStatus.NO_RANKING, readout.result.resultStatus)
         assertEquals(emptyList(), updated.raceData.competitorData.mapNotNull { it.readoutData })
+    }
+
+    @Test
+    fun addsDownloadedPracticeReadoutByCreatingCompetitorWhenNoCompetitorMatches() {
+        val original = projectFile(raceLevel = RaceLevel.PRACTICE)
+
+        val updated = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = original,
+            resultId = "result-1",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = sportIdentReadout(
+                siNumber = 2005010,
+                controlCodes = emptyList(),
+                cardHolder = SportIdentCardHolder(firstName = "Alice", lastName = "Runner", club = "OK Test")
+            ),
+            readoutDateTimeIso = "2026-05-31T12:00",
+            punchIdFactory = { index, type -> "punch-$index-${type.name}" }
+        )
+
+        val competitorData = updated.raceData.competitorData.single()
+        val competitor = competitorData.competitorCategory.competitor
+        val readout = competitorData.readoutData!!
+        assertEquals("practice-competitor-result-1", competitor.id)
+        assertEquals("Alice", competitor.firstName)
+        assertEquals("Runner", competitor.lastName)
+        assertEquals("OK Test", competitor.club)
+        assertEquals(2005010, competitor.siNumber)
+        assertEquals(null, competitor.categoryId)
+        assertEquals("practice-competitor-result-1", readout.result.competitorId)
+        assertEquals("Runner Alice", readout.result.cardName)
+        assertEquals(2005010, readout.result.siNumber)
+        assertEquals(ResultStatus.NO_RANKING, readout.result.resultStatus)
+        assertEquals(emptyList(), updated.raceData.unmatchedReadoutData)
+    }
+
+    @Test
+    fun addsDownloadedPracticeReadoutWithSiPlaceholderWhenCardHasNoName() {
+        val original = projectFile(raceLevel = RaceLevel.PRACTICE)
+
+        val updated = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = original,
+            resultId = "result-1",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = sportIdentReadout(siNumber = 2005010, cardHolder = null),
+            readoutDateTimeIso = "2026-05-31T12:00",
+            punchIdFactory = { index, type -> "punch-$index-${type.name}" }
+        )
+
+        val competitor = updated.raceData.competitorData.single().competitorCategory.competitor
+        assertEquals("SI 2005010", competitor.firstName)
+        assertEquals("Practice", competitor.lastName)
+        assertEquals(null, updated.raceData.competitorData.single().readoutData!!.result.cardName)
     }
 
     @Test
@@ -2327,6 +2380,7 @@ class EventProjectEditorTest {
     @Test
     fun replacesDuplicateDownloadedSportIdentReadout() {
         val original = projectFile(
+            raceLevel = RaceLevel.REGIONAL,
             unmatchedReadouts = listOf(readout("existing", null, 2005010))
         )
 
@@ -3362,7 +3416,8 @@ class EventProjectEditorTest {
         startSeconds: Long? = 600,
         finishSeconds: Long? = 1_800,
         controlCodes: List<Int> = listOf(31, 32),
-        firstControlSeconds: Long = 900
+        firstControlSeconds: Long = 900,
+        cardHolder: SportIdentCardHolder? = null
     ): SportIdentCardReadout =
         SportIdentCardReadout(
             siNumber = siNumber,
@@ -3375,7 +3430,8 @@ class EventProjectEditorTest {
                     siCode = code,
                     siTime = SportIdentTime(firstControlSeconds + index * 60)
                 )
-            }
+            },
+            cardHolder = cardHolder
         )
 
     private fun alias(id: String, siCode: Int, name: String): EventAlias =

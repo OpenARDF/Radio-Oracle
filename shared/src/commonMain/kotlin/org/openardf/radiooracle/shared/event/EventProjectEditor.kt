@@ -2385,36 +2385,52 @@ object EventProjectEditor {
         }
 
         val createNewReadout = hasDuplicateSiNumber && duplicatePolicy == EventReadoutDuplicatePolicy.CreateNew
-        val matchedCompetitorIndex = if (createNewReadout) {
+        val existingMatchedCompetitorIndex = if (createNewReadout) {
             null
         } else {
             workingProjectFile.raceData.competitorData.indexOfFirst { competitorData ->
                 competitorData.competitorCategory.competitor.siNumber == readout.siNumber
             }.takeIf { it >= 0 }
         }
+        val shouldCreatePracticeCompetitor = existingMatchedCompetitorIndex == null &&
+            !createNewReadout &&
+            workingProjectFile.raceData.race.raceLevel == RaceLevel.PRACTICE
+        val matchedProjectFile = if (shouldCreatePracticeCompetitor) {
+            workingProjectFile.withPracticeCompetitorForDownloadedReadout(
+                competitorId = uniquePracticeCompetitorId(workingProjectFile, resultId),
+                readout = readout
+            )
+        } else {
+            workingProjectFile
+        }
+        val matchedCompetitorIndex = existingMatchedCompetitorIndex ?: if (shouldCreatePracticeCompetitor) {
+            matchedProjectFile.raceData.competitorData.lastIndex
+        } else {
+            null
+        }
         matchedCompetitorIndex?.let { index ->
-            require(workingProjectFile.raceData.competitorData[index].readoutData == null) {
+            require(matchedProjectFile.raceData.competitorData[index].readoutData == null) {
                 "Competitor already has a readout."
             }
         }
-        val matchedCompetitorData = matchedCompetitorIndex?.let { workingProjectFile.raceData.competitorData[it] }
+        val matchedCompetitorData = matchedCompetitorIndex?.let { matchedProjectFile.raceData.competitorData[it] }
         val matchedCompetitor = matchedCompetitorData?.competitorCategory?.competitor
         val categoryData = matchedCompetitor?.categoryId?.let { categoryId ->
-            workingProjectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
+            matchedProjectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
         }
-        val effectiveRaceType = categoryData?.category?.effectiveRaceType(workingProjectFile.raceData.race)
+        val effectiveRaceType = categoryData?.category?.effectiveRaceType(matchedProjectFile.raceData.race)
 
         val controlPunches = readout.punches
         val evaluation = categoryData?.let { data ->
             CourseEvaluator.evaluate(
                 raceType = effectiveRaceType ?: data.category.effectiveRaceType(projectFile.raceData.race),
                 punches = controlPunches.map { EvaluationPunch(it.siCode, SIRecordType.CONTROL) },
-                controlPoints = workingProjectFile.raceData.evaluationControlPoints(data)
+                controlPoints = matchedProjectFile.raceData.evaluationControlPoints(data)
             )
         }
         val startSeconds = readout.startTime?.getSeconds()
             ?: matchedCompetitor?.drawnStartTimeSeconds?.let { drawnStart ->
-                raceStartSecondsOfDay(workingProjectFile.raceData.race.startDateTimeIso)?.let { raceStart ->
+                raceStartSecondsOfDay(matchedProjectFile.raceData.race.startDateTimeIso)?.let { raceStart ->
                     (raceStart + drawnStart) % SportIdentCodes.SECONDS_DAY
                 }
             }
@@ -2446,7 +2462,7 @@ object EventProjectEditor {
         val readoutData = EventReadoutData(
             result = EventResult(
                 id = resultId,
-                raceId = workingProjectFile.raceData.race.id,
+                raceId = matchedProjectFile.raceData.race.id,
                 competitorId = matchedCompetitor?.id,
                 siNumber = readout.siNumber,
                 cardType = cardType,
@@ -2460,23 +2476,24 @@ object EventProjectEditor {
                 runTimeSeconds = runTimeSeconds,
                 modified = false,
                 sent = false,
+                cardName = readout.cardHolder?.displayName,
                 categoryId = matchedCompetitor?.categoryId
             ),
             punches = punches
         )
 
         return if (matchedCompetitorIndex != null) {
-            workingProjectFile.copy(
-                raceData = workingProjectFile.raceData.copy(
-                    competitorData = workingProjectFile.raceData.competitorData.mapIndexed { index, data ->
+            matchedProjectFile.copy(
+                raceData = matchedProjectFile.raceData.copy(
+                    competitorData = matchedProjectFile.raceData.competitorData.mapIndexed { index, data ->
                         if (index == matchedCompetitorIndex) data.copy(readoutData = readoutData) else data
                     }
                 )
             )
         } else {
-            workingProjectFile.copy(
-                raceData = workingProjectFile.raceData.copy(
-                    unmatchedReadoutData = workingProjectFile.raceData.unmatchedReadoutData + readoutData
+            matchedProjectFile.copy(
+                raceData = matchedProjectFile.raceData.copy(
+                    unmatchedReadoutData = matchedProjectFile.raceData.unmatchedReadoutData + readoutData
                 )
             )
         }.withResultPlaces()
@@ -2704,6 +2721,54 @@ object EventProjectEditor {
     private fun EventRaceData.containsReadoutForSiNumber(siNumber: Int): Boolean =
         competitorData.any { it.readoutData?.result?.siNumber == siNumber } ||
             unmatchedReadoutData.any { it.result.siNumber == siNumber }
+
+    private fun uniquePracticeCompetitorId(projectFile: EventProjectFile, resultId: String): String {
+        val existingIds = projectFile.raceData.competitorData
+            .mapTo(mutableSetOf()) { it.competitorCategory.competitor.id }
+        val baseId = "practice-competitor-$resultId"
+        if (baseId !in existingIds) {
+            return baseId
+        }
+        var suffix = 2
+        while ("$baseId-$suffix" in existingIds) {
+            suffix++
+        }
+        return "$baseId-$suffix"
+    }
+
+    private fun EventProjectFile.withPracticeCompetitorForDownloadedReadout(
+        competitorId: String,
+        readout: SportIdentCardReadout
+    ): EventProjectFile {
+        val holder = readout.cardHolder
+        val firstName = holder?.firstName?.trim().orEmpty()
+        val lastName = holder?.lastName?.trim().orEmpty()
+        val competitor = EventCompetitor(
+            id = competitorId,
+            raceId = raceData.race.id,
+            categoryId = null,
+            firstName = firstName.ifEmpty { "SI ${readout.siNumber}" },
+            lastName = lastName.ifEmpty { "Practice" },
+            club = holder?.club?.trim().orEmpty(),
+            index = "",
+            isMan = true,
+            birthYear = null,
+            siNumber = readout.siNumber,
+            siRent = false,
+            drawnStartTimeSeconds = null
+        )
+        return copy(
+            raceData = raceData.copy(
+                competitorData = raceData.competitorData + EventCompetitorData(
+                    competitorCategory = EventCompetitorCategory(
+                        competitor = competitor,
+                        category = null
+                    ),
+                    readoutData = null
+                )
+            )
+        )
+    }
 
     private fun EventProjectFile.withResultPlaces(): EventProjectFile =
         copy(

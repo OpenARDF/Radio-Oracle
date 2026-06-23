@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceBand
+import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 
 class DesktopNavigationTest {
@@ -694,6 +695,18 @@ class DesktopNavigationTest {
                 setupComplete.copy(hasRaceOpsData = true)
             )
         )
+    }
+
+    @Test
+    fun practiceEventsEnableRaceOpsWithoutCompetitorsOrStartList() {
+        val practiceEvent = DesktopNavigationReadiness(
+            hasEventFile = true,
+            raceLevel = RaceLevel.PRACTICE
+        )
+        val regionalEvent = practiceEvent.copy(raceLevel = RaceLevel.REGIONAL)
+
+        assertTrue(DesktopNavigation.isWorkflowEnabled(DesktopWorkflow.RaceOps, practiceEvent))
+        assertFalse(DesktopNavigation.isWorkflowEnabled(DesktopWorkflow.RaceOps, regionalEvent))
     }
 
     @Test

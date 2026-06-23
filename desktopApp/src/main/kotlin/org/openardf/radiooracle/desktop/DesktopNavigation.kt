@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.domain.RaceBand
+import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.toDisplayLabel
@@ -117,6 +118,7 @@ data class DesktopNavigationReadiness(
     val hasRaceOpsData: Boolean = false,
     val hasSeriesContext: Boolean = false,
     val raceType: RaceType? = null,
+    val raceLevel: RaceLevel? = null,
     val raceBand: RaceBand? = null,
     val competitorCount: Int = 0,
     val unassignedCompetitorCount: Int = 0,
@@ -124,10 +126,15 @@ data class DesktopNavigationReadiness(
 ) {
     val isSetupComplete: Boolean
         get() = hasEventFile &&
-            hasControls &&
-            hasCategories &&
-            hasAssignedCompetitors &&
-            hasStartList
+            (
+                raceLevel == RaceLevel.PRACTICE ||
+                    (
+                        hasControls &&
+                            hasCategories &&
+                            hasAssignedCompetitors &&
+                            hasStartList
+                    )
+                )
 
     val eventFormatLabel: String?
         get() = raceType?.toEventWorkflowPrefix(raceBand)
@@ -156,6 +163,7 @@ data class DesktopNavigationReadiness(
                     raceData.unmatchedReadoutData.isNotEmpty(),
                 hasSeriesContext = projectFile.seriesLink != null,
                 raceType = raceData.race.raceType,
+                raceLevel = raceData.race.raceLevel,
                 raceBand = raceData.race.raceBand,
                 competitorCount = competitors.size,
                 unassignedCompetitorCount = unassignedCompetitorCount,
