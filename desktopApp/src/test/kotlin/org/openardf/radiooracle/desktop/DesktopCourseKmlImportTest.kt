@@ -970,7 +970,7 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
-    fun importsControlSiCodesFromKmlDescriptionLines() {
+    fun preservesExistingControlSiCodesWhenImportedDescriptionLinesDifferByDefault() {
         val kmlPath = Files.createTempFile("description-si-controls", ".kml")
         Files.writeString(kmlPath, sampleKmlWithDescriptionSiLines())
         val baseProject = classicPresetProject(raceName = "Description SI Test", startDateTimeIso = "2026-06-12T09:00")
@@ -989,6 +989,37 @@ class DesktopCourseKmlImportTest {
             elevationProvider = { 100.0 }
         )
 
+        assertEquals(1, summary.controlSiConflictCount)
+        assertEquals(0, summary.controlIdentityUpdateCount)
+        assertEquals(131, updated.raceData.controls.single { it.publicLabel == "Fox1" }.siCode)
+        assertEquals(132, updated.raceData.controls.single { it.publicLabel == "Fox2" }.siCode)
+        assertEquals("131 132", summary.categoryAssignmentUpdates.single().controlPointsText)
+        assertEquals(false, summary.isControlLocationNoOp)
+        assertEquals("Fox1 Fox2", DesktopProtectedCourseOrder.decrypt(updated.raceData.categories.single().category.encryptedIdealOrder!!, "course-key"))
+    }
+
+    @Test
+    fun overwritesControlSiCodesFromKmlDescriptionLinesWhenRequested() {
+        val kmlPath = Files.createTempFile("description-si-controls", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithDescriptionSiLines())
+        val baseProject = classicPresetProject(raceName = "Description SI Test", startDateTimeIso = "2026-06-12T09:00")
+            .withControlIdentity(oldSiCode = 31, newSiCode = 131, label = "131", publicLabel = "Fox1")
+            .withControlIdentity(oldSiCode = 32, newSiCode = 132, label = "132", publicLabel = "Fox2")
+        val project = EventProjectEditor.addCategory(
+            baseProject,
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { 100.0 },
+            siImportPolicy = DesktopCourseKmlSiImportPolicy.OverwriteFromImport
+        )
+
+        assertEquals(1, summary.controlSiConflictCount)
         assertEquals(1, summary.controlIdentityUpdateCount)
         assertEquals(231, updated.raceData.controls.single { it.publicLabel == "Fox1" }.siCode)
         assertEquals(132, updated.raceData.controls.single { it.publicLabel == "Fox2" }.siCode)

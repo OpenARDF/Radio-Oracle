@@ -26,6 +26,8 @@ class DesktopKmlToolsTest {
         assertEquals(4, result.translatedCoordinateCount)
 
         val output = Files.readString(result.outputPath)
+        assertTrue(output.contains("<description>SI=221"))
+        assertTrue(output.indexOf("<description>SI=221") < output.indexOf("Start detail"))
         assertTrue(output.contains("-94.99,39.01,0"))
         assertTrue(output.contains("-94.989,39.01,5"))
         assertTrue(output.contains("-94.988,39.012"))
@@ -86,6 +88,8 @@ class DesktopKmlToolsTest {
               <Document>
                 <Placemark>
                   <name>Start</name>
+                  <description>SI=221
+Start detail</description>
                   <Point><coordinates>-95.000000,39.000000,0</coordinates></Point>
                 </Placemark>
                 <Placemark>

@@ -66,6 +66,12 @@ class DesktopControlsRouteKmlKmzExportTest {
         assertTrue(kml.placemarkNamed("Spectator").contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
         assertTrue(kml.placemarkNamed("1").contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
         assertTrue(kml.placemarkNamed("B").contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
+        val foxPlacemark = kml.placemarkNamed("1")
+        assertTrue(foxPlacemark.contains("<description>SI=31"))
+        assertTrue(foxPlacemark.indexOf("SI=31") < foxPlacemark.indexOf("Course control"))
+        val beaconPlacemark = kml.placemarkNamed("B")
+        assertTrue(beaconPlacemark.contains("<description>SI=99"))
+        assertTrue(beaconPlacemark.indexOf("SI=99") < beaconPlacemark.indexOf("<styleUrl>"))
         assertEquals(
             listOf("M21 route", "Start", "Spectator", "B", "Finish", "1", "2"),
             kml.folderPlacemarkNames("Courses")
@@ -440,8 +446,9 @@ class DesktopControlsRouteKmlKmzExportTest {
 
     private fun String.placemarkNamed(name: String): String {
         val escapedName = Regex.escape(name)
-        return Regex("<Placemark>[\\s\\S]*?<name>$escapedName</name>[\\s\\S]*?</Placemark>")
-            .find(this)
+        return Regex("<Placemark>[\\s\\S]*?</Placemark>")
+            .findAll(this)
+            .firstOrNull { Regex("<name>$escapedName</name>").containsMatchIn(it.value) }
             ?.value
             ?: error("Missing Placemark named $name")
     }

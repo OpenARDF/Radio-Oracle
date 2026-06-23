@@ -22,7 +22,8 @@ data class ClassicCourseGeneratorResult(
 
 data class ClassicCoursePoint(
     val label: String,
-    val point: CourseGeoPoint
+    val point: CourseGeoPoint,
+    val siCodeHint: Int? = null
 )
 
 data class ClassicCourseGeneratorGroup(
@@ -187,7 +188,7 @@ object DesktopClassicCourseGenerator {
         val beaconPoints = mutableListOf<ClassicCoursePoint>()
         val foxPoints = mutableListOf<ClassicCoursePoint>()
         points.forEach { point ->
-            val coursePoint = ClassicCoursePoint(point.name, point.point)
+            val coursePoint = ClassicCoursePoint(point.name, point.point, point.siCodeHint)
             when {
                 point.name.isStartLabel() -> startPoints += coursePoint
                 point.name.isFinishLabel() -> finishPoints += coursePoint
@@ -408,6 +409,9 @@ object DesktopClassicCourseGenerator {
             courseObjects.forEach { courseObject ->
                 appendLine("      <Placemark>")
                 appendLine("        <name>${xmlText(courseObject.label)}</name>")
+                courseObject.kmlDescription()?.let { description ->
+                    appendLine("        <description>${xmlText(description)}</description>")
+                }
                 appendLine("        <styleUrl>#${courseObjectStyleId(courseObject, result)}</styleUrl>")
                 appendLine("        <Point>")
                 appendLine("          <coordinates>${courseObject.point.kmlCoordinate()}</coordinates>")
@@ -485,6 +489,9 @@ object DesktopClassicCourseGenerator {
 
     private fun ClassicCoursePoint.kmlObjectKey(): String =
         "${label.trim().lowercase(Locale.US)}|${point.latitude}|${point.longitude}|${point.elevationMeters}"
+
+    private fun ClassicCoursePoint.kmlDescription(): String? =
+        siCodeHint?.let { "SI=$it" }
 
     private fun CourseGeoPoint.kmlCoordinate(): String =
         if (elevationMeters == null) {

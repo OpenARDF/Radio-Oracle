@@ -83,7 +83,7 @@ class DesktopClassicCourseGeneratorTest {
     @Test
     fun exportsPdfAndGreenCourseCandidateKml() {
         val path = Files.createTempFile("classic-course-points", ".kml")
-        Files.writeString(path, coursePointsKml())
+        Files.writeString(path, coursePointsKml(includeSiDescriptions = true))
         val result = DesktopClassicCourseGenerator.generate(path)
         val pdfPath = Files.createTempFile("classic-course-generator", ".pdf")
 
@@ -110,6 +110,8 @@ class DesktopClassicCourseGeneratorTest {
         assertEquals(1, kmlText.countOccurrences("<styleUrl>#${DesktopCourseKmlStyle.StartStyleId}</styleUrl>"))
         assertEquals(1, kmlText.countOccurrences("<styleUrl>#${DesktopCourseKmlStyle.FinishStyleId}</styleUrl>"))
         assertEquals(6, kmlText.countOccurrences("<styleUrl>#${DesktopCourseKmlStyle.DonutStyleId}</styleUrl>"))
+        assertTrue(kmlText.placemarkNamed("FOX1").contains("<description>SI=221</description>"))
+        assertTrue(kmlText.placemarkNamed("Beacon").contains("<description>SI=299</description>"))
         val routeStyles = kmlText.routeLineStyleBlocks()
         assertEquals(result.rows.count { it.hasCategoryMatch }, routeStyles.size)
         assertTrue(routeStyles.all { it.contains("<width>3</width>") })
@@ -140,9 +142,11 @@ class DesktopClassicCourseGeneratorTest {
     private fun coursePointsKml(
         includeLineString: Boolean = false,
         includeElevations: Boolean = true,
-        extraPlacemark: String = ""
+        extraPlacemark: String = "",
+        includeSiDescriptions: Boolean = false
     ): String {
         fun elevation(value: Double): Double? = value.takeIf { includeElevations }
+        fun description(siCode: Int): String? = "SI=$siCode".takeIf { includeSiDescriptions }
         val lineString = if (includeLineString) {
             """
             <Placemark>
@@ -156,14 +160,14 @@ class DesktopClassicCourseGeneratorTest {
         return """
             <kml xmlns="http://www.opengis.net/kml/2.2">
               <Document>
-                ${pointPlacemark("Start", -95.000, 39.000, elevation(100.0))}
-                ${pointPlacemark("FOX1", -94.990, 39.000, elevation(100.0))}
-                ${pointPlacemark("FOX2", -94.980, 39.000, elevation(105.0))}
-                ${pointPlacemark("FOX3", -94.970, 39.000, elevation(105.0))}
-                ${pointPlacemark("FOX4", -94.960, 39.000, elevation(110.0))}
-                ${pointPlacemark("FOX5", -94.950, 39.000, elevation(110.0))}
-                ${pointPlacemark("Beacon", -94.940, 39.000, elevation(110.0))}
-                ${pointPlacemark("Finish", -94.930, 39.000, elevation(110.0))}
+                ${pointPlacemark("Start", -95.000, 39.000, elevation(100.0), description(200))}
+                ${pointPlacemark("FOX1", -94.990, 39.000, elevation(100.0), description(221))}
+                ${pointPlacemark("FOX2", -94.980, 39.000, elevation(105.0), description(222))}
+                ${pointPlacemark("FOX3", -94.970, 39.000, elevation(105.0), description(223))}
+                ${pointPlacemark("FOX4", -94.960, 39.000, elevation(110.0), description(224))}
+                ${pointPlacemark("FOX5", -94.950, 39.000, elevation(110.0), description(225))}
+                ${pointPlacemark("Beacon", -94.940, 39.000, elevation(110.0), description(299))}
+                ${pointPlacemark("Finish", -94.930, 39.000, elevation(110.0), description(201))}
                 $extraPlacemark
                 $lineString
               </Document>
@@ -171,18 +175,29 @@ class DesktopClassicCourseGeneratorTest {
         """.trimIndent()
     }
 
-    private fun pointPlacemark(name: String, longitude: Double, latitude: Double, elevation: Double?): String {
+    private fun pointPlacemark(name: String, longitude: Double, latitude: Double, elevation: Double?, description: String? = null): String {
         val coordinateText = if (elevation == null) {
             "$longitude,$latitude"
         } else {
             "$longitude,$latitude,$elevation"
         }
+        val descriptionText = description?.let { "<description>$it</description>" }.orEmpty()
         return """
             <Placemark>
               <name>$name</name>
+              $descriptionText
               <Point><coordinates>$coordinateText</coordinates></Point>
             </Placemark>
         """.trimIndent()
+    }
+
+    private fun String.placemarkNamed(name: String): String {
+        val escapedName = Regex.escape(name)
+        return Regex("<Placemark>[\\s\\S]*?</Placemark>")
+            .findAll(this)
+            .firstOrNull { Regex("<name>$escapedName</name>").containsMatchIn(it.value) }
+            ?.value
+            ?: error("Missing Placemark named $name")
     }
 
     private fun String.countOccurrences(needle: String): Int =
@@ -195,8 +210,9 @@ class DesktopClassicCourseGeneratorTest {
             .toList()
 
     private fun String.routePlacemarkBlocks(): List<String> =
-        Regex("""<Placemark>.*?<LineString>.*?</LineString>.*?</Placemark>""", RegexOption.DOT_MATCHES_ALL)
+        Regex("""<Placemark>.*?</Placemark>""", RegexOption.DOT_MATCHES_ALL)
             .findAll(this)
+            .filter { it.value.contains("<LineString>") }
             .map { it.value }
             .toList()
 }

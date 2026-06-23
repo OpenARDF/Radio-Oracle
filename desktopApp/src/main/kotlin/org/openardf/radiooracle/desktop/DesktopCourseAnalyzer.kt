@@ -165,7 +165,8 @@ data class DesktopCourseKmlExportPoint(
     val label: String,
     val originalLabel: String?,
     val point: CourseGeoPoint,
-    val type: DesktopCourseKmlExportPointType
+    val type: DesktopCourseKmlExportPointType,
+    val siCode: Int? = null
 )
 
 enum class DesktopCourseKmlExportPointType {
@@ -2788,7 +2789,8 @@ object DesktopCourseAnalyzer {
                         label = control.analysisRouteLabel(),
                         originalLabel = null,
                         point = point,
-                        type = control.kmlExportPointType()
+                        type = control.kmlExportPointType(),
+                        siCode = control.siCode
                     )
                 }
                 .forEach(::add)
@@ -2886,7 +2888,8 @@ object DesktopCourseAnalyzer {
                         label = suggestedLabel ?: originalLabel,
                         originalLabel = originalLabel.takeIf { suggestedLabel != null && suggestedLabel != originalLabel },
                         point = stop.point,
-                        type = type
+                        type = type,
+                        siCode = control?.siCode
                     )
                 }
                 .forEach(::add)

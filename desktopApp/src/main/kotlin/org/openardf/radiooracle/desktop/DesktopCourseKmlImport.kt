@@ -74,7 +74,8 @@ data class DesktopCourseKmlImportSummary(
     val rejectedRoutes: List<DesktopCourseKmlRejectedRoute> = emptyList(),
     val eventTypeWarnings: List<String>,
     val sourceSha256: String,
-    val controlIdentityUpdateCount: Int = 0
+    val controlIdentityUpdateCount: Int = 0,
+    val controlSiConflictCount: Int = 0
 ) {
     val assignedCategoryControlCount: Int
         get() = categoryAssignmentUpdates.sumOf { it.controls.size }
@@ -84,6 +85,7 @@ data class DesktopCourseKmlImportSummary(
             importedCategoryCount == 0 &&
             assignedCategoryControlCount == 0 &&
             controlIdentityUpdateCount == 0 &&
+            controlSiConflictCount == 0 &&
             changedControlLocationCount == 0 &&
             duplicateCategoryCount == matchedCategoryCount
 
@@ -99,6 +101,7 @@ data class DesktopCourseKmlImportSummary(
             assignedCategoryControlCount == 0 &&
             duplicateCategoryCount == 0 &&
             controlIdentityUpdateCount == 0 &&
+            controlSiConflictCount == 0 &&
             changedControlLocationCount == 0 &&
             matchedControlPointCount > 0
 
@@ -134,6 +137,11 @@ data class DesktopCourseKmlCategoryAssignmentUpdate(
     val controlPointsText: String,
     val controls: List<DesktopCourseKmlAssignedControl>
 )
+
+enum class DesktopCourseKmlSiImportPolicy {
+    PreserveExisting,
+    OverwriteFromImport
+}
 
 class DesktopCourseKmlMissingRouteException(message: String) : IllegalArgumentException(message)
 
@@ -177,7 +185,8 @@ object DesktopCourseKmlImporter {
         createMissingCategories: Boolean = false,
         createMissingControls: Boolean = false,
         missingCategoryIdFactory: (String) -> String = { UUID.randomUUID().toString() },
-        requireRoutes: Boolean = true
+        requireRoutes: Boolean = true,
+        siImportPolicy: DesktopCourseKmlSiImportPolicy = DesktopCourseKmlSiImportPolicy.PreserveExisting
     ): Pair<EventProjectFile, DesktopCourseKmlImportSummary> {
         val sourceSha256 = fileSha256(path)
         val courseData = parse(path)
@@ -267,7 +276,12 @@ object DesktopCourseKmlImporter {
             )
         }
         val matchedControlResult = matchedControls(importedControlsForControlMatching, projectWithMissingControls.raceData.controls)
-        val hintedProject = applyControlSiHints(projectWithMissingControls, matchedControlResult.controls)
+        val controlSiConflictCount = matchedControlResult.controls.count { it.hasSiCodeConflict() }
+        val hintedProject = if (siImportPolicy == DesktopCourseKmlSiImportPolicy.OverwriteFromImport) {
+            applyControlSiHints(projectWithMissingControls, matchedControlResult.controls)
+        } else {
+            projectWithMissingControls
+        }
         val matchedControlsForHintedProject = matchedControls(importedControlsForControlMatching, hintedProject.raceData.controls)
         val labeledProject = applyControlPublicLabelHints(hintedProject, matchedControlsForHintedProject.controls)
         val matchedControlsForLabeledProject = matchedControls(importedControlsForControlMatching, labeledProject.raceData.controls)
@@ -550,7 +564,12 @@ object DesktopCourseKmlImporter {
                 controlTypes = controls.map { it.type }
             ),
             sourceSha256 = sourceSha256,
-            controlIdentityUpdateCount = matchedControlResult.controls.count { it.siCodeHint != null && it.siCodeHint != it.siCode }
+            controlIdentityUpdateCount = if (siImportPolicy == DesktopCourseKmlSiImportPolicy.OverwriteFromImport) {
+                controlSiConflictCount
+            } else {
+                0
+            },
+            controlSiConflictCount = controlSiConflictCount
         )
         DesktopDebugLog.info(
             "CourseKml",
@@ -2005,6 +2024,9 @@ private data class CourseMatchedControl(
     val type: ControlPointType,
     val point: CourseGeoPoint
 )
+
+private fun CourseMatchedControl.hasSiCodeConflict(): Boolean =
+    siCodeHint != null && siCodeHint != siCode
 
 private data class CourseMatchedControlResult(
     val controls: List<CourseMatchedControl>,

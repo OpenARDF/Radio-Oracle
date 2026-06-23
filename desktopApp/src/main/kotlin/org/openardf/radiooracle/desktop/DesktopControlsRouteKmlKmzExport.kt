@@ -196,10 +196,11 @@ object DesktopControlsRouteKmlKmzExporter {
         controlsById: Map<String, EventControl>
     ) {
         points.forEach { point ->
-            val label = controlsById[point.controlId]?.displayCourseLabel() ?: point.label
+            val control = controlsById[point.controlId]
+            val label = control?.displayCourseLabel() ?: point.label
             appendLine("        <Placemark>")
             appendLine("          <name>${xml(label)}</name>")
-            appendLine("          <description>${xml("Course control $label; type ${point.type}; id ${point.controlId}")}</description>")
+            appendLine("          <description>${xml(coursePointDescription(control, "Course control $label; type ${point.type}; id ${point.controlId}"))}</description>")
             appendExtendedData(
                 indent = "          ",
                 values = listOf(
@@ -223,10 +224,11 @@ object DesktopControlsRouteKmlKmzExporter {
         controlsById: Map<String, EventControl>
     ) {
         points.forEach { point ->
-            val label = controlsById[point.id]?.displayCourseLabel() ?: point.label
+            val control = controlsById[point.id]
+            val label = control?.displayCourseLabel() ?: point.label
             appendLine("        <Placemark>")
             appendLine("          <name>${xml(label)}</name>")
-            appendLine("          <description>${xml("Course object $label; type ${point.type}; id ${point.id}")}</description>")
+            appendLine("          <description>${xml(coursePointDescription(control, "Course object $label; type ${point.type}; id ${point.id}"))}</description>")
             appendExtendedData(
                 indent = "          ",
                 values = listOf(
@@ -252,6 +254,12 @@ object DesktopControlsRouteKmlKmzExporter {
         }
         appendLine("${indent}</ExtendedData>")
     }
+
+    private fun coursePointDescription(control: EventControl?, details: String): String =
+        listOfNotNull(
+            control?.siCode?.let { "SI=$it" },
+            details
+        ).joinToString("\n")
 
     private fun buildKmz(kml: String): ByteArray {
         val output = ByteArrayOutputStream()

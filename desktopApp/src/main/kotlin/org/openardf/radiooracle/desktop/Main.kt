@@ -2794,15 +2794,30 @@ fun main(args: Array<String>) = application {
             review: PendingCourseKmlKmzImportReview,
             fetchElevations: Boolean,
             applyCategoryAssignments: Boolean,
-            createMissingCategories: Boolean
+            createMissingCategories: Boolean,
+            overwriteImportedSiNumbers: Boolean
         ) {
             val formatLabel = controlsRouteImportFormatLabel(review.sourceName)
-            val selectedSummary = if (createMissingCategories) {
+            val overwriteProject = if (createMissingCategories) {
+                review.overwriteSiCreatedMissingCategoryProject
+            } else {
+                review.overwriteSiProject
+            }
+            val overwriteSummary = if (createMissingCategories) {
+                review.overwriteSiCreatedMissingCategorySummary
+            } else {
+                review.overwriteSiSummary
+            }
+            val selectedSummary = if (overwriteImportedSiNumbers && overwriteSummary != null) {
+                overwriteSummary
+            } else if (createMissingCategories) {
                 review.createdMissingCategorySummary ?: review.summary
             } else {
                 review.summary
             }
-            val selectedProject = if (createMissingCategories) {
+            val selectedProject = if (overwriteImportedSiNumbers && overwriteProject != null) {
+                overwriteProject
+            } else if (createMissingCategories) {
                 review.createdMissingCategoryProject ?: review.updatedProject
             } else {
                 review.updatedProject
@@ -2829,12 +2844,16 @@ fun main(args: Array<String>) = application {
             syncProtectedCourseState(updatedProject, review.password)
             pendingCourseKmlKmzImportReview = null
             recordActivity("Applied controls/route $formatLabel import ${review.sourceName}.")
+            val retainedImportedSiConflictCount = selectedSummary.controlSiConflictCount
+                .takeIf { !overwriteImportedSiNumbers }
+                ?: 0
             recentImportReport = DesktopImportReport(
                 title = "Controls/route $formatLabel: ${review.sourceName}",
                 lines = withRollbackBackupLine(listOf(
                     "${selectedSummary.importedCategoryCount} categories received stored route data.",
                     "${selectedSummary.duplicateCategoryCount} duplicate categories skipped.",
                     "${selectedSummary.controlIdentityUpdateCount} control identities updated.",
+                    "$retainedImportedSiConflictCount imported SI conflicts retained existing Event File numbers.",
                     "${selectedSummary.changedControlLocationCount} control locations updated.",
                     "${selectedSummary.categoryAssignmentUpdates.size.takeIf { applyCategoryAssignments } ?: 0} assigned-control lists replaced.",
                     "${selectedSummary.createdCategoryNames.size} missing categories created.",
@@ -2936,11 +2955,41 @@ fun main(args: Array<String>) = application {
                                 requireRoutes = requireRoutes
                             )
                         }
+                    val overwritePreview = preview.second
+                        .takeIf { it.controlSiConflictCount > 0 }
+                        ?.let {
+                            DesktopCourseKmlImporter.importProtectedCourseInfo(
+                                path = path,
+                                projectFile = baseProject,
+                                password = password,
+                                categoryOverrideId = categoryOverrideId,
+                                requireRoutes = requireRoutes,
+                                siImportPolicy = DesktopCourseKmlSiImportPolicy.OverwriteFromImport
+                            )
+                        }
+                    val overwriteCreatedPreview = createdPreview?.second
+                        ?.takeIf { it.controlSiConflictCount > 0 }
+                        ?.let {
+                            DesktopCourseKmlImporter.importProtectedCourseInfo(
+                                path = path,
+                                projectFile = baseProject,
+                                password = password,
+                                categoryOverrideId = categoryOverrideId,
+                                createMissingCategories = true,
+                                createMissingControls = true,
+                                requireRoutes = requireRoutes,
+                                siImportPolicy = DesktopCourseKmlSiImportPolicy.OverwriteFromImport
+                            )
+                        }
                     CourseKmlKmzImportPreview(
                         updatedProject = preview.first,
                         summary = preview.second,
                         createdMissingCategoryProject = createdPreview?.first,
-                        createdMissingCategorySummary = createdPreview?.second
+                        createdMissingCategorySummary = createdPreview?.second,
+                        overwriteSiProject = overwritePreview?.first,
+                        overwriteSiSummary = overwritePreview?.second,
+                        overwriteSiCreatedMissingCategoryProject = overwriteCreatedPreview?.first,
+                        overwriteSiCreatedMissingCategorySummary = overwriteCreatedPreview?.second
                     )
                 }
 
@@ -3034,6 +3083,10 @@ fun main(args: Array<String>) = application {
                             summary = summary,
                             createdMissingCategoryProject = preview.createdMissingCategoryProject,
                             createdMissingCategorySummary = preview.createdMissingCategorySummary,
+                            overwriteSiProject = preview.overwriteSiProject,
+                            overwriteSiSummary = preview.overwriteSiSummary,
+                            overwriteSiCreatedMissingCategoryProject = preview.overwriteSiCreatedMissingCategoryProject,
+                            overwriteSiCreatedMissingCategorySummary = preview.overwriteSiCreatedMissingCategorySummary,
                             password = password
                         )
                         projectStatusText = if (summary.isDuplicateOnly) {
@@ -4794,12 +4847,13 @@ fun main(args: Array<String>) = application {
         pendingCourseKmlKmzImportReview?.let { review ->
             CourseKmlKmzImportReviewDialog(
                 review = review,
-                onKeep = { fetchElevations, applyCategoryAssignments, createMissingCategories ->
+                onKeep = { fetchElevations, applyCategoryAssignments, createMissingCategories, overwriteImportedSiNumbers ->
                     applyCourseKmlKmzImport(
                         review = review,
                         fetchElevations = fetchElevations,
                         applyCategoryAssignments = applyCategoryAssignments,
-                        createMissingCategories = createMissingCategories
+                        createMissingCategories = createMissingCategories,
+                        overwriteImportedSiNumbers = overwriteImportedSiNumbers
                     )
                 },
                 onCancel = {
@@ -6074,7 +6128,12 @@ private fun EventCategoryData.restorableControlPointsText(): String =
 @Composable
 private fun CourseKmlKmzImportReviewDialog(
     review: PendingCourseKmlKmzImportReview,
-    onKeep: (fetchElevations: Boolean, applyCategoryAssignments: Boolean, createMissingCategories: Boolean) -> Unit,
+    onKeep: (
+        fetchElevations: Boolean,
+        applyCategoryAssignments: Boolean,
+        createMissingCategories: Boolean,
+        overwriteImportedSiNumbers: Boolean
+    ) -> Unit,
     onCancel: () -> Unit
 ) {
     val summary = review.summary
@@ -6109,6 +6168,15 @@ private fun CourseKmlKmzImportReviewDialog(
     }
     var applyCategoryAssignments by remember(review.sourceName, summary.sourceSha256) {
         mutableStateOf(false)
+    }
+    var overwriteImportedSiNumbers by remember(review.sourceName, summary.sourceSha256) {
+        mutableStateOf(false)
+    }
+    val selectedSiConflictCount = selectedSummary.controlSiConflictCount
+    val selectedSiUpdateCount = if (overwriteImportedSiNumbers) {
+        selectedSummary.controlSiConflictCount
+    } else {
+        selectedSummary.controlIdentityUpdateCount
     }
     val scrollState = rememberScrollState()
     Dialog(
@@ -6222,8 +6290,30 @@ private fun CourseKmlKmzImportReviewDialog(
                             Text("Duplicate categories already imported: ${selectedSummary.duplicateCategoryCount}")
                         }
                         Text("Matched course controls: ${courseControlMatchSummary(selectedSummary.matchedFoxCount, selectedSummary.matchedBeaconCount, selectedSummary.matchedSpectatorCount)}")
-                        if (selectedSummary.controlIdentityUpdateCount > 0) {
-                            Text("Control identities to update from SI= lines: ${selectedSummary.controlIdentityUpdateCount}")
+                        if (selectedSiConflictCount > 0) {
+                            Text("Imported SI= lines differ from existing Event File SI numbers: $selectedSiConflictCount")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Checkbox(
+                                    checked = overwriteImportedSiNumbers,
+                                    onCheckedChange = { overwriteImportedSiNumbers = it }
+                                )
+                                Text("Overwrite Event File SI numbers from imported SI= lines")
+                            }
+                            Text(
+                                text = if (overwriteImportedSiNumbers) {
+                                    "The imported SI= values will replace the existing Event File SI numbers for matched controls."
+                                } else {
+                                    "The current Event File SI numbers will be retained; imported SI= values remain in the source file only."
+                                },
+                                fontSize = 12.sp,
+                                color = Color.DarkGray
+                            )
+                        }
+                        if (selectedSiUpdateCount > 0) {
+                            Text("Control identities to update from SI= lines: $selectedSiUpdateCount")
                         }
                         if (selectedSummary.labelConversions.isNotEmpty()) {
                             Text("Imported control names to treat as existing Event File labels:")
@@ -6277,7 +6367,9 @@ private fun CourseKmlKmzImportReviewDialog(
                                 selectedSummary.importedCategoryCount == 0 &&
                                 (selectedSummary.changedControlLocationCount > 0 || selectedSummary.controlIdentityUpdateCount > 0)
                             ) {
-                                "Keep imported data to update control locations. Affected stored route geometry is invalidated so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
+                                "Keep imported data to update control identities or locations. Affected stored route geometry is invalidated when locations change so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
+                            } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.controlSiConflictCount > 0) {
+                                "Choose whether to retain current Event File SI numbers or overwrite them from imported SI= lines. Cancel leaves the Event File unchanged."
                             } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.assignedCategoryControlCount > 0) {
                                 "Keep imported data to review matched $formatLabel control points. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
                             } else if (selectedSummary.hasLabelConversions) {
@@ -6298,7 +6390,14 @@ private fun CourseKmlKmzImportReviewDialog(
                         Text("Cancel")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = { onKeep(fetchElevations, applyCategoryAssignments, createMissingCategories) }) {
+                    Button(onClick = {
+                        onKeep(
+                            fetchElevations,
+                            applyCategoryAssignments,
+                            createMissingCategories,
+                            overwriteImportedSiNumbers
+                        )
+                    }) {
                         Text(
                             if (selectedSummary.isDuplicateOnly) {
                                 "Continue"
@@ -7569,6 +7668,10 @@ private data class PendingCourseKmlKmzImportReview(
     val summary: DesktopCourseKmlImportSummary,
     val createdMissingCategoryProject: EventProjectFile?,
     val createdMissingCategorySummary: DesktopCourseKmlImportSummary?,
+    val overwriteSiProject: EventProjectFile?,
+    val overwriteSiSummary: DesktopCourseKmlImportSummary?,
+    val overwriteSiCreatedMissingCategoryProject: EventProjectFile?,
+    val overwriteSiCreatedMissingCategorySummary: DesktopCourseKmlImportSummary?,
     val password: String
 )
 
@@ -7581,7 +7684,11 @@ private data class CourseKmlKmzImportPreview(
     val updatedProject: EventProjectFile,
     val summary: DesktopCourseKmlImportSummary,
     val createdMissingCategoryProject: EventProjectFile?,
-    val createdMissingCategorySummary: DesktopCourseKmlImportSummary?
+    val createdMissingCategorySummary: DesktopCourseKmlImportSummary?,
+    val overwriteSiProject: EventProjectFile?,
+    val overwriteSiSummary: DesktopCourseKmlImportSummary?,
+    val overwriteSiCreatedMissingCategoryProject: EventProjectFile?,
+    val overwriteSiCreatedMissingCategorySummary: DesktopCourseKmlImportSummary?
 )
 
 private data class PendingCompetitorsCsvImportReview(

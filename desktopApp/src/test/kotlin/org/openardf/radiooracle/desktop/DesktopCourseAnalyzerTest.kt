@@ -887,6 +887,10 @@ class DesktopCourseAnalyzerTest {
         assertTrue(kmlText.placemarkNamed("Finish").contains("<styleUrl>#courseFinishStyle</styleUrl>"))
         assertTrue(kmlText.placemarkNamed("31").contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
         assertTrue(kmlText.placemarkNamed("B").contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
+        val foxPlacemark = kmlText.placemarkNamed("31")
+        assertTrue(foxPlacemark.contains("<description>SI=31</description>"))
+        val beaconPlacemark = kmlText.placemarkNamed("B")
+        assertTrue(beaconPlacemark.contains("<description>SI=99</description>"))
         assertEquals(
             List(summary.kmlFolders.size) { expectedFileStem },
             kmlLineStringPlacemarkNames(kmlText)
@@ -1871,8 +1875,9 @@ class DesktopCourseAnalyzerTest {
 
     private fun String.placemarkNamed(name: String): String {
         val escapedName = Regex.escape(name)
-        return Regex("<Placemark>[\\s\\S]*?<name>$escapedName</name>[\\s\\S]*?</Placemark>")
-            .find(this)
+        return Regex("<Placemark>[\\s\\S]*?</Placemark>")
+            .findAll(this)
+            .firstOrNull { Regex("<name>$escapedName</name>").containsMatchIn(it.value) }
             ?.value
             ?: error("Missing Placemark named $name")
     }

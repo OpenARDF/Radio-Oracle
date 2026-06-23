@@ -284,8 +284,12 @@ object DesktopCourseAnalysisExports {
         folder.courseObjects.forEach { courseObject ->
             appendLine("      <Placemark>")
             appendLine("        <name>${xmlText(courseObject.label)}</name>")
-            courseObject.originalLabel?.let {
-                appendLine("        <description>${xmlText("Original label: $it")}</description>")
+            val descriptionLines = listOfNotNull(
+                courseObject.siCode?.let { "SI=$it" },
+                courseObject.originalLabel?.let { "Original label: $it" }
+            )
+            if (descriptionLines.isNotEmpty()) {
+                appendLine("        <description>${xmlText(descriptionLines.joinToString("\n"))}</description>")
             }
             appendLine("        <styleUrl>#${courseObjectStyleId(courseObject.type)}</styleUrl>")
             appendLine("        <Point>")
