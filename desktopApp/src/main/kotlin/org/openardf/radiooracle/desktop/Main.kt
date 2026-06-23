@@ -13015,6 +13015,21 @@ private fun ClassicCourseGeneratorResultView(result: ClassicCourseGeneratorResul
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
+            if (result.requirementWarnings.isNotEmpty()) {
+                Text(
+                    text = "Course requirement warnings",
+                    color = DesktopPalette.Error,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                result.requirementWarnings.forEach { warning ->
+                    Text(
+                        text = "${warning.label}: ${warning.message}",
+                        color = DesktopPalette.Error,
+                        fontSize = 13.sp
+                    )
+                }
+            }
             result.groups.forEach { group ->
                 Text(
                     text = group.title,

@@ -13,6 +13,7 @@ data class ClassicCourseGeneratorResult(
     val finish: ClassicCoursePoint,
     val beacon: ClassicCoursePoint?,
     val foxes: List<ClassicCoursePoint>,
+    val requirementWarnings: List<ClassicCourseRequirementWarning>,
     val groups: List<ClassicCourseGeneratorGroup>,
     val elevationResolvedPointCount: Int,
     val missingElevationPointCount: Int
@@ -24,6 +25,11 @@ data class ClassicCoursePoint(
     val label: String,
     val point: CourseGeoPoint,
     val siCodeHint: Int? = null
+)
+
+data class ClassicCourseRequirementWarning(
+    val label: String,
+    val message: String
 )
 
 data class ClassicCourseGeneratorGroup(
@@ -52,6 +58,8 @@ data class ClassicCourseGeneratorExportPaths(
 
 object DesktopClassicCourseGenerator {
     private const val CLASSIC_CLIMB_LIMIT_PERCENT = 6.0
+    private const val CLASSIC_START_EXCLUSION_METERS = 750
+    private const val CLASSIC_TRANSMITTER_SEPARATION_METERS = 400
     private const val COURSE_CANDIDATE_LINE_WIDTH = 3
     private val courseCandidateRouteColors = listOf(
         "ffb85700", // blue
@@ -144,6 +152,7 @@ object DesktopClassicCourseGenerator {
             finish = elevated.finish,
             beacon = elevated.beacon,
             foxes = elevated.foxes,
+            requirementWarnings = requirementWarnings(elevated),
             groups = groups,
             elevationResolvedPointCount = elevationResult.resolvedPointCount,
             missingElevationPointCount = elevated.allPoints().count { it.point.elevationMeters == null }
@@ -183,6 +192,7 @@ object DesktopClassicCourseGenerator {
             appendLine("Source: ${result.sourcePath.fileName}")
             appendLine("Course points: Start, ${result.foxes.size} foxes, ${if (result.beacon == null) "no beacon" else "beacon"}, Finish")
             appendLine(elevationSummaryText(result))
+            appendRequirementWarningText(result)
             appendLine()
             result.groups.forEach { group ->
                 appendLine(group.title)
@@ -365,6 +375,49 @@ object DesktopClassicCourseGenerator {
     private fun categoryText(row: ClassicCourseGeneratorRow): String =
         row.matchingCategories.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: "No category match"
 
+    private fun requirementWarnings(classified: ClassifiedClassicCoursePoints): List<ClassicCourseRequirementWarning> =
+        buildList {
+            val transmitters = classified.transmitters()
+            transmitters
+                .map { transmitter -> transmitter.label to classified.start.point.distanceMetersTo(transmitter.point) }
+                .minByOrNull { it.second }
+                ?.takeIf { it.second + 0.5 < CLASSIC_START_EXCLUSION_METERS }
+                ?.let { (label, distance) ->
+                    add(
+                        ClassicCourseRequirementWarning(
+                            label = "Classic start exclusion zone",
+                            message = "Violation: nearest transmitter $label ${distance.roundToInt()} m from Start (required at least $CLASSIC_START_EXCLUSION_METERS m)."
+                        )
+                    )
+                }
+            transmitters
+                .flatMapIndexed { index, first ->
+                    transmitters.drop(index + 1).map { second ->
+                        "${first.label}-${second.label}" to first.point.distanceMetersTo(second.point)
+                    }
+                }
+                .minByOrNull { it.second }
+                ?.takeIf { it.second + 0.5 < CLASSIC_TRANSMITTER_SEPARATION_METERS }
+                ?.let { (pair, distance) ->
+                    add(
+                        ClassicCourseRequirementWarning(
+                            label = "Classic minimum transmitter spacing",
+                            message = "Violation: closest transmitter pair $pair ${distance.roundToInt()} m apart (required at least $CLASSIC_TRANSMITTER_SEPARATION_METERS m)."
+                        )
+                    )
+                }
+        }
+
+    private fun StringBuilder.appendRequirementWarningText(result: ClassicCourseGeneratorResult) {
+        if (result.requirementWarnings.isEmpty()) {
+            return
+        }
+        appendLine("Course requirement warnings:")
+        result.requirementWarnings.forEach { warning ->
+            appendLine("${warning.label}: ${warning.message}")
+        }
+    }
+
     private fun elevationSummaryText(result: ClassicCourseGeneratorResult): String =
         when {
             result.missingElevationPointCount == 0 && result.elevationResolvedPointCount > 0 ->
@@ -544,6 +597,12 @@ object DesktopClassicCourseGenerator {
             add(PdfLine("Source: ${result.sourcePath.fileName}", PdfColor.Body, 11))
             add(PdfLine("Course points: Start, ${result.foxes.size} foxes, ${if (result.beacon == null) "no beacon" else "beacon"}, Finish", PdfColor.Body, 11))
             add(PdfLine(elevationSummaryText(result), PdfColor.Body, 11))
+            if (result.requirementWarnings.isNotEmpty()) {
+                add(PdfLine("Course requirement warnings", PdfColor.WarningRed, 12, bold = true))
+                result.requirementWarnings.forEach { warning ->
+                    add(PdfLine("${warning.label}: ${warning.message}", PdfColor.WarningRed, 10))
+                }
+            }
             add(PdfLine("", PdfColor.Body, 8))
             result.groups.forEach { group ->
                 add(PdfLine(group.title, PdfColor.Body, 14, bold = true))
@@ -586,6 +645,9 @@ object DesktopClassicCourseGenerator {
     ) {
         fun allPoints(): List<ClassicCoursePoint> =
             listOf(start) + foxes + listOfNotNull(beacon) + finish
+
+        fun transmitters(): List<ClassicCoursePoint> =
+            foxes + listOfNotNull(beacon)
     }
 
     private data class ClassicCourseElevationResult(
@@ -609,6 +671,7 @@ object DesktopClassicCourseGenerator {
 
     private enum class PdfColor(val r: String, val g: String, val b: String) {
         Body("0", "0", "0"),
+        WarningRed("0.78", "0.05", "0.05"),
         MatchGreen("0.00", "0.30", "0.08"),
         NoMatchGray("0.45", "0.45", "0.45")
     }

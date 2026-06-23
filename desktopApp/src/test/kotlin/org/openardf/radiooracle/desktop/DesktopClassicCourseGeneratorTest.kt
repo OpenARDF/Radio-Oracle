@@ -89,6 +89,30 @@ class DesktopClassicCourseGeneratorTest {
     }
 
     @Test
+    fun reportsClassicCourseRequirementWarningsWithoutFilteringResults() {
+        val path = Files.createTempFile("classic-course-points-rule-warnings", ".kml")
+        Files.writeString(path, coursePointsKmlWithRuleViolations())
+
+        val result = DesktopClassicCourseGenerator.generate(path, elevationLookup = { null })
+        val reportText = DesktopClassicCourseGenerator.reportText(result)
+        val pdfPath = Files.createTempFile("classic-course-generator-warnings", ".pdf")
+        DesktopClassicCourseGenerator.exportPdf(pdfPath, result)
+        val pdfText = Files.readString(pdfPath)
+
+        assertEquals(2, result.requirementWarnings.size)
+        assertTrue(result.requirementWarnings.any { it.label == "Classic start exclusion zone" })
+        assertTrue(result.requirementWarnings.any { it.label == "Classic minimum transmitter spacing" })
+        assertTrue(reportText.contains("Course requirement warnings"))
+        assertTrue(reportText.contains("required at least 750 m"))
+        assertTrue(reportText.contains("required at least 400 m"))
+        assertTrue(pdfText.contains("Course requirement warnings"))
+        assertEquals(10, result.groups.single { it.foxCount == 3 }.rows.size)
+        assertEquals(5, result.groups.single { it.foxCount == 4 }.rows.size)
+        assertEquals(1, result.groups.single { it.foxCount == 5 }.rows.size)
+        assertTrue(result.rows.any { it.hasCategoryMatch })
+    }
+
+    @Test
     fun rejectsCoursePointsOutsideClassicGeneratorShape() {
         val path = Files.createTempFile("classic-course-points-spectator", ".kml")
         Files.writeString(
@@ -196,6 +220,22 @@ class DesktopClassicCourseGeneratorTest {
             </kml>
         """.trimIndent()
     }
+
+    private fun coursePointsKmlWithRuleViolations(): String =
+        """
+            <kml xmlns="http://www.opengis.net/kml/2.2">
+              <Document>
+                ${pointPlacemark("Start", -95.0000, 39.0000, 100.0)}
+                ${pointPlacemark("FOX1", -94.9990, 39.0000, 100.0)}
+                ${pointPlacemark("FOX2", -94.9985, 39.0000, 105.0)}
+                ${pointPlacemark("FOX3", -94.9700, 39.0000, 105.0)}
+                ${pointPlacemark("FOX4", -94.9600, 39.0000, 110.0)}
+                ${pointPlacemark("FOX5", -94.9500, 39.0000, 110.0)}
+                ${pointPlacemark("Beacon", -94.9400, 39.0000, 110.0)}
+                ${pointPlacemark("Finish", -94.9300, 39.0000, 110.0)}
+              </Document>
+            </kml>
+        """.trimIndent()
 
     private fun pointPlacemark(name: String, longitude: Double, latitude: Double, elevation: Double?, description: String? = null): String {
         val coordinateText = if (elevation == null) {
