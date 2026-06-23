@@ -512,8 +512,8 @@ object DesktopClassicCourseGenerator {
                 appendLine("        <LineString>")
                 appendLine("          <tessellate>1</tessellate>")
                 appendLine("          <coordinates>")
-                row.routePoints.forEach { routePoint ->
-                    appendLine("            ${routePoint.kmlCoordinate()}")
+                row.coursePoints.forEach { coursePoint ->
+                    appendLine("            ${coursePoint.point.kmlCoordinate()}")
                 }
                 appendLine("          </coordinates>")
                 appendLine("        </LineString>")

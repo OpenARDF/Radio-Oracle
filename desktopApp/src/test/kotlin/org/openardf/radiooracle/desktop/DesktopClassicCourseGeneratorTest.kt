@@ -166,7 +166,8 @@ class DesktopClassicCourseGeneratorTest {
         assertFalse(routeColors.any { it in setOf("ffffffff", "ff000000", "ff00ff00") })
         val routePlacemarks = kmlText.routePlacemarkBlocks()
         assertEquals(result.rows.count { it.hasCategoryMatch }, routePlacemarks.size)
-        routePlacemarks.forEach { routePlacemark ->
+        routePlacemarks.zip(result.rows.filter { it.hasCategoryMatch }).forEach { (routePlacemark, row) ->
+            assertEquals(row.coursePoints.size, routePlacemark.lineStringCoordinateLines().size)
             val description = Regex("""<description>(.*?)</description>""", RegexOption.DOT_MATCHES_ALL)
                 .find(routePlacemark)
                 ?.groupValues
@@ -277,4 +278,15 @@ class DesktopClassicCourseGeneratorTest {
             .filter { it.value.contains("<LineString>") }
             .map { it.value }
             .toList()
+
+    private fun String.lineStringCoordinateLines(): List<String> =
+        Regex("""<coordinates>(.*?)</coordinates>""", RegexOption.DOT_MATCHES_ALL)
+            .find(this)
+            ?.groupValues
+            ?.get(1)
+            ?.lineSequence()
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.toList()
+            ?: emptyList()
 }
