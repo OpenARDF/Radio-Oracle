@@ -371,7 +371,7 @@ object DesktopClassicCourseGenerator {
             greenRows.forEachIndexed { index, row ->
                 appendLine("      <Placemark>")
                 appendLine("        <name>${xmlText(kmlRouteName(index + 1, row))}</name>")
-                appendLine("        <description>${xmlText(row.matchingCategories.joinToString(", "))}</description>")
+                appendLine("        <description>${xmlText(kmlRouteDescription(row))}</description>")
                 appendLine("        <styleUrl>#${candidateRouteStyleId(index)}</styleUrl>")
                 appendLine("        <LineString>")
                 appendLine("          <tessellate>1</tessellate>")
@@ -425,6 +425,14 @@ object DesktopClassicCourseGenerator {
 
     private fun kmlRouteName(index: Int, row: ClassicCourseGeneratorRow): String =
         "${index.toString().padStart(3, '0')} ${row.foxCount}-fox ${kilometers(row.effectiveLengthMeters)} ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})"
+
+    private fun kmlRouteDescription(row: ClassicCourseGeneratorRow): String =
+        listOf(
+            "Matching Categories: ${row.matchingCategories.joinToString(", ")}",
+            "Horizontal Length: ${kilometers(row.horizontalLengthMeters)}",
+            "Climb: ${row.climbMeters?.roundToInt()?.let { "$it m" } ?: "Unknown"}",
+            "Effective Length: ${kilometers(row.effectiveLengthMeters)}"
+        ).joinToString("\n")
 
     private fun ClassicCoursePoint.kmlObjectKey(): String =
         "${label.trim().lowercase(Locale.US)}|${point.latitude}|${point.longitude}|${point.elevationMeters}"

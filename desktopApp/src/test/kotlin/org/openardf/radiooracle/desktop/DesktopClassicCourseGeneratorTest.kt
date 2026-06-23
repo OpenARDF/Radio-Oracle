@@ -94,6 +94,19 @@ class DesktopClassicCourseGeneratorTest {
         assertEquals(routeStyles.size, routeColors.size)
         assertEquals(routeColors.size, routeColors.toSet().size)
         assertFalse(routeColors.any { it in setOf("ffffffff", "ff000000", "ff00ff00") })
+        val routePlacemarks = kmlText.routePlacemarkBlocks()
+        assertEquals(result.rows.count { it.hasCategoryMatch }, routePlacemarks.size)
+        routePlacemarks.forEach { routePlacemark ->
+            val description = Regex("""<description>(.*?)</description>""", RegexOption.DOT_MATCHES_ALL)
+                .find(routePlacemark)
+                ?.groupValues
+                ?.get(1)
+                .orEmpty()
+            assertTrue(description.contains("Matching Categories: "))
+            assertTrue(description.contains(Regex("""Horizontal Length: \d+\.\d{2} km""")))
+            assertTrue(description.contains(Regex("""Climb: \d+ m""")))
+            assertTrue(description.contains(Regex("""Effective Length: \d+\.\d{2} km""")))
+        }
         assertEquals(1, kmlText.countOccurrences("<name>Start</name>"))
         assertEquals(1, kmlText.countOccurrences("<name>Finish</name>"))
         assertEquals(1, kmlText.countOccurrences("<name>Beacon</name>"))
@@ -154,6 +167,12 @@ class DesktopClassicCourseGeneratorTest {
 
     private fun String.routeLineStyleBlocks(): List<String> =
         Regex("""<Style id="classicCourseCandidateRoute-\d+">.*?</Style>""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(this)
+            .map { it.value }
+            .toList()
+
+    private fun String.routePlacemarkBlocks(): List<String> =
+        Regex("""<Placemark>.*?<LineString>.*?</LineString>.*?</Placemark>""", RegexOption.DOT_MATCHES_ALL)
             .findAll(this)
             .map { it.value }
             .toList()
