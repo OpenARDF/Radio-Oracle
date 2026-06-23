@@ -1582,6 +1582,33 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun importsExportedCompetitorStartRowsBySiNumberWhenStartNumberChanged() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", startNumber = 1, siNumber = 1111),
+                competitorData("comp-2", "Bob", "Racer", startNumber = 2, siNumber = 2222)
+            )
+        )
+
+        val updated = EventProjectEditor.importCompetitorStartRows(
+            original,
+            listOf(
+                CompetitorStartCsvImportRow(
+                    startNumber = 99,
+                    startTimeText = "10:15",
+                    siNumber = 2222,
+                    bibNumber = "REG002"
+                )
+            )
+        )
+
+        val kept = updated.raceData.competitorData[0].competitorCategory.competitor
+        val changed = updated.raceData.competitorData[1].competitorCategory.competitor
+        assertEquals(null, kept.drawnStartTimeSeconds)
+        assertEquals(10 * 60L + 15, changed.drawnStartTimeSeconds)
+    }
+
+    @Test
     fun removesCompetitorAndKeepsReadoutAsUnmatched() {
         val readoutData = readout("result-1", "comp-1", siNumber = 1111)
         val original = projectFile(

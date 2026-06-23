@@ -102,6 +102,33 @@ class EventCsvExportsTest {
     }
 
     @Test
+    fun exportedCompetitorRowsPreserveIdentityFieldsForRoundTripImport() {
+        val baseRaceData = raceData()
+        val raceData = baseRaceData.copy(
+            competitorData = baseRaceData.competitorData.map { competitorData ->
+                val competitor = competitorData.competitorCategory.competitor
+                competitorData.copy(
+                    competitorCategory = competitorData.competitorCategory.copy(
+                        competitor = competitor.copy(
+                            index = "REG001",
+                            bibNumber = "B007",
+                            callSign = "RUN"
+                        )
+                    )
+                )
+            }
+        )
+
+        val result = EventCsvImports.parseAndroidCompetitorRows(EventCsvExports.competitors(raceData))
+
+        assertEquals(emptyList(), result.invalidLines)
+        val row = result.rows.single()
+        assertEquals("REG001", row.index)
+        assertEquals("B007", row.bibNumber)
+        assertEquals("RUN", row.callSign)
+    }
+
+    @Test
     fun exportsControlRows() {
         val raceData = raceData(
             controls = listOf(
@@ -125,6 +152,45 @@ class EventCsvExportsTest {
             """.trimIndent() + "\n",
             EventCsvExports.controls(raceData)
         )
+    }
+
+    @Test
+    fun exportedControlRowsParseWithSharedImportContract() {
+        val raceData = raceData(
+            controls = listOf(
+                EventControl(
+                    id = "control-31",
+                    raceId = "race",
+                    label = "31",
+                    siCode = 31,
+                    type = ControlPointType.CONTROL,
+                    scored = true,
+                    publicLabel = "F1",
+                    notes = "first fox"
+                ),
+                EventControl(
+                    id = "control-99",
+                    raceId = "race",
+                    label = "99B",
+                    siCode = 99,
+                    type = ControlPointType.BEACON,
+                    scored = false,
+                    publicLabel = "M",
+                    notes = "finish beacon"
+                )
+            )
+        )
+
+        val result = EventCsvImports.parseControlRows(EventCsvExports.controls(raceData))
+
+        assertEquals(emptyList(), result.invalidLines)
+        assertEquals(2, result.rows.size)
+        assertEquals(31, result.rows[0].siCode)
+        assertEquals(ControlPointType.CONTROL, result.rows[0].type)
+        assertEquals(true, result.rows[0].scored)
+        assertEquals(99, result.rows[1].siCode)
+        assertEquals(ControlPointType.BEACON, result.rows[1].type)
+        assertEquals(false, result.rows[1].scored)
     }
 
     @Test
@@ -162,6 +228,24 @@ class EventCsvExportsTest {
             listOf(CompetitorStartCsvImportRow(startNumber = 7, startTimeText = "10:00", siNumber = 123456, bibNumber = "OK001")),
             result.rows
         )
+    }
+
+    @Test
+    fun exportedCompetitorStartVariantsParseWithSharedImportContract() {
+        val raceData = startVariantRaceData()
+        val exports = listOf(
+            EventCsvExports.competitorStarts(raceData),
+            EventCsvExports.competitorStartsByCategory(raceData),
+            EventCsvExports.competitorStartsByMinute(raceData)
+        )
+
+        exports.forEach { csv ->
+            val result = EventCsvImports.parseAndroidCompetitorStartRows(csv)
+
+            assertEquals(emptyList(), result.invalidLines)
+            assertEquals(4, result.rows.size)
+            assertEquals(setOf(111111, 222222, 333333, 444444), result.rows.mapNotNull { it.siNumber }.toSet())
+        }
     }
 
     @Test

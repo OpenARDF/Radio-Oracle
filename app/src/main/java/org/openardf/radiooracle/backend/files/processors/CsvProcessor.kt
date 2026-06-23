@@ -3,13 +3,10 @@ package org.openardf.radiooracle.backend.files.processors
 import android.content.Context
 import android.util.Log
 import androidx.preference.PreferenceManager
-import com.github.doyaaaaaken.kotlincsv.client.CsvReader
-import com.github.doyaaaaaken.kotlincsv.dsl.context.CsvReaderContext
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.constants.DataFormat
 import org.openardf.radiooracle.backend.files.constants.DataType
-import org.openardf.radiooracle.backend.files.constants.FileConstants
 import org.openardf.radiooracle.backend.files.wrappers.DataImportWrapper
 import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
@@ -22,7 +19,6 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.backend.room.enums.StandardCategoryType
-import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -120,13 +116,6 @@ object CsvProcessor : FormatProcessor {
         }
     }
 
-
-    /** Creates a CSV reader configured for the app's semicolon-delimited files. */
-    private fun getReader(): CsvReader {
-        val context = CsvReaderContext()
-        context.delimiter = EventCsvFormat.DELIMITER
-        return CsvReader(context)
-    }
 
     /** Imports category/course rows and reports invalid rows without aborting the whole import. */
     private fun importCategories(
@@ -326,58 +315,44 @@ object CsvProcessor : FormatProcessor {
         )
     }
 
-    /** Imports start-list rows and updates matched competitors by start number. */
+    /** Imports start-list rows and updates matched competitors by SI number or start number. */
     private fun importCompetitorStarts(
         inStream: InputStream,
         competitors: HashSet<CompetitorData>,
 
         context: Context
     ): DataImportWrapper {
-        val csvReader = getReader().readAll(inStream)
+        val parsedRows = EventCsvImports.parseAndroidCompetitorStartRows(inStream.bufferedReader().readText())
         val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
         val preferAppStartTime =
             sharedPref.getBoolean(
                 context.getString(R.string.key_files_prefer_app_start_time),
                 false
             )
-        val invalidLines = ArrayList<Pair<Int, String>>()
+        val invalidLines = parsedRows.invalidLines
+            .mapTo(ArrayList()) { it.lineIndex to it.message }
 
-        for (csvRow in csvReader.withIndex()) {
-            val row = csvRow.value
-            if (row.size == FileConstants.OCM_START_CSV_COLUMNS) {
-                try {
-                    val startNumber = row[0].trim().toInt()
-                    val relativeTime = TimeProcessor.minuteStringToDuration(row[1].trim())
-                    val siNumber = row[2].trim().toIntOrNull()
+        for ((index, row) in parsedRows.rows.withIndex()) {
+            try {
+                val relativeTime = TimeProcessor.minuteStringToDuration(row.startTimeText)
+                val match = row.siNumber?.let { siNumber ->
+                    competitors.find { it.competitorCategory.competitor.siNumber == siNumber }
+                } ?: competitors.find { it.competitorCategory.competitor.startNumber == row.startNumber }
 
-                    // Validate SI numbers before attaching them to existing competitors.
-                    if (siNumber != null && !SIConstants.isSINumberValid(siNumber)) {
-                        throw IllegalArgumentException(
-                            context.getString(
-                                R.string.data_import_competitor_invalid_si,
-                                csvRow.index
-                            )
-                        )
+                if (match != null && !preferAppStartTime) {
+                    match.competitorCategory.competitor.drawnRelativeStartTime =
+                        relativeTime
+
+                    if (row.siNumber != null) {
+                        match.competitorCategory.competitor.siNumber = row.siNumber
                     }
-
-                    val match =
-                        competitors.find { it.competitorCategory.competitor.startNumber == startNumber }
-
-                    if (match != null && !preferAppStartTime) {
-                        match.competitorCategory.competitor.drawnRelativeStartTime =
-                            relativeTime
-
-                        if (siNumber != null) {
-                            match.competitorCategory.competitor.siNumber = siNumber
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(
-                        "CSV import",
-                        "Failed to import competitor start: \n" + e.stackTraceToString()
-                    )
-                    invalidLines.add(Pair(csvRow.index, e.message ?: ""))
                 }
+            } catch (e: Exception) {
+                Log.e(
+                    "CSV import",
+                    "Failed to import competitor start: \n" + e.stackTraceToString()
+                )
+                invalidLines.add(Pair(index, e.message ?: ""))
             }
         }
 
