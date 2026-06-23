@@ -62,6 +62,7 @@ object DesktopControlsRouteKmlKmzExporter {
         }
 
         val protectedCourseInfoByCategoryId = decryptProtectedCourseInfo(projectFile, trimmedPassword)
+        val exportedCourseObjects = courseExportObjects(protectedCourseInfoByCategoryId.values)
         val entryBytes = when (target.format) {
             DesktopControlsRouteKmlKmzExportFormat.Kml -> buildKml(projectFile, protectedCourseInfoByCategoryId).encodeToByteArray()
             DesktopControlsRouteKmlKmzExportFormat.Kmz -> buildKmz(buildKml(projectFile, protectedCourseInfoByCategoryId))
@@ -84,8 +85,12 @@ object DesktopControlsRouteKmlKmzExporter {
         return DesktopControlsRouteKmlKmzExportSummary(
             categoryCount = projectFile.raceData.categories.size,
             routeCount = protectedCourseInfoByCategoryId.values.count { it.route.isNotEmpty() },
-            controlCatalogCount = projectFile.raceData.controls.size,
-            courseControlPointCount = protectedCourseInfoByCategoryId.values.sumOf { it.controlPoints.size },
+            controlCatalogCount = if (target.format == DesktopControlsRouteKmlKmzExportFormat.Gpx) {
+                projectFile.raceData.controls.size
+            } else {
+                0
+            },
+            courseControlPointCount = exportedCourseObjects.courseObjects.size + exportedCourseObjects.controlPoints.size,
             outputFormat = target.format
         )
     }
@@ -144,60 +149,26 @@ object DesktopControlsRouteKmlKmzExporter {
             appendLine("      </LineStyle>")
             appendLine("    </Style>")
         }
+        val controlsById = projectFile.raceData.controls.associateBy { it.id }
+        val exportedCourseObjects = courseExportObjects(protectedCourseInfoByCategoryId.values)
         appendLine("    <Folder>")
-        appendLine("      <name>Control catalog</name>")
-        projectFile.raceData.controls.forEach { control ->
-            appendControlCatalogPlacemark(control)
-        }
-        appendLine("    </Folder>")
-        appendLine("    <Folder>")
-        appendLine("      <name>Category courses</name>")
+        appendLine("      <name>Courses</name>")
         projectFile.raceData.categories.forEach { categoryData ->
             val category = categoryData.category
             val courseInfo = protectedCourseInfoByCategoryId[category.id]
-            appendLine("      <Folder>")
-            appendLine("        <name>${xml(category.name)}</name>")
-            appendLine("        <description>${xml(courseDescription(courseInfo))}</description>")
             if (courseInfo != null) {
                 appendCourseRoutePlacemark(
                     categoryName = category.name,
                     categoryId = category.id,
                     courseInfo = courseInfo
                 )
-                appendCourseControlPointPlacemarks(courseInfo.controlPoints)
-                appendCourseObjectPlacemarks(courseInfo.courseObjects)
             }
-            appendLine("      </Folder>")
         }
+        appendCourseObjectPlacemarks(exportedCourseObjects.courseObjects, controlsById)
+        appendCourseControlPointPlacemarks(exportedCourseObjects.controlPoints, controlsById)
         appendLine("    </Folder>")
         appendLine("  </Document>")
         appendLine("</kml>")
-    }
-
-    private fun StringBuilder.appendControlCatalogPlacemark(control: EventControl) {
-        appendLine("      <Placemark>")
-        appendLine("        <name>${xml(control.publicLabel?.takeIf { it.isNotBlank() } ?: control.label)}</name>")
-        appendLine("        <description>${xml(controlCatalogDescription(control))}</description>")
-        appendExtendedData(
-            indent = "        ",
-            values = listOf(
-                "id" to control.id,
-                "siCode" to control.siCode.toString(),
-                "type" to control.type.name,
-                "scored" to control.scored.toString(),
-                "publicLabel" to (control.publicLabel ?: ""),
-                "notes" to (control.notes ?: "")
-            )
-        )
-        val latitude = control.latitude
-        val longitude = control.longitude
-        if (latitude != null && longitude != null) {
-            controlPointStyle(control.type)?.let { styleId ->
-                appendLine("        <styleUrl>#$styleId</styleUrl>")
-            }
-            appendLine("        <Point><coordinates>${coordinates(longitude, latitude, null)}</coordinates></Point>")
-        }
-        appendLine("      </Placemark>")
     }
 
     private fun StringBuilder.appendCourseRoutePlacemark(
@@ -223,16 +194,21 @@ object DesktopControlsRouteKmlKmzExporter {
         appendLine("        </Placemark>")
     }
 
-    private fun StringBuilder.appendCourseControlPointPlacemarks(points: List<ProtectedCourseControlPoint>) {
+    private fun StringBuilder.appendCourseControlPointPlacemarks(
+        points: List<ProtectedCourseControlPoint>,
+        controlsById: Map<String, EventControl>
+    ) {
         points.forEach { point ->
+            val label = controlsById[point.controlId]?.displayCourseLabel() ?: point.label
             appendLine("        <Placemark>")
-            appendLine("          <name>${xml(point.label)}</name>")
-            appendLine("          <description>${xml("Course control ${point.label}; type ${point.type}; id ${point.controlId}")}</description>")
+            appendLine("          <name>${xml(label)}</name>")
+            appendLine("          <description>${xml("Course control $label; type ${point.type}; id ${point.controlId}")}</description>")
             appendExtendedData(
                 indent = "          ",
                 values = listOf(
                     "controlId" to point.controlId,
-                    "label" to point.label,
+                    "label" to label,
+                    "sourceLabel" to point.label,
                     "type" to point.type.name,
                     "elevationMeters" to (point.elevationMeters?.let(::formatNumber) ?: "")
                 )
@@ -245,16 +221,21 @@ object DesktopControlsRouteKmlKmzExporter {
         }
     }
 
-    private fun StringBuilder.appendCourseObjectPlacemarks(points: List<ProtectedCourseObjectPoint>) {
+    private fun StringBuilder.appendCourseObjectPlacemarks(
+        points: List<ProtectedCourseObjectPoint>,
+        controlsById: Map<String, EventControl>
+    ) {
         points.forEach { point ->
+            val label = controlsById[point.id]?.displayCourseLabel() ?: point.label
             appendLine("        <Placemark>")
-            appendLine("          <name>${xml(point.label)}</name>")
-            appendLine("          <description>${xml("Course object ${point.label}; type ${point.type}; id ${point.id}")}</description>")
+            appendLine("          <name>${xml(label)}</name>")
+            appendLine("          <description>${xml("Course object $label; type ${point.type}; id ${point.id}")}</description>")
             appendExtendedData(
                 indent = "          ",
                 values = listOf(
                     "id" to point.id,
-                    "label" to point.label,
+                    "label" to label,
+                    "sourceLabel" to point.label,
                     "type" to point.type.name,
                     "elevationMeters" to (point.elevationMeters?.let(::formatNumber) ?: "")
                 )
@@ -398,6 +379,24 @@ object DesktopControlsRouteKmlKmzExporter {
 
     private fun courseRouteStyleId(categoryId: String): String = "courseRoute-${categoryId}"
 
+    private fun EventControl.displayCourseLabel(): String =
+        publicLabel?.takeIf { it.isNotBlank() } ?: label
+
+    private fun courseExportObjects(courseInfos: Collection<ProtectedCourseInfo>): CourseExportObjects {
+        // KML/KMZ exports keep routes and course objects in one folder. Each shared start, finish,
+        // spectator, beacon, fox, or route waypoint is emitted once so importing an exported file
+        // does not create duplicate controls from per-category copies.
+        val courseObjects = courseInfos
+            .flatMap { it.courseObjects }
+            .distinctBy { "${it.id}:${it.type}:${it.latitude}:${it.longitude}" }
+        val courseObjectControlIds = courseObjects.mapTo(mutableSetOf()) { it.id }
+        val controlPoints = courseInfos
+            .flatMap { it.controlPoints }
+            .filterNot { it.controlId in courseObjectControlIds }
+            .distinctBy { "${it.controlId}:${it.type}:${it.latitude}:${it.longitude}" }
+        return CourseExportObjects(courseObjects = courseObjects, controlPoints = controlPoints)
+    }
+
     private fun controlPointStyle(type: ControlPointType): String? = when (type) {
         ControlPointType.CONTROL,
         ControlPointType.BEACON,
@@ -461,3 +460,8 @@ object DesktopControlsRouteKmlKmzExporter {
             .replace("\"", "&quot;")
             .replace("'", "&apos;")
 }
+
+private data class CourseExportObjects(
+    val courseObjects: List<ProtectedCourseObjectPoint>,
+    val controlPoints: List<ProtectedCourseControlPoint>
+)

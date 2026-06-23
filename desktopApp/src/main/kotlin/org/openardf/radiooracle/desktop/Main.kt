@@ -3128,7 +3128,7 @@ fun main(args: Array<String>) = application {
                     val formatName = summary.outputFormat.contentExtension.uppercase()
                     projectStatusText =
                         "Exported ${target.path.fileName} as an encrypted ZIP containing $formatName " +
-                            "with ${summary.controlCatalogCount} controls and ${summary.routeCount} routes."
+                            "with ${summary.courseControlPointCount} course objects and ${summary.routeCount} routes."
                 }.onFailure { error ->
                     projectStatusText = "Controls/route KML/KMZ export failed: ${error.message ?: error::class.simpleName}"
                 }
@@ -3147,7 +3147,7 @@ fun main(args: Array<String>) = application {
                     syncProjectState()
                     projectStatusText =
                         "Exported ${target.path.fileName} as an encrypted ZIP containing GPX " +
-                            "with ${summary.controlCatalogCount} controls and ${summary.routeCount} routes."
+                            "with ${summary.controlCatalogCount} controls, ${summary.courseControlPointCount} course objects, and ${summary.routeCount} routes."
                 }.onFailure { error ->
                     projectStatusText = "Controls/route GPX export failed: ${error.message ?: error::class.simpleName}"
                 }

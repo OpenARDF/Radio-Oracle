@@ -34,15 +34,17 @@ class DesktopControlsRouteKmlKmzExportTest {
 
         assertEquals(1, summary.categoryCount)
         assertEquals(1, summary.routeCount)
-        assertEquals(1, summary.controlCatalogCount)
-        assertEquals(2, summary.courseControlPointCount)
+        assertEquals(0, summary.controlCatalogCount)
+        assertEquals(6, summary.courseControlPointCount)
 
         val zip = ZipFile(output.toFile(), "course-key".toCharArray())
         val header = zip.fileHeaders.single()
         assertEquals("controls-routes.kml", header.fileName)
         val kml = zip.getInputStream(header).use { it.readBytes().decodeToString() }
         assertTrue(kml.contains("<name>Course Test controls and routes</name>"))
-        assertTrue(kml.contains("<name>Control catalog</name>"))
+        assertFalse(kml.contains("<name>Control catalog</name>"))
+        assertFalse(kml.contains("<name>Category courses</name>"))
+        assertTrue(kml.contains("<name>Courses</name>"))
         assertTrue(kml.contains("<name>M21 route</name>"))
         assertTrue(kml.contains("<Style id=\"courseControlDoughnutStyle\">"))
         assertTrue(kml.contains("<Style id=\"courseStartStyle\">"))
@@ -63,12 +65,16 @@ class DesktopControlsRouteKmlKmzExportTest {
         assertTrue(kml.placemarkNamed("Finish").contains("<styleUrl>#courseFinishStyle</styleUrl>"))
         assertTrue(kml.placemarkNamed("Spectator").contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
         assertTrue(kml.placemarkNamed("1").contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
+        assertTrue(kml.placemarkNamed("B").contains("<styleUrl>#courseControlDoughnutStyle</styleUrl>"))
+        assertEquals(
+            listOf("M21 route", "Start", "Spectator", "B", "Finish", "1", "2"),
+            kml.folderPlacemarkNames("Courses")
+        )
         val routeColor = extractRouteColorByCategoryId(kml, "cat-m21")
         assertNotEquals("ffffffff", routeColor)
         assertNotEquals("ff00ffff", routeColor)
         assertTrue(kml.contains("-122.0001,45.0001,90"))
-        assertTrue(kml.contains("<Data name=\"siCode\"><value>31</value></Data>"))
-        assertTrue(kml.contains("SI=31"))
+        assertTrue(kml.contains("<Data name=\"controlId\"><value>control-31</value></Data>"))
     }
 
     @Test
@@ -95,6 +101,40 @@ class DesktopControlsRouteKmlKmzExportTest {
         assertNotEquals("ff00ffff", m21Color)
         assertNotEquals("ffffffff", w65Color)
         assertNotEquals("ff00ffff", w65Color)
+    }
+
+    @Test
+    fun exportedCourseKmlImportsBackWithoutDuplicateCourseObjects() {
+        val output = Files.createTempFile("radio-oracle-controls-routes-round-trip", ".kml.zip")
+        val sourceProject = sampleProjectWithTwoCategories("course-key")
+        DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+            target = DesktopControlsRouteKmlKmzExportTarget(output, DesktopControlsRouteKmlKmzExportFormat.Kml),
+            projectFile = sourceProject,
+            password = "course-key"
+        )
+        val kmlPath = Files.createTempFile("radio-oracle-controls-routes-round-trip", ".kml")
+        Files.writeString(kmlPath, exportedKmlText(output, "course-key"))
+        val targetProject = sampleProjectWithoutProtectedCourses(sourceProject)
+
+        val (importedProject, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = targetProject,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        assertEquals(2, summary.importedCategoryCount)
+        assertEquals(emptyList<String>(), summary.missingControlNames)
+        importedProject.raceData.categories.forEach { categoryData ->
+            val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+                requireNotNull(categoryData.category.encryptedCourseInfo),
+                "course-key"
+            )
+            val courseObjectLabels = protectedCourseInfo.courseObjects.map { it.label }
+            assertEquals(listOf("Start", "1", "Spectator", "B", "2", "Finish"), courseObjectLabels)
+            assertEquals(courseObjectLabels.distinct(), courseObjectLabels)
+            assertEquals("1 Spectator B 2", protectedCourseInfo.idealOrder)
+        }
     }
 
     @Test
@@ -177,6 +217,36 @@ class DesktopControlsRouteKmlKmzExportTest {
                             publicLabel = "1",
                             latitude = 45.0001,
                             longitude = -122.0001
+                        ),
+                        EventControl(
+                            id = "control-32",
+                            raceId = "race",
+                            label = "Fox 2",
+                            siCode = 32,
+                            type = ControlPointType.CONTROL,
+                            publicLabel = "2",
+                            latitude = 45.0008,
+                            longitude = -122.0008
+                        ),
+                        EventControl(
+                            id = "control-spectator",
+                            raceId = "race",
+                            label = "Spectator",
+                            siCode = 46,
+                            type = ControlPointType.SEPARATOR,
+                            publicLabel = "Spectator",
+                            latitude = 45.0004,
+                            longitude = -122.0004
+                        ),
+                        EventControl(
+                            id = "control-beacon",
+                            raceId = "race",
+                            label = "Beacon",
+                            siCode = 99,
+                            type = ControlPointType.BEACON,
+                            publicLabel = "B",
+                            latitude = 45.0006,
+                            longitude = -122.0006
                         )
                     )
                 )
@@ -201,6 +271,27 @@ class DesktopControlsRouteKmlKmzExportTest {
         )
     }
 
+    private fun sampleProjectWithoutProtectedCourses(project: EventProjectFile): EventProjectFile =
+        project.copy(
+            raceData = project.raceData.copy(
+                categories = project.raceData.categories.map { categoryData ->
+                    categoryData.copy(
+                        category = categoryData.category.copy(
+                            encryptedIdealOrder = null,
+                            encryptedCourseInfo = null
+                        )
+                    )
+                }
+            )
+        )
+
+    private fun exportedKmlText(output: java.nio.file.Path, password: String): String {
+        val zip = ZipFile(output.toFile(), password.toCharArray())
+        val header = zip.fileHeaders.single()
+        assertEquals("controls-routes.kml", header.fileName)
+        return zip.getInputStream(header).use { it.readBytes().decodeToString() }
+    }
+
     private fun extractRouteColorByCategoryId(kml: String, categoryId: String): String {
         val routeStyleId = "courseRoute-$categoryId"
         val colorRegex = Regex("<Style id=\"$routeStyleId\">[\\s\\S]*?<color>([0-9a-fA-F]{8})</color>")
@@ -216,16 +307,32 @@ class DesktopControlsRouteKmlKmzExportTest {
             ?: error("Missing Placemark named $name")
     }
 
+    private fun String.folderPlacemarkNames(folderName: String): List<String> {
+        val escapedName = Regex.escape(folderName)
+        val folder = Regex("<Folder>\\s*<name>$escapedName</name>[\\s\\S]*?</Folder>")
+            .find(this)
+            ?.value
+            ?: error("Missing folder $folderName")
+        return Regex("<Placemark>[\\s\\S]*?<name>([\\s\\S]*?)</name>[\\s\\S]*?</Placemark>")
+            .findAll(folder)
+            .map { it.groupValues[1] }
+            .toList()
+    }
+
     private fun sampleCourseInfo() = ProtectedCourseInfo(
         idealOrder = "1 2",
         lengthMeters = 1200,
         climbMeters = 25,
         sourceName = "sample.kml",
         sourceSha256 = "abc123",
-        sampledPointCount = 2,
+        sampledPointCount = 6,
         route = listOf(
+            ProtectedCourseRoutePoint(latitude = 45.0, longitude = -122.0, elevationMeters = 88.0),
             ProtectedCourseRoutePoint(latitude = 45.0001, longitude = -122.0001, elevationMeters = 90.0),
-            ProtectedCourseRoutePoint(latitude = 45.0008, longitude = -122.0008, elevationMeters = 110.0)
+            ProtectedCourseRoutePoint(latitude = 45.0004, longitude = -122.0004, elevationMeters = 100.0),
+            ProtectedCourseRoutePoint(latitude = 45.0006, longitude = -122.0006, elevationMeters = 105.0),
+            ProtectedCourseRoutePoint(latitude = 45.0008, longitude = -122.0008, elevationMeters = 110.0),
+            ProtectedCourseRoutePoint(latitude = 45.0009, longitude = -122.0009, elevationMeters = 112.0)
         ),
         controlPoints = listOf(
             ProtectedCourseControlPoint(
@@ -243,6 +350,14 @@ class DesktopControlsRouteKmlKmzExportTest {
                 longitude = -122.0008,
                 type = ControlPointType.CONTROL,
                 elevationMeters = 110.0
+            ),
+            ProtectedCourseControlPoint(
+                controlId = "control-beacon",
+                label = "Beacon",
+                latitude = 45.0006,
+                longitude = -122.0006,
+                type = ControlPointType.BEACON,
+                elevationMeters = 105.0
             )
         ),
         courseObjects = listOf(
@@ -261,6 +376,14 @@ class DesktopControlsRouteKmlKmzExportTest {
                 latitude = 45.0004,
                 longitude = -122.0004,
                 elevationMeters = 100.0
+            ),
+            ProtectedCourseObjectPoint(
+                id = "control-beacon",
+                label = "Beacon",
+                type = ProtectedCourseObjectType.BEACON,
+                latitude = 45.0006,
+                longitude = -122.0006,
+                elevationMeters = 105.0
             ),
             ProtectedCourseObjectPoint(
                 id = "finish",
