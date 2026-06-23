@@ -12890,8 +12890,11 @@ private fun KmlClassicCourseGeneratorPanel() {
     var selectedPath by remember { mutableStateOf<Path?>(null) }
     var result by remember { mutableStateOf<ClassicCourseGeneratorResult?>(null) }
     var statusText by remember { mutableStateOf<String?>(null) }
+    var isGenerating by remember { mutableStateOf(false) }
+    val generationScope = rememberCoroutineScope()
 
     fun chooseFile() {
+        if (isGenerating) return
         DesktopFileDialogs.chooseKmlToolsFile()?.let { path ->
             selectedPath = path
             result = null
@@ -12901,21 +12904,31 @@ private fun KmlClassicCourseGeneratorPanel() {
 
     fun generate() {
         val path = selectedPath ?: return
-        runCatching {
-            DesktopClassicCourseGenerator.generate(path)
-        }.onSuccess { generated ->
-            result = generated
-            val elevationStatus = when {
-                generated.missingElevationPointCount == 0 && generated.elevationResolvedPointCount > 0 ->
-                    " Filled ${generated.elevationResolvedPointCount} missing elevations from the local cache."
-                generated.missingElevationPointCount > 0 ->
-                    " ${generated.missingElevationPointCount} point elevations are still missing; category matches require complete elevations."
-                else -> ""
+        if (isGenerating) return
+        isGenerating = true
+        result = null
+        statusText = null
+        generationScope.launch {
+            try {
+                delay(100)
+                val generated = withContext(Dispatchers.Default) {
+                    DesktopClassicCourseGenerator.generate(path)
+                }
+                result = generated
+                val elevationStatus = when {
+                    generated.missingElevationPointCount == 0 && generated.elevationResolvedPointCount > 0 ->
+                        " Filled ${generated.elevationResolvedPointCount} missing elevations from the local cache."
+                    generated.missingElevationPointCount > 0 ->
+                        " ${generated.missingElevationPointCount} point elevations are still missing; category matches require complete elevations."
+                    else -> ""
+                }
+                statusText = "Generated ${generated.rows.size} ideal course combinations from ${generated.foxes.size} foxes.$elevationStatus"
+            } catch (error: Throwable) {
+                result = null
+                statusText = "Classic Course Generator failed: ${error.message ?: error::class.simpleName}"
+            } finally {
+                isGenerating = false
             }
-            statusText = "Generated ${generated.rows.size} ideal course combinations from ${generated.foxes.size} foxes.$elevationStatus"
-        }.onFailure { error ->
-            result = null
-            statusText = "Classic Course Generator failed: ${error.message ?: error::class.simpleName}"
         }
     }
 
@@ -12953,18 +12966,21 @@ private fun KmlClassicCourseGeneratorPanel() {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(onClick = ::chooseFile) {
+            Button(
+                onClick = ::chooseFile,
+                enabled = !isGenerating
+            ) {
                 ButtonLabel("Choose KML/KMZ...")
             }
             Button(
                 onClick = ::generate,
-                enabled = selectedPath != null
+                enabled = selectedPath != null && !isGenerating
             ) {
                 ButtonLabel("Generate")
             }
             Button(
                 onClick = ::exportResults,
-                enabled = result != null
+                enabled = result != null && !isGenerating
             ) {
                 ButtonLabel("Export PDF/KML...")
             }
@@ -12988,6 +13004,12 @@ private fun KmlClassicCourseGeneratorPanel() {
         result?.let { generated ->
             ClassicCourseGeneratorResultView(generated)
         }
+    }
+    if (isGenerating) {
+        IndeterminateProgressDialog(
+            title = "Generating Classic courses",
+            message = "Calculating ideal course combinations, sampled elevations, effective lengths, category matches, and course requirement warnings."
+        )
     }
 }
 
