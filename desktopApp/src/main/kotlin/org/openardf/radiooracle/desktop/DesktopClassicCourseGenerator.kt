@@ -48,6 +48,25 @@ data class ClassicCourseGeneratorExportPaths(
 
 object DesktopClassicCourseGenerator {
     private const val CLASSIC_CLIMB_LIMIT_PERCENT = 6.0
+    private const val COURSE_CANDIDATE_LINE_WIDTH = 3
+    private val courseCandidateRouteColors = listOf(
+        "ffb85700", // blue
+        "ff1f7cff", // orange
+        "ffa64ea6", // purple
+        "ff3030d9", // red
+        "ffd98200", // steel blue
+        "ff008cff", // amber
+        "ffd9538c", // violet
+        "ff3366cc", // brick
+        "ffcc99cc", // mauve
+        "ff00bfff", // gold
+        "ffff6666", // medium blue
+        "ff663399", // maroon
+        "ffff00cc", // magenta
+        "ffcc6600", // deep blue
+        "ff9966ff", // coral
+        "ffff9999" // light blue
+    )
     private val classicRequirements = linkedMapOf(
         "W12" to ClassicCourseRequirement(3, 3, 2_000, 3_000),
         "W14" to ClassicCourseRequirement(4, 4, 2_500, 3_000),
@@ -320,11 +339,27 @@ object DesktopClassicCourseGenerator {
             appendLine("""<kml xmlns="http://www.opengis.net/kml/2.2">""")
             appendLine("  <Document>")
             appendLine("    <name>${xmlText(result.sourcePath.fileName.toString())} Classic Course Generator</name>")
+            appendCoursePointStyle(
+                styleId = DesktopCourseKmlStyle.DonutStyleId,
+                iconUrl = DesktopCourseKmlStyle.DonutIconUrl
+            )
+            appendCoursePointStyle(
+                styleId = DesktopCourseKmlStyle.StartStyleId,
+                iconUrl = DesktopCourseKmlStyle.StartIconUrl
+            )
+            appendCoursePointStyle(
+                styleId = DesktopCourseKmlStyle.FinishStyleId,
+                iconUrl = DesktopCourseKmlStyle.FinishIconUrl
+            )
+            greenRows.indices.forEach { index ->
+                appendCandidateRouteStyle(index)
+            }
             appendLine("    <Folder>")
             appendLine("      <name>Course Objects</name>")
             courseObjects.forEach { courseObject ->
                 appendLine("      <Placemark>")
                 appendLine("        <name>${xmlText(courseObject.label)}</name>")
+                appendLine("        <styleUrl>#${courseObjectStyleId(courseObject, result)}</styleUrl>")
                 appendLine("        <Point>")
                 appendLine("          <coordinates>${courseObject.point.kmlCoordinate()}</coordinates>")
                 appendLine("        </Point>")
@@ -337,6 +372,7 @@ object DesktopClassicCourseGenerator {
                 appendLine("      <Placemark>")
                 appendLine("        <name>${xmlText(kmlRouteName(index + 1, row))}</name>")
                 appendLine("        <description>${xmlText(row.matchingCategories.joinToString(", "))}</description>")
+                appendLine("        <styleUrl>#${candidateRouteStyleId(index)}</styleUrl>")
                 appendLine("        <LineString>")
                 appendLine("          <tessellate>1</tessellate>")
                 appendLine("          <coordinates>")
@@ -352,6 +388,40 @@ object DesktopClassicCourseGenerator {
             appendLine("</kml>")
         }
     }
+
+    private fun StringBuilder.appendCoursePointStyle(styleId: String, iconUrl: String) {
+        appendLine("    <Style id=\"$styleId\">")
+        appendLine("      <IconStyle>")
+        appendLine("        <scale>${DesktopCourseKmlStyle.MarkerScale}</scale>")
+        appendLine("        <color>${DesktopCourseKmlStyle.MarkerColor}</color>")
+        appendLine("        <colorMode>normal</colorMode>")
+        appendLine("        <Icon><href>$iconUrl</href></Icon>")
+        appendLine("      </IconStyle>")
+        appendLine("      <LabelStyle><color>${DesktopCourseKmlStyle.MarkerColor}</color><colorMode>normal</colorMode></LabelStyle>")
+        appendLine("    </Style>")
+    }
+
+    private fun StringBuilder.appendCandidateRouteStyle(index: Int) {
+        appendLine("    <Style id=\"${candidateRouteStyleId(index)}\">")
+        appendLine("      <LineStyle>")
+        appendLine("        <color>${courseCandidateRouteColors[index % courseCandidateRouteColors.size]}</color>")
+        appendLine("        <width>$COURSE_CANDIDATE_LINE_WIDTH</width>")
+        appendLine("      </LineStyle>")
+        appendLine("    </Style>")
+    }
+
+    private fun candidateRouteStyleId(index: Int): String =
+        "classicCourseCandidateRoute-${index + 1}"
+
+    private fun courseObjectStyleId(
+        courseObject: ClassicCoursePoint,
+        result: ClassicCourseGeneratorResult
+    ): String =
+        when (courseObject.kmlObjectKey()) {
+            result.start.kmlObjectKey() -> DesktopCourseKmlStyle.StartStyleId
+            result.finish.kmlObjectKey() -> DesktopCourseKmlStyle.FinishStyleId
+            else -> DesktopCourseKmlStyle.DonutStyleId
+        }
 
     private fun kmlRouteName(index: Int, row: ClassicCourseGeneratorRow): String =
         "${index.toString().padStart(3, '0')} ${row.foxCount}-fox ${kilometers(row.effectiveLengthMeters)} ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})"

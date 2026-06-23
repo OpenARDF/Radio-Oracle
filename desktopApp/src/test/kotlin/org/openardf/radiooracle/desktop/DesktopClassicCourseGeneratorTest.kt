@@ -77,6 +77,23 @@ class DesktopClassicCourseGeneratorTest {
         assertTrue(kmlText.contains("<name>Course Objects</name>"))
         assertTrue(kmlText.contains("<name>Category-matching course candidates</name>"))
         assertEquals(result.rows.count { it.hasCategoryMatch }, kmlText.countOccurrences("<LineString>"))
+        assertTrue(kmlText.contains("<Style id=\"${DesktopCourseKmlStyle.StartStyleId}\">"))
+        assertTrue(kmlText.contains("<Style id=\"${DesktopCourseKmlStyle.FinishStyleId}\">"))
+        assertTrue(kmlText.contains("<Style id=\"${DesktopCourseKmlStyle.DonutStyleId}\">"))
+        assertTrue(kmlText.contains(DesktopCourseKmlStyle.StartIconUrl))
+        assertTrue(kmlText.contains(DesktopCourseKmlStyle.FinishIconUrl))
+        assertTrue(kmlText.contains(DesktopCourseKmlStyle.DonutIconUrl))
+        assertTrue(kmlText.contains("<color>${DesktopCourseKmlStyle.MarkerColor}</color>"))
+        assertEquals(1, kmlText.countOccurrences("<styleUrl>#${DesktopCourseKmlStyle.StartStyleId}</styleUrl>"))
+        assertEquals(1, kmlText.countOccurrences("<styleUrl>#${DesktopCourseKmlStyle.FinishStyleId}</styleUrl>"))
+        assertEquals(6, kmlText.countOccurrences("<styleUrl>#${DesktopCourseKmlStyle.DonutStyleId}</styleUrl>"))
+        val routeStyles = kmlText.routeLineStyleBlocks()
+        assertEquals(result.rows.count { it.hasCategoryMatch }, routeStyles.size)
+        assertTrue(routeStyles.all { it.contains("<width>3</width>") })
+        val routeColors = routeStyles.mapNotNull { Regex("""<color>([^<]+)</color>""").find(it)?.groupValues?.get(1) }
+        assertEquals(routeStyles.size, routeColors.size)
+        assertEquals(routeColors.size, routeColors.toSet().size)
+        assertFalse(routeColors.any { it in setOf("ffffffff", "ff000000", "ff00ff00") })
         assertEquals(1, kmlText.countOccurrences("<name>Start</name>"))
         assertEquals(1, kmlText.countOccurrences("<name>Finish</name>"))
         assertEquals(1, kmlText.countOccurrences("<name>Beacon</name>"))
@@ -134,4 +151,10 @@ class DesktopClassicCourseGeneratorTest {
 
     private fun String.countOccurrences(needle: String): Int =
         split(needle).size - 1
+
+    private fun String.routeLineStyleBlocks(): List<String> =
+        Regex("""<Style id="classicCourseCandidateRoute-\d+">.*?</Style>""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(this)
+            .map { it.value }
+            .toList()
 }
