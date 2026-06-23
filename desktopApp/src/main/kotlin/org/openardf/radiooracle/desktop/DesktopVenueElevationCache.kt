@@ -2029,19 +2029,69 @@ private fun Double.gdalCoordinateText(): String =
 
 private val desktopGdalJson = Json { ignoreUnknownKeys = true }
 
+internal const val DESKTOP_ELEVATION_TOOL_INSTALL_COMMAND = "conda install -c conda-forge pdal gdal"
+internal const val DESKTOP_ELEVATION_TOOL_CONDA_ENV_NAME = "radio-oracle-elevation"
+internal const val DESKTOP_ELEVATION_TOOL_MAC_HOMEBREW_INSTALL_COMMAND = "brew install gdal pdal"
+internal const val DESKTOP_ELEVATION_TOOL_WINDOWS_MINIFORGE_URL =
+    "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Windows-x86_64.exe"
+
+internal val DESKTOP_ELEVATION_TOOL_INSTALL_HELP = listOf(
+    "Local GeoTIFF/ZIP elevation imports require GDAL command-line tools.",
+    "LAS/LAZ point-cloud imports also require PDAL with readers.las and writers.gdal support.",
+    "Recommended on Windows, macOS, and Linux with Conda or Miniforge: $DESKTOP_ELEVATION_TOOL_INSTALL_COMMAND",
+    "Windows: if PowerShell says 'conda' is not recognized, install Miniforge first: $DESKTOP_ELEVATION_TOOL_WINDOWS_MINIFORGE_URL",
+    "After installing Miniforge, run the Conda install command from Miniforge Prompt, or run 'conda init powershell' in Miniforge Prompt and then close and reopen PowerShell.",
+    "If using the Radio Oracle helper script, it creates a Conda environment named $DESKTOP_ELEVATION_TOOL_CONDA_ENV_NAME.",
+    "macOS Homebrew alternative: $DESKTOP_ELEVATION_TOOL_MAC_HOMEBREW_INSTALL_COMMAND",
+    "If using Conda, launch Radio Oracle from the activated environment or put that environment's tool directory on PATH; already-open shells may need to be reopened before commands like gdalinfo work.",
+    "On Windows that directory is typically Library\\bin inside the Conda environment, such as miniforge3\\envs\\$DESKTOP_ELEVATION_TOOL_CONDA_ENV_NAME\\Library\\bin.",
+    "After installing, restart Radio Oracle and verify: gdalinfo --version, gdalbuildvrt --version, gdallocationinfo --version, and pdal --version."
+).joinToString(" ")
+
 private fun findDesktopExecutable(name: String): Path? {
+    val candidateNames = desktopExecutableCandidateNames(name)
     val candidates = buildList {
         System.getenv("PATH")
             ?.split(java.io.File.pathSeparator)
             ?.filter { it.isNotBlank() }
-            ?.map { Path.of(it).resolve(name) }
+            ?.flatMap { directory -> candidateNames.map { candidateName -> Path.of(directory).resolve(candidateName) } }
             ?.let(::addAll)
+        addAll(desktopCondaExecutableCandidates(candidateNames))
         add(Path.of("/opt/local/bin").resolve(name))
         add(Path.of("/opt/homebrew/bin").resolve(name))
         add(Path.of("/usr/local/bin").resolve(name))
         add(Path.of("/usr/bin").resolve(name))
     }
     return candidates.firstOrNull { Files.isExecutable(it) }
+}
+
+internal fun desktopExecutableCandidateNames(name: String, osName: String = System.getProperty("os.name").orEmpty()): List<String> {
+    val normalizedOsName = osName.lowercase(Locale.US)
+    if (!normalizedOsName.contains("win") || name.endsWith(".exe", ignoreCase = true)) {
+        return listOf(name)
+    }
+    return listOf(name, "$name.exe", "$name.cmd", "$name.bat")
+}
+
+private fun desktopCondaExecutableCandidates(candidateNames: List<String>): List<Path> {
+    val home = System.getProperty("user.home").orEmpty()
+    val localAppData = System.getenv("LOCALAPPDATA").orEmpty()
+    val prefixes = listOf(
+        home,
+        localAppData
+    ).filter { it.isNotBlank() }.flatMap { base ->
+        listOf("miniforge3", "miniconda3", "anaconda3").map { Path.of(base).resolve(it) }
+    }
+    return prefixes.flatMap { prefix ->
+        listOf(
+            prefix.resolve("bin"),
+            prefix.resolve("Library").resolve("bin"),
+            prefix.resolve("envs").resolve(DESKTOP_ELEVATION_TOOL_CONDA_ENV_NAME).resolve("bin"),
+            prefix.resolve("envs").resolve(DESKTOP_ELEVATION_TOOL_CONDA_ENV_NAME).resolve("Library").resolve("bin")
+        ).flatMap { directory ->
+            candidateNames.map { candidateName -> directory.resolve(candidateName) }
+        }
+    }
 }
 
 private suspend fun Process.waitForCancellable(): Int =
@@ -2204,7 +2254,8 @@ private class DesktopGdalTools(
             val info = findDesktopExecutable("gdalinfo")
             val locationInfo = findDesktopExecutable("gdallocationinfo")
             require(buildVrt != null && info != null && locationInfo != null) {
-                "LiDAR raster import requires GDAL command-line tools (gdalbuildvrt, gdalinfo, and gdallocationinfo)."
+                "LiDAR raster import requires GDAL command-line tools (gdalbuildvrt, gdalinfo, and gdallocationinfo). " +
+                    DESKTOP_ELEVATION_TOOL_INSTALL_HELP
             }
             return DesktopGdalTools(gdalBuildVrt = buildVrt, gdalInfo = info, gdalLocationInfo = locationInfo)
         }
@@ -2320,7 +2371,8 @@ private class DesktopPdalTools(
         fun requireAvailable(): DesktopPdalTools {
             val pdal = findDesktopExecutable("pdal")
             require(pdal != null) {
-                "LAS/LAZ elevation imports require PDAL command-line tools with readers.las and writers.gdal support."
+                "LAS/LAZ elevation imports require PDAL command-line tools with readers.las and writers.gdal support. " +
+                    DESKTOP_ELEVATION_TOOL_INSTALL_HELP
             }
             return DesktopPdalTools(pdal)
         }

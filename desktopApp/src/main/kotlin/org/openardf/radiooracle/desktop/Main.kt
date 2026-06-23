@@ -13172,6 +13172,30 @@ private fun VenueElevationCacheImportPanel(
                 ) {
                     ButtonLabel("Create Cache from Local Source")
                 }
+                Button(
+                    onClick = {
+                        Toolkit.getDefaultToolkit().systemClipboard.setContents(
+                            StringSelection(DESKTOP_ELEVATION_TOOL_INSTALL_COMMAND),
+                            null
+                        )
+                    }
+                ) {
+                    ButtonLabel("Copy Tool Install Command")
+                }
+                Button(
+                    onClick = {
+                        runCatching {
+                            Desktop.getDesktop().browse(URI(DESKTOP_ELEVATION_TOOL_WINDOWS_MINIFORGE_URL))
+                        }.onFailure {
+                            Toolkit.getDefaultToolkit().systemClipboard.setContents(
+                                StringSelection(DESKTOP_ELEVATION_TOOL_WINDOWS_MINIFORGE_URL),
+                                null
+                            )
+                        }
+                    }
+                ) {
+                    ButtonLabel("Open Windows Miniforge Installer")
+                }
             }
             LabeledTextField(
                 "Local source file(s)",
@@ -13183,6 +13207,11 @@ private fun VenueElevationCacheImportPanel(
                 text = "Use a local GeoTIFF raster (.tif/.tiff), GeoTIFF ZIP (.zip), or one or more LAS/LAZ point clouds (.las/.laz), such as countywide LiDAR DEM files, to create a cache without downloading elevation data.",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
+            )
+            Text(
+                text = DESKTOP_ELEVATION_TOOL_INSTALL_HELP,
+                color = DesktopPalette.Disconnected,
+                fontSize = 12.sp
             )
         }
     }

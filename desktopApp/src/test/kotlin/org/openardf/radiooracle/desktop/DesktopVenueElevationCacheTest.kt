@@ -103,6 +103,41 @@ class DesktopVenueElevationCacheTest {
     }
 
     @Test
+    fun lidarToolInstallHelpIncludesCrossPlatformInstallAndVerifySteps() {
+        assertEquals("conda install -c conda-forge pdal gdal", DESKTOP_ELEVATION_TOOL_INSTALL_COMMAND)
+        assertEquals("radio-oracle-elevation", DESKTOP_ELEVATION_TOOL_CONDA_ENV_NAME)
+        assertEquals("brew install gdal pdal", DESKTOP_ELEVATION_TOOL_MAC_HOMEBREW_INSTALL_COMMAND)
+        assertEquals(
+            "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Windows-x86_64.exe",
+            DESKTOP_ELEVATION_TOOL_WINDOWS_MINIFORGE_URL
+        )
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("Windows"))
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("Conda"))
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("conda' is not recognized"))
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("Miniforge Prompt"))
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("conda init powershell"))
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("radio-oracle-elevation"))
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("already-open shells may need to be reopened"))
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("GDAL"))
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("PDAL"))
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("Library\\bin"))
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("miniforge3\\envs\\radio-oracle-elevation\\Library\\bin"))
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("gdalinfo --version"))
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("gdallocationinfo --version"))
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("pdal --version"))
+        assertTrue(DESKTOP_ELEVATION_TOOL_INSTALL_HELP.contains("restart Radio Oracle"))
+    }
+
+    @Test
+    fun includesWindowsExecutableExtensionsWhenFindingTools() {
+        assertEquals(
+            listOf("gdalinfo", "gdalinfo.exe", "gdalinfo.cmd", "gdalinfo.bat"),
+            desktopExecutableCandidateNames("gdalinfo", "Windows 11")
+        )
+        assertEquals(listOf("gdalinfo"), desktopExecutableCandidateNames("gdalinfo", "Mac OS X"))
+    }
+
+    @Test
     fun buildsPdalMergePipelineForLasPointCloudRasterization() {
         val pipeline = desktopPdalLasPointCloudRasterPipeline(
             sourcePaths = listOf(Path.of("/data/source-a.laz"), Path.of("/data/source-b.laz")),
