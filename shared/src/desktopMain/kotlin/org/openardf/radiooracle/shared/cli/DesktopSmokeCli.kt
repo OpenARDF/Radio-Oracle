@@ -152,7 +152,7 @@ private fun sampleRaceData(): EventRaceData =
                         siNumber = 123456,
                         siRent = false,
                         startNumber = 1,
-                        drawnStartTimeSeconds = null
+                        drawnStartTimeSeconds = 0
                     ),
                     category = null
                 ),
