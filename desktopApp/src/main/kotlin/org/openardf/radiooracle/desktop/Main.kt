@@ -1258,6 +1258,7 @@ fun main(args: Array<String>) = application {
                 protectedCoursePassword != null
             )
             val stopRequested = AtomicBoolean(false)
+            val timeoutNoticeLogged = AtomicBoolean(false)
             continuousSiReadoutStopRequested = stopRequested
             isContinuousSiReadoutActive = true
             siDownloadStatusText = "Continuous SI readout is running; insert SI cards and keep each seated until it reads."
@@ -1328,13 +1329,19 @@ fun main(args: Array<String>) = application {
                                 onTimeout = {
                                     appCoroutineScope.launch {
                                         if (!stopRequested.get()) {
-                                            siDownloadStatusText = "Continuous SI readout timed out waiting for a card."
+                                            siDownloadStatusText = "Continuous SI readout is running; waiting for an SI card."
                                             projectStatusText = siDownloadStatusText ?: projectStatusText
-                                            DesktopDebugLog.warn("SI", "Continuous SI readout timed out waiting for a card")
+                                            if (timeoutNoticeLogged.compareAndSet(false, true)) {
+                                                DesktopDebugLog.warn(
+                                                    "SI",
+                                                    "Continuous SI readout timed out waiting for a card; continuing"
+                                                )
+                                            }
                                         }
                                     }
                                 },
-                                shouldContinue = { !stopRequested.get() }
+                                shouldContinue = { !stopRequested.get() },
+                                continueAfterTimeout = true
                             )
                         }
                     }
@@ -8015,6 +8022,34 @@ private fun RadioOManagerDesktopApp(
             activeBypassedDisabledNavigation != null -> DesktopPalette.WarningBackground
             navState.submenuStack.isNotEmpty() -> DesktopPalette.NavigationBackground
             else -> DesktopPalette.White
+        }
+        var lastAutoStartedPracticeSiReadoutKey by remember { mutableStateOf<String?>(null) }
+        val practiceSiReadoutContextKey = practiceRaceOpsSiReadoutContextKey(
+            raceId = projectFile?.raceData?.race?.id,
+            raceLevel = projectFile?.raceData?.race?.raceLevel,
+            workflow = navState.workflow,
+            isSiReaderConnected = siReaderState.severity == DesktopSiReaderSeverity.CONNECTED,
+            siReaderStatusText = siReaderState.statusText
+        )
+
+        LaunchedEffect(
+            practiceSiReadoutContextKey,
+            isDownloadingSiReadout,
+            isContinuousSiReadoutActive,
+            isReadingCompetitorSiCard
+        ) {
+            if (practiceSiReadoutContextKey == null) {
+                lastAutoStartedPracticeSiReadoutKey = null
+            } else if (
+                !isDownloadingSiReadout &&
+                !isContinuousSiReadoutActive &&
+                !isReadingCompetitorSiCard &&
+                lastAutoStartedPracticeSiReadoutKey != practiceSiReadoutContextKey
+            ) {
+                lastAutoStartedPracticeSiReadoutKey = practiceSiReadoutContextKey
+                DesktopDebugLog.info("SI", "Practice Race Ops auto-starting continuous SI readout")
+                onStartContinuousSportIdentReadout()
+            }
         }
 
         fun selectionFor(intent: DesktopPendingNavigation): Pair<DesktopNavState, DesktopNavAction?> =
@@ -17007,6 +17042,28 @@ private fun detectDesktopSiReaderState(): DesktopSiReaderUiState {
             statusText = "SI station error: ${error.message ?: error::class.simpleName}"
         )
     }
+}
+
+internal fun practiceRaceOpsSiReadoutContextKey(
+    raceId: String?,
+    raceLevel: RaceLevel?,
+    workflow: DesktopWorkflow,
+    isSiReaderConnected: Boolean,
+    siReaderStatusText: String
+): String? {
+    if (raceId.isNullOrBlank()) {
+        return null
+    }
+    if (raceLevel != RaceLevel.PRACTICE) {
+        return null
+    }
+    if (workflow != DesktopWorkflow.RaceOps) {
+        return null
+    }
+    if (!isSiReaderConnected) {
+        return null
+    }
+    return "$raceId:$siReaderStatusText"
 }
 
 private fun downloadDesktopSportIdentCardReadout(): DesktopSportIdentCardBlockDownload {

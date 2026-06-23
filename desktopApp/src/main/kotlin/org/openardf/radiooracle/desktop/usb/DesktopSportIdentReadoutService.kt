@@ -29,7 +29,8 @@ class DesktopSportIdentReadoutService(
         onDownload: (DesktopSportIdentCardBlockDownload) -> Unit,
         onTimeout: () -> Unit = {},
         shouldContinue: () -> Boolean = { true },
-        isTimeoutError: (Throwable) -> Boolean = ::isNoCardInsertTimeout
+        isTimeoutError: (Throwable) -> Boolean = ::isNoCardInsertTimeout,
+        continueAfterTimeout: Boolean = false
     ): Int {
         val port = firstSportIdentPort()
         var cardsRead = 0
@@ -41,7 +42,10 @@ class DesktopSportIdentReadoutService(
                     val error = result.exceptionOrNull()
                     if (error != null && isTimeoutError(error)) {
                         onTimeout()
-                        break
+                        if (!continueAfterTimeout) {
+                            break
+                        }
+                        continue
                     }
                     throw error ?: IllegalStateException("SPORTident card download failed.")
                 }
