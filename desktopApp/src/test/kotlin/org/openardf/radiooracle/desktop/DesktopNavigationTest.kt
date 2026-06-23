@@ -160,7 +160,7 @@ class DesktopNavigationTest {
     @Test
     fun placesCurrentDesktopSectionsUnderWorkflowGroups() {
         assertEquals(
-            listOf("Event File", "Controls", "Categories", "Competitors", "Start List"),
+            listOf("Event File", "Controls", "Categories", "Competitors", "Start List", "Tools"),
             DesktopNavigation.rootItems(DesktopWorkflow.Setup).map { it.label }
         )
         assertEquals(
@@ -632,6 +632,7 @@ class DesktopNavigationTest {
         assertTrue(setupItems.first { it.label == "Categories" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Competitors" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Start List" }.requiresEventFile)
+        assertFalse(setupItems.first { it.label == "Tools" }.requiresEventFile)
     }
 
     @Test
@@ -641,12 +642,14 @@ class DesktopNavigationTest {
         val categories = setupItems.first { it.label == "Categories" }
         val competitors = setupItems.first { it.label == "Competitors" }
         val startList = setupItems.first { it.label == "Start List" }
+        val tools = setupItems.first { it.label == "Tools" }
 
         val noEvent = DesktopNavigationReadiness()
         assertFalse(DesktopNavigation.isItemEnabled(controls, noEvent))
         assertFalse(DesktopNavigation.isItemEnabled(categories, noEvent))
         assertFalse(DesktopNavigation.isItemEnabled(competitors, noEvent))
         assertFalse(DesktopNavigation.isItemEnabled(startList, noEvent))
+        assertTrue(DesktopNavigation.isItemEnabled(tools, noEvent))
 
         val eventOnly = DesktopNavigationReadiness(hasEventFile = true)
         assertTrue(DesktopNavigation.isItemEnabled(controls, eventOnly))
@@ -830,8 +833,6 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "Elevation Data",
-                "Course Analyzer",
-                "Course Tools",
                 "Import/Export",
                 "Delete All Controls..."
             ),
@@ -848,32 +849,6 @@ class DesktopNavigationTest {
             categoryItems.map { it.label }
         )
         assertEquals(DesktopNavAction.DeleteAllControls, controlItems.last { it.label == "Delete All Controls..." }.action)
-        assertEquals(DesktopSection.CourseAnalysis, controlItems.first { it.label == "Course Analyzer" }.section)
-        assertEquals(
-            listOf("Import Course KML/KMZ...", "Import Course GPX..."),
-            controlItems.first { it.label == "Course Analyzer" }.children.map { it.label }
-        )
-        assertEquals(
-            DesktopNavAction.ImportCourseKmlKmz,
-            controlItems.first { it.label == "Course Analyzer" }.children.first().action
-        )
-        assertEquals(
-            DesktopNavAction.ImportCourseGpx,
-            controlItems.first { it.label == "Course Analyzer" }.children.last().action
-        )
-        assertEquals(DesktopSection.KmlTools, controlItems.first { it.label == "Course Tools" }.section)
-        assertEquals(
-            listOf("Move Course", "Classic Course Generator"),
-            controlItems.first { it.label == "Course Tools" }.children.map { it.label }
-        )
-        assertEquals(
-            DesktopSection.KmlMoveCourse,
-            controlItems.first { it.label == "Course Tools" }.children.first().section
-        )
-        assertEquals(
-            DesktopSection.KmlClassicCourseGenerator,
-            controlItems.first { it.label == "Course Tools" }.children.last().section
-        )
         assertEquals(
             DesktopNavAction.ImportControlsKmlKmz,
             controlItems.first { it.label == "Import/Export" }.children.first { it.label == "Import Controls KML/KMZ..." }.action
@@ -934,6 +909,54 @@ class DesktopNavigationTest {
         assertEquals(DesktopNavAction.DeleteAllCompetitors, competitorItems.first { it.label == "Delete All Competitors..." }.action)
         assertFalse(setupItems.any { it.label == "Imports" })
         assertFalse(setupItems.any { it.label == "Setup Exports" })
+    }
+
+    @Test
+    fun setupToolsOwnCourseToolsAndCourseAnalyzer() {
+        val tools = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Tools" }
+        val courseTools = tools.children.first { it.label == "Course Tools" }
+        val courseAnalyzer = courseTools.children.first { it.label == "Course Analyzer" }
+
+        assertEquals(DesktopSection.Tools, tools.section)
+        assertEquals(DesktopSection.KmlTools, courseTools.section)
+        assertFalse(tools.requiresEventFile)
+        assertFalse(courseTools.requiresEventFile)
+        assertEquals(
+            listOf("Course Analyzer", "Move Course", "Classic Course Generator"),
+            courseTools.children.map { it.label }
+        )
+        assertEquals(DesktopSection.CourseAnalysis, courseAnalyzer.section)
+        assertTrue(courseAnalyzer.requiresEventFile)
+        assertEquals(
+            listOf("Import Course KML/KMZ...", "Import Course GPX..."),
+            courseAnalyzer.children.map { it.label }
+        )
+        val courseAnalyzerState = DesktopNavState()
+            .enter(tools)
+            .enter(courseTools)
+            .enter(courseAnalyzer)
+        assertEquals(
+            listOf(
+                "setup.tools",
+                "setup.tools.course-tools",
+                "setup.tools.course-tools.course-analysis"
+            ),
+            courseAnalyzerState.submenuStack
+        )
+        assertEquals(DesktopSection.CourseAnalysis, courseAnalyzerState.selectedSection)
+        assertEquals(
+            listOf("Import Course KML/KMZ...", "Import Course GPX..."),
+            DesktopNavigation.currentItems(courseAnalyzerState).map { it.label }
+        )
+        assertEquals(DesktopNavAction.ImportCourseKmlKmz, courseAnalyzer.children.first().action)
+        assertEquals(DesktopNavAction.ImportCourseGpx, courseAnalyzer.children.last().action)
+        assertEquals(DesktopSection.KmlMoveCourse, courseTools.children.first { it.label == "Move Course" }.section)
+        assertFalse(courseTools.children.first { it.label == "Move Course" }.requiresEventFile)
+        assertEquals(
+            DesktopSection.KmlClassicCourseGenerator,
+            courseTools.children.first { it.label == "Classic Course Generator" }.section
+        )
+        assertFalse(courseTools.children.first { it.label == "Classic Course Generator" }.requiresEventFile)
     }
 
     @Test

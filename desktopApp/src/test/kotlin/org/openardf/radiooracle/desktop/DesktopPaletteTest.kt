@@ -25,6 +25,7 @@ class DesktopPaletteTest {
                 "Course Analyzer",
                 "Elevation Data",
                 "Import Elevation Data",
+                "Tools",
                 "Course Tools",
                 "Move Course",
                 "Classic Course Generator",

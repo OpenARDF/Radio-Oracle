@@ -298,49 +298,6 @@ object DesktopNavigation {
                             DesktopSection.ElevationCache
                         ),
                         group(
-                            "setup.controls.course-analysis",
-                            "Course Analyzer",
-                            workflow,
-                            listOf(
-                                action(
-                                    "setup.controls.course-analysis.import-kml-kmz",
-                                    "Import Course KML/KMZ...",
-                                    workflow,
-                                    DesktopNavAction.ImportCourseKmlKmz
-                                ),
-                                action(
-                                    "setup.controls.course-analysis.import-gpx",
-                                    "Import Course GPX...",
-                                    workflow,
-                                    DesktopNavAction.ImportCourseGpx
-                                )
-                            ),
-                            DesktopSection.CourseAnalysis
-                        ),
-                        group(
-                            "setup.controls.kml-tools",
-                            "Course Tools",
-                            workflow,
-                            listOf(
-                                item(
-                                    "setup.controls.kml-tools.move-course",
-                                    "Move Course",
-                                    workflow,
-                                    DesktopSection.KmlMoveCourse,
-                                    requiresEventFile = false
-                                ),
-                                item(
-                                    "setup.controls.kml-tools.classic-course-generator",
-                                    "Classic Course Generator",
-                                    workflow,
-                                    DesktopSection.KmlClassicCourseGenerator,
-                                    requiresEventFile = false
-                                )
-                            ),
-                            DesktopSection.KmlTools,
-                            requiresEventFile = false
-                        ),
-                        group(
                             "setup.controls.import-export",
                             "Import/Export",
                             workflow,
@@ -503,6 +460,58 @@ object DesktopNavigation {
                         )
                     ),
                     DesktopSection.StartList
+                ),
+                group(
+                    "setup.tools",
+                    "Tools",
+                    workflow,
+                    listOf(
+                        group(
+                            "setup.tools.course-tools",
+                            "Course Tools",
+                            workflow,
+                            listOf(
+                                group(
+                                    "setup.tools.course-tools.course-analysis",
+                                    "Course Analyzer",
+                                    workflow,
+                                    listOf(
+                                        action(
+                                            "setup.tools.course-tools.course-analysis.import-kml-kmz",
+                                            "Import Course KML/KMZ...",
+                                            workflow,
+                                            DesktopNavAction.ImportCourseKmlKmz
+                                        ),
+                                        action(
+                                            "setup.tools.course-tools.course-analysis.import-gpx",
+                                            "Import Course GPX...",
+                                            workflow,
+                                            DesktopNavAction.ImportCourseGpx
+                                        )
+                                    ),
+                                    DesktopSection.CourseAnalysis
+                                ),
+                                item(
+                                    "setup.tools.course-tools.move-course",
+                                    "Move Course",
+                                    workflow,
+                                    DesktopSection.KmlMoveCourse,
+                                    requiresEventFile = false
+                                ),
+                                item(
+                                    "setup.tools.course-tools.classic-course-generator",
+                                    "Classic Course Generator",
+                                    workflow,
+                                    DesktopSection.KmlClassicCourseGenerator,
+                                    requiresEventFile = false
+                                )
+                            ),
+                            DesktopSection.KmlTools,
+                            requiresEventFile = false
+                        )
+                    ),
+                    DesktopSection.Tools,
+                    requiresEventFile = false
                 )
             )
             DesktopWorkflow.RaceOps -> listOf(
@@ -1076,18 +1085,6 @@ object DesktopNavigation {
             "Use Import Elevation Data to create a venue elevation cache from online elevation services, a local raster, or a LAS/LAZ point cloud.",
         "setup.controls.elevation-cache.import-dem" to
             "Use Import DEM File to add one or more existing Radio-Oracle DEM cache JSON files, including cache files packaged inside a ZIP archive.",
-        "setup.controls.course-analysis" to
-            "Use Course Analyzer to inspect stored course routes, ideal routes, climb, distance, time estimates, and classic wait-slot behavior.",
-        "setup.controls.course-analysis.import-kml-kmz" to
-            "Use Import Course KML/KMZ to bring in control placemarks and required category route lines for course analysis and category course assignments.",
-        "setup.controls.course-analysis.import-gpx" to
-            "Use Import Course GPX to bring in control waypoints and required category routes or tracks for course analysis and category course assignments.",
-        "setup.controls.kml-tools" to
-            "Use Course Tools to analyze or modify course-related files without changing the open Event File.",
-        "setup.controls.kml-tools.move-course" to
-            "Use Move Course to create a translated KML/KMZ copy where the Start point is moved to a new latitude and longitude and all other coordinates move by the same offset.",
-        "setup.controls.kml-tools.classic-course-generator" to
-            "Use Classic Course Generator to read Start, Finish, Beacon, and fox point placemarks from a KML/KMZ file and list ideal Classic course combinations with category matches.",
         "setup.controls.import-export" to
             "Use Import/Export to synchronize control CSV files and protected controls/route KML/KMZ or GPX files with the current Event File.",
         "setup.controls.import-controls" to
@@ -1142,6 +1139,20 @@ object DesktopNavigation {
             "Use Export ROBIS Start List CSV to generate a start-list file for ROBIS workflows.",
         "setup.start-list.export-iof" to
             "Use Export IOF Start List XML to write an IOF-compatible start-list file.",
+        "setup.tools" to
+            "Use Tools to open standalone utilities for course files and other future event-support workflows.",
+        "setup.tools.course-tools" to
+            "Use Course Tools to analyze or modify course-related files and course data.",
+        "setup.tools.course-tools.course-analysis" to
+            "Use Course Analyzer to inspect stored course routes, ideal routes, climb, distance, time estimates, and classic wait-slot behavior.",
+        "setup.tools.course-tools.course-analysis.import-kml-kmz" to
+            "Use Import Course KML/KMZ to bring in control placemarks and required category route lines for course analysis and category course assignments.",
+        "setup.tools.course-tools.course-analysis.import-gpx" to
+            "Use Import Course GPX to bring in control waypoints and required category routes or tracks for course analysis and category course assignments.",
+        "setup.tools.course-tools.move-course" to
+            "Use Move Course to create a translated KML/KMZ copy where the Start point is moved to a new latitude and longitude and all other coordinates move by the same offset.",
+        "setup.tools.course-tools.classic-course-generator" to
+            "Use Classic Course Generator to read Start, Finish, Beacon, and fox point placemarks from a KML/KMZ file and list ideal Classic course combinations with category matches.",
         "race.readouts" to
             "Use Readouts to download, review, match, edit, remove, print, and manually add SI-card readouts during race operations.",
         "race.si-readout" to
