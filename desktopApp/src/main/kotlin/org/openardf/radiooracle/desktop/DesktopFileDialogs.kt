@@ -442,6 +442,69 @@ object DesktopFileDialogs {
             ?.let { DesktopControlsRouteKmlKmzExportTarget(it, DesktopControlsRouteKmlKmzExportFormat.Gpx) }
     }
 
+    fun chooseExportCourseOverlays(
+        eventName: String? = null,
+        defaultStartRadiusMeters: Int,
+        defaultFinishRadiusMeters: Int
+    ): DesktopCourseOverlayExportTarget? {
+        val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
+        val baseMapChooser = JFileChooser(directory.toFile())
+        baseMapChooser.dialogTitle = "Choose Base OOM Map"
+        baseMapChooser.fileFilter = FileNameExtensionFilter("OpenOrienteering Mapper maps (*.omap, *.xmap)", "omap", "xmap")
+        if (baseMapChooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) {
+            return null
+        }
+        val baseMapPath = baseMapChooser.selectedFile?.toPath() ?: return null
+
+        val outputChooser = JFileChooser(baseMapPath.parent?.toFile() ?: directory.toFile())
+        outputChooser.dialogTitle = "Export Course Overlay Files"
+        outputChooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+        outputChooser.approveButtonText = "Export Here"
+        if (outputChooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) {
+            return null
+        }
+        val outputDirectory = outputChooser.selectedFile?.toPath() ?: return null
+
+        val startRadiusField = javax.swing.JTextField(defaultStartRadiusMeters.toString(), 8)
+        val finishRadiusField = javax.swing.JTextField(defaultFinishRadiusMeters.toString(), 8)
+        val panel = javax.swing.JPanel(java.awt.GridLayout(0, 2, 8, 8)).apply {
+            add(javax.swing.JLabel("Start exclusion radius (m)"))
+            add(startRadiusField)
+            add(javax.swing.JLabel("Finish exclusion radius (m)"))
+            add(finishRadiusField)
+        }
+        val title = eventName?.takeIf { it.isNotBlank() }?.let { "Course Overlay Export - $it" }
+            ?: "Course Overlay Export"
+        val choice = JOptionPane.showConfirmDialog(
+            null,
+            panel,
+            title,
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE
+        )
+        if (choice != JOptionPane.OK_OPTION) {
+            return null
+        }
+        val startRadius = startRadiusField.text.trim().toIntOrNull()
+        val finishRadius = finishRadiusField.text.trim().toIntOrNull()
+        if (startRadius == null || startRadius < 0 || finishRadius == null || finishRadius < 0) {
+            JOptionPane.showMessageDialog(
+                null,
+                "Exclusion radii must be whole numbers greater than or equal to 0.",
+                "Course Overlay Export",
+                JOptionPane.ERROR_MESSAGE
+            )
+            return null
+        }
+        DesktopEventFileLocations.rememberEventFileDirectory(outputDirectory)
+        return DesktopCourseOverlayExportTarget(
+            baseMapPath = baseMapPath,
+            outputDirectory = outputDirectory,
+            startExclusionRadiusMeters = startRadius,
+            finishExclusionRadiusMeters = finishRadius
+        )
+    }
+
     fun chooseElevationRaster(): List<Path> {
         val dialog = FileDialog(null as Frame?, "Select Elevation Source", FileDialog.LOAD)
         dialog.filenameFilter = FilenameFilter { _, name ->

@@ -67,6 +67,7 @@ enum class DesktopNavAction {
     ExportControlsCsv,
     ExportCourseKmlKmz,
     ExportCourseGpx,
+    ExportCourseOverlays,
     ExportCompetitorsCsv,
     ExportStartsCsv,
     ExportStartsByCategoryCsv,
@@ -345,6 +346,12 @@ object DesktopNavigation {
                                     "Export Controls GPX...",
                                     workflow,
                                     DesktopNavAction.ExportCourseGpx
+                                ),
+                                action(
+                                    "setup.controls.export-course-overlays",
+                                    "Export Course Overlays...",
+                                    workflow,
+                                    DesktopNavAction.ExportCourseOverlays
                                 )
                             ),
                             DesktopSection.ControlsImportExport
@@ -1107,6 +1114,8 @@ object DesktopNavigation {
             "Use Export Controls KML/KMZ to write protected control and route geometry inside a password-locked ZIP file.",
         "setup.controls.export-gpx" to
             "Use Export Controls GPX to write protected control and route geometry as standard GPX inside a password-locked ZIP file.",
+        "setup.controls.export-course-overlays" to
+            "Use Export Course Overlays to write separate OpenOrienteering Mapper competitor, master, and custodian overlay files from protected course locations.",
         "setup.controls.delete-all" to
             "Use Delete All Controls to remove every control and clear category course assignments, length, climb, and protected course data that depends on them.",
         "setup.categories" to

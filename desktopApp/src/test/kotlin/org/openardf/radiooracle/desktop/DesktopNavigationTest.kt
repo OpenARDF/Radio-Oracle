@@ -891,7 +891,8 @@ class DesktopNavigationTest {
                 "Import Controls KML/KMZ...",
                 "Export Controls KML/KMZ...",
                 "Import Controls GPX...",
-                "Export Controls GPX..."
+                "Export Controls GPX...",
+                "Export Course Overlays..."
             ),
             controlItems.first { it.label == "Import/Export" }.children.map { it.label }
         )

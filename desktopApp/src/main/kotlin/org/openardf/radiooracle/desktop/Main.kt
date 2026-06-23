@@ -3395,6 +3395,37 @@ fun main(args: Array<String>) = application {
             pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.ExportGpx
         }
 
+        fun chooseExportCourseOverlaysUnlocked(password: String) {
+            val currentProject = projectSession.currentProject ?: return
+            val defaultRadius = DesktopCourseOverlayExporter.defaultExclusionRadiusMeters(currentProject.raceData.race.raceType)
+            DesktopFileDialogs.chooseExportCourseOverlays(
+                eventName = currentProject.raceData.race.name,
+                defaultStartRadiusMeters = defaultRadius,
+                defaultFinishRadiusMeters = defaultRadius
+            )?.let { target ->
+                runCatching {
+                    val summary = DesktopCourseOverlayExporter.exportOverlays(
+                        target = target,
+                        projectFile = currentProject,
+                        password = password
+                    )
+                    syncProjectState()
+                    projectStatusText =
+                        "Exported OOM course overlays: ${summary.competitorPath.fileName}, " +
+                            "${summary.masterPath.fileName}, and ${summary.custodianPath.fileName}; " +
+                            "${summary.exportedPointCount} course points, ${summary.exclusionCircleCount} exclusion circles, " +
+                            "${summary.finishCorridorCount} finish corridor."
+                }.onFailure { error ->
+                    projectStatusText = "Course overlay export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
+        fun chooseExportCourseOverlays() {
+            projectStatusText = "Enter the Event Password before exporting OOM course overlay files."
+            pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.ExportOverlays
+        }
+
         fun importAndroidRaceBackupJson(path: Path) {
             runCatching {
                 lockProtectedCourseOrder()
@@ -4480,6 +4511,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportControlsCsv,
                 DesktopNavAction.ExportCourseKmlKmz,
                 DesktopNavAction.ExportCourseGpx,
+                DesktopNavAction.ExportCourseOverlays,
                 DesktopNavAction.ExportCompetitorsCsv,
                 DesktopNavAction.ExportStartsCsv,
                 DesktopNavAction.ExportStartsByCategoryCsv,
@@ -4588,6 +4620,7 @@ fun main(args: Array<String>) = application {
                     exportCsv("Export Controls CSV", "controls", DesktopProjectFiles::exportControlsCsv)
                 DesktopNavAction.ExportCourseKmlKmz -> chooseExportCourseKmlKmz()
                 DesktopNavAction.ExportCourseGpx -> chooseExportCourseGpx()
+                DesktopNavAction.ExportCourseOverlays -> chooseExportCourseOverlays()
                 DesktopNavAction.ExportCompetitorsCsv ->
                     exportCsv("Export Competitors CSV", "competitors", DesktopProjectFiles::exportCompetitorsCsv)
                 DesktopNavAction.ExportStartsCsv ->
@@ -4887,6 +4920,7 @@ fun main(args: Array<String>) = application {
                     CourseKmlKmzUnlockAction.ImportControlsGpx -> "Unlock control locations"
                     CourseKmlKmzUnlockAction.Export -> "Export protected controls/routes"
                     CourseKmlKmzUnlockAction.ExportGpx -> "Export protected controls/routes"
+                    CourseKmlKmzUnlockAction.ExportOverlays -> "Export course overlays"
                 },
                 description = when (unlockAction) {
                     CourseKmlKmzUnlockAction.Import ->
@@ -4901,6 +4935,8 @@ fun main(args: Array<String>) = application {
                         "Controls/route KML/KMZ export includes sensitive coordinates and routes. The exported file will be placed inside a password-locked ZIP."
                     CourseKmlKmzUnlockAction.ExportGpx ->
                         "Controls/route GPX export includes sensitive coordinates and routes. The exported file will be placed inside a password-locked ZIP."
+                    CourseKmlKmzUnlockAction.ExportOverlays ->
+                        "Course overlay export uses protected course coordinates to create plain OpenOrienteering Mapper files for map production."
                 },
                 confirmLabel = when (unlockAction) {
                     CourseKmlKmzUnlockAction.Import -> "Unlock and Import"
@@ -4909,6 +4945,7 @@ fun main(args: Array<String>) = application {
                     CourseKmlKmzUnlockAction.ImportControlsGpx -> "Unlock and Import"
                     CourseKmlKmzUnlockAction.Export -> "Export"
                     CourseKmlKmzUnlockAction.ExportGpx -> "Export"
+                    CourseKmlKmzUnlockAction.ExportOverlays -> "Export"
                 },
                 onUnlock = { password ->
                     if (unlockProtectedCourseOrder(password)) {
@@ -4923,6 +4960,7 @@ fun main(args: Array<String>) = application {
                                 chooseImportCourseGpxUnlocked(unlockedPassword, requireRoutes = false)
                             CourseKmlKmzUnlockAction.Export -> chooseExportCourseKmlKmzUnlocked(unlockedPassword)
                             CourseKmlKmzUnlockAction.ExportGpx -> chooseExportCourseGpxUnlocked(unlockedPassword)
+                            CourseKmlKmzUnlockAction.ExportOverlays -> chooseExportCourseOverlaysUnlocked(unlockedPassword)
                         }
                         true
                     } else {
@@ -7894,7 +7932,8 @@ private enum class CourseKmlKmzUnlockAction {
     ImportControls,
     ImportControlsGpx,
     Export,
-    ExportGpx
+    ExportGpx,
+    ExportOverlays
 }
 
 private enum class BulkCategoryAction {
