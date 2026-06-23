@@ -3,6 +3,7 @@ package org.openardf.radiooracle.shared.event
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.course.ControlPointValidationError
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
+import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.importing.ImportValidationRules
 import org.openardf.radiooracle.shared.importing.ReadoutPunchValidationError
 import org.openardf.radiooracle.shared.sportident.SportIdentCodes
@@ -38,7 +39,7 @@ object EventValidationRules {
         }
         validateAliases(raceData.aliases).takeIf { it.isNotEmpty() }?.let(issues::addAll)
 
-        validateCompetitors(raceData.competitorData).takeIf { it.isNotEmpty() }?.let(issues::addAll)
+        validateCompetitors(raceData).takeIf { it.isNotEmpty() }?.let(issues::addAll)
         validateReadouts(raceData.competitorData.mapNotNull { it.readoutData }, issues)
         validateReadouts(raceData.unmatchedReadoutData, issues)
 
@@ -124,12 +125,13 @@ object EventValidationRules {
             ?.let { listOf(EventValidationIssue.LegacyIncompatibleAliasCodes(it)) }
             ?: emptyList()
 
-    private fun validateCompetitors(competitors: List<EventCompetitorData>): List<EventValidationIssue> {
+    private fun validateCompetitors(raceData: EventRaceData): List<EventValidationIssue> {
+        val competitors = raceData.competitorData
         val eventCompetitors = competitors.map { it.competitorCategory.competitor }
         return buildList {
-            ImportValidationRules.duplicateSINumbers(
-                eventCompetitors.map { it.siNumber }
-            ).takeIf { it.isNotEmpty() }?.let { add(EventValidationIssue.DuplicateSINumbers(it)) }
+            duplicateSiNumbersForValidation(raceData).takeIf { it.isNotEmpty() }?.let {
+                add(EventValidationIssue.DuplicateSINumbers(it))
+            }
 
             ImportValidationRules.duplicateBibNumbers(
                 eventCompetitors.map { it.bibNumber }
@@ -153,6 +155,27 @@ object EventValidationRules {
                 .takeIf { it.isNotEmpty() }
                 ?.let { mismatched -> add(EventValidationIssue.InvalidStartNumberAssignments(mismatched.map { it.id }.toSet())) }
         }
+    }
+
+    private fun duplicateSiNumbersForValidation(raceData: EventRaceData): Set<Int> {
+        val competitorsBySiNumber = raceData.competitorData
+            .mapNotNull { data ->
+                data.competitorCategory.competitor.siNumber?.let { siNumber -> siNumber to data }
+            }
+            .groupBy({ it.first }, { it.second })
+        if (raceData.race.raceLevel != RaceLevel.PRACTICE) {
+            return competitorsBySiNumber
+                .filterValues { it.size > 1 }
+                .keys
+        }
+        return competitorsBySiNumber
+            .filterValues { competitors ->
+                competitors.size > 1 &&
+                    !competitors.all { data ->
+                        data.readoutData?.result?.siNumber == data.competitorCategory.competitor.siNumber
+                    }
+            }
+            .keys
     }
 
     private fun validateReadouts(

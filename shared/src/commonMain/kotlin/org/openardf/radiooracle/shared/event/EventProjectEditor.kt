@@ -2385,6 +2385,8 @@ object EventProjectEditor {
         }
 
         val createNewReadout = hasDuplicateSiNumber && duplicatePolicy == EventReadoutDuplicatePolicy.CreateNew
+        val shouldCreatePracticeDuplicateCompetitor = createNewReadout &&
+            workingProjectFile.raceData.race.raceLevel == RaceLevel.PRACTICE
         val existingMatchedCompetitorIndex = if (createNewReadout) {
             null
         } else {
@@ -2395,15 +2397,22 @@ object EventProjectEditor {
         val shouldCreatePracticeCompetitor = existingMatchedCompetitorIndex == null &&
             !createNewReadout &&
             workingProjectFile.raceData.race.raceLevel == RaceLevel.PRACTICE
-        val matchedProjectFile = if (shouldCreatePracticeCompetitor) {
-            workingProjectFile.withPracticeCompetitorForDownloadedReadout(
-                competitorId = uniquePracticeCompetitorId(workingProjectFile, resultId),
-                readout = readout
-            )
-        } else {
-            workingProjectFile
+        val matchedProjectFile = when {
+            shouldCreatePracticeCompetitor ->
+                workingProjectFile.withPracticeCompetitorForDownloadedReadout(
+                    competitorId = uniquePracticeCompetitorId(workingProjectFile, resultId),
+                    readout = readout
+                )
+            shouldCreatePracticeDuplicateCompetitor ->
+                workingProjectFile.withPracticeDuplicateCompetitorForDownloadedReadout(
+                    competitorId = uniquePracticeCompetitorId(workingProjectFile, resultId),
+                    readout = readout
+                )
+            else -> workingProjectFile
         }
         val matchedCompetitorIndex = existingMatchedCompetitorIndex ?: if (shouldCreatePracticeCompetitor) {
+            matchedProjectFile.raceData.competitorData.lastIndex
+        } else if (shouldCreatePracticeDuplicateCompetitor) {
             matchedProjectFile.raceData.competitorData.lastIndex
         } else {
             null
@@ -2768,6 +2777,44 @@ object EventProjectEditor {
                 )
             )
         )
+    }
+
+    private fun EventProjectFile.withPracticeDuplicateCompetitorForDownloadedReadout(
+        competitorId: String,
+        readout: SportIdentCardReadout
+    ): EventProjectFile {
+        val matchingCompetitorData = raceData.competitorData.firstOrNull {
+            it.competitorCategory.competitor.siNumber == readout.siNumber
+        }
+        return if (matchingCompetitorData == null) {
+            withPracticeCompetitorForDownloadedReadout(competitorId, readout)
+        } else {
+            val matchingCompetitor = matchingCompetitorData.competitorCategory.competitor
+            val duplicateOrdinal = raceData.competitorData.count {
+                it.competitorCategory.competitor.siNumber == readout.siNumber
+            } + 1
+            val duplicateCompetitor = matchingCompetitor.copy(
+                id = competitorId,
+                lastName = "${matchingCompetitor.lastName} #$duplicateOrdinal",
+                index = "",
+                startNumber = null,
+                drawnStartTimeSeconds = null,
+                preferredStartGroup = null,
+                bibNumber = "",
+                callSign = ""
+            )
+            copy(
+                raceData = raceData.copy(
+                    competitorData = raceData.competitorData + EventCompetitorData(
+                        competitorCategory = EventCompetitorCategory(
+                            competitor = duplicateCompetitor,
+                            category = matchingCompetitorData.competitorCategory.category
+                        ),
+                        readoutData = null
+                    )
+                )
+            )
+        }
     }
 
     private fun EventProjectFile.withResultPlaces(): EventProjectFile =

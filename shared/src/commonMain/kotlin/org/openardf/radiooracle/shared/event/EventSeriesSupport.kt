@@ -95,6 +95,22 @@ object EventSeriesSupport {
                 }
             }
 
+        val orderedLinkedEvents = seriesFile.sortedEvents().mapNotNull { event -> linkedByEventId[event.seriesEventId] }
+        val expectedRaceLevel = orderedLinkedEvents.firstOrNull()?.projectFile?.raceData?.race?.raceLevel
+        if (expectedRaceLevel != null) {
+            orderedLinkedEvents
+                .filter { it.projectFile.raceData.race.raceLevel != expectedRaceLevel }
+                .forEach { linked ->
+                    issues += EventSeriesValidationIssue(
+                        severity = EventSeriesIssueSeverity.ERROR,
+                        message = "Event File '${linked.event.displayName}' has race level " +
+                            "${linked.projectFile.raceData.race.raceLevel.toDisplayLabel()}; " +
+                            "series member events must all use ${expectedRaceLevel.toDisplayLabel()}.",
+                        seriesEventId = linked.event.seriesEventId
+                    )
+                }
+        }
+
         return issues
     }
 

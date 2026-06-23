@@ -8,6 +8,7 @@ import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class EventValidationRulesTest {
@@ -37,6 +38,36 @@ class EventValidationRulesTest {
         assertTrue(issues.contains(EventValidationIssue.DuplicateSINumbers(setOf(123))))
         assertTrue(issues.contains(EventValidationIssue.DuplicateBibNumbers(setOf("B1"))))
         assertTrue(issues.contains(EventValidationIssue.DuplicateCallSigns(setOf("K0ABC"))))
+    }
+
+    @Test
+    fun allowsDuplicateSiNumbersForRecordedPracticeRepeats() {
+        val raceData = raceData(
+            race = race().copy(raceLevel = RaceLevel.PRACTICE),
+            competitors = listOf(
+                competitorData("one", siNumber = 123, readoutData = readout()),
+                competitorData("two", siNumber = 123, readoutData = readout())
+            )
+        )
+
+        val issues = EventValidationRules.validateRaceData(raceData)
+
+        assertFalse(issues.contains(EventValidationIssue.DuplicateSINumbers(setOf(123))))
+    }
+
+    @Test
+    fun stillReportsDuplicateSiNumbersForUnrecordedPracticeCompetitors() {
+        val raceData = raceData(
+            race = race().copy(raceLevel = RaceLevel.PRACTICE),
+            competitors = listOf(
+                competitorData("one", siNumber = 123, readoutData = readout()),
+                competitorData("two", siNumber = 123, readoutData = null)
+            )
+        )
+
+        val issues = EventValidationRules.validateRaceData(raceData)
+
+        assertTrue(issues.contains(EventValidationIssue.DuplicateSINumbers(setOf(123))))
     }
 
     @Test
@@ -185,7 +216,7 @@ class EventValidationRulesTest {
             readoutData = readoutData
         )
 
-    private fun readout(punches: List<EventPunch>): EventReadoutData =
+    private fun readout(punches: List<EventPunch> = emptyList()): EventReadoutData =
         EventReadoutData(
             result = EventResult(
                 id = "result",

@@ -229,6 +229,8 @@ private fun desktopTimeLimitText(timeLimitText: String): String {
 
 private enum class DesktopSportIdentAppendOutcome {
     Added,
+    PracticeInForestStarted,
+    PracticeInForestAlreadyStarted,
     DuplicateIgnored,
     DuplicateReplaced,
     DuplicateCreatedNew
@@ -921,8 +923,8 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun openProject(path: Path) {
-            runCatching {
+        fun openProject(path: Path): Boolean {
+            return runCatching {
                 clearAssignedControlsWarning()
                 lockProtectedCourseOrder()
                 projectSession.open(path)
@@ -948,7 +950,7 @@ fun main(args: Array<String>) = application {
             }.onFailure { error ->
                 projectStatusText = "Open failed: ${error.message ?: error::class.simpleName}"
                 DesktopDebugLog.error("EventFile", "Open failed: ${error.message ?: error::class.simpleName}")
-            }
+            }.isSuccess
         }
 
         fun closeProject(discardUnsavedChanges: Boolean = false) {
@@ -1038,9 +1040,148 @@ fun main(args: Array<String>) = application {
         }
 
         fun appendSportIdentDownload(download: DesktopSportIdentCardBlockDownload): DesktopSportIdentAppendOutcome {
+            val initialProject = projectSession.currentProject ?: return DesktopSportIdentAppendOutcome.DuplicateIgnored
+            val readoutDateTime = LocalDateTime.now().withNano(0)
+            val manifestPath = currentSeriesManifestPath()
+
+            fun saveOpenEventBeforeSeriesReadout(targetDescription: String) {
+                if (!hasUnsavedChanges) {
+                    return
+                }
+                val savedPath = projectSession.currentPath
+                    ?: error("Save the current Event File before $targetDescription.")
+                projectSession.save()
+                projectSession.currentProject?.let { savedProject ->
+                    refreshSavedEventSeriesMetadata(savedProject, savedPath)
+                }
+                syncProjectState()
+                DesktopDebugLog.info("EventFile", "Saved ${savedPath.fileName} before $targetDescription")
+            }
+
+            fun reloadCurrentEventIfUpdated(update: DesktopSeriesPracticeInForestUpdate) {
+                val currentPath = projectSession.currentPath ?: return
+                val currentPathKey = currentPath.toAbsolutePath().normalize()
+                if (currentPathKey in update.updatedEventPaths) {
+                    projectSession.open(currentPath)
+                    syncProjectState()
+                }
+            }
+
+            if (DesktopSeriesSportIdentReadoutRouter.isBlankPracticeStartReadout(download.readout)) {
+                if (manifestPath != null) {
+                    saveOpenEventBeforeSeriesReadout("starting a Practice series competitor")
+                    val update = DesktopSeriesSportIdentReadoutRouter.startPracticeCompetitorInForestAcrossSeries(
+                        store = DesktopEventSeriesFiles,
+                        manifestPath = manifestPath,
+                        readout = download.readout,
+                        readoutDateTime = readoutDateTime
+                    )
+                    reloadCurrentEventIfUpdated(update)
+                    DesktopDebugLog.info(
+                        "EventSeries",
+                        "Started SI card ${download.readout.siNumber} in forest for " +
+                            "${update.updatedCompetitorCount} Practice series event(s)."
+                    )
+                    scheduleLocalResultsWebPageRefresh()
+                    return if (update.updatedCompetitorCount > 0) {
+                        DesktopSportIdentAppendOutcome.PracticeInForestStarted
+                    } else {
+                        DesktopSportIdentAppendOutcome.PracticeInForestAlreadyStarted
+                    }
+                } else if (initialProject.raceData.race.raceLevel == RaceLevel.PRACTICE) {
+                    val updatedProject = DesktopSeriesSportIdentReadoutRouter.startPracticeCompetitorInForest(
+                        projectFile = initialProject,
+                        readout = download.readout,
+                        readoutDateTime = readoutDateTime
+                    )
+                    if (updatedProject != initialProject) {
+                        projectFile = projectSession.updateCurrentProject { updatedProject }
+                        hasUnsavedChanges = projectSession.hasUnsavedChanges
+                        scheduleLocalResultsWebPageRefresh()
+                        return DesktopSportIdentAppendOutcome.PracticeInForestStarted
+                    }
+                    return DesktopSportIdentAppendOutcome.PracticeInForestAlreadyStarted
+                }
+                return DesktopSportIdentAppendOutcome.PracticeInForestAlreadyStarted
+            }
+
+            if (
+                manifestPath != null &&
+                !DesktopSeriesSportIdentReadoutRouter.isBlankPracticeStartReadout(download.readout)
+            ) {
+                saveOpenEventBeforeSeriesReadout("clearing Practice series in-forest entries")
+                val update = DesktopSeriesSportIdentReadoutRouter.clearPracticeCompetitorInForestAcrossSeries(
+                    store = DesktopEventSeriesFiles,
+                    manifestPath = manifestPath,
+                    siNumber = download.readout.siNumber
+                )
+                reloadCurrentEventIfUpdated(update)
+                if (update.updatedCompetitorCount > 0) {
+                    DesktopDebugLog.info(
+                        "EventSeries",
+                        "Cleared SI card ${download.readout.siNumber} from " +
+                            "${update.updatedCompetitorCount} Practice series in-forest list(s)."
+                    )
+                }
+            } else if (
+                manifestPath == null &&
+                !DesktopSeriesSportIdentReadoutRouter.isBlankPracticeStartReadout(download.readout)
+            ) {
+                val activeProject = projectSession.currentProject
+                if (activeProject != null) {
+                    val updatedProject = DesktopSeriesSportIdentReadoutRouter.clearPracticeCompetitorInForest(
+                        projectFile = activeProject,
+                        siNumber = download.readout.siNumber
+                    )
+                    if (updatedProject != activeProject) {
+                        projectFile = projectSession.updateCurrentProject { updatedProject }
+                        hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    }
+                }
+            }
+
+            val matchedSeriesEvent = manifestPath?.let { activeManifestPath ->
+                runCatching {
+                    DesktopSeriesSportIdentReadoutRouter.matchingEventForReadout(
+                        store = DesktopEventSeriesFiles,
+                        manifestPath = activeManifestPath,
+                        readout = download.readout
+                    )
+                }.onFailure { error ->
+                    DesktopDebugLog.error(
+                        "EventSeries",
+                        "SI readout series matching failed: ${error.message ?: error::class.simpleName}"
+                    )
+                }.getOrNull()
+            }
+            val currentPathKey = projectSession.currentPath?.toAbsolutePath()?.normalize()
+            val matchedPathKey = matchedSeriesEvent?.eventPath?.toAbsolutePath()?.normalize()
+            if (matchedSeriesEvent != null && matchedPathKey != null && matchedPathKey != currentPathKey) {
+                saveOpenEventBeforeSeriesReadout("routing this SI readout to ${matchedSeriesEvent.event.displayName}")
+                check(openProject(matchedSeriesEvent.eventPath)) {
+                    "Could not open matched Event File ${matchedSeriesEvent.eventPath.fileName}."
+                }
+                DesktopDebugLog.info(
+                    "EventSeries",
+                    "Routed SI card ${download.readout.siNumber} to ${matchedSeriesEvent.event.displayName}."
+                )
+            } else if (matchedSeriesEvent == null && initialProject.seriesLink != null) {
+                DesktopDebugLog.info(
+                    "EventSeries",
+                    "No unique series event matched SI card ${download.readout.siNumber}; keeping readout on the open Event File."
+                )
+            }
             val currentProject = projectSession.currentProject ?: return DesktopSportIdentAppendOutcome.DuplicateIgnored
             val isDuplicate = currentProject.raceData.containsReadoutForSiNumber(download.readout.siNumber)
-            if (isDuplicate && readoutDuplicatePolicy == EventReadoutDuplicatePolicy.Reject) {
+            val effectiveDuplicatePolicy = if (
+                isDuplicate &&
+                currentProject.raceData.race.raceLevel == RaceLevel.PRACTICE
+            ) {
+                EventReadoutDuplicatePolicy.CreateNew
+            } else {
+                readoutDuplicatePolicy
+            }
+            if (isDuplicate && effectiveDuplicatePolicy == EventReadoutDuplicatePolicy.Reject) {
                 return DesktopSportIdentAppendOutcome.DuplicateIgnored
             }
             projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -1049,8 +1190,8 @@ fun main(args: Array<String>) = application {
                     resultId = UUID.randomUUID().toString(),
                     cardType = download.inserted.cardType,
                     readout = download.readout,
-                    readoutDateTimeIso = LocalDateTime.now().withNano(0).toString(),
-                    duplicatePolicy = readoutDuplicatePolicy
+                    readoutDateTimeIso = readoutDateTime.toString(),
+                    duplicatePolicy = effectiveDuplicatePolicy
                 ) { index, type ->
                     "${UUID.randomUUID()}-$index-${type.name}"
                 }
@@ -1065,7 +1206,7 @@ fun main(args: Array<String>) = application {
             scheduleLocalResultsWebPageRefresh()
             return when {
                 !isDuplicate -> DesktopSportIdentAppendOutcome.Added
-                readoutDuplicatePolicy == EventReadoutDuplicatePolicy.Replace ->
+                effectiveDuplicatePolicy == EventReadoutDuplicatePolicy.Replace ->
                     DesktopSportIdentAppendOutcome.DuplicateReplaced
                 else -> DesktopSportIdentAppendOutcome.DuplicateCreatedNew
             }
@@ -1106,6 +1247,15 @@ fun main(args: Array<String>) = application {
                                 recordActivity("Downloaded SI card ${download.readout.siNumber}.")
                                 projectStatusText = "Downloaded SI card ${download.readout.siNumber}."
                                 DesktopDebugLog.info("SI", "Downloaded SI card ${download.readout.siNumber}")
+                            }
+                            DesktopSportIdentAppendOutcome.PracticeInForestStarted -> {
+                                recordActivity("Started SI card ${download.readout.siNumber}.")
+                                projectStatusText = "Started SI card ${download.readout.siNumber}; waiting for finish readout."
+                                DesktopDebugLog.info("SI", "Started SI card ${download.readout.siNumber} in forest")
+                            }
+                            DesktopSportIdentAppendOutcome.PracticeInForestAlreadyStarted -> {
+                                projectStatusText = "SI card ${download.readout.siNumber} is already in forest."
+                                DesktopDebugLog.info("SI", "SI card ${download.readout.siNumber} already in forest")
                             }
                             DesktopSportIdentAppendOutcome.DuplicateIgnored -> {
                                 projectStatusText = "SI card ${download.readout.siNumber} was already downloaded."
@@ -1281,6 +1431,27 @@ fun main(args: Array<String>) = application {
                                                     DesktopDebugLog.info("SI", "Downloaded SI card ${download.readout.siNumber}")
                                                     siDownloadStatusText =
                                                         "Continuous SI readout running; waiting for the next card."
+                                                }
+                                                DesktopSportIdentAppendOutcome.PracticeInForestStarted -> {
+                                                    projectStatusText =
+                                                        "Started SI card ${download.readout.siNumber}; waiting for finish readout."
+                                                    recordActivity("Started SI card ${download.readout.siNumber}.")
+                                                    DesktopDebugLog.info(
+                                                        "SI",
+                                                        "Started SI card ${download.readout.siNumber} in forest"
+                                                    )
+                                                    siDownloadStatusText =
+                                                        "Practice start recorded; waiting for the next card."
+                                                }
+                                                DesktopSportIdentAppendOutcome.PracticeInForestAlreadyStarted -> {
+                                                    projectStatusText =
+                                                        "SI card ${download.readout.siNumber} is already in forest."
+                                                    DesktopDebugLog.info(
+                                                        "SI",
+                                                        "SI card ${download.readout.siNumber} already in forest"
+                                                    )
+                                                    siDownloadStatusText =
+                                                        "Practice card already in forest; waiting for the next card."
                                                 }
                                                 DesktopSportIdentAppendOutcome.DuplicateIgnored -> {
                                                     projectStatusText =

@@ -318,6 +318,11 @@ class DesktopEventDataGeneratedCoverageTest {
             .withCategory("M21")
             .withCategory("W21")
             .withCategory("M50")
+        project = project.copy(
+            raceData = project.raceData.copy(
+                race = project.raceData.race.copy(raceLevel = RaceLevel.REGIONAL)
+            )
+        )
         val categories = project.raceData.categories.map { it.category }
         val competitors = (1..12).map { index ->
             val category = categories[(index - 1) % categories.size]

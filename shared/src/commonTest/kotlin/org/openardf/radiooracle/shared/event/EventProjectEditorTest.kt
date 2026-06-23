@@ -2433,6 +2433,7 @@ class EventProjectEditorTest {
     @Test
     fun createsNewDuplicateDownloadedSportIdentReadoutAsUnmatchedWithSiNumber() {
         val original = projectFile(
+            raceLevel = RaceLevel.REGIONAL,
             competitors = listOf(
                 competitorData(
                     "comp-1",
@@ -2459,6 +2460,43 @@ class EventProjectEditorTest {
         assertEquals("new-duplicate", duplicate.result.id)
         assertEquals(null, duplicate.result.competitorId)
         assertEquals(2005010, duplicate.result.siNumber)
+    }
+
+    @Test
+    fun createsNewDuplicatePracticeReadoutAsNumberedCompetitorResult() {
+        val original = projectFile(
+            raceLevel = RaceLevel.PRACTICE,
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    siNumber = 2005010,
+                    readoutData = readout("existing", "comp-1", 2005010)
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = original,
+            resultId = "new-duplicate",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = sportIdentReadout(siNumber = 2005010),
+            readoutDateTimeIso = "2026-05-31T12:00",
+            duplicatePolicy = EventReadoutDuplicatePolicy.CreateNew,
+            punchIdFactory = { index, type -> "new-punch-$index-${type.name}" }
+        )
+
+        val competitors = updated.raceData.competitorData.map { it.competitorCategory.competitor }
+        assertEquals(listOf("comp-1", "practice-competitor-new-duplicate"), competitors.map { it.id })
+        assertEquals(listOf("Runner", "Runner #2"), competitors.map { it.lastName })
+        assertEquals(listOf(2005010, 2005010), competitors.map { it.siNumber })
+        assertEquals(listOf("existing", "new-duplicate"), updated.raceData.competitorData.map { it.readoutData!!.result.id })
+        assertEquals(
+            listOf("comp-1", "practice-competitor-new-duplicate"),
+            updated.raceData.competitorData.map { it.readoutData!!.result.competitorId }
+        )
+        assertEquals(emptyList(), updated.raceData.unmatchedReadoutData)
     }
 
     @Test

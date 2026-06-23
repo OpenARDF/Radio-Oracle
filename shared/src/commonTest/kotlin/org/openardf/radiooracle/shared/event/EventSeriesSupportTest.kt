@@ -49,6 +49,37 @@ class EventSeriesSupportTest {
     }
 
     @Test
+    fun validatesRaceLevelCompatibilityAcrossLinkedEvents() {
+        val series = seriesFile(events = listOf(seriesEvent("day-1", 0), seriesEvent("day-2", 1)))
+        val linkedEvents = listOf(
+            linkedEvent(
+                "day-1",
+                projectFile(
+                    "Day 1",
+                    seriesLink = EventSeriesLink("series-1", "day-1"),
+                    raceLevel = RaceLevel.PRACTICE
+                )
+            ),
+            linkedEvent(
+                "day-2",
+                projectFile(
+                    "Day 2",
+                    seriesLink = EventSeriesLink("series-1", "day-2"),
+                    raceLevel = RaceLevel.REGIONAL
+                )
+            )
+        )
+
+        val issues = EventSeriesSupport.validateLinkedEvents(series, linkedEvents)
+
+        assertEquals(
+            listOf("Event File 'day-2' has race level Regional; series member events must all use Practice."),
+            issues.map { it.message }
+        )
+        assertTrue(issues.all { it.severity == EventSeriesIssueSeverity.ERROR })
+    }
+
+    @Test
     fun extractsOtherSeriesStartRowsWithGeneratedStartsInManifestOrder() {
         val series = seriesFile(
             events = listOf(seriesEvent("day-1", 0), seriesEvent("day-2", 1), seriesEvent("day-3", 2), seriesEvent("day-4", 3))
@@ -250,7 +281,8 @@ class EventSeriesSupportTest {
         name: String,
         raceId: String = name,
         competitors: List<EventCompetitorData> = emptyList(),
-        seriesLink: EventSeriesLink? = null
+        seriesLink: EventSeriesLink? = null,
+        raceLevel: RaceLevel = RaceLevel.PRACTICE
     ): EventProjectFile {
         val category = category()
         return EventProjectFile(
@@ -261,7 +293,7 @@ class EventSeriesSupportTest {
                     apiKey = "",
                     startDateTimeIso = "2026-06-01T10:00",
                     raceType = RaceType.CLASSIC,
-                    raceLevel = RaceLevel.PRACTICE,
+                    raceLevel = raceLevel,
                     raceBand = RaceBand.M80,
                     timeLimitSeconds = 7200
                 ),
