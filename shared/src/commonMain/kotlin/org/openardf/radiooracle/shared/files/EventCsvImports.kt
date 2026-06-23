@@ -303,20 +303,36 @@ object EventCsvImports {
     }
 
     private fun parseAndroidCompetitorStartRow(fields: List<String>, lineIndex: Int): CompetitorStartCsvImportRow {
-        require(fields.size == EventCsvFormat.CompetitorStart.COLUMN_COUNT) {
-            "Expected ${EventCsvFormat.CompetitorStart.COLUMN_COUNT} columns at line: $lineIndex"
+        require(
+            fields.size == EventCsvFormat.CompetitorStart.COLUMN_COUNT ||
+                fields.size >= EventCsvFormat.CompetitorStart.EXPORTED_COLUMN_COUNT
+        ) {
+            "Expected ${EventCsvFormat.CompetitorStart.COLUMN_COUNT} or at least ${EventCsvFormat.CompetitorStart.EXPORTED_COLUMN_COUNT} columns at line: $lineIndex"
         }
 
+        val exportedShape = fields.size >= EventCsvFormat.CompetitorStart.EXPORTED_COLUMN_COUNT
+        val startTimeColumn = if (exportedShape) {
+            EventCsvFormat.CompetitorStart.EXPORTED_START_TIME
+        } else {
+            EventCsvFormat.CompetitorStart.START_TIME
+        }
+        val siNumberColumn = if (exportedShape) {
+            EventCsvFormat.CompetitorStart.EXPORTED_SI_NUMBER
+        } else {
+            EventCsvFormat.CompetitorStart.SI_NUMBER
+        }
+        val bibNumber = if (exportedShape) fields[EventCsvFormat.CompetitorStart.EXPORTED_INDEX].trim() else ""
         val startNumber = fields[EventCsvFormat.CompetitorStart.START_NUMBER].trim().toInt()
-        val siNumber = fields[EventCsvFormat.CompetitorStart.SI_NUMBER].trim().takeIf { it.isNotEmpty() }?.toInt()
+        val siNumber = fields[siNumberColumn].trim().takeIf { it.isNotEmpty() }?.toInt()
         require(siNumber == null || SportIdentCodes.isSINumberValid(siNumber)) {
             "Invalid SI number at line: $lineIndex"
         }
 
         return CompetitorStartCsvImportRow(
             startNumber = startNumber,
-            startTimeText = fields[EventCsvFormat.CompetitorStart.START_TIME].trim(),
-            siNumber = siNumber
+            startTimeText = fields[startTimeColumn].trim(),
+            siNumber = siNumber,
+            bibNumber = bibNumber
         )
     }
 

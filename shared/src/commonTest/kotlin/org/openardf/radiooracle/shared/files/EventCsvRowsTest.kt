@@ -29,6 +29,27 @@ class EventCsvRowsTest {
     }
 
     @Test
+    fun formatsCategoryRowsWithQuotedFields() {
+        val category = EventCategory(
+            id = "category",
+            raceId = "race",
+            name = "M;21",
+            isMan = true,
+            maxAge = null,
+            lengthMeters = 5_000,
+            climbMeters = 100,
+            order = 1,
+            differentProperties = true,
+            raceType = RaceType.SPRINT,
+            raceBand = null,
+            timeLimitSeconds = 2_700,
+            controlPointsString = "31 32"
+        )
+
+        assertEquals("\"M;21\";1;99;5000;100;0;SPRINT;45;", EventCsvRows.categoryRow(category))
+    }
+
+    @Test
     fun formatsCompetitorRows() {
         val competitor = EventCompetitor(
             id = "competitor",
@@ -129,6 +150,44 @@ class EventCsvRowsTest {
         assertEquals(
             "42;Kolsky;Pavel;M21;;;OK001;;OK;123456",
             EventCsvRows.competitorStartRow(competitor, "M21", null)
+        )
+    }
+
+    @Test
+    fun formatsCompetitorStartRowsWithQuotedFields() {
+        val competitor = EventCompetitor(
+            id = "competitor",
+            raceId = "race",
+            categoryId = "category",
+            firstName = "Pa\"vel",
+            lastName = "Kol;sky",
+            club = "OK; East",
+            index = "OK001",
+            isMan = true,
+            birthYear = 1980,
+            siNumber = 123456,
+            siRent = false,
+            startNumber = 42,
+            drawnStartTimeSeconds = 600
+        )
+
+        assertEquals(
+            "42;\"Kol;sky\";\"Pa\"\"vel\";\"M;21\";;10:10;OK001;;\"OK; East\";123456",
+            EventCsvRows.competitorStartRow(competitor, "M;21", "10:10")
+        )
+    }
+
+    @Test
+    fun formatsResultRowsWithQuotedFields() {
+        assertEquals(
+            "1;\"RUNNER; Test\";OK;2;00:10:00",
+            EventCsvRows.resultRow(
+                placeText = "1",
+                competitorName = "RUNNER; Test",
+                statusLabel = "OK",
+                pointsText = "2",
+                runTimeText = "00:10:00"
+            )
         )
     }
 

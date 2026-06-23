@@ -281,6 +281,26 @@ class EventCsvImportsTest {
     }
 
     @Test
+    fun parsesExportedCompetitorStartRows() {
+        val result = EventCsvImports.parseAndroidCompetitorStartRows(
+            "42;\"Kol;sky\";\"Pa\"\"vel\";\"M;21\";;10:10;OK001;;\"OK; East\";123456"
+        )
+
+        assertEquals(emptyList(), result.invalidLines)
+        assertEquals(
+            listOf(
+                CompetitorStartCsvImportRow(
+                    startNumber = 42,
+                    startTimeText = "10:10",
+                    siNumber = 123456,
+                    bibNumber = "OK001"
+                )
+            ),
+            result.rows
+        )
+    }
+
+    @Test
     fun reportsInvalidCompetitorStartRows() {
         val result = EventCsvImports.parseAndroidCompetitorStartRows(
             """
@@ -296,6 +316,6 @@ class EventCsvImportsTest {
         )
         assertEquals(2, result.invalidLines.size)
         assertEquals("Invalid SI number at line: 0", result.invalidLines[0].message)
-        assertEquals("Expected 3 columns at line: 1", result.invalidLines[1].message)
+        assertEquals("Expected 3 or at least 10 columns at line: 1", result.invalidLines[1].message)
     }
 }

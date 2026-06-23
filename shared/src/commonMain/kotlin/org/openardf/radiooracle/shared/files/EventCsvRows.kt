@@ -16,7 +16,7 @@ object EventCsvRows {
     /** Formats a category row in the legacy semicolon-delimited category export shape. */
     fun categoryRow(category: EventCategory): String {
         val followsRacePresets = if (category.differentProperties) 0 else 1
-        return listOf(
+        return csvRow(
             category.name,
             category.isMan.compareTo(false),
             category.maxAge ?: EventCsvFormat.Category.OPEN_MAX_AGE,
@@ -26,12 +26,12 @@ object EventCsvRows {
             category.raceType?.name ?: "",
             category.timeLimitSeconds?.div(60) ?: "",
             category.raceBand?.toDisplayLabel() ?: ""
-        ).joinToString(EventCsvFormat.DELIMITER.toString())
+        )
     }
 
     /** Formats a competitor row in the existing simple competitor CSV export shape. */
     fun competitorRow(competitor: EventCompetitor, categoryName: String): String {
-        return listOf(
+        return csvRow(
             competitor.siNumber ?: "",
             competitor.startNumber ?: "",
             competitor.firstName,
@@ -46,7 +46,7 @@ object EventCsvRows {
             competitor.preferredStartGroup ?: "",
             competitor.bibNumber,
             competitor.callSign
-        ).joinToString(EventCsvFormat.DELIMITER.toString()) { it.toString().csvField() }
+        )
     }
 
     /** Formats a start-list row, using caller-provided absolute start time text when available. */
@@ -55,9 +55,18 @@ object EventCsvRows {
         categoryName: String,
         startTimeText: String?
     ): String {
-        return "${competitor.startNumber ?: ""};${competitor.lastName};${competitor.firstName};" +
-                "$categoryName;;${startTimeText ?: ""};${competitor.index};;" +
-                "${competitor.club};${competitor.siNumber ?: ""}"
+        return csvRow(
+            competitor.startNumber,
+            competitor.lastName,
+            competitor.firstName,
+            categoryName,
+            "",
+            startTimeText,
+            competitor.index,
+            "",
+            competitor.club,
+            competitor.siNumber
+        )
     }
 
     fun robisStartListRow(
@@ -71,7 +80,7 @@ object EventCsvRows {
 
     /** Formats one raw punch row for readout debugging/export. */
     fun punchRow(cardNumber: Int?, siCode: Int, timeText: String): String {
-        return "${cardNumber ?: ""};$siCode;$timeText"
+        return csvRow(cardNumber, siCode, timeText)
     }
 
     /** Formats one full readout row with header times followed by control code/time pairs. */
@@ -82,19 +91,16 @@ object EventCsvRows {
         finishTimeText: String?,
         controlPunches: List<TimedPunchCsvField>
     ): String {
-        val punchFields = controlPunches.joinToString(";") { punch ->
-            "${punch.siCode};${punch.timeText}"
-        }
-
-        val header = listOf(
+        val headerFields: List<Any?> = listOf(
             siNumber ?: "",
             checkTimeText ?: "",
             startTimeText ?: "",
             finishTimeText ?: "",
             controlPunches.size
-        ).joinToString(";")
+        )
+        val punchFields: List<Any?> = controlPunches.flatMap { punch -> listOf(punch.siCode, punch.timeText) }
 
-        return header + if (punchFields.isNotEmpty()) ";$punchFields" else ""
+        return csvRow(*(headerFields + punchFields).toTypedArray())
     }
 
     /** Formats one ranked result row in the same order as the desktop Results section. */
@@ -105,7 +111,7 @@ object EventCsvRows {
         pointsText: String,
         runTimeText: String
     ): String =
-        "$placeText;$competitorName;$statusLabel;$pointsText;$runTimeText"
+        csvRow(placeText, competitorName, statusLabel, pointsText, runTimeText)
 
     fun ardfEventResultRow(
         categoryName: String,

@@ -82,6 +82,10 @@ object EventCsvFormat {
         const val START_NUMBER = 0
         const val START_TIME = 1
         const val SI_NUMBER = 2
+        const val EXPORTED_COLUMN_COUNT = 10
+        const val EXPORTED_START_TIME = 5
+        const val EXPORTED_INDEX = 6
+        const val EXPORTED_SI_NUMBER = 9
     }
 
     object Control {

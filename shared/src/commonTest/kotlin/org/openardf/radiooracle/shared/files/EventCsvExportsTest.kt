@@ -43,6 +43,24 @@ class EventCsvExportsTest {
     }
 
     @Test
+    fun exportedCategoryRowsQuoteNamesForRoundTripImport() {
+        val baseRaceData = raceData()
+        val raceData = baseRaceData.copy(
+            categories = baseRaceData.categories.map { categoryData ->
+                categoryData.copy(category = categoryData.category.copy(name = "M;21"))
+            }
+        )
+
+        val exported = EventCsvExports.categories(raceData)
+        val result = EventCsvImports.parseAndroidCategoryRows(exported)
+
+        assertEquals("\"M;21\";1;99;5000;100;1;;;;2;31,32\n", exported)
+        assertEquals(emptyList(), result.invalidLines)
+        assertEquals("M;21", result.rows.single().name)
+        assertEquals("31 32", result.rows.single().controlPointsText)
+    }
+
+    @Test
     fun lockedCategoryExportOmitsEncryptedIdealOrderColumn() {
         val raceData = raceData().withEncryptedIdealOrder("ro-ideal-v1:test")
 
@@ -132,6 +150,17 @@ class EventCsvExportsTest {
         assertEquals(
             "7;Runner;Test;M21;;10:00;OK001;;OK Test;123456\n",
             EventCsvExports.competitorStarts(raceData())
+        )
+    }
+
+    @Test
+    fun exportedCompetitorStartRowsParseWithSharedImportContract() {
+        val result = EventCsvImports.parseAndroidCompetitorStartRows(EventCsvExports.competitorStarts(raceData()))
+
+        assertEquals(emptyList(), result.invalidLines)
+        assertEquals(
+            listOf(CompetitorStartCsvImportRow(startNumber = 7, startTimeText = "10:00", siNumber = 123456, bibNumber = "OK001")),
+            result.rows
         )
     }
 
