@@ -160,6 +160,18 @@ object DesktopFileOverwriteConfirmation {
         confirmOverwrite: (Path) -> Boolean
     ): Path? =
         if (!exists(path) || confirmOverwrite(path)) path else null
+
+    fun confirmedExtensionAdjustedPath(
+        selectedPath: Path,
+        finalPath: Path,
+        exists: (Path) -> Boolean,
+        confirmOverwrite: (Path) -> Boolean
+    ): Path? =
+        if (selectedPath.toAbsolutePath().normalize() == finalPath.toAbsolutePath().normalize()) {
+            finalPath
+        } else {
+            confirmedPath(finalPath, exists, confirmOverwrite)
+        }
 }
 
 /** File filters for selectable Event Files; directories stay visible so users can browse normally. */
@@ -238,64 +250,56 @@ object DesktopFileDialogs {
 
     /** Lets the user choose a save location, returning null when cancelled. */
     fun chooseSaveProject(raceName: String? = null, suggestedFileName: String? = null): Path? =
-        chooseEventFile(
+        chooseSaveEventFile(
             title = "Save Radio-Oracle Event File",
-            mode = FileDialog.SAVE,
             defaultFileName = suggestedFileName
                 ?.takeIf { it.isNotBlank() }
                 ?.let(DesktopProjectFilePaths::defaultProjectFileName)
                 ?: raceName?.let(DesktopProjectFilePaths::defaultProjectFileName)
         )
-            ?.let(DesktopProjectFilePaths::withProjectExtension)
 
     /** Lets the user choose an export-copy location, returning null when cancelled. */
     fun chooseExportProject(): Path? =
-        chooseEventFile("Export Radio-Oracle Event File Copy", FileDialog.SAVE)
-            ?.let(DesktopProjectFilePaths::withProjectExtension)
+        chooseSaveEventFile("Export Radio-Oracle Event File Copy")
 
     fun chooseExportCsv(title: String, eventName: String? = null, suffix: String? = null): Path? =
-        chooseFile(
-            title,
-            FileDialog.SAVE,
-            DesktopProjectFilePaths.CSV_EXTENSION,
+        chooseSaveFile(
+            title = title,
+            extension = DesktopProjectFilePaths.CSV_EXTENSION,
             defaultFileName = eventName?.let { DesktopProjectFilePaths.defaultCsvFileName(it, suffix) }
-        )
-            ?.let(DesktopProjectFilePaths::withCsvExtension)
+        ) { DesktopProjectFilePaths.withCsvExtension(it) }
 
     fun chooseExportArdfJson(): Path? =
-        chooseFile("Export ARDF JSON", FileDialog.SAVE, DesktopProjectFilePaths.ARDF_JSON_EXTENSION)
-            ?.let(DesktopProjectFilePaths::withArdfJsonExtension)
-            ?.let(::confirmOverwrite)
+        chooseSaveFile("Export ARDF JSON", DesktopProjectFilePaths.ARDF_JSON_EXTENSION) {
+            DesktopProjectFilePaths.withArdfJsonExtension(it)
+        }
 
     fun chooseExportAndroidRaceBackupJson(eventName: String? = null): Path? =
-        chooseFile(
+        chooseSaveFile(
             title = "Save Android Event File",
-            mode = FileDialog.SAVE,
             extension = DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION,
             defaultFileName = eventName?.let(DesktopProjectFilePaths::defaultAndroidEventJsonFileName)
-        )
-            ?.let(DesktopProjectFilePaths::withAndroidRaceBackupJsonExtension)
-            ?.let(::confirmOverwrite)
+        ) { DesktopProjectFilePaths.withAndroidRaceBackupJsonExtension(it) }
 
     fun chooseExportFinalResultsJson(): Path? =
-        chooseFile("Export Final Results JSON", FileDialog.SAVE, DesktopProjectFilePaths.FINAL_RESULTS_JSON_EXTENSION)
-            ?.let(DesktopProjectFilePaths::withFinalResultsJsonExtension)
-            ?.let(::confirmOverwrite)
+        chooseSaveFile("Export Final Results JSON", DesktopProjectFilePaths.FINAL_RESULTS_JSON_EXTENSION) {
+            DesktopProjectFilePaths.withFinalResultsJsonExtension(it)
+        }
 
     fun chooseExportLiveResultsJson(): Path? =
-        chooseFile("Export Live Results JSON", FileDialog.SAVE, DesktopProjectFilePaths.LIVE_RESULTS_JSON_EXTENSION)
-            ?.let(DesktopProjectFilePaths::withLiveResultsJsonExtension)
-            ?.let(::confirmOverwrite)
+        chooseSaveFile("Export Live Results JSON", DesktopProjectFilePaths.LIVE_RESULTS_JSON_EXTENSION) {
+            DesktopProjectFilePaths.withLiveResultsJsonExtension(it)
+        }
 
     fun chooseExportIofXml(title: String): Path? =
-        chooseFile(title, FileDialog.SAVE, DesktopProjectFilePaths.IOF_XML_EXTENSION)
-            ?.let(DesktopProjectFilePaths::withIofXmlExtension)
-            ?.let(::confirmOverwrite)
+        chooseSaveFile(title, DesktopProjectFilePaths.IOF_XML_EXTENSION) {
+            DesktopProjectFilePaths.withIofXmlExtension(it)
+        }
 
     fun chooseExportHtml(title: String): Path? =
-        chooseFile(title, FileDialog.SAVE, DesktopProjectFilePaths.HTML_EXTENSION)
-            ?.let(DesktopProjectFilePaths::withHtmlExtension)
-            ?.let(::confirmOverwrite)
+        chooseSaveFile(title, DesktopProjectFilePaths.HTML_EXTENSION) {
+            DesktopProjectFilePaths.withHtmlExtension(it)
+        }
 
     fun chooseExportPublicResultsSiteDirectory(): Path? {
         val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
@@ -322,29 +326,23 @@ object DesktopFileDialogs {
     }
 
     fun chooseExportCourseAnalysisPdf(defaultFileName: String? = null): Path? =
-        chooseFile(
+        chooseSaveFile(
             title = "Export Course Analysis PDF",
-            mode = FileDialog.SAVE,
             extension = DesktopProjectFilePaths.PDF_EXTENSION,
             defaultFileName = defaultFileName
-        )
-            ?.let(DesktopProjectFilePaths::withPdfExtension)
-            ?.let(::confirmOverwrite)
+        ) { DesktopProjectFilePaths.withPdfExtension(it) }
 
     fun chooseExportClassicCourseGeneratorPdf(defaultFileName: String? = null): Path? =
-        chooseFile(
+        chooseSaveFile(
             title = "Export Classic Course Generator PDF",
-            mode = FileDialog.SAVE,
             extension = DesktopProjectFilePaths.PDF_EXTENSION,
             defaultFileName = defaultFileName
-        )
-            ?.let(DesktopProjectFilePaths::withPdfExtension)
-            ?.let(::confirmOverwrite)
+        ) { DesktopProjectFilePaths.withPdfExtension(it) }
 
     fun chooseExportTxt(title: String): Path? =
-        chooseFile(title, FileDialog.SAVE, DesktopProjectFilePaths.TXT_EXTENSION)
-            ?.let(DesktopProjectFilePaths::withTxtExtension)
-            ?.let(::confirmOverwrite)
+        chooseSaveFile(title, DesktopProjectFilePaths.TXT_EXTENSION) {
+            DesktopProjectFilePaths.withTxtExtension(it)
+        }
 
     fun chooseImportCsv(title: String): Path? =
         chooseFile(title, FileDialog.LOAD, DesktopProjectFilePaths.CSV_EXTENSION)
@@ -489,6 +487,17 @@ object DesktopFileDialogs {
         return Path.of(directory, file)
     }
 
+    private fun chooseSaveFile(
+        title: String,
+        extension: String,
+        defaultFileName: String? = null,
+        withExtension: (Path) -> Path
+    ): Path? {
+        val selectedPath = chooseFile(title, FileDialog.SAVE, extension, defaultFileName) ?: return null
+        val finalPath = withExtension(selectedPath)
+        return confirmExtensionAdjustedOverwrite(selectedPath, finalPath)
+    }
+
     private fun chooseFiles(title: String, extension: String): List<Path> {
         val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD)
         dialog.filenameFilter = FilenameFilter { _, name -> name.endsWith(extension) }
@@ -536,6 +545,23 @@ object DesktopFileDialogs {
                 JOptionPane.WARNING_MESSAGE
             ) == JOptionPane.YES_OPTION
         }
+
+    private fun confirmExtensionAdjustedOverwrite(selectedPath: Path, finalPath: Path): Path? =
+        DesktopFileOverwriteConfirmation.confirmedExtensionAdjustedPath(selectedPath, finalPath, Files::exists) { path ->
+            JOptionPane.showConfirmDialog(
+                null,
+                "${path.fileName} already exists. Replace it?",
+                "Replace Existing File?",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+            ) == JOptionPane.YES_OPTION
+        }
+
+    private fun chooseSaveEventFile(title: String, defaultFileName: String? = null): Path? {
+        val selectedPath = chooseEventFile(title, FileDialog.SAVE, defaultFileName) ?: return null
+        val finalPath = DesktopProjectFilePaths.withProjectExtension(selectedPath)
+        return confirmExtensionAdjustedOverwrite(selectedPath, finalPath)
+    }
 
     private fun chooseEventFile(title: String, mode: Int, defaultFileName: String? = null): Path? {
         val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()

@@ -234,6 +234,60 @@ class DesktopProjectFilePathsTest {
     }
 
     @Test
+    fun extensionAdjustedOverwriteSkipsPromptWhenNativeDialogConfirmedSamePath() {
+        val path = Path.of("event.csv")
+        var prompted = false
+
+        assertEquals(
+            path,
+            DesktopFileOverwriteConfirmation.confirmedExtensionAdjustedPath(
+                selectedPath = path,
+                finalPath = path,
+                exists = { true },
+                confirmOverwrite = {
+                    prompted = true
+                    false
+                }
+            )
+        )
+        assertFalse(prompted)
+    }
+
+    @Test
+    fun extensionAdjustedOverwritePromptsWhenFinalPathDiffersAndExists() {
+        val selectedPath = Path.of("event")
+        val finalPath = Path.of("event.csv")
+        var promptedPath: Path? = null
+
+        assertEquals(
+            finalPath,
+            DesktopFileOverwriteConfirmation.confirmedExtensionAdjustedPath(
+                selectedPath = selectedPath,
+                finalPath = finalPath,
+                exists = { it == finalPath },
+                confirmOverwrite = {
+                    promptedPath = it
+                    true
+                }
+            )
+        )
+        assertEquals(finalPath, promptedPath)
+    }
+
+    @Test
+    fun extensionAdjustedOverwriteCancelsWhenFinalPathDiffersAndRejected() {
+        assertEquals(
+            null,
+            DesktopFileOverwriteConfirmation.confirmedExtensionAdjustedPath(
+                selectedPath = Path.of("event"),
+                finalPath = Path.of("event.csv"),
+                exists = { true },
+                confirmOverwrite = { false }
+            )
+        )
+    }
+
+    @Test
     fun keepsExistingArdfJsonExtension() {
         val path = Path.of("event.ardf.json")
 
