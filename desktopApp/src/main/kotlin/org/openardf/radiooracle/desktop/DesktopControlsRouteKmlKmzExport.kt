@@ -22,6 +22,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 private const val COURSE_ROUTE_STYLE_LINE_WIDTH = 4
+private const val COURSE_OBJECT_COLOCATION_TOLERANCE_METERS = 5.0
 
 private val COURSE_CONTROL_DONUT_STYLE_ID = DesktopCourseKmlStyle.DonutStyleId
 private val COURSE_START_STYLE_ID = DesktopCourseKmlStyle.StartStyleId
@@ -85,11 +86,7 @@ object DesktopControlsRouteKmlKmzExporter {
         return DesktopControlsRouteKmlKmzExportSummary(
             categoryCount = projectFile.raceData.categories.size,
             routeCount = protectedCourseInfoByCategoryId.values.count { it.route.isNotEmpty() },
-            controlCatalogCount = if (target.format == DesktopControlsRouteKmlKmzExportFormat.Gpx) {
-                projectFile.raceData.controls.size
-            } else {
-                0
-            },
+            controlCatalogCount = 0,
             courseControlPointCount = exportedCourseObjects.courseObjects.size + exportedCourseObjects.controlPoints.size,
             outputFormat = target.format
         )
@@ -276,22 +273,10 @@ object DesktopControlsRouteKmlKmzExporter {
         appendLine("    <name>${xml(projectFile.raceData.race.name)} controls and routes</name>")
         appendLine("    <desc>Radio-Oracle protected controls and category routes. OCAD-specific GPX extensions are not yet documented; standard GPX waypoints and routes are used.</desc>")
         appendLine("  </metadata>")
-        projectFile.raceData.controls.forEach { control ->
-            val latitude = control.latitude
-            val longitude = control.longitude
-            if (latitude != null && longitude != null) {
-                appendGpxWaypoint(
-                    indent = "  ",
-                    tagName = "wpt",
-                    latitude = latitude,
-                    longitude = longitude,
-                    elevationMeters = null,
-                    name = control.publicLabel?.takeIf { it.isNotBlank() } ?: control.label,
-                    description = controlCatalogDescription(control),
-                    type = control.type.name
-                )
-            }
-        }
+        val controlsById = projectFile.raceData.controls.associateBy { it.id }
+        val exportedCourseObjects = courseExportObjects(protectedCourseInfoByCategoryId.values)
+        appendGpxCourseObjectWaypoints(exportedCourseObjects.courseObjects, controlsById)
+        appendGpxCourseControlWaypoints(exportedCourseObjects.controlPoints, controlsById)
         projectFile.raceData.categories.forEach { categoryData ->
             val category = categoryData.category
             val courseInfo = protectedCourseInfoByCategoryId[category.id] ?: return@forEach
@@ -315,20 +300,46 @@ object DesktopControlsRouteKmlKmzExporter {
                 )
             }
             appendLine("  </rte>")
-            courseInfo.controlPoints.forEach { point ->
-                appendGpxWaypoint(
-                    indent = "  ",
-                    tagName = "wpt",
-                    latitude = point.latitude,
-                    longitude = point.longitude,
-                    elevationMeters = point.elevationMeters,
-                    name = point.label,
-                    description = "Course control ${point.label}; category ${category.name}; type ${point.type}; id ${point.controlId}",
-                    type = point.type.name
-                )
-            }
         }
         appendLine("</gpx>")
+    }
+
+    private fun StringBuilder.appendGpxCourseObjectWaypoints(
+        points: List<ProtectedCourseObjectPoint>,
+        controlsById: Map<String, EventControl>
+    ) {
+        points.forEach { point ->
+            val label = controlsById[point.id]?.displayCourseLabel() ?: point.label
+            appendGpxWaypoint(
+                indent = "  ",
+                tagName = "wpt",
+                latitude = point.latitude,
+                longitude = point.longitude,
+                elevationMeters = point.elevationMeters,
+                name = label,
+                description = "Course object $label; type ${point.type}; id ${point.id}",
+                type = point.type.name
+            )
+        }
+    }
+
+    private fun StringBuilder.appendGpxCourseControlWaypoints(
+        points: List<ProtectedCourseControlPoint>,
+        controlsById: Map<String, EventControl>
+    ) {
+        points.forEach { point ->
+            val label = controlsById[point.controlId]?.displayCourseLabel() ?: point.label
+            appendGpxWaypoint(
+                indent = "  ",
+                tagName = "wpt",
+                latitude = point.latitude,
+                longitude = point.longitude,
+                elevationMeters = point.elevationMeters,
+                name = label,
+                description = "Course control $label; type ${point.type}; id ${point.controlId}",
+                type = point.type.name
+            )
+        }
     }
 
     private fun StringBuilder.appendGpxWaypoint(
@@ -368,33 +379,43 @@ object DesktopControlsRouteKmlKmzExporter {
             }.joinToString("; ").ifBlank { "Protected course data." }
         }
 
-    private fun controlCatalogDescription(control: EventControl): String =
-        buildList {
-            add("SI=${control.siCode}")
-            add("Type ${control.type}")
-            add(if (control.scored) "Scored" else "Not scored")
-            control.publicLabel?.takeIf { it.isNotBlank() }?.let { add("Public label: $it") }
-            control.notes?.takeIf { it.isNotBlank() }?.let { add("Notes: $it") }
-        }.joinToString("\n")
-
     private fun courseRouteStyleId(categoryId: String): String = "courseRoute-${categoryId}"
 
     private fun EventControl.displayCourseLabel(): String =
         publicLabel?.takeIf { it.isNotBlank() } ?: label
 
     private fun courseExportObjects(courseInfos: Collection<ProtectedCourseInfo>): CourseExportObjects {
-        // KML/KMZ exports keep routes and course objects in one folder. Each shared start, finish,
-        // spectator, beacon, fox, or route waypoint is emitted once so importing an exported file
-        // does not create duplicate controls from per-category copies.
-        val courseObjects = courseInfos
-            .flatMap { it.courseObjects }
-            .distinctBy { "${it.id}:${it.type}:${it.latitude}:${it.longitude}" }
+        // KML/KMZ/GPX exports keep routes and course objects in one shared surface. Starts, finishes,
+        // spectators, beacons, and foxes are shared event objects, so dedupe them by object identity
+        // even when category route endpoints differ slightly. For route-derived objects such as
+        // mandatory waypoints, use a meter-based colocation check so tiny coordinate differences do
+        // not create duplicate exported waypoints.
+        val courseObjects = courseInfos.flatMap { it.courseObjects }.dedupeForExport()
         val courseObjectControlIds = courseObjects.mapTo(mutableSetOf()) { it.id }
         val controlPoints = courseInfos
             .flatMap { it.controlPoints }
             .filterNot { it.controlId in courseObjectControlIds }
-            .distinctBy { "${it.controlId}:${it.type}:${it.latitude}:${it.longitude}" }
+            .distinctBy { "${it.controlId}:${it.type}" }
         return CourseExportObjects(courseObjects = courseObjects, controlPoints = controlPoints)
+    }
+
+    private fun List<ProtectedCourseObjectPoint>.dedupeForExport(): List<ProtectedCourseObjectPoint> =
+        fold(emptyList()) { exported, candidate ->
+            if (exported.any { it.sameExportObjectAs(candidate) }) {
+                exported
+            } else {
+                exported + candidate
+            }
+        }
+
+    private fun ProtectedCourseObjectPoint.sameExportObjectAs(other: ProtectedCourseObjectPoint): Boolean {
+        if (id == other.id && type == other.type) {
+            return true
+        }
+        return type == other.type &&
+            label.trim().equals(other.label.trim(), ignoreCase = true) &&
+            CourseGeoPoint(latitude, longitude).distanceMetersTo(CourseGeoPoint(other.latitude, other.longitude)) <=
+            COURSE_OBJECT_COLOCATION_TOLERANCE_METERS
     }
 
     private fun controlPointStyle(type: ControlPointType): String? = when (type) {

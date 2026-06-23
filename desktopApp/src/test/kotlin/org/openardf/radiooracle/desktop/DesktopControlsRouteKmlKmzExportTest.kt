@@ -104,6 +104,66 @@ class DesktopControlsRouteKmlKmzExportTest {
     }
 
     @Test
+    fun exportsSharedStartsAndFinishesOnceAcrossCategoryEndpointVariants() {
+        val project = sampleProjectWithEndpointVariants("course-key")
+        val kmlOutput = Files.createTempFile("radio-oracle-controls-routes-endpoints", ".kml.zip")
+
+        val kmlSummary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+            target = DesktopControlsRouteKmlKmzExportTarget(kmlOutput, DesktopControlsRouteKmlKmzExportFormat.Kml),
+            projectFile = project,
+            password = "course-key"
+        )
+
+        assertEquals(3, kmlSummary.routeCount)
+        assertEquals(6, kmlSummary.courseControlPointCount)
+        val kmlNames = exportedKmlText(kmlOutput, "course-key").folderPlacemarkNames("Courses")
+        assertEquals(1, kmlNames.count { it == "Start" })
+        assertEquals(1, kmlNames.count { it == "Finish" })
+
+        val gpxOutput = Files.createTempFile("radio-oracle-controls-routes-endpoints", ".gpx.zip")
+        val gpxSummary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+            target = DesktopControlsRouteKmlKmzExportTarget(gpxOutput, DesktopControlsRouteKmlKmzExportFormat.Gpx),
+            projectFile = project,
+            password = "course-key"
+        )
+
+        assertEquals(3, gpxSummary.routeCount)
+        assertEquals(6, gpxSummary.courseControlPointCount)
+        val gpx = exportedGpxText(gpxOutput, "course-key")
+        assertEquals(1, gpx.gpxWaypointNames().count { it == "Start" })
+        assertEquals(1, gpx.gpxWaypointNames().count { it == "Finish" })
+        assertEquals(listOf("M21", "W65", "M40"), gpx.gpxRouteNames())
+    }
+
+    @Test
+    fun exportsColocatedMandatoryWaypointsOnceAcrossCategoryCoordinateNoise() {
+        val project = sampleProjectWithColocatedWaypointVariants("course-key")
+        val kmlOutput = Files.createTempFile("radio-oracle-controls-routes-waypoints", ".kml.zip")
+
+        val kmlSummary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+            target = DesktopControlsRouteKmlKmzExportTarget(kmlOutput, DesktopControlsRouteKmlKmzExportFormat.Kml),
+            projectFile = project,
+            password = "course-key"
+        )
+
+        assertEquals(2, kmlSummary.routeCount)
+        assertEquals(7, kmlSummary.courseControlPointCount)
+        val kmlNames = exportedKmlText(kmlOutput, "course-key").folderPlacemarkNames("Courses")
+        assertEquals(1, kmlNames.count { it == "Gate A" })
+
+        val gpxOutput = Files.createTempFile("radio-oracle-controls-routes-waypoints", ".gpx.zip")
+        val gpxSummary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+            target = DesktopControlsRouteKmlKmzExportTarget(gpxOutput, DesktopControlsRouteKmlKmzExportFormat.Gpx),
+            projectFile = project,
+            password = "course-key"
+        )
+
+        assertEquals(2, gpxSummary.routeCount)
+        assertEquals(7, gpxSummary.courseControlPointCount)
+        assertEquals(1, exportedGpxText(gpxOutput, "course-key").gpxWaypointNames().count { it == "Gate A" })
+    }
+
+    @Test
     fun exportedCourseKmlImportsBackWithoutDuplicateCourseObjects() {
         val output = Files.createTempFile("radio-oracle-controls-routes-round-trip", ".kml.zip")
         val sourceProject = sampleProjectWithTwoCategories("course-key")
@@ -170,17 +230,59 @@ class DesktopControlsRouteKmlKmzExportTest {
         )
 
         assertEquals(DesktopControlsRouteKmlKmzExportFormat.Gpx, summary.outputFormat)
+        assertEquals(0, summary.controlCatalogCount)
+        assertEquals(6, summary.courseControlPointCount)
         val zip = ZipFile(output.toFile(), "course-key".toCharArray())
         val header = zip.fileHeaders.single()
         assertEquals("controls-routes.gpx", header.fileName)
         val gpx = zip.getInputStream(header).use { it.readBytes().decodeToString() }
         assertTrue(gpx.contains("<gpx version=\"1.1\""))
         assertTrue(gpx.contains("<name>Course Test controls and routes</name>"))
-        assertTrue(gpx.contains("<wpt lat=\"45.0001\" lon=\"-122.0001\">"))
+        assertTrue(gpx.indexOf("<metadata>") < gpx.indexOf("<wpt "))
+        assertTrue(gpx.indexOf("<wpt ") < gpx.indexOf("<rte>"))
+        assertEquals(listOf("Start", "Spectator", "B", "Finish", "1", "2"), gpx.gpxWaypointNames())
         assertTrue(gpx.contains("<rte>"))
         assertTrue(gpx.contains("<name>M21</name>"))
-        assertTrue(gpx.contains("<rtept lat=\"45.0001\" lon=\"-122.0001\">"))
+        assertEquals(listOf("M21"), gpx.gpxRouteNames())
+        assertEquals(6, Regex("<rtept\\b").findAll(gpx).count())
+        assertTrue(gpx.contains("<wpt lat=\"45\" lon=\"-122\">"))
+        assertTrue(gpx.contains("<wpt lat=\"45.0001\" lon=\"-122.0001\">"))
         assertTrue(gpx.contains("<type>Radio-Oracle category route</type>"))
+        assertFalse(gpx.contains("SI=31"))
+    }
+
+    @Test
+    fun exportedCourseGpxImportsBackWithoutDuplicateCourseObjects() {
+        val output = Files.createTempFile("radio-oracle-controls-routes-round-trip", ".gpx.zip")
+        val sourceProject = sampleProjectWithTwoCategories("course-key")
+        DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+            target = DesktopControlsRouteKmlKmzExportTarget(output, DesktopControlsRouteKmlKmzExportFormat.Gpx),
+            projectFile = sourceProject,
+            password = "course-key"
+        )
+        val gpxPath = Files.createTempFile("radio-oracle-controls-routes-round-trip", ".gpx")
+        Files.writeString(gpxPath, exportedGpxText(output, "course-key"))
+        val targetProject = sampleProjectWithoutProtectedCourses(sourceProject)
+
+        val (importedProject, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = gpxPath,
+            projectFile = targetProject,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        assertEquals(2, summary.importedCategoryCount)
+        assertEquals(emptyList<String>(), summary.missingControlNames)
+        importedProject.raceData.categories.forEach { categoryData ->
+            val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+                requireNotNull(categoryData.category.encryptedCourseInfo),
+                "course-key"
+            )
+            val courseObjectLabels = protectedCourseInfo.courseObjects.map { it.label }
+            assertEquals(listOf("Start", "1", "Spectator", "B", "2", "Finish"), courseObjectLabels)
+            assertEquals(courseObjectLabels.distinct(), courseObjectLabels)
+            assertEquals("1 Spectator B 2", protectedCourseInfo.idealOrder)
+        }
     }
 
     @Test
@@ -271,6 +373,36 @@ class DesktopControlsRouteKmlKmzExportTest {
         )
     }
 
+    private fun sampleProjectWithEndpointVariants(password: String): EventProjectFile {
+        val withSecondCategory = EventProjectEditor.addCategory(sampleProject(password), categoryId = "cat-w65", name = "W65")
+        val withThirdCategory = EventProjectEditor.addCategory(withSecondCategory, categoryId = "cat-m40", name = "M40")
+        return EventProjectEditor.updateCategoryEncryptedCourseInfo(
+            EventProjectEditor.updateCategoryEncryptedCourseInfo(
+                withThirdCategory,
+                "cat-w65",
+                DesktopProtectedCourseOrder.encryptCourseInfo(sampleCourseInfo(endpointOffset = 0.00002), password)
+            ),
+            "cat-m40",
+            DesktopProtectedCourseOrder.encryptCourseInfo(sampleCourseInfo(endpointOffset = -0.00002), password)
+        )
+    }
+
+    private fun sampleProjectWithColocatedWaypointVariants(password: String): EventProjectFile {
+        val withSecondCategory = EventProjectEditor.addCategory(sampleProject(password), categoryId = "cat-w65", name = "W65")
+        return EventProjectEditor.updateCategoryEncryptedCourseInfo(
+            EventProjectEditor.updateCategoryEncryptedCourseInfo(
+                withSecondCategory,
+                "cat-m21",
+                DesktopProtectedCourseOrder.encryptCourseInfo(sampleCourseInfo(includeWaypoint = true), password)
+            ),
+            "cat-w65",
+            DesktopProtectedCourseOrder.encryptCourseInfo(
+                sampleCourseInfo(includeWaypoint = true, waypointOffset = 0.00003),
+                password
+            )
+        )
+    }
+
     private fun sampleProjectWithoutProtectedCourses(project: EventProjectFile): EventProjectFile =
         project.copy(
             raceData = project.raceData.copy(
@@ -289,6 +421,13 @@ class DesktopControlsRouteKmlKmzExportTest {
         val zip = ZipFile(output.toFile(), password.toCharArray())
         val header = zip.fileHeaders.single()
         assertEquals("controls-routes.kml", header.fileName)
+        return zip.getInputStream(header).use { it.readBytes().decodeToString() }
+    }
+
+    private fun exportedGpxText(output: java.nio.file.Path, password: String): String {
+        val zip = ZipFile(output.toFile(), password.toCharArray())
+        val header = zip.fileHeaders.single()
+        assertEquals("controls-routes.gpx", header.fileName)
         return zip.getInputStream(header).use { it.readBytes().decodeToString() }
     }
 
@@ -319,7 +458,34 @@ class DesktopControlsRouteKmlKmzExportTest {
             .toList()
     }
 
-    private fun sampleCourseInfo() = ProtectedCourseInfo(
+    private fun String.gpxWaypointNames(): List<String> =
+        Regex("<wpt\\b[\\s\\S]*?</wpt>")
+            .findAll(this)
+            .mapNotNull { waypoint ->
+                Regex("<name>([\\s\\S]*?)</name>").find(waypoint.value)?.groupValues?.get(1)
+            }
+            .toList()
+
+    private fun String.gpxRouteNames(): List<String> =
+        Regex("<rte>[\\s\\S]*?</rte>")
+            .findAll(this)
+            .mapNotNull { route ->
+                Regex("<name>([\\s\\S]*?)</name>").find(route.value)?.groupValues?.get(1)
+            }
+            .toList()
+
+    private fun sampleCourseInfo(
+        endpointOffset: Double = 0.0,
+        includeWaypoint: Boolean = false,
+        waypointOffset: Double = 0.0
+    ): ProtectedCourseInfo {
+        val startLatitude = 45.0 + endpointOffset
+        val startLongitude = -122.0 + endpointOffset
+        val finishLatitude = 45.0009 + endpointOffset
+        val finishLongitude = -122.0009 + endpointOffset
+        val waypointLatitude = 45.0002 + waypointOffset
+        val waypointLongitude = -122.0002 + waypointOffset
+        return ProtectedCourseInfo(
         idealOrder = "1 2",
         lengthMeters = 1200,
         climbMeters = 25,
@@ -327,13 +493,18 @@ class DesktopControlsRouteKmlKmzExportTest {
         sourceSha256 = "abc123",
         sampledPointCount = 6,
         route = listOf(
-            ProtectedCourseRoutePoint(latitude = 45.0, longitude = -122.0, elevationMeters = 88.0),
+            ProtectedCourseRoutePoint(latitude = startLatitude, longitude = startLongitude, elevationMeters = 88.0),
             ProtectedCourseRoutePoint(latitude = 45.0001, longitude = -122.0001, elevationMeters = 90.0),
+            if (includeWaypoint) {
+                ProtectedCourseRoutePoint(latitude = waypointLatitude, longitude = waypointLongitude, elevationMeters = 95.0)
+            } else {
+                null
+            },
             ProtectedCourseRoutePoint(latitude = 45.0004, longitude = -122.0004, elevationMeters = 100.0),
             ProtectedCourseRoutePoint(latitude = 45.0006, longitude = -122.0006, elevationMeters = 105.0),
             ProtectedCourseRoutePoint(latitude = 45.0008, longitude = -122.0008, elevationMeters = 110.0),
-            ProtectedCourseRoutePoint(latitude = 45.0009, longitude = -122.0009, elevationMeters = 112.0)
-        ),
+            ProtectedCourseRoutePoint(latitude = finishLatitude, longitude = finishLongitude, elevationMeters = 112.0)
+        ).filterNotNull(),
         controlPoints = listOf(
             ProtectedCourseControlPoint(
                 controlId = "control-31",
@@ -365,10 +536,22 @@ class DesktopControlsRouteKmlKmzExportTest {
                 id = "start",
                 label = "Start",
                 type = ProtectedCourseObjectType.START,
-                latitude = 45.0,
-                longitude = -122.0,
+                latitude = startLatitude,
+                longitude = startLongitude,
                 elevationMeters = 88.0
             ),
+            if (includeWaypoint) {
+                ProtectedCourseObjectPoint(
+                    id = "waypoint-1-${waypointLatitude}-${waypointLongitude}",
+                    label = "Gate A",
+                    type = ProtectedCourseObjectType.WAYPOINT,
+                    latitude = waypointLatitude,
+                    longitude = waypointLongitude,
+                    elevationMeters = 95.0
+                )
+            } else {
+                null
+            },
             ProtectedCourseObjectPoint(
                 id = "spectator",
                 label = "Spectator",
@@ -389,10 +572,11 @@ class DesktopControlsRouteKmlKmzExportTest {
                 id = "finish",
                 label = "Finish",
                 type = ProtectedCourseObjectType.FINISH,
-                latitude = 45.0009,
-                longitude = -122.0009,
+                latitude = finishLatitude,
+                longitude = finishLongitude,
                 elevationMeters = 112.0
             )
-        )
+        ).filterNotNull()
     )
+    }
 }
