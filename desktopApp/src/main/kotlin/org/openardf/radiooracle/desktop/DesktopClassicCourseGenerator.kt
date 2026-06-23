@@ -38,6 +38,7 @@ data class ClassicCourseGeneratorRow(
     val horizontalLengthMeters: Double,
     val climbMeters: Double?,
     val coursePoints: List<ClassicCoursePoint>,
+    val routePoints: List<CourseGeoPoint>,
     val orderLabels: List<String>,
     val matchingCategories: List<String>
 ) {
@@ -113,13 +114,24 @@ object DesktopClassicCourseGenerator {
         val classified = classifyCoursePoints(courseData.controls)
         val elevationResult = classified.withMissingElevations(elevationLookup)
         val elevated = elevationResult.classified
+        val legSampleCache = mutableMapOf<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>()
         val groups = (3..elevated.foxes.size).map { foxCount ->
             ClassicCourseGeneratorGroup(
                 foxCount = foxCount,
                 title = groupTitle(foxCount),
                 rows = elevated.foxes
                     .combinations(foxCount)
-                    .map { foxSet -> idealRow(foxCount, elevated.start, elevated.finish, elevated.beacon, foxSet) }
+                    .map { foxSet ->
+                        idealRow(
+                            foxCount = foxCount,
+                            start = elevated.start,
+                            finish = elevated.finish,
+                            beacon = elevated.beacon,
+                            foxes = foxSet,
+                            elevationLookup = elevationLookup,
+                            legSampleCache = legSampleCache
+                        )
+                    }
                     .sortedWith(
                         compareBy<ClassicCourseGeneratorRow> { it.effectiveLengthMeters }
                             .thenBy { it.orderLabels.joinToString("\u0000") }
@@ -246,13 +258,16 @@ object DesktopClassicCourseGenerator {
         start: ClassicCoursePoint,
         finish: ClassicCoursePoint,
         beacon: ClassicCoursePoint?,
-        foxes: List<ClassicCoursePoint>
+        foxes: List<ClassicCoursePoint>,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        legSampleCache: MutableMap<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>
     ): ClassicCourseGeneratorRow =
         foxes.permutations()
             .map { orderedFoxes ->
                 val orderedPoints = listOf(start) + orderedFoxes + listOfNotNull(beacon) + finish
-                val horizontalLength = orderedPoints.zipWithNext().sumOf { (from, to) -> from.point.distanceMetersTo(to.point) }
-                val climb = orderedPoints.climbMetersOrNull()
+                val routePoints = sampledCourseRoutePoints(orderedPoints, elevationLookup, legSampleCache)
+                val horizontalLength = routePoints.routeLengthMeters()
+                val climb = routePoints.climbMetersOrNull()
                 val effectiveLength = if (climb == null) horizontalLength else horizontalLength + 10.0 * climb
                 val matchingCategories = matchingClassicCategories(
                     foxCount = foxCount,
@@ -266,6 +281,7 @@ object DesktopClassicCourseGenerator {
                     horizontalLengthMeters = horizontalLength,
                     climbMeters = climb,
                     coursePoints = orderedPoints,
+                    routePoints = routePoints,
                     orderLabels = listOf("S") + orderedFoxes.map { it.label } + listOfNotNull(beacon?.let { "B" }) + "F",
                     matchingCategories = matchingCategories
                 )
@@ -296,12 +312,26 @@ object DesktopClassicCourseGenerator {
         }
     }
 
-    private fun List<ClassicCoursePoint>.climbMetersOrNull(): Double? {
-        if (any { it.point.elevationMeters == null }) {
+    private fun sampledCourseRoutePoints(
+        coursePoints: List<ClassicCoursePoint>,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        legSampleCache: MutableMap<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>
+    ): List<CourseGeoPoint> =
+        DesktopCourseRouteSampler.sampledStraightRoutePoints(
+            routePoints = coursePoints.map { it.point },
+            elevationLookup = elevationLookup,
+            legSampleCache = legSampleCache
+        )
+
+    private fun List<CourseGeoPoint>.routeLengthMeters(): Double =
+        zipWithNext().sumOf { (from, to) -> from.distanceMetersTo(to) }
+
+    private fun List<CourseGeoPoint>.climbMetersOrNull(): Double? {
+        if (size < 2 || any { it.elevationMeters == null }) {
             return null
         }
         return zipWithNext().sumOf { (from, to) ->
-            max(0.0, requireNotNull(to.point.elevationMeters) - requireNotNull(from.point.elevationMeters))
+            max(0.0, requireNotNull(to.elevationMeters) - requireNotNull(from.elevationMeters))
         }
     }
 
@@ -429,8 +459,8 @@ object DesktopClassicCourseGenerator {
                 appendLine("        <LineString>")
                 appendLine("          <tessellate>1</tessellate>")
                 appendLine("          <coordinates>")
-                row.coursePoints.forEach { coursePoint ->
-                    appendLine("            ${coursePoint.point.kmlCoordinate()}")
+                row.routePoints.forEach { routePoint ->
+                    appendLine("            ${routePoint.kmlCoordinate()}")
                 }
                 appendLine("          </coordinates>")
                 appendLine("        </LineString>")

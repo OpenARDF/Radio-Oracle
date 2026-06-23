@@ -17,7 +17,6 @@ import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import java.time.LocalDateTime
 import kotlin.math.abs
-import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -298,7 +297,6 @@ object DesktopCourseAnalyzer {
     private const val FOXORING_EXHAUSTIVE_CONTROLS = 6
     private const val FOXORING_ROLLING_WINDOW_CONTROLS = 5
     private const val MAX_SPRINT_LOOP_PERMUTATIONS = 120
-    private const val CALCULATED_ROUTE_SAMPLE_METERS = 25.0
     private const val ROUTE_ENDPOINT_EXACT_TOLERANCE_METERS = 0.5
     private const val ROUTE_STOP_TOLERANCE_METERS = 5.0
     private const val COURSE_RECOMMENDATION_WAIT_SECONDS = 30
@@ -2375,7 +2373,7 @@ object DesktopCourseAnalyzer {
         val arrivalSecondsByControlId = mutableMapOf<String, Int>()
         var cumulativeSeconds: Double? = 0.0
         timingStops.zipWithNext().forEach { (from, to) ->
-            val legPoints = sampledLegPoints(from.point, to.point, elevationLookup)
+            val legPoints = DesktopCourseRouteSampler.sampledStraightLegPoints(from.point, to.point, elevationLookup)
             val lengthMeters = legPoints.straightLineMeters().roundToInt()
             val movementSeconds = estimatedIdealSecondsDouble(legPoints, speedModel) ?: 0.0
             val startSeconds = cumulativeSeconds
@@ -2480,40 +2478,12 @@ object DesktopCourseAnalyzer {
             stops.map { it.point }.forEach(::add)
             add(finish)
         }
-        if (routePoints.size < 2) {
-            return routePoints.map { it.withCachedElevation(elevationLookup) }
-        }
-        val sampled = mutableListOf<CourseGeoPoint>()
-        routePoints.zipWithNext().forEach { (from, to) ->
-            val legPoints = legSampleCache?.getOrPut(from to to) {
-                sampledLegPoints(from, to, elevationLookup)
-            } ?: sampledLegPoints(from, to, elevationLookup)
-            if (sampled.isEmpty()) {
-                sampled += legPoints
-            } else {
-                sampled += legPoints.drop(1)
-            }
-        }
-        return sampled
-    }
-
-    private fun sampledLegPoints(
-        start: CourseGeoPoint,
-        end: CourseGeoPoint,
-        elevationLookup: (CourseGeoPoint) -> Double?
-    ): List<CourseGeoPoint> {
-        val intervals = max(
-            1,
-            ceil(start.distanceMetersTo(end) / CALCULATED_ROUTE_SAMPLE_METERS).toInt()
+        return DesktopCourseRouteSampler.sampledStraightRoutePoints(
+            routePoints = routePoints,
+            elevationLookup = elevationLookup,
+            legSampleCache = legSampleCache
         )
-        return (0..intervals).map { index ->
-            start.interpolate(end, index.toDouble() / intervals.toDouble())
-                .withCachedElevation(elevationLookup)
-        }
     }
-
-    private fun CourseGeoPoint.withCachedElevation(elevationLookup: (CourseGeoPoint) -> Double?): CourseGeoPoint =
-        copy(elevationMeters = elevationLookup(this) ?: elevationMeters)
 
     private fun calculatedRouteLabels(
         controls: List<ControlAnalysisPoint>,
@@ -2753,7 +2723,7 @@ object DesktopCourseAnalyzer {
         val markers = mutableListOf<DesktopCourseElevationProfileMarker>()
         var distanceMeters = 0.0
         stops.zipWithNext().forEach { (from, to) ->
-            val legPoints = sampledLegPoints(from.point, to.point, elevationLookup)
+            val legPoints = DesktopCourseRouteSampler.sampledStraightLegPoints(from.point, to.point, elevationLookup)
             distanceMeters += legPoints.straightLineMeters()
             val markerPoint = legPoints.lastOrNull()
             if (to.control?.type == ControlPointType.CONTROL && markerPoint?.elevationMeters != null) {

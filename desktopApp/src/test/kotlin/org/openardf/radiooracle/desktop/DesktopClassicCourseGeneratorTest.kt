@@ -13,7 +13,7 @@ class DesktopClassicCourseGeneratorTest {
         val path = Files.createTempFile("classic-course-points", ".kml")
         Files.writeString(path, coursePointsKml(includeLineString = true))
 
-        val result = DesktopClassicCourseGenerator.generate(path)
+        val result = DesktopClassicCourseGenerator.generate(path, elevationLookup = { null })
 
         assertEquals(5, result.foxes.size)
         assertEquals(listOf(3, 4, 5), result.groups.map { it.foxCount })
@@ -68,6 +68,27 @@ class DesktopClassicCourseGeneratorTest {
     }
 
     @Test
+    fun samplesElevationsAlongGeneratedCourseLegsForClimbAndEffectiveLength() {
+        val path = Files.createTempFile("classic-course-points-route-elev", ".kml")
+        Files.writeString(path, coursePointsKml(flatElevations = true))
+
+        val result = DesktopClassicCourseGenerator.generate(path) { point ->
+            val routeProgressMeters = (point.longitude + 95.0) * 10_000.0
+            when {
+                routeProgressMeters in 75.0..125.0 -> 150.0
+                routeProgressMeters in 175.0..225.0 -> 160.0
+                else -> 100.0
+            }
+        }
+
+        assertEquals(0, result.missingElevationPointCount)
+        assertTrue(result.rows.all { it.routePoints.size > it.coursePoints.size })
+        assertTrue(result.rows.all { it.climbMeters != null })
+        assertTrue(result.rows.any { requireNotNull(it.climbMeters) > 0.0 })
+        assertTrue(result.rows.all { it.effectiveLengthMeters >= it.horizontalLengthMeters + 10.0 * requireNotNull(it.climbMeters) })
+    }
+
+    @Test
     fun rejectsCoursePointsOutsideClassicGeneratorShape() {
         val path = Files.createTempFile("classic-course-points-spectator", ".kml")
         Files.writeString(
@@ -84,7 +105,7 @@ class DesktopClassicCourseGeneratorTest {
     fun exportsPdfAndGreenCourseCandidateKml() {
         val path = Files.createTempFile("classic-course-points", ".kml")
         Files.writeString(path, coursePointsKml(includeSiDescriptions = true))
-        val result = DesktopClassicCourseGenerator.generate(path)
+        val result = DesktopClassicCourseGenerator.generate(path, elevationLookup = { null })
         val pdfPath = Files.createTempFile("classic-course-generator", ".pdf")
 
         val exports = DesktopClassicCourseGenerator.exportPdfAndKml(pdfPath, result)
@@ -143,9 +164,10 @@ class DesktopClassicCourseGeneratorTest {
         includeLineString: Boolean = false,
         includeElevations: Boolean = true,
         extraPlacemark: String = "",
-        includeSiDescriptions: Boolean = false
+        includeSiDescriptions: Boolean = false,
+        flatElevations: Boolean = false
     ): String {
-        fun elevation(value: Double): Double? = value.takeIf { includeElevations }
+        fun elevation(value: Double): Double? = (if (flatElevations) 100.0 else value).takeIf { includeElevations }
         fun description(siCode: Int): String? = "SI=$siCode".takeIf { includeSiDescriptions }
         val lineString = if (includeLineString) {
             """
