@@ -71,6 +71,7 @@ enum class DesktopSection(val label: String) {
     KmlMoveCourse("Move Course"),
     KmlClassicCourseGenerator("Classic Course Generator"),
     KmlFoxoringCourseGenerator("Foxoring Course Generator"),
+    KmlSprintCourseGenerator("Sprint Course Generator"),
     ControlsImportExport("Import/Export"),
     ControlsRouteKmlImport("Import Controls KML/KMZ"),
     Readouts("Readouts"),

@@ -936,7 +936,7 @@ class DesktopNavigationTest {
         assertFalse(tools.requiresEventFile)
         assertFalse(courseTools.requiresEventFile)
         assertEquals(
-            listOf("Course Analyzer", "Move Course", "Classic Course Generator", "Foxoring Course Generator"),
+            listOf("Course Analyzer", "Move Course", "Classic Course Generator", "Foxoring Course Generator", "Sprint Course Generator"),
             courseTools.children.map { it.label }
         )
         assertEquals(DesktopSection.CourseAnalysis, courseAnalyzer.section)
@@ -976,6 +976,11 @@ class DesktopNavigationTest {
             courseTools.children.first { it.label == "Foxoring Course Generator" }.section
         )
         assertFalse(courseTools.children.first { it.label == "Foxoring Course Generator" }.requiresEventFile)
+        assertEquals(
+            DesktopSection.KmlSprintCourseGenerator,
+            courseTools.children.first { it.label == "Sprint Course Generator" }.section
+        )
+        assertFalse(courseTools.children.first { it.label == "Sprint Course Generator" }.requiresEventFile)
     }
 
     @Test
