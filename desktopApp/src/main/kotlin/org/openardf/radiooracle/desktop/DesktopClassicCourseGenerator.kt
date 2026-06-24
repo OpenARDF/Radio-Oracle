@@ -14,6 +14,7 @@ data class ClassicCourseGeneratorResult(
     val beacon: ClassicCoursePoint?,
     val foxes: List<ClassicCoursePoint>,
     val requirementWarnings: List<ClassicCourseRequirementWarning>,
+    val recommendedCourseSets: List<ClassicCourseGeneratorRecommendedSet> = emptyList(),
     val groups: List<ClassicCourseGeneratorGroup>,
     val elevationResolvedPointCount: Int,
     val missingElevationPointCount: Int,
@@ -53,6 +54,16 @@ data class ClassicCourseGeneratorRow(
     val hasCategoryMatch: Boolean = matchingCategories.isNotEmpty()
 }
 
+data class ClassicCourseGeneratorRecommendedSet(
+    val index: Int,
+    val courseCount: Int,
+    val uniqueFirstFoxCount: Int,
+    val categoryFoxMinimum: Int,
+    val categoryFoxTotal: Int,
+    val coveredCategories: List<String>,
+    val rows: List<ClassicCourseGeneratorRow>
+)
+
 data class ClassicCourseGeneratorExportPaths(
     val pdfPath: Path,
     val kmlPath: Path
@@ -65,6 +76,9 @@ object DesktopClassicCourseGenerator {
     private const val FOXORING_START_EXCLUSION_METERS = 250
     private const val FOXORING_TRANSMITTER_SEPARATION_METERS = 250
     private const val COURSE_CANDIDATE_LINE_WIDTH = 3
+    private const val FOXORING_RECOMMENDATION_LIMIT = 10
+    private const val FOXORING_RECOMMENDATION_CANDIDATE_LIMIT = 120
+    private const val FOXORING_RECOMMENDATION_SCORE_BUFFER = 200
     private val courseCandidateRouteColors = listOf(
         "ffb85700", // blue
         "ff1f7cff", // orange
@@ -141,7 +155,8 @@ object DesktopClassicCourseGenerator {
         requirements = foxoringRequirements,
         startExclusionMeters = FOXORING_START_EXCLUSION_METERS,
         transmitterSeparationMeters = FOXORING_TRANSMITTER_SEPARATION_METERS,
-        useSubsetDynamicProgramming = true
+        useSubsetDynamicProgramming = true,
+        recommendCourseSets = true
     )
 
     fun generate(
@@ -205,6 +220,11 @@ object DesktopClassicCourseGenerator {
                 )
             )
         }
+        val recommendedCourseSets = if (config.recommendCourseSets) {
+            recommendedFoxoringCourseSets(groups.flatMap { it.rows }, config)
+        } else {
+            emptyList()
+        }
         return ClassicCourseGeneratorResult(
             sourcePath = sourcePath,
             start = elevated.start,
@@ -212,6 +232,7 @@ object DesktopClassicCourseGenerator {
             beacon = elevated.beacon,
             foxes = elevated.foxes,
             requirementWarnings = requirementWarnings(elevated, config),
+            recommendedCourseSets = recommendedCourseSets,
             groups = groups,
             elevationResolvedPointCount = elevationResult.resolvedPointCount,
             missingElevationPointCount = elevated.allPoints().count { it.point.elevationMeters == null },
@@ -253,10 +274,11 @@ object DesktopClassicCourseGenerator {
             appendLine("Source: ${result.sourcePath.fileName}")
             appendLine("Course points: Start, ${result.foxes.size} foxes, ${if (result.beacon == null) "no beacon" else "beacon"}, Finish")
             appendLine(elevationSummaryText(result))
-            appendRequirementWarningText(result)
-            appendLine()
-            result.groups.forEach { group ->
-                appendLine(group.title)
+        appendRequirementWarningText(result)
+        appendLine()
+        appendRecommendedCourseSetText(result)
+        result.groups.forEach { group ->
+            appendLine(group.title)
                 appendLine("IDEAL EL : Course Order")
                 group.rows.forEach { row ->
                     appendLine("${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})")
@@ -631,6 +653,185 @@ object DesktopClassicCourseGenerator {
     private fun categoryText(row: ClassicCourseGeneratorRow): String =
         row.matchingCategories.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: "No category match"
 
+    private fun recommendedFoxoringCourseSets(
+        rows: List<ClassicCourseGeneratorRow>,
+        config: CourseGeneratorConfig
+    ): List<ClassicCourseGeneratorRecommendedSet> {
+        val allCategories = config.requirements.keys.toList()
+        val fullMask = (1 shl allCategories.size) - 1
+        val categoryIndex = allCategories.withIndex().associate { it.value to it.index }
+        val candidates = recommendationCandidateRows(rows, allCategories, categoryIndex)
+        if (candidates.isEmpty()) {
+            return emptyList()
+        }
+        val scoredSets = mutableListOf<RecommendedCourseSetScore>()
+        val setComparator = recommendedSetComparator()
+        fun addScoredSet(score: RecommendedCourseSetScore) {
+            if (scoredSets.size < FOXORING_RECOMMENDATION_SCORE_BUFFER) {
+                scoredSets += score
+                return
+            }
+            val worst = scoredSets.maxWith(setComparator)
+            if (setComparator.compare(score, worst) < 0) {
+                scoredSets.remove(worst)
+                scoredSets += score
+            }
+        }
+        for (size in 3..4) {
+            visitCandidateCombinations(candidates, size) { combination ->
+                val categoryMask = combination.fold(0) { mask, candidate -> mask or candidate.categoryMask }
+                if (categoryMask != fullMask) {
+                    return@visitCandidateCombinations
+                }
+                addScoredSet(
+                    scoreRecommendedSet(
+                        rows = combination.map { it.row },
+                        allCategories = allCategories,
+                        categoryIndex = categoryIndex
+                    )
+                )
+            }
+        }
+        return scoredSets
+            .distinctBy { score ->
+                score.rows
+                    .map { it.orderLabels.joinToString(" -> ") }
+                    .sorted()
+                    .joinToString("\u0000")
+            }
+            .sortedWith(setComparator)
+            .take(FOXORING_RECOMMENDATION_LIMIT)
+            .mapIndexed { index, score ->
+                ClassicCourseGeneratorRecommendedSet(
+                    index = index + 1,
+                    courseCount = score.rows.size,
+                    uniqueFirstFoxCount = score.uniqueFirstFoxCount,
+                    categoryFoxMinimum = score.categoryFoxMinimum,
+                    categoryFoxTotal = score.categoryFoxTotal,
+                    coveredCategories = allCategories,
+                    rows = score.rows.sortedWith(
+                        compareByDescending<ClassicCourseGeneratorRow> { it.foxCount }
+                            .thenBy { it.effectiveLengthMeters }
+                            .thenBy { it.orderLabels.joinToString("\u0000") }
+                    )
+                )
+            }
+    }
+
+    private fun visitCandidateCombinations(
+        candidates: List<RecommendationCandidateRow>,
+        size: Int,
+        visit: (List<RecommendationCandidateRow>) -> Unit
+    ) {
+        val selected = ArrayList<RecommendationCandidateRow>(size)
+        fun recurse(startIndex: Int) {
+            if (selected.size == size) {
+                visit(selected.toList())
+                return
+            }
+            val remainingNeeded = size - selected.size
+            val maxStart = candidates.size - remainingNeeded
+            for (index in startIndex..maxStart) {
+                selected += candidates[index]
+                recurse(index + 1)
+                selected.removeAt(selected.lastIndex)
+            }
+        }
+        if (candidates.size >= size) {
+            recurse(0)
+        }
+    }
+
+    private fun recommendationCandidateRows(
+        rows: List<ClassicCourseGeneratorRow>,
+        allCategories: List<String>,
+        categoryIndex: Map<String, Int>
+    ): List<RecommendationCandidateRow> {
+        val candidates = rows
+            .filter { it.hasCategoryMatch }
+            .map { row ->
+                RecommendationCandidateRow(
+                    row = row,
+                    categoryMask = row.matchingCategories.fold(0) { mask, category ->
+                        mask or (1 shl requireNotNull(categoryIndex[category]))
+                    }
+                )
+            }
+        if (candidates.size <= FOXORING_RECOMMENDATION_CANDIDATE_LIMIT) {
+            return candidates
+        }
+        val selected = linkedMapOf<String, RecommendationCandidateRow>()
+        fun add(candidate: RecommendationCandidateRow) {
+            val key = candidate.row.orderLabels.joinToString("\u0000")
+            selected.putIfAbsent(key, candidate)
+        }
+        allCategories.forEach { category ->
+            candidates
+                .filter { category in it.row.matchingCategories }
+                .sortedWith(recommendationCandidateComparator())
+                .take(12)
+                .forEach(::add)
+        }
+        candidates
+            .groupBy { it.row.orderLabels.getOrNull(1).orEmpty() }
+            .values
+            .forEach { sameFirstFox ->
+                sameFirstFox
+                    .sortedWith(recommendationCandidateComparator())
+                    .take(8)
+                    .forEach(::add)
+            }
+        candidates
+            .sortedWith(recommendationCandidateComparator())
+            .take(FOXORING_RECOMMENDATION_CANDIDATE_LIMIT)
+            .forEach(::add)
+        return selected.values
+            .sortedWith(recommendationCandidateComparator())
+            .take(FOXORING_RECOMMENDATION_CANDIDATE_LIMIT)
+    }
+
+    private fun scoreRecommendedSet(
+        rows: List<ClassicCourseGeneratorRow>,
+        allCategories: List<String>,
+        categoryIndex: Map<String, Int>
+    ): RecommendedCourseSetScore {
+        val firstFoxCounts = rows
+            .mapNotNull { it.orderLabels.getOrNull(1) }
+            .groupingBy { it }
+            .eachCount()
+        val uniqueFirstFoxCount = rows.count { row ->
+            firstFoxCounts[row.orderLabels.getOrNull(1)] == 1
+        }
+        val categoryFoxCounts = IntArray(allCategories.size)
+        rows.forEach { row ->
+            row.matchingCategories.forEach { category ->
+                val index = requireNotNull(categoryIndex[category])
+                categoryFoxCounts[index] = max(categoryFoxCounts[index], row.foxCount)
+            }
+        }
+        return RecommendedCourseSetScore(
+            rows = rows,
+            uniqueFirstFoxCount = uniqueFirstFoxCount,
+            categoryFoxMinimum = categoryFoxCounts.minOrNull() ?: 0,
+            categoryFoxTotal = categoryFoxCounts.sum(),
+            totalEffectiveLengthMeters = rows.sumOf { it.effectiveLengthMeters }
+        )
+    }
+
+    private fun recommendationCandidateComparator(): Comparator<RecommendationCandidateRow> =
+        compareByDescending<RecommendationCandidateRow> { it.row.matchingCategories.size }
+            .thenByDescending { it.row.foxCount }
+            .thenBy { it.row.effectiveLengthMeters }
+            .thenBy { it.row.orderLabels.joinToString("\u0000") }
+
+    private fun recommendedSetComparator(): Comparator<RecommendedCourseSetScore> =
+        compareByDescending<RecommendedCourseSetScore> { it.uniqueFirstFoxCount }
+            .thenByDescending { it.categoryFoxMinimum }
+            .thenByDescending { it.categoryFoxTotal }
+            .thenByDescending { it.rows.size }
+            .thenBy { it.totalEffectiveLengthMeters }
+            .thenBy { it.rows.joinToString("\u0000") { row -> row.orderLabels.joinToString(" -> ") } }
+
     private fun requirementWarnings(
         classified: ClassifiedClassicCoursePoints,
         config: CourseGeneratorConfig = classicConfig
@@ -675,6 +876,23 @@ object DesktopClassicCourseGenerator {
         result.requirementWarnings.forEach { warning ->
             appendLine("${warning.label}: ${warning.message}")
         }
+    }
+
+    private fun StringBuilder.appendRecommendedCourseSetText(result: ClassicCourseGeneratorResult) {
+        if (result.recommendedCourseSets.isEmpty()) {
+            return
+        }
+        appendLine("FOXORING COURSE COMBINATIONS")
+        result.recommendedCourseSets.forEach { set ->
+            appendLine(
+                "Combination ${set.index}: ${set.courseCount} courses, " +
+                    "${set.uniqueFirstFoxCount} unique first foxes, minimum category fox count ${set.categoryFoxMinimum}, total category fox count ${set.categoryFoxTotal}"
+            )
+            set.rows.forEach { row ->
+                appendLine("  ${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})")
+            }
+        }
+        appendLine()
     }
 
     private fun elevationSummaryText(result: ClassicCourseGeneratorResult): String =
@@ -862,6 +1080,29 @@ object DesktopClassicCourseGenerator {
                     add(PdfLine("${warning.label}: ${warning.message}", PdfColor.WarningRed, 10))
                 }
             }
+            if (result.recommendedCourseSets.isNotEmpty()) {
+                add(PdfLine("FOXORING COURSE COMBINATIONS", PdfColor.Body, 14, bold = true))
+                result.recommendedCourseSets.forEach { set ->
+                    add(
+                        PdfLine(
+                            "Combination ${set.index}: ${set.courseCount} courses, ${set.uniqueFirstFoxCount} unique first foxes, minimum category fox count ${set.categoryFoxMinimum}, total category fox count ${set.categoryFoxTotal}",
+                            PdfColor.Body,
+                            11,
+                            bold = true
+                        )
+                    )
+                    set.rows.forEach { row ->
+                        add(
+                            PdfLine(
+                                "${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})",
+                                PdfColor.MatchGreen,
+                                10
+                            )
+                        )
+                    }
+                }
+                add(PdfLine("", PdfColor.Body, 8))
+            }
             add(PdfLine("", PdfColor.Body, 8))
             result.groups.forEach { group ->
                 add(PdfLine(group.title, PdfColor.Body, 14, bold = true))
@@ -930,7 +1171,21 @@ object DesktopClassicCourseGenerator {
         val requirements: LinkedHashMap<String, ClassicCourseRequirement>,
         val startExclusionMeters: Int,
         val transmitterSeparationMeters: Int,
-        val useSubsetDynamicProgramming: Boolean
+        val useSubsetDynamicProgramming: Boolean,
+        val recommendCourseSets: Boolean = false
+    )
+
+    private data class RecommendationCandidateRow(
+        val row: ClassicCourseGeneratorRow,
+        val categoryMask: Int
+    )
+
+    private data class RecommendedCourseSetScore(
+        val rows: List<ClassicCourseGeneratorRow>,
+        val uniqueFirstFoxCount: Int,
+        val categoryFoxMinimum: Int,
+        val categoryFoxTotal: Int,
+        val totalEffectiveLengthMeters: Double
     )
 
     private data class PdfLine(
