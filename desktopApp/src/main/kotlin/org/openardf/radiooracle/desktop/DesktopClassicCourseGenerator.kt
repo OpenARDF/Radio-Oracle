@@ -653,20 +653,31 @@ object DesktopClassicCourseGenerator {
     private fun categoryText(row: ClassicCourseGeneratorRow): String =
         row.matchingCategories.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: "No category match"
 
+    private fun String.isFoxoringRecommendedSetCategory(): Boolean {
+        val match = Regex("""^([MW])(\d+)$""").matchEntire(this) ?: return true
+        val gender = match.groupValues[1]
+        val age = match.groupValues[2].toInt()
+        return when (gender) {
+            "M" -> age <= 70
+            "W" -> age <= 65
+            else -> true
+        }
+    }
+
     private fun recommendedFoxoringCourseSets(
         rows: List<ClassicCourseGeneratorRow>,
         config: CourseGeneratorConfig
     ): List<ClassicCourseGeneratorRecommendedSet> {
         val allCategories = config.requirements.keys.toList()
-        val categoryIndex = allCategories.withIndex().associate { it.value to it.index }
-        if (allCategories.any { category -> rows.none { category in it.matchingCategories } }) {
+        val targetCategories = allCategories.filter { it.isFoxoringRecommendedSetCategory() }
+        val categoryIndex = targetCategories.withIndex().associate { it.value to it.index }
+        if (targetCategories.any { category -> rows.none { category in it.matchingCategories } }) {
             return emptyList()
         }
-        val candidates = recommendationCandidateRows(rows, allCategories, categoryIndex)
+        val candidates = recommendationCandidateRows(rows, targetCategories, categoryIndex)
         if (candidates.isEmpty()) return emptyList()
 
-        val targetMask = (1 shl allCategories.size) - 1
-        val targetCategories = allCategories
+        val targetMask = (1 shl targetCategories.size) - 1
         val scoredSets = mutableListOf<RecommendedCourseSetScore>()
         val setComparator = recommendedSetComparator()
         fun addScoredSet(score: RecommendedCourseSetScore) {
@@ -751,12 +762,15 @@ object DesktopClassicCourseGenerator {
     ): List<RecommendationCandidateRow> {
         val candidates = rows
             .filter { it.hasCategoryMatch }
-            .map { row ->
+            .mapNotNull { row ->
+                val categoryMask = row.matchingCategories.fold(0) { mask, category ->
+                    val index = categoryIndex[category] ?: return@fold mask
+                    mask or (1 shl index)
+                }
+                if (categoryMask == 0) return@mapNotNull null
                 RecommendationCandidateRow(
                     row = row,
-                    categoryMask = row.matchingCategories.fold(0) { mask, category ->
-                        mask or (1 shl requireNotNull(categoryIndex[category]))
-                    }
+                    categoryMask = categoryMask
                 )
             }
         if (candidates.size <= FOXORING_RECOMMENDATION_CANDIDATE_LIMIT) {

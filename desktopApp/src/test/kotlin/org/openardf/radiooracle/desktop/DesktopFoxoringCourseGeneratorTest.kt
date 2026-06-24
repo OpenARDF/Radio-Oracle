@@ -55,7 +55,7 @@ class DesktopFoxoringCourseGeneratorTest {
     }
 
     @Test
-    fun recommendsFoxoringCourseCombinationsCoveringAllCategories() {
+    fun recommendsFoxoringCourseCombinationsCoveringStandardCategories() {
         val path = Files.createTempFile("foxoring-course-points-recommendations", ".kml")
         Files.writeString(path, outAndBackFoxoringCoursePointsKml())
 
@@ -68,9 +68,13 @@ class DesktopFoxoringCourseGeneratorTest {
         val firstSet = result.recommendedCourseSets.firstOrNull()
             ?: error("Expected at least one recommended Foxoring course combination.")
         assertTrue(firstSet.courseCount in 3..4)
-        assertEquals(14, firstSet.coveredCategories.size)
+        assertTrue(result.rows.any { "M80" in it.matchingCategories })
+        assertTrue(result.rows.any { "W75" in it.matchingCategories })
+        assertEquals(12, firstSet.coveredCategories.size)
         assertTrue(firstSet.coveredCategories.contains("M21"))
-        assertTrue(firstSet.coveredCategories.contains("W75"))
+        assertTrue(firstSet.coveredCategories.contains("W65"))
+        assertFalse(firstSet.coveredCategories.contains("M80"))
+        assertFalse(firstSet.coveredCategories.contains("W75"))
         assertEquals(firstSet.rows.size, firstSet.courseCount)
         assertEquals(uniqueFirstFoxCount(firstSet.rows), firstSet.uniqueFirstFoxCount)
         val recommendedFoxCountByCategory = bestMatchingFoxCountByCategory(firstSet.rows, firstSet.coveredCategories)
