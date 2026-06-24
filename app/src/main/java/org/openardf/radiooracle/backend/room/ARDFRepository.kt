@@ -3,6 +3,7 @@ package org.openardf.radiooracle.backend.room
 import android.content.Context
 import androidx.room.Room
 import androidx.room.withTransaction
+import org.openardf.radiooracle.backend.files.AndroidEventSeriesImport
 import org.openardf.radiooracle.backend.room.database.EventDatabase
 import org.openardf.radiooracle.backend.room.database.MIGRATION_1_2
 import org.openardf.radiooracle.backend.room.database.MIGRATION_2_3
@@ -10,16 +11,20 @@ import org.openardf.radiooracle.backend.room.database.MIGRATION_3_4
 import org.openardf.radiooracle.backend.room.database.MIGRATION_4_5
 import org.openardf.radiooracle.backend.room.database.MIGRATION_5_6
 import org.openardf.radiooracle.backend.room.database.MIGRATION_6_7
+import org.openardf.radiooracle.backend.room.database.MIGRATION_7_8
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.ControlPoint
+import org.openardf.radiooracle.backend.room.entity.EventSeries
+import org.openardf.radiooracle.backend.room.entity.EventSeriesMember
 import org.openardf.radiooracle.backend.room.entity.Punch
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.Result
 import org.openardf.radiooracle.backend.room.entity.ResultService
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.EventSeriesData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -33,7 +38,15 @@ class ARDFRepository private constructor(context: Context) {
             EventDatabase::class.java,
             "event-database"
         )
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+        .addMigrations(
+            MIGRATION_1_2,
+            MIGRATION_2_3,
+            MIGRATION_3_4,
+            MIGRATION_4_5,
+            MIGRATION_5_6,
+            MIGRATION_6_7,
+            MIGRATION_7_8
+        )
         .build()
 
     //-------------------Races-------------------
@@ -208,6 +221,38 @@ class ARDFRepository private constructor(context: Context) {
     suspend fun deleteAllResultsByRace(raceId: UUID) =
         eventDatabase.resultDao().deleteAllResultsByRace(raceId)
 
+    //-------------------Event series-------------------
+    fun getEventSeries(): Flow<List<EventSeriesData>> =
+        eventDatabase.eventSeriesDao().getSeries()
+
+    suspend fun getEventSeries(seriesId: String): EventSeriesData? =
+        eventDatabase.eventSeriesDao().getSeries(seriesId)
+
+    suspend fun getEventSeriesForRace(raceId: UUID): EventSeriesData? =
+        eventDatabase.eventSeriesDao().getSeriesForRace(raceId)
+
+    suspend fun saveEventSeries(series: EventSeries, members: List<EventSeriesMember>) {
+        eventDatabase.withTransaction {
+            eventDatabase.eventSeriesDao().upsertSeries(series)
+            eventDatabase.eventSeriesDao().deleteMembersForSeries(series.seriesId)
+            members.forEach { member -> eventDatabase.eventSeriesDao().upsertMember(member) }
+        }
+    }
+
+    suspend fun saveEventSeriesImport(eventSeriesImport: AndroidEventSeriesImport) {
+        eventDatabase.withTransaction {
+            eventSeriesImport.races.forEach { raceData -> saveRaceDataRows(raceData) }
+            eventDatabase.eventSeriesDao().upsertSeries(eventSeriesImport.series)
+            eventDatabase.eventSeriesDao().deleteMembersForSeries(eventSeriesImport.series.seriesId)
+            eventSeriesImport.members.forEach { member ->
+                eventDatabase.eventSeriesDao().upsertMember(member)
+            }
+        }
+    }
+
+    suspend fun deleteEventSeries(seriesId: String) =
+        eventDatabase.eventSeriesDao().deleteSeries(seriesId)
+
     //-------------------Punches-------------------
     suspend fun createPunch(punch: Punch) = eventDatabase.punchDao().createOrUpdatePunch(punch)
 
@@ -228,35 +273,39 @@ class ARDFRepository private constructor(context: Context) {
     //-------------------Race data-------------------
     suspend fun saveRaceData(raceData: RaceData) {
         eventDatabase.withTransaction {
-            raceData.race.importSourceId?.let { importSourceId ->
-                val deletedCount =
-                    eventDatabase.raceDao().deletePriorImportedCopies(importSourceId, raceData.race.id)
-                if (deletedCount > 0) {
-                    DebugLog.info(
-                        "Events",
-                        "Replaced prior imported event copies count=$deletedCount source=$importSourceId"
-                    )
-                }
-            }
-            createRace(raceData.race)
-            raceData.categories.forEach { cd ->
-                createOrUpdateCategory(
-                    cd.category,
-                    cd.controlPoints
+            saveRaceDataRows(raceData)
+        }
+    }
+
+    private suspend fun saveRaceDataRows(raceData: RaceData) {
+        raceData.race.importSourceId?.let { importSourceId ->
+            val deletedCount =
+                eventDatabase.raceDao().deletePriorImportedCopies(importSourceId, raceData.race.id)
+            if (deletedCount > 0) {
+                DebugLog.info(
+                    "Events",
+                    "Replaced prior imported event copies count=$deletedCount source=$importSourceId"
                 )
             }
-            raceData.aliases.forEach { alias -> createOrUpdateAlias(alias) }
-            raceData.competitorData.forEach { cd ->
-                createCompetitor(cd.competitorCategory.competitor)
-                cd.readoutData?.let {
-                    saveResultPunches(
-                        it.result,
-                        cd.readoutData!!.punches.map { ap -> ap.punch })
-                }
+        }
+        createRace(raceData.race)
+        raceData.categories.forEach { cd ->
+            createOrUpdateCategory(
+                cd.category,
+                cd.controlPoints
+            )
+        }
+        raceData.aliases.forEach { alias -> createOrUpdateAlias(alias) }
+        raceData.competitorData.forEach { cd ->
+            createCompetitor(cd.competitorCategory.competitor)
+            cd.readoutData?.let {
+                saveResultPunches(
+                    it.result,
+                    cd.readoutData!!.punches.map { ap -> ap.punch })
             }
-            raceData.unmatchedReadoutData.forEach { rd ->
-                saveResultPunches(rd.result, rd.punches.map { it -> it.punch })
-            }
+        }
+        raceData.unmatchedReadoutData.forEach { rd ->
+            saveResultPunches(rd.result, rd.punches.map { it -> it.punch })
         }
     }
 

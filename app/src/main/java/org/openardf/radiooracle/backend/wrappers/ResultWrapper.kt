@@ -11,5 +11,6 @@ data class ResultWrapper(
     var competitorData: MutableList<CompetitorData> = ArrayList(),
     var isExpanded: Boolean = false,
     var childPosition: Int = 0,
-    var finished: Int // Number of competitors with finished readouts in this group.
+    var finished: Int, // Number of competitors with finished readouts in this group.
+    val displayLabel: String? = null
 ) : Serializable

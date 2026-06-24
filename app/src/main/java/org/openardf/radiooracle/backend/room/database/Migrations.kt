@@ -145,3 +145,37 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_competitor_start_number_race_id` ON `competitor` (`start_number`, `race_id`)")
     }
 }
+
+// Migration from version 7 -> 8: store Android-local Event Series membership.
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `event_series` (
+                `series_id` TEXT NOT NULL,
+                `name` TEXT NOT NULL,
+                PRIMARY KEY(`series_id`)
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `event_series_member` (
+                `series_id` TEXT NOT NULL,
+                `series_event_id` TEXT NOT NULL,
+                `local_race_id` BLOB NOT NULL,
+                `event_file_path` TEXT NOT NULL,
+                `event_order` INTEGER NOT NULL,
+                `display_name` TEXT NOT NULL,
+                `start_date_time_iso` TEXT NOT NULL,
+                `format_label` TEXT NOT NULL,
+                PRIMARY KEY(`series_id`, `series_event_id`),
+                FOREIGN KEY(`series_id`) REFERENCES `event_series`(`series_id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`local_race_id`) REFERENCES `race`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_event_series_member_series_id` ON `event_series_member` (`series_id`)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_event_series_member_local_race_id` ON `event_series_member` (`local_race_id`)")
+    }
+}

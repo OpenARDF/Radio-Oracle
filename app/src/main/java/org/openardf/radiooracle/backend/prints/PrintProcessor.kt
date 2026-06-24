@@ -355,7 +355,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
     }
 
     private fun formatCategoryHeader(resultWrapper: ResultWrapper): String {
-        val catHead = "<b>${resultWrapper.category?.name}</b>"
+        val catHead = "<b>${resultWrapper.displayLabel ?: resultWrapper.category?.name}</b>"
         return "${catHead}\n" + formatHorizontalLine()
     }
 

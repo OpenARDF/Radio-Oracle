@@ -136,7 +136,7 @@ class SIPort(
 
             //If the readout was valid, process the data further
             if (valid) {
-                if (dataProcessor.processCardData(cardData, race) == true) {
+                if (dataProcessor.processCardDataForCurrentRaceOrSeries(cardData, race) == true) {
                     lastReadCardId = cardData.siNumber
                     DebugLog.info(
                         "SI",

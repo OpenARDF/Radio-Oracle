@@ -9,6 +9,9 @@ import androidx.lifecycle.MutableLiveData
 import androidx.preference.PreferenceManager
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.files.DataImportValidator
+import org.openardf.radiooracle.backend.files.AndroidEventSeriesImport
+import org.openardf.radiooracle.backend.files.EventSeriesExport
+import org.openardf.radiooracle.backend.files.EventSeriesImport
 import org.openardf.radiooracle.backend.files.FileProcessor
 import org.openardf.radiooracle.backend.files.processors.JsonProcessor
 import org.openardf.radiooracle.backend.files.wrappers.DataImportWrapper
@@ -26,6 +29,8 @@ import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.ControlPoint
+import org.openardf.radiooracle.backend.room.entity.EventSeries
+import org.openardf.radiooracle.backend.room.entity.EventSeriesMember
 import org.openardf.radiooracle.backend.room.entity.Punch
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.Result
@@ -35,6 +40,9 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.backend.room.withFreshImportIds
+import org.openardf.radiooracle.backend.sportident.EventSeriesReadoutMemberData
+import org.openardf.radiooracle.backend.sportident.EventSeriesReadoutRoute
+import org.openardf.radiooracle.backend.sportident.EventSeriesReadoutRouter
 import org.openardf.radiooracle.backend.sportident.SIPort.CardData
 import org.openardf.radiooracle.backend.sportident.SIReaderService
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
@@ -53,7 +61,9 @@ import org.openardf.radiooracle.shared.files.DataFormat
 import org.openardf.radiooracle.shared.files.DataType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import java.io.ByteArrayOutputStream
 import java.lang.ref.WeakReference
@@ -402,6 +412,68 @@ class DataProcessor private constructor(context: Context) {
         ardfRepository.deleteAllResultsByRace(raceId)
     }
 
+    //EVENT SERIES
+    fun getEventSeries() = ardfRepository.getEventSeries()
+
+    suspend fun getEventSeries(seriesId: String) =
+        ardfRepository.getEventSeries(seriesId)
+
+    suspend fun getEventSeriesForRace(raceId: UUID) =
+        ardfRepository.getEventSeriesForRace(raceId)
+
+    suspend fun getSeriesResultWrapperFlowForRace(raceId: UUID): Flow<List<ResultWrapper>>? {
+        val seriesData = getEventSeriesForRace(raceId) ?: return null
+        val members = seriesData.orderedMembers()
+        if (members.size < 2) {
+            return null
+        }
+        val memberFlows = members.map { member ->
+            ResultsProcessor.getResultWrapperFlowByRace(member.localRaceId, this).map { wrappers ->
+                wrappers.map { wrapper ->
+                    wrapper.copy(displayLabel = seriesResultDisplayLabel(member.displayName, wrapper))
+                }
+            }
+        }
+        return combine(memberFlows) { groupedResults ->
+            groupedResults.flatMap { it }
+        }
+    }
+
+    suspend fun saveEventSeries(series: EventSeries, members: List<EventSeriesMember>) {
+        ardfRepository.saveEventSeries(series, members)
+        DebugLog.info(
+            "Event Series",
+            "Saved Android event series id=${series.seriesId} members=${members.size}"
+        )
+    }
+
+    fun prepareEventSeriesImport(
+        manifestJson: String,
+        eventFileJsonByPath: Map<String, String>
+    ): AndroidEventSeriesImport =
+        EventSeriesImport.prepare(manifestJson, eventFileJsonByPath)
+
+    suspend fun saveEventSeriesImport(eventSeriesImport: AndroidEventSeriesImport) {
+        ardfRepository.saveEventSeriesImport(eventSeriesImport)
+        DebugLog.info(
+            "Event Series",
+            "Saved Android event series import id=${eventSeriesImport.series.seriesId} " +
+                "members=${eventSeriesImport.memberImports.size}"
+        )
+    }
+
+    suspend fun deleteEventSeries(seriesId: String) {
+        ardfRepository.deleteEventSeries(seriesId)
+        DebugLog.info("Event Series", "Deleted Android event series id=$seriesId")
+    }
+
+    private fun seriesResultDisplayLabel(eventName: String, wrapper: ResultWrapper): String {
+        val categoryName = wrapper.category?.name
+            ?: getContext()?.getString(R.string.no_category)
+            ?: "No category"
+        return "$eventName - $categoryName"
+    }
+
     // Return wherever the "mm:ss" format should be used
     fun useMinuteTimeFormat(): Boolean {
         val context = getContext()
@@ -429,6 +501,53 @@ class DataProcessor private constructor(context: Context) {
 
     suspend fun processCardData(cardData: CardData, race: Race) =
         appContext.get()?.let { ResultsProcessor.processCardData(cardData, race, it, this) }
+
+    suspend fun processCardDataForCurrentRaceOrSeries(cardData: CardData, currentRace: Race): Boolean? {
+        val seriesMembers = eventSeriesReadoutMembersForRace(currentRace.id)
+        if (seriesMembers.size < 2) {
+            return processCardData(cardData, currentRace)
+        }
+
+        return when (val route = EventSeriesReadoutRouter.route(cardData, seriesMembers)) {
+            is EventSeriesReadoutRoute.Matched -> {
+                DebugLog.info(
+                    "Event Series",
+                    "Card read routed si=${cardData.siNumber} " +
+                        "series=${route.memberData.member.seriesId} " +
+                        "event=${route.memberData.member.seriesEventId} " +
+                        "reason=${route.reason}"
+                )
+                processCardData(cardData, route.memberData.raceData.race)
+            }
+            is EventSeriesReadoutRoute.Ambiguous -> {
+                DebugLog.warn(
+                    "Event Series",
+                    "Card read ambiguous si=${cardData.siNumber} " +
+                        "candidates=${route.candidates.joinToString { it.member.seriesEventId }} " +
+                        "reason=${route.reason}"
+                )
+                false
+            }
+            EventSeriesReadoutRoute.NoMatch -> {
+                DebugLog.warn(
+                    "Event Series",
+                    "Card read did not match any series event si=${cardData.siNumber}"
+                )
+                false
+            }
+        }
+    }
+
+    private suspend fun eventSeriesReadoutMembersForRace(raceId: UUID): List<EventSeriesReadoutMemberData> {
+        val seriesData = getEventSeriesForRace(raceId) ?: return emptyList()
+        return seriesData.orderedMembers().mapNotNull { member ->
+            getRace(member.localRaceId) ?: return@mapNotNull null
+            EventSeriesReadoutMemberData(
+                member = member,
+                raceData = getRaceData(member.localRaceId)
+            )
+        }
+    }
 
     suspend fun setAllResultsUnsent(raceId: UUID) =
         ardfRepository.setAllResultsUnsent(raceId)
@@ -557,9 +676,39 @@ class DataProcessor private constructor(context: Context) {
         return importedRaceData
     }
 
+    @Throws(Exception::class)
+    suspend fun importEventSeriesPackage(uri: Uri): AndroidEventSeriesImport? {
+        val context = getContext() ?: return null
+        val eventSeriesImport = context.contentResolver.openInputStream(uri)?.use { input ->
+            EventSeriesImport.prepareZipPackage(input)
+        } ?: return null
+        eventSeriesImport.races.forEach { raceData ->
+            DataImportValidator.validateRaceDataImport(raceData, context)
+        }
+        DebugLog.info(
+            "Event Series",
+            "Prepared Event Series import id=${eventSeriesImport.series.seriesId} " +
+                "members=${eventSeriesImport.memberImports.size}"
+        )
+        return eventSeriesImport
+    }
+
     suspend fun exportRaceData(uri: Uri, raceId: UUID) {
         fileProcessor?.exportRaceData(uri, raceId)
         DebugLog.info("Events", "Exported event=$raceId")
+    }
+
+    suspend fun exportRaceOrSeriesData(uri: Uri, raceId: UUID) {
+        val seriesPackageBytes = exportEventSeriesPackageBytesForRace(raceId)
+        if (seriesPackageBytes == null) {
+            exportRaceData(uri, raceId)
+            return
+        }
+        val context = getContext() ?: return
+        context.contentResolver.openOutputStream(uri)?.use { output ->
+            output.write(seriesPackageBytes)
+        }
+        DebugLog.info("Event Series", "Exported Event Series package for event=$raceId")
     }
 
     suspend fun exportRaceDataBytes(raceId: UUID): ByteArray =
@@ -567,6 +716,23 @@ class DataProcessor private constructor(context: Context) {
             JsonProcessor.exportRaceData(outStream, this, raceId)
             outStream.toByteArray()
         }
+
+    suspend fun exportRaceOrSeriesDataBytes(raceId: UUID): ByteArray =
+        exportEventSeriesPackageBytesForRace(raceId) ?: exportRaceDataBytes(raceId)
+
+    suspend fun exportEventSeriesPackageBytesForRace(raceId: UUID): ByteArray? {
+        val seriesData = getEventSeriesForRace(raceId) ?: return null
+        val members = seriesData.orderedMembers()
+        if (members.size < 2) {
+            return null
+        }
+        return EventSeriesExport.packageBytes(
+            seriesData = seriesData,
+            raceDataById = members.associate { member ->
+                member.localRaceId to getRaceData(member.localRaceId)
+            }
+        )
+    }
 
     suspend fun saveRaceData(raceData: RaceData) {
         ardfRepository.saveRaceData(raceData)

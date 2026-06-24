@@ -12,6 +12,7 @@ import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.room.entity.Race
+import kotlinx.coroutines.runBlocking
 import java.util.UUID
 
 /**
@@ -59,6 +60,10 @@ class RaceRecyclerViewAdapter(
     private fun showContextMenu(anchor: View, position: Int, item: Race) {
         val popupMenu = PopupMenu(context, anchor)
         popupMenu.inflate(R.menu.context_menu_race)
+        if (isSeriesRace(item.id)) {
+            popupMenu.menu.findItem(R.id.menu_item_export_race)
+                ?.setTitle(R.string.event_series_export)
+        }
 
         popupMenu.setOnMenuItemClickListener {
             when (it.itemId) {
@@ -89,6 +94,10 @@ class RaceRecyclerViewAdapter(
             }
         }
         popupMenu.show()
+    }
+
+    private fun isSeriesRace(raceId: UUID): Boolean = runBlocking {
+        (dataProcessor.getEventSeriesForRace(raceId)?.members?.size ?: 0) >= 2
     }
 
     /** Returns the number of races currently displayed. */

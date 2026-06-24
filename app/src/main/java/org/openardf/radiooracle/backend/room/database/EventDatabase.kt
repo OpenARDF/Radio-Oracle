@@ -7,6 +7,7 @@ import org.openardf.radiooracle.backend.room.dao.AliasDao
 import org.openardf.radiooracle.backend.room.dao.CategoryDao
 import org.openardf.radiooracle.backend.room.dao.CompetitorDao
 import org.openardf.radiooracle.backend.room.dao.ControlPointDao
+import org.openardf.radiooracle.backend.room.dao.EventSeriesDao
 import org.openardf.radiooracle.backend.room.dao.PunchDao
 import org.openardf.radiooracle.backend.room.dao.RaceDao
 import org.openardf.radiooracle.backend.room.dao.ResultDao
@@ -15,6 +16,8 @@ import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.ControlPoint
+import org.openardf.radiooracle.backend.room.entity.EventSeries
+import org.openardf.radiooracle.backend.room.entity.EventSeriesMember
 import org.openardf.radiooracle.backend.room.entity.Punch
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.Result
@@ -29,8 +32,10 @@ import org.openardf.radiooracle.backend.room.entity.ResultService
         ControlPoint::class,
         Punch::class,
         Result::class,
-        ResultService::class],
-    version = 7,
+        ResultService::class,
+        EventSeries::class,
+        EventSeriesMember::class],
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(DateTimeTypeConverter::class)
@@ -51,4 +56,6 @@ abstract class EventDatabase : RoomDatabase() {
     abstract fun resultDao(): ResultDao
     /** DAO for live-result service settings. */
     abstract fun resultServiceDao(): ResultServiceDao
+    /** DAO for Android-local Event Series membership. */
+    abstract fun eventSeriesDao(): EventSeriesDao
 }

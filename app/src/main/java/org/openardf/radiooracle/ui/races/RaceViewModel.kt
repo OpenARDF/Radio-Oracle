@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import org.openardf.radiooracle.backend.files.AndroidEventSeriesImport
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
@@ -41,6 +42,14 @@ class RaceViewModel : ViewModel() {
         }
     }
 
+    /** Returns the local series name for this race when it belongs to a multi-event series. */
+    fun seriesNameForRace(raceId: UUID): String? = runBlocking {
+        dataProcessor.getEventSeriesForRace(raceId)
+            ?.takeIf { it.members.size >= 2 }
+            ?.series
+            ?.name
+    }
+
     /** Saves an imported full-race payload on a background dispatcher. */
     fun saveRaceData(raceData: RaceData) = CoroutineScope(Dispatchers.IO).launch {
         dataProcessor.saveRaceData(raceData)
@@ -60,6 +69,13 @@ class RaceViewModel : ViewModel() {
         dataProcessor.importRaceData(jsonString)
     }
 
+    /** Imports and saves a full Event Series package from a selected URI. */
+    suspend fun importAndSaveEventSeriesPackage(uri: Uri): AndroidEventSeriesImport? {
+        val eventSeriesImport = dataProcessor.importEventSeriesPackage(uri) ?: return null
+        dataProcessor.saveEventSeriesImport(eventSeriesImport)
+        return eventSeriesImport
+    }
+
     /** Downloads race data from an online provider. */
     fun fetchProviderRaceData(providerType: ProviderType, apiKey: String, context: Context) =
         runBlocking {
@@ -71,6 +87,13 @@ class RaceViewModel : ViewModel() {
         uri: Uri, raceId: UUID
     ) = runBlocking {
         dataProcessor.exportRaceData(uri, raceId)
+    }
+
+    /** Exports a single Event File or the full Event Series package when the event is a series member. */
+    fun exportRaceOrSeriesData(
+        uri: Uri, raceId: UUID
+    ) = runBlocking {
+        dataProcessor.exportRaceOrSeriesData(uri, raceId)
     }
 
     /** Exports a full race backup as bytes for direct desktop upload. */

@@ -63,7 +63,10 @@ class ResultsFragmentRecyclerViewAdapter(
         if (dataList.isChild == 0) {
             holder as CategoryViewHolder
             holder.apply {
-                if (dataList.category != null) {
+                if (dataList.displayLabel != null) {
+                    categoryName.text =
+                        "${dataList.displayLabel} (${dataList.finished}/${dataList.competitorData.size})"
+                } else if (dataList.category != null) {
                     categoryName.text =
                         "${dataList.category.name} (${dataList.finished}/${
                             dataList.competitorData.size

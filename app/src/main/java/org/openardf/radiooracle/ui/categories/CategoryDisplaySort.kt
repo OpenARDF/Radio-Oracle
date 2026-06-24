@@ -14,7 +14,11 @@ object CategoryDisplaySort {
         categories.sortedWith(::compareCategories)
 
     fun resultWrappers(results: List<ResultWrapper>): List<ResultWrapper> =
-        results.sortedWith { left, right -> compareNullableCategories(left.category, right.category) }
+        if (results.any { it.displayLabel != null }) {
+            results
+        } else {
+            results.sortedWith { left, right -> compareNullableCategories(left.category, right.category) }
+        }
 
     private fun compareNullableCategories(left: Category?, right: Category?): Int =
         when {

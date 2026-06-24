@@ -237,7 +237,7 @@ class RaceSelectionFragment : Fragment() {
 
     private fun exportImportRaceData(uri: Uri) {
         if (exportData && selectedRaceId != null) {
-            raceViewModel.exportRaceData(uri, selectedRaceId!!)
+            raceViewModel.exportRaceOrSeriesData(uri, selectedRaceId!!)
 
             // Inform user about successful export
             Toast.makeText(
@@ -247,18 +247,65 @@ class RaceSelectionFragment : Fragment() {
             ).show()
 
         } else {
-            try {
-                raceData = raceViewModel.importRaceData(uri)
-                findNavController().navigate(
-                    RaceSelectionFragmentDirections.raceCreateOfModify(
-                        RaceEditDialogFragment.RaceEditActions.IMPORT, -1, raceData!!.race
-                    )
-                )
-
-            } catch (e: Exception) {
-                displayAlert(e.message.toString())
+            if (isEventSeriesPackageUri(uri)) {
+                importEventSeriesPackage(uri)
+            } else {
+                importSingleEventFile(uri)
             }
         }
+    }
+
+    private fun importSingleEventFile(uri: Uri) {
+        try {
+            raceData = raceViewModel.importRaceData(uri)
+            findNavController().navigate(
+                RaceSelectionFragmentDirections.raceCreateOfModify(
+                    RaceEditDialogFragment.RaceEditActions.IMPORT, -1, raceData!!.race
+                )
+            )
+        } catch (e: Exception) {
+            displayAlert(e.message.toString())
+        }
+    }
+
+    private fun importEventSeriesPackage(uri: Uri) {
+        val progressDialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_series_import_title)
+            .setMessage(R.string.event_series_import_progress)
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val eventSeriesImport = withContext(Dispatchers.IO) {
+                    raceViewModel.importAndSaveEventSeriesPackage(uri)
+                        ?: throw IllegalStateException(getString(R.string.event_series_import_invalid))
+                }
+                progressDialog.dismiss()
+                Toast.makeText(
+                    requireContext(),
+                    getString(
+                        R.string.event_series_import_success,
+                        eventSeriesImport.series.name,
+                        eventSeriesImport.memberImports.size
+                    ),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (error: Exception) {
+                progressDialog.dismiss()
+                displayAlert(error.message ?: getString(R.string.race_import_failure))
+            }
+        }
+    }
+
+    private fun isEventSeriesPackageUri(uri: Uri): Boolean {
+        val type = requireContext().contentResolver.getType(uri).orEmpty()
+        if (type == "application/zip" || type == "application/x-zip-compressed") {
+            return true
+        }
+        val name = displayNameForUri(uri)
+        return name.endsWith(".zip", ignoreCase = true)
     }
 
     private fun showReceiveFromDesktopDialog() {
@@ -397,16 +444,7 @@ class RaceSelectionFragment : Fragment() {
 
     private fun desktopUploadFromUri(uri: Uri): DesktopFileTransferUpload {
         val resolver = requireContext().contentResolver
-        val fileName = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-            ?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
-                } else {
-                    null
-                }
-            }
-            ?: uri.lastPathSegment
-            ?: "android-upload.bin"
+        val fileName = displayNameForUri(uri).ifBlank { "android-upload.bin" }
         val bytes = resolver.openInputStream(uri)?.use { input -> input.readBytes() }
             ?: throw IllegalStateException("Could not open the selected file.")
         return DesktopFileTransferUpload(
@@ -415,6 +453,18 @@ class RaceSelectionFragment : Fragment() {
             bytes = bytes
         )
     }
+
+    private fun displayNameForUri(uri: Uri): String =
+        requireContext().contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+                } else {
+                    null
+                }
+            }
+            ?: uri.lastPathSegment
+            ?: ""
 
     private fun showSendToDesktopDialog() {
         AlertDialog.Builder(requireContext())
@@ -529,8 +579,14 @@ class RaceSelectionFragment : Fragment() {
 
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
         intent.addCategory(Intent.CATEGORY_OPENABLE)
-        intent.type = "text/json"
-        intent.putExtra(Intent.EXTRA_TITLE, "race.ardfjs")
+        val seriesName = raceViewModel.seriesNameForRace(raceId)
+        if (seriesName == null) {
+            intent.type = "text/json"
+            intent.putExtra(Intent.EXTRA_TITLE, "race.ardfjs")
+        } else {
+            intent.type = "application/zip"
+            intent.putExtra(Intent.EXTRA_TITLE, "${safeUploadFileStem(seriesName)}.zip")
+        }
         getResult.launch(intent)
     }
 
