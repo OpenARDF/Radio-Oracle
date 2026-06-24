@@ -35,7 +35,7 @@ class DesktopAndroidFileReceiveServerTest {
         )
 
         assertEquals(201, response.statusCode())
-        val result = requireNotNull(received)
+        val result = awaitReceived { received }
         assertEquals("Test Event.ardfjs", result.fileName)
         assertEquals(body.size.toLong(), result.byteCount)
         assertArrayEquals(body, Files.readAllBytes(result.path))
@@ -76,7 +76,7 @@ class DesktopAndroidFileReceiveServerTest {
         )
 
         assertEquals(201, response.statusCode())
-        assertEquals("race 2.ardfjs", requireNotNull(received).fileName)
+        assertEquals("race 2.ardfjs", awaitReceived { received }.fileName)
     }
 
     @Test
@@ -141,5 +141,16 @@ class DesktopAndroidFileReceiveServerTest {
             Thread.sleep(25)
         }
         throw AssertionError("Server remained available.", lastError)
+    }
+
+    private fun awaitReceived(
+        resultProvider: () -> DesktopAndroidFileReceiveResult?
+    ): DesktopAndroidFileReceiveResult {
+        val deadline = System.nanoTime() + 2_000_000_000L
+        while (System.nanoTime() < deadline) {
+            resultProvider()?.let { return it }
+            Thread.sleep(25)
+        }
+        throw AssertionError("Receive callback was not invoked.")
     }
 }
