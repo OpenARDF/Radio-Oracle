@@ -3414,7 +3414,7 @@ fun main(args: Array<String>) = application {
                         "Exported editable OOM course overlays: ${summary.editableCompetitorPath.fileName}, " +
                             "${summary.editableMasterPath.fileName}, and ${summary.editableCustodianPath.fileName}; " +
                             "${summary.exportedPointCount} course points, ${summary.exclusionCircleCount} exclusion circles, " +
-                            "${summary.finishCorridorCount} finish corridor. Template copies were also exported."
+                            "${summary.finishCorridorCount} finish corridor."
                 }.onFailure { error ->
                     projectStatusText = "Course overlay export failed: ${error.message ?: error::class.simpleName}"
                 }

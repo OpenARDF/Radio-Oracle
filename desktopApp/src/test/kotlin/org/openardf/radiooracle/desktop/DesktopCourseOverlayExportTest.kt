@@ -22,7 +22,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 class DesktopCourseOverlayExportTest {
     @Test
-    fun exportsThreeOomXmapOverlaysWithAudienceSpecificContent() {
+    fun exportsThreeEditableOomOverlaysWithAudienceSpecificContent() {
         val outputDirectory = Files.createTempDirectory("radio-oracle-course-overlays")
         val baseMap = Files.createTempFile("radio-oracle-base-map", ".xmap")
         Files.writeString(baseMap, sampleBaseMap())
@@ -39,16 +39,13 @@ class DesktopCourseOverlayExportTest {
             password = "course-key"
         )
 
-        assertTrue(Files.exists(summary.competitorPath))
-        assertTrue(Files.exists(summary.masterPath))
-        assertTrue(Files.exists(summary.custodianPath))
         assertTrue(Files.exists(summary.editableCompetitorPath))
         assertTrue(Files.exists(summary.editableMasterPath))
         assertTrue(Files.exists(summary.editableCustodianPath))
+        assertFalse(Files.exists(outputDirectory.resolve("Overlay Test competitor overlay.xmap")))
+        assertFalse(Files.exists(outputDirectory.resolve("Overlay Test master overlay.xmap")))
+        assertFalse(Files.exists(outputDirectory.resolve("Overlay Test custodian overlay.xmap")))
         listOf(
-            summary.competitorPath,
-            summary.masterPath,
-            summary.custodianPath,
             summary.editableCompetitorPath,
             summary.editableMasterPath,
             summary.editableCustodianPath
@@ -57,35 +54,34 @@ class DesktopCourseOverlayExportTest {
         assertEquals(2, summary.exclusionCircleCount)
         assertEquals(1, summary.finishCorridorCount)
 
-        val competitor = Files.readString(summary.competitorPath)
+        val competitor = Files.readString(summary.editableCompetitorPath)
         assertTrue(competitor.contains("""<barrier version="6" required="0.6.0">"""))
         assertTrue(competitor.contains("</barrier>"))
-        assertTrue(competitor.contains("""<color priority="0" name="Radio-Oracle Purple" c="0.2" m="1" y="0" k="0""""))
         assertTrue(competitor.contains("""code="701" name="Radio-Oracle Start""""))
         assertTrue(competitor.contains("""code="702" name="Radio-Oracle Control point""""))
         assertTrue(competitor.contains("""code="705" name="Radio-Oracle Marked route""""))
         assertTrue(competitor.contains("""code="706" name="Radio-Oracle Finish""""))
         assertTrue(competitor.contains("""code="RO.1" name="Radio-Oracle ARDF exclusion circle""""))
-        assertEquals(1, competitor.objectCountForSymbol(1))
-        assertEquals(2, competitor.objectCountForSymbol(2))
+        assertEquals(1, competitor.objectCountForSymbol(2))
+        assertEquals(2, competitor.objectCountForSymbol(3))
         assertEquals(1, competitor.objectCountForSymbol(5))
         assertEquals(1, competitor.objectCountForSymbol(6))
-        assertEquals(2, competitor.objectCountForSymbol(209))
-        assertEquals(listOf("B", "Spectator"), competitor.textObjectValues())
+        assertEquals(2, competitor.objectCountForSymbol(7))
+        assertEquals(listOf("B", "Spectator"), competitor.textObjectValues(4))
         assertTrue(competitor.coordsBlocks().all { it.trimEnd().endsWith(";") })
 
-        val master = Files.readString(summary.masterPath)
-        assertEquals(4, master.objectCountForSymbol(2))
-        assertEquals(listOf("B", "Spectator", "1", "2"), master.textObjectValues())
+        val master = Files.readString(summary.editableMasterPath)
+        assertEquals(4, master.objectCountForSymbol(3))
+        assertEquals(listOf("B", "Spectator", "1", "2"), master.textObjectValues(4))
         assertTrue(master.coordsBlocks().all { it.trimEnd().endsWith(";") })
 
-        val custodian = Files.readString(summary.custodianPath)
+        val custodian = Files.readString(summary.editableCustodianPath)
         assertEquals(0, custodian.objectCountForSymbol(5))
-        assertEquals(0, custodian.objectCountForSymbol(209))
-        assertEquals(4, custodian.objectCountForSymbol(2))
-        assertEquals(1, custodian.objectCountForSymbol(1))
+        assertEquals(0, custodian.objectCountForSymbol(7))
+        assertEquals(4, custodian.objectCountForSymbol(3))
+        assertEquals(1, custodian.objectCountForSymbol(2))
         assertEquals(1, custodian.objectCountForSymbol(6))
-        assertEquals(listOf("B", "Spectator", "1", "2"), custodian.textObjectValues())
+        assertEquals(listOf("B", "Spectator", "1", "2"), custodian.textObjectValues(4))
         assertTrue(custodian.coordsBlocks().all { it.trimEnd().endsWith(";") })
 
         val editableMaster = Files.readString(summary.editableMasterPath)
@@ -245,8 +241,8 @@ class DesktopCourseOverlayExportTest {
     private fun String.objectCountForSymbol(symbolId: Int): Int =
         Regex("""<object\b[^>]*\bsymbol="$symbolId"""").findAll(this).count()
 
-    private fun String.textObjectValues(): List<String> =
-        Regex("""<object\b[^>]*\bsymbol="3"[\s\S]*?<text>([\s\S]*?)</text></object>""")
+    private fun String.textObjectValues(symbolId: Int): List<String> =
+        Regex("""<object\b[^>]*\bsymbol="$symbolId"[\s\S]*?<text>([\s\S]*?)</text></object>""")
             .findAll(this)
             .map { it.groupValues[1] }
             .toList()

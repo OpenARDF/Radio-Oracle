@@ -13,6 +13,7 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
+import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
@@ -377,6 +378,7 @@ object DesktopControlsRouteKmlKmzExporter {
                     add("Ideal order: ${courseInfo.idealOrder}")
                 }
                 courseInfo.lengthMeters?.let { add("Length: ${it} m") }
+                courseInfo.effectiveLengthMeters()?.let { add("Effective length: ${it} m") }
                 courseInfo.climbMeters?.let { add("Climb: ${it} m") }
                 if (courseInfo.sourceName.isNotBlank()) {
                     add("Source: ${courseInfo.sourceName}")
