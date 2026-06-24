@@ -1161,9 +1161,10 @@ object DesktopCourseKmlImporter {
         importedControls: List<CourseControlPoint>,
         eventControls: List<EventControl>
     ): CourseMatchedControlResult {
-        // Control names from map files are user-authored, so match the visible
-        // identifiers users can see in the Event File: SI code, control label,
-        // and public label. Duplicate tokens are ignored to avoid guessing.
+        // Control names from map files are user-authored, so match the visible identifiers users can
+        // see in the Event File first. For explicit SI-like clues, also allow a unique SI/type match
+        // so labels such as 2F can resolve to an existing control still labeled only as SI 42.
+        // Duplicate tokens are ignored to avoid guessing.
         val controlTokens = eventControls.flatMap { control ->
             listOfNotNull(
                 ControlMatchToken(control.siCode.toString(), control),
@@ -1179,6 +1180,9 @@ object DesktopCourseKmlImporter {
         }
         val controlsByToken = uniqueControlTokensBy(controlTokens) { it.token.normalizedCourseName() }
         val controlsByCompactToken = uniqueControlTokensBy(controlTokens) { it.token.compactCourseName() }
+        val controlsByIdentity = uniqueControlTokensBy(
+            eventControls.map { control -> ControlMatchToken(control.displayCourseLabel(), control) }
+        ) { "${it.control.siCode}|${it.control.type.name}" }
         val controlsByNumber = uniqueControlTokensBy(labelTokens) { it.token.singleEmbeddedNumber()?.toString().orEmpty() }
             .filterKeys { it.isNotBlank() }
         val labelConversions = mutableListOf<DesktopCourseKmlLabelConversion>()
@@ -1187,8 +1191,12 @@ object DesktopCourseKmlImporter {
                 return@mapNotNull null
             }
             val exactMatch = controlsByToken[imported.name.normalizedCourseName()]
+            val identityMatch = imported.inferredControlIdentity()?.let { identity ->
+                controlsByIdentity["${identity.first}|${identity.second.name}"]
+            }
             val match = exactMatch
                 ?: controlsByCompactToken[imported.name.compactCourseName()]
+                ?: identityMatch
                 ?: imported.name.controlKeywordNumber()?.let { number -> controlsByNumber[number.toString()] }
                 ?: imported.name.singleEmbeddedNumber()?.let { number -> controlsByNumber[number.toString()] }
             match?.takeIf { imported.name.trim() != it.token.trim() }?.let { token ->
@@ -1214,6 +1222,18 @@ object DesktopCourseKmlImporter {
             controls = controls,
             labelConversions = labelConversions.distinct()
         )
+    }
+
+    private fun CourseControlPoint.inferredControlIdentity(): Pair<Int, ControlPointType>? {
+        val hasIdentityClue = siCodeHint?.takeIf(SportIdentCodes::isSICodeValid) != null ||
+            sprintFastFoxNumber(name) != null ||
+            name.trim().matches(Regex("""\d+"""))
+        if (!hasIdentityClue) {
+            return null
+        }
+        val type = ControlRoleLabelRules.inferredRole(name) ?: ControlPointType.CONTROL
+        val siCode = inferredControlSiCode(name, type, siCodeHint) ?: return null
+        return siCode to type
     }
 
     private fun missingCourseControls(
