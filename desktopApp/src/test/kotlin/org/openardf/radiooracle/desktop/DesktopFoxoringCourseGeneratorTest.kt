@@ -73,8 +73,19 @@ class DesktopFoxoringCourseGeneratorTest {
         assertTrue(firstSet.coveredCategories.contains("W75"))
         assertEquals(firstSet.rows.size, firstSet.courseCount)
         assertEquals(uniqueFirstFoxCount(firstSet.rows), firstSet.uniqueFirstFoxCount)
-        assertTrue(firstSet.categoryFoxMinimum >= 4)
-        assertTrue(firstSet.categoryFoxTotal > firstSet.coveredCategories.size * 4)
+        val recommendedFoxCountByCategory = bestMatchingFoxCountByCategory(firstSet.rows, firstSet.coveredCategories)
+        assertEquals(firstSet.coveredCategories.toSet(), recommendedFoxCountByCategory.keys)
+        assertEquals(recommendedFoxCountByCategory.values.minOrNull(), firstSet.categoryFoxMinimum)
+        assertEquals(recommendedFoxCountByCategory.values.sum(), firstSet.categoryFoxTotal)
+        assertEquals(
+            result.recommendedCourseSets.sortedWith(
+                compareByDescending<ClassicCourseGeneratorRecommendedSet> { it.categoryFoxMinimum }
+                    .thenByDescending { it.categoryFoxTotal }
+                    .thenByDescending { it.uniqueFirstFoxCount }
+                    .thenByDescending { it.rows.size }
+            ),
+            result.recommendedCourseSets
+        )
         assertTrue(reportText.contains("RECOMMENDED FOXORING COURSE SETS"))
         assertTrue(reportText.contains("Set #1"))
         assertFalse(reportText.contains("Combination 1:"))
@@ -179,4 +190,15 @@ class DesktopFoxoringCourseGeneratorTest {
             .eachCount()
         return rows.count { firstFoxCounts[it.orderLabels[1]] == 1 }
     }
+
+    private fun bestMatchingFoxCountByCategory(
+        rows: List<ClassicCourseGeneratorRow>,
+        categories: List<String>
+    ): Map<String, Int> =
+        categories.mapNotNull { category ->
+            rows
+                .filter { category in it.matchingCategories }
+                .maxOfOrNull { it.foxCount }
+                ?.let { category to it }
+        }.toMap()
 }

@@ -659,15 +659,14 @@ object DesktopClassicCourseGenerator {
     ): List<ClassicCourseGeneratorRecommendedSet> {
         val allCategories = config.requirements.keys.toList()
         val categoryIndex = allCategories.withIndex().associate { it.value to it.index }
-        val candidates = recommendationCandidateRows(rows, allCategories, categoryIndex)
-        if (candidates.isEmpty()) {
+        if (allCategories.any { category -> rows.none { category in it.matchingCategories } }) {
             return emptyList()
         }
-        val targetMask = candidates.fold(0) { mask, candidate -> mask or candidate.categoryMask }
-        val targetCategories = allCategories.filter { category ->
-            val index = requireNotNull(categoryIndex[category])
-            targetMask and (1 shl index) != 0
-        }
+        val candidates = recommendationCandidateRows(rows, allCategories, categoryIndex)
+        if (candidates.isEmpty()) return emptyList()
+
+        val targetMask = (1 shl allCategories.size) - 1
+        val targetCategories = allCategories
         val scoredSets = mutableListOf<RecommendedCourseSetScore>()
         val setComparator = recommendedSetComparator()
         fun addScoredSet(score: RecommendedCourseSetScore) {
@@ -768,11 +767,17 @@ object DesktopClassicCourseGenerator {
             val key = candidate.row.orderLabels.joinToString("\u0000")
             selected.putIfAbsent(key, candidate)
         }
+        fun addIfRoom(candidate: RecommendationCandidateRow) {
+            if (selected.size < FOXORING_RECOMMENDATION_CANDIDATE_LIMIT) {
+                add(candidate)
+            }
+        }
+        val perCategorySeedLimit = max(1, FOXORING_RECOMMENDATION_CANDIDATE_LIMIT / allCategories.size)
         allCategories.forEach { category ->
             candidates
                 .filter { category in it.row.matchingCategories }
                 .sortedWith(recommendationCandidateComparator())
-                .take(12)
+                .take(perCategorySeedLimit)
                 .forEach(::add)
         }
         candidates
@@ -782,15 +787,14 @@ object DesktopClassicCourseGenerator {
                 sameFirstFox
                     .sortedWith(recommendationCandidateComparator())
                     .take(8)
-                    .forEach(::add)
+                    .forEach(::addIfRoom)
             }
         candidates
             .sortedWith(recommendationCandidateComparator())
             .take(FOXORING_RECOMMENDATION_CANDIDATE_LIMIT)
-            .forEach(::add)
+            .forEach(::addIfRoom)
         return selected.values
             .sortedWith(recommendationCandidateComparator())
-            .take(FOXORING_RECOMMENDATION_CANDIDATE_LIMIT)
     }
 
     private fun scoreRecommendedSet(
@@ -822,15 +826,15 @@ object DesktopClassicCourseGenerator {
     }
 
     private fun recommendationCandidateComparator(): Comparator<RecommendationCandidateRow> =
-        compareByDescending<RecommendationCandidateRow> { it.row.matchingCategories.size }
-            .thenByDescending { it.row.foxCount }
+        compareByDescending<RecommendationCandidateRow> { it.row.foxCount }
+            .thenByDescending { it.categoryMask.countOneBits() }
             .thenBy { it.row.effectiveLengthMeters }
             .thenBy { it.row.orderLabels.joinToString("\u0000") }
 
     private fun recommendedSetComparator(): Comparator<RecommendedCourseSetScore> =
-        compareByDescending<RecommendedCourseSetScore> { it.uniqueFirstFoxCount }
-            .thenByDescending { it.categoryFoxMinimum }
+        compareByDescending<RecommendedCourseSetScore> { it.categoryFoxMinimum }
             .thenByDescending { it.categoryFoxTotal }
+            .thenByDescending { it.uniqueFirstFoxCount }
             .thenByDescending { it.rows.size }
             .thenBy { it.totalEffectiveLengthMeters }
             .thenBy { it.rows.joinToString("\u0000") { row -> row.orderLabels.joinToString(" -> ") } }
