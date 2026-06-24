@@ -13335,6 +13335,30 @@ private fun ClassicCourseGeneratorResultView(result: ClassicCourseGeneratorResul
                     )
                 }
             }
+            if (result.recommendedCourseSets.isNotEmpty()) {
+                Text(
+                    text = "Foxoring course combinations",
+                    color = DesktopPalette.Black,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                result.recommendedCourseSets.forEach { set ->
+                    Text(
+                        text = "Combination ${set.index}: ${set.courseCount} courses, ${set.uniqueFirstFoxCount} unique first foxes, minimum category fox count ${set.categoryFoxMinimum}, total category fox count ${set.categoryFoxTotal}",
+                        color = DesktopPalette.Black,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    set.rows.forEach { row ->
+                        val categoryText = row.matchingCategories.joinToString(", ")
+                        Text(
+                            text = "  ${kilometersText(row.effectiveLengthMeters.roundToInt())} : ${row.orderLabels.joinToString(" -> ")} ($categoryText)",
+                            color = Color(0xFF0B5D1E),
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
             result.groups.forEach { group ->
                 Text(
                     text = group.title,

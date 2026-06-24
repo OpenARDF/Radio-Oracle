@@ -53,6 +53,44 @@ class DesktopFoxoringCourseGeneratorTest {
     }
 
     @Test
+    fun recommendsFoxoringCourseCombinationsCoveringAllCategories() {
+        val path = Files.createTempFile("foxoring-course-points-recommendations", ".kml")
+        Files.writeString(path, outAndBackFoxoringCoursePointsKml())
+
+        val result = DesktopFoxoringCourseGenerator.generate(path, elevationLookup = { null })
+        val reportText = DesktopFoxoringCourseGenerator.reportText(result)
+        val pdfPath = Files.createTempFile("foxoring-course-generator-recommendations", ".pdf")
+        DesktopFoxoringCourseGenerator.exportPdf(pdfPath, result)
+        val pdfText = Files.readString(pdfPath)
+
+        val firstSet = result.recommendedCourseSets.firstOrNull()
+            ?: error("Expected at least one recommended Foxoring course combination.")
+        assertTrue(firstSet.courseCount in 3..4)
+        assertEquals(14, firstSet.coveredCategories.size)
+        assertTrue(firstSet.coveredCategories.contains("M21"))
+        assertTrue(firstSet.coveredCategories.contains("W75"))
+        assertEquals(firstSet.rows.size, firstSet.courseCount)
+        assertEquals(uniqueFirstFoxCount(firstSet.rows), firstSet.uniqueFirstFoxCount)
+        assertTrue(firstSet.categoryFoxMinimum >= 4)
+        assertTrue(firstSet.categoryFoxTotal > firstSet.coveredCategories.size * 4)
+        assertTrue(reportText.contains("FOXORING COURSE COMBINATIONS"))
+        assertTrue(reportText.contains("Combination 1:"))
+        assertTrue(pdfText.contains("FOXORING COURSE COMBINATIONS"))
+        assertTrue(pdfText.contains("minimum category fox count"))
+    }
+
+    @Test
+    fun leavesClassicGeneratorWithoutCourseSetRecommendations() {
+        val path = Files.createTempFile("classic-course-points-no-recommendations", ".kml")
+        Files.writeString(path, foxoringCoursePointsKml(foxCount = 5, includeBeacon = true))
+
+        val result = DesktopClassicCourseGenerator.generate(path, elevationLookup = { null })
+
+        assertTrue(result.recommendedCourseSets.isEmpty())
+        assertFalse(DesktopClassicCourseGenerator.reportText(result).contains("FOXORING COURSE COMBINATIONS"))
+    }
+
+    @Test
     fun rejectsFoxoringCoursePointFilesWithMoreThanTwelveFoxes() {
         val path = Files.createTempFile("foxoring-course-points-too-many", ".kml")
         Files.writeString(path, foxoringCoursePointsKml(foxCount = 13, includeBeacon = false))
@@ -88,6 +126,27 @@ class DesktopFoxoringCourseGeneratorTest {
         """.trimIndent()
     }
 
+    private fun outAndBackFoxoringCoursePointsKml(): String {
+        val centerLatitude = 39.000
+        val centerLongitude = -95.000
+        val metersPerLongitudeDegree = 86_200.0
+        val foxDistancesMeters = listOf(600, 1_000, 1_400, 1_800, 2_200, 2_600, 3_000, 3_400, 3_800, 4_200, 4_600, 5_000)
+        val foxes = foxDistancesMeters.mapIndexed { index, distanceMeters ->
+            val foxNumber = index + 1
+            val longitude = centerLongitude + distanceMeters / metersPerLongitudeDegree
+            pointPlacemark("FOX$foxNumber", longitude, centerLatitude, 100.0, "SI=${220 + foxNumber}")
+        }.joinToString("\n")
+        return """
+            <kml xmlns="http://www.opengis.net/kml/2.2">
+              <Document>
+                ${pointPlacemark("Start", centerLongitude, centerLatitude, 100.0, "SI=200")}
+                $foxes
+                ${pointPlacemark("Finish", centerLongitude + 100.0 / metersPerLongitudeDegree, centerLatitude, 100.0, "SI=201")}
+              </Document>
+            </kml>
+        """.trimIndent()
+    }
+
     private fun pointPlacemark(
         name: String,
         longitude: Double,
@@ -105,4 +164,12 @@ class DesktopFoxoringCourseGeneratorTest {
 
     private fun String.countOccurrences(needle: String): Int =
         split(needle).size - 1
+
+    private fun uniqueFirstFoxCount(rows: List<ClassicCourseGeneratorRow>): Int {
+        val firstFoxCounts = rows
+            .map { it.orderLabels[1] }
+            .groupingBy { it }
+            .eachCount()
+        return rows.count { firstFoxCounts[it.orderLabels[1]] == 1 }
+    }
 }
