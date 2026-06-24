@@ -960,6 +960,7 @@ object DesktopClassicCourseGenerator {
 
     private fun kmlText(result: ClassicCourseGeneratorResult): String {
         val greenRows = result.rows.filter { it.hasCategoryMatch }
+        val greenRowIndexes = greenRows.withIndex().associate { it.value to it.index }
         val courseObjects = (listOf(result.start) + result.foxes + listOfNotNull(result.beacon) + result.finish)
             .distinctBy { it.kmlObjectKey() }
         return buildString {
@@ -1000,24 +1001,51 @@ object DesktopClassicCourseGenerator {
             appendLine("    <Folder>")
             appendLine("      <name>Category-matching course candidates</name>")
             greenRows.forEachIndexed { index, row ->
-                appendLine("      <Placemark>")
-                appendLine("        <name>${xmlText(kmlRouteName(index + 1, row))}</name>")
-                appendLine("        <description>${xmlText(kmlRouteDescription(row))}</description>")
-                appendLine("        <styleUrl>#${candidateRouteStyleId(index)}</styleUrl>")
-                appendLine("        <LineString>")
-                appendLine("          <tessellate>1</tessellate>")
-                appendLine("          <coordinates>")
-                row.coursePoints.forEach { coursePoint ->
-                    appendLine("            ${coursePoint.point.kmlCoordinate()}")
-                }
-                appendLine("          </coordinates>")
-                appendLine("        </LineString>")
-                appendLine("      </Placemark>")
+                appendCourseRoutePlacemark(
+                    row = row,
+                    name = kmlRouteName(index + 1, row),
+                    styleIndex = index,
+                    indent = "      "
+                )
             }
             appendLine("    </Folder>")
+            result.recommendedCourseSets.forEach { set ->
+                appendLine("    <Folder>")
+                appendLine("      <name>${xmlText("Recommended Set #${set.index}")}</name>")
+                set.rows.forEachIndexed { rowIndex, row ->
+                    appendCourseRoutePlacemark(
+                        row = row,
+                        name = "Recommended Set #${set.index} Course #${rowIndex + 1}: ${row.orderLabels.joinToString(" -> ")}",
+                        styleIndex = greenRowIndexes[row] ?: 0,
+                        indent = "      "
+                    )
+                }
+                appendLine("    </Folder>")
+            }
             appendLine("  </Document>")
             appendLine("</kml>")
         }
+    }
+
+    private fun StringBuilder.appendCourseRoutePlacemark(
+        row: ClassicCourseGeneratorRow,
+        name: String,
+        styleIndex: Int,
+        indent: String
+    ) {
+        appendLine("${indent}<Placemark>")
+        appendLine("$indent  <name>${xmlText(name)}</name>")
+        appendLine("$indent  <description>${xmlText(kmlRouteDescription(row))}</description>")
+        appendLine("$indent  <styleUrl>#${candidateRouteStyleId(styleIndex)}</styleUrl>")
+        appendLine("$indent  <LineString>")
+        appendLine("$indent    <tessellate>1</tessellate>")
+        appendLine("$indent    <coordinates>")
+        row.coursePoints.forEach { coursePoint ->
+            appendLine("$indent      ${coursePoint.point.kmlCoordinate()}")
+        }
+        appendLine("$indent    </coordinates>")
+        appendLine("$indent  </LineString>")
+        appendLine("$indent</Placemark>")
     }
 
     private fun StringBuilder.appendCoursePointStyle(styleId: String, iconUrl: String) {
@@ -1090,7 +1118,7 @@ object DesktopClassicCourseGenerator {
         buildList {
             add(PdfLine(result.generatorTitle, PdfColor.Body, 18, bold = true))
             add(PdfLine("Source: ${result.sourcePath.fileName}", PdfColor.Body, 11))
-            add(PdfLine("Course points: Start, ${result.foxes.size} foxes, ${if (result.beacon == null) "no beacon" else "beacon"}, Finish", PdfColor.Body, 11))
+            add(PdfLine("Points: Start, ${result.foxes.size} foxes, ${if (result.beacon == null) "no beacon" else "beacon"}, Finish", PdfColor.Body, 11))
             add(PdfLine(elevationSummaryText(result), PdfColor.Body, 11))
             if (result.requirementWarnings.isNotEmpty()) {
                 add(PdfLine("Course requirement warnings", PdfColor.WarningRed, 12, bold = true))
@@ -1099,7 +1127,7 @@ object DesktopClassicCourseGenerator {
                 }
             }
             if (result.recommendedCourseSets.isNotEmpty()) {
-                add(PdfLine("RECOMMENDED FOXORING COURSE SETS", PdfColor.Body, 14, bold = true))
+                add(PdfLine("Recommended Foxoring course sets", PdfColor.Body, 14, bold = true))
                 result.recommendedCourseSets.forEach { set ->
                     add(PdfLine("Set #${set.index}", PdfColor.Body, 11, bold = true))
                     set.rows.forEach { row ->

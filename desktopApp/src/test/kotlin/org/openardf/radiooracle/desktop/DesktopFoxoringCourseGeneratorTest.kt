@@ -62,8 +62,9 @@ class DesktopFoxoringCourseGeneratorTest {
         val result = DesktopFoxoringCourseGenerator.generate(path, elevationLookup = { null })
         val reportText = DesktopFoxoringCourseGenerator.reportText(result)
         val pdfPath = Files.createTempFile("foxoring-course-generator-recommendations", ".pdf")
-        DesktopFoxoringCourseGenerator.exportPdf(pdfPath, result)
+        val exports = DesktopFoxoringCourseGenerator.exportPdfAndKml(pdfPath, result)
         val pdfText = Files.readString(pdfPath)
+        val kmlText = Files.readString(exports.kmlPath)
 
         val firstSet = result.recommendedCourseSets.firstOrNull()
             ?: error("Expected at least one recommended Foxoring course combination.")
@@ -97,8 +98,20 @@ class DesktopFoxoringCourseGeneratorTest {
             Regex("""Set #1\n\d+\.\d{2} km : S -> .* \([^)]+\)""")
                 .containsMatchIn(reportText)
         )
-        assertTrue(pdfText.contains("RECOMMENDED FOXORING COURSE SETS"))
+        assertTrue(pdfText.contains("Points: Start, 12 foxes, no beacon, Finish"))
+        assertTrue(pdfText.contains("Elevation: complete point elevations available."))
+        assertTrue(pdfText.contains("Recommended Foxoring course sets"))
         assertTrue(pdfText.contains("Set #1"))
+        assertEquals(1, kmlText.countOccurrences("<name>Course Objects</name>"))
+        assertEquals(result.recommendedCourseSets.size, Regex("""<name>Recommended Set #\d+</name>""").findAll(kmlText).count())
+        assertTrue(kmlText.contains("<name>Recommended Set #1</name>"))
+        assertTrue(kmlText.contains("<name>Recommended Set #1 Course #1:"))
+        assertEquals(
+            result.rows.count { it.hasCategoryMatch } + result.recommendedCourseSets.sumOf { it.rows.size },
+            kmlText.countOccurrences("<LineString>")
+        )
+        assertEquals(1, kmlText.countOccurrences("<name>Start</name>"))
+        assertEquals(1, kmlText.countOccurrences("<name>FOX1</name>"))
     }
 
     @Test
