@@ -16,7 +16,9 @@ data class ClassicCourseGeneratorResult(
     val requirementWarnings: List<ClassicCourseRequirementWarning>,
     val groups: List<ClassicCourseGeneratorGroup>,
     val elevationResolvedPointCount: Int,
-    val missingElevationPointCount: Int
+    val missingElevationPointCount: Int,
+    val generatorTitle: String = "Classic Course Generator",
+    val formatLabel: String = "Classic"
 ) {
     val rows: List<ClassicCourseGeneratorRow> = groups.flatMap { it.rows }
 }
@@ -60,6 +62,8 @@ object DesktopClassicCourseGenerator {
     private const val CLASSIC_CLIMB_LIMIT_PERCENT = 6.0
     private const val CLASSIC_START_EXCLUSION_METERS = 750
     private const val CLASSIC_TRANSMITTER_SEPARATION_METERS = 400
+    private const val FOXORING_START_EXCLUSION_METERS = 250
+    private const val FOXORING_TRANSMITTER_SEPARATION_METERS = 250
     private const val COURSE_CANDIDATE_LINE_WIDTH = 3
     private val courseCandidateRouteColors = listOf(
         "ffb85700", // blue
@@ -101,6 +105,44 @@ object DesktopClassicCourseGenerator {
         "M70" to ClassicCourseRequirement(3, 4, 4_000, 6_000),
         "M80" to ClassicCourseRequirement(2, 4, 3_000, 5_000)
     )
+    private val foxoringRequirements = linkedMapOf(
+        "W19" to ClassicCourseRequirement(5, 8, 4_000, 6_000),
+        "W21" to ClassicCourseRequirement(6, 10, 5_000, 7_000),
+        "W35" to ClassicCourseRequirement(5, 8, 4_000, 6_000),
+        "W45" to ClassicCourseRequirement(4, 7, 4_000, 6_000),
+        "W55" to ClassicCourseRequirement(4, 7, 3_000, 5_000),
+        "W65" to ClassicCourseRequirement(4, 7, 3_000, 5_000),
+        "W75" to ClassicCourseRequirement(4, 7, 3_000, 4_000),
+        "M19" to ClassicCourseRequirement(6, 8, 6_000, 8_000),
+        "M21" to ClassicCourseRequirement(8, 10, 7_000, 9_000),
+        "M40" to ClassicCourseRequirement(6, 8, 6_000, 8_000),
+        "M50" to ClassicCourseRequirement(5, 8, 5_000, 7_000),
+        "M60" to ClassicCourseRequirement(5, 8, 4_000, 6_000),
+        "M70" to ClassicCourseRequirement(4, 7, 3_000, 5_000),
+        "M80" to ClassicCourseRequirement(4, 7, 3_000, 4_000)
+    )
+    private val classicConfig = CourseGeneratorConfig(
+        generatorTitle = "Classic Course Generator",
+        formatLabel = "Classic",
+        minimumFoxes = 3,
+        maximumFoxes = 5,
+        foxCounts = { totalFoxes -> 3..totalFoxes },
+        requirements = classicRequirements,
+        startExclusionMeters = CLASSIC_START_EXCLUSION_METERS,
+        transmitterSeparationMeters = CLASSIC_TRANSMITTER_SEPARATION_METERS,
+        useSubsetDynamicProgramming = false
+    )
+    private val foxoringConfig = CourseGeneratorConfig(
+        generatorTitle = "Foxoring Course Generator",
+        formatLabel = "Foxoring",
+        minimumFoxes = 5,
+        maximumFoxes = 12,
+        foxCounts = { totalFoxes -> 4 until totalFoxes },
+        requirements = foxoringRequirements,
+        startExclusionMeters = FOXORING_START_EXCLUSION_METERS,
+        transmitterSeparationMeters = FOXORING_TRANSMITTER_SEPARATION_METERS,
+        useSubsetDynamicProgramming = true
+    )
 
     fun generate(
         sourcePath: Path,
@@ -114,36 +156,53 @@ object DesktopClassicCourseGenerator {
         return generate(sourcePath, parsed, elevationLookup)
     }
 
+    fun generateFoxoring(
+        sourcePath: Path,
+        elevationLookup: (CourseGeoPoint) -> Double? = DesktopVenueElevationCache::elevationMeters
+    ): ClassicCourseGeneratorResult {
+        val fileName = sourcePath.fileName.toString()
+        require(fileName.endsWith(".kml", ignoreCase = true) || fileName.endsWith(".kmz", ignoreCase = true)) {
+            "Choose a .kml or .kmz course points file."
+        }
+        val parsed = DesktopCourseKmlImporter.parse(sourcePath)
+        return generateFoxoring(sourcePath, parsed, elevationLookup)
+    }
+
     fun generate(
         sourcePath: Path,
         courseData: DesktopCourseKmlData,
         elevationLookup: (CourseGeoPoint) -> Double? = DesktopVenueElevationCache::elevationMeters
+    ): ClassicCourseGeneratorResult =
+        generateWithConfig(sourcePath, courseData, elevationLookup, classicConfig)
+
+    fun generateFoxoring(
+        sourcePath: Path,
+        courseData: DesktopCourseKmlData,
+        elevationLookup: (CourseGeoPoint) -> Double? = DesktopVenueElevationCache::elevationMeters
+    ): ClassicCourseGeneratorResult =
+        generateWithConfig(sourcePath, courseData, elevationLookup, foxoringConfig)
+
+    private fun generateWithConfig(
+        sourcePath: Path,
+        courseData: DesktopCourseKmlData,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        config: CourseGeneratorConfig
     ): ClassicCourseGeneratorResult {
-        val classified = classifyCoursePoints(courseData.controls)
+        val classified = classifyCoursePoints(courseData.controls, config)
         val elevationResult = classified.withMissingElevations(elevationLookup)
         val elevated = elevationResult.classified
         val legSampleCache = mutableMapOf<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>()
-        val groups = (3..elevated.foxes.size).map { foxCount ->
+        val groups = config.foxCounts(elevated.foxes.size).map { foxCount ->
             ClassicCourseGeneratorGroup(
                 foxCount = foxCount,
                 title = groupTitle(foxCount),
-                rows = elevated.foxes
-                    .combinations(foxCount)
-                    .map { foxSet ->
-                        idealRow(
-                            foxCount = foxCount,
-                            start = elevated.start,
-                            finish = elevated.finish,
-                            beacon = elevated.beacon,
-                            foxes = foxSet,
-                            elevationLookup = elevationLookup,
-                            legSampleCache = legSampleCache
-                        )
-                    }
-                    .sortedWith(
-                        compareBy<ClassicCourseGeneratorRow> { it.effectiveLengthMeters }
-                            .thenBy { it.orderLabels.joinToString("\u0000") }
-                    )
+                rows = idealRows(
+                    foxCount = foxCount,
+                    classified = elevated,
+                    elevationLookup = elevationLookup,
+                    legSampleCache = legSampleCache,
+                    config = config
+                )
             )
         }
         return ClassicCourseGeneratorResult(
@@ -152,10 +211,12 @@ object DesktopClassicCourseGenerator {
             finish = elevated.finish,
             beacon = elevated.beacon,
             foxes = elevated.foxes,
-            requirementWarnings = requirementWarnings(elevated),
+            requirementWarnings = requirementWarnings(elevated, config),
             groups = groups,
             elevationResolvedPointCount = elevationResult.resolvedPointCount,
-            missingElevationPointCount = elevated.allPoints().count { it.point.elevationMeters == null }
+            missingElevationPointCount = elevated.allPoints().count { it.point.elevationMeters == null },
+            generatorTitle = config.generatorTitle,
+            formatLabel = config.formatLabel
         )
     }
 
@@ -166,7 +227,7 @@ object DesktopClassicCourseGenerator {
             .removeSuffix(".kml")
             .removeSuffix(".KML")
             .ifBlank { "Course Points" }
-        return DesktopProjectFilePaths.defaultPdfFileName(stem, "Classic Course Generator")
+        return DesktopProjectFilePaths.defaultPdfFileName(stem, result.generatorTitle)
     }
 
     fun exportPdf(path: Path, result: ClassicCourseGeneratorResult) {
@@ -188,7 +249,7 @@ object DesktopClassicCourseGenerator {
 
     fun reportText(result: ClassicCourseGeneratorResult): String =
         buildString {
-            appendLine("Classic Course Generator")
+            appendLine(result.generatorTitle)
             appendLine("Source: ${result.sourcePath.fileName}")
             appendLine("Course points: Start, ${result.foxes.size} foxes, ${if (result.beacon == null) "no beacon" else "beacon"}, Finish")
             appendLine(elevationSummaryText(result))
@@ -204,7 +265,10 @@ object DesktopClassicCourseGenerator {
             }
         }.trimEnd() + "\n"
 
-    private fun classifyCoursePoints(points: List<CourseControlPoint>): ClassifiedClassicCoursePoints {
+    private fun classifyCoursePoints(
+        points: List<CourseControlPoint>,
+        config: CourseGeneratorConfig
+    ): ClassifiedClassicCoursePoints {
         val startPoints = mutableListOf<ClassicCoursePoint>()
         val finishPoints = mutableListOf<ClassicCoursePoint>()
         val beaconPoints = mutableListOf<ClassicCoursePoint>()
@@ -216,7 +280,7 @@ object DesktopClassicCourseGenerator {
                 point.name.isFinishLabel() -> finishPoints += coursePoint
                 point.name.isBeaconLabel() -> beaconPoints += coursePoint
                 point.name.isSpectatorLabel() ->
-                    throw IllegalArgumentException("Classic Course Generator does not accept spectator/separator points.")
+                    throw IllegalArgumentException("${config.generatorTitle} does not accept spectator/separator points.")
                 else -> foxPoints += coursePoint
             }
         }
@@ -229,8 +293,8 @@ object DesktopClassicCourseGenerator {
         require(beaconPoints.size <= 1) {
             "Course points file must contain no more than one Beacon point."
         }
-        require(foxPoints.size in 3..5) {
-            "Course points file must contain between 3 and 5 fox points."
+        require(foxPoints.size in config.minimumFoxes..config.maximumFoxes) {
+            "Course points file must contain between ${config.minimumFoxes} and ${config.maximumFoxes} fox points."
         }
         return ClassifiedClassicCoursePoints(
             start = startPoints.single(),
@@ -263,6 +327,42 @@ object DesktopClassicCourseGenerator {
         )
     }
 
+    private fun idealRows(
+        foxCount: Int,
+        classified: ClassifiedClassicCoursePoints,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        legSampleCache: MutableMap<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>,
+        config: CourseGeneratorConfig
+    ): List<ClassicCourseGeneratorRow> =
+        if (config.useSubsetDynamicProgramming) {
+            exactSubsetRows(
+                foxCount = foxCount,
+                classified = classified,
+                elevationLookup = elevationLookup,
+                legSampleCache = legSampleCache,
+                config = config
+            )
+        } else {
+            classified.foxes
+                .combinations(foxCount)
+                .map { foxSet ->
+                    idealRow(
+                        foxCount = foxCount,
+                        start = classified.start,
+                        finish = classified.finish,
+                        beacon = classified.beacon,
+                        foxes = foxSet,
+                        elevationLookup = elevationLookup,
+                        legSampleCache = legSampleCache,
+                        config = config
+                    )
+                }
+                .sortedWith(
+                    compareBy<ClassicCourseGeneratorRow> { it.effectiveLengthMeters }
+                        .thenBy { it.orderLabels.joinToString("\u0000") }
+                )
+        }
+
     private fun idealRow(
         foxCount: Int,
         start: ClassicCoursePoint,
@@ -270,7 +370,8 @@ object DesktopClassicCourseGenerator {
         beacon: ClassicCoursePoint?,
         foxes: List<ClassicCoursePoint>,
         elevationLookup: (CourseGeoPoint) -> Double?,
-        legSampleCache: MutableMap<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>
+        legSampleCache: MutableMap<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>,
+        config: CourseGeneratorConfig
     ): ClassicCourseGeneratorRow =
         foxes.permutations()
             .map { orderedFoxes ->
@@ -283,7 +384,8 @@ object DesktopClassicCourseGenerator {
                     foxCount = foxCount,
                     effectiveLengthMeters = effectiveLength,
                     horizontalLengthMeters = horizontalLength,
-                    climbMeters = climb
+                    climbMeters = climb,
+                    config = config
                 )
                 ClassicCourseGeneratorRow(
                     foxCount = foxCount,
@@ -301,11 +403,163 @@ object DesktopClassicCourseGenerator {
                     .thenBy { it.orderLabels.joinToString("\u0000") }
             )
 
+    private fun exactSubsetRows(
+        foxCount: Int,
+        classified: ClassifiedClassicCoursePoints,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        legSampleCache: MutableMap<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>,
+        config: CourseGeneratorConfig
+    ): List<ClassicCourseGeneratorRow> {
+        val foxes = classified.foxes
+        val foxSize = foxes.size
+        val maskCount = 1 shl foxSize
+        val edgeWeights = Array(foxSize + 1) { DoubleArray(foxSize) }
+        val startIndex = foxSize
+        repeat(foxSize) { to ->
+            edgeWeights[startIndex][to] = legComparisonLength(
+                from = classified.start,
+                to = foxes[to],
+                elevationLookup = elevationLookup,
+                legSampleCache = legSampleCache
+            )
+        }
+        repeat(foxSize) { from ->
+            repeat(foxSize) { to ->
+                edgeWeights[from][to] = if (from == to) {
+                    0.0
+                } else {
+                    legComparisonLength(
+                        from = foxes[from],
+                        to = foxes[to],
+                        elevationLookup = elevationLookup,
+                        legSampleCache = legSampleCache
+                    )
+                }
+            }
+        }
+        val terminalWeights = DoubleArray(foxSize) { from ->
+            if (classified.beacon == null) {
+                legComparisonLength(foxes[from], classified.finish, elevationLookup, legSampleCache)
+            } else {
+                legComparisonLength(foxes[from], classified.beacon, elevationLookup, legSampleCache) +
+                    legComparisonLength(classified.beacon, classified.finish, elevationLookup, legSampleCache)
+            }
+        }
+        val dp = Array(maskCount) { DoubleArray(foxSize) { Double.POSITIVE_INFINITY } }
+        val parent = Array(maskCount) { IntArray(foxSize) { -1 } }
+        repeat(foxSize) { foxIndex ->
+            dp[1 shl foxIndex][foxIndex] = edgeWeights[startIndex][foxIndex]
+        }
+        for (mask in 1 until maskCount) {
+            repeat(foxSize) { last ->
+                val current = dp[mask][last]
+                if (!current.isFinite()) return@repeat
+                repeat(foxSize) { next ->
+                    if (mask and (1 shl next) == 0) {
+                        val nextMask = mask or (1 shl next)
+                        val nextValue = current + edgeWeights[last][next]
+                        if (nextValue < dp[nextMask][next] - 0.0001) {
+                            dp[nextMask][next] = nextValue
+                            parent[nextMask][next] = last
+                        }
+                    }
+                }
+            }
+        }
+        return (1 until maskCount)
+            .filter { it.countOneBits() == foxCount }
+            .map { mask ->
+                val last = (0 until foxSize).minWith(
+                    compareBy<Int> { dp[mask][it] + terminalWeights[it] }
+                        .thenBy { foxes[it].label }
+                )
+                val orderedFoxes = reconstructFoxOrder(mask, last, parent, foxes)
+                rowFromOrderedFoxes(
+                    foxCount = foxCount,
+                    start = classified.start,
+                    finish = classified.finish,
+                    beacon = classified.beacon,
+                    orderedFoxes = orderedFoxes,
+                    elevationLookup = elevationLookup,
+                    legSampleCache = legSampleCache,
+                    config = config
+                )
+            }
+            .sortedWith(
+                compareBy<ClassicCourseGeneratorRow> { it.effectiveLengthMeters }
+                    .thenBy { it.orderLabels.joinToString("\u0000") }
+            )
+    }
+
+    private fun reconstructFoxOrder(
+        mask: Int,
+        last: Int,
+        parent: Array<IntArray>,
+        foxes: List<ClassicCoursePoint>
+    ): List<ClassicCoursePoint> {
+        val reversed = mutableListOf<ClassicCoursePoint>()
+        var currentMask = mask
+        var current = last
+        while (current >= 0) {
+            reversed += foxes[current]
+            val previous = parent[currentMask][current]
+            currentMask = currentMask and (1 shl current).inv()
+            current = previous
+        }
+        return reversed.asReversed()
+    }
+
+    private fun rowFromOrderedFoxes(
+        foxCount: Int,
+        start: ClassicCoursePoint,
+        finish: ClassicCoursePoint,
+        beacon: ClassicCoursePoint?,
+        orderedFoxes: List<ClassicCoursePoint>,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        legSampleCache: MutableMap<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>,
+        config: CourseGeneratorConfig
+    ): ClassicCourseGeneratorRow {
+        val orderedPoints = listOf(start) + orderedFoxes + listOfNotNull(beacon) + finish
+        val routePoints = sampledCourseRoutePoints(orderedPoints, elevationLookup, legSampleCache)
+        val horizontalLength = routePoints.routeLengthMeters()
+        val climb = routePoints.climbMetersOrNull()
+        val effectiveLength = if (climb == null) horizontalLength else horizontalLength + 10.0 * climb
+        return ClassicCourseGeneratorRow(
+            foxCount = foxCount,
+            effectiveLengthMeters = effectiveLength,
+            horizontalLengthMeters = horizontalLength,
+            climbMeters = climb,
+            coursePoints = orderedPoints,
+            routePoints = routePoints,
+            orderLabels = listOf("S") + orderedFoxes.map { it.label } + listOfNotNull(beacon?.let { "B" }) + "F",
+            matchingCategories = matchingClassicCategories(
+                foxCount = foxCount,
+                effectiveLengthMeters = effectiveLength,
+                horizontalLengthMeters = horizontalLength,
+                climbMeters = climb,
+                config = config
+            )
+        )
+    }
+
+    private fun legComparisonLength(
+        from: ClassicCoursePoint,
+        to: ClassicCoursePoint,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        legSampleCache: MutableMap<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>
+    ): Double {
+        val routePoints = sampledCourseRoutePoints(listOf(from, to), elevationLookup, legSampleCache)
+        val horizontalLength = routePoints.routeLengthMeters()
+        val climb = routePoints.climbMetersOrNull()
+        return if (climb == null) horizontalLength else horizontalLength + 10.0 * climb
+    }
+
     private fun matchingClassicCategories(
         foxCount: Int,
         effectiveLengthMeters: Double,
         horizontalLengthMeters: Double,
-        climbMeters: Double?
+        climbMeters: Double?,
+        config: CourseGeneratorConfig
     ): List<String> {
         if (climbMeters == null || horizontalLengthMeters <= 0.0) {
             return emptyList()
@@ -314,7 +568,7 @@ object DesktopClassicCourseGenerator {
         if (climbPercent > CLASSIC_CLIMB_LIMIT_PERCENT) {
             return emptyList()
         }
-        return classicRequirements.mapNotNull { (category, requirement) ->
+        return config.requirements.mapNotNull { (category, requirement) ->
             category.takeIf {
                 foxCount in requirement.minControls..requirement.maxControls &&
                     effectiveLengthMeters.roundToInt() in requirement.minLengthMeters..requirement.maxLengthMeters
@@ -369,24 +623,29 @@ object DesktopClassicCourseGenerator {
             3 -> "THREE-FOX COURSES"
             4 -> "FOUR-FOX COURSES"
             5 -> "FIVE-FOX COURSES"
+            6 -> "SIX-FOX COURSES"
+            7 -> "SEVEN-FOX COURSES"
             else -> "$foxCount-FOX COURSES"
         }
 
     private fun categoryText(row: ClassicCourseGeneratorRow): String =
         row.matchingCategories.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: "No category match"
 
-    private fun requirementWarnings(classified: ClassifiedClassicCoursePoints): List<ClassicCourseRequirementWarning> =
+    private fun requirementWarnings(
+        classified: ClassifiedClassicCoursePoints,
+        config: CourseGeneratorConfig = classicConfig
+    ): List<ClassicCourseRequirementWarning> =
         buildList {
             val transmitters = classified.transmitters()
             transmitters
                 .map { transmitter -> transmitter.label to classified.start.point.distanceMetersTo(transmitter.point) }
                 .minByOrNull { it.second }
-                ?.takeIf { it.second + 0.5 < CLASSIC_START_EXCLUSION_METERS }
+                ?.takeIf { it.second + 0.5 < config.startExclusionMeters }
                 ?.let { (label, distance) ->
                     add(
                         ClassicCourseRequirementWarning(
-                            label = "Classic start exclusion zone",
-                            message = "Violation: nearest transmitter $label ${distance.roundToInt()} m from Start (required at least $CLASSIC_START_EXCLUSION_METERS m)."
+                            label = "${config.formatLabel} start exclusion zone",
+                            message = "Violation: nearest transmitter $label ${distance.roundToInt()} m from Start (required at least ${config.startExclusionMeters} m)."
                         )
                     )
                 }
@@ -397,12 +656,12 @@ object DesktopClassicCourseGenerator {
                     }
                 }
                 .minByOrNull { it.second }
-                ?.takeIf { it.second + 0.5 < CLASSIC_TRANSMITTER_SEPARATION_METERS }
+                ?.takeIf { it.second + 0.5 < config.transmitterSeparationMeters }
                 ?.let { (pair, distance) ->
                     add(
                         ClassicCourseRequirementWarning(
-                            label = "Classic minimum transmitter spacing",
-                            message = "Violation: closest transmitter pair $pair ${distance.roundToInt()} m apart (required at least $CLASSIC_TRANSMITTER_SEPARATION_METERS m)."
+                            label = "${config.formatLabel} minimum transmitter spacing",
+                            message = "Violation: closest transmitter pair $pair ${distance.roundToInt()} m apart (required at least ${config.transmitterSeparationMeters} m)."
                         )
                     )
                 }
@@ -471,7 +730,7 @@ object DesktopClassicCourseGenerator {
             appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
             appendLine("""<kml xmlns="http://www.opengis.net/kml/2.2">""")
             appendLine("  <Document>")
-            appendLine("    <name>${xmlText(result.sourcePath.fileName.toString())} Classic Course Generator</name>")
+            appendLine("    <name>${xmlText(result.sourcePath.fileName.toString())} ${xmlText(result.generatorTitle)}</name>")
             appendCoursePointStyle(
                 styleId = DesktopCourseKmlStyle.DonutStyleId,
                 iconUrl = DesktopCourseKmlStyle.DonutIconUrl
@@ -593,7 +852,7 @@ object DesktopClassicCourseGenerator {
 
     private fun pdfLines(result: ClassicCourseGeneratorResult): List<PdfLine> =
         buildList {
-            add(PdfLine("Classic Course Generator", PdfColor.Body, 18, bold = true))
+            add(PdfLine(result.generatorTitle, PdfColor.Body, 18, bold = true))
             add(PdfLine("Source: ${result.sourcePath.fileName}", PdfColor.Body, 11))
             add(PdfLine("Course points: Start, ${result.foxes.size} foxes, ${if (result.beacon == null) "no beacon" else "beacon"}, Finish", PdfColor.Body, 11))
             add(PdfLine(elevationSummaryText(result), PdfColor.Body, 11))
@@ -662,6 +921,18 @@ object DesktopClassicCourseGenerator {
         val maxLengthMeters: Int
     )
 
+    private data class CourseGeneratorConfig(
+        val generatorTitle: String,
+        val formatLabel: String,
+        val minimumFoxes: Int,
+        val maximumFoxes: Int,
+        val foxCounts: (Int) -> IntRange,
+        val requirements: LinkedHashMap<String, ClassicCourseRequirement>,
+        val startExclusionMeters: Int,
+        val transmitterSeparationMeters: Int,
+        val useSubsetDynamicProgramming: Boolean
+    )
+
     private data class PdfLine(
         val text: String,
         val color: PdfColor,
@@ -675,6 +946,38 @@ object DesktopClassicCourseGenerator {
         MatchGreen("0.00", "0.30", "0.08"),
         NoMatchGray("0.45", "0.45", "0.45")
     }
+}
+
+object DesktopFoxoringCourseGenerator {
+    fun generate(
+        sourcePath: Path,
+        elevationLookup: (CourseGeoPoint) -> Double? = DesktopVenueElevationCache::elevationMeters
+    ): ClassicCourseGeneratorResult =
+        DesktopClassicCourseGenerator.generateFoxoring(sourcePath, elevationLookup)
+
+    fun generate(
+        sourcePath: Path,
+        courseData: DesktopCourseKmlData,
+        elevationLookup: (CourseGeoPoint) -> Double? = DesktopVenueElevationCache::elevationMeters
+    ): ClassicCourseGeneratorResult =
+        DesktopClassicCourseGenerator.generateFoxoring(sourcePath, courseData, elevationLookup)
+
+    fun defaultPdfFileName(result: ClassicCourseGeneratorResult): String =
+        DesktopClassicCourseGenerator.defaultPdfFileName(result)
+
+    fun exportPdf(path: Path, result: ClassicCourseGeneratorResult) {
+        DesktopClassicCourseGenerator.exportPdf(path, result)
+    }
+
+    fun exportPdfAndKml(path: Path, result: ClassicCourseGeneratorResult): ClassicCourseGeneratorExportPaths =
+        DesktopClassicCourseGenerator.exportPdfAndKml(path, result)
+
+    fun exportKml(path: Path, result: ClassicCourseGeneratorResult) {
+        DesktopClassicCourseGenerator.exportKml(path, result)
+    }
+
+    fun reportText(result: ClassicCourseGeneratorResult): String =
+        DesktopClassicCourseGenerator.reportText(result)
 }
 
 private fun <T> List<T>.combinations(size: Int): List<List<T>> {

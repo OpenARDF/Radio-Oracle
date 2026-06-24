@@ -9473,6 +9473,9 @@ private fun SectionWorkspace(
         if (section == DesktopSection.KmlClassicCourseGenerator) {
             KmlClassicCourseGeneratorPanel()
         }
+        if (section == DesktopSection.KmlFoxoringCourseGenerator) {
+            KmlFoxoringCourseGeneratorPanel()
+        }
         if (section == DesktopSection.ElevationCache && projectFile != null) {
             VenueElevationCachePanel(
                 refreshToken = elevationCacheRefreshToken,
@@ -13132,6 +13135,40 @@ private fun KmlMoveCoursePanel() {
 
 @Composable
 private fun KmlClassicCourseGeneratorPanel() {
+    CourseGeneratorPanel(
+        title = "Classic Course Generator",
+        description = "Choose a KML/KMZ course points file containing one Start, one Finish, and 3-5 fox point placemarks. LineString route placemarks are ignored. If a Beacon is present, it is inserted immediately before Finish.",
+        progressTitle = "Generating Classic courses",
+        progressMessage = "Calculating ideal course combinations, sampled elevations, effective lengths, category matches, and course requirement warnings.",
+        generateResult = DesktopClassicCourseGenerator::generate,
+        defaultPdfFileName = DesktopClassicCourseGenerator::defaultPdfFileName,
+        exportPdfAndKml = DesktopClassicCourseGenerator::exportPdfAndKml
+    )
+}
+
+@Composable
+private fun KmlFoxoringCourseGeneratorPanel() {
+    CourseGeneratorPanel(
+        title = "Foxoring Course Generator",
+        description = "Choose a KML/KMZ course points file containing one Start, one Finish, and 5-12 fox point placemarks. LineString route placemarks are ignored. If a Beacon is present, it is inserted immediately before Finish. Courses are generated from four foxes through one fewer than the total available fox count.",
+        progressTitle = "Generating Foxoring courses",
+        progressMessage = "Exhaustively calculating Foxoring course combinations, sampled elevations, effective lengths, category matches, and course requirement warnings.",
+        generateResult = DesktopFoxoringCourseGenerator::generate,
+        defaultPdfFileName = DesktopFoxoringCourseGenerator::defaultPdfFileName,
+        exportPdfAndKml = DesktopFoxoringCourseGenerator::exportPdfAndKml
+    )
+}
+
+@Composable
+private fun CourseGeneratorPanel(
+    title: String,
+    description: String,
+    progressTitle: String,
+    progressMessage: String,
+    generateResult: (Path) -> ClassicCourseGeneratorResult,
+    defaultPdfFileName: (ClassicCourseGeneratorResult) -> String,
+    exportPdfAndKml: (Path, ClassicCourseGeneratorResult) -> ClassicCourseGeneratorExportPaths
+) {
     var selectedPath by remember { mutableStateOf<Path?>(null) }
     var result by remember { mutableStateOf<ClassicCourseGeneratorResult?>(null) }
     var statusText by remember { mutableStateOf<String?>(null) }
@@ -13157,7 +13194,7 @@ private fun KmlClassicCourseGeneratorPanel() {
             try {
                 delay(100)
                 val generated = withContext(Dispatchers.Default) {
-                    DesktopClassicCourseGenerator.generate(path)
+                    generateResult(path)
                 }
                 result = generated
                 val elevationStatus = when {
@@ -13170,7 +13207,7 @@ private fun KmlClassicCourseGeneratorPanel() {
                 statusText = "Generated ${generated.rows.size} ideal course combinations from ${generated.foxes.size} foxes.$elevationStatus"
             } catch (error: Throwable) {
                 result = null
-                statusText = "Classic Course Generator failed: ${error.message ?: error::class.simpleName}"
+                statusText = "$title failed: ${error.message ?: error::class.simpleName}"
             } finally {
                 isGenerating = false
             }
@@ -13179,15 +13216,16 @@ private fun KmlClassicCourseGeneratorPanel() {
 
     fun exportResults() {
         val generated = result ?: return
-        DesktopFileDialogs.chooseExportClassicCourseGeneratorPdf(
-            defaultFileName = DesktopClassicCourseGenerator.defaultPdfFileName(generated)
+        DesktopFileDialogs.chooseExportCourseGeneratorPdf(
+            title = "Export $title PDF",
+            defaultFileName = defaultPdfFileName(generated)
         )?.let { path ->
             runCatching {
-                DesktopClassicCourseGenerator.exportPdfAndKml(path, generated)
+                exportPdfAndKml(path, generated)
             }.onSuccess { exports ->
                 statusText = "Exported ${exports.pdfPath.fileName} and ${exports.kmlPath.fileName}"
             }.onFailure { error ->
-                statusText = "Classic Course Generator export failed: ${error.message ?: error::class.simpleName}"
+                statusText = "$title export failed: ${error.message ?: error::class.simpleName}"
             }
         }
     }
@@ -13197,13 +13235,13 @@ private fun KmlClassicCourseGeneratorPanel() {
         modifier = Modifier.fillMaxWidth()
     ) {
         Text(
-            text = "Classic Course Generator",
+            text = title,
             color = DesktopPalette.Black,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Choose a KML/KMZ course points file containing one Start, one Finish, and 3-5 fox point placemarks. LineString route placemarks are ignored. If a Beacon is present, it is inserted immediately before Finish.",
+            text = description,
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -13238,7 +13276,7 @@ private fun KmlClassicCourseGeneratorPanel() {
         statusText?.let { text ->
             Text(
                 text = text,
-                color = if (text.startsWith("Classic Course Generator") && text.contains("failed")) {
+                color = if (text.startsWith(title) && text.contains("failed")) {
                     DesktopPalette.Error
                 } else {
                     DesktopPalette.Disconnected
@@ -13252,8 +13290,8 @@ private fun KmlClassicCourseGeneratorPanel() {
     }
     if (isGenerating) {
         IndeterminateProgressDialog(
-            title = "Generating Classic courses",
-            message = "Calculating ideal course combinations, sampled elevations, effective lengths, category matches, and course requirement warnings."
+            title = progressTitle,
+            message = progressMessage
         )
     }
 }
