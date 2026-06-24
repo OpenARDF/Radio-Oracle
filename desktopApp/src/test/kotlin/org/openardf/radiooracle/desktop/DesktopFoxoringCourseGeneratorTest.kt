@@ -8,7 +8,7 @@ import java.nio.file.Files
 
 class DesktopFoxoringCourseGeneratorTest {
     @Test
-    fun generatesFoxoringCourseGroupsFromFourThroughOneLessThanTotalFoxes() {
+    fun generatesFoxoringCourseGroupsFromFourThroughAllFoxes() {
         val path = Files.createTempFile("foxoring-course-points", ".kml")
         Files.writeString(path, foxoringCoursePointsKml(foxCount = 7, includeBeacon = true))
 
@@ -17,10 +17,11 @@ class DesktopFoxoringCourseGeneratorTest {
         assertEquals("Foxoring Course Generator", result.generatorTitle)
         assertEquals("Foxoring", result.formatLabel)
         assertEquals(7, result.foxes.size)
-        assertEquals(listOf(4, 5, 6), result.groups.map { it.foxCount })
+        assertEquals(listOf(4, 5, 6, 7), result.groups.map { it.foxCount })
         assertEquals(35, result.groups.single { it.foxCount == 4 }.rows.size)
         assertEquals(21, result.groups.single { it.foxCount == 5 }.rows.size)
         assertEquals(7, result.groups.single { it.foxCount == 6 }.rows.size)
+        assertEquals(1, result.groups.single { it.foxCount == 7 }.rows.size)
         assertTrue(result.rows.all { row ->
             row.orderLabels.first() == "S" &&
                 row.orderLabels.takeLast(2) == listOf("B", "F")
@@ -28,6 +29,7 @@ class DesktopFoxoringCourseGeneratorTest {
         assertTrue(result.rows.any { it.hasCategoryMatch })
         assertTrue(DesktopFoxoringCourseGenerator.reportText(result).contains("FOUR-FOX COURSES"))
         assertTrue(DesktopFoxoringCourseGenerator.reportText(result).contains("SIX-FOX COURSES"))
+        assertTrue(DesktopFoxoringCourseGenerator.reportText(result).contains("SEVEN-FOX COURSES"))
     }
 
     @Test
@@ -73,10 +75,15 @@ class DesktopFoxoringCourseGeneratorTest {
         assertEquals(uniqueFirstFoxCount(firstSet.rows), firstSet.uniqueFirstFoxCount)
         assertTrue(firstSet.categoryFoxMinimum >= 4)
         assertTrue(firstSet.categoryFoxTotal > firstSet.coveredCategories.size * 4)
-        assertTrue(reportText.contains("FOXORING COURSE COMBINATIONS"))
-        assertTrue(reportText.contains("Combination 1:"))
-        assertTrue(pdfText.contains("FOXORING COURSE COMBINATIONS"))
-        assertTrue(pdfText.contains("minimum category fox count"))
+        assertTrue(reportText.contains("RECOMMENDED FOXORING COURSE SETS"))
+        assertTrue(reportText.contains("Set #1"))
+        assertFalse(reportText.contains("Combination 1:"))
+        assertTrue(
+            Regex("""Set #1\n\d+\.\d{2} km : S -> .* \([^)]+\)""")
+                .containsMatchIn(reportText)
+        )
+        assertTrue(pdfText.contains("RECOMMENDED FOXORING COURSE SETS"))
+        assertTrue(pdfText.contains("Set #1"))
     }
 
     @Test
@@ -87,7 +94,7 @@ class DesktopFoxoringCourseGeneratorTest {
         val result = DesktopClassicCourseGenerator.generate(path, elevationLookup = { null })
 
         assertTrue(result.recommendedCourseSets.isEmpty())
-        assertFalse(DesktopClassicCourseGenerator.reportText(result).contains("FOXORING COURSE COMBINATIONS"))
+        assertFalse(DesktopClassicCourseGenerator.reportText(result).contains("RECOMMENDED FOXORING COURSE SETS"))
     }
 
     @Test
