@@ -526,6 +526,13 @@ object DesktopNavigation {
                                     workflow,
                                     DesktopSection.KmlFoxoringCourseGenerator,
                                     requiresEventFile = false
+                                ),
+                                item(
+                                    "setup.tools.course-tools.sprint-course-generator",
+                                    "Sprint Course Generator",
+                                    workflow,
+                                    DesktopSection.KmlSprintCourseGenerator,
+                                    requiresEventFile = false
                                 )
                             ),
                             DesktopSection.KmlTools,
@@ -1179,6 +1186,8 @@ object DesktopNavigation {
             "Use Classic Course Generator to read Start, Finish, Beacon, and fox point placemarks from a KML/KMZ file and list ideal Classic course combinations with category matches.",
         "setup.tools.course-tools.foxoring-course-generator" to
             "Use Foxoring Course Generator to read Start, Finish, optional Beacon, and fox point placemarks from a KML/KMZ file and list ideal Foxoring course combinations with category matches.",
+        "setup.tools.course-tools.sprint-course-generator" to
+            "Use Sprint Course Generator to read Start, Finish, Beacon, optional Spectator, five slow foxes, and five fast foxes from a KML/KMZ file and list ideal Sprint course combinations with category matches.",
         "race.readouts" to
             "Use Readouts to download, review, match, edit, remove, print, and manually add SI-card readouts during race operations.",
         "race.si-readout" to

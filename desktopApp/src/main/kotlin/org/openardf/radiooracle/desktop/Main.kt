@@ -9476,6 +9476,9 @@ private fun SectionWorkspace(
         if (section == DesktopSection.KmlFoxoringCourseGenerator) {
             KmlFoxoringCourseGeneratorPanel()
         }
+        if (section == DesktopSection.KmlSprintCourseGenerator) {
+            KmlSprintCourseGeneratorPanel()
+        }
         if (section == DesktopSection.ElevationCache && projectFile != null) {
             VenueElevationCachePanel(
                 refreshToken = elevationCacheRefreshToken,
@@ -13160,6 +13163,19 @@ private fun KmlFoxoringCourseGeneratorPanel() {
 }
 
 @Composable
+private fun KmlSprintCourseGeneratorPanel() {
+    CourseGeneratorPanel(
+        title = "Sprint Course Generator",
+        description = "Choose a KML/KMZ sprint course points file containing one Start, one Finish, one Beacon, five slow fox point placemarks, five fast fox point placemarks, and optionally one Spectator. LineString route placemarks are ignored. Courses are generated with at least one slow-loop fox and at least one fast-loop fox; total fox counts follow doubled Classic category requirements.",
+        progressTitle = "Generating Sprint courses",
+        progressMessage = "Calculating Sprint slow-loop and fast-loop course combinations, sampled elevations, effective lengths, category matches, and recommended course sets.",
+        generateResult = DesktopSprintCourseGenerator::generate,
+        defaultPdfFileName = DesktopSprintCourseGenerator::defaultPdfFileName,
+        exportPdfAndKml = DesktopSprintCourseGenerator::exportPdfAndKml
+    )
+}
+
+@Composable
 private fun CourseGeneratorPanel(
     title: String,
     description: String,
@@ -13301,7 +13317,7 @@ private fun ClassicCourseGeneratorResultView(result: ClassicCourseGeneratorResul
     SelectionContainer {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                text = "Points: Start, ${result.foxes.size} foxes, ${if (result.beacon == null) "no beacon" else "beacon"}, Finish",
+                text = "Points: ${result.pointSummary}",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
@@ -13337,7 +13353,7 @@ private fun ClassicCourseGeneratorResultView(result: ClassicCourseGeneratorResul
             }
             if (result.recommendedCourseSets.isNotEmpty()) {
                 Text(
-                    text = "Recommended Foxoring course sets",
+                    text = "Recommended ${result.formatLabel} course sets",
                     color = DesktopPalette.Black,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
