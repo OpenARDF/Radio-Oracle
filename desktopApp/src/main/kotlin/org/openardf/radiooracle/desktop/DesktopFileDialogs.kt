@@ -333,8 +333,14 @@ object DesktopFileDialogs {
         ) { DesktopProjectFilePaths.withPdfExtension(it) }
 
     fun chooseExportClassicCourseGeneratorPdf(defaultFileName: String? = null): Path? =
-        chooseSaveFile(
+        chooseExportCourseGeneratorPdf(
             title = "Export Classic Course Generator PDF",
+            defaultFileName = defaultFileName
+        )
+
+    fun chooseExportCourseGeneratorPdf(title: String, defaultFileName: String? = null): Path? =
+        chooseSaveFile(
+            title = title,
             extension = DesktopProjectFilePaths.PDF_EXTENSION,
             defaultFileName = defaultFileName
         ) { DesktopProjectFilePaths.withPdfExtension(it) }

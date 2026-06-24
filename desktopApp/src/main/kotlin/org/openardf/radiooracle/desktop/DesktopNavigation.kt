@@ -519,6 +519,13 @@ object DesktopNavigation {
                                     workflow,
                                     DesktopSection.KmlClassicCourseGenerator,
                                     requiresEventFile = false
+                                ),
+                                item(
+                                    "setup.tools.course-tools.foxoring-course-generator",
+                                    "Foxoring Course Generator",
+                                    workflow,
+                                    DesktopSection.KmlFoxoringCourseGenerator,
+                                    requiresEventFile = false
                                 )
                             ),
                             DesktopSection.KmlTools,
@@ -1170,6 +1177,8 @@ object DesktopNavigation {
             "Use Move Course to create a translated KML/KMZ copy where the Start point is moved to a new latitude and longitude and all other coordinates move by the same offset.",
         "setup.tools.course-tools.classic-course-generator" to
             "Use Classic Course Generator to read Start, Finish, Beacon, and fox point placemarks from a KML/KMZ file and list ideal Classic course combinations with category matches.",
+        "setup.tools.course-tools.foxoring-course-generator" to
+            "Use Foxoring Course Generator to read Start, Finish, optional Beacon, and fox point placemarks from a KML/KMZ file and list ideal Foxoring course combinations with category matches.",
         "race.readouts" to
             "Use Readouts to download, review, match, edit, remove, print, and manually add SI-card readouts during race operations.",
         "race.si-readout" to

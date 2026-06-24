@@ -29,6 +29,7 @@ class DesktopPaletteTest {
                 "Course Tools",
                 "Move Course",
                 "Classic Course Generator",
+                "Foxoring Course Generator",
                 "Import/Export",
                 "Import Controls KML/KMZ",
                 "Readouts",

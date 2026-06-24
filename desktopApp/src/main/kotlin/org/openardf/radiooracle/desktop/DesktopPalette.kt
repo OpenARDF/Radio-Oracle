@@ -70,6 +70,7 @@ enum class DesktopSection(val label: String) {
     KmlTools("Course Tools"),
     KmlMoveCourse("Move Course"),
     KmlClassicCourseGenerator("Classic Course Generator"),
+    KmlFoxoringCourseGenerator("Foxoring Course Generator"),
     ControlsImportExport("Import/Export"),
     ControlsRouteKmlImport("Import Controls KML/KMZ"),
     Readouts("Readouts"),
