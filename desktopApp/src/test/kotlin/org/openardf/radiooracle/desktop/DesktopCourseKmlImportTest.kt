@@ -9,6 +9,7 @@ import org.junit.Test
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectEditor
@@ -551,6 +552,54 @@ class DesktopCourseKmlImportTest {
         assertEquals(5, protectedCourseInfo.controlPoints.size)
         assertEquals("1 2 S 1F Beacon", protectedCourseInfo.idealOrder)
         assertNotNull(updatedProject.raceData.categories.single().category.encryptedIdealOrder)
+    }
+
+    @Test
+    fun matchesImportedFoxLabelsToExistingControlsByInferredSiCode() {
+        val kmlPath = Files.createTempFile("radio-oracle-foxoring-si-labels", ".kml")
+        Files.writeString(kmlPath, sampleFoxoringKmlWithSiCodeLabeledControls())
+        val emptyProject = EventProjectFactory.createEmptyProject(
+            raceId = "race",
+            raceName = "Foxoring Import",
+            startDateTimeIso = "2026-06-24T09:00"
+        )
+        val baseProject = emptyProject.copy(
+            raceData = emptyProject.raceData.copy(
+                controls = listOf(
+                    EventControl("control-fox1-31-control", "race", "FOX 1", 31, ControlPointType.CONTROL),
+                    EventControl("control-32-32-control", "race", "32", 32, ControlPointType.CONTROL),
+                    EventControl("control-33-33-control", "race", "33", 33, ControlPointType.CONTROL),
+                    EventControl("control-41-41-control", "race", "41", 41, ControlPointType.CONTROL),
+                    EventControl("control-42-42-control", "race", "42", 42, ControlPointType.CONTROL)
+                )
+            )
+        )
+        val project = EventProjectEditor.addCategory(
+            baseProject,
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null },
+            createMissingControls = true
+        )
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        val importedFoxLabels = setOf("1F", "2", "3", "2F", "4")
+        val importedFoxObjects = protectedCourseInfo.courseObjects.filter { it.label in importedFoxLabels }
+        assertEquals(5, summary.matchedControlPointCount)
+        assertEquals(listOf("4"), summary.createdControlNames)
+        assertEquals("1F 2 3 2F 4", protectedCourseInfo.idealOrder)
+        assertEquals(importedFoxLabels, importedFoxObjects.map { it.label }.toSet())
+        assertTrue(importedFoxObjects.all { it.type == ProtectedCourseObjectType.CONTROL })
+        assertTrue(protectedCourseInfo.courseObjects.none { it.type == ProtectedCourseObjectType.WAYPOINT })
     }
 
     @Test
@@ -2323,6 +2372,47 @@ class DesktopCourseKmlImportTest {
             <Placemark>
               <name>Start</name>
               <Point><coordinates>-95.0010,39.0000,0</coordinates></Point>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleFoxoringKmlWithSiCodeLabeledControls(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>1F</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>2</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>3</name>
+              <Point><coordinates>-94.9960,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>2F</name>
+              <Point><coordinates>-94.9940,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>4</name>
+              <Point><coordinates>-94.9920,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9980,39.0000,0
+                  -94.9960,39.0000,0
+                  -94.9940,39.0000,0
+                  -94.9920,39.0000,0
+                </coordinates>
+              </LineString>
             </Placemark>
           </Document>
         </kml>
