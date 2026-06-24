@@ -151,7 +151,7 @@ object DesktopClassicCourseGenerator {
         formatLabel = "Foxoring",
         minimumFoxes = 5,
         maximumFoxes = 12,
-        foxCounts = { totalFoxes -> 4 until totalFoxes },
+        foxCounts = { totalFoxes -> 4..totalFoxes },
         requirements = foxoringRequirements,
         startExclusionMeters = FOXORING_START_EXCLUSION_METERS,
         transmitterSeparationMeters = FOXORING_TRANSMITTER_SEPARATION_METERS,
@@ -658,11 +658,15 @@ object DesktopClassicCourseGenerator {
         config: CourseGeneratorConfig
     ): List<ClassicCourseGeneratorRecommendedSet> {
         val allCategories = config.requirements.keys.toList()
-        val fullMask = (1 shl allCategories.size) - 1
         val categoryIndex = allCategories.withIndex().associate { it.value to it.index }
         val candidates = recommendationCandidateRows(rows, allCategories, categoryIndex)
         if (candidates.isEmpty()) {
             return emptyList()
+        }
+        val targetMask = candidates.fold(0) { mask, candidate -> mask or candidate.categoryMask }
+        val targetCategories = allCategories.filter { category ->
+            val index = requireNotNull(categoryIndex[category])
+            targetMask and (1 shl index) != 0
         }
         val scoredSets = mutableListOf<RecommendedCourseSetScore>()
         val setComparator = recommendedSetComparator()
@@ -680,14 +684,13 @@ object DesktopClassicCourseGenerator {
         for (size in 3..4) {
             visitCandidateCombinations(candidates, size) { combination ->
                 val categoryMask = combination.fold(0) { mask, candidate -> mask or candidate.categoryMask }
-                if (categoryMask != fullMask) {
+                if (categoryMask and targetMask != targetMask) {
                     return@visitCandidateCombinations
                 }
                 addScoredSet(
                     scoreRecommendedSet(
                         rows = combination.map { it.row },
-                        allCategories = allCategories,
-                        categoryIndex = categoryIndex
+                        allCategories = targetCategories
                     )
                 )
             }
@@ -708,7 +711,7 @@ object DesktopClassicCourseGenerator {
                     uniqueFirstFoxCount = score.uniqueFirstFoxCount,
                     categoryFoxMinimum = score.categoryFoxMinimum,
                     categoryFoxTotal = score.categoryFoxTotal,
-                    coveredCategories = allCategories,
+                    coveredCategories = targetCategories,
                     rows = score.rows.sortedWith(
                         compareByDescending<ClassicCourseGeneratorRow> { it.foxCount }
                             .thenBy { it.effectiveLengthMeters }
@@ -792,9 +795,9 @@ object DesktopClassicCourseGenerator {
 
     private fun scoreRecommendedSet(
         rows: List<ClassicCourseGeneratorRow>,
-        allCategories: List<String>,
-        categoryIndex: Map<String, Int>
+        allCategories: List<String>
     ): RecommendedCourseSetScore {
+        val categoryIndex = allCategories.withIndex().associate { it.value to it.index }
         val firstFoxCounts = rows
             .mapNotNull { it.orderLabels.getOrNull(1) }
             .groupingBy { it }
@@ -805,7 +808,7 @@ object DesktopClassicCourseGenerator {
         val categoryFoxCounts = IntArray(allCategories.size)
         rows.forEach { row ->
             row.matchingCategories.forEach { category ->
-                val index = requireNotNull(categoryIndex[category])
+                val index = categoryIndex[category] ?: return@forEach
                 categoryFoxCounts[index] = max(categoryFoxCounts[index], row.foxCount)
             }
         }
@@ -882,14 +885,11 @@ object DesktopClassicCourseGenerator {
         if (result.recommendedCourseSets.isEmpty()) {
             return
         }
-        appendLine("FOXORING COURSE COMBINATIONS")
+        appendLine("RECOMMENDED FOXORING COURSE SETS")
         result.recommendedCourseSets.forEach { set ->
-            appendLine(
-                "Combination ${set.index}: ${set.courseCount} courses, " +
-                    "${set.uniqueFirstFoxCount} unique first foxes, minimum category fox count ${set.categoryFoxMinimum}, total category fox count ${set.categoryFoxTotal}"
-            )
+            appendLine("Set #${set.index}")
             set.rows.forEach { row ->
-                appendLine("  ${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})")
+                appendLine("${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})")
             }
         }
         appendLine()
@@ -1081,16 +1081,9 @@ object DesktopClassicCourseGenerator {
                 }
             }
             if (result.recommendedCourseSets.isNotEmpty()) {
-                add(PdfLine("FOXORING COURSE COMBINATIONS", PdfColor.Body, 14, bold = true))
+                add(PdfLine("RECOMMENDED FOXORING COURSE SETS", PdfColor.Body, 14, bold = true))
                 result.recommendedCourseSets.forEach { set ->
-                    add(
-                        PdfLine(
-                            "Combination ${set.index}: ${set.courseCount} courses, ${set.uniqueFirstFoxCount} unique first foxes, minimum category fox count ${set.categoryFoxMinimum}, total category fox count ${set.categoryFoxTotal}",
-                            PdfColor.Body,
-                            11,
-                            bold = true
-                        )
-                    )
+                    add(PdfLine("Set #${set.index}", PdfColor.Body, 11, bold = true))
                     set.rows.forEach { row ->
                         add(
                             PdfLine(

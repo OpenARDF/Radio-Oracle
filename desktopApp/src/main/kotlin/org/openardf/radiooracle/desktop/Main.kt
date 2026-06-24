@@ -13150,7 +13150,7 @@ private fun KmlClassicCourseGeneratorPanel() {
 private fun KmlFoxoringCourseGeneratorPanel() {
     CourseGeneratorPanel(
         title = "Foxoring Course Generator",
-        description = "Choose a KML/KMZ course points file containing one Start, one Finish, and 5-12 fox point placemarks. LineString route placemarks are ignored. If a Beacon is present, it is inserted immediately before Finish. Courses are generated from four foxes through one fewer than the total available fox count.",
+        description = "Choose a KML/KMZ course points file containing one Start, one Finish, and 5-12 fox point placemarks. LineString route placemarks are ignored. If a Beacon is present, it is inserted immediately before Finish. Courses are generated from four foxes through the total available fox count.",
         progressTitle = "Generating Foxoring courses",
         progressMessage = "Exhaustively calculating Foxoring course combinations, sampled elevations, effective lengths, category matches, and course requirement warnings.",
         generateResult = DesktopFoxoringCourseGenerator::generate,
@@ -13337,14 +13337,14 @@ private fun ClassicCourseGeneratorResultView(result: ClassicCourseGeneratorResul
             }
             if (result.recommendedCourseSets.isNotEmpty()) {
                 Text(
-                    text = "Foxoring course combinations",
+                    text = "Recommended Foxoring course sets",
                     color = DesktopPalette.Black,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 )
                 result.recommendedCourseSets.forEach { set ->
                     Text(
-                        text = "Combination ${set.index}: ${set.courseCount} courses, ${set.uniqueFirstFoxCount} unique first foxes, minimum category fox count ${set.categoryFoxMinimum}, total category fox count ${set.categoryFoxTotal}",
+                        text = "Set #${set.index}",
                         color = DesktopPalette.Black,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
