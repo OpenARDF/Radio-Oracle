@@ -17,6 +17,8 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
 import java.nio.file.Files
+import java.nio.file.Path
+import javax.xml.parsers.DocumentBuilderFactory
 
 class DesktopCourseOverlayExportTest {
     @Test
@@ -40,6 +42,17 @@ class DesktopCourseOverlayExportTest {
         assertTrue(Files.exists(summary.competitorPath))
         assertTrue(Files.exists(summary.masterPath))
         assertTrue(Files.exists(summary.custodianPath))
+        assertTrue(Files.exists(summary.editableCompetitorPath))
+        assertTrue(Files.exists(summary.editableMasterPath))
+        assertTrue(Files.exists(summary.editableCustodianPath))
+        listOf(
+            summary.competitorPath,
+            summary.masterPath,
+            summary.custodianPath,
+            summary.editableCompetitorPath,
+            summary.editableMasterPath,
+            summary.editableCustodianPath
+        ).forEach(::assertWellFormedXml)
         assertEquals(6, summary.exportedPointCount)
         assertEquals(2, summary.exclusionCircleCount)
         assertEquals(1, summary.finishCorridorCount)
@@ -47,22 +60,24 @@ class DesktopCourseOverlayExportTest {
         val competitor = Files.readString(summary.competitorPath)
         assertTrue(competitor.contains("""<barrier version="6" required="0.6.0">"""))
         assertTrue(competitor.contains("</barrier>"))
-        assertTrue(competitor.contains("""<color priority="0" name="Purple" c="0.2" m="1" y="0" k="0""""))
-        assertTrue(competitor.contains("""code="701" name="Start""""))
-        assertTrue(competitor.contains("""code="702" name="Control point""""))
-        assertTrue(competitor.contains("""code="705" name="Marked route""""))
-        assertTrue(competitor.contains("""code="706" name="Finish""""))
-        assertTrue(competitor.contains("""code="RO.1" name="ARDF exclusion circle""""))
+        assertTrue(competitor.contains("""<color priority="0" name="Radio-Oracle Purple" c="0.2" m="1" y="0" k="0""""))
+        assertTrue(competitor.contains("""code="701" name="Radio-Oracle Start""""))
+        assertTrue(competitor.contains("""code="702" name="Radio-Oracle Control point""""))
+        assertTrue(competitor.contains("""code="705" name="Radio-Oracle Marked route""""))
+        assertTrue(competitor.contains("""code="706" name="Radio-Oracle Finish""""))
+        assertTrue(competitor.contains("""code="RO.1" name="Radio-Oracle ARDF exclusion circle""""))
         assertEquals(1, competitor.objectCountForSymbol(1))
         assertEquals(2, competitor.objectCountForSymbol(2))
         assertEquals(1, competitor.objectCountForSymbol(5))
         assertEquals(1, competitor.objectCountForSymbol(6))
         assertEquals(2, competitor.objectCountForSymbol(209))
         assertEquals(listOf("B", "Spectator"), competitor.textObjectValues())
+        assertTrue(competitor.coordsBlocks().all { it.trimEnd().endsWith(";") })
 
         val master = Files.readString(summary.masterPath)
         assertEquals(4, master.objectCountForSymbol(2))
         assertEquals(listOf("B", "Spectator", "1", "2"), master.textObjectValues())
+        assertTrue(master.coordsBlocks().all { it.trimEnd().endsWith(";") })
 
         val custodian = Files.readString(summary.custodianPath)
         assertEquals(0, custodian.objectCountForSymbol(5))
@@ -71,6 +86,13 @@ class DesktopCourseOverlayExportTest {
         assertEquals(1, custodian.objectCountForSymbol(1))
         assertEquals(1, custodian.objectCountForSymbol(6))
         assertEquals(listOf("B", "Spectator", "1", "2"), custodian.textObjectValues())
+        assertTrue(custodian.coordsBlocks().all { it.trimEnd().endsWith(";") })
+
+        val editableMaster = Files.readString(summary.editableMasterPath)
+        assertTrue(editableMaster.contains("""<part name="Radio-Oracle master overlay">""") || editableMaster.contains("""<part name="Radio-Oracle master overlay"><objects"""))
+        assertTrue(editableMaster.contains("""<objects count=""""))
+        assertTrue(editableMaster.contains("""name="Radio-Oracle Control point""""))
+        assertTrue(editableMaster.contains("""current="1""""))
     }
 
     @Test
@@ -117,6 +139,11 @@ class DesktopCourseOverlayExportTest {
         <?xml version="1.0" encoding="UTF-8"?>
         <map xmlns="http://openorienteering.org/apps/mapper/xml/v2" version="9">
         <georeferencing scale="15000" auxiliary_scale_factor="1" grivation="0"><ref_point x="10" y="35"/><projected_crs id="UTM"><spec language="PROJ.4">+proj=utm +datum=WGS84 +zone=32</spec><parameter>32 N</parameter><ref_point x="696686.398978" y="5347699.134904"/></projected_crs><geographic_crs id="Geographic coordinates"><spec language="PROJ.4">+proj=latlong +datum=WGS84</spec><ref_point_deg lat="48.25195669" lon="11.64973926"/></geographic_crs></georeferencing>
+        <colors count="1"><color priority="0" name="Black" c="0" m="0" y="0" k="1" opacity="1"><cmyk method="custom"/><rgb method="cmyk" r="0" g="0" b="0"/></color></colors>
+        <barrier version="6" required="0.6.0">
+        <symbols count="1" id="Test"><symbol type="1" id="1" code="0" name="Existing"><point_symbol inner_radius="100" inner_color="0" outer_width="0" outer_color="-1" elements="0"/></symbol></symbols>
+        <parts count="1" current="0"><part name="default part"><objects count="0"></objects></part></parts>
+        </barrier>
         </map>
         """.trimIndent()
 
@@ -223,4 +250,16 @@ class DesktopCourseOverlayExportTest {
             .findAll(this)
             .map { it.groupValues[1] }
             .toList()
+
+    private fun String.coordsBlocks(): List<String> =
+        Regex("""<coords\b[^>]*>([^<]*)</coords>""")
+            .findAll(this)
+            .map { it.groupValues[1] }
+            .toList()
+
+    private fun assertWellFormedXml(path: Path) {
+        DocumentBuilderFactory.newInstance()
+            .newDocumentBuilder()
+            .parse(path.toFile())
+    }
 }
