@@ -1838,7 +1838,7 @@ class DesktopCourseKmlImportTest {
             Files.writeString(it, sampleKml())
         }
 
-        val parsed = DesktopCourseKmlImporter.parse(kmlPath)
+        val parsed = DesktopCourseFileReader.read(kmlPath)
 
         assertEquals(listOf("31", "32"), parsed.controls.map { it.name })
         assertEquals(listOf("M21"), parsed.routes.map { it.name })
@@ -1853,7 +1853,7 @@ class DesktopCourseKmlImportTest {
             zip.closeEntry()
         }
 
-        val parsed = DesktopCourseKmlImporter.parse(kmzPath)
+        val parsed = DesktopCourseFileReader.read(kmzPath)
 
         assertEquals(listOf("31", "32"), parsed.controls.map { it.name })
         assertEquals(listOf("M21"), parsed.routes.map { it.name })

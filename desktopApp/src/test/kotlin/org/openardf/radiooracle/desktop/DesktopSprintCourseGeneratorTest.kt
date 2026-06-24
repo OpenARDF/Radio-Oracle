@@ -104,7 +104,31 @@ class DesktopSprintCourseGeneratorTest {
         assertEquals(listOf("B", "F"), row.orderLabels.takeLast(2))
     }
 
-    private fun sprintCoursePointsKml(includeSpectator: Boolean): String {
+    @Test
+    fun ignoresSprintHelperPointsAndRecognizesSpSpectator() {
+        val path = Files.createTempFile("sprint-course-points-with-helpers", ".kml")
+        Files.writeString(
+            path,
+            sprintCoursePointsKml(
+                includeSpectator = true,
+                spectatorName = "Sp",
+                includeCorridorHelpers = true
+            )
+        )
+
+        val result = DesktopSprintCourseGenerator.generate(path, elevationLookup = { null })
+
+        assertEquals("Start, 5 slow foxes, spectator, 5 fast foxes, Beacon, Finish", result.pointSummary)
+        assertEquals(10, result.foxes.size)
+        assertEquals(listOf("Sp"), result.additionalCourseObjects.map { it.label })
+        assertEquals((2..10).toList(), result.groups.map { it.foxCount })
+    }
+
+    private fun sprintCoursePointsKml(
+        includeSpectator: Boolean,
+        spectatorName: String = "Spectator",
+        includeCorridorHelpers: Boolean = false
+    ): String {
         val centerLatitude = 39.000
         val centerLongitude = -95.000
         val metersPerLongitudeDegree = 86_200.0
@@ -116,7 +140,15 @@ class DesktopSprintCourseGeneratorTest {
             pointPlacemark("${index}F", longitude(1_400 + index * 120), centerLatitude, 100.0, "SI=${240 + index}")
         }
         val spectator = if (includeSpectator) {
-            pointPlacemark("Spectator", longitude(1_100), centerLatitude, 100.0, "SI=246")
+            pointPlacemark(spectatorName, longitude(1_100), centerLatitude, 100.0, "SI=246")
+        } else {
+            ""
+        }
+        val helperPoints = if (includeCorridorHelpers) {
+            """
+                ${pointPlacemark("End Corridor_Strt", longitude(2_260), centerLatitude, 100.0, "SI=0")}
+                ${pointPlacemark("End Corridor_S", longitude(2_300), centerLatitude, 100.0, "SI=0")}
+            """.trimIndent()
         } else {
             ""
         }
@@ -128,6 +160,7 @@ class DesktopSprintCourseGeneratorTest {
                 $spectator
                 $fastFoxes
                 ${pointPlacemark("Beacon", longitude(2_200), centerLatitude, 100.0, "SI=299")}
+                $helperPoints
                 ${pointPlacemark("Finish", longitude(2_350), centerLatitude, 100.0, "SI=201")}
               </Document>
             </kml>

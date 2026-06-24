@@ -192,7 +192,7 @@ object DesktopClassicCourseGenerator {
         require(fileName.endsWith(".kml", ignoreCase = true) || fileName.endsWith(".kmz", ignoreCase = true)) {
             "Choose a .kml or .kmz course points file."
         }
-        val parsed = DesktopCourseKmlImporter.parse(sourcePath)
+        val parsed = DesktopCourseFileReader.read(sourcePath)
         return generate(sourcePath, parsed, elevationLookup)
     }
 
@@ -204,7 +204,7 @@ object DesktopClassicCourseGenerator {
         require(fileName.endsWith(".kml", ignoreCase = true) || fileName.endsWith(".kmz", ignoreCase = true)) {
             "Choose a .kml or .kmz course points file."
         }
-        val parsed = DesktopCourseKmlImporter.parse(sourcePath)
+        val parsed = DesktopCourseFileReader.read(sourcePath)
         return generateFoxoring(sourcePath, parsed, elevationLookup)
     }
 
@@ -216,7 +216,7 @@ object DesktopClassicCourseGenerator {
         require(fileName.endsWith(".kml", ignoreCase = true) || fileName.endsWith(".kmz", ignoreCase = true)) {
             "Choose a .kml or .kmz course points file."
         }
-        val parsed = DesktopCourseKmlImporter.parse(sourcePath)
+        val parsed = DesktopCourseFileReader.read(sourcePath)
         return generateSprint(sourcePath, parsed, elevationLookup)
     }
 
@@ -430,7 +430,7 @@ object DesktopClassicCourseGenerator {
                 point.name.isBeaconLabel() -> beaconPoints += coursePoint
                 point.name.isSpectatorLabel() -> spectatorPoints += coursePoint
                 point.name.isSprintFastFoxLabel() -> fastFoxPoints += coursePoint
-                else -> slowFoxPoints += coursePoint
+                point.name.isSprintSlowFoxLabel() -> slowFoxPoints += coursePoint
             }
         }
         require(startPoints.size == 1) {
@@ -925,34 +925,26 @@ object DesktopClassicCourseGenerator {
     }
 
     private fun String.isStartLabel(): Boolean {
-        val compact = compactCoursePointLabel()
-        return compact == "start" || compact.endsWith("start")
+        return DesktopCoursePointLabelClassifier.isCourseStartName(this)
     }
 
     private fun String.isFinishLabel(): Boolean {
-        val compact = compactCoursePointLabel()
-        return compact == "finish" || compact.endsWith("finish")
+        return DesktopCoursePointLabelClassifier.isCourseFinishName(this)
     }
 
     private fun String.isBeaconLabel(): Boolean =
-        compactCoursePointLabel() in setOf("b", "m", "beacon")
+        DesktopCoursePointLabelClassifier.isBeaconLabel(this)
 
     private fun String.isSpectatorLabel(): Boolean =
-        compactCoursePointLabel() in setOf("s", "spectator", "separator")
+        DesktopCoursePointLabelClassifier.isSpectatorLabel(this)
 
-    private fun String.isSprintFastFoxLabel(): Boolean {
-        val normalized = trim().uppercase(Locale.US)
-        val suffix = normalized.takeIf { it.endsWith("F") }?.dropLast(1)?.toIntOrNull()
-        val prefix = normalized.takeIf { it.startsWith("F") }?.drop(1)?.toIntOrNull()
-        val fastText = normalized.takeIf { it.contains("FAST") }?.sprintLabelNumber()
-        return listOfNotNull(suffix, prefix, fastText).any { it in 1..5 }
+    private fun String.isSprintSlowFoxLabel(): Boolean {
+        return DesktopCoursePointLabelClassifier.sprintSlowFoxNumber(this) != null
     }
 
-    private fun String.sprintLabelNumber(): Int? =
-        Regex("""\b([1-5])\b""").find(this)?.groupValues?.get(1)?.toIntOrNull()
-
-    private fun String.compactCoursePointLabel(): String =
-        trim().lowercase(Locale.US).replace(Regex("[^a-z0-9]+"), "")
+    private fun String.isSprintFastFoxLabel(): Boolean {
+        return DesktopCoursePointLabelClassifier.sprintFastFoxNumber(this) != null
+    }
 
     private fun groupTitle(foxCount: Int): String =
         when (foxCount) {
