@@ -42,6 +42,37 @@ class EventResultDetailsTest {
         assertEquals("3", rows[0].pointsText)
         assertEquals("00:20:00", rows[0].runTimeText)
         assertEquals("31, 32", rows[0].punchCodesText)
+        assertEquals(false, rows[0].hasWarning)
+    }
+
+    @Test
+    fun hidesScoreAndRunTimeForErrorRows() {
+        val rows = EventResultDetails.from(
+            raceData(
+                categories = emptyList(),
+                competitorData = listOf(
+                    competitorData(
+                        id = "competitor",
+                        categoryId = null,
+                        category = null,
+                        firstName = "Alice",
+                        lastName = "Runner",
+                        resultId = "result",
+                        points = 3,
+                        place = 0,
+                        controlCodes = listOf(31, 32),
+                        resultStatus = ResultStatus.OK,
+                        startTimeSeconds = 1_000,
+                        finishTimeSeconds = 500,
+                        runTimeSeconds = -110L * 3_600L - 12L
+                    )
+                )
+            )
+        )
+
+        assertEquals("", rows[0].pointsText)
+        assertEquals("ERR", rows[0].runTimeText)
+        assertEquals(true, rows[0].hasWarning)
     }
 
     @Test
@@ -115,7 +146,11 @@ class EventResultDetailsTest {
         resultId: String = "result-$id",
         points: Int = 1,
         place: Int,
-        controlCodes: List<Int> = emptyList()
+        controlCodes: List<Int> = emptyList(),
+        resultStatus: ResultStatus = ResultStatus.OK,
+        startTimeSeconds: Long = 600,
+        finishTimeSeconds: Long = 1_800,
+        runTimeSeconds: Long = 1_200
     ): EventCompetitorData {
         val competitor = EventCompetitor(
             id = id,
@@ -142,13 +177,13 @@ class EventResultDetailsTest {
                     siNumber = 123456,
                     cardType = 10,
                     checkTimeSeconds = null,
-                    startTimeSeconds = 600,
-                    finishTimeSeconds = 1_800,
+                    startTimeSeconds = startTimeSeconds,
+                    finishTimeSeconds = finishTimeSeconds,
                     readoutDateTimeIso = "2026-05-31T11:00",
                     automaticStatus = true,
-                    resultStatus = ResultStatus.OK,
+                    resultStatus = resultStatus,
                     points = points,
-                    runTimeSeconds = 1_200,
+                    runTimeSeconds = runTimeSeconds,
                     modified = false,
                     sent = false,
                     place = place
@@ -161,8 +196,8 @@ class EventResultDetailsTest {
                             resultId = resultId,
                             cardNumber = competitor.siNumber,
                             siCode = siCode,
-                            siTimeSeconds = 600L + index,
-                            originalSiTimeSeconds = 600L + index,
+                            siTimeSeconds = 700L + index,
+                            originalSiTimeSeconds = 700L + index,
                             punchType = SIRecordType.CONTROL,
                             order = index,
                             punchStatus = PunchStatus.UNKNOWN,

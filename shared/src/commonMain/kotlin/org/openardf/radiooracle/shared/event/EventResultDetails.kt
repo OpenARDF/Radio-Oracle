@@ -3,6 +3,7 @@ package org.openardf.radiooracle.shared.event
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.domain.toResultStatusCode
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
@@ -20,6 +21,7 @@ data class EventResultDetails(
     val pointsText: String,
     val runTimeText: String,
     val punchCodesText: String,
+    val hasWarning: Boolean,
     private val categorySortOrder: Int = Int.MAX_VALUE
 ) {
     companion object {
@@ -65,6 +67,7 @@ data class EventResultDetails(
             controlLabelsByCode: Map<Int, String>
         ): EventResultDetails {
             val result = readoutData.result
+            val blocksScoreAndRunTime = readoutData.blocksScoreAndRunTimeDisplay()
             return EventResultDetails(
                 id = result.id,
                 categoryId = categoryId,
@@ -76,8 +79,12 @@ data class EventResultDetails(
                 resultStatus = result.resultStatus,
                 automaticStatus = result.automaticStatus,
                 statusLabel = result.resultStatus.toDisplayLabel(),
-                pointsText = result.points.toString(),
-                runTimeText = DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinutes = false),
+                pointsText = if (blocksScoreAndRunTime) "" else result.points.toString(),
+                runTimeText = if (blocksScoreAndRunTime) {
+                    readoutData.blockedRunTimeStatusCode()
+                } else {
+                    DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinutes = false)
+                },
                 punchCodesText = readoutData.punches
                     .filter { it.punch.punchType == SIRecordType.CONTROL }
                     .joinToString(", ") { aliasPunch ->
@@ -88,7 +95,8 @@ data class EventResultDetails(
                         } else {
                             aliasPunch.punch.siCode.toString()
                         }
-                    }
+                    },
+                hasWarning = readoutData.hasReadoutWarning()
             )
         }
     }

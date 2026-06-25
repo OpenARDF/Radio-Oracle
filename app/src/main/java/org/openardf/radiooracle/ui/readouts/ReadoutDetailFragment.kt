@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.widget.Toolbar
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResultListener
@@ -23,8 +24,12 @@ import org.openardf.radiooracle.backend.prints.PrintAttemptResult
 import org.openardf.radiooracle.backend.results.ResultsProcessor
 import org.openardf.radiooracle.backend.room.entity.embeddeds.AliasPunch
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
+import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.domain.toResultStatusCode
+import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.categories.CategoryEditDialogFragment
 import kotlinx.coroutines.Dispatchers
@@ -101,7 +106,11 @@ class ReadoutDetailFragment : Fragment() {
             clubView.text = resultData.competitorCategory!!.competitor.club
             indexView.text = resultData.competitorCategory!!.competitor.index
             competitorNameView.text = resultData.competitorCategory!!.competitor.getFullName()
-            pointsView.text = resultData.result.points.toString()
+            pointsView.text = if (resultData.blocksScoreAndRunTimeDisplay()) {
+                "-"
+            } else {
+                resultData.result.points.toString()
+            }
         } else {
             competitorNameView.text =
                 resultData.result.cardName ?: getString(R.string.readout_unknown_competitor)
@@ -125,11 +134,14 @@ class ReadoutDetailFragment : Fragment() {
         }
         checkTimeView.text = resultData.result.checkTime?.getTimeString() ?: "-"
 
-        runTimeView.text =
+        runTimeView.text = if (resultData.blocksScoreAndRunTimeDisplay()) {
+            resultData.blockedRunTimeStatusText()
+        } else {
             TimeProcessor.durationToFormattedString(
                 resultData.result.runTime,
                 dataProcessor.useMinuteTimeFormat()
             )
+        }
 
         placeView.text = if (resultData.competitorCategory?.competitor != null &&
             resultData.result.resultStatus == ResultStatus.OK
@@ -146,8 +158,57 @@ class ReadoutDetailFragment : Fragment() {
             "-"
         }
 
+        val textColor = if (resultData.hasWarning()) {
+            ContextCompat.getColor(requireContext(), R.color.red_error)
+        } else {
+            ContextCompat.getColor(requireContext(), R.color.black)
+        }
+        setDetailTextColor(textColor)
+
         setMenuActions()
         setRecyclerViewAdapter(resultData.punches)
+    }
+
+    private fun ResultData.hasWarning(): Boolean =
+        blocksScoreAndRunTimeDisplay() ||
+            hasTimingOrPunches() && readoutTiming().issues.isNotEmpty() ||
+            punches.any { it.punch.punchStatus == PunchStatus.INVALID }
+
+    private fun ResultData.blocksScoreAndRunTimeDisplay(): Boolean =
+        result.resultStatus == ResultStatus.ERROR || hasTimingOrPunches() && readoutTiming().blocksResult
+
+    private fun ResultData.blockedRunTimeStatusText(): String =
+        if (hasTimingOrPunches() && readoutTiming().blocksResult) {
+            ResultStatus.ERROR.toResultStatusCode()
+        } else {
+            dataProcessor.resultStatusToShortString(result.resultStatus)
+        }
+
+    private fun ResultData.hasTimingOrPunches(): Boolean =
+        result.startTime != null ||
+            result.finishTime != null ||
+            punches.isNotEmpty()
+
+    private fun ResultData.readoutTiming() =
+        SportIdentReadoutTiming.calculate(
+            startSeconds = result.startTime?.getSeconds(),
+            finishSeconds = result.finishTime?.getSeconds(),
+            controlSeconds = punches
+                .filter { it.punch.punchType == SIRecordType.CONTROL }
+                .map { it.punch.siTime.getSeconds() }
+        )
+
+    private fun setDetailTextColor(color: Int) {
+        competitorNameView.setTextColor(color)
+        siNumberView.setTextColor(color)
+        clubView.setTextColor(color)
+        indexView.setTextColor(color)
+        checkTimeView.setTextColor(color)
+        runTimeView.setTextColor(color)
+        raceStatusView.setTextColor(color)
+        categoryView.setTextColor(color)
+        pointsView.setTextColor(color)
+        placeView.setTextColor(color)
     }
 
     /** Handles toolbar actions for edit, print, category creation, control assignment, and delete. */

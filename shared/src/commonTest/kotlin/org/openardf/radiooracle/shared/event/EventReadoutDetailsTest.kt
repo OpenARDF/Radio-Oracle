@@ -25,6 +25,7 @@ class EventReadoutDetailsTest {
         assertEquals("3", rows[0].pointsText)
         assertEquals("00:20:00", rows[0].runTimeText)
         assertEquals("Foxhole 32", rows[0].punchCodesText)
+        assertEquals(false, rows[0].hasWarning)
 
         assertEquals("unmatched", rows[1].id)
         assertEquals("654321", rows[1].siNumberText)
@@ -33,6 +34,22 @@ class EventReadoutDetailsTest {
         assertEquals(true, rows[1].automaticStatus)
         assertEquals("No ranking", rows[1].statusLabel)
         assertEquals("41", rows[1].punchCodesText)
+    }
+
+    @Test
+    fun hidesScoreAndRunTimeForErrorReadouts() {
+        val rows = EventReadoutDetails.from(
+            raceData(
+                matchedResultStatus = ResultStatus.OK,
+                matchedStartTimeSeconds = 1_000,
+                matchedFinishTimeSeconds = 500,
+                matchedRunTimeSeconds = -110L * 3_600L - 12L
+            )
+        )
+
+        assertEquals("", rows[0].pointsText)
+        assertEquals("ERR", rows[0].runTimeText)
+        assertEquals(true, rows[0].hasWarning)
     }
 
     @Test
@@ -79,7 +96,11 @@ class EventReadoutDetailsTest {
     private fun raceData(
         raceType: RaceType = RaceType.CLASSIC,
         unmatchedCardName: String? = null,
-        controls: List<EventControl> = emptyList()
+        controls: List<EventControl> = emptyList(),
+        matchedResultStatus: ResultStatus = ResultStatus.OK,
+        matchedStartTimeSeconds: Long = 600,
+        matchedFinishTimeSeconds: Long = 1_800,
+        matchedRunTimeSeconds: Long = 1_200
     ): EventRaceData {
         val alias = EventAlias(
             id = "alias",
@@ -118,7 +139,17 @@ class EventReadoutDetailsTest {
             competitorData = listOf(
                 EventCompetitorData(
                     competitorCategory = EventCompetitorCategory(competitor, category = null),
-                    readoutData = readout("matched", competitor.id, 123456, ResultStatus.OK, listOf(31, 32), alias)
+                    readoutData = readout(
+                        "matched",
+                        competitor.id,
+                        123456,
+                        matchedResultStatus,
+                        listOf(31, 32),
+                        alias,
+                        startTimeSeconds = matchedStartTimeSeconds,
+                        finishTimeSeconds = matchedFinishTimeSeconds,
+                        runTimeSeconds = matchedRunTimeSeconds
+                    )
                 )
             ),
             unmatchedReadoutData = listOf(
@@ -142,7 +173,10 @@ class EventReadoutDetailsTest {
         resultStatus: ResultStatus,
         controlCodes: List<Int>,
         alias: EventAlias? = null,
-        cardName: String? = null
+        cardName: String? = null,
+        startTimeSeconds: Long = 600,
+        finishTimeSeconds: Long = 1_800,
+        runTimeSeconds: Long = 1_200
     ): EventReadoutData =
         EventReadoutData(
             result = EventResult(
@@ -152,13 +186,13 @@ class EventReadoutDetailsTest {
                 siNumber = siNumber,
                 cardType = 10,
                 checkTimeSeconds = null,
-                startTimeSeconds = 600,
-                finishTimeSeconds = 1_800,
+                startTimeSeconds = startTimeSeconds,
+                finishTimeSeconds = finishTimeSeconds,
                 readoutDateTimeIso = "2026-05-31T11:00",
                 automaticStatus = true,
                 resultStatus = resultStatus,
                 points = 3,
-                runTimeSeconds = 1_200,
+                runTimeSeconds = runTimeSeconds,
                 modified = false,
                 sent = false,
                 cardName = cardName
@@ -171,8 +205,8 @@ class EventReadoutDetailsTest {
                         resultId = id,
                         cardNumber = siNumber,
                         siCode = siCode,
-                        siTimeSeconds = 600L + index,
-                        originalSiTimeSeconds = 600L + index,
+                        siTimeSeconds = 700L + index,
+                        originalSiTimeSeconds = 700L + index,
                         punchType = SIRecordType.CONTROL,
                         order = index,
                         punchStatus = PunchStatus.UNKNOWN,

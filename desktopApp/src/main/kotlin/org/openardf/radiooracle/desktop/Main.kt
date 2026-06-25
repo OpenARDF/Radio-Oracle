@@ -10415,13 +10415,14 @@ private fun ResultDetailRow(
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
     onEditReadout: (String) -> Unit
 ) {
+    val textColor = if (result.hasWarning) DesktopPalette.Error else DesktopPalette.Black
     Row(
         modifier = Modifier.width(fixedTableWidth(ResultTableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        FixedTableText(result.placeText, ResultTableColumns[0].width)
-        FixedTableText(result.competitorName, ResultTableColumns[1].width)
+        FixedTableText(result.placeText, ResultTableColumns[0].width, color = textColor)
+        FixedTableText(result.competitorName, ResultTableColumns[1].width, color = textColor)
         ResultStatusPicker(
             selectedStatus = result.resultStatus,
             onStatusSelected = { status ->
@@ -10431,9 +10432,9 @@ private fun ResultDetailRow(
             },
             modifier = Modifier.width(ResultTableColumns[2].width)
         )
-        FixedTableText(result.pointsText, ResultTableColumns[3].width)
-        FixedTableText(result.runTimeText, ResultTableColumns[4].width)
-        FixedTableText(result.punchCodesText, ResultTableColumns[5].width)
+        FixedTableText(result.pointsText, ResultTableColumns[3].width, color = textColor)
+        FixedTableText(result.runTimeText, ResultTableColumns[4].width, color = textColor)
+        FixedTableText(result.punchCodesText, ResultTableColumns[5].width, color = textColor)
         Button(
             onClick = { onEditReadout(result.id) },
             modifier = Modifier.width(ResultTableColumns[6].width)
@@ -11869,14 +11870,15 @@ private fun ReadoutDetailRow(
     onPreviewFinishTicket: () -> Unit
 ) {
     var selectedCompetitorId by remember(readout.id) { mutableStateOf<String?>(null) }
+    val textColor = if (readout.hasWarning) DesktopPalette.Error else DesktopPalette.Black
 
     Row(
         modifier = Modifier.width(fixedTableWidth(ReadoutTableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        FixedTableText(readout.siNumberText, ReadoutTableColumns[0].width)
-        FixedTableText(readout.competitorName, ReadoutTableColumns[1].width)
+        FixedTableText(readout.siNumberText, ReadoutTableColumns[0].width, color = textColor)
+        FixedTableText(readout.competitorName, ReadoutTableColumns[1].width, color = textColor)
         ResultStatusPicker(
             selectedStatus = readout.resultStatus,
             onStatusSelected = { status ->
@@ -11886,9 +11888,9 @@ private fun ReadoutDetailRow(
             },
             modifier = Modifier.width(ReadoutTableColumns[2].width)
         )
-        FixedTableText(readout.pointsText, ReadoutTableColumns[3].width)
-        FixedTableText(readout.runTimeText, ReadoutTableColumns[4].width)
-        FixedTableText(readout.punchCodesText, ReadoutTableColumns[5].width)
+        FixedTableText(readout.pointsText, ReadoutTableColumns[3].width, color = textColor)
+        FixedTableText(readout.runTimeText, ReadoutTableColumns[4].width, color = textColor)
+        FixedTableText(readout.punchCodesText, ReadoutTableColumns[5].width, color = textColor)
         if (readout.matched) {
             FixedTableText("", ReadoutTableColumns[6].width)
             Spacer(modifier = Modifier.width(ReadoutTableColumns[7].width))
