@@ -9,6 +9,7 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFileJson
+import org.openardf.radiooracle.shared.event.EventSeriesPackageContents
 import org.openardf.radiooracle.shared.event.isEventSeriesFileName
 import java.io.InputStream
 import java.security.MessageDigest
@@ -50,17 +51,19 @@ object EventSeriesImport {
         ZipInputStream(inputStream.buffered()).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
-                val entryPath = normalizeSeriesPath(entry.name)
-                if (!entry.isDirectory && entryPath.isNotBlank() && !entryPath.startsWith("__MACOSX/")) {
-                    val text = zip.readBytes().toString(Charsets.UTF_8)
-                    if (isEventSeriesFileName(entryPath.substringAfterLast('/'))) {
-                        require(manifestJson == null) {
-                            "Event Series package contains more than one manifest."
+                if (!entry.isDirectory) {
+                    val entryPath = EventSeriesPackageContents.normalizedPackagePath(entry.name)
+                    if (!entryPath.startsWith("__MACOSX/")) {
+                        val text = zip.readBytes().toString(Charsets.UTF_8)
+                        if (isEventSeriesFileName(entryPath.substringAfterLast('/'))) {
+                            require(manifestJson == null) {
+                                "Event Series package contains more than one manifest."
+                            }
+                            manifestEntryPath = entryPath
+                            manifestJson = text
+                        } else if (entryPath.endsWith(".json", ignoreCase = true)) {
+                            jsonEntries[entryPath] = text
                         }
-                        manifestEntryPath = entryPath
-                        manifestJson = text
-                    } else if (entryPath.endsWith(".json", ignoreCase = true)) {
-                        jsonEntries[entryPath] = text
                     }
                 }
                 zip.closeEntry()
@@ -89,9 +92,9 @@ object EventSeriesImport {
     ): AndroidEventSeriesImport {
         val seriesFile = EventSeriesFileJson.decode(manifestJson)
         val eventFilesByPath = eventFileJsonByPath
-            .mapKeys { (path, _) -> normalizeSeriesPath(path) }
+            .mapKeys { (path, _) -> EventSeriesPackageContents.normalizedPackagePath(path) }
         val memberImports = seriesFile.sortedEvents().map { event ->
-            val eventJson = eventFilesByPath[normalizeSeriesPath(event.eventFilePath)]
+            val eventJson = eventFilesByPath[EventSeriesPackageContents.normalizedPackagePath(event.eventFilePath)]
                 ?: throw IllegalArgumentException("Missing Event File for series event '${event.displayName}'.")
             val projectFile = EventProjectFileJson.decode(eventJson)
             validateSeriesLink(projectFile, seriesFile.seriesId, event)
@@ -138,9 +141,6 @@ object EventSeriesImport {
             "Event File '${event.displayName}' links to a different Event Series member."
         }
     }
-
-    private fun normalizeSeriesPath(path: String): String =
-        path.replace('\\', '/').removePrefix("./")
 }
 
 private fun RaceData.withSeriesImportIdentity(

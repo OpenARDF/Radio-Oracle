@@ -116,7 +116,7 @@ object DesktopEventSeriesPackageFiles {
     }
 
     private fun safeZipRelativePath(path: String): Path {
-        val normalized = Path.of(path.replace('\\', '/')).normalize()
+        val normalized = Path.of(EventSeriesPackageContents.normalizedPackagePath(path)).normalize()
         require(!normalized.isAbsolute && normalized.none { it.toString() == ".." }) {
             "Event Series package contains an unsafe path: $path"
         }

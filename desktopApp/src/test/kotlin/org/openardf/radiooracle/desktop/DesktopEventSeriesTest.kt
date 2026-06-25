@@ -1234,6 +1234,23 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun unpackSeriesPackageRejectsUnsafeEntryPath() {
+        val root = Files.createTempDirectory("radio-oracle-series-package-unsafe")
+        val zipPath = root.resolve("Championship.zip")
+        ZipOutputStream(Files.newOutputStream(zipPath)).use { zip ->
+            zip.putNextEntry(ZipEntry("../series.radio-oracle.json"))
+            zip.write(EventSeriesFileJson.encode(seriesFile()).toByteArray())
+            zip.closeEntry()
+        }
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            DesktopEventSeriesPackageFiles.unpack(zipPath, root.resolve("received"))
+        }
+
+        assertEquals("Event Series package contains an unsafe path: ../series.radio-oracle.json", error.message)
+    }
+
+    @Test
     fun openingSeriesManifestUsesRememberedMemberEvent() {
         val manifestPath = Path.of("/work/championship/series.radio-oracle.json")
         val dayOnePath = Path.of("/work/championship/day-1.rom.json")
