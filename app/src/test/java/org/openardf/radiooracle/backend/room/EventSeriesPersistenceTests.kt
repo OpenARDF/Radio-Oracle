@@ -93,6 +93,25 @@ class EventSeriesPersistenceTests {
     }
 
     @Test
+    fun deletingSeriesRemovesGroupingButKeepsMemberRaces() = runBlocking {
+        val firstRace = race("Day 1")
+        val secondRace = race("Day 2")
+        val series = EventSeries(seriesId = "series-remove-grouping", name = "Remove grouping test")
+        val members = listOf(
+            member(series.seriesId, "day-1", firstRace.id, 0, firstRace.name),
+            member(series.seriesId, "day-2", secondRace.id, 1, secondRace.name)
+        )
+        saveImportedSeriesRows(series, members, firstRace, secondRace)
+
+        database.eventSeriesDao().deleteSeries(series.seriesId)
+
+        assertNull(database.eventSeriesDao().getSeries(series.seriesId))
+        assertNull(database.eventSeriesDao().getSeriesForRace(firstRace.id))
+        assertEquals(firstRace, database.raceDao().getRace(firstRace.id))
+        assertEquals(secondRace, database.raceDao().getRace(secondRace.id))
+    }
+
+    @Test
     fun importedSeriesCanBeFoundFromEveryLocalMemberRace() = runBlocking {
         val firstRace = race("Day 1")
         val secondRace = race("Day 2")

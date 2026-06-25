@@ -72,7 +72,8 @@ class EventSeriesFragment : Fragment() {
                         series,
                         requireContext(),
                         ::prepareSeriesForDesktopUpload,
-                        ::chooseSeriesExportDestination
+                        ::chooseSeriesExportDestination,
+                        ::confirmRemoveSeriesGrouping
                     )
                     emptyView.visibility = if (series.isEmpty()) View.VISIBLE else View.GONE
                     recyclerView.visibility = if (series.isEmpty()) View.GONE else View.VISIBLE
@@ -142,6 +143,34 @@ class EventSeriesFragment : Fragment() {
             } catch (error: Exception) {
                 progressDialog.dismiss()
                 displayAlert(error.message ?: "Could not prepare Event Series for desktop upload.")
+            }
+        }
+    }
+
+    private fun confirmRemoveSeriesGrouping(item: EventSeriesListItem) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_series_remove_grouping)
+            .setMessage(getString(R.string.event_series_remove_grouping_confirmation, item.name))
+            .setNegativeButton(R.string.general_cancel, null)
+            .setPositiveButton(R.string.event_series_remove_grouping) { _, _ ->
+                removeSeriesGrouping(item)
+            }
+            .show()
+    }
+
+    private fun removeSeriesGrouping(item: EventSeriesListItem) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    viewModel.removeSeriesGrouping(item.seriesId)
+                }
+                Toast.makeText(
+                    requireContext(),
+                    getString(R.string.event_series_remove_grouping_success),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (error: Exception) {
+                displayAlert(error.message ?: "Could not remove Event Series grouping.")
             }
         }
     }
