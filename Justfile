@@ -13,11 +13,26 @@ status:
 diff:
     git -c core.pager=delta diff
 
+gradle +args:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh {{args}}
+
 compile:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:compileKotlin
 
 test:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:test
+
+android-compile:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:compileDebugKotlin
+
+android-test filter="":
+    @if [ -n "{{filter}}" ]; then \
+        JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:testDebugUnitTest --tests "{{filter}}"; \
+    else \
+        JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:testDebugUnitTest; \
+    fi
+
+android-check: android-compile android-test
 
 test-nav:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:test --tests org.openardf.radiooracle.desktop.DesktopNavigationTest --tests org.openardf.radiooracle.desktop.DesktopAutomationCliTest
