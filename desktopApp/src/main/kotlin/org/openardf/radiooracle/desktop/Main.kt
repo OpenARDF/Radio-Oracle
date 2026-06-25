@@ -16330,27 +16330,47 @@ private fun CategoryDeleteButton(
         ButtonLabel("Delete")
     }
     if (showDeleteDialog) {
+        val hasAssignedCompetitors = category.assignedCompetitorCount > 0
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete category") },
-            text = { Text("Delete ${category.name}? Competitors can be kept for reassignment or deleted too.") },
-            confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            showDeleteDialog = false
-                            onRemoveCategory(category.id, false)
-                        }
-                    ) {
-                        Text("Keep competitors")
+            text = {
+                Text(
+                    if (hasAssignedCompetitors) {
+                        "Delete ${category.name}? Competitors can be kept for reassignment or deleted too."
+                    } else {
+                        "Delete ${category.name}?"
                     }
+                )
+            },
+            confirmButton = {
+                if (hasAssignedCompetitors) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                showDeleteDialog = false
+                                onRemoveCategory(category.id, false)
+                            }
+                        ) {
+                            Text("Keep competitors")
+                        }
+                        Button(
+                            onClick = {
+                                showDeleteDialog = false
+                                onRemoveCategory(category.id, true)
+                            }
+                        ) {
+                            Text("Delete competitors")
+                        }
+                    }
+                } else {
                     Button(
                         onClick = {
                             showDeleteDialog = false
                             onRemoveCategory(category.id, true)
                         }
                     ) {
-                        Text("Delete competitors")
+                        Text("Delete")
                     }
                 }
             },
