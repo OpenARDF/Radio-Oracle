@@ -474,22 +474,13 @@ object DesktopControlsRouteKmlKmzExporter {
         coordinates(point.longitude, point.latitude, point.elevationMeters)
 
     private fun coordinates(longitude: Double, latitude: Double, elevationMeters: Double?): String =
-        listOfNotNull(
-            formatNumber(longitude),
-            formatNumber(latitude),
-            elevationMeters?.let(::formatNumber)
-        ).joinToString(",")
+        DesktopExportPrimitives.compactKmlCoordinate(longitude, latitude, elevationMeters)
 
     private fun formatNumber(value: Double): String =
-        String.format(Locale.US, "%.7f", value).trimEnd('0').trimEnd('.')
+        DesktopExportPrimitives.compactDecimal(value)
 
     private fun xml(value: String): String =
-        value
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace("\"", "&quot;")
-            .replace("'", "&apos;")
+        DesktopExportPrimitives.xmlText(value)
 }
 
 private data class CourseExportObjects(

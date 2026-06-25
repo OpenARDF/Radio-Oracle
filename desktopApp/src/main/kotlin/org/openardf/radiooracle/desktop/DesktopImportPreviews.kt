@@ -6,7 +6,6 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
-import java.util.Locale
 
 data class DesktopCategoryCsvImportPreview(
     val addedCount: Int,
@@ -141,14 +140,14 @@ object DesktopImportPreviews {
         controlCount: Int? = null,
         controlTypes: List<ControlPointType> = emptyList()
     ): List<String> {
-        val inferredTypes = inferredRaceTypes(sourceName, clues, controlCount, controlTypes)
+        val inferredTypes = DesktopCourseFormatDetector.inferredRaceTypes(sourceName, clues, controlCount, controlTypes)
             .filterNot { it == eventRaceType }
         if (inferredTypes.isEmpty()) {
             return emptyList()
         }
-        val eventTypeText = eventRaceType.name.lowercase().replaceFirstChar { it.titlecase(Locale.US) }
+        val eventTypeText = DesktopCourseFormatDetector.run { eventRaceType.displayName() }
         return inferredTypes.distinct().map { inferredType ->
-            val importTypeText = inferredType.name.lowercase().replaceFirstChar { it.titlecase(Locale.US) }
+            val importTypeText = DesktopCourseFormatDetector.run { inferredType.displayName() }
             "Import data suggests $importTypeText, but the Event File is $eventTypeText."
         }
     }
@@ -172,47 +171,4 @@ object DesktopImportPreviews {
         }
     }
 
-    private fun inferredRaceTypes(
-        sourceName: String,
-        clues: List<String>,
-        controlCount: Int?,
-        controlTypes: List<ControlPointType>
-    ): List<RaceType> {
-        val sourceNameText = sourceName.lowercase()
-        val haystack = (listOf(sourceName) + clues)
-            .joinToString(" ")
-            .lowercase()
-        val sourceNameSuggestsFoxoring = sourceNameText.containsFoxoringToken()
-        val foxCount = controlTypes.count { it == ControlPointType.CONTROL }
-        val hasSpectator = controlTypes.any { it == ControlPointType.SEPARATOR }
-        val exceedsSprintFoxLimit = foxCount > 10
-        val hasSprintControlShape = controlCount != null &&
-            controlCount > 6 &&
-            foxCount in 1..10 &&
-            hasSpectator
-        return buildList {
-            if (
-                !sourceNameSuggestsFoxoring &&
-                !exceedsSprintFoxLimit &&
-                (haystack.contains("sprint") || hasSprintControlShape)
-            ) {
-                add(RaceType.SPRINT)
-            }
-            if (haystack.containsFoxoringToken()) {
-                add(RaceType.FOXORING)
-            }
-            if (haystack.contains("classic")) {
-                add(RaceType.CLASSIC)
-            }
-            if (haystack.contains("orienteering")) {
-                add(RaceType.ORIENTEERING)
-            }
-        }
-    }
-
-    private fun String.containsFoxoringToken(): Boolean =
-        contains("foxoring") ||
-            contains("fox-o") ||
-            contains("fox o") ||
-            Regex("""\bfoxo\b""").containsMatchIn(this)
 }

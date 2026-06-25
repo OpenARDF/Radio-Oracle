@@ -124,6 +124,16 @@ class DesktopSprintCourseGeneratorTest {
         assertEquals((2..10).toList(), result.groups.map { it.foxCount })
     }
 
+    @Test
+    fun rejectsClassicCoursePointsWhenSprintGeneratorSelected() {
+        val path = Files.createTempFile("Classic Practice", ".kml")
+        Files.writeString(path, classicCoursePointsKml())
+
+        val error = runCatching { DesktopSprintCourseGenerator.generate(path) }.exceptionOrNull()
+
+        assertTrue(error?.message.orEmpty().contains("appears to be Classic"))
+    }
+
     private fun sprintCoursePointsKml(
         includeSpectator: Boolean,
         spectatorName: String = "Spectator",
@@ -162,6 +172,22 @@ class DesktopSprintCourseGeneratorTest {
                 ${pointPlacemark("Beacon", longitude(2_200), centerLatitude, 100.0, "SI=299")}
                 $helperPoints
                 ${pointPlacemark("Finish", longitude(2_350), centerLatitude, 100.0, "SI=201")}
+              </Document>
+            </kml>
+        """.trimIndent()
+    }
+
+    private fun classicCoursePointsKml(): String {
+        val foxes = (1..5).joinToString("\n") { index ->
+            pointPlacemark("FOX$index", -94.990 + index * 0.004, 39.000, 100.0, "SI=${220 + index}")
+        }
+        return """
+            <kml xmlns="http://www.opengis.net/kml/2.2">
+              <Document>
+                ${pointPlacemark("Start", -95.000, 39.000, 100.0, "SI=200")}
+                $foxes
+                ${pointPlacemark("Beacon", -94.940, 39.000, 100.0, "SI=299")}
+                ${pointPlacemark("Finish", -94.930, 39.000, 100.0, "SI=201")}
               </Document>
             </kml>
         """.trimIndent()

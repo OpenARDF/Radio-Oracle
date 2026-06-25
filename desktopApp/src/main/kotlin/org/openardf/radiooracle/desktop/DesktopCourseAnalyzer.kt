@@ -311,47 +311,6 @@ object DesktopCourseAnalyzer {
     private const val CLASSIC_WAIT_TIMING_NOTE =
         "For Classic-style fox controls, timing assumes the competitor waits if the fox is off the air, then spends 30 seconds finding and punching before departing for the next leg; that delay affects later arrival phases."
     private val CATEGORY_SPEED_FACTOR_TABLE = DesktopCourseSpeedFactors.provisionalCategoryTable
-    private val classicCategoryRequirements = mapOf(
-        "W19" to CourseRuleRequirement(4, 4, 6_000, 8_000),
-        "W21" to CourseRuleRequirement(4, 4, 7_000, 9_000),
-        "W35" to CourseRuleRequirement(4, 5, 6_000, 8_000),
-        "W45" to CourseRuleRequirement(3, 4, 5_000, 7_000),
-        "W55" to CourseRuleRequirement(3, 4, 4_000, 6_000),
-        "W65" to CourseRuleRequirement(3, 4, 4_000, 6_000),
-        "W75" to CourseRuleRequirement(2, 4, 3_000, 5_000),
-        "M19" to CourseRuleRequirement(4, 4, 8_000, 10_000),
-        "M21" to CourseRuleRequirement(5, 5, 9_000, 12_000),
-        "M40" to CourseRuleRequirement(4, 4, 8_000, 10_000),
-        "M50" to CourseRuleRequirement(4, 5, 6_000, 8_000),
-        "M60" to CourseRuleRequirement(3, 4, 5_000, 7_000),
-        "M70" to CourseRuleRequirement(3, 4, 4_000, 6_000),
-        "M80" to CourseRuleRequirement(2, 4, 3_000, 5_000)
-    )
-    private val youthClassicCategoryRequirements = mapOf(
-        "W12" to CourseRuleRequirement(3, 3, 2_000, 3_000),
-        "W14" to CourseRuleRequirement(4, 4, 2_500, 3_000),
-        "W16" to CourseRuleRequirement(5, 5, 3_500, 4_000),
-        "M12" to CourseRuleRequirement(3, 3, 2_000, 3_000),
-        "M14" to CourseRuleRequirement(4, 4, 2_500, 3_000),
-        "M16" to CourseRuleRequirement(5, 5, 3_500, 4_000)
-    )
-    private val foxoringCategoryRequirements = mapOf(
-        "W19" to CourseRuleRequirement(5, 8, 4_000, 6_000),
-        "W21" to CourseRuleRequirement(6, 10, 5_000, 7_000),
-        "W35" to CourseRuleRequirement(5, 8, 4_000, 6_000),
-        "W45" to CourseRuleRequirement(4, 7, 4_000, 6_000),
-        "W55" to CourseRuleRequirement(4, 7, 3_000, 5_000),
-        "W65" to CourseRuleRequirement(4, 7, 3_000, 5_000),
-        "W75" to CourseRuleRequirement(4, 7, 3_000, 4_000),
-        "M19" to CourseRuleRequirement(6, 8, 6_000, 8_000),
-        "M21" to CourseRuleRequirement(8, 10, 7_000, 9_000),
-        "M40" to CourseRuleRequirement(6, 8, 6_000, 8_000),
-        "M50" to CourseRuleRequirement(5, 8, 5_000, 7_000),
-        "M60" to CourseRuleRequirement(5, 8, 4_000, 6_000),
-        "M70" to CourseRuleRequirement(4, 7, 3_000, 5_000),
-        "M80" to CourseRuleRequirement(4, 7, 3_000, 4_000)
-    )
-
     /**
      * Mirrors the analyzer's Section 1/Section 2 prerequisites without running the route search.
      * A stored route polyline alone can still produce only Section 3, which should not make the
@@ -2915,18 +2874,11 @@ object DesktopCourseAnalyzer {
         )
     }
 
-    private fun climbMetersOrNull(route: List<CourseGeoPoint>): Double? {
-        if (route.size < 2 || route.any { it.elevationMeters == null }) {
-            return null
-        }
-        return route.zipWithNext()
-            .sumOf { (start, end) -> max(0.0, requireNotNull(end.elevationMeters) - requireNotNull(start.elevationMeters)) }
-    }
+    private fun climbMetersOrNull(route: List<CourseGeoPoint>): Double? =
+        DesktopCourseRouteMetricsCalculator.climbMetersOrNull(route)
 
-    private fun effectiveLengthMetersOrNull(route: List<CourseGeoPoint>): Double? {
-        val climbMeters = climbMetersOrNull(route) ?: return null
-        return route.straightLineMeters() + 10.0 * climbMeters
-    }
+    private fun effectiveLengthMetersOrNull(route: List<CourseGeoPoint>): Double? =
+        DesktopCourseRouteMetricsCalculator.effectiveLengthMetersOrNull(route)
 
     private fun routeMap(
         title: String,
@@ -3383,63 +3335,17 @@ object DesktopCourseAnalyzer {
         )
     }
 
-    private fun categoryRequirement(categoryName: String, raceType: RaceType): CourseRuleRequirement? {
-        val key = categoryRuleKey(categoryName) ?: return null
-        return when (raceType) {
-            RaceType.FOXORING -> foxoringCategoryRequirements[key]
-            RaceType.SPRINT -> classicCategoryRequirements[key]?.let {
-                it.copy(minControls = it.minControls * 2, maxControls = it.maxControls * 2)
-            }
-            RaceType.CLASSIC, RaceType.SHORT -> youthClassicCategoryRequirements[key] ?: classicCategoryRequirements[key]
-            RaceType.ORIENTEERING -> null
-        }
-    }
+    private fun categoryRequirement(categoryName: String, raceType: RaceType): CourseRuleRequirement? =
+        DesktopCourseRuleCatalog.categoryRequirement(categoryName, raceType)
 
     private fun routeLengthRequirement(categoryName: String, raceType: RaceType): CourseRuleRequirement? =
-        when (raceType) {
-            RaceType.CLASSIC, RaceType.SHORT, RaceType.FOXORING -> categoryRequirement(categoryName, raceType)
-            RaceType.SPRINT, RaceType.ORIENTEERING -> null
-        }
+        DesktopCourseRuleCatalog.routeLengthRequirement(categoryName, raceType)
 
     private fun RaceType.hasCourseAnalyzerClimbLimit(): Boolean =
-        when (this) {
-            RaceType.CLASSIC,
-            RaceType.SHORT,
-            RaceType.SPRINT,
-            RaceType.FOXORING -> true
-            RaceType.ORIENTEERING -> false
-        }
+        DesktopCourseRuleCatalog.hasClimbLimit(this)
 
-    private fun spacingRuleSet(raceType: RaceType, categoryName: String): CourseSpacingRuleSet? {
-        val key = categoryRuleKey(categoryName)
-        return when (raceType) {
-            RaceType.SPRINT -> CourseSpacingRuleSet(
-                "Sprint",
-                100,
-                100,
-                includeBeaconInStartCheck = false,
-                includeSpectatorInPairCheck = true,
-                includeBeaconInPairCheck = true
-            )
-            RaceType.FOXORING -> CourseSpacingRuleSet(
-                "Foxoring",
-                250,
-                250,
-                includeBeaconInStartCheck = true,
-                includeSpectatorInPairCheck = false,
-                includeBeaconInPairCheck = true
-            )
-            RaceType.CLASSIC, RaceType.SHORT -> CourseSpacingRuleSet(
-                formatLabel = if (key in youthClassicCategoryRequirements) "Youth Classic" else "Classic",
-                startMinMeters = if (key in youthClassicCategoryRequirements) 500 else 750,
-                pairMinMeters = 400,
-                includeBeaconInStartCheck = true,
-                includeSpectatorInPairCheck = false,
-                includeBeaconInPairCheck = true
-            )
-            RaceType.ORIENTEERING -> null
-        }
-    }
+    private fun spacingRuleSet(raceType: RaceType, categoryName: String): CourseSpacingRuleSet? =
+        DesktopCourseRuleCatalog.spacingRuleSet(raceType, categoryName)
 
     private fun CourseSpacingRuleSet.startCheckedPoints(
         foxes: List<ControlAnalysisPoint>,
@@ -3470,14 +3376,8 @@ object DesktopCourseAnalyzer {
     private fun ControlAnalysisPoint.labeledPoint(): LabeledCoursePoint? =
         point?.let { LabeledCoursePoint(control.analysisRouteLabel(), it) }
 
-    private fun categoryRuleKey(categoryName: String): String? {
-        val rawKey = Regex("""\b[WMD][\s_-]*\d{2}\b""")
-            .find(categoryName.uppercase())
-            ?.value
-            ?: return null
-        val compactKey = rawKey.filter { it.isLetterOrDigit() }
-        return if (compactKey.startsWith("D")) "W${compactKey.drop(1)}" else compactKey
-    }
+    private fun categoryRuleKey(categoryName: String): String? =
+        DesktopCourseRuleCatalog.categoryRuleKey(categoryName)
 
     private fun speedModel(
         raceType: RaceType,
@@ -3704,7 +3604,7 @@ object DesktopCourseAnalyzer {
         }
 
     private fun List<CourseGeoPoint>.straightLineMeters(): Double =
-        zipWithNext().sumOf { (start, end) -> start.distanceMetersTo(end) }
+        DesktopCourseRouteMetricsCalculator.horizontalLengthMeters(this)
 
     private fun List<CourseGeoPoint>.analysisBoundingBoxOrNull(): DesktopVenueElevationBoundingBox? =
         takeIf { it.isNotEmpty() }?.let { points ->
@@ -4015,35 +3915,6 @@ private data class CalculatedRoute(
     val distanceMeters: Double,
     val routeCount: Int,
     val calculationNote: String? = null
-)
-
-private data class CourseRuleRequirement(
-    val minControls: Int,
-    val maxControls: Int,
-    val minLengthMeters: Int,
-    val maxLengthMeters: Int
-) {
-    fun controlRangeText(): String =
-        if (minControls == maxControls) minControls.toString() else "$minControls-$maxControls"
-
-    fun lengthRangeText(): String =
-        "${lengthValueText(minLengthMeters)}-${lengthValueText(maxLengthMeters)} km"
-
-    private fun lengthValueText(meters: Int): String =
-        if (meters % 1000 == 0) {
-            "${meters / 1000}"
-        } else {
-            "${meters / 1000}.${(meters % 1000).toString().padStart(3, '0').trimEnd('0')}"
-        }
-}
-
-private data class CourseSpacingRuleSet(
-    val formatLabel: String,
-    val startMinMeters: Int,
-    val pairMinMeters: Int,
-    val includeBeaconInStartCheck: Boolean,
-    val includeSpectatorInPairCheck: Boolean,
-    val includeBeaconInPairCheck: Boolean
 )
 
 private data class LabeledCoursePoint(

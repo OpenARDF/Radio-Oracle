@@ -227,7 +227,7 @@ object DesktopCourseAnalysisExports {
             appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
             appendLine("""<kml xmlns="http://www.opengis.net/kml/2.2">""")
             appendLine("  <Document>")
-            appendLine("    <name>${xmlText(kmlFileStem)}</name>")
+            appendLine("    <name>${DesktopExportPrimitives.xmlText(kmlFileStem)}</name>")
             appendLine("    <Style id=\"storedRouteStyle\"><LineStyle><color>ff0057b8</color><width>4</width></LineStyle></Style>")
             appendLine("    <Style id=\"calculatedRouteStyle\"><LineStyle><color>ff00a676</color><width>4</width></LineStyle></Style>")
             appendCoursePointStyle(
@@ -264,18 +264,18 @@ object DesktopCourseAnalysisExports {
         routeName: String
     ) {
         appendLine("    <Folder>")
-        appendLine("      <name>${xmlText(folder.title)}</name>")
+        appendLine("      <name>${DesktopExportPrimitives.xmlText(folder.title)}</name>")
         appendLine("      <open>1</open>")
         val routeCoordinates = kmlRouteCoordinates(folder)
         if (routeCoordinates.size >= 2) {
             appendLine("      <Placemark>")
-            appendLine("        <name>${xmlText(routeName)}</name>")
+            appendLine("        <name>${DesktopExportPrimitives.xmlText(routeName)}</name>")
             appendLine("        <styleUrl>#$routeStyleId</styleUrl>")
             appendLine("        <LineString>")
             appendLine("          <tessellate>1</tessellate>")
             appendLine("          <coordinates>")
             routeCoordinates.forEach { point ->
-                appendLine("            ${kmlCoordinate(point)}")
+                appendLine("            ${DesktopExportPrimitives.kmlCoordinate(point)}")
             }
             appendLine("          </coordinates>")
             appendLine("        </LineString>")
@@ -283,17 +283,17 @@ object DesktopCourseAnalysisExports {
         }
         folder.courseObjects.forEach { courseObject ->
             appendLine("      <Placemark>")
-            appendLine("        <name>${xmlText(courseObject.label)}</name>")
+            appendLine("        <name>${DesktopExportPrimitives.xmlText(courseObject.label)}</name>")
             val descriptionLines = listOfNotNull(
                 courseObject.siCode?.let { "SI=$it" },
                 courseObject.originalLabel?.let { "Original label: $it" }
             )
             if (descriptionLines.isNotEmpty()) {
-                appendLine("        <description>${xmlText(descriptionLines.joinToString("\n"))}</description>")
+                appendLine("        <description>${DesktopExportPrimitives.xmlText(descriptionLines.joinToString("\n"))}</description>")
             }
             appendLine("        <styleUrl>#${courseObjectStyleId(courseObject.type)}</styleUrl>")
             appendLine("        <Point>")
-            appendLine("          <coordinates>${kmlCoordinate(courseObject.point)}</coordinates>")
+            appendLine("          <coordinates>${DesktopExportPrimitives.kmlCoordinate(courseObject.point)}</coordinates>")
             appendLine("        </Point>")
             appendLine("      </Placemark>")
         }
@@ -327,21 +327,6 @@ object DesktopCourseAnalysisExports {
             .takeIf { it.size >= 2 }
             ?.map { it.point }
             ?: folder.routePoints
-
-    private fun kmlCoordinate(point: CourseGeoPoint): String =
-        if (point.elevationMeters != null) {
-            String.format(Locale.US, "%.8f,%.8f,%.2f", point.longitude, point.latitude, point.elevationMeters)
-        } else {
-            String.format(Locale.US, "%.8f,%.8f", point.longitude, point.latitude)
-        }
-
-    private fun xmlText(text: String): String =
-        text
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace("\"", "&quot;")
-            .replace("'", "&apos;")
 
     private fun kmlPathForPdf(path: Path, result: DesktopCourseAnalysisSummary): Path =
         path.resolveSibling("${courseAnalysisFileStem(result)}.kml")
@@ -624,7 +609,7 @@ object DesktopCourseAnalysisExports {
                     appendLine("0 0 0 rg")
                 }
                 appendLine("1 0 0 1 54 ${pdfNumber(y)} Tm")
-                appendLine("(${line.text.toPdfText()}) Tj")
+                appendLine("(${DesktopExportPrimitives.pdfText(line.text)}) Tj")
                 appendLine("ET")
                 y -= line.style.lineHeight
             }
@@ -792,20 +777,9 @@ object DesktopCourseAnalysisExports {
         appendLine("/F1 $fontSize Tf")
         appendLine("0 0 0 rg")
         appendLine("1 0 0 1 ${pdfNumber(x)} ${pdfNumber(y)} Tm")
-        appendLine("(${text.toPdfText()}) Tj")
+        appendLine("(${DesktopExportPrimitives.pdfText(text)}) Tj")
         appendLine("ET")
     }
-
-    private fun String.toPdfText(): String =
-        map { character ->
-            when (character) {
-                '\\' -> "\\\\"
-                '(' -> "\\("
-                ')' -> "\\)"
-                in ' '..'~' -> character.toString()
-                else -> "?"
-            }
-        }.joinToString("")
 
     private fun kilometersText(value: Int?): String =
         value?.let { "${twoDecimalText(it / 1000.0)} km" } ?: "Unknown"

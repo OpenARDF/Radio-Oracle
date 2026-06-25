@@ -135,6 +135,16 @@ class DesktopFoxoringCourseGeneratorTest {
         assertTrue(error?.message.orEmpty().contains("between 5 and 12 fox points"))
     }
 
+    @Test
+    fun rejectsClassicCoursePointsWhenFoxoringGeneratorSelected() {
+        val path = Files.createTempFile("Classic Practice", ".kml")
+        Files.writeString(path, foxoringCoursePointsKml(foxCount = 5, includeBeacon = true))
+
+        val error = runCatching { DesktopFoxoringCourseGenerator.generate(path) }.exceptionOrNull()
+
+        assertTrue(error?.message.orEmpty().contains("appears to be Classic"))
+    }
+
     private fun foxoringCoursePointsKml(foxCount: Int, includeBeacon: Boolean): String {
         val foxes = (1..foxCount).joinToString("\n") { index ->
             pointPlacemark("FOX$index", -95.000 + index * 0.008, 39.000, 100.0, "SI=${220 + index}")
