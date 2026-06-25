@@ -5493,18 +5493,27 @@ fun main(args: Array<String>) = application {
             },
             onRemoveCategory = { categoryId, deleteCompetitors ->
                 runCatching {
-                    val currentProject = requireNotNull(projectSession.currentProject)
-                    require(!currentProject.categoryHasLockedProtectedCourseData(categoryId, protectedCoursePassword != null)) {
-                        "Category has locked protected course data. Unlock course data before deleting it."
-                    }
+                    var removalResult: DesktopCategoryRemovalResult? = null
                     projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.removeCategory(currentProject, categoryId, deleteCompetitors)
+                        DesktopCategoryActions.removeCategory(
+                            projectFile = currentProject,
+                            categoryIdOrName = categoryId,
+                            deleteCompetitors = deleteCompetitors
+                        ).also { removalResult = it }.projectFile
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    recordActivity("Removed category.")
+                    val result = requireNotNull(removalResult)
+                    recordActivity("Removed category ${result.categoryName}.")
                     projectStatusText = "Unsaved changes."
+                    DesktopDebugLog.info(
+                        "Category",
+                        "Removed category id=${result.categoryId} name=${result.categoryName} " +
+                            "deleteCompetitors=$deleteCompetitors removedCompetitors=${result.removedCompetitorCount} " +
+                            "hadProtectedCourseData=${result.hadProtectedCourseData}"
+                    )
                 }.onFailure { error ->
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("Category", projectStatusText)
                 }
             },
             onRenameCompetitor = { competitorId, firstName, lastName ->

@@ -168,6 +168,7 @@ object DesktopAutomationCli {
             "import-android-event-file" -> importAndroidEventFile(commandArgs, out, err)
             "export-android-event-file" -> exportAndroidEventFile(commandArgs, out, err)
             "import-competitors-csv" -> importCompetitorsCsv(commandArgs, out, err)
+            "remove-category" -> removeCategory(commandArgs, out, err)
             "event-series-list" -> eventSeriesList(commandArgs, out, err)
             "event-series-add-event" -> eventSeriesAddEvent(commandArgs, out, err)
             "event-series-validate" -> eventSeriesValidate(commandArgs, out, err)
@@ -899,6 +900,60 @@ object DesktopAutomationCli {
             0
         }.getOrElse { error ->
             err.println("Failed to import Competitors CSV: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
+    private fun removeCategory(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val eventFileText = args.getOrNull(0)
+        val categoryText = args.getOrNull(1)
+        if (eventFileText.isNullOrBlank() || categoryText.isNullOrBlank()) {
+            err.println("remove-category requires Event File path and category ID or unique category name.")
+            return 64
+        }
+        val deleteCompetitors = "--delete-competitors" in args
+        val writeChanges = "--write" in args
+        return runCatching {
+            DesktopDebugLog.initialize()
+            val eventFilePath = Path.of(eventFileText)
+            val projectFile = DesktopProjectFiles.read(eventFilePath)
+            val result = DesktopCategoryActions.removeCategory(
+                projectFile = projectFile,
+                categoryIdOrName = categoryText,
+                deleteCompetitors = deleteCompetitors
+            )
+            if (writeChanges) {
+                DesktopProjectFiles.write(eventFilePath, result.projectFile)
+            }
+            DesktopDebugLog.info(
+                "Category",
+                "CLI removed category id=${result.categoryId} name=${result.categoryName} " +
+                    "deleteCompetitors=$deleteCompetitors write=$writeChanges " +
+                    "removedCompetitors=${result.removedCompetitorCount} " +
+                    "hadProtectedCourseData=${result.hadProtectedCourseData}"
+            )
+            out.println(
+                jsonObject(
+                    "command" to "remove-category",
+                    "eventFile" to eventFilePath.toAbsolutePath().normalize().toString(),
+                    "write" to writeChanges,
+                    "categoryId" to result.categoryId,
+                    "categoryName" to result.categoryName,
+                    "deleteCompetitors" to deleteCompetitors,
+                    "hadProtectedCourseData" to result.hadProtectedCourseData,
+                    "beforeCategoryCount" to result.beforeCategoryIds.size,
+                    "afterCategoryCount" to result.afterCategoryIds.size,
+                    "beforeCategoryIds" to result.beforeCategoryIds,
+                    "afterCategoryIds" to result.afterCategoryIds,
+                    "beforeCompetitorCount" to result.beforeCompetitorIds.size,
+                    "afterCompetitorCount" to result.afterCompetitorIds.size,
+                    "removedCompetitorCount" to result.removedCompetitorCount
+                )
+            )
+            0
+        }.getOrElse { error ->
+            DesktopDebugLog.error("Category", "CLI remove category failed: ${error.message ?: error::class.simpleName}")
+            err.println("Failed to remove category: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -1883,6 +1938,8 @@ object DesktopAutomationCli {
                                           Save a desktop Event File as an Android Event File.
           import-competitors-csv <event-path> <csv-path> [--update-existing]
                                           Import competitors CSV into an Event File.
+          remove-category <event-path> <category-id-or-name> [--delete-competitors] [--write]
+                                          Remove one category and report before/after counts; writes only with --write.
           event-series-list <manifest-path> [--current-event <event-path>]
                                           List series manifest events as JSON.
           event-series-add-event <manifest-path> <event-path>

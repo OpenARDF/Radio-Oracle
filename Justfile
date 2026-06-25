@@ -113,6 +113,9 @@ series-start-fairness-verify manifest current flags="":
 event-start-list-verify event flags="":
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-start-list-verify "{{event}}" {{flags}}'
 
+event-category-remove event category flags="":
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='remove-category "{{event}}" "{{category}}" {{flags}}'
+
 desktop-check: compile test
 
 desktop-package:
