@@ -148,6 +148,7 @@ class RaceSelectionFragment : Fragment() {
         setRecyclerAdapter()
         setSwipeActions()
         setFragmentListener()
+        setSeriesMenuVisibility()
         setBackButton()
     }
 
@@ -166,6 +167,17 @@ class RaceSelectionFragment : Fragment() {
                 }
 
                 else -> false
+            }
+        }
+    }
+
+    private fun setSeriesMenuVisibility() {
+        toolbar.menu.findItem(R.id.race_menu_event_series)?.isVisible = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                raceViewModel.showStoredSeriesActions.collect { showSeries ->
+                    toolbar.menu.findItem(R.id.race_menu_event_series)?.isVisible = showSeries
+                }
             }
         }
     }

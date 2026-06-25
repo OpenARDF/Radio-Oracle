@@ -10,6 +10,7 @@ import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.room.enums.ProviderType
+import org.openardf.radiooracle.ui.series.EventSeriesUiVisibility
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +25,8 @@ class RaceViewModel : ViewModel() {
     private val dataProcessor = DataProcessor.get()
     private val _races: MutableStateFlow<List<Race>> = MutableStateFlow(emptyList())
     val races: StateFlow<List<Race>> get() = _races.asStateFlow()
+    private val _showStoredSeriesActions: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val showStoredSeriesActions: StateFlow<Boolean> get() = _showStoredSeriesActions.asStateFlow()
 
 
     /** Creates a race on a background dispatcher. */
@@ -120,6 +123,12 @@ class RaceViewModel : ViewModel() {
         viewModelScope.launch {
             dataProcessor.getRaces().collect { races ->
                 _races.value = races.sortedBy { it.startDateTime }
+            }
+        }
+        viewModelScope.launch {
+            dataProcessor.getEventSeries().collect { eventSeries ->
+                _showStoredSeriesActions.value =
+                    EventSeriesUiVisibility.showStoredSeriesActions(eventSeries.size)
             }
         }
     }
