@@ -13,7 +13,8 @@ class EventSeriesRecyclerViewAdapter(
     private val values: List<EventSeriesListItem>,
     private val context: Context,
     private val onSendToDesktop: (EventSeriesListItem) -> Unit,
-    private val onExport: (EventSeriesListItem) -> Unit
+    private val onExport: (EventSeriesListItem) -> Unit,
+    private val onRemoveGrouping: (EventSeriesListItem) -> Unit
 ) : RecyclerView.Adapter<EventSeriesRecyclerViewAdapter.EventSeriesViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EventSeriesViewHolder {
@@ -37,6 +38,9 @@ class EventSeriesRecyclerViewAdapter(
         holder.exportButton.setOnClickListener {
             onExport(item)
         }
+        holder.removeGroupingButton.setOnClickListener {
+            onRemoveGrouping(item)
+        }
     }
 
     override fun getItemCount(): Int = values.size
@@ -47,5 +51,6 @@ class EventSeriesRecyclerViewAdapter(
         val members: TextView = view.findViewById(R.id.event_series_item_members)
         val sendButton: ImageButton = view.findViewById(R.id.event_series_item_send_desktop)
         val exportButton: ImageButton = view.findViewById(R.id.event_series_item_export)
+        val removeGroupingButton: ImageButton = view.findViewById(R.id.event_series_item_remove_grouping)
     }
 }

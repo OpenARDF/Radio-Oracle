@@ -29,4 +29,8 @@ class EventSeriesViewModel : ViewModel() {
     suspend fun exportEventSeriesPackage(uri: Uri, seriesId: String) {
         dataProcessor.exportEventSeriesPackage(uri, seriesId)
     }
+
+    suspend fun removeSeriesGrouping(seriesId: String) {
+        dataProcessor.deleteEventSeries(seriesId)
+    }
 }

@@ -45,6 +45,15 @@
                 android:contentDescription="@string/event_series_send_desktop"
                 android:padding="12dp"
                 android:src="@drawable/ic_upload" />
+
+            <ImageButton
+                android:id="@+id/event_series_item_remove_grouping"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/event_series_remove_grouping"
+                android:padding="12dp"
+                android:src="@drawable/ic_delete" />
         </LinearLayout>
 
         <TextView
