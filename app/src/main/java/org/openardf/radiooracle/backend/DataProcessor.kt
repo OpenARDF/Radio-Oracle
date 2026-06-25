@@ -99,6 +99,10 @@ class DataProcessor private constructor(context: Context) {
         fun get(): DataProcessor {
             return INSTANCE ?: throw IllegalStateException("DataProcessor must be initialized")
         }
+
+        fun resetForTests() {
+            INSTANCE = null
+        }
     }
 
     init {

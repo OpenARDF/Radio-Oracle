@@ -322,5 +322,9 @@ class ARDFRepository private constructor(context: Context) {
         fun get(): ARDFRepository {
             return INSTANCE ?: throw IllegalStateException("ARDFRepository must be initialized")
         }
+
+        fun resetForTests() {
+            INSTANCE = null
+        }
     }
 }

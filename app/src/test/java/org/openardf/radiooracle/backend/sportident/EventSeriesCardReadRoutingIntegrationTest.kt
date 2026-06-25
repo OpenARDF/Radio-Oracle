@@ -39,8 +39,8 @@ class EventSeriesCardReadRoutingIntegrationTest {
     @Before
     fun initializeBackend() {
         val context = RuntimeEnvironment.getApplication()
-        resetSingleton(DataProcessor::class.java)
-        resetSingleton(ARDFRepository::class.java)
+        DataProcessor.resetForTests()
+        ARDFRepository.resetForTests()
         ARDFRepository.initialize(context)
         DataProcessor.initialize(context)
     }
@@ -168,10 +168,4 @@ class EventSeriesCardReadRoutingIntegrationTest {
             punchData = ArrayList(punches.map { PunchData(it, SITime(10 * 60)) })
         )
 
-    private fun resetSingleton(type: Class<*>) {
-        type.getDeclaredField("INSTANCE").apply {
-            isAccessible = true
-            set(null, null)
-        }
-    }
 }
