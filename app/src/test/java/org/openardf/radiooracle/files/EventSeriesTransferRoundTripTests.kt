@@ -9,6 +9,8 @@ import org.junit.runner.RunWith
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.EventSeriesImport
 import org.openardf.radiooracle.backend.room.ARDFRepository
+import org.openardf.radiooracle.backend.room.entity.Race
+import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
 import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.shared.domain.RaceBand
@@ -24,11 +26,16 @@ import org.openardf.radiooracle.shared.event.EventSeriesFileJson
 import org.openardf.radiooracle.shared.event.EventSeriesLink
 import org.openardf.radiooracle.shared.event.EventSeriesPackageContents
 import org.openardf.radiooracle.shared.event.EventSeriesPackageEventFile
+import org.openardf.radiooracle.shared.event.EventSeriesPackageFingerprint
+import org.openardf.radiooracle.shared.event.EventSeriesPackageFingerprints
 import org.openardf.radiooracle.shared.event.isEventSeriesFileName
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.time.Duration
+import java.time.LocalDateTime
+import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -40,6 +47,51 @@ class EventSeriesTransferRoundTripTests {
         val context = RuntimeEnvironment.getApplication()
         ARDFRepository.initialize(context)
         DataProcessor.initialize(context)
+    }
+
+    @Test
+    fun androidCreatedSeriesSurvivesRoundTripBackToAndroid() = runBlocking {
+        val processor = DataProcessor.get()
+        val dayOne = androidRaceData(
+            id = UUID.fromString("11111111-1111-1111-1111-111111111111"),
+            name = "Android Day 1",
+            startDateTime = LocalDateTime.of(2026, 6, 20, 9, 0)
+        )
+        val dayTwo = androidRaceData(
+            id = UUID.fromString("22222222-2222-2222-2222-222222222222"),
+            name = "Android Day 2",
+            startDateTime = LocalDateTime.of(2026, 6, 21, 9, 0)
+        )
+        processor.saveRaceData(dayOne)
+        processor.saveRaceData(dayTwo)
+        val createdSeries = processor.createEventSeriesFromRace(dayOne.race.id, "Android Created Series")
+        val completeSeries = processor.addRaceToEventSeries(dayTwo.race.id, createdSeries.series.seriesId)
+
+        val androidPackage = processor.exportEventSeriesPackageBytes(completeSeries.series.seriesId)
+        val androidFingerprint = packageFingerprint(androidPackage)
+        val returnedToAndroid = EventSeriesImport.prepareZipPackage(ByteArrayInputStream(androidPackage))
+        processor.saveEventSeriesImport(returnedToAndroid)
+        val reexportedPackage = processor.exportEventSeriesPackageBytes(returnedToAndroid.series.seriesId)
+
+        assertEquals(androidFingerprint, packageFingerprint(reexportedPackage))
+    }
+
+    @Test
+    fun desktopCreatedSeriesSurvivesAndroidRoundTripBackToDesktop() = runBlocking {
+        val desktopPackage = desktopSeriesPackageBytes(
+            seriesId = "desktop-roundtrip-series",
+            seriesName = "Desktop Round Trip",
+            eventIdsAndNames = listOf("day-1" to "Desktop Day 1", "day-2" to "Desktop Day 2")
+        )
+        val desktopFingerprint = packageFingerprint(desktopPackage)
+        val androidImport = EventSeriesImport.prepareZipPackage(ByteArrayInputStream(desktopPackage))
+        DataProcessor.get().saveEventSeriesImport(androidImport)
+
+        val upload = DataProcessor.get().desktopUploadForSeries(androidImport.series.seriesId)
+
+        assertEquals("Desktop Round Trip.zip", upload.fileName)
+        assertEquals(EVENT_SERIES_PACKAGE_CONTENT_TYPE, upload.contentType)
+        assertEquals(desktopFingerprint, packageFingerprint(upload.bytes))
     }
 
     @Test
@@ -120,6 +172,28 @@ class EventSeriesTransferRoundTripTests {
         assertEquals(EventSeriesLink("solo-series", "solo-day"), returnedEventFile.seriesLink)
     }
 
+    private fun androidRaceData(
+        id: UUID,
+        name: String,
+        startDateTime: LocalDateTime
+    ): RaceData =
+        RaceData(
+            race = Race(
+                id = id,
+                name = name,
+                apiKey = "",
+                startDateTime = startDateTime,
+                raceType = RaceType.CLASSIC,
+                raceLevel = RaceLevel.PRACTICE,
+                raceBand = RaceBand.M80,
+                timeLimit = Duration.ofHours(2)
+            ),
+            categories = emptyList(),
+            aliases = emptyList(),
+            competitorData = emptyList(),
+            unmatchedReadoutData = emptyList()
+        )
+
     private fun desktopSeriesPackageBytes(
         seriesId: String,
         seriesName: String,
@@ -184,6 +258,9 @@ class EventSeriesTransferRoundTripTests {
                 unmatchedReadoutData = emptyList()
             )
         )
+
+    private fun packageFingerprint(bytes: ByteArray): EventSeriesPackageFingerprint =
+        EventSeriesPackageFingerprints.fromTextEntries(unzipTextEntries(bytes))
 
     private fun unzipTextEntries(bytes: ByteArray): Map<String, String> =
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->

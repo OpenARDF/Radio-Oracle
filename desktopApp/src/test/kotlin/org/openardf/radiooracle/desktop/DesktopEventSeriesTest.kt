@@ -15,6 +15,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
@@ -22,6 +23,9 @@ import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFile
 import org.openardf.radiooracle.shared.event.EventSeriesFileJson
 import org.openardf.radiooracle.shared.event.EventSeriesLink
+import org.openardf.radiooracle.shared.event.EventSeriesPackageContents
+import org.openardf.radiooracle.shared.event.EventSeriesPackageEventFile
+import org.openardf.radiooracle.shared.event.EventSeriesPackageFingerprints
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
 import org.openardf.radiooracle.shared.event.StartDrawSettings
@@ -1214,6 +1218,28 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun desktopRepackagesAndroidCreatedSeriesPackageWithoutChangingPortableFingerprint() {
+        val root = Files.createTempDirectory("radio-oracle-android-series-package")
+        val packageBytes = androidCreatedSeriesPackageBytes()
+        val zipPath = root.resolve("Android Created Series.zip")
+        Files.write(zipPath, packageBytes)
+        val unpacked = DesktopEventSeriesPackageFiles.unpack(zipPath, root.resolve("received"))
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(unpacked.manifestPath to EventSeriesFileJson.decode(Files.readString(unpacked.manifestPath))),
+            eventFiles = unpacked.eventFilePaths.associateWith { eventPath ->
+                EventProjectFileJson.decode(Files.readString(eventPath))
+            }
+        )
+
+        val repackaged = DesktopEventSeriesPackageFiles.packageForManifest(store, unpacked.manifestPath)
+
+        assertEquals(
+            EventSeriesPackageFingerprints.fromTextEntries(zipTextEntries(packageBytes)),
+            EventSeriesPackageFingerprints.fromTextEntries(zipTextEntries(repackaged.bytes))
+        )
+    }
+
+    @Test
     fun unpackSeriesPackageExtractsManifestAndMemberEventsSafely() {
         val root = Files.createTempDirectory("radio-oracle-series-package")
         val zipPath = root.resolve("Championship.zip")
@@ -1350,6 +1376,65 @@ class DesktopEventSeriesTest {
                 }
             }
         }
+
+    private fun zipTextEntries(bytes: ByteArray): Map<String, String> =
+        ZipInputStream(bytes.inputStream()).use { zip ->
+            buildMap {
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    if (!entry.isDirectory) {
+                        put(entry.name, zip.readBytes().toString(Charsets.UTF_8))
+                    }
+                    zip.closeEntry()
+                }
+            }
+        }
+
+    private fun androidCreatedSeriesPackageBytes(): ByteArray {
+        val seriesFile = EventSeriesFile(
+            seriesId = "android-created-series",
+            name = "Android Created Series",
+            events = listOf(
+                EventSeriesEvent(
+                    seriesEventId = "event-11111111-1111-1111-1111-111111111111",
+                    eventFilePath = "events/11111111-1111-1111-1111-111111111111.rom.json",
+                    order = 0,
+                    displayName = "Android Day 1",
+                    startDateTimeIso = "2026-06-20T09:00",
+                    formatLabel = "Classic"
+                ),
+                EventSeriesEvent(
+                    seriesEventId = "event-22222222-2222-2222-2222-222222222222",
+                    eventFilePath = "events/22222222-2222-2222-2222-222222222222.rom.json",
+                    order = 1,
+                    displayName = "Android Day 2",
+                    startDateTimeIso = "2026-06-21T09:00",
+                    formatLabel = "Classic"
+                )
+            )
+        )
+        val content = EventSeriesPackageContents.build(
+            seriesFile = seriesFile,
+            eventFiles = seriesFile.events.map { event ->
+                EventSeriesPackageEventFile(
+                    event = event,
+                    projectFile = projectFile(event.displayName, eventId = event.seriesEventId)
+                        .copy(seriesLink = EventSeriesLink(seriesFile.seriesId, event.seriesEventId))
+                )
+            },
+            manifestEntryPath = "series.radio-oracle.json"
+        )
+        return java.io.ByteArrayOutputStream().use { output ->
+            ZipOutputStream(output).use { zip ->
+                content.entries.forEach { entry ->
+                    zip.putNextEntry(ZipEntry(entry.path))
+                    zip.write(entry.text.toByteArray(Charsets.UTF_8))
+                    zip.closeEntry()
+                }
+            }
+            output.toByteArray()
+        }
+    }
 
     private fun projectFile(
         name: String,
