@@ -7,12 +7,17 @@ import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.appcompat.widget.PopupMenu
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
+import org.openardf.radiooracle.backend.room.enums.PunchStatus
 import org.openardf.radiooracle.backend.room.enums.ResultStatus
+import org.openardf.radiooracle.backend.room.enums.SIRecordType
+import org.openardf.radiooracle.shared.domain.toResultStatusCode
+import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
 
 class ReadoutDataRecyclerViewAdapter(
     private var values: List<ResultData>,
@@ -57,12 +62,17 @@ class ReadoutDataRecyclerViewAdapter(
                 item.competitorCategory?.competitor?.club?.take(13)
             } else "-"
 
-        holder.runTimeView.text = "${
-            TimeProcessor.durationToFormattedString(
-                item.result.runTime,
-                dataProcessor.useMinuteTimeFormat()
-            )
-        } (${dataProcessor.resultStatusToShortString(item.result.resultStatus)})"
+        val resultStatusText = dataProcessor.resultStatusToShortString(item.result.resultStatus)
+        holder.runTimeView.text = if (item.blocksScoreAndRunTimeDisplay()) {
+            item.blockedRunTimeStatusText()
+        } else {
+            "${
+                TimeProcessor.durationToFormattedString(
+                    item.result.runTime,
+                    dataProcessor.useMinuteTimeFormat()
+                )
+            } ($resultStatusText)"
+        }
 
         //Set the start + finish + readout time
         holder.startTimeView.text = if (item.result.startTime != null) {
@@ -99,11 +109,46 @@ class ReadoutDataRecyclerViewAdapter(
         } else {
             holder.itemView.setBackgroundResource(R.color.white)
         }
+        val textColor = if (item.hasWarning()) {
+            ContextCompat.getColor(context, R.color.red_error)
+        } else {
+            ContextCompat.getColor(context, R.color.black)
+        }
+        holder.setTextColor(textColor)
 
         holder.moreBtn.setOnClickListener {
             showContextMenu(holder.moreBtn, position, item)
         }
     }
+
+    private fun ResultData.hasWarning(): Boolean =
+        blocksScoreAndRunTimeDisplay() ||
+            hasTimingOrPunches() && readoutTiming().issues.isNotEmpty() ||
+            punches.any { it.punch.punchStatus == PunchStatus.INVALID }
+
+    private fun ResultData.blocksScoreAndRunTimeDisplay(): Boolean =
+        result.resultStatus == ResultStatus.ERROR || hasTimingOrPunches() && readoutTiming().blocksResult
+
+    private fun ResultData.blockedRunTimeStatusText(): String =
+        if (hasTimingOrPunches() && readoutTiming().blocksResult) {
+            ResultStatus.ERROR.toResultStatusCode()
+        } else {
+            dataProcessor.resultStatusToShortString(result.resultStatus)
+        }
+
+    private fun ResultData.hasTimingOrPunches(): Boolean =
+        result.startTime != null ||
+            result.finishTime != null ||
+            punches.isNotEmpty()
+
+    private fun ResultData.readoutTiming() =
+        SportIdentReadoutTiming.calculate(
+            startSeconds = result.startTime?.getSeconds(),
+            finishSeconds = result.finishTime?.getSeconds(),
+            controlSeconds = punches
+                .filter { it.punch.punchType == SIRecordType.CONTROL }
+                .map { it.punch.siTime.getSeconds() }
+        )
 
     private fun showContextMenu(anchor: View, position: Int, item: ResultData) {
         val popupMenu = PopupMenu(context, anchor)
@@ -139,5 +184,16 @@ class ReadoutDataRecyclerViewAdapter(
         var readoutTimeView: TextView = view.findViewById(R.id.readout_item_readout_time)
         var categoryView: TextView = view.findViewById(R.id.readout_item_category)
         var moreBtn: ImageButton = view.findViewById(R.id.readout_item_more_btn)
+
+        fun setTextColor(color: Int) {
+            competitorView.setTextColor(color)
+            siNumberView.setTextColor(color)
+            clubView.setTextColor(color)
+            runTimeView.setTextColor(color)
+            startTimeView.setTextColor(color)
+            finishTimeView.setTextColor(color)
+            readoutTimeView.setTextColor(color)
+            categoryView.setTextColor(color)
+        }
     }
 }

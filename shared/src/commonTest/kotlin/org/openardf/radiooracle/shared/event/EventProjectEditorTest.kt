@@ -2245,6 +2245,56 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun recalculatingDownloadedReadoutWithFinishBeforeStartKeepsTimingError() {
+        val category = category("cat-1", "M21")
+        val original = projectFile(
+            raceType = RaceType.SPRINT,
+            categories = listOf(
+                categoryData(
+                    "cat-1",
+                    "M21",
+                    controlSiCodes = listOf(161, 162, 163, 164, 165, 137, 171, 172, 173, 174, 175, 136)
+                )
+            ),
+            competitors = listOf(
+                competitorData("comp-1", "Charles", "Scharlau", siNumber = 2005010, category = category)
+            )
+        )
+        val updated = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = original,
+            resultId = "result-1",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = SportIdentCardReadout(
+                siNumber = 2005010,
+                series = 2,
+                checkTime = SportIdentTime(14, 2, 18, 4, 0),
+                startTime = SportIdentTime(14, 2, 23, 4, 0),
+                finishTime = SportIdentTime(0, 2, 11, 0, 0),
+                punches = listOf(
+                    SportIdentCardPunch(171, SportIdentTime(14, 4, 50, 4, 0)),
+                    SportIdentCardPunch(162, SportIdentTime(14, 4, 51, 4, 0)),
+                    SportIdentCardPunch(165, SportIdentTime(14, 5, 6, 4, 0)),
+                    SportIdentCardPunch(161, SportIdentTime(14, 5, 5, 4, 0)),
+                    SportIdentCardPunch(137, SportIdentTime(14, 7, 17, 4, 0)),
+                    SportIdentCardPunch(172, SportIdentTime(14, 7, 36, 4, 0)),
+                    SportIdentCardPunch(173, SportIdentTime(14, 7, 37, 4, 0)),
+                    SportIdentCardPunch(172, SportIdentTime(14, 7, 54, 4, 0)),
+                    SportIdentCardPunch(136, SportIdentTime(14, 7, 55, 4, 0))
+                )
+            ),
+            readoutDateTimeIso = "2026-06-25T16:52:43",
+            punchIdFactory = { index, type -> "punch-$index-${type.name}" }
+        )
+
+        val recalculated = EventProjectEditor.recalculateResults(updated)
+        val readout = recalculated.projectFile.raceData.competitorData.single().readoutData!!
+
+        assertEquals(1, recalculated.recalculatedCount)
+        assertEquals(0L, readout.result.runTimeSeconds)
+        assertEquals(ResultStatus.ERROR, readout.result.resultStatus)
+    }
+
+    @Test
     fun downloadedSportIdentReadoutWithNonSequentialControlTimeKeepsResultButFlagsPunch() {
         val category = category("cat-1", "M21")
         val original = projectFile(

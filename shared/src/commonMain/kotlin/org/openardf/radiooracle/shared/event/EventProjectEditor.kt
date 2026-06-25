@@ -2111,6 +2111,9 @@ object EventProjectEditor {
             val controlPunches = punches
                 .filter { it.punch.punchType == SIRecordType.CONTROL }
                 .map { EvaluationPunch(it.punch.siCode, SIRecordType.CONTROL) }
+            val controlPunchSeconds = punches
+                .filter { it.punch.punchType == SIRecordType.CONTROL }
+                .map { it.punch.siTimeSeconds }
             val evaluation = categoryData?.let { data ->
                 CourseEvaluator.evaluate(
                     raceType = effectiveRaceType ?: data.category.effectiveRaceType(projectFile.raceData.race),
@@ -2120,24 +2123,30 @@ object EventProjectEditor {
             }
             val startSeconds = result.startTimeSeconds
             val finishSeconds = result.finishTimeSeconds
-            val runTimeSeconds = if (startSeconds != null && finishSeconds != null) {
-                finishSeconds - startSeconds
-            } else {
-                0
-            }
+            val runTiming = SportIdentReadoutTiming.calculate(
+                startSeconds = startSeconds,
+                finishSeconds = finishSeconds,
+                controlSeconds = controlPunchSeconds
+            )
+            val runTimeSeconds = runTiming.runTimeSeconds
             val timeLimitSeconds = categoryData?.category?.effectiveTimeLimitSeconds(projectFile.raceData.race)
                 ?: projectFile.raceData.race.timeLimitSeconds
             val resultStatus = when {
-                startSeconds == null || finishSeconds == null -> ResultStatus.ERROR
+                runTiming.blocksResult -> ResultStatus.ERROR
                 runTimeSeconds > timeLimitSeconds -> ResultStatus.OVER_TIME_LIMIT
                 evaluation != null -> evaluation.resultStatus
                 else -> ResultStatus.NO_RANKING
             }
+            val timingInvalidControlIndices = invalidControlIndices(runTiming)
             var controlIndex = 0
             val updatedPunches = punches.map { aliasPunch ->
                 when (aliasPunch.punch.punchType) {
                     SIRecordType.CONTROL -> {
-                        val punchStatus = evaluation?.punchStatuses?.getOrNull(controlIndex) ?: PunchStatus.UNKNOWN
+                        val punchStatus = if (controlIndex in timingInvalidControlIndices) {
+                            PunchStatus.INVALID
+                        } else {
+                            evaluation?.punchStatuses?.getOrNull(controlIndex) ?: PunchStatus.UNKNOWN
+                        }
                         controlIndex++
                         aliasPunch.copy(punch = aliasPunch.punch.copy(punchStatus = punchStatus))
                     }
@@ -2531,13 +2540,7 @@ object EventProjectEditor {
     }
 
     private fun List<PunchStatus>.withTimingIssues(timing: SportIdentRunTiming): List<PunchStatus> {
-        val timingInvalidControlIndices = timing.issues
-            .filter { issue ->
-                issue.status == SportIdentRunTimingStatus.CONTROL_NOT_AFTER_START ||
-                    issue.status == SportIdentRunTimingStatus.CONTROL_NOT_AFTER_PREVIOUS_CONTROL
-            }
-            .mapNotNull { it.controlIndex }
-            .toSet()
+        val timingInvalidControlIndices = invalidControlIndices(timing)
         if (timingInvalidControlIndices.isEmpty()) {
             return this
         }
@@ -2545,6 +2548,15 @@ object EventProjectEditor {
             if (index in timingInvalidControlIndices) PunchStatus.INVALID else status
         }
     }
+
+    private fun invalidControlIndices(timing: SportIdentRunTiming): Set<Int> =
+        timing.issues
+            .filter { issue ->
+                issue.status == SportIdentRunTimingStatus.CONTROL_NOT_AFTER_START ||
+                    issue.status == SportIdentRunTimingStatus.CONTROL_NOT_AFTER_PREVIOUS_CONTROL
+            }
+            .mapNotNull { it.controlIndex }
+            .toSet()
 
     /** Returns a copy of the Event File with one validated alias changed. */
     fun updateAlias(

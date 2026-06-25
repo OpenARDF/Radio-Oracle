@@ -3,6 +3,8 @@ package org.openardf.radiooracle.shared.event
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.domain.toResultStatusCode
+import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** Shared read-only readout row for matched and unmatched SI-card data. */
@@ -16,7 +18,8 @@ data class EventReadoutDetails(
     val statusLabel: String,
     val pointsText: String,
     val runTimeText: String,
-    val punchCodesText: String
+    val punchCodesText: String,
+    val hasWarning: Boolean
 ) {
     companion object {
         /** Builds readout display rows for competitor-linked and unmatched readouts. */
@@ -58,6 +61,7 @@ data class EventReadoutDetails(
             controlLabelsByCode: Map<Int, String>
         ): EventReadoutDetails {
             val result = readoutData.result
+            val blocksScoreAndRunTime = readoutData.blocksScoreAndRunTimeDisplay()
             return EventReadoutDetails(
                 id = result.id,
                 siNumberText = result.siNumber?.toString() ?: "",
@@ -66,8 +70,12 @@ data class EventReadoutDetails(
                 resultStatus = result.resultStatus,
                 automaticStatus = result.automaticStatus,
                 statusLabel = result.resultStatus.toDisplayLabel(),
-                pointsText = result.points.toString(),
-                runTimeText = DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinutes = false),
+                pointsText = if (blocksScoreAndRunTime) "" else result.points.toString(),
+                runTimeText = if (blocksScoreAndRunTime) {
+                    readoutData.blockedRunTimeStatusCode()
+                } else {
+                    DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinutes = false)
+                },
                 punchCodesText = readoutData.punches
                     .filter { it.punch.punchType == SIRecordType.CONTROL }
                     .joinToString(" ") { aliasPunch ->
@@ -78,11 +86,41 @@ data class EventReadoutDetails(
                         } else {
                             aliasPunch.punch.siCode.toString()
                         }
-                    }
+                    },
+                hasWarning = readoutData.hasReadoutWarning()
             )
         }
     }
 }
+
+internal fun EventReadoutData.blocksScoreAndRunTimeDisplay(): Boolean =
+    result.resultStatus == ResultStatus.ERROR || (hasTimingOrPunches() && readoutTiming().blocksResult)
+
+internal fun EventReadoutData.hasReadoutWarning(): Boolean =
+    blocksScoreAndRunTimeDisplay() ||
+        (hasTimingOrPunches() && readoutTiming().issues.isNotEmpty()) ||
+        punches.any { it.punch.punchStatus == org.openardf.radiooracle.shared.domain.PunchStatus.INVALID }
+
+internal fun EventReadoutData.blockedRunTimeStatusCode(): String =
+    if (hasTimingOrPunches() && readoutTiming().blocksResult) {
+        ResultStatus.ERROR.toResultStatusCode()
+    } else {
+        result.resultStatus.toResultStatusCode()
+    }
+
+private fun EventReadoutData.hasTimingOrPunches(): Boolean =
+    result.startTimeSeconds != null ||
+        result.finishTimeSeconds != null ||
+        punches.isNotEmpty()
+
+private fun EventReadoutData.readoutTiming() =
+    SportIdentReadoutTiming.calculate(
+        startSeconds = result.startTimeSeconds,
+        finishSeconds = result.finishTimeSeconds,
+        controlSeconds = punches
+            .filter { it.punch.punchType == SIRecordType.CONTROL }
+            .map { it.punch.siTimeSeconds }
+    )
 
 /** English result-status labels matching the existing Android default resources. */
 fun ResultStatus.toDisplayLabel(): String =
