@@ -88,6 +88,8 @@
                 <action android:name="org.openardf.radiooracle.command.DELETE_EVENT" />
                 <action android:name="org.openardf.radiooracle.command.SELECT_EVENT" />
                 <action android:name="org.openardf.radiooracle.command.SEND_EVENT_OR_SERIES_TO_DESKTOP" />
+                <action android:name="org.openardf.radiooracle.command.SEND_SERIES_TO_DESKTOP" />
+                <action android:name="org.openardf.radiooracle.command.LOG_SERIES_PACKAGE_FINGERPRINT" />
             </intent-filter>
         </receiver>
     </application>
