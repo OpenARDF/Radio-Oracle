@@ -519,7 +519,7 @@ class RaceSelectionFragment : Fragment() {
             intent.putExtra(Intent.EXTRA_TITLE, "race.ardfjs")
         } else {
             intent.type = EVENT_SERIES_PACKAGE_CONTENT_TYPE
-            intent.putExtra(Intent.EXTRA_TITLE, EventFileTransferUploads.fileNameForRaceOrSeries("race", seriesName))
+            intent.putExtra(Intent.EXTRA_TITLE, EventFileTransferPayloads.seriesPackageFileName(seriesName))
         }
         getResult.launch(intent)
     }

@@ -43,17 +43,17 @@ object DesktopEventSeriesPackageFiles {
             "Cannot send Event Series because required Event Files are missing: ${missing.joinToString()}"
         }
 
+        val content = EventSeriesPackageContents.build(
+            seriesFile = seriesFile,
+            eventFiles = members.map { event ->
+                val source = seriesFolder.resolve(event.eventFilePath).normalize()
+                EventSeriesPackageEventFile(event, store.readEvent(source))
+            },
+            manifestEntryPath = manifestPath.fileName.toString(),
+            packageFileNameStem = seriesFile.name
+        )
         val bytes = ByteArrayOutputStream().use { output ->
             ZipOutputStream(output).use { zip ->
-                val content = EventSeriesPackageContents.build(
-                    seriesFile = seriesFile,
-                    eventFiles = members.map { event ->
-                        val source = seriesFolder.resolve(event.eventFilePath).normalize()
-                        EventSeriesPackageEventFile(event, store.readEvent(source))
-                    },
-                    manifestEntryPath = manifestPath.fileName.toString(),
-                    packageFileNameStem = seriesFile.name
-                )
                 content.entries.forEach { entry ->
                     zip.writeTextEntry(entry.path, entry.text)
                 }
@@ -62,7 +62,7 @@ object DesktopEventSeriesPackageFiles {
         }
 
         return DesktopEventSeriesPackage(
-            fileName = EventSeriesPackageContents.safePackageFileStem(seriesFile.name) + ".zip",
+            fileName = content.fileName,
             bytes = bytes
         )
     }
