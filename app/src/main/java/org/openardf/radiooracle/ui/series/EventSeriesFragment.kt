@@ -14,6 +14,7 @@ import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -26,10 +27,12 @@ import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
 import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
+import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.transfer.DesktopFileTransferUploadDialogs
 
 class EventSeriesFragment : Fragment() {
     private val viewModel: EventSeriesViewModel by viewModels()
+    private val selectedRaceViewModel: SelectedRaceViewModel by activityViewModels()
     private lateinit var toolbar: Toolbar
     private lateinit var recyclerView: RecyclerView
     private lateinit var emptyView: TextView
@@ -73,7 +76,8 @@ class EventSeriesFragment : Fragment() {
                         requireContext(),
                         ::prepareSeriesForDesktopUpload,
                         ::chooseSeriesExportDestination,
-                        ::confirmRemoveSeriesGrouping
+                        ::confirmRemoveSeriesGrouping,
+                        ::openSeriesMember
                     )
                     emptyView.visibility = if (series.isEmpty()) View.VISIBLE else View.GONE
                     recyclerView.visibility = if (series.isEmpty()) View.GONE else View.VISIBLE
@@ -88,6 +92,11 @@ class EventSeriesFragment : Fragment() {
 
     private fun closeSeriesPage() {
         findNavController().navigateUp()
+    }
+
+    private fun openSeriesMember(member: EventSeriesMemberListItem) {
+        selectedRaceViewModel.setRace(member.localRaceId)
+        findNavController().navigate(EventSeriesFragmentDirections.openRaceFromSeries())
     }
 
     private fun chooseSeriesExportDestination(item: EventSeriesListItem) {

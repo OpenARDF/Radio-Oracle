@@ -1,10 +1,12 @@
 package org.openardf.radiooracle.ui.series
 
 import android.content.Context
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
@@ -14,7 +16,8 @@ class EventSeriesRecyclerViewAdapter(
     private val context: Context,
     private val onSendToDesktop: (EventSeriesListItem) -> Unit,
     private val onExport: (EventSeriesListItem) -> Unit,
-    private val onRemoveGrouping: (EventSeriesListItem) -> Unit
+    private val onRemoveGrouping: (EventSeriesListItem) -> Unit,
+    private val onOpenMember: (EventSeriesMemberListItem) -> Unit
 ) : RecyclerView.Adapter<EventSeriesRecyclerViewAdapter.EventSeriesViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EventSeriesViewHolder {
@@ -31,7 +34,10 @@ class EventSeriesRecyclerViewAdapter(
             item.memberCount,
             item.memberCount
         )
-        holder.members.text = item.memberLines.joinToString("\n")
+        holder.members.removeAllViews()
+        item.members.forEach { member ->
+            holder.members.addView(memberView(member))
+        }
         holder.sendButton.setOnClickListener {
             onSendToDesktop(item)
         }
@@ -45,10 +51,28 @@ class EventSeriesRecyclerViewAdapter(
 
     override fun getItemCount(): Int = values.size
 
+    private fun memberView(member: EventSeriesMemberListItem): TextView =
+        TextView(context).apply {
+            text = member.displayLine
+            contentDescription = context.getString(R.string.event_series_open_member, member.displayLine)
+            isClickable = true
+            isFocusable = true
+            setBackgroundResource(selectableItemBackgroundResource())
+            val verticalPadding = (8 * context.resources.displayMetrics.density).toInt()
+            setPadding(0, verticalPadding, 0, verticalPadding)
+            setOnClickListener { onOpenMember(member) }
+        }
+
+    private fun selectableItemBackgroundResource(): Int {
+        val value = TypedValue()
+        context.theme.resolveAttribute(android.R.attr.selectableItemBackground, value, true)
+        return value.resourceId
+    }
+
     inner class EventSeriesViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val title: TextView = view.findViewById(R.id.event_series_item_title)
         val count: TextView = view.findViewById(R.id.event_series_item_count)
-        val members: TextView = view.findViewById(R.id.event_series_item_members)
+        val members: LinearLayout = view.findViewById(R.id.event_series_item_members)
         val sendButton: ImageButton = view.findViewById(R.id.event_series_item_send_desktop)
         val exportButton: ImageButton = view.findViewById(R.id.event_series_item_export)
         val removeGroupingButton: ImageButton = view.findViewById(R.id.event_series_item_remove_grouping)

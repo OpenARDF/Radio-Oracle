@@ -103,6 +103,7 @@
     <string name="event_series_export_progress">Exporting Event Series...</string>
     <string name="event_series_export_success">Event Series exported successfully</string>
     <string name="event_series_send_desktop">Send Event Series to Desktop</string>
+    <string name="event_series_open_member">Open %1$s</string>
     <string name="event_series_remove_grouping">Remove series grouping</string>
     <string name="event_series_remove_grouping_confirmation">Remove grouping for "%1$s"? Events and results in this series will stay on this device.</string>
     <string name="event_series_remove_grouping_success">Series grouping removed</string>

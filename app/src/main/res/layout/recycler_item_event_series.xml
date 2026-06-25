@@ -61,10 +61,11 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
-        <TextView
+        <LinearLayout
             android:id="@+id/event_series_item_members"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp" />
+            android:layout_marginTop="6dp"
+            android:orientation="vertical" />
     </LinearLayout>
 </LinearLayout>
