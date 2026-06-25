@@ -29,6 +29,15 @@
                 android:textStyle="bold" />
 
             <ImageButton
+                android:id="@+id/event_series_item_export"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/event_series_export"
+                android:padding="12dp"
+                android:src="@drawable/ic_share" />
+
+            <ImageButton
                 android:id="@+id/event_series_item_send_desktop"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
