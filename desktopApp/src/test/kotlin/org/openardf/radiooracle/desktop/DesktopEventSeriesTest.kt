@@ -17,6 +17,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFile
 import org.openardf.radiooracle.shared.event.EventSeriesFileJson
@@ -26,6 +27,9 @@ import org.openardf.radiooracle.shared.event.StartDrawOptions
 import org.openardf.radiooracle.shared.event.StartDrawSettings
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 class DesktopEventSeriesTest {
     @Test
@@ -1164,6 +1168,58 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun packageForManifestZipsManifestAndAllMemberEvents() {
+        val manifestPath = Path.of("/source/Championship Week.series.radio-oracle.json")
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(
+                manifestPath to seriesFile(
+                    events = listOf(
+                        EventSeriesEvent("day-1", "events/day-1.rom.json", 0, "Day 1"),
+                        EventSeriesEvent("day-2", "events/day-2.rom.json", 1, "Day 2")
+                    )
+                )
+            ),
+            eventFiles = mapOf(
+                Path.of("/source/events/day-1.rom.json") to projectFile("Day 1"),
+                Path.of("/source/events/day-2.rom.json") to projectFile("Day 2")
+            )
+        )
+
+        val packageFile = DesktopEventSeriesPackageFiles.packageForManifest(store, manifestPath)
+
+        assertEquals("Championship.zip", packageFile.fileName)
+        assertEquals(EVENT_SERIES_PACKAGE_CONTENT_TYPE, packageFile.contentType)
+        assertEquals(
+            setOf(
+                "Championship Week.series.radio-oracle.json",
+                "events/day-1.rom.json",
+                "events/day-2.rom.json"
+            ),
+            zipEntryNames(packageFile.bytes)
+        )
+    }
+
+    @Test
+    fun unpackSeriesPackageExtractsManifestAndMemberEventsSafely() {
+        val root = Files.createTempDirectory("radio-oracle-series-package")
+        val zipPath = root.resolve("Championship.zip")
+        ZipOutputStream(Files.newOutputStream(zipPath)).use { zip ->
+            zip.putNextEntry(ZipEntry("series.radio-oracle.json"))
+            zip.write(EventSeriesFileJson.encode(seriesFile()).toByteArray())
+            zip.closeEntry()
+            zip.putNextEntry(ZipEntry("day-1.rom.json"))
+            zip.write("""{"appName":"Radio-Oracle","raceData":{}}""".toByteArray())
+            zip.closeEntry()
+        }
+
+        val result = DesktopEventSeriesPackageFiles.unpack(zipPath, root.resolve("received"))
+
+        assertEquals("series.radio-oracle.json", result.manifestPath.fileName.toString())
+        assertEquals(listOf("day-1.rom.json"), result.eventFilePaths.map { it.fileName.toString() })
+        assertTrue(result.manifestPath.startsWith(root.resolve("received")))
+    }
+
+    @Test
     fun openingSeriesManifestUsesRememberedMemberEvent() {
         val manifestPath = Path.of("/work/championship/series.radio-oracle.json")
         val dayOnePath = Path.of("/work/championship/day-1.rom.json")
@@ -1248,6 +1304,17 @@ class DesktopEventSeriesTest {
             exists = true,
             isCurrentEvent = isCurrentEvent
         )
+
+    private fun zipEntryNames(bytes: ByteArray): Set<String> =
+        ZipInputStream(bytes.inputStream()).use { zip ->
+            buildSet {
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    add(entry.name)
+                    zip.closeEntry()
+                }
+            }
+        }
 
     private fun projectFile(
         name: String,

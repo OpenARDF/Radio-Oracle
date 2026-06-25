@@ -76,6 +76,13 @@ class RaceViewModel : ViewModel() {
         return eventSeriesImport
     }
 
+    /** Imports and saves a full Event Series package downloaded from desktop transfer bytes. */
+    suspend fun importAndSaveEventSeriesPackage(bytes: ByteArray): AndroidEventSeriesImport? {
+        val eventSeriesImport = dataProcessor.importEventSeriesPackage(bytes) ?: return null
+        dataProcessor.saveEventSeriesImport(eventSeriesImport)
+        return eventSeriesImport
+    }
+
     /** Downloads race data from an online provider. */
     fun fetchProviderRaceData(providerType: ProviderType, apiKey: String, context: Context) =
         runBlocking {
@@ -99,6 +106,10 @@ class RaceViewModel : ViewModel() {
     /** Exports a full race backup as bytes for direct desktop upload. */
     suspend fun exportRaceDataBytes(raceId: UUID): ByteArray =
         dataProcessor.exportRaceDataBytes(raceId)
+
+    /** Exports a single Event File or the full Event Series package as bytes. */
+    suspend fun exportRaceOrSeriesDataBytes(raceId: UUID): ByteArray =
+        dataProcessor.exportRaceOrSeriesDataBytes(raceId)
 
     /** Observes races and publishes them sorted by start time. */
     init {

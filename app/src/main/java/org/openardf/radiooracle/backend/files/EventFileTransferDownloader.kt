@@ -3,17 +3,49 @@ package org.openardf.radiooracle.backend.files
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.openardf.radiooracle.backend.logging.DebugLog
+import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
+data class EventFileTransferDownload(
+    val fileName: String,
+    val contentType: String?,
+    val bytes: ByteArray
+) {
+    val isZip: Boolean
+        get() = EventFileTransferPayloads.isSeriesPackage(fileName, contentType)
+
+    fun text(): String = bytes.toString(Charsets.UTF_8)
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as EventFileTransferDownload
+
+        if (fileName != other.fileName) return false
+        if (contentType != other.contentType) return false
+        if (!bytes.contentEquals(other.bytes)) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = fileName.hashCode()
+        result = 31 * result + (contentType?.hashCode() ?: 0)
+        result = 31 * result + bytes.contentHashCode()
+        return result
+    }
+}
+
 class EventFileTransferDownloader(
     private val client: OkHttpClient = OkHttpClient()
 ) {
     @Throws(EventFileTransferException::class)
-    fun download(rawUrl: String): String {
+    fun download(rawUrl: String): EventFileTransferDownload {
         val url = EventFileTransferUrlValidator.validate(rawUrl)
         DebugLog.info("EventFileTransfer", "Downloading Event File from ${safeUrlDescription(url)}")
         val request = Request.Builder().url(url).get().build()
@@ -37,12 +69,47 @@ class EventFileTransferDownloader(
                 DebugLog.warn("EventFileTransfer", "Desktop returned HTTP ${it.code} from ${safeUrlDescription(url)}")
                 throw EventFileTransferException("The desktop returned HTTP ${it.code}. Start a new transfer and try again.")
             }
-            val body = it.body.string()
-            DebugLog.info("EventFileTransfer", "Downloaded Event File bytes=${body.toByteArray().size} from ${safeUrlDescription(url)}")
-            return body
+            val bytes = it.body.bytes()
+            val fileName = contentDispositionFileName(it.header("Content-Disposition"))
+                ?: if (EventFileTransferPayloads.isSeriesPackage(fileName = null, contentType = it.header("Content-Type"))) {
+                    "event-series.zip"
+                } else {
+                    "event.rom.json"
+                }
+            DebugLog.info("EventFileTransfer", "Downloaded Event File bytes=${bytes.size} from ${safeUrlDescription(url)}")
+            return EventFileTransferDownload(
+                fileName = fileName,
+                contentType = it.header("Content-Type"),
+                bytes = bytes
+            )
         }
     }
 }
+
+private fun contentDispositionFileName(header: String?): String? {
+    val value = header ?: return null
+    val fileNameStar = Regex("""filename\*=UTF-8''([^;]+)""", RegexOption.IGNORE_CASE)
+        .find(value)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.let { URLDecoder.decode(it, StandardCharsets.UTF_8) }
+    if (!fileNameStar.isNullOrBlank()) {
+        return safeDownloadFileName(fileNameStar)
+    }
+    return Regex("""filename="?([^";]+)"?""", RegexOption.IGNORE_CASE)
+        .find(value)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.let(::safeDownloadFileName)
+}
+
+private fun safeDownloadFileName(fileName: String): String =
+    fileName
+        .substringAfterLast('/')
+        .substringAfterLast('\\')
+        .replace(Regex("[\\p{Cntrl}:*?\"<>|]"), "_")
+        .trim()
+        .ifBlank { "event.rom.json" }
 
 object EventFileTransferUrlValidator {
     @Throws(EventFileTransferException::class)
