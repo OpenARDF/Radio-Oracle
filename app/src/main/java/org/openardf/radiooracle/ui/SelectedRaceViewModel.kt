@@ -23,6 +23,7 @@ import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.Result
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.EventSeriesData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultServiceData
 import org.openardf.radiooracle.backend.room.enums.ResultStatus
@@ -64,6 +65,12 @@ class SelectedRaceViewModel : ViewModel() {
         MutableStateFlow(emptyList())
     val resultWrappers: StateFlow<List<ResultWrapper>> get() = _resultWrappers.asStateFlow()
 
+    private val _eventSeries: MutableStateFlow<List<EventSeriesData>> = MutableStateFlow(emptyList())
+    val eventSeries: StateFlow<List<EventSeriesData>> get() = _eventSeries.asStateFlow()
+
+    private val _currentRaceSeries: MutableStateFlow<EventSeriesData?> = MutableStateFlow(null)
+    val currentRaceSeries: StateFlow<EventSeriesData?> get() = _currentRaceSeries.asStateFlow()
+
     var resultService: LiveData<ResultServiceData> = MutableLiveData(null)
 
     // Jobs for running collectors - stored so we can cancel them when switching races
@@ -71,6 +78,16 @@ class SelectedRaceViewModel : ViewModel() {
     private var competitorJob: Job? = null
     private var readoutJob: Job? = null
     private var resultWrapperJob: Job? = null
+    private var selectedRaceId: UUID? = null
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            dataProcessor.getEventSeries().collect { series ->
+                _eventSeries.value = series
+                updateCurrentRaceSeries()
+            }
+        }
+    }
 
     @Throws(IllegalStateException::class)
     fun getCurrentRace(): Race? {
@@ -82,6 +99,7 @@ class SelectedRaceViewModel : ViewModel() {
      * Return indicates if the race was correctly set and retrieved from DB
      */
     fun setRace(id: UUID) {
+        selectedRaceId = id
 
         // Cancel any previous collectors to avoid collecting old race data
         categoryJob?.cancel()
@@ -95,6 +113,7 @@ class SelectedRaceViewModel : ViewModel() {
         _readoutData.value = emptyList()
         _resultWrappers.value = emptyList()
         _race.postValue(null)
+        updateCurrentRaceSeries()
 
         // Use viewModelScope so the collectors are lifecycle-aware and can be cancelled when VM is cleared
         viewModelScope.launch(Dispatchers.IO) {
@@ -156,8 +175,42 @@ class SelectedRaceViewModel : ViewModel() {
         _readoutData.value = emptyList()
         _resultWrappers.value = emptyList()
         _race.postValue(null)
+        selectedRaceId = null
+        updateCurrentRaceSeries()
 
         dataProcessor.removeCurrentRace()
+    }
+
+    private fun updateCurrentRaceSeries() {
+        val raceId = selectedRaceId
+        _currentRaceSeries.value = if (raceId == null) {
+            null
+        } else {
+            _eventSeries.value.firstOrNull { seriesData ->
+                seriesData.members.any { member -> member.localRaceId == raceId }
+            }
+        }
+    }
+
+    private fun currentRaceIdOrThrow(): UUID =
+        selectedRaceId ?: throw IllegalStateException("No event is selected.")
+
+    suspend fun createSeriesFromCurrentRace(seriesName: String): EventSeriesData {
+        val seriesData = dataProcessor.createEventSeriesFromRace(currentRaceIdOrThrow(), seriesName)
+        selectedRaceId?.let { setRace(it) }
+        return seriesData
+    }
+
+    suspend fun addCurrentRaceToEventSeries(seriesId: String): EventSeriesData {
+        val seriesData = dataProcessor.addRaceToEventSeries(currentRaceIdOrThrow(), seriesId)
+        selectedRaceId?.let { setRace(it) }
+        return seriesData
+    }
+
+    suspend fun removeCurrentRaceFromEventSeries(): EventSeriesData? {
+        val seriesData = dataProcessor.removeRaceFromEventSeries(currentRaceIdOrThrow())
+        selectedRaceId?.let { setRace(it) }
+        return seriesData
     }
 
     // get current locale
