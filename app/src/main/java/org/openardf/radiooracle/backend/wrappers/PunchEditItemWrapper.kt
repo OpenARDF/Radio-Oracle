@@ -17,7 +17,14 @@ data class PunchEditItemWrapper(
     var isTimeValid: Boolean,
     var isDayValid: Boolean,
     var isWeekValid: Boolean,
+    var aliasName: String? = null,
 ) {
+    fun displayCodeText(): String =
+        aliasName?.takeIf { it.isNotBlank() } ?: punch.siCode.takeIf { it != 0 }?.toString().orEmpty()
+
+    fun matchesDisplayCodeText(text: String): Boolean =
+        text == displayCodeText()
+
     companion object {
         /** Wraps alias-punch aggregates with optimistic valid flags for the edit UI. */
         fun getWrappers(punches: ArrayList<AliasPunch>): ArrayList<PunchEditItemWrapper> {
@@ -27,7 +34,8 @@ data class PunchEditItemWrapper(
                     isCodeValid = true,
                     isTimeValid = true,
                     isDayValid = true,
-                    isWeekValid = true
+                    isWeekValid = true,
+                    aliasName = ap.alias?.name
                 )
             })
         }

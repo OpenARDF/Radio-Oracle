@@ -51,6 +51,75 @@ object SportIdentReadoutTiming {
     }
 }
 
+/** Conservative repair for edited readout times whose SI day/week fields are stale. */
+object SportIdentReadoutTimingRepair {
+    private const val ROLLOVER_REPAIR_THRESHOLD_SECONDS = SportIdentCodes.SECONDS_DAY / 2
+
+    fun normalizeEditedTimes(
+        startSeconds: Long?,
+        controlSeconds: List<Long>,
+        finishSeconds: Long?
+    ): SportIdentReadoutTimingRepairResult {
+        val start = startSeconds ?: run {
+            return SportIdentReadoutTimingRepairResult(controlSeconds, finishSeconds)
+        }
+
+        val normalizedControls = mutableListOf<Long>()
+        var previousControlMinimum = start
+        controlSeconds.forEach { controlSecondsValue ->
+            val normalizedControl = rollForwardIfStaleDayWeek(
+                valueSeconds = controlSecondsValue,
+                minimumSeconds = previousControlMinimum,
+                strictlyAfterMinimum = true
+            )
+            normalizedControls += normalizedControl
+            previousControlMinimum = maxOf(previousControlMinimum, normalizedControl)
+        }
+
+        val finishMinimum = maxOf(
+            start,
+            normalizedControls.maxOrNull() ?: start
+        )
+        val normalizedFinish = finishSeconds?.let { finishSecondsValue ->
+            rollForwardIfStaleDayWeek(
+                valueSeconds = finishSecondsValue,
+                minimumSeconds = finishMinimum,
+                strictlyAfterMinimum = false
+            )
+        }
+
+        return SportIdentReadoutTimingRepairResult(normalizedControls, normalizedFinish)
+    }
+
+    private fun rollForwardIfStaleDayWeek(
+        valueSeconds: Long,
+        minimumSeconds: Long,
+        strictlyAfterMinimum: Boolean
+    ): Long {
+        val targetSeconds = if (strictlyAfterMinimum) minimumSeconds + 1 else minimumSeconds
+        if (valueSeconds >= targetSeconds) {
+            return valueSeconds
+        }
+        if (minimumSeconds - valueSeconds <= ROLLOVER_REPAIR_THRESHOLD_SECONDS) {
+            return valueSeconds
+        }
+
+        var repairedSeconds = valueSeconds
+        while (repairedSeconds < targetSeconds) {
+            repairedSeconds += SportIdentCodes.SECONDS_DAY
+        }
+        return repairedSeconds
+    }
+}
+
+data class SportIdentReadoutTimingRepairResult(
+    val controlSeconds: List<Long>,
+    val finishSeconds: Long?
+) {
+    fun changedFrom(originalControlSeconds: List<Long>, originalFinishSeconds: Long?): Boolean =
+        controlSeconds != originalControlSeconds || finishSeconds != originalFinishSeconds
+}
+
 data class SportIdentRunTiming(
     val runTimeSeconds: Long,
     val issues: List<SportIdentTimingIssue>

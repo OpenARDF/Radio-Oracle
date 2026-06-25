@@ -1997,6 +1997,49 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun editsReadoutTimesThatCrossMidnight() {
+        val original = projectFile(
+            raceLevel = RaceLevel.REGIONAL,
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    siNumber = 1111,
+                    readoutData = readout("result-1", "comp-1", 1111)
+                )
+            )
+        ).let { file ->
+            file.copy(
+                raceData = file.raceData.copy(
+                    race = file.raceData.race.copy(startDateTimeIso = "2026-05-31T23:30")
+                )
+            )
+        }
+
+        val updated = EventProjectEditor.updateReadoutEdit(
+            projectFile = original,
+            resultId = "result-1",
+            startSeconds = "45:00",
+            finishSeconds = "1:00:00",
+            controlPunchesText = "",
+            resultStatus = ResultStatus.OK,
+            categoryId = null,
+            updateCompetitorCategory = false,
+            punchIdFactory = { index, type -> "midnight-$index-${type.name}" }
+        )
+
+        val readout = updated.raceData.competitorData.single().readoutData!!
+        val row = EventReadoutDetails.from(updated.raceData).single()
+        assertEquals(87_300, readout.result.startTimeSeconds)
+        assertEquals(88_200, readout.result.finishTimeSeconds)
+        assertEquals(900, readout.result.runTimeSeconds)
+        assertEquals(ResultStatus.OK, readout.result.resultStatus)
+        assertEquals("00:15:00", row.runTimeText)
+        assertEquals(false, row.hasWarning)
+    }
+
+    @Test
     fun marksMatchedReadoutsSent() {
         val original = projectFile(
             competitors = listOf(

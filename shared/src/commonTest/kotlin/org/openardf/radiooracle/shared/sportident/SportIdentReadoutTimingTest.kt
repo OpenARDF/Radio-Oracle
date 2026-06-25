@@ -98,4 +98,46 @@ class SportIdentReadoutTimingTest {
         assertEquals(0, timing.issues.single().previousControlIndex)
         assertEquals(30L * 60L, timing.runTimeSeconds)
     }
+
+    @Test
+    fun repairsStaleFinishDayWeekFromAndroidTimeOnlyEdit() {
+        val start = SportIdentTime(14, 2, 23, 4, 0).getSeconds()
+        val control = SportIdentTime(14, 5, 0, 4, 0).getSeconds()
+        val staleFinish = SportIdentTime(14, 10, 0, 0, 0).getSeconds()
+
+        val repaired = SportIdentReadoutTimingRepair.normalizeEditedTimes(
+            startSeconds = start,
+            controlSeconds = listOf(control),
+            finishSeconds = staleFinish
+        )
+
+        assertTrue(repaired.changedFrom(listOf(control), staleFinish))
+        assertEquals(SportIdentTime(14, 10, 0, 4, 0).getSeconds(), repaired.finishSeconds)
+
+        val timing = SportIdentReadoutTiming.calculate(
+            startSeconds = start,
+            finishSeconds = repaired.finishSeconds,
+            controlSeconds = repaired.controlSeconds
+        )
+        assertTrue(timing.isValid)
+        assertEquals(7L * 60L + 37L, timing.runTimeSeconds)
+    }
+
+    @Test
+    fun doesNotRepairShortControlRegression() {
+        val start = SportIdentTime(10, 0, 0, 4, 0).getSeconds()
+        val controls = listOf(
+            SportIdentTime(10, 12, 0, 4, 0).getSeconds(),
+            SportIdentTime(10, 11, 59, 4, 0).getSeconds()
+        )
+        val finish = SportIdentTime(10, 30, 0, 4, 0).getSeconds()
+
+        val repaired = SportIdentReadoutTimingRepair.normalizeEditedTimes(
+            startSeconds = start,
+            controlSeconds = controls,
+            finishSeconds = finish
+        )
+
+        assertFalse(repaired.changedFrom(controls, finish))
+    }
 }

@@ -5270,7 +5270,14 @@ fun main(args: Array<String>) = application {
                         )
                     }.onFailure { error ->
                         projectStatusText = "Result edit failed: ${error.message ?: error::class.simpleName}"
-                        DesktopDebugLog.error("Results", projectStatusText)
+                        DesktopDebugLog.error(
+                            "Results",
+                            "$projectStatusText result=${updatedDraft.resultId} " +
+                                "start=${updatedDraft.startSeconds.ifBlank { "blank" }} " +
+                                "finish=${updatedDraft.finishSeconds.ifBlank { "blank" }} " +
+                                "status=${updatedDraft.resultStatus.name} category=${updatedDraft.categoryId ?: "none"} " +
+                                "updateCompetitorCategory=${updatedDraft.updateCompetitorCategory}"
+                        )
                     }
                 },
                 onCancel = { pendingReadoutEdit = null }
