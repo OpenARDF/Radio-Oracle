@@ -686,27 +686,27 @@ class DataProcessor private constructor(context: Context) {
         val eventSeriesImport = context.contentResolver.openInputStream(uri)?.use { input ->
             EventSeriesImport.prepareZipPackage(input)
         } ?: return null
-        eventSeriesImport.races.forEach { raceData ->
-            DataImportValidator.validateRaceDataImport(raceData, context)
-        }
-        DebugLog.info(
-            "Event Series",
-            "Prepared Event Series import id=${eventSeriesImport.series.seriesId} " +
-                "members=${eventSeriesImport.memberImports.size}"
-        )
-        return eventSeriesImport
+        return validateEventSeriesImport(context, eventSeriesImport, "Prepared Event Series import")
     }
 
     @Throws(Exception::class)
     suspend fun importEventSeriesPackage(bytes: ByteArray): AndroidEventSeriesImport? {
         val context = getContext() ?: return null
         val eventSeriesImport = EventSeriesImport.prepareZipPackage(ByteArrayInputStream(bytes))
+        return validateEventSeriesImport(context, eventSeriesImport, "Prepared downloaded Event Series import")
+    }
+
+    private fun validateEventSeriesImport(
+        context: Context,
+        eventSeriesImport: AndroidEventSeriesImport,
+        logMessagePrefix: String
+    ): AndroidEventSeriesImport {
         eventSeriesImport.races.forEach { raceData ->
             DataImportValidator.validateRaceDataImport(raceData, context)
         }
         DebugLog.info(
             "Event Series",
-            "Prepared downloaded Event Series import id=${eventSeriesImport.series.seriesId} " +
+            "$logMessagePrefix id=${eventSeriesImport.series.seriesId} " +
                 "members=${eventSeriesImport.memberImports.size}"
         )
         return eventSeriesImport
