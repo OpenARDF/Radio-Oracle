@@ -16,12 +16,20 @@ data class EventCategoryDetails(
     val raceTypeLabel: String,
     val raceBandLabel: String,
     val timeLimitText: String,
-    val controlPointsText: String
+    val controlPointsText: String,
+    val assignedCompetitorCount: Int
 ) {
     companion object {
         /** Builds display rows sorted the same way category administration presents them. */
-        fun from(raceData: EventRaceData, useAliases: Boolean = true): List<EventCategoryDetails> =
-            raceData.categories
+        fun from(raceData: EventRaceData, useAliases: Boolean = true): List<EventCategoryDetails> {
+            val assignedCompetitorCountByCategoryId = raceData.competitorData
+                .mapNotNull { competitorData ->
+                    competitorData.competitorCategory.category?.id
+                        ?: competitorData.competitorCategory.competitor.categoryId
+                }
+                .groupingBy { it }
+                .eachCount()
+            return raceData.categories
                 .sortedWith(EventCategorySort.byDisplayName)
                 .map { categoryData ->
                     val category = categoryData.category
@@ -38,9 +46,11 @@ data class EventCategoryDetails(
                             category.effectiveTimeLimitSeconds(raceData.race),
                             useMinutes = true
                         ),
-                        controlPointsText = categoryData.displayControlPoints(raceData, raceType, useAliases)
+                        controlPointsText = categoryData.displayControlPoints(raceData, raceType, useAliases),
+                        assignedCompetitorCount = assignedCompetitorCountByCategoryId[category.id] ?: 0
                     )
                 }
+        }
 
         private fun EventCategoryData.displayControlPoints(
             raceData: EventRaceData,

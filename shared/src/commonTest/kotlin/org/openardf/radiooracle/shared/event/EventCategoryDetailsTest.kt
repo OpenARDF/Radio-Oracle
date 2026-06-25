@@ -22,6 +22,7 @@ class EventCategoryDetailsTest {
         assertEquals("2m", rows[0].raceBandLabel)
         assertEquals("60:00", rows[0].timeLimitText)
         assertEquals("Foxhole 32", rows[0].controlPointsText)
+        assertEquals(0, rows[0].assignedCompetitorCount)
 
         assertEquals("M21", rows[1].id)
         assertEquals("M21", rows[1].name)
@@ -29,6 +30,7 @@ class EventCategoryDetailsTest {
         assertEquals("Classic", rows[1].raceTypeLabel)
         assertEquals("80m", rows[1].raceBandLabel)
         assertEquals("120:00", rows[1].timeLimitText)
+        assertEquals(0, rows[1].assignedCompetitorCount)
     }
 
     @Test
@@ -60,6 +62,22 @@ class EventCategoryDetailsTest {
         val rows = EventCategoryDetails.from(raceData(defaultRaceType = RaceType.ORIENTEERING))
 
         assertEquals("31 32", rows.first { it.name == "M21" }.controlPointsText)
+    }
+
+    @Test
+    fun reportsAssignedCompetitorCountsFromTopLevelCompetitorData() {
+        val rows = EventCategoryDetails.from(
+            raceData().copy(
+                competitorData = listOf(
+                    competitorData("competitor-1", "M21"),
+                    competitorData("competitor-2", "M21"),
+                    competitorData("competitor-3", "W21")
+                )
+            )
+        )
+
+        assertEquals(2, rows.first { it.name == "M21" }.assignedCompetitorCount)
+        assertEquals(1, rows.first { it.name == "W21" }.assignedCompetitorCount)
     }
 
     @Test
@@ -265,5 +283,28 @@ class EventCategoryDetailsTest {
                 EventControlPoint("cp-32-$name", name, 32, ControlPointType.CONTROL, 1)
             ),
             competitors = emptyList()
+        )
+
+    private fun competitorData(id: String, categoryId: String): EventCompetitorData =
+        EventCompetitorData(
+            competitorCategory = EventCompetitorCategory(
+                competitor = EventCompetitor(
+                    id = id,
+                    raceId = "race",
+                    categoryId = categoryId,
+                    firstName = id,
+                    lastName = "Runner",
+                    club = "",
+                    index = "",
+                    isMan = true,
+                    birthYear = null,
+                    siNumber = null,
+                    siRent = false,
+                    startNumber = null,
+                    drawnStartTimeSeconds = null
+                ),
+                category = null
+            ),
+            readoutData = null
         )
 }
