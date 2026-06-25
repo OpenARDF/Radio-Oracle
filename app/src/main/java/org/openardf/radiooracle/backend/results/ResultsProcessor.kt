@@ -486,8 +486,10 @@ object ResultsProcessor {
         race: Race,
         dataProcessor: DataProcessor
     ) {
-        // If no start time is found in the SI card, try to get it from the competitor
-        getStartTimeFromStartList(result, race, dataProcessor)
+        // If no start time is found in the SI card or edit, try to get it from the competitor.
+        if (result.startTime == null) {
+            getStartTimeFromStartList(result, race, dataProcessor)
+        }
 
         if (category != null) {
             evaluatePunches(punches, category, result, race, dataProcessor)
