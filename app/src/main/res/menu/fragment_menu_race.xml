@@ -2,6 +2,11 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
 
     <item
+        android:id="@+id/race_menu_event_series"
+        android:icon="@drawable/ic_results"
+        android:title="@string/event_series_toolbar_title" />
+
+    <item
         android:id="@+id/race_menu_global_settings"
         android:icon="@drawable/ic_settings"
         android:title="@string/global_settings" />

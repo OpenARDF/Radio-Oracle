@@ -278,6 +278,8 @@
     <string name="race_send_desktop">Odeslat do desktopu</string>
     <string name="race_send_file_desktop">Odeslat vybraný soubor do desktopu</string>
     <string name="event_series_send_desktop">Odeslat sérii do desktopu</string>
+    <string name="event_series_toolbar_title">Série</string>
+    <string name="event_series_empty">V tomto zařízení nejsou uložené žádné série.</string>
     <string name="race_export_success">Událost úspěšně exportována</string>
     <string name="race_import_success">Událost úspěšně importována</string>
     <string name="race_import_failure">Chyba při importu události</string>
@@ -304,4 +306,9 @@
     <string name="about_app_credits_title">Autoři a licence</string>
     <string name="about_app_credits">Udržuje OpenARDF. Odvozeno z projektu Radio-O-Manager s licencí MIT od Pavla Kolského, Vojtěcha Kopala a Jakuba Šroma. Používá open-source knihovny včetně SortableTableView, kotlin-csv, UsbSerial, ESCPOS-ThermalPrinter-Android, Moshi, OkHttp, Markwon, Firebase a AndroidX. Logo je původní grafika Radio-Oracle vygenerovaná pro tento projekt pomocí Codex.</string>
 
+    <plurals name="event_series_member_count">
+        <item quantity="one">%d událost</item>
+        <item quantity="few">%d události</item>
+        <item quantity="other">%d událostí</item>
+    </plurals>
 </resources>

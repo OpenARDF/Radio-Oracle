@@ -155,6 +155,11 @@ class RaceSelectionFragment : Fragment() {
     private fun setMenuListener() {
         toolbar.setOnMenuItemClickListener {
             when (it.itemId) {
+                R.id.race_menu_event_series -> {
+                    findNavController().navigate(RaceSelectionFragmentDirections.openEventSeries())
+                    true
+                }
+
                 R.id.race_menu_global_settings -> {
                     // Navigate to settings screen.
                     findNavController().navigate(RaceSelectionFragmentDirections.openSettings())

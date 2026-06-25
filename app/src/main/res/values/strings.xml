@@ -100,6 +100,8 @@
     <string name="event_series_import_invalid">Invalid Event Series package.</string>
     <string name="event_series_export">Export Event Series</string>
     <string name="event_series_send_desktop">Send Event Series to Desktop</string>
+    <string name="event_series_toolbar_title">Series</string>
+    <string name="event_series_empty">No Event Series are stored on this device.</string>
     <string name="race_toolbar_title">Events</string>
     <string name="race_level">Level</string>
     <string name="race_type">Race type</string>
@@ -618,4 +620,8 @@
         <item>@string/punch_status_duplicate_short</item>
         <item>@string/punch_status_unknown_short</item>
     </string-array>
+    <plurals name="event_series_member_count">
+        <item quantity="one">%d event</item>
+        <item quantity="other">%d events</item>
+    </plurals>
 </resources>
