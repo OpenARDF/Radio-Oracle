@@ -54,6 +54,14 @@ class EventSeriesPackageContentsTest {
     }
 
     @Test
+    fun normalizesPackageEntryPaths() {
+        assertEquals(
+            "series/events/day-1.rom.json",
+            EventSeriesPackageContents.normalizedPackagePath("./series\\events/day-1.rom.json")
+        )
+    }
+
+    @Test
     fun rejectsMissingEventFiles() {
         val seriesFile = EventSeriesFile(
             seriesId = "series-1",

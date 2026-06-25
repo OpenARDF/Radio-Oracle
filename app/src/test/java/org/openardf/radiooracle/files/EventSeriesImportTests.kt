@@ -30,13 +30,13 @@ class EventSeriesImportTests {
     @Test
     fun preparesSeriesImportFromZipPackage() {
         val packageBytes = zipOf(
-            "series/Championship.series.radio-oracle.json" to EventSeriesFileJson.encode(seriesManifest()),
-            "series/events/day-1.rom.json" to eventFileJson(
+            "./series/Championship.series.radio-oracle.json" to EventSeriesFileJson.encode(seriesManifest()),
+            "./series/events/day-1.rom.json" to eventFileJson(
                 raceId = "race-day-1",
                 raceName = "Day 1",
                 seriesEventId = "day-1"
             ),
-            "series/events/day-2.rom.json" to eventFileJson(
+            "./series/events/day-2.rom.json" to eventFileJson(
                 raceId = "race-day-2",
                 raceName = "Day 2",
                 seriesEventId = "day-2"
@@ -76,6 +76,19 @@ class EventSeriesImportTests {
         }
 
         assertEquals("Event Series package contains more than one manifest.", error.message)
+    }
+
+    @Test
+    fun rejectsUnsafeZipPackageEntryPath() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            EventSeriesImport.readZipPackage(
+                ByteArrayInputStream(
+                    zipOf("../Championship.series.radio-oracle.json" to EventSeriesFileJson.encode(seriesManifest()))
+                )
+            )
+        }
+
+        assertEquals("Event Series package contains an unsafe path: ../Championship.series.radio-oracle.json", error.message)
     }
 
     @Test

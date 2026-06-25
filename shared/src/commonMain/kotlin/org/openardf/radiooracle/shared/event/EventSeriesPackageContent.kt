@@ -66,15 +66,15 @@ object EventSeriesPackageContents {
             .trim()
             .ifBlank { "event-series" }
 
-    private fun normalizedPackagePath(path: String): String {
+    fun normalizedPackagePath(path: String): String {
         val packagePath = path.replace('\\', '/')
         require(!packagePath.startsWith("/")) {
             "Event Series package contains an unsafe path: $path"
         }
-        val normalized = packagePath.trim('/')
-        require(normalized.isNotBlank() && normalized.split('/').none { it == ".." || it.isBlank() }) {
+        val segments = packagePath.split('/').filterNot { it == "." }
+        require(segments.isNotEmpty() && segments.none { it == ".." || it.isBlank() }) {
             "Event Series package contains an unsafe path: $path"
         }
-        return normalized
+        return segments.joinToString("/")
     }
 }
