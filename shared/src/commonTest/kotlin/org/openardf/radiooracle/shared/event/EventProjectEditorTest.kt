@@ -2019,7 +2019,7 @@ class EventProjectEditorTest {
         assertEquals(false, readout.result.sent)
         assertEquals(null, readout.result.startTimeSeconds)
         assertEquals(null, readout.result.finishTimeSeconds)
-        assertEquals(0, readout.result.runTimeSeconds)
+        assertEquals(0L, readout.result.runTimeSeconds)
         assertEquals(emptyList(), readout.punches)
     }
 
@@ -2190,6 +2190,99 @@ class EventProjectEditorTest {
         assertEquals(listOf(0L, 200L, 60L, 60L, 880L), readout.punches.map { it.punch.splitSeconds })
         assertEquals("F1", readout.punches[1].alias?.name)
         assertEquals(emptyList(), updated.raceData.unmatchedReadoutData)
+    }
+
+    @Test
+    fun downloadedSportIdentReadoutWithFinishBeforeStartIsStoredAsTimingError() {
+        val category = category("cat-1", "M21")
+        val original = projectFile(
+            raceType = RaceType.SPRINT,
+            categories = listOf(
+                categoryData(
+                    "cat-1",
+                    "M21",
+                    controlSiCodes = listOf(161, 162, 163, 164, 165, 137, 171, 172, 173, 174, 175, 136)
+                )
+            ),
+            competitors = listOf(
+                competitorData("comp-1", "Charles", "Scharlau", siNumber = 2005010, category = category)
+            )
+        )
+        val motoReadout = SportIdentCardReadout(
+            siNumber = 2005010,
+            series = 2,
+            checkTime = SportIdentTime(14, 2, 18, 4, 0),
+            startTime = SportIdentTime(14, 2, 23, 4, 0),
+            finishTime = SportIdentTime(0, 2, 11, 0, 0),
+            punches = listOf(
+                SportIdentCardPunch(171, SportIdentTime(14, 4, 50, 4, 0)),
+                SportIdentCardPunch(162, SportIdentTime(14, 4, 51, 4, 0)),
+                SportIdentCardPunch(165, SportIdentTime(14, 5, 6, 4, 0)),
+                SportIdentCardPunch(161, SportIdentTime(14, 5, 5, 4, 0)),
+                SportIdentCardPunch(137, SportIdentTime(14, 7, 17, 4, 0)),
+                SportIdentCardPunch(172, SportIdentTime(14, 7, 36, 4, 0)),
+                SportIdentCardPunch(173, SportIdentTime(14, 7, 37, 4, 0)),
+                SportIdentCardPunch(172, SportIdentTime(14, 7, 54, 4, 0)),
+                SportIdentCardPunch(136, SportIdentTime(14, 7, 55, 4, 0))
+            )
+        )
+
+        val updated = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = original,
+            resultId = "result-1",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = motoReadout,
+            readoutDateTimeIso = "2026-06-25T16:52:43",
+            punchIdFactory = { index, type -> "punch-$index-${type.name}" }
+        )
+
+        val readout = updated.raceData.competitorData.single().readoutData!!
+        assertEquals(2005010, readout.result.siNumber)
+        assertEquals(SportIdentTime(14, 2, 23, 4, 0).getSeconds(), readout.result.startTimeSeconds)
+        assertEquals(SportIdentTime(0, 2, 11, 0, 0).getSeconds(), readout.result.finishTimeSeconds)
+        assertEquals(0L, readout.result.runTimeSeconds)
+        assertEquals(ResultStatus.ERROR, readout.result.resultStatus)
+    }
+
+    @Test
+    fun downloadedSportIdentReadoutWithNonSequentialControlTimeKeepsResultButFlagsPunch() {
+        val category = category("cat-1", "M21")
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21", controlSiCodes = listOf(31, 32))),
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", siNumber = 2005010, category = category)
+            )
+        )
+
+        val updated = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = original,
+            resultId = "result-1",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = SportIdentCardReadout(
+                siNumber = 2005010,
+                series = 2,
+                checkTime = null,
+                startTime = SportIdentTime(10, 0, 0, 4, 0),
+                finishTime = SportIdentTime(10, 30, 0, 4, 0),
+                punches = listOf(
+                    SportIdentCardPunch(31, SportIdentTime(10, 12, 0, 4, 0)),
+                    SportIdentCardPunch(32, SportIdentTime(10, 11, 59, 4, 0))
+                )
+            ),
+            readoutDateTimeIso = "2026-06-25T16:52:43",
+            punchIdFactory = { index, type -> "punch-$index-${type.name}" }
+        )
+
+        val readout = updated.raceData.competitorData.single().readoutData!!
+        assertEquals(ResultStatus.OK, readout.result.resultStatus)
+        assertEquals(2, readout.result.points)
+        assertEquals(30L * 60L, readout.result.runTimeSeconds)
+        assertEquals(
+            listOf(PunchStatus.VALID, PunchStatus.INVALID),
+            readout.punches
+                .filter { it.punch.punchType == SIRecordType.CONTROL }
+                .map { it.punch.punchStatus }
+        )
     }
 
     @Test

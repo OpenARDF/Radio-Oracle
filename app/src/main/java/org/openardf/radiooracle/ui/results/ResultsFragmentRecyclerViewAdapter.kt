@@ -6,11 +6,13 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
+import org.openardf.radiooracle.backend.room.enums.PunchStatus
 import org.openardf.radiooracle.backend.room.enums.ResultStatus
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
 import org.openardf.radiooracle.shared.domain.toResultStatusCode
@@ -170,8 +172,25 @@ class ResultsFragmentRecyclerViewAdapter(
                 else {
                     holder.itemView.setBackgroundResource(R.color.white)
                 }
+
+                val textColor = if (singleResult.hasInvalidPunch()) {
+                    ContextCompat.getColor(context, R.color.red_error)
+                } else {
+                    ContextCompat.getColor(context, R.color.black)
+                }
+                setCompetitorTextColor(holder, textColor)
             }
         }
+    }
+
+    private fun CompetitorData.hasInvalidPunch(): Boolean =
+        readoutData?.punches?.any { it.punch.punchStatus == PunchStatus.INVALID } == true
+
+    private fun setCompetitorTextColor(holder: CompetitorViewHolder, color: Int) {
+        holder.competitorPlace.setTextColor(color)
+        holder.competitorName.setTextColor(color)
+        holder.competitorTime.setTextColor(color)
+        holder.competitorPoints.setTextColor(color)
     }
 
     override fun onViewRecycled(holder: RecyclerView.ViewHolder) {

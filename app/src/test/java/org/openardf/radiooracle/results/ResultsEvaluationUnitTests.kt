@@ -12,9 +12,11 @@ import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.sportident.SITime
+import org.openardf.radiooracle.shared.sportident.SportIdentRunTimingStatus
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.Duration
+import java.time.LocalTime
 import java.util.Random
 import java.util.UUID
 
@@ -23,6 +25,35 @@ import java.util.UUID
  * TODO: Add more random data
  */
 class ResultsEvaluationUnitTests {
+
+    @Test
+    fun rejectsReadoutTimingWithFinishBeforeStart() {
+        val timing = ResultsProcessor.calculateReadoutRunTiming(
+            SITime(LocalTime.of(14, 2, 23), 4, 0),
+            SITime(LocalTime.of(0, 2, 11), 0, 0)
+        )
+
+        assertEquals(false, timing.isValid)
+        assertEquals(SportIdentRunTimingStatus.FINISH_BEFORE_START, timing.status)
+        assertEquals(0L, timing.runTimeSeconds)
+    }
+
+    @Test
+    fun flagsNonSequentialControlsWithoutBlockingRunTime() {
+        val timing = ResultsProcessor.calculateReadoutRunTiming(
+            SITime(LocalTime.of(10, 0, 0), 4, 0),
+            SITime(LocalTime.of(10, 30, 0), 4, 0),
+            listOf(
+                SITime(LocalTime.of(10, 12, 0), 4, 0),
+                SITime(LocalTime.of(10, 11, 59), 4, 0)
+            )
+        )
+
+        assertEquals(false, timing.isValid)
+        assertEquals(false, timing.blocksResult)
+        assertEquals(SportIdentRunTimingStatus.CONTROL_NOT_AFTER_PREVIOUS_CONTROL, timing.status)
+        assertEquals(30L * 60L, timing.runTimeSeconds)
+    }
 
     @Test
     fun testClassicsCorrectData() {
