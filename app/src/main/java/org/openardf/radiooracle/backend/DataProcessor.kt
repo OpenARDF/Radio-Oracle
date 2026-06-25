@@ -27,6 +27,7 @@ import org.openardf.radiooracle.backend.results.ResultsProcessor
 import org.openardf.radiooracle.backend.results.ResultsProcessor.updateResultsForCategory
 import org.openardf.radiooracle.backend.results.ResultsProcessor.updateResultsForCompetitor
 import org.openardf.radiooracle.backend.room.ARDFRepository
+import org.openardf.radiooracle.backend.series.EventSeriesMemberships
 import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
@@ -453,6 +454,45 @@ class DataProcessor private constructor(context: Context) {
             "Event Series",
             "Saved Android event series id=${series.seriesId} members=${members.size}"
         )
+    }
+
+    suspend fun createEventSeriesFromRace(raceId: UUID, seriesName: String): EventSeriesData {
+        val race = getRace(raceId) ?: throw IllegalArgumentException("Event not found: $raceId")
+        require(seriesName.isNotBlank()) {
+            "Series name must not be blank."
+        }
+        require(getEventSeriesForRace(raceId) == null) {
+            "Event is already part of an Event Series."
+        }
+        val series = EventSeries(seriesId = UUID.randomUUID().toString(), name = seriesName.trim())
+        val member = EventSeriesMemberships.memberForRace(series.seriesId, race, eventOrder = 0)
+        saveEventSeries(series, listOf(member))
+        DebugLog.info("Event Series", "Created series id=${series.seriesId} event=$raceId")
+        return getEventSeries(series.seriesId) ?: EventSeriesData(series, listOf(member))
+    }
+
+    suspend fun addRaceToEventSeries(raceId: UUID, seriesId: String): EventSeriesData {
+        val race = getRace(raceId) ?: throw IllegalArgumentException("Event not found: $raceId")
+        val seriesData = getEventSeries(seriesId) ?: throw IllegalArgumentException("Event Series not found: $seriesId")
+        require(getEventSeriesForRace(raceId) == null) {
+            "Event is already part of an Event Series."
+        }
+        saveEventSeries(seriesData.series, EventSeriesMemberships.appendRace(seriesData, race))
+        DebugLog.info("Event Series", "Added event=$raceId to series=$seriesId")
+        return getEventSeries(seriesId) ?: seriesData
+    }
+
+    suspend fun removeRaceFromEventSeries(raceId: UUID): EventSeriesData? {
+        val seriesData = getEventSeriesForRace(raceId) ?: return null
+        val remainingMembers = EventSeriesMemberships.removeRace(seriesData, raceId)
+        if (remainingMembers.isEmpty()) {
+            deleteEventSeries(seriesData.series.seriesId)
+            DebugLog.info("Event Series", "Removed final event=$raceId from series=${seriesData.series.seriesId}")
+            return null
+        }
+        saveEventSeries(seriesData.series, remainingMembers)
+        DebugLog.info("Event Series", "Removed event=$raceId from series=${seriesData.series.seriesId}")
+        return getEventSeries(seriesData.series.seriesId)
     }
 
     fun prepareEventSeriesImport(

@@ -3,12 +3,15 @@ package org.openardf.radiooracle.ui.categories
 import android.app.AlertDialog
 import android.os.Bundle
 import android.os.SystemClock
+import android.text.InputType
 import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.addCallback
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
@@ -26,11 +29,14 @@ import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.EventSeriesData
 import org.openardf.radiooracle.databinding.FragmentCategoriesBinding
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
 import org.openardf.radiooracle.ui.races.RaceEditDialogFragment
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class CategoryFragment : Fragment() {
 
@@ -70,6 +76,7 @@ class CategoryFragment : Fragment() {
         categoryToolbar.setOnMenuItemClickListener {
             return@setOnMenuItemClickListener setFragmentMenuActions(it)
         }
+        setSeriesMenuTitle()
 
         categoryAddFab.setOnClickListener {
             //Prevent accidental double click
@@ -115,6 +122,11 @@ class CategoryFragment : Fragment() {
                 return true
             }
 
+            R.id.category_menu_event_series -> {
+                showEventSeriesMembershipDialog()
+                return true
+            }
+
             R.id.category_menu_edit_race -> {
                 findNavController().navigate(
                     BottomNavDirections.modifyRaceProperties(
@@ -133,6 +145,160 @@ class CategoryFragment : Fragment() {
             }
         }
         return false
+    }
+
+    private fun setSeriesMenuTitle() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                selectedRaceViewModel.currentRaceSeries.collect { series ->
+                    categoryToolbar.menu.findItem(R.id.category_menu_event_series)
+                        ?.setTitle(
+                            if (series == null) {
+                                R.string.event_series_add_event
+                            } else {
+                                R.string.event_series_remove_event
+                            }
+                        )
+                }
+            }
+        }
+    }
+
+    private fun showEventSeriesMembershipDialog() {
+        val race = selectedRaceViewModel.getCurrentRace() ?: return
+        val currentSeries = selectedRaceViewModel.currentRaceSeries.value
+        if (currentSeries == null) {
+            showAddToSeriesDialog(race)
+        } else {
+            confirmRemoveFromSeries(race, currentSeries)
+        }
+    }
+
+    private fun showAddToSeriesDialog(race: Race) {
+        val availableSeries = selectedRaceViewModel.eventSeries.value
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.series.name })
+        if (availableSeries.isEmpty()) {
+            showCreateSeriesDialog(race)
+            return
+        }
+
+        val itemLabels = listOf(getString(R.string.event_series_create_new)) +
+            availableSeries.map { it.series.name }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_series_add_to_existing_title)
+            .setItems(itemLabels.toTypedArray()) { _, which ->
+                if (which == 0) {
+                    showCreateSeriesDialog(race)
+                } else {
+                    addCurrentEventToSeries(availableSeries[which - 1])
+                }
+            }
+            .setNegativeButton(R.string.general_cancel, null)
+            .show()
+    }
+
+    private fun showCreateSeriesDialog(race: Race) {
+        val input = EditText(requireContext()).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            hint = getString(R.string.event_series_name_hint)
+            setSingleLine(true)
+            setText(getString(R.string.event_series_default_name, race.name))
+            selectAll()
+        }
+        val dialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_series_create_new_title)
+            .setView(input)
+            .setPositiveButton(R.string.event_series_create_new, null)
+            .setNegativeButton(R.string.general_cancel, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val seriesName = input.text.toString().trim()
+                if (seriesName.isBlank()) {
+                    input.error = getString(R.string.event_series_name_required)
+                } else {
+                    dialog.dismiss()
+                    createSeriesFromCurrentEvent(seriesName)
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun createSeriesFromCurrentEvent(seriesName: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val series = withContext(Dispatchers.IO) {
+                    selectedRaceViewModel.createSeriesFromCurrentRace(seriesName)
+                }
+                Toast.makeText(
+                    requireContext(),
+                    getString(R.string.event_series_create_new_success, series.series.name),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (error: Exception) {
+                showEventSeriesMembershipError(error)
+            }
+        }
+    }
+
+    private fun addCurrentEventToSeries(series: EventSeriesData) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val updatedSeries = withContext(Dispatchers.IO) {
+                    selectedRaceViewModel.addCurrentRaceToEventSeries(series.series.seriesId)
+                }
+                Toast.makeText(
+                    requireContext(),
+                    getString(R.string.event_series_add_to_existing_success, updatedSeries.series.name),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (error: Exception) {
+                showEventSeriesMembershipError(error)
+            }
+        }
+    }
+
+    private fun confirmRemoveFromSeries(race: Race, series: EventSeriesData) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_series_remove_event)
+            .setMessage(
+                getString(
+                    R.string.event_series_remove_event_confirmation,
+                    race.name,
+                    series.series.name
+                )
+            )
+            .setPositiveButton(R.string.event_series_remove_event) { _, _ ->
+                removeCurrentEventFromSeries()
+            }
+            .setNegativeButton(R.string.general_cancel, null)
+            .show()
+    }
+
+    private fun removeCurrentEventFromSeries() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    selectedRaceViewModel.removeCurrentRaceFromEventSeries()
+                }
+                Toast.makeText(
+                    requireContext(),
+                    R.string.event_series_remove_event_success,
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (error: Exception) {
+                showEventSeriesMembershipError(error)
+            }
+        }
+    }
+
+    private fun showEventSeriesMembershipError(error: Exception) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_series_membership_error)
+            .setMessage(error.message ?: getString(R.string.event_series_membership_error))
+            .setPositiveButton(R.string.general_ok, null)
+            .show()
     }
 
 
