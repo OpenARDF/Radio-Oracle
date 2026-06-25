@@ -1,5 +1,6 @@
 package org.openardf.radiooracle.ui.series
 
+import android.app.AlertDialog
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -14,8 +15,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.ui.transfer.DesktopFileTransferUploadDialogs
 
 class EventSeriesFragment : Fragment() {
     private val viewModel: EventSeriesViewModel by viewModels()
@@ -44,7 +48,7 @@ class EventSeriesFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.series.collect { series ->
-                    recyclerView.adapter = EventSeriesRecyclerViewAdapter(series, requireContext())
+                    recyclerView.adapter = EventSeriesRecyclerViewAdapter(series, requireContext(), ::prepareSeriesForDesktopUpload)
                     emptyView.visibility = if (series.isEmpty()) View.VISIBLE else View.GONE
                     recyclerView.visibility = if (series.isEmpty()) View.GONE else View.VISIBLE
                 }
@@ -58,5 +62,35 @@ class EventSeriesFragment : Fragment() {
 
     private fun closeSeriesPage() {
         findNavController().navigateUp()
+    }
+
+    private fun prepareSeriesForDesktopUpload(item: EventSeriesListItem) {
+        val progressDialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_file_send_title)
+            .setMessage(R.string.event_file_send_progress)
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val upload = withContext(Dispatchers.IO) {
+                    viewModel.desktopUploadForSeries(item.seriesId)
+                }
+                progressDialog.dismiss()
+                DesktopFileTransferUploadDialogs.show(this@EventSeriesFragment, upload)
+            } catch (error: Exception) {
+                progressDialog.dismiss()
+                displayAlert(error.message ?: "Could not prepare Event Series for desktop upload.")
+            }
+        }
+    }
+
+    private fun displayAlert(message: String) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.general_unknown_error)
+            .setMessage(message)
+            .setPositiveButton(R.string.general_ok, null)
+            .show()
     }
 }

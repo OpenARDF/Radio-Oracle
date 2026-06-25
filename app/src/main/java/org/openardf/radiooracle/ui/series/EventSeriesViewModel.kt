@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.openardf.radiooracle.backend.DataProcessor
+import org.openardf.radiooracle.backend.files.DesktopFileTransferUpload
 
 class EventSeriesViewModel : ViewModel() {
     private val dataProcessor = DataProcessor.get()
@@ -20,4 +21,7 @@ class EventSeriesViewModel : ViewModel() {
             }
         }
     }
+
+    suspend fun desktopUploadForSeries(seriesId: String): DesktopFileTransferUpload =
+        dataProcessor.desktopUploadForSeries(seriesId)
 }

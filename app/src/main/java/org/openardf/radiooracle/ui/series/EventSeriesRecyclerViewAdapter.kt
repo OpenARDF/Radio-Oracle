@@ -4,13 +4,15 @@ import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
 
 class EventSeriesRecyclerViewAdapter(
     private val values: List<EventSeriesListItem>,
-    private val context: Context
+    private val context: Context,
+    private val onSendToDesktop: (EventSeriesListItem) -> Unit
 ) : RecyclerView.Adapter<EventSeriesRecyclerViewAdapter.EventSeriesViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EventSeriesViewHolder {
@@ -28,6 +30,9 @@ class EventSeriesRecyclerViewAdapter(
             item.memberCount
         )
         holder.members.text = item.memberLines.joinToString("\n")
+        holder.sendButton.setOnClickListener {
+            onSendToDesktop(item)
+        }
     }
 
     override fun getItemCount(): Int = values.size
@@ -36,5 +41,6 @@ class EventSeriesRecyclerViewAdapter(
         val title: TextView = view.findViewById(R.id.event_series_item_title)
         val count: TextView = view.findViewById(R.id.event_series_item_count)
         val members: TextView = view.findViewById(R.id.event_series_item_members)
+        val sendButton: ImageButton = view.findViewById(R.id.event_series_item_send_desktop)
     }
 }
