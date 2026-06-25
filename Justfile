@@ -34,6 +34,38 @@ android-test filter="":
 
 android-check: android-compile android-test
 
+android-series-list serial="":
+    @ADB="${ANDROID_ADB:-adb}"; \
+    if [ -n {{quote(serial)}} ]; then \
+        "$ADB" -s {{quote(serial)}} shell am broadcast -a org.openardf.radiooracle.command.LIST_SERIES; \
+    else \
+        "$ADB" shell am broadcast -a org.openardf.radiooracle.command.LIST_SERIES; \
+    fi
+
+android-series-create event_ids name serial="":
+    @ADB="${ANDROID_ADB:-adb}"; \
+    if [ -n {{quote(serial)}} ]; then \
+        "$ADB" -s {{quote(serial)}} shell am broadcast -a org.openardf.radiooracle.command.CREATE_SERIES_FROM_EVENTS --es event_ids {{quote(event_ids)}} --es series_name {{quote(name)}}; \
+    else \
+        "$ADB" shell am broadcast -a org.openardf.radiooracle.command.CREATE_SERIES_FROM_EVENTS --es event_ids {{quote(event_ids)}} --es series_name {{quote(name)}}; \
+    fi
+
+android-series-fingerprint series_id serial="":
+    @ADB="${ANDROID_ADB:-adb}"; \
+    if [ -n {{quote(serial)}} ]; then \
+        "$ADB" -s {{quote(serial)}} shell am broadcast -a org.openardf.radiooracle.command.LOG_SERIES_PACKAGE_FINGERPRINT --es series_id {{quote(series_id)}}; \
+    else \
+        "$ADB" shell am broadcast -a org.openardf.radiooracle.command.LOG_SERIES_PACKAGE_FINGERPRINT --es series_id {{quote(series_id)}}; \
+    fi
+
+android-event-series-fingerprint event_id serial="":
+    @ADB="${ANDROID_ADB:-adb}"; \
+    if [ -n {{quote(serial)}} ]; then \
+        "$ADB" -s {{quote(serial)}} shell am broadcast -a org.openardf.radiooracle.command.LOG_SERIES_PACKAGE_FINGERPRINT --es event_id {{quote(event_id)}}; \
+    else \
+        "$ADB" shell am broadcast -a org.openardf.radiooracle.command.LOG_SERIES_PACKAGE_FINGERPRINT --es event_id {{quote(event_id)}}; \
+    fi
+
 test-nav:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:test --tests org.openardf.radiooracle.desktop.DesktopNavigationTest --tests org.openardf.radiooracle.desktop.DesktopAutomationCliTest
 
