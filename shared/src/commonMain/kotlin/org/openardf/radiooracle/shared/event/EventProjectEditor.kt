@@ -20,6 +20,9 @@ import org.openardf.radiooracle.shared.results.EvaluationPunch
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadout
 import org.openardf.radiooracle.shared.sportident.SportIdentCodes
+import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
+import org.openardf.radiooracle.shared.sportident.SportIdentRunTiming
+import org.openardf.radiooracle.shared.sportident.SportIdentRunTimingStatus
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 enum class CompetitorCsvImportDuplicatePolicy {
@@ -2458,21 +2461,24 @@ object EventProjectEditor {
                 raceStartSecondsOfDay(matchedProjectFile.raceData.race.startDateTimeIso)?.let { raceStart ->
                     (raceStart + drawnStart) % SportIdentCodes.SECONDS_DAY
                 }
-            }
-        val finishSeconds = readout.finishTime?.getSeconds()
-        val runTimeSeconds = if (startSeconds != null && finishSeconds != null) {
-            finishSeconds - startSeconds
-        } else {
-            0
         }
+        val finishSeconds = readout.finishTime?.getSeconds()
+        val runTiming = SportIdentReadoutTiming.calculate(
+            startSeconds = startSeconds,
+            finishSeconds = finishSeconds,
+            controlSeconds = controlPunches.map { it.siTime.getSeconds() }
+        )
+        val runTimeSeconds = runTiming.runTimeSeconds
         val timeLimitSeconds = categoryData?.category?.effectiveTimeLimitSeconds(projectFile.raceData.race)
             ?: projectFile.raceData.race.timeLimitSeconds
         val resultStatus = when {
-            startSeconds == null || finishSeconds == null -> ResultStatus.ERROR
+            runTiming.blocksResult -> ResultStatus.ERROR
             runTimeSeconds > timeLimitSeconds -> ResultStatus.OVER_TIME_LIMIT
             evaluation != null -> evaluation.resultStatus
             else -> ResultStatus.NO_RANKING
         }
+        val controlStatuses = (evaluation?.punchStatuses ?: List(controlPunches.size) { PunchStatus.UNKNOWN })
+            .withTimingIssues(runTiming)
         val punches = buildDownloadedPunches(
             raceId = projectFile.raceData.race.id,
             resultId = resultId,
@@ -2480,7 +2486,7 @@ object EventProjectEditor {
             startSeconds = startSeconds,
             finishSeconds = finishSeconds,
             controlPunches = controlPunches,
-            controlStatuses = evaluation?.punchStatuses,
+            controlStatuses = controlStatuses,
             aliases = projectFile.raceData.aliases,
             punchIdFactory = punchIdFactory
         )
@@ -2522,6 +2528,22 @@ object EventProjectEditor {
                 )
             )
         }.withResultPlaces()
+    }
+
+    private fun List<PunchStatus>.withTimingIssues(timing: SportIdentRunTiming): List<PunchStatus> {
+        val timingInvalidControlIndices = timing.issues
+            .filter { issue ->
+                issue.status == SportIdentRunTimingStatus.CONTROL_NOT_AFTER_START ||
+                    issue.status == SportIdentRunTimingStatus.CONTROL_NOT_AFTER_PREVIOUS_CONTROL
+            }
+            .mapNotNull { it.controlIndex }
+            .toSet()
+        if (timingInvalidControlIndices.isEmpty()) {
+            return this
+        }
+        return mapIndexed { index, status ->
+            if (index in timingInvalidControlIndices) PunchStatus.INVALID else status
+        }
     }
 
     /** Returns a copy of the Event File with one validated alias changed. */

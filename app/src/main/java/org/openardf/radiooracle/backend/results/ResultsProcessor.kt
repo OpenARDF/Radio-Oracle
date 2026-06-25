@@ -41,6 +41,9 @@ import org.openardf.radiooracle.shared.results.CourseEvaluator
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.results.EvaluationControlPoint
 import org.openardf.radiooracle.shared.results.EvaluationPunch
+import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
+import org.openardf.radiooracle.shared.sportident.SportIdentRunTiming
+import org.openardf.radiooracle.shared.sportident.SportIdentRunTimingStatus
 import java.time.Duration
 import java.time.LocalTime
 import java.util.UUID
@@ -51,6 +54,16 @@ object ResultsProcessor {
     internal const val PRINT_AUTOMATIC_CATEGORY_MATCHED_VALUE = "category_matched"
     internal const val PRINT_AUTOMATIC_COMPETITOR_MATCHED_VALUE = "competitor_matched"
     internal const val PRINT_AUTOMATIC_ALWAYS_VALUE = "allways"
+
+    internal fun calculateReadoutRunTiming(
+        startTime: SITime?,
+        finishTime: SITime?,
+        controlTimes: List<SITime> = emptyList()
+    ) = SportIdentReadoutTiming.calculate(
+        startSeconds = startTime?.getSeconds(),
+        finishSeconds = finishTime?.getSeconds(),
+        controlSeconds = controlTimes.map { it.getSeconds() }
+    )
 
     private fun adjustTime(previous: SITime, current: SITime): SITime {
         if (current.isAtOrAfter(previous)) {
@@ -479,6 +492,12 @@ object ResultsProcessor {
         if (category != null) {
             evaluatePunches(punches, category, result, race, dataProcessor)
         }
+        val runTiming = calculateReadoutRunTiming(
+            result.startTime,
+            result.finishTime,
+            punches.map { it.siTime }
+        )
+        applyTimingIssues(punches, runTiming)
 
         // Add back start and finish
         if (result.startTime != null) {
@@ -523,8 +542,8 @@ object ResultsProcessor {
         calculateSplits(punches)
 
         // Result time calculation
-        if (result.startTime != null && result.finishTime != null) {
-            result.runTime = SITime.split(result.startTime!!, result.finishTime!!)
+        if (!runTiming.blocksResult) {
+            result.runTime = Duration.ofSeconds(runTiming.runTimeSeconds)
 
             // Check time limit
             val timeLimit = if (category?.differentProperties == true) {
@@ -538,11 +557,17 @@ object ResultsProcessor {
             }
 
         } else {
+            result.runTime = Duration.ZERO
             result.resultStatus = ResultStatus.ERROR
+            DebugLog.warn(
+                "SI",
+                "Invalid readout timing result=${result.id} si=${result.siNumber} " +
+                    "status=${runTiming.status} start=${result.startTime} finish=${result.finishTime}"
+            )
         }
 
         // Set the result status based on user preference
-        if (manualStatus != null) {
+        if (manualStatus != null && !runTiming.blocksResult) {
             result.automaticStatus = false
             result.resultStatus = manualStatus
         } else {
@@ -734,6 +759,19 @@ object ResultsProcessor {
             punch.punchStatus = PunchStatus.UNKNOWN
         }
         result.resultStatus = ResultStatus.NO_RANKING
+    }
+
+    private fun applyTimingIssues(punches: ArrayList<Punch>, timing: SportIdentRunTiming) {
+        val timingInvalidControlIndices = timing.issues
+            .filter { issue ->
+                issue.status == SportIdentRunTimingStatus.CONTROL_NOT_AFTER_START ||
+                    issue.status == SportIdentRunTimingStatus.CONTROL_NOT_AFTER_PREVIOUS_CONTROL
+            }
+            .mapNotNull { it.controlIndex }
+            .toSet()
+        timingInvalidControlIndices.forEach { controlIndex ->
+            punches.getOrNull(controlIndex)?.punchStatus = PunchStatus.INVALID
+        }
     }
 
     /**
