@@ -38,6 +38,7 @@ import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.Result
 import org.openardf.radiooracle.backend.room.entity.ResultService
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.EventSeriesData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
@@ -750,11 +751,30 @@ class DataProcessor private constructor(context: Context) {
         )
     }
 
+    suspend fun desktopUploadForSeries(seriesId: String): DesktopFileTransferUpload {
+        val seriesData = getEventSeries(seriesId) ?: throw IllegalArgumentException("Event Series not found: $seriesId")
+        val firstMember = seriesData.orderedMembers().firstOrNull()
+        return EventFileTransferUploads.forRaceOrSeries(
+            raceName = firstMember?.displayName ?: seriesData.series.name,
+            seriesName = seriesData.series.name,
+            bytes = exportEventSeriesPackageBytes(seriesId)
+        )
+    }
+
+    suspend fun exportEventSeriesPackageBytes(seriesId: String): ByteArray {
+        val seriesData = getEventSeries(seriesId) ?: throw IllegalArgumentException("Event Series not found: $seriesId")
+        return exportEventSeriesPackageBytes(seriesData)
+    }
+
     suspend fun exportEventSeriesPackageBytesForRace(raceId: UUID): ByteArray? {
         val seriesData = getEventSeriesForRace(raceId) ?: return null
+        return exportEventSeriesPackageBytes(seriesData)
+    }
+
+    private suspend fun exportEventSeriesPackageBytes(seriesData: EventSeriesData): ByteArray {
         val members = seriesData.orderedMembers()
         if (members.isEmpty()) {
-            return null
+            throw IllegalArgumentException("Event Series export requires at least one event.")
         }
         return EventSeriesExport.packageBytes(
             seriesData = seriesData,

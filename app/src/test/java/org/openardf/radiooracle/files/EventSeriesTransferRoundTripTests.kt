@@ -54,6 +54,7 @@ class EventSeriesTransferRoundTripTests {
         val selectedMember = androidImport.members.last()
 
         val upload = DataProcessor.get().desktopUploadForRaceOrSeries(selectedMember.localRaceId)
+        val seriesUpload = DataProcessor.get().desktopUploadForSeries(androidImport.series.seriesId)
         val uploadBytes = upload.bytes
 
         assertTrue(
@@ -62,6 +63,9 @@ class EventSeriesTransferRoundTripTests {
         )
         assertEquals("Championship.zip", upload.fileName)
         assertEquals(EVENT_SERIES_PACKAGE_CONTENT_TYPE, upload.contentType)
+        assertEquals(upload.fileName, seriesUpload.fileName)
+        assertEquals(upload.contentType, seriesUpload.contentType)
+        assertEquals(unzipTextEntries(upload.bytes), unzipTextEntries(seriesUpload.bytes))
         assertTrue(EventFileTransferPayloads.isSeriesPackage(upload.fileName, upload.contentType))
         assertTrue(
             "Android upload must not be a single Event File.",
@@ -97,6 +101,7 @@ class EventSeriesTransferRoundTripTests {
         val selectedMember = androidImport.members.single()
 
         val upload = DataProcessor.get().desktopUploadForRaceOrSeries(selectedMember.localRaceId)
+        val seriesUpload = DataProcessor.get().desktopUploadForSeries(androidImport.series.seriesId)
         val uploadEntries = unzipTextEntries(upload.bytes)
         val returnedManifest = uploadEntries.entries.single { (path, _) ->
             isEventSeriesFileName(path.substringAfterLast('/'))
@@ -106,6 +111,9 @@ class EventSeriesTransferRoundTripTests {
 
         assertEquals("Solo Series.zip", upload.fileName)
         assertEquals(EVENT_SERIES_PACKAGE_CONTENT_TYPE, upload.contentType)
+        assertEquals(upload.fileName, seriesUpload.fileName)
+        assertEquals(upload.contentType, seriesUpload.contentType)
+        assertEquals(uploadEntries, unzipTextEntries(seriesUpload.bytes))
         assertTrue(EventFileTransferPayloads.isSeriesPackage(upload.fileName, upload.contentType))
         assertEquals("solo-series", returnedSeries.seriesId)
         assertEquals(listOf("solo-day"), returnedSeries.sortedEvents().map { it.seriesEventId })
