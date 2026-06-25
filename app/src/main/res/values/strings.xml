@@ -92,6 +92,7 @@
     <string name="race_send_desktop">Send to Desktop</string>
     <string name="race_send_file_desktop">Send Picked File to Desktop</string>
     <string name="race_export_success">Event exported successfully</string>
+    <string name="race_export_failure">Failed to export event</string>
     <string name="race_import_success">Event imported successfully</string>
     <string name="race_import_failure">Failed to import event</string>
     <string name="event_series_import_title">Import Event Series</string>
