@@ -9,8 +9,8 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFileJson
+import org.openardf.radiooracle.shared.event.EventSeriesPackageEntryKind
 import org.openardf.radiooracle.shared.event.EventSeriesPackageContents
-import org.openardf.radiooracle.shared.event.isEventSeriesFileName
 import java.io.InputStream
 import java.security.MessageDigest
 import java.util.zip.ZipInputStream
@@ -52,17 +52,23 @@ object EventSeriesImport {
             while (true) {
                 val entry = zip.nextEntry ?: break
                 if (!entry.isDirectory) {
-                    val entryPath = EventSeriesPackageContents.normalizedPackagePath(entry.name)
-                    if (!entryPath.startsWith("__MACOSX/")) {
+                    val packageEntry = EventSeriesPackageContents.classifyEntryPath(entry.name)
+                    if (packageEntry.kind != EventSeriesPackageEntryKind.IGNORED) {
                         val text = zip.readBytes().toString(Charsets.UTF_8)
-                        if (isEventSeriesFileName(entryPath.substringAfterLast('/'))) {
-                            require(manifestJson == null) {
-                                "Event Series package contains more than one manifest."
+                        when (packageEntry.kind) {
+                            EventSeriesPackageEntryKind.MANIFEST -> {
+                                require(manifestJson == null) {
+                                    "Event Series package contains more than one manifest."
+                                }
+                                manifestEntryPath = packageEntry.path
+                                manifestJson = text
                             }
-                            manifestEntryPath = entryPath
-                            manifestJson = text
-                        } else if (entryPath.endsWith(".json", ignoreCase = true)) {
-                            jsonEntries[entryPath] = text
+
+                            EventSeriesPackageEntryKind.EVENT_FILE -> {
+                                jsonEntries[packageEntry.path] = text
+                            }
+
+                            EventSeriesPackageEntryKind.IGNORED -> Unit
                         }
                     }
                 }

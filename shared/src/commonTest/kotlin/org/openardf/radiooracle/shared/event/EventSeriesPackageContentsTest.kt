@@ -62,6 +62,26 @@ class EventSeriesPackageContentsTest {
     }
 
     @Test
+    fun classifiesPackageEntryPaths() {
+        assertEquals(
+            EventSeriesPackageEntry("series/Championship.series.radio-oracle.json", EventSeriesPackageEntryKind.MANIFEST),
+            EventSeriesPackageContents.classifyEntryPath("./series/Championship.series.radio-oracle.json")
+        )
+        assertEquals(
+            EventSeriesPackageEntry("series/events/day-1.rom.json", EventSeriesPackageEntryKind.EVENT_FILE),
+            EventSeriesPackageContents.classifyEntryPath("series/events/day-1.rom.json")
+        )
+        assertEquals(
+            EventSeriesPackageEntry("__MACOSX/._day-1.rom.json", EventSeriesPackageEntryKind.IGNORED),
+            EventSeriesPackageContents.classifyEntryPath("__MACOSX/._day-1.rom.json")
+        )
+        assertEquals(
+            EventSeriesPackageEntry("series/readme.txt", EventSeriesPackageEntryKind.IGNORED),
+            EventSeriesPackageContents.classifyEntryPath("series/readme.txt")
+        )
+    }
+
+    @Test
     fun rejectsMissingEventFiles() {
         val seriesFile = EventSeriesFile(
             seriesId = "series-1",

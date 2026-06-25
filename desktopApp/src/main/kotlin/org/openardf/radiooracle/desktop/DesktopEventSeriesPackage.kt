@@ -1,9 +1,9 @@
 package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
+import org.openardf.radiooracle.shared.event.EventSeriesPackageEntryKind
 import org.openardf.radiooracle.shared.event.EventSeriesPackageContents
 import org.openardf.radiooracle.shared.event.EventSeriesPackageEventFile
-import org.openardf.radiooracle.shared.event.isEventSeriesFileName
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -77,20 +77,28 @@ object DesktopEventSeriesPackageFiles {
             while (true) {
                 val entry = zip.nextEntry ?: break
                 if (!entry.isDirectory) {
-                    val safeRelativePath = safeZipRelativePath(entry.name)
-                    val targetPath = targetDirectory.resolve(safeRelativePath).normalize()
-                    require(targetPath.startsWith(targetDirectory)) {
-                        "Event Series package contains an unsafe path: ${entry.name}"
-                    }
-                    targetPath.parent?.let(Files::createDirectories)
-                    Files.write(targetPath, zip.readBytes())
-                    if (isEventSeriesFileName(targetPath.fileName.toString())) {
-                        require(manifestPath == null) {
-                            "Event Series package contains more than one manifest."
+                    val packageEntry = EventSeriesPackageContents.classifyEntryPath(entry.name)
+                    if (packageEntry.kind != EventSeriesPackageEntryKind.IGNORED) {
+                        val targetPath = targetDirectory.resolve(Path.of(packageEntry.path)).normalize()
+                        require(targetPath.startsWith(targetDirectory)) {
+                            "Event Series package contains an unsafe path: ${entry.name}"
                         }
-                        manifestPath = targetPath
-                    } else if (DesktopProjectFilePaths.isProjectFileName(targetPath.fileName.toString())) {
-                        eventFilePaths.add(targetPath)
+                        targetPath.parent?.let(Files::createDirectories)
+                        Files.write(targetPath, zip.readBytes())
+                        when (packageEntry.kind) {
+                            EventSeriesPackageEntryKind.MANIFEST -> {
+                                require(manifestPath == null) {
+                                    "Event Series package contains more than one manifest."
+                                }
+                                manifestPath = targetPath
+                            }
+
+                            EventSeriesPackageEntryKind.EVENT_FILE -> {
+                                eventFilePaths.add(targetPath)
+                            }
+
+                            EventSeriesPackageEntryKind.IGNORED -> Unit
+                        }
                     }
                 }
                 zip.closeEntry()
@@ -113,14 +121,6 @@ object DesktopEventSeriesPackageFiles {
         putNextEntry(ZipEntry(path.replace('\\', '/')))
         write(bytes)
         closeEntry()
-    }
-
-    private fun safeZipRelativePath(path: String): Path {
-        val normalized = Path.of(EventSeriesPackageContents.normalizedPackagePath(path)).normalize()
-        require(!normalized.isAbsolute && normalized.none { it.toString() == ".." }) {
-            "Event Series package contains an unsafe path: $path"
-        }
-        return normalized
     }
 
     private fun uniqueDirectory(root: Path, stem: String): Path {
