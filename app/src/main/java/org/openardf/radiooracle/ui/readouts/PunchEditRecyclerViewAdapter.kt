@@ -1,8 +1,12 @@
 package org.openardf.radiooracle.ui.readouts
 
+import android.content.Context
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageButton
 import androidx.core.widget.doOnTextChanged
@@ -38,6 +42,7 @@ class PunchEditRecyclerViewAdapter(
         holder.time.setText(item.punch.siTime.getTimeString())
         holder.weekday.setText(item.punch.siTime.getDayOfWeek().toString())
         holder.week.setText(item.punch.siTime.getWeek().toString())
+        holder.installKeyboardDoneHandlers()
 
         holder.addBtn.setOnClickListener {
             holder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }?.let(::addPunch)
@@ -69,11 +74,7 @@ class PunchEditRecyclerViewAdapter(
             }
 
             SIRecordType.CONTROL -> {
-                if (item.punch.siCode != 0) {
-                    holder.code.setText(item.punch.siCode.toString())
-                } else {
-                    holder.code.setText("")
-                }
+                holder.code.setText(item.displayCodeText())
                 holder.code.isEnabled = true
                 holder.addBtn.visibility = View.VISIBLE
                 holder.deleteBtn.visibility = View.VISIBLE
@@ -137,10 +138,15 @@ class PunchEditRecyclerViewAdapter(
     //Text watchers
     private fun codeWatcher(position: Int, text: String): Boolean {
         if (position == RecyclerView.NO_POSITION) return true
+        if (values[position].matchesDisplayCodeText(text)) {
+            values[position].isCodeValid = true
+            return true
+        }
         try {
             val code = text.toInt()
             if (SIConstants.isSICodeValid(code)) {
                 values[position].punch.siCode = code
+                values[position].aliasName = null
                 values[position].isCodeValid = true
             } else {
                 values[position].isCodeValid = false
@@ -214,6 +220,25 @@ class PunchEditRecyclerViewAdapter(
         var week: EditText = view.findViewById(R.id.punch_edit_item_week)
         var addBtn: ImageButton = view.findViewById(R.id.punch_edit_item_add_btn)
         var deleteBtn: ImageButton = view.findViewById(R.id.punch_edit_item_delete_btn)
+
+        fun installKeyboardDoneHandlers() {
+            listOf(code, time, weekday, week).forEach { editor ->
+                editor.setOnEditorActionListener { view, actionId, event ->
+                    val isDoneAction = actionId == EditorInfo.IME_ACTION_DONE
+                    val isEnter = event?.keyCode == KeyEvent.KEYCODE_ENTER &&
+                        (event.action == KeyEvent.ACTION_DOWN || event.action == KeyEvent.ACTION_UP)
+                    if (isDoneAction || isEnter) {
+                        view.clearFocus()
+                        val inputMethodManager =
+                            view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                        inputMethodManager?.hideSoftInputFromWindow(view.windowToken, 0)
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
+        }
     }
 
 }

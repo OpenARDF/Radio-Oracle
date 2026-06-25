@@ -207,8 +207,10 @@
 
     <string name="competitor_hint_code">Code</string>
     <string name="competitor_hint_time_format" translatable="false">HH:MM:SS</string>
-    <string name="competitor_hint_day">D</string>
-    <string name="competitor_hint_week">W</string>
+    <string name="competitor_hint_day">Day</string>
+    <string name="competitor_hint_week">Week</string>
+    <string name="readout_punch_si_day_label">Day</string>
+    <string name="readout_punch_si_week_label">Week</string>
 
     <string name="competitor_display_overview">Overview</string>
     <string name="competitor_display_start_list">Start list</string>

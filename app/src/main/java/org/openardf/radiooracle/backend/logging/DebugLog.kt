@@ -49,5 +49,16 @@ object DebugLog {
         } catch (exception: Exception) {
             Log.w("DebugLog", "Failed to write debug log: ${exception.message}")
         }
+        try {
+            val logMessage = "$tag $message"
+            when (level) {
+                "E" -> Log.e("RadioOracle", logMessage)
+                "W" -> Log.w("RadioOracle", logMessage)
+                "I" -> Log.i("RadioOracle", logMessage)
+                else -> Log.d("RadioOracle", logMessage)
+            }
+        } catch (_: RuntimeException) {
+            // android.util.Log is not available in local JVM unit tests.
+        }
     }
 }

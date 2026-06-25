@@ -20,6 +20,7 @@ import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputLayout
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
+import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.Result
@@ -304,11 +305,19 @@ class ReadoutEditDialogFragment : DialogFragment() {
                 }
 
                 // Save punch data
+                val selectedStatusText = raceStatusPicker.text.toString()
+                val manualStatus = getResultStatusFromPicker()
+                DebugLog.info(
+                    "Results",
+                    "Readout edit submitted result=${result.id} si=${result.siNumber} " +
+                        "selectedStatus=\"$selectedStatusText\" manualStatus=${manualStatus?.name ?: "automatic"} " +
+                        "modified=$modified"
+                )
                 runBlocking {
                     selectedRaceViewModel.processManualPunchData(
                         result,
                         punches,
-                        getResultStatusFromPicker(),
+                        manualStatus,
                         modified
                     )
                 }

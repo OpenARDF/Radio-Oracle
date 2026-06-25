@@ -42,6 +42,7 @@ import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.results.EvaluationControlPoint
 import org.openardf.radiooracle.shared.results.EvaluationPunch
 import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
+import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTimingRepair
 import org.openardf.radiooracle.shared.sportident.SportIdentRunTiming
 import org.openardf.radiooracle.shared.sportident.SportIdentRunTimingStatus
 import java.time.Duration
@@ -464,6 +465,13 @@ object ResultsProcessor {
 
         //Modify the start and finish times
         removeStartAndFinishPunch(result, punches)
+        DebugLog.info(
+            "Results",
+            "Manual readout edit requested result=${result.id} si=${result.siNumber} " +
+                "manualStatus=${manualStatus?.name ?: "automatic"} modified=$modified " +
+                "start=${result.startTime?.getSeconds()} finish=${result.finishTime?.getSeconds()} " +
+                "controls=${punches.count { it.punchType == SIRecordType.CONTROL }}"
+        )
 
         calculateResult(
             result,
@@ -472,6 +480,12 @@ object ResultsProcessor {
             manualStatus,
             race,
             dataProcessor
+        )
+        DebugLog.info(
+            "Results",
+            "Manual readout edit saved result=${result.id} status=${result.resultStatus.name} " +
+                "automatic=${result.automaticStatus} runTime=${result.runTime.seconds} " +
+                "points=${result.points} start=${result.startTime?.getSeconds()} finish=${result.finishTime?.getSeconds()}"
         )
     }
 
@@ -493,7 +507,10 @@ object ResultsProcessor {
 
         if (category != null) {
             evaluatePunches(punches, category, result, race, dataProcessor)
+        } else {
+            clearEvaluation(punches, result)
         }
+        repairStaleDayWeekFields(result, punches)
         val runTiming = calculateReadoutRunTiming(
             result.startTime,
             result.finishTime,
@@ -577,6 +594,30 @@ object ResultsProcessor {
         }
 
         dataProcessor.saveResultPunches(result, punches)
+    }
+
+    private fun repairStaleDayWeekFields(result: Result, punches: ArrayList<Punch>) {
+        val originalControlSeconds = punches.map { it.siTime.getSeconds() }
+        val originalFinishSeconds = result.finishTime?.getSeconds()
+        val repaired = SportIdentReadoutTimingRepair.normalizeEditedTimes(
+            startSeconds = result.startTime?.getSeconds(),
+            controlSeconds = originalControlSeconds,
+            finishSeconds = originalFinishSeconds
+        )
+        if (!repaired.changedFrom(originalControlSeconds, originalFinishSeconds)) {
+            return
+        }
+
+        repaired.controlSeconds.forEachIndexed { index, seconds ->
+            punches[index].siTime = SITime(seconds)
+        }
+        result.finishTime = repaired.finishSeconds?.let(::SITime)
+        DebugLog.info(
+            "Results",
+            "Repaired stale readout day/week result=${result.id} si=${result.siNumber} " +
+                "start=${result.startTime?.getSeconds()} finish=$originalFinishSeconds->${result.finishTime?.getSeconds()} " +
+                "controls=${originalControlSeconds.zip(repaired.controlSeconds).count { it.first != it.second }}"
+        )
     }
 
     private suspend fun evaluatePunches(

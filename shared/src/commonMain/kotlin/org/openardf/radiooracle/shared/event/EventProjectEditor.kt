@@ -3047,8 +3047,8 @@ object EventProjectEditor {
 
     private fun Long.toDaySeconds(raceStartSeconds: Long?, fieldName: String): Long {
         val seconds = (raceStartSeconds ?: 0L) + this
-        require(seconds in 0..<SportIdentCodes.SECONDS_DAY) {
-            "$fieldName must stay within the event day."
+        require(seconds >= 0) {
+            "$fieldName cannot be negative."
         }
         return seconds
     }

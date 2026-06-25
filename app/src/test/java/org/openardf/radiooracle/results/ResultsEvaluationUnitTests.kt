@@ -133,6 +133,127 @@ class ResultsEvaluationUnitTests {
     }
 
     @Test
+    fun recalculationClearsStaleTimingInvalidPunchStatus() = runTest {
+        val raceId = UUID.randomUUID()
+        val dataProcessor = mock<DataProcessor>()
+        val race = Race(
+            id = raceId,
+            name = "Editable Readout",
+            apiKey = "",
+            startDateTime = LocalDateTime.of(2026, 6, 25, 0, 0),
+            raceType = RaceType.CLASSIC,
+            raceLevel = RaceLevel.PRACTICE,
+            raceBand = RaceBand.M80,
+            timeLimit = Duration.ofHours(2)
+        )
+        val result = Result(
+            id = UUID.randomUUID(),
+            raceId = raceId,
+            competitorId = null,
+            siNumber = 123456,
+            cardType = SIConstants.SI_CARD8_9_SIAC,
+            checkTime = null,
+            startTime = SITime(LocalTime.of(10, 0)),
+            finishTime = SITime(LocalTime.of(10, 30)),
+            automaticStatus = false,
+            resultStatus = ResultStatus.ERROR,
+            points = 0,
+            runTime = Duration.ZERO,
+            modified = true,
+            sent = false
+        )
+        val punches = arrayListOf(
+            Punch(
+                UUID.randomUUID(),
+                raceId,
+                result.id,
+                result.siNumber,
+                31,
+                SITime(LocalTime.of(10, 10)),
+                SITime(LocalTime.of(10, 10)),
+                SIRecordType.CONTROL,
+                0,
+                PunchStatus.INVALID,
+                Duration.ZERO
+            )
+        )
+
+        ResultsProcessor.calculateResult(
+            result = result,
+            category = null,
+            punches = punches,
+            manualStatus = ResultStatus.OK,
+            race = race,
+            dataProcessor = dataProcessor
+        )
+
+        assertEquals(ResultStatus.OK, result.resultStatus)
+        assertEquals(Duration.ofMinutes(30), result.runTime)
+        assertEquals(PunchStatus.UNKNOWN, punches.single { it.punchType == SIRecordType.CONTROL }.punchStatus)
+    }
+
+    @Test
+    fun manualRecalculationRepairsStaleFinishDayWeekBeforeApplyingOkStatus() = runTest {
+        val raceId = UUID.randomUUID()
+        val dataProcessor = mock<DataProcessor>()
+        val race = Race(
+            id = raceId,
+            name = "Sprint Practice",
+            apiKey = "",
+            startDateTime = LocalDateTime.of(2026, 6, 25, 0, 0),
+            raceType = RaceType.SPRINT,
+            raceLevel = RaceLevel.PRACTICE,
+            raceBand = RaceBand.M80,
+            timeLimit = Duration.ofHours(2)
+        )
+        val result = Result(
+            id = UUID.randomUUID(),
+            raceId = raceId,
+            competitorId = null,
+            siNumber = 2005010,
+            cardType = SIConstants.SI_CARD8_9_SIAC,
+            checkTime = null,
+            startTime = SITime(LocalTime.of(14, 2, 23), 4, 0),
+            finishTime = SITime(LocalTime.of(14, 10, 0), 0, 0),
+            automaticStatus = true,
+            resultStatus = ResultStatus.ERROR,
+            points = 0,
+            runTime = Duration.ZERO,
+            modified = true,
+            sent = false
+        )
+        val punches = arrayListOf(
+            Punch(
+                UUID.randomUUID(),
+                raceId,
+                result.id,
+                result.siNumber,
+                31,
+                SITime(LocalTime.of(14, 5), 4, 0),
+                SITime(LocalTime.of(14, 5), 4, 0),
+                SIRecordType.CONTROL,
+                0,
+                PunchStatus.INVALID,
+                Duration.ZERO
+            )
+        )
+
+        ResultsProcessor.calculateResult(
+            result = result,
+            category = null,
+            punches = punches,
+            manualStatus = ResultStatus.OK,
+            race = race,
+            dataProcessor = dataProcessor
+        )
+
+        assertEquals(4 * 24 * 60 * 60L + 14 * 60 * 60L + 10 * 60L, result.finishTime?.getSeconds())
+        assertEquals(ResultStatus.OK, result.resultStatus)
+        assertEquals(false, result.automaticStatus)
+        assertEquals(Duration.ofSeconds(7 * 60L + 37L), result.runTime)
+    }
+
+    @Test
     fun testClassicsCorrectData() {
         val result = Result()
         val punches = ArrayList<Punch>()
