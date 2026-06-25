@@ -99,6 +99,8 @@
     <string name="event_series_import_success">Imported series: %1$s (%2$d events)</string>
     <string name="event_series_import_invalid">Invalid Event Series package.</string>
     <string name="event_series_export">Export Event Series</string>
+    <string name="event_series_export_progress">Exporting Event Series...</string>
+    <string name="event_series_export_success">Event Series exported successfully</string>
     <string name="event_series_send_desktop">Send Event Series to Desktop</string>
     <string name="event_series_toolbar_title">Series</string>
     <string name="event_series_empty">No Event Series are stored on this device.</string>

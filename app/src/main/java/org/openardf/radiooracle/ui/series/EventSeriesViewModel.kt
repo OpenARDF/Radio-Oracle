@@ -1,5 +1,6 @@
 package org.openardf.radiooracle.ui.series
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,4 +25,8 @@ class EventSeriesViewModel : ViewModel() {
 
     suspend fun desktopUploadForSeries(seriesId: String): DesktopFileTransferUpload =
         dataProcessor.desktopUploadForSeries(seriesId)
+
+    suspend fun exportEventSeriesPackage(uri: Uri, seriesId: String) {
+        dataProcessor.exportEventSeriesPackage(uri, seriesId)
+    }
 }
