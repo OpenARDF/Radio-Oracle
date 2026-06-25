@@ -26,8 +26,8 @@ object EventSeriesPackageContents {
     ): EventSeriesPackageContent {
         val eventsById = eventFiles.associateBy { it.event.seriesEventId }
         val sortedEvents = seriesFile.sortedEvents()
-        require(sortedEvents.size >= 2) {
-            "Event Series package requires at least two events."
+        require(sortedEvents.isNotEmpty()) {
+            "Event Series package requires at least one event."
         }
         require(eventFiles.size == sortedEvents.size && sortedEvents.all { it.seriesEventId in eventsById }) {
             "Event Series package must include one Event File for each manifest event."

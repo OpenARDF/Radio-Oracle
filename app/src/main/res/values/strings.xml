@@ -90,7 +90,7 @@
     <string name="race_import_internet">Import from ROBIS</string>
     <string name="race_receive_desktop">Receive from Desktop</string>
     <string name="race_send_desktop">Send to Desktop</string>
-    <string name="race_send_file_desktop">Send File to Desktop</string>
+    <string name="race_send_file_desktop">Send Picked File to Desktop</string>
     <string name="race_export_success">Event exported successfully</string>
     <string name="race_import_success">Event imported successfully</string>
     <string name="race_import_failure">Failed to import event</string>
@@ -99,6 +99,7 @@
     <string name="event_series_import_success">Imported series: %1$s (%2$d events)</string>
     <string name="event_series_import_invalid">Invalid Event Series package.</string>
     <string name="event_series_export">Export Event Series</string>
+    <string name="event_series_send_desktop">Send Event Series to Desktop</string>
     <string name="race_toolbar_title">Events</string>
     <string name="race_level">Level</string>
     <string name="race_type">Race type</string>

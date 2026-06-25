@@ -31,8 +31,8 @@ object DesktopEventSeriesPackageFiles {
             "Event Series manifest must have a parent folder."
         }
         val members = seriesFile.sortedEvents()
-        require(members.size >= 2) {
-            "Event Series package requires at least two events."
+        require(members.isNotEmpty()) {
+            "Event Series package requires at least one event."
         }
 
         val missing = members

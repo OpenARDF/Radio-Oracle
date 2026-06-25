@@ -38,6 +38,22 @@ class EventSeriesPackageContentsTest {
     }
 
     @Test
+    fun buildsPackageForSingleKnownSeriesMember() {
+        val seriesFile = EventSeriesFile(
+            seriesId = "series-1",
+            name = "Practice",
+            events = listOf(EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"))
+        )
+
+        val content = EventSeriesPackageContents.build(
+            seriesFile = seriesFile,
+            eventFiles = listOf(EventSeriesPackageEventFile(seriesFile.events[0], projectFile("Day 1")))
+        )
+
+        assertEquals(listOf(EVENT_SERIES_FILE_NAME, "day-1.rom.json"), content.entries.map { it.path })
+    }
+
+    @Test
     fun rejectsMissingEventFiles() {
         val seriesFile = EventSeriesFile(
             seriesId = "series-1",

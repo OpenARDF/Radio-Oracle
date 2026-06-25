@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.openardf.radiooracle.backend.DataProcessor
+import org.openardf.radiooracle.backend.files.DesktopFileTransferUploader
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.ARDFRepository
 import org.openardf.radiooracle.backend.room.entity.Race
@@ -49,8 +50,10 @@ class AppCommandReceiver : BroadcastReceiver() {
         val dataProcessor = initializedDataProcessor(context)
         when (intent.action) {
             ACTION_LIST_EVENTS -> listEvents(dataProcessor)
+            ACTION_LIST_SERIES -> listSeries(dataProcessor)
             ACTION_DELETE_EVENT -> deleteEvent(dataProcessor, intent)
             ACTION_SELECT_EVENT -> selectEvent(dataProcessor, intent)
+            ACTION_SEND_EVENT_OR_SERIES_TO_DESKTOP -> sendEventOrSeriesToDesktop(dataProcessor, intent)
             ACTION_PRINT_STATUS -> printStatus(context)
             ACTION_PRINT_FINISH_TICKET -> printFinishTicket(dataProcessor, intent)
             ACTION_PRINT_LATEST_FINISH_TICKET -> printLatestFinishTicket(dataProcessor, intent)
@@ -79,6 +82,26 @@ class AppCommandReceiver : BroadcastReceiver() {
         }
     }
 
+    private suspend fun listSeries(dataProcessor: DataProcessor) {
+        val seriesList = dataProcessor.getEventSeries().first().sortedBy { it.series.name }
+        DebugLog.info(TAG, "Command listed series count=${seriesList.size}")
+        Log.i(TAG, "series count=${seriesList.size}")
+        seriesList.forEach { seriesData ->
+            val members = seriesData.orderedMembers()
+            val message = "series id=${seriesData.series.seriesId} name=${seriesData.series.name} members=${members.size}"
+            DebugLog.info(TAG, message)
+            Log.i(TAG, message)
+            members.forEach { member ->
+                val race = dataProcessor.getRace(member.localRaceId)
+                val memberMessage = "series-member series=${seriesData.series.seriesId} " +
+                    "event=${member.seriesEventId} localRace=${member.localRaceId} " +
+                    "name=${race?.name ?: member.displayName}"
+                DebugLog.info(TAG, memberMessage)
+                Log.i(TAG, memberMessage)
+            }
+        }
+    }
+
     private suspend fun deleteEvent(dataProcessor: DataProcessor, intent: Intent) {
         val eventId = intent.uuidExtra() ?: return missingEventId()
         val race = dataProcessor.getRace(eventId)
@@ -104,6 +127,21 @@ class AppCommandReceiver : BroadcastReceiver() {
 
         DebugLog.info(TAG, "Command selected event=$eventId name=${race.name}")
         Log.i(TAG, "selected event id=$eventId name=${race.name}")
+    }
+
+    private suspend fun sendEventOrSeriesToDesktop(dataProcessor: DataProcessor, intent: Intent) {
+        val eventId = intent.uuidExtra() ?: return missingEventId()
+        val receiveUrl = intent.getStringExtra(EXTRA_DESKTOP_RECEIVE_URL)?.takeIf { it.isNotBlank() } ?: run {
+            DebugLog.warn(TAG, "Command send ignored missing $EXTRA_DESKTOP_RECEIVE_URL")
+            Log.w(TAG, "missing $EXTRA_DESKTOP_RECEIVE_URL")
+            return
+        }
+        val upload = dataProcessor.desktopUploadForRaceOrSeries(eventId)
+        DesktopFileTransferUploader().upload(receiveUrl, upload)
+        val message = "sent event-or-series id=$eventId file=${upload.fileName} " +
+            "contentType=${upload.contentType} bytes=${upload.bytes.size}"
+        DebugLog.info(TAG, "Command $message")
+        Log.i(TAG, message)
     }
 
     private suspend fun printStatus(context: Context) {
@@ -217,12 +255,16 @@ class AppCommandReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "AppCommand"
         const val ACTION_LIST_EVENTS = "org.openardf.radiooracle.command.LIST_EVENTS"
+        const val ACTION_LIST_SERIES = "org.openardf.radiooracle.command.LIST_SERIES"
         const val ACTION_DELETE_EVENT = "org.openardf.radiooracle.command.DELETE_EVENT"
         const val ACTION_SELECT_EVENT = "org.openardf.radiooracle.command.SELECT_EVENT"
+        const val ACTION_SEND_EVENT_OR_SERIES_TO_DESKTOP =
+            "org.openardf.radiooracle.command.SEND_EVENT_OR_SERIES_TO_DESKTOP"
         const val ACTION_PRINT_STATUS = "org.openardf.radiooracle.command.PRINT_STATUS"
         const val ACTION_PRINT_FINISH_TICKET = "org.openardf.radiooracle.command.PRINT_FINISH_TICKET"
         const val ACTION_PRINT_LATEST_FINISH_TICKET = "org.openardf.radiooracle.command.PRINT_LATEST_FINISH_TICKET"
         const val EXTRA_EVENT_ID = "event_id"
         const val EXTRA_RESULT_ID = "result_id"
+        const val EXTRA_DESKTOP_RECEIVE_URL = "desktop_receive_url"
     }
 }

@@ -421,12 +421,7 @@ class RaceSelectionFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val upload = withContext(Dispatchers.IO) {
-                    val seriesName = raceViewModel.seriesNameForRace(race.id)
-                    EventFileTransferUploads.forRaceOrSeries(
-                        raceName = race.name,
-                        seriesName = seriesName,
-                        bytes = raceViewModel.exportRaceOrSeriesDataBytes(race.id)
-                    )
+                    raceViewModel.desktopUploadForRaceOrSeries(race.id)
                 }
                 pendingDesktopUpload = upload
                 progressDialog.dismiss()

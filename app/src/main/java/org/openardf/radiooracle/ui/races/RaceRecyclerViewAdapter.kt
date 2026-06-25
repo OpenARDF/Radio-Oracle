@@ -63,6 +63,8 @@ class RaceRecyclerViewAdapter(
         if (isSeriesRace(item.id)) {
             popupMenu.menu.findItem(R.id.menu_item_export_race)
                 ?.setTitle(R.string.event_series_export)
+            popupMenu.menu.findItem(R.id.menu_item_send_race_desktop)
+                ?.setTitle(R.string.event_series_send_desktop)
         }
 
         popupMenu.setOnMenuItemClickListener {
@@ -97,7 +99,7 @@ class RaceRecyclerViewAdapter(
     }
 
     private fun isSeriesRace(raceId: UUID): Boolean = runBlocking {
-        (dataProcessor.getEventSeriesForRace(raceId)?.members?.size ?: 0) >= 2
+        dataProcessor.getEventSeriesForRace(raceId) != null
     }
 
     /** Returns the number of races currently displayed. */

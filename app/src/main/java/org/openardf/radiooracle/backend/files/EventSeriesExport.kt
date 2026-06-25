@@ -23,8 +23,8 @@ object EventSeriesExport {
         raceDataById: Map<UUID, RaceData>
     ): ByteArray {
         val members = seriesData.orderedMembers()
-        require(members.size >= 2) {
-            "Event Series export requires at least two events."
+        require(members.isNotEmpty()) {
+            "Event Series export requires at least one event."
         }
         val seriesFile = EventSeriesFile(
             seriesId = seriesData.series.seriesId,
