@@ -700,6 +700,48 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun eventSeriesPackageFingerprintCommandReportsPortablePackageIdentity() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-series-fingerprint")
+        val eventDirectory = directory.resolve("events")
+        Files.createDirectories(eventDirectory)
+        val manifestPath = directory.resolve("Championship.series.radio-oracle.json")
+        val dayOnePath = eventDirectory.resolve("day-1.rom.json")
+        val dayTwoPath = eventDirectory.resolve("day-2.rom.json")
+        DesktopEventSeriesFiles.write(
+            manifestPath,
+            EventSeriesFile(
+                seriesId = "series-1",
+                name = "Championship",
+                events = listOf(
+                    EventSeriesEvent("day-1", "events/day-1.rom.json", 0, "Day 1"),
+                    EventSeriesEvent("day-2", "events/day-2.rom.json", 1, "Day 2")
+                )
+            )
+        )
+        DesktopProjectFiles.write(
+            dayOnePath,
+            projectFile("Day 1", eventId = "race-day-1", seriesLink = EventSeriesLink("series-1", "day-1"))
+        )
+        DesktopProjectFiles.write(
+            dayTwoPath,
+            projectFile("Day 2", eventId = "race-day-2", seriesLink = EventSeriesLink("series-1", "day-2"))
+        )
+        val packageFile = DesktopEventSeriesPackageFiles.packageForManifest(DesktopEventSeriesFiles, manifestPath)
+        val packagePath = directory.resolve(packageFile.fileName)
+        Files.write(packagePath, packageFile.bytes)
+
+        val result = runAutomation("event-series-package-fingerprint", packagePath.toString())
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"event-series-package-fingerprint\""))
+        assertTrue(result.stdout.contains("\"seriesId\":\"series-1\""))
+        assertTrue(result.stdout.contains("\"memberCount\":2"))
+        assertTrue(result.stdout.contains("\"seriesEventId\":\"day-1\""))
+        assertTrue(result.stdout.contains("\"eventFilePath\":\"events/day-2.rom.json\""))
+        assertTrue(result.stdout.contains("\"seriesLink\":{\"seriesId\":\"series-1\", \"seriesEventId\":\"day-2\"}"))
+    }
+
+    @Test
     fun eventSeriesStartFairnessCommandReportsHistoryInputs() {
         val directory = Files.createTempDirectory("radio-oracle-automation-series-start-fairness")
         val manifestPath = directory.resolve("series.radio-oracle.json")

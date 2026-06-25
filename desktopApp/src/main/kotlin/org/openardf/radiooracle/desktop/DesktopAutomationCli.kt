@@ -7,6 +7,7 @@ import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
+import java.util.zip.ZipInputStream
 import kotlin.system.exitProcess
 import org.openardf.radiooracle.desktop.printing.DesktopPrinterDiagnostics
 import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinter
@@ -21,6 +22,7 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFile
 import org.openardf.radiooracle.shared.event.EventSeriesIssueSeverity
+import org.openardf.radiooracle.shared.event.EventSeriesPackageFingerprints
 import org.openardf.radiooracle.shared.event.EventStartListDetails
 import org.openardf.radiooracle.shared.event.EventStartListRuleSeverity
 import org.openardf.radiooracle.shared.event.EventValidationRules
@@ -170,6 +172,7 @@ object DesktopAutomationCli {
             "event-series-add-event" -> eventSeriesAddEvent(commandArgs, out, err)
             "event-series-validate" -> eventSeriesValidate(commandArgs, out, err)
             "event-series-export" -> eventSeriesExport(commandArgs, out, err)
+            "event-series-package-fingerprint" -> eventSeriesPackageFingerprint(commandArgs, out, err)
             "event-series-match" -> eventSeriesMatch(commandArgs, out, err)
             "event-series-start-fairness" -> eventSeriesStartFairness(commandArgs, out, err)
             "event-series-optimize-start-fairness" -> eventSeriesOptimizeStartFairness(commandArgs, out, err)
@@ -1057,6 +1060,51 @@ object DesktopAutomationCli {
         }
     }
 
+    private fun eventSeriesPackageFingerprint(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val packageText = args.getOrNull(0)
+        if (packageText.isNullOrBlank()) {
+            err.println("event-series-package-fingerprint requires an Event Series package ZIP path.")
+            return 64
+        }
+        return runCatching {
+            val packagePath = Path.of(packageText)
+            val fingerprint = EventSeriesPackageFingerprints.fromTextEntries(zipTextEntries(packagePath))
+            out.println(
+                jsonObject(
+                    "command" to "event-series-package-fingerprint",
+                    "package" to packagePath.toAbsolutePath().normalize().toString(),
+                    "seriesId" to fingerprint.seriesId,
+                    "name" to fingerprint.name,
+                    "memberCount" to fingerprint.events.size,
+                    "competitorMatchOverrideCount" to fingerprint.competitorMatchOverrides.size,
+                    "events" to fingerprint.events.map { event ->
+                        mapOf(
+                            "seriesEventId" to event.seriesEventId,
+                            "eventFilePath" to event.eventFilePath,
+                            "order" to event.order,
+                            "displayName" to event.displayName,
+                            "startDateTimeIso" to event.startDateTimeIso,
+                            "formatLabel" to event.formatLabel,
+                            "raceName" to event.raceName,
+                            "raceStartDateTimeIso" to event.raceStartDateTimeIso,
+                            "raceType" to event.raceType,
+                            "raceLevel" to event.raceLevel,
+                            "raceBand" to event.raceBand,
+                            "timeLimitSeconds" to event.timeLimitSeconds,
+                            "seriesLink" to event.seriesLink?.let { link ->
+                                mapOf("seriesId" to link.seriesId, "seriesEventId" to link.seriesEventId)
+                            }
+                        )
+                    }
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Event Series package fingerprint failed: ${error.message ?: error::class.simpleName}")
+            66
+        }
+    }
+
     private fun eventSeriesMatch(args: List<String>, out: PrintStream, err: PrintStream): Int {
         val manifestText = args.getOrNull(0)
         val currentEventText = args.getOrNull(1)
@@ -1807,6 +1855,19 @@ object DesktopAutomationCli {
             .filter { (_, value) -> value == name }
             .mapNotNull { (index, _) -> args.getOrNull(index + 1) }
 
+    private fun zipTextEntries(path: Path): Map<String, String> =
+        ZipInputStream(Files.newInputStream(path).buffered()).use { zip ->
+            buildMap {
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    if (!entry.isDirectory) {
+                        put(entry.name, zip.readBytes().toString(Charsets.UTF_8))
+                    }
+                    zip.closeEntry()
+                }
+            }
+        }
+
     private fun helpText(): String = """
         Radio-Oracle desktop automation
 
@@ -1830,6 +1891,8 @@ object DesktopAutomationCli {
                                           Validate a series manifest and linked Event Files; fail when issues exist with --require-clean.
           event-series-export <manifest-path> <target-folder>
                                           Copy the manifest and only manifest-listed Event Files to a clean folder.
+          event-series-package-fingerprint <zip-path>
+                                          Print a stable semantic fingerprint for an Event Series package ZIP.
           event-series-match <manifest-path> <current-event-path>
                                           Print competitor matching diagnostics for the current series event.
           event-series-start-fairness <manifest-path> <current-event-path>
