@@ -92,6 +92,38 @@ class EventSeriesPersistenceTests {
         assertEquals(emptyList<EventSeriesMember>(), stored.members)
     }
 
+    @Test
+    fun importedSeriesCanBeFoundFromEveryLocalMemberRace() = runBlocking {
+        val firstRace = race("Day 1")
+        val secondRace = race("Day 2")
+        val series = EventSeries(seriesId = "series-import", name = "Imported Championship")
+        val members = listOf(
+            member(series.seriesId, "day-1", firstRace.id, 0, firstRace.name),
+            member(series.seriesId, "day-2", secondRace.id, 1, secondRace.name)
+        )
+
+        saveImportedSeriesRows(series, members, firstRace, secondRace)
+
+        assertEquals(
+            listOf("day-1", "day-2"),
+            database.eventSeriesDao().getSeriesForRace(firstRace.id)!!.orderedMembers().map { it.seriesEventId }
+        )
+        assertEquals(
+            listOf("day-1", "day-2"),
+            database.eventSeriesDao().getSeriesForRace(secondRace.id)!!.orderedMembers().map { it.seriesEventId }
+        )
+    }
+
+    private suspend fun saveImportedSeriesRows(
+        series: EventSeries,
+        members: List<EventSeriesMember>,
+        vararg races: Race
+    ) {
+        races.forEach { race -> database.raceDao().createRace(race) }
+        database.eventSeriesDao().upsertSeries(series)
+        members.forEach { member -> database.eventSeriesDao().upsertMember(member) }
+    }
+
     private fun race(name: String): Race =
         Race(
             id = UUID.randomUUID(),

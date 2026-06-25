@@ -276,7 +276,8 @@
     <string name="race_import_internet">Importovat z ROBIS</string>
     <string name="race_receive_desktop">Přijmout z desktopu</string>
     <string name="race_send_desktop">Odeslat do desktopu</string>
-    <string name="race_send_file_desktop">Odeslat soubor do desktopu</string>
+    <string name="race_send_file_desktop">Odeslat vybraný soubor do desktopu</string>
+    <string name="event_series_send_desktop">Odeslat sérii do desktopu</string>
     <string name="race_export_success">Událost úspěšně exportována</string>
     <string name="race_import_success">Událost úspěšně importována</string>
     <string name="race_import_failure">Chyba při importu události</string>

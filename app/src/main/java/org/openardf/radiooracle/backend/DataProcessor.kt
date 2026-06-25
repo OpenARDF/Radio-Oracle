@@ -10,8 +10,10 @@ import androidx.preference.PreferenceManager
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.files.DataImportValidator
 import org.openardf.radiooracle.backend.files.AndroidEventSeriesImport
+import org.openardf.radiooracle.backend.files.DesktopFileTransferUpload
 import org.openardf.radiooracle.backend.files.EventSeriesExport
 import org.openardf.radiooracle.backend.files.EventSeriesImport
+import org.openardf.radiooracle.backend.files.EventFileTransferUploads
 import org.openardf.radiooracle.backend.files.FileProcessor
 import org.openardf.radiooracle.backend.files.processors.JsonProcessor
 import org.openardf.radiooracle.backend.files.wrappers.DataImportWrapper
@@ -736,10 +738,22 @@ class DataProcessor private constructor(context: Context) {
     suspend fun exportRaceOrSeriesDataBytes(raceId: UUID): ByteArray =
         exportEventSeriesPackageBytesForRace(raceId) ?: exportRaceDataBytes(raceId)
 
+    suspend fun desktopUploadForRaceOrSeries(raceId: UUID): DesktopFileTransferUpload {
+        val race = getRace(raceId) ?: throw IllegalArgumentException("Event not found: $raceId")
+        val seriesName = getEventSeriesForRace(raceId)
+            ?.series
+            ?.name
+        return EventFileTransferUploads.forRaceOrSeries(
+            raceName = race.name,
+            seriesName = seriesName,
+            bytes = exportRaceOrSeriesDataBytes(raceId)
+        )
+    }
+
     suspend fun exportEventSeriesPackageBytesForRace(raceId: UUID): ByteArray? {
         val seriesData = getEventSeriesForRace(raceId) ?: return null
         val members = seriesData.orderedMembers()
-        if (members.size < 2) {
+        if (members.isEmpty()) {
             return null
         }
         return EventSeriesExport.packageBytes(

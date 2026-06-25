@@ -84,8 +84,10 @@
             android:exported="${radioOracleCommandReceiverExported}">
             <intent-filter>
                 <action android:name="org.openardf.radiooracle.command.LIST_EVENTS" />
+                <action android:name="org.openardf.radiooracle.command.LIST_SERIES" />
                 <action android:name="org.openardf.radiooracle.command.DELETE_EVENT" />
                 <action android:name="org.openardf.radiooracle.command.SELECT_EVENT" />
+                <action android:name="org.openardf.radiooracle.command.SEND_EVENT_OR_SERIES_TO_DESKTOP" />
             </intent-filter>
         </receiver>
     </application>

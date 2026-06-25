@@ -1200,6 +1200,20 @@ class DesktopEventSeriesTest {
     }
 
     @Test
+    fun packageForManifestZipsSingleKnownSeriesMember() {
+        val manifestPath = Path.of("/source/Championship.series.radio-oracle.json")
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile()),
+            eventFiles = mapOf(Path.of("/source/day-1.rom.json") to projectFile("Day 1"))
+        )
+
+        val packageFile = DesktopEventSeriesPackageFiles.packageForManifest(store, manifestPath)
+
+        assertEquals("Championship.zip", packageFile.fileName)
+        assertEquals(setOf("Championship.series.radio-oracle.json", "day-1.rom.json"), zipEntryNames(packageFile.bytes))
+    }
+
+    @Test
     fun unpackSeriesPackageExtractsManifestAndMemberEventsSafely() {
         val root = Files.createTempDirectory("radio-oracle-series-package")
         val zipPath = root.resolve("Championship.zip")

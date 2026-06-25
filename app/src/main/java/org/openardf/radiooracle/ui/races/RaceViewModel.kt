@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import org.openardf.radiooracle.backend.files.DesktopFileTransferUpload
 import org.openardf.radiooracle.backend.files.AndroidEventSeriesImport
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.room.entity.Race
@@ -45,7 +46,6 @@ class RaceViewModel : ViewModel() {
     /** Returns the local series name for this race when it belongs to a multi-event series. */
     fun seriesNameForRace(raceId: UUID): String? = runBlocking {
         dataProcessor.getEventSeriesForRace(raceId)
-            ?.takeIf { it.members.size >= 2 }
             ?.series
             ?.name
     }
@@ -110,6 +110,10 @@ class RaceViewModel : ViewModel() {
     /** Exports a single Event File or the full Event Series package as bytes. */
     suspend fun exportRaceOrSeriesDataBytes(raceId: UUID): ByteArray =
         dataProcessor.exportRaceOrSeriesDataBytes(raceId)
+
+    /** Prepares the direct desktop upload for a single Event File or the containing Event Series package. */
+    suspend fun desktopUploadForRaceOrSeries(raceId: UUID): DesktopFileTransferUpload =
+        dataProcessor.desktopUploadForRaceOrSeries(raceId)
 
     /** Observes races and publishes them sorted by start time. */
     init {
