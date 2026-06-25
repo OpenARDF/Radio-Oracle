@@ -331,6 +331,12 @@ Goal: add platform-specific capabilities after the event-admin beta is stable.
   operator's coarse adjustment for unusual conditions, but make the long-term
   model capable of explaining each leg's adjusted speed assumptions in the
   analyzer report.
+- Extract a shared course-route optimization core after current analyzer and
+  generator route choices have characterization tests. The first shared layer
+  should be the pure route-ordering and shortest-effective-path logic used by
+  Course Analyzer and the course generators; analyzer-specific imported-route
+  comparison, wait timing, renumbering, and category/report context should stay
+  layered on top rather than being pulled into the common optimizer.
 
 Milestone: each platform feature lands behind shared tests plus platform smoke
 tests without regressing Android.

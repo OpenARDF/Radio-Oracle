@@ -124,9 +124,11 @@ class DesktopControlsRouteKmlKmzExportTest {
 
         assertEquals(3, kmlSummary.routeCount)
         assertEquals(6, kmlSummary.courseControlPointCount)
-        val kmlNames = exportedKmlText(kmlOutput, "course-key").folderPlacemarkNames("Courses")
+        val kml = exportedKmlText(kmlOutput, "course-key")
+        val kmlNames = kml.folderPlacemarkNames("Courses")
         assertEquals(1, kmlNames.count { it == "Start" })
         assertEquals(1, kmlNames.count { it == "Finish" })
+        assertTrue(kml.contains("-121.99997999,45.00002001,88"))
 
         val gpxOutput = Files.createTempFile("radio-oracle-controls-routes-endpoints", ".gpx.zip")
         val gpxSummary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
@@ -141,6 +143,7 @@ class DesktopControlsRouteKmlKmzExportTest {
         assertEquals(1, gpx.gpxWaypointNames().count { it == "Start" })
         assertEquals(1, gpx.gpxWaypointNames().count { it == "Finish" })
         assertEquals(listOf("M21", "W65", "M40"), gpx.gpxRouteNames())
+        assertTrue(gpx.contains("<rtept lat=\"45.00002001\" lon=\"-121.99997999\">"))
     }
 
     @Test
@@ -389,10 +392,10 @@ class DesktopControlsRouteKmlKmzExportTest {
             EventProjectEditor.updateCategoryEncryptedCourseInfo(
                 withThirdCategory,
                 "cat-w65",
-                DesktopProtectedCourseOrder.encryptCourseInfo(sampleCourseInfo(endpointOffset = 0.00002), password)
+                DesktopProtectedCourseOrder.encryptCourseInfo(sampleCourseInfo(endpointOffset = 0.00002001), password)
             ),
             "cat-m40",
-            DesktopProtectedCourseOrder.encryptCourseInfo(sampleCourseInfo(endpointOffset = -0.00002), password)
+            DesktopProtectedCourseOrder.encryptCourseInfo(sampleCourseInfo(endpointOffset = -0.00002001), password)
         )
     }
 

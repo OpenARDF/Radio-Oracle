@@ -254,12 +254,7 @@ object DesktopCourseOverlayExporter {
             .ifBlank { "Course" }
 
     private fun xml(value: String): String =
-        value
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace("\"", "&quot;")
-            .replace("'", "&apos;")
+        DesktopExportPrimitives.xmlText(value)
 }
 
 private data class CourseOverlayData(
@@ -567,12 +562,7 @@ private data class OverlayObject(
         }.joinToString(separator = ";", postfix = ";")
 
     private fun xml(value: String): String =
-        value
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace("\"", "&quot;")
-            .replace("'", "&apos;")
+        DesktopExportPrimitives.xmlText(value)
 
     companion object {
         fun point(symbol: OomSymbol, point: OomMapPoint): OverlayObject =
