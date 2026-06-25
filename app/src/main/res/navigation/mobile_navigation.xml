@@ -30,7 +30,11 @@
         android:id="@+id/eventSeriesFragment"
         android:name="org.openardf.radiooracle.ui.series.EventSeriesFragment"
         android:label="@string/event_series_toolbar_title"
-        tools:layout="@layout/fragment_event_series" />
+        tools:layout="@layout/fragment_event_series">
+        <action
+            android:id="@+id/openRaceFromSeries"
+            app:destination="@id/bottomNav" />
+    </fragment>
 
     <navigation
         android:id="@+id/bottomNav"
