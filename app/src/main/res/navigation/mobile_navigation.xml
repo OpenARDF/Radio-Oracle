@@ -21,7 +21,16 @@
         <action
             android:id="@+id/importRobis"
             app:destination="@id/InternetImportDialogFragment" />
+        <action
+            android:id="@+id/openEventSeries"
+            app:destination="@id/eventSeriesFragment" />
     </fragment>
+
+    <fragment
+        android:id="@+id/eventSeriesFragment"
+        android:name="org.openardf.radiooracle.ui.series.EventSeriesFragment"
+        android:label="@string/event_series_toolbar_title"
+        tools:layout="@layout/fragment_event_series" />
 
     <navigation
         android:id="@+id/bottomNav"
