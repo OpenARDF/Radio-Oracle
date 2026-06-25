@@ -17,6 +17,17 @@ data class EventSeriesPackageContent(
     val entries: List<EventSeriesPackageTextEntry>
 )
 
+enum class EventSeriesPackageEntryKind {
+    MANIFEST,
+    EVENT_FILE,
+    IGNORED
+}
+
+data class EventSeriesPackageEntry(
+    val path: String,
+    val kind: EventSeriesPackageEntryKind
+)
+
 object EventSeriesPackageContents {
     fun build(
         seriesFile: EventSeriesFile,
@@ -77,4 +88,20 @@ object EventSeriesPackageContents {
         }
         return segments.joinToString("/")
     }
+
+    fun classifyEntryPath(path: String): EventSeriesPackageEntry {
+        val normalizedPath = normalizedPackagePath(path)
+        val fileName = normalizedPath.substringAfterLast('/')
+        val kind = when {
+            normalizedPath.startsWith("__MACOSX/") -> EventSeriesPackageEntryKind.IGNORED
+            isEventSeriesFileName(fileName) -> EventSeriesPackageEntryKind.MANIFEST
+            isEventFileName(fileName) -> EventSeriesPackageEntryKind.EVENT_FILE
+            else -> EventSeriesPackageEntryKind.IGNORED
+        }
+        return EventSeriesPackageEntry(normalizedPath, kind)
+    }
+
+    private fun isEventFileName(fileName: String): Boolean =
+        fileName.endsWith(".json", ignoreCase = true) ||
+            fileName.endsWith(".rom.json", ignoreCase = true)
 }

@@ -40,7 +40,9 @@ class EventSeriesImportTests {
                 raceId = "race-day-2",
                 raceName = "Day 2",
                 seriesEventId = "day-2"
-            )
+            ),
+            "./series/readme.txt" to "ignored",
+            "__MACOSX/._day-1.rom.json" to "ignored"
         )
 
         val import = EventSeriesImport.prepareZipPackage(ByteArrayInputStream(packageBytes))

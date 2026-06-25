@@ -1224,6 +1224,9 @@ class DesktopEventSeriesTest {
             zip.putNextEntry(ZipEntry("day-1.rom.json"))
             zip.write("""{"appName":"Radio-Oracle","raceData":{}}""".toByteArray())
             zip.closeEntry()
+            zip.putNextEntry(ZipEntry("readme.txt"))
+            zip.write("ignored".toByteArray())
+            zip.closeEntry()
         }
 
         val result = DesktopEventSeriesPackageFiles.unpack(zipPath, root.resolve("received"))
@@ -1231,6 +1234,7 @@ class DesktopEventSeriesTest {
         assertEquals("series.radio-oracle.json", result.manifestPath.fileName.toString())
         assertEquals(listOf("day-1.rom.json"), result.eventFilePaths.map { it.fileName.toString() })
         assertTrue(result.manifestPath.startsWith(root.resolve("received")))
+        assertFalse(Files.exists(result.manifestPath.parent.resolve("readme.txt")))
     }
 
     @Test
