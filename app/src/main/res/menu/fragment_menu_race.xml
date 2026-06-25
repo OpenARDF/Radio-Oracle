@@ -4,7 +4,8 @@
     <item
         android:id="@+id/race_menu_event_series"
         android:icon="@drawable/ic_results"
-        android:title="@string/event_series_toolbar_title" />
+        android:title="@string/event_series_toolbar_title"
+        android:visible="false" />
 
     <item
         android:id="@+id/race_menu_global_settings"
