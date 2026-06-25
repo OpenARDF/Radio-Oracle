@@ -54,6 +54,7 @@ class AppCommandReceiver : BroadcastReceiver() {
             ACTION_DELETE_EVENT -> deleteEvent(dataProcessor, intent)
             ACTION_SELECT_EVENT -> selectEvent(dataProcessor, intent)
             ACTION_SEND_EVENT_OR_SERIES_TO_DESKTOP -> sendEventOrSeriesToDesktop(dataProcessor, intent)
+            ACTION_SEND_SERIES_TO_DESKTOP -> sendSeriesToDesktop(dataProcessor, intent)
             ACTION_PRINT_STATUS -> printStatus(context)
             ACTION_PRINT_FINISH_TICKET -> printFinishTicket(dataProcessor, intent)
             ACTION_PRINT_LATEST_FINISH_TICKET -> printLatestFinishTicket(dataProcessor, intent)
@@ -131,14 +132,21 @@ class AppCommandReceiver : BroadcastReceiver() {
 
     private suspend fun sendEventOrSeriesToDesktop(dataProcessor: DataProcessor, intent: Intent) {
         val eventId = intent.uuidExtra() ?: return missingEventId()
-        val receiveUrl = intent.getStringExtra(EXTRA_DESKTOP_RECEIVE_URL)?.takeIf { it.isNotBlank() } ?: run {
-            DebugLog.warn(TAG, "Command send ignored missing $EXTRA_DESKTOP_RECEIVE_URL")
-            Log.w(TAG, "missing $EXTRA_DESKTOP_RECEIVE_URL")
-            return
-        }
+        val receiveUrl = intent.desktopReceiveUrl() ?: return
         val upload = dataProcessor.desktopUploadForRaceOrSeries(eventId)
         DesktopFileTransferUploader().upload(receiveUrl, upload)
         val message = "sent event-or-series id=$eventId file=${upload.fileName} " +
+            "contentType=${upload.contentType} bytes=${upload.bytes.size}"
+        DebugLog.info(TAG, "Command $message")
+        Log.i(TAG, message)
+    }
+
+    private suspend fun sendSeriesToDesktop(dataProcessor: DataProcessor, intent: Intent) {
+        val seriesId = intent.getStringExtra(EXTRA_SERIES_ID)?.takeIf { it.isNotBlank() } ?: return missingSeriesId()
+        val receiveUrl = intent.desktopReceiveUrl() ?: return
+        val upload = dataProcessor.desktopUploadForSeries(seriesId)
+        DesktopFileTransferUploader().upload(receiveUrl, upload)
+        val message = "sent series id=$seriesId file=${upload.fileName} " +
             "contentType=${upload.contentType} bytes=${upload.bytes.size}"
         DebugLog.info(TAG, "Command $message")
         Log.i(TAG, message)
@@ -228,9 +236,21 @@ class AppCommandReceiver : BroadcastReceiver() {
     private fun Intent.uuidExtra(): UUID? =
         uuidExtra(EXTRA_EVENT_ID)
 
+    private fun Intent.desktopReceiveUrl(): String? =
+        getStringExtra(EXTRA_DESKTOP_RECEIVE_URL)?.takeIf { it.isNotBlank() } ?: run {
+            DebugLog.warn(TAG, "Command send ignored missing $EXTRA_DESKTOP_RECEIVE_URL")
+            Log.w(TAG, "missing $EXTRA_DESKTOP_RECEIVE_URL")
+            null
+        }
+
     private fun missingEventId() {
         DebugLog.warn(TAG, "Command missing or invalid $EXTRA_EVENT_ID")
         Log.w(TAG, "missing or invalid $EXTRA_EVENT_ID")
+    }
+
+    private fun missingSeriesId() {
+        DebugLog.warn(TAG, "Command missing or invalid $EXTRA_SERIES_ID")
+        Log.w(TAG, "missing or invalid $EXTRA_SERIES_ID")
     }
 
     private fun missingResultId() {
@@ -260,10 +280,12 @@ class AppCommandReceiver : BroadcastReceiver() {
         const val ACTION_SELECT_EVENT = "org.openardf.radiooracle.command.SELECT_EVENT"
         const val ACTION_SEND_EVENT_OR_SERIES_TO_DESKTOP =
             "org.openardf.radiooracle.command.SEND_EVENT_OR_SERIES_TO_DESKTOP"
+        const val ACTION_SEND_SERIES_TO_DESKTOP = "org.openardf.radiooracle.command.SEND_SERIES_TO_DESKTOP"
         const val ACTION_PRINT_STATUS = "org.openardf.radiooracle.command.PRINT_STATUS"
         const val ACTION_PRINT_FINISH_TICKET = "org.openardf.radiooracle.command.PRINT_FINISH_TICKET"
         const val ACTION_PRINT_LATEST_FINISH_TICKET = "org.openardf.radiooracle.command.PRINT_LATEST_FINISH_TICKET"
         const val EXTRA_EVENT_ID = "event_id"
+        const val EXTRA_SERIES_ID = "series_id"
         const val EXTRA_RESULT_ID = "result_id"
         const val EXTRA_DESKTOP_RECEIVE_URL = "desktop_receive_url"
     }
