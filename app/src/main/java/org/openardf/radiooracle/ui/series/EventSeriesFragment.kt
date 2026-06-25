@@ -24,8 +24,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.R
-import org.openardf.radiooracle.backend.files.EventFileTransferUploads
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
+import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.ui.transfer.DesktopFileTransferUploadDialogs
 
 class EventSeriesFragment : Fragment() {
@@ -95,7 +95,7 @@ class EventSeriesFragment : Fragment() {
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
         intent.addCategory(Intent.CATEGORY_OPENABLE)
         intent.type = EVENT_SERIES_PACKAGE_CONTENT_TYPE
-        intent.putExtra(Intent.EXTRA_TITLE, EventFileTransferUploads.fileNameForRaceOrSeries("series", item.name))
+        intent.putExtra(Intent.EXTRA_TITLE, EventFileTransferPayloads.seriesPackageFileName(item.name))
         exportSeriesResult.launch(intent)
     }
 

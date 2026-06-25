@@ -37,9 +37,4 @@ class EventFileTransferUploadsTest {
         assertEquals(EVENT_SERIES_PACKAGE_CONTENT_TYPE, upload.contentType)
         assertArrayEquals(bytes, upload.bytes)
     }
-
-    @Test
-    fun fallsBackToNeutralSingleEventName() {
-        assertEquals("race.ardfjs", EventFileTransferUploads.fileNameForRaceOrSeries("  ", null))
-    }
 }
