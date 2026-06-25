@@ -63,6 +63,9 @@ series-validate manifest flags="":
 series-export manifest target:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-export "{{manifest}}" "{{target}}"'
 
+series-package-fingerprint package:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-package-fingerprint "{{package}}"'
+
 series-match manifest current:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='event-series-match "{{manifest}}" "{{current}}"'
 
