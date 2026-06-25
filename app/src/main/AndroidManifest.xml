@@ -87,6 +87,7 @@
                 <action android:name="org.openardf.radiooracle.command.LIST_SERIES" />
                 <action android:name="org.openardf.radiooracle.command.DELETE_EVENT" />
                 <action android:name="org.openardf.radiooracle.command.SELECT_EVENT" />
+                <action android:name="org.openardf.radiooracle.command.CREATE_SERIES_FROM_EVENTS" />
                 <action android:name="org.openardf.radiooracle.command.SEND_EVENT_OR_SERIES_TO_DESKTOP" />
                 <action android:name="org.openardf.radiooracle.command.SEND_SERIES_TO_DESKTOP" />
                 <action android:name="org.openardf.radiooracle.command.LOG_SERIES_PACKAGE_FINGERPRINT" />
