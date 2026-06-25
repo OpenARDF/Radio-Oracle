@@ -1,7 +1,12 @@
 package org.openardf.radiooracle.backend.sportident
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -80,7 +85,101 @@ class EventSeriesCardReadRoutingIntegrationTest {
         assertEquals(day2.race.id, route.memberData.raceData.race.id)
     }
 
-    private fun raceData(name: String, controls: List<Int>, siNumber: Int): RaceData {
+    @Test
+    fun practiceSeriesCardReadStoresResultInMatchedEventAndRequestsSelection() = runBlocking {
+        val processor = DataProcessor.get()
+        val day1 = raceData("Practice Day 1", listOf(31, 32), siNumber = 1001)
+        val day2 = raceData("Practice Day 2", listOf(41, 42), siNumber = 1001)
+        val series = EventSeries(seriesId = "series-routing-${UUID.randomUUID()}", name = "Routing Series")
+        processor.saveRaceData(day1)
+        processor.saveRaceData(day2)
+        processor.saveEventSeries(
+            series = series,
+            members = listOf(
+                member(series.seriesId, "day-1", day1, order = 0),
+                member(series.seriesId, "day-2", day2, order = 1)
+            )
+        )
+
+        val selectionRequest = async {
+            withTimeout(1_000) { processor.raceSelectionRequests.first() }
+        }
+        val stored = processor.processCardDataForCurrentRaceOrSeries(
+            cardData = card(siNumber = 1001, punches = listOf(41, 42)),
+            currentRace = day1.race
+        )
+
+        assertEquals(true, stored)
+        assertEquals(day2.race.id, selectionRequest.await())
+        assertEquals(emptyList<ResultDataSummary>(), processor.resultSummaries(day1.race.id))
+        assertEquals(
+            listOf(ResultDataSummary(raceId = day2.race.id, siNumber = 1001)),
+            processor.resultSummaries(day2.race.id)
+        )
+    }
+
+    @Test
+    fun nonPracticeSeriesCardReadDoesNotRouteToAnotherEvent() = runBlocking {
+        val processor = DataProcessor.get()
+        val day1 = raceData(
+            "Regional Day 1",
+            listOf(31, 32),
+            siNumber = 1001,
+            raceLevel = RaceLevel.REGIONAL
+        )
+        val day2 = raceData(
+            "Regional Day 2",
+            listOf(41, 42),
+            siNumber = 1001,
+            raceLevel = RaceLevel.REGIONAL
+        )
+        val series = EventSeries(seriesId = "series-routing-${UUID.randomUUID()}", name = "Routing Series")
+        processor.saveRaceData(day1)
+        processor.saveRaceData(day2)
+        processor.saveEventSeries(
+            series = series,
+            members = listOf(
+                member(series.seriesId, "day-1", day1, order = 0),
+                member(series.seriesId, "day-2", day2, order = 1)
+            )
+        )
+
+        val selectionRequest = async {
+            withTimeoutOrNull(250) { processor.raceSelectionRequests.first() }
+        }
+        val stored = processor.processCardDataForCurrentRaceOrSeries(
+            cardData = card(siNumber = 1001, punches = listOf(41, 42)),
+            currentRace = day1.race
+        )
+
+        assertEquals(true, stored)
+        assertNull(selectionRequest.await())
+        assertEquals(
+            listOf(ResultDataSummary(raceId = day1.race.id, siNumber = 1001)),
+            processor.resultSummaries(day1.race.id)
+        )
+        assertEquals(emptyList<ResultDataSummary>(), processor.resultSummaries(day2.race.id))
+    }
+
+    private suspend fun DataProcessor.resultSummaries(raceId: UUID): List<ResultDataSummary> =
+        getResultDataFlowByRace(raceId).first().map { resultData ->
+            ResultDataSummary(
+                raceId = resultData.result.raceId,
+                siNumber = resultData.result.siNumber
+            )
+        }
+
+    private data class ResultDataSummary(
+        val raceId: UUID,
+        val siNumber: Int?
+    )
+
+    private fun raceData(
+        name: String,
+        controls: List<Int>,
+        siNumber: Int,
+        raceLevel: RaceLevel = RaceLevel.PRACTICE
+    ): RaceData {
         val raceId = UUID.randomUUID()
         val categoryId = UUID.randomUUID()
         val category = Category(
@@ -101,7 +200,7 @@ class EventSeriesCardReadRoutingIntegrationTest {
                 apiKey = "",
                 startDateTime = LocalDateTime.of(2026, 6, 20, 9, 0),
                 raceType = RaceType.CLASSIC,
-                raceLevel = RaceLevel.PRACTICE,
+                raceLevel = raceLevel,
                 raceBand = RaceBand.M80,
                 timeLimit = Duration.ofHours(2)
             ),

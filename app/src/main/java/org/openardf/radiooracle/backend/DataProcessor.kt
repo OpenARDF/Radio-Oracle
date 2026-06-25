@@ -65,6 +65,9 @@ import org.openardf.radiooracle.shared.files.DataFormat
 import org.openardf.radiooracle.shared.files.DataType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -88,6 +91,8 @@ class DataProcessor private constructor(context: Context) {
     var currentState = MutableLiveData<AppState>()
     var fileProcessor: FileProcessor? = null
     var printProcessor = PrintProcessor(context, this)
+    private val _raceSelectionRequests = MutableSharedFlow<UUID>(extraBufferCapacity = 1)
+    val raceSelectionRequests: SharedFlow<UUID> = _raceSelectionRequests.asSharedFlow()
 
     companion object {
         private var INSTANCE: DataProcessor? = null
@@ -551,6 +556,10 @@ class DataProcessor private constructor(context: Context) {
         appContext.get()?.let { ResultsProcessor.processCardData(cardData, race, it, this) }
 
     suspend fun processCardDataForCurrentRaceOrSeries(cardData: CardData, currentRace: Race): Boolean? {
+        if (currentRace.raceLevel != RaceLevel.PRACTICE) {
+            return processCardData(cardData, currentRace)
+        }
+
         val seriesMembers = eventSeriesReadoutMembersForRace(currentRace.id)
         if (seriesMembers.size < 2) {
             return processCardData(cardData, currentRace)
@@ -558,6 +567,7 @@ class DataProcessor private constructor(context: Context) {
 
         return when (val route = EventSeriesReadoutRouter.route(cardData, seriesMembers)) {
             is EventSeriesReadoutRoute.Matched -> {
+                val routedRace = route.memberData.raceData.race
                 DebugLog.info(
                     "Event Series",
                     "Card read routed si=${cardData.siNumber} " +
@@ -565,7 +575,12 @@ class DataProcessor private constructor(context: Context) {
                         "event=${route.memberData.member.seriesEventId} " +
                         "reason=${route.reason}"
                 )
-                processCardData(cardData, route.memberData.raceData.race)
+                val stored = processCardData(cardData, routedRace)
+                if (stored == true && routedRace.id != currentRace.id) {
+                    setCurrentRace(routedRace.id)
+                    _raceSelectionRequests.tryEmit(routedRace.id)
+                }
+                stored
             }
             is EventSeriesReadoutRoute.Ambiguous -> {
                 DebugLog.warn(

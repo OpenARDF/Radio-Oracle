@@ -82,6 +82,14 @@ class SelectedRaceViewModel : ViewModel() {
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
+            dataProcessor.raceSelectionRequests.collect { raceId ->
+                if (raceId != selectedRaceId) {
+                    setRace(raceId)
+                }
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
             dataProcessor.getEventSeries().collect { series ->
                 _eventSeries.value = series
                 updateCurrentRaceSeries()
