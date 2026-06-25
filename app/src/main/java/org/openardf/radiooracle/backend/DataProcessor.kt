@@ -723,20 +723,21 @@ class DataProcessor private constructor(context: Context) {
             exportRaceData(uri, raceId)
             return
         }
-        val context = getContext() ?: return
-        context.contentResolver.openOutputStream(uri)?.use { output ->
-            output.write(seriesPackageBytes)
-        }
+        writeEventSeriesPackageToUri(uri, seriesPackageBytes)
         DebugLog.info("Event Series", "Exported Event Series package for event=$raceId")
     }
 
     suspend fun exportEventSeriesPackage(uri: Uri, seriesId: String) {
-        val context = getContext() ?: throw IllegalStateException("Could not access Android context.")
         val seriesPackageBytes = exportEventSeriesPackageBytes(seriesId)
-        context.contentResolver.openOutputStream(uri)?.use { output ->
-            output.write(seriesPackageBytes)
-        } ?: throw IllegalStateException("Could not open Event Series export destination.")
+        writeEventSeriesPackageToUri(uri, seriesPackageBytes)
         DebugLog.info("Event Series", "Exported Event Series package id=$seriesId")
+    }
+
+    private fun writeEventSeriesPackageToUri(uri: Uri, bytes: ByteArray) {
+        val context = getContext() ?: throw IllegalStateException("Could not access Android context.")
+        context.contentResolver.openOutputStream(uri)?.use { output ->
+            output.write(bytes)
+        } ?: throw IllegalStateException("Could not open Event Series export destination.")
     }
 
     suspend fun exportRaceDataBytes(raceId: UUID): ByteArray =

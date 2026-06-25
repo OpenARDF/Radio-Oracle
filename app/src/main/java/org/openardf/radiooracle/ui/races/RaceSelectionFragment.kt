@@ -232,9 +232,9 @@ class RaceSelectionFragment : Fragment() {
         }
     }
 
-    private fun displayAlert(message: String) {
+    private fun displayAlert(message: String, titleRes: Int = R.string.race_import_failure) {
         val alertDialog = AlertDialog.Builder(requireContext()).create()
-        alertDialog.setTitle(getString(R.string.race_import_failure))
+        alertDialog.setTitle(getString(titleRes))
         alertDialog.setMessage(message)
         alertDialog.setButton(
             AlertDialog.BUTTON_POSITIVE, getString(R.string.general_ok)
@@ -244,7 +244,15 @@ class RaceSelectionFragment : Fragment() {
 
     private fun exportImportRaceData(uri: Uri) {
         if (exportData && selectedRaceId != null) {
-            raceViewModel.exportRaceOrSeriesData(uri, selectedRaceId!!)
+            try {
+                raceViewModel.exportRaceOrSeriesData(uri, selectedRaceId!!)
+            } catch (error: Exception) {
+                displayAlert(
+                    error.message ?: getString(R.string.race_export_failure),
+                    R.string.race_export_failure
+                )
+                return
+            }
 
             // Inform user about successful export
             Toast.makeText(
