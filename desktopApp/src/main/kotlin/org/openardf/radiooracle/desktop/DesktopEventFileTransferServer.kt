@@ -5,6 +5,7 @@ import com.google.zxing.client.j2se.MatrixToImageWriter
 import com.google.zxing.qrcode.QRCodeWriter
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import org.openardf.radiooracle.shared.event.EVENT_FILE_TRANSFER_CONTENT_TYPE
 import java.awt.image.BufferedImage
 import java.net.Inet4Address
 import java.net.InetAddress
@@ -25,7 +26,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 private const val EventFileTransferPath = "/radio-oracle/event-file"
-private const val EventFileTransferContentType = "application/vnd.openardf.radiooracle.event+json; charset=utf-8"
 
 data class DesktopEventFileTransferAddress(
     val label: String,
@@ -45,6 +45,7 @@ data class DesktopEventFileTransferSession(
 
 class DesktopEventFileTransferServer(
     private val filePath: Path,
+    private val contentType: String = EVENT_FILE_TRANSFER_CONTENT_TYPE,
     private val addressesProvider: () -> List<DesktopEventFileTransferAddress> = ::discoverDesktopEventFileTransferAddresses,
     private val tokenFactory: () -> String = ::generateDesktopEventFileTransferToken,
     private val timeoutMillis: Long = TimeUnit.MINUTES.toMillis(10),
@@ -148,7 +149,7 @@ class DesktopEventFileTransferServer(
             return
         }
 
-        exchange.responseHeaders.add("Content-Type", EventFileTransferContentType)
+        exchange.responseHeaders.add("Content-Type", contentType)
         exchange.responseHeaders.add(
             "Content-Disposition",
             "attachment; filename=\"${contentDispositionFileName(filePath.fileName.toString())}\""

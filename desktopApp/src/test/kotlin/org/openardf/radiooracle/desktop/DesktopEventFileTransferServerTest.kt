@@ -3,6 +3,7 @@ package org.openardf.radiooracle.desktop
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.openardf.radiooracle.shared.event.EVENT_FILE_TRANSFER_CONTENT_TYPE
 import java.net.ConnectException
 import java.net.URI
 import java.net.http.HttpClient
@@ -29,11 +30,7 @@ class DesktopEventFileTransferServerTest {
 
         assertEquals(200, response.statusCode())
         assertEquals("""{"appName":"Radio-Oracle","raceData":{}}""", response.body())
-        assertTrue(
-            response.headers().firstValue("Content-Type").orElse("").startsWith(
-                "application/vnd.openardf.radiooracle.event+json"
-            )
-        )
+        assertEquals(EVENT_FILE_TRANSFER_CONTENT_TYPE, response.headers().firstValue("Content-Type").orElse(""))
         assertTrue(response.headers().firstValue("Content-Disposition").orElse("").contains(path.fileName.toString()))
 
         eventuallyUnavailable(session.url)

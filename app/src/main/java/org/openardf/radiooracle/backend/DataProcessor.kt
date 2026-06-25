@@ -65,6 +65,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.lang.ref.WeakReference
 import java.time.Duration
@@ -688,6 +689,21 @@ class DataProcessor private constructor(context: Context) {
         DebugLog.info(
             "Event Series",
             "Prepared Event Series import id=${eventSeriesImport.series.seriesId} " +
+                "members=${eventSeriesImport.memberImports.size}"
+        )
+        return eventSeriesImport
+    }
+
+    @Throws(Exception::class)
+    suspend fun importEventSeriesPackage(bytes: ByteArray): AndroidEventSeriesImport? {
+        val context = getContext() ?: return null
+        val eventSeriesImport = EventSeriesImport.prepareZipPackage(ByteArrayInputStream(bytes))
+        eventSeriesImport.races.forEach { raceData ->
+            DataImportValidator.validateRaceDataImport(raceData, context)
+        }
+        DebugLog.info(
+            "Event Series",
+            "Prepared downloaded Event Series import id=${eventSeriesImport.series.seriesId} " +
                 "members=${eventSeriesImport.memberImports.size}"
         )
         return eventSeriesImport

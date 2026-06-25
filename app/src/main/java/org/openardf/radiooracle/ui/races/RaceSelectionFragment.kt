@@ -35,9 +35,12 @@ import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.files.DesktopFileTransferUpload
 import org.openardf.radiooracle.backend.files.DesktopFileTransferUploader
 import org.openardf.radiooracle.backend.files.EventFileTransferDownloader
+import org.openardf.radiooracle.backend.files.EventFileTransferUploads
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
+import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
+import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
 import kotlinx.coroutines.Dispatchers
@@ -301,11 +304,8 @@ class RaceSelectionFragment : Fragment() {
 
     private fun isEventSeriesPackageUri(uri: Uri): Boolean {
         val type = requireContext().contentResolver.getType(uri).orEmpty()
-        if (type == "application/zip" || type == "application/x-zip-compressed") {
-            return true
-        }
         val name = displayNameForUri(uri)
-        return name.endsWith(".zip", ignoreCase = true)
+        return EventFileTransferPayloads.isSeriesPackage(name, type)
     }
 
     private fun showReceiveFromDesktopDialog() {
@@ -369,10 +369,28 @@ class RaceSelectionFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val jsonString = withContext(Dispatchers.IO) {
+                val download = withContext(Dispatchers.IO) {
                     EventFileTransferDownloader().download(rawUrl)
                 }
-                raceData = raceViewModel.importRaceData(jsonString)
+                if (download.isZip) {
+                    val eventSeriesImport = withContext(Dispatchers.IO) {
+                        raceViewModel.importAndSaveEventSeriesPackage(download.bytes)
+                            ?: throw IllegalStateException(getString(R.string.event_series_import_invalid))
+                    }
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        requireContext(),
+                        getString(
+                            R.string.event_series_import_success,
+                            eventSeriesImport.series.name,
+                            eventSeriesImport.memberImports.size
+                        ),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@launch
+                }
+
+                raceData = raceViewModel.importRaceData(download.text())
                     ?: throw IllegalStateException("Invalid Event File.")
                 progressDialog.dismiss()
                 findNavController().navigate(
@@ -403,10 +421,11 @@ class RaceSelectionFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val upload = withContext(Dispatchers.IO) {
-                    DesktopFileTransferUpload(
-                        fileName = "${safeUploadFileStem(race.name)}.ardfjs",
-                        contentType = "application/json; charset=utf-8",
-                        bytes = raceViewModel.exportRaceDataBytes(race.id)
+                    val seriesName = raceViewModel.seriesNameForRace(race.id)
+                    EventFileTransferUploads.forRaceOrSeries(
+                        raceName = race.name,
+                        seriesName = seriesName,
+                        bytes = raceViewModel.exportRaceOrSeriesDataBytes(race.id)
                     )
                 }
                 pendingDesktopUpload = upload
@@ -584,18 +603,11 @@ class RaceSelectionFragment : Fragment() {
             intent.type = "text/json"
             intent.putExtra(Intent.EXTRA_TITLE, "race.ardfjs")
         } else {
-            intent.type = "application/zip"
-            intent.putExtra(Intent.EXTRA_TITLE, "${safeUploadFileStem(seriesName)}.zip")
+            intent.type = EVENT_SERIES_PACKAGE_CONTENT_TYPE
+            intent.putExtra(Intent.EXTRA_TITLE, EventFileTransferUploads.fileNameForRaceOrSeries("race", seriesName))
         }
         getResult.launch(intent)
     }
-
-    private fun safeUploadFileStem(name: String): String =
-        name
-            .trim()
-            .replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), " ")
-            .replace(Regex("\\s+"), " ")
-            .ifBlank { "race" }
 
     private fun setRecyclerAdapter() {
 

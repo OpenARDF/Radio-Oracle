@@ -126,6 +126,8 @@ import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventControlDetails
 import org.openardf.radiooracle.shared.event.EventAssignedControlWarning
 import org.openardf.radiooracle.shared.event.EventAssignedControlWarnings
+import org.openardf.radiooracle.shared.event.EVENT_FILE_TRANSFER_CONTENT_TYPE
+import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.shared.event.EventInForestDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutSeverity
@@ -4199,10 +4201,31 @@ fun main(args: Array<String>) = application {
             eventFileTransferDialog = null
 
             runCatching {
-                val fileName = path.fileName.toString()
-                val byteCount = Files.size(path)
+                val manifestPath = currentSeriesManifestPath()
+                var transferContentType = EVENT_FILE_TRANSFER_CONTENT_TYPE
+                val transferPath = if (manifestPath == null) {
+                    path
+                } else {
+                    val seriesPackage = DesktopEventSeriesPackageFiles.packageForManifest(
+                        store = DesktopEventSeriesFiles,
+                        manifestPath = manifestPath
+                    )
+                    transferContentType = seriesPackage.contentType
+                    val tempDirectory = Files.createTempDirectory("radio-oracle-series-transfer-")
+                    tempDirectory.resolve(seriesPackage.fileName).also { tempPath ->
+                        Files.write(tempPath, seriesPackage.bytes)
+                    }
+                }
+                val isSeriesTransfer = manifestPath != null
+                val fileName = if (isSeriesTransfer) {
+                    transferPath.fileName.toString()
+                } else {
+                    path.fileName.toString()
+                }
+                val byteCount = Files.size(transferPath)
                 val server = DesktopEventFileTransferServer(
-                    filePath = path,
+                    filePath = transferPath,
+                    contentType = transferContentType,
                     onStopped = { reason ->
                         appCoroutineScope.launch {
                             if (transferRequestId != eventFileTransferRequestId) {
@@ -4210,11 +4233,19 @@ fun main(args: Array<String>) = application {
                             }
                             val message = when (reason) {
                                 DesktopEventFileTransferStopReason.Downloaded ->
-                                    "Event File downloaded by Android. Transfer stopped."
+                                    if (isSeriesTransfer) {
+                                        "Event Series package downloaded by Android. Transfer stopped."
+                                    } else {
+                                        "Event File downloaded by Android. Transfer stopped."
+                                    }
                                 DesktopEventFileTransferStopReason.Cancelled ->
-                                    "Event File transfer cancelled."
+                                    if (isSeriesTransfer) "Event Series transfer cancelled." else "Event File transfer cancelled."
                                 DesktopEventFileTransferStopReason.Timeout ->
-                                    "Event File transfer expired after 10 minutes."
+                                    if (isSeriesTransfer) {
+                                        "Event Series transfer expired after 10 minutes."
+                                    } else {
+                                        "Event File transfer expired after 10 minutes."
+                                    }
                             }
                             projectStatusText = message
                             eventFileTransferDialog = null
@@ -4230,7 +4261,7 @@ fun main(args: Array<String>) = application {
                                     eventFileTransferResultDialog = DesktopEventFileTransferResultDialogState.failure(
                                         title = "Android Transfer Expired",
                                         message = "No Android device downloaded $fileName before the 10 minute transfer link expired.",
-                                        path = path
+                                        path = transferPath
                                     )
                                 DesktopEventFileTransferStopReason.Cancelled -> Unit
                             }
@@ -4248,10 +4279,14 @@ fun main(args: Array<String>) = application {
                     qrCode = desktopEventFileTransferQrCode(session.url),
                     statusText = "Waiting for Android to download ${session.fileName}. The link expires after 10 minutes or one download."
                 )
-                projectStatusText = "Event File transfer ready at ${session.url}"
+                projectStatusText = if (isSeriesTransfer) {
+                    "Event Series transfer ready at ${session.url}"
+                } else {
+                    "Event File transfer ready at ${session.url}"
+                }
                 DesktopDebugLog.info(
                     "EventFile",
-                    "Started Android transfer for ${path.fileName}: selectedHost=${session.address.host} port=${session.port} candidates=${
+                    "Started Android transfer for ${session.fileName}: selectedHost=${session.address.host} port=${session.port} candidates=${
                         addresses.joinToString { address ->
                             "${address.interfaceName.ifBlank { "unknown" }}:${address.host}"
                         }
@@ -4270,9 +4305,57 @@ fun main(args: Array<String>) = application {
             recordActivity(savedText)
             DesktopDebugLog.info("EventFile", "$savedText Saved to ${result.path}.")
 
-            val lowerFileName = result.fileName.lowercase()
             val outcome = when {
-                lowerFileName.endsWith(DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION) -> {
+                EventFileTransferPayloads.isSeriesPackage(result.fileName, result.contentType) -> {
+                    if (hasProtectedUnsavedChanges()) {
+                        projectStatusText =
+                            "$savedText Saved to ${result.path}. Save or close the current Event File before importing it."
+                        DesktopAndroidFileReceiveResultDialogState.savedOnly(
+                            fileName = result.fileName,
+                            path = result.path,
+                            reason = "The current desktop Event File has unsaved changes, so the received Event Series package was not loaded."
+                        )
+                    } else {
+                        runCatching {
+                            clearAssignedControlsWarning()
+                            lockProtectedCourseOrder()
+                            val unpacked = DesktopEventSeriesPackageFiles.unpack(
+                                path = result.path,
+                                targetRoot = result.path.parent ?: DesktopAndroidFileReceiveLocations.receiveDirectory()
+                            )
+                            val eventPath = DesktopEventSeriesActions.eventPathToOpenFromManifest(
+                                store = DesktopEventSeriesFiles,
+                                manifestPath = unpacked.manifestPath,
+                                lastSeriesEventStore = DesktopLastSeriesEventPreferences
+                            )
+                            projectFile = projectSession.open(eventPath)
+                            newEventDraftProject = null
+                            hasUnsavedEventDefinitionChanges = false
+                            isEventDefinitionSaveDialogVisible = false
+                            hasUnsavedChanges = projectSession.hasUnsavedChanges
+                            DesktopLastEventFilePreferences.rememberEventFile(eventPath)
+                            syncProjectState()
+                            projectStatusText =
+                                "Imported Event Series from Android to ${unpacked.manifestPath.parent} with ${unpacked.eventFilePaths.size} Event Files."
+                            DesktopDebugLog.info("EventSeries", projectStatusText)
+                            DesktopAndroidFileReceiveResultDialogState.loaded(
+                                fileName = result.fileName,
+                                path = unpacked.manifestPath,
+                                loadedMessage = "The received Event Series package is now open."
+                            )
+                        }.getOrElse { error ->
+                            projectStatusText =
+                                "$savedText Saved to ${result.path}, but Event Series import failed: ${error.message ?: error::class.simpleName}"
+                            DesktopDebugLog.error("EventSeries", projectStatusText)
+                            DesktopAndroidFileReceiveResultDialogState.failedToLoad(
+                                fileName = result.fileName,
+                                path = result.path,
+                                failure = "Event Series import failed: ${error.message ?: error::class.simpleName}"
+                            )
+                        }
+                    }
+                }
+                result.fileName.lowercase().endsWith(DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION) -> {
                     if (hasProtectedUnsavedChanges()) {
                         projectStatusText =
                             "$savedText Saved to ${result.path}. Save or close the current Event File before importing it."

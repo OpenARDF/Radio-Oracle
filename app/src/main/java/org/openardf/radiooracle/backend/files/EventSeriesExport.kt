@@ -6,11 +6,11 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.shared.toEventRaceData
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_FILE_NAME
 import org.openardf.radiooracle.shared.event.EventProjectFile
-import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFile
-import org.openardf.radiooracle.shared.event.EventSeriesFileJson
 import org.openardf.radiooracle.shared.event.EventSeriesLink
+import org.openardf.radiooracle.shared.event.EventSeriesPackageContents
+import org.openardf.radiooracle.shared.event.EventSeriesPackageEventFile
 import java.io.ByteArrayOutputStream
 import java.util.UUID
 import java.util.zip.ZipEntry
@@ -34,13 +34,12 @@ object EventSeriesExport {
 
         return ByteArrayOutputStream().use { output ->
             ZipOutputStream(output).use { zip ->
-                zip.writeTextEntry(EVENT_SERIES_FILE_NAME, EventSeriesFileJson.encode(seriesFile))
-                members.forEach { member ->
+                val eventFiles = members.map { member ->
                     val raceData = raceDataById[member.localRaceId]
                         ?: throw IllegalArgumentException("Missing Event data for '${member.displayName}'.")
-                    zip.writeTextEntry(
-                        member.eventFilePath,
-                        EventProjectFileJson.encode(
+                    EventSeriesPackageEventFile(
+                        event = member.toEventSeriesEvent(),
+                        projectFile =
                             EventProjectFile(
                                 raceData = raceData.toEventRaceData(),
                                 seriesLink = EventSeriesLink(
@@ -48,8 +47,15 @@ object EventSeriesExport {
                                     seriesEventId = member.seriesEventId
                                 )
                             )
-                        )
                     )
+                }
+                EventSeriesPackageContents.build(
+                    seriesFile = seriesFile,
+                    eventFiles = eventFiles,
+                    manifestEntryPath = EVENT_SERIES_FILE_NAME,
+                    packageFileNameStem = seriesData.series.name
+                ).entries.forEach { entry ->
+                    zip.writeTextEntry(entry.path, entry.text)
                 }
             }
             output.toByteArray()
