@@ -465,6 +465,7 @@ fun main(args: Array<String>) = application {
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzUnlockAction by remember { mutableStateOf<CourseKmlKmzUnlockAction?>(null) }
         var pendingProtectedControlDeleteId by remember { mutableStateOf<String?>(null) }
+        var pendingControlsCsvSyncUnlockReview by remember { mutableStateOf<PendingControlsCsvImportReview?>(null) }
         var pendingBulkCategoryAction by remember { mutableStateOf<BulkCategoryAction?>(null) }
         var isDeleteAllControlsDialogVisible by remember { mutableStateOf(false) }
         var isDeleteAllCompetitorsDialogVisible by remember { mutableStateOf(false) }
@@ -2153,16 +2154,11 @@ fun main(args: Array<String>) = application {
             return true
         }
 
-        fun applyBulkCategoryAction(action: BulkCategoryAction, password: String): Boolean {
+        fun applyBulkCategoryAction(action: BulkCategoryAction): Boolean {
             val currentProject = projectSession.currentProject ?: return false
             if (currentProject.raceData.categories.isEmpty()) {
                 projectStatusText = "No categories to update."
                 return false
-            }
-            if (currentProject.hasProtectedCategoryData()) {
-                if (!unlockProtectedCourseOrder(password)) {
-                    return false
-                }
             }
             return runCatching {
                 projectFile = projectSession.updateCurrentProject { project ->
@@ -2193,7 +2189,7 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun deleteAllControls(password: String): Boolean {
+        fun deleteAllControls(): Boolean {
             val currentProject = projectSession.currentProject ?: return false
             val affectedCategoryCount = currentProject.raceData.categories.count { categoryData ->
                 categoryData.controlPoints.isNotEmpty() ||
@@ -2207,11 +2203,6 @@ fun main(args: Array<String>) = application {
             if (currentProject.raceData.controls.isEmpty() && affectedCategoryCount == 0) {
                 projectStatusText = "No controls to delete."
                 return false
-            }
-            if (currentProject.hasProtectedCategoryData()) {
-                if (!unlockProtectedCourseOrder(password)) {
-                    return false
-                }
             }
             return runCatching {
                 val controlCount = currentProject.raceData.controls.size
@@ -3887,14 +3878,20 @@ fun main(args: Array<String>) = application {
         }
 
         fun applyControlsCsvImport(review: PendingControlsCsvImportReview, syncMissingControls: Boolean) {
+            val currentProjectBeforeImport = projectSession.currentProject
+            if (
+                syncMissingControls &&
+                currentProjectBeforeImport?.hasLockedProtectedCourseData(protectedCoursePassword != null) == true
+            ) {
+                pendingControlsCsvSyncUnlockReview = review
+                projectStatusText = "Unlock course data to synchronize control deletions."
+                return
+            }
             runCatching {
                 checkpointBeforeImport("controls CSV import ${review.path.fileName}")
                 var deletedMissingControls = 0
                 var skippedMissingControls = 0
                 projectFile = projectSession.updateCurrentProject { currentProject ->
-                    require(!syncMissingControls || !currentProject.hasLockedProtectedCourseData(protectedCoursePassword != null)) {
-                        "Course data is locked. Unlock course data before synchronizing control deletions."
-                    }
                     val importedIdentities = review.rows.mapTo(mutableSetOf()) { it.siCode to it.type }
                     val missingExistingControls = currentProject.raceData.controls
                         .filterNot { it.siCode to it.type in importedIdentities }
@@ -5074,6 +5071,23 @@ fun main(args: Array<String>) = application {
                 onCancel = { pendingProtectedControlDeleteId = null }
             )
         }
+        pendingControlsCsvSyncUnlockReview?.let { review ->
+            CourseKmlKmzUnlockDialog(
+                title = "Unlock course data to synchronize controls",
+                description = "Synchronizing missing controls must inspect stored protected course references before deleting controls that are absent from ${review.path.fileName}.",
+                confirmLabel = "Unlock and Continue",
+                onUnlock = { password ->
+                    if (unlockProtectedCourseOrder(password)) {
+                        pendingControlsCsvSyncUnlockReview = null
+                        applyControlsCsvImport(review, syncMissingControls = true)
+                        true
+                    } else {
+                        false
+                    }
+                },
+                onCancel = { pendingControlsCsvSyncUnlockReview = null }
+            )
+        }
         if (isDeleteAllControlsDialogVisible) {
             val currentProject = projectSession.currentProject
             DeleteAllControlsDialog(
@@ -5088,12 +5102,9 @@ fun main(args: Array<String>) = application {
                         categoryData.category.encryptedCourseInfo?.isNotBlank() == true
                 } ?: 0,
                 hasProtectedCategoryData = currentProject?.hasProtectedCategoryData() == true,
-                onConfirm = { password ->
-                    if (deleteAllControls(password)) {
+                onConfirm = {
+                    if (deleteAllControls()) {
                         isDeleteAllControlsDialogVisible = false
-                        true
-                    } else {
-                        false
                     }
                 },
                 onCancel = { isDeleteAllControlsDialogVisible = false }
@@ -5105,12 +5116,9 @@ fun main(args: Array<String>) = application {
                 action = action,
                 categoryCount = currentProject?.raceData?.categories?.size ?: 0,
                 hasProtectedCategoryData = currentProject?.hasProtectedCategoryData() == true,
-                onConfirm = { password ->
-                    if (applyBulkCategoryAction(action, password)) {
+                onConfirm = {
+                    if (applyBulkCategoryAction(action)) {
                         pendingBulkCategoryAction = null
-                        true
-                    } else {
-                        false
                     }
                 },
                 onCancel = { pendingBulkCategoryAction = null }
@@ -6222,16 +6230,10 @@ private fun BulkCategoryActionDialog(
     action: BulkCategoryAction,
     categoryCount: Int,
     hasProtectedCategoryData: Boolean,
-    onConfirm: (String) -> Boolean,
+    onConfirm: () -> Unit,
     onCancel: () -> Unit
 ) {
-    var passwordDraft by remember(action) { mutableStateOf("") }
-    val canSubmit = categoryCount > 0 && (!hasProtectedCategoryData || passwordDraft.isNotBlank())
-    fun submit() {
-        if (canSubmit && onConfirm(passwordDraft)) {
-            passwordDraft = ""
-        }
-    }
+    val canSubmit = categoryCount > 0
     val title = when (action) {
         BulkCategoryAction.DeleteAllAssignedControls -> "Delete all assigned controls"
         BulkCategoryAction.DeleteAllCategories -> "Delete all categories"
@@ -6250,26 +6252,16 @@ private fun BulkCategoryActionDialog(
                 Text(description)
                 if (hasProtectedCategoryData) {
                     Text(
-                        text = "Because protected course data will be affected, enter the Event Password to continue.",
+                        text = "Stored protected course/order data will be deleted by this action.",
                         fontSize = 13.sp,
                         color = Color.DarkGray
-                    )
-                    TextField(
-                        value = passwordDraft,
-                        onValueChange = { passwordDraft = it },
-                        label = { Text("Event Password") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .commitOnEnter(::submit)
                     )
                 }
             }
         },
         confirmButton = {
             Button(
-                onClick = ::submit,
+                onClick = onConfirm,
                 enabled = canSubmit
             ) {
                 Text("Delete")
@@ -6288,17 +6280,10 @@ private fun DeleteAllControlsDialog(
     controlCount: Int,
     affectedCategoryCount: Int,
     hasProtectedCategoryData: Boolean,
-    onConfirm: (String) -> Boolean,
+    onConfirm: () -> Unit,
     onCancel: () -> Unit
 ) {
-    var passwordDraft by remember { mutableStateOf("") }
-    val canSubmit = (controlCount > 0 || affectedCategoryCount > 0) &&
-        (!hasProtectedCategoryData || passwordDraft.isNotBlank())
-    fun submit() {
-        if (canSubmit && onConfirm(passwordDraft)) {
-            passwordDraft = ""
-        }
-    }
+    val canSubmit = controlCount > 0 || affectedCategoryCount > 0
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Delete all controls") },
@@ -6318,26 +6303,16 @@ private fun DeleteAllControlsDialog(
                 )
                 if (hasProtectedCategoryData) {
                     Text(
-                        text = "Because protected course data will be affected, enter the Event Password to continue.",
+                        text = "Stored protected course/order data will be deleted by this action.",
                         fontSize = 13.sp,
                         color = Color.DarkGray
-                    )
-                    TextField(
-                        value = passwordDraft,
-                        onValueChange = { passwordDraft = it },
-                        label = { Text("Event Password") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .commitOnEnter(::submit)
                     )
                 }
             }
         },
         confirmButton = {
             Button(
-                onClick = ::submit,
+                onClick = onConfirm,
                 enabled = canSubmit
             ) {
                 Text("Delete")
