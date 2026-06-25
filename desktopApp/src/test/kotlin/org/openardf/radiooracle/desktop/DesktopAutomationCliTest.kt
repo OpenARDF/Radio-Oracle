@@ -284,6 +284,47 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun removeCategoryCommandDeletesProtectedCategoryAndCompetitorsWhenWritten() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-remove-category")
+        val eventFilePath = directory.resolve("Automation Event.json")
+        DesktopProjectFiles.write(
+            eventFilePath,
+            projectFile(
+                "Automation Event",
+                categories = listOf(
+                    categoryData("cat-m21", "M21", 0, encryptedCourseInfo = "encrypted-course"),
+                    categoryData("cat-w21", "W21", 1)
+                ),
+                competitors = listOf(
+                    competitorData(id = "Alice", startNumber = 1, siNumber = 1111, categoryId = "cat-m21"),
+                    competitorData(id = "Bob", startNumber = 2, siNumber = 2222, categoryId = "cat-w21")
+                )
+            )
+        )
+
+        val result = runAutomation(
+            "remove-category",
+            eventFilePath.toString(),
+            "M21",
+            "--delete-competitors",
+            "--write"
+        )
+        val updated = DesktopProjectFiles.read(eventFilePath)
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"remove-category\""))
+        assertTrue(result.stdout.contains("\"write\":true"))
+        assertTrue(result.stdout.contains("\"categoryId\":\"cat-m21\""))
+        assertTrue(result.stdout.contains("\"deleteCompetitors\":true"))
+        assertTrue(result.stdout.contains("\"hadProtectedCourseData\":true"))
+        assertTrue(result.stdout.contains("\"removedCompetitorCount\":1"))
+        assertEquals(listOf("cat-w21"), updated.raceData.categories.map { it.category.id })
+        assertEquals(listOf("Bob"), updated.raceData.competitorData.map {
+            it.competitorCategory.competitor.id
+        })
+    }
+
+    @Test
     fun eventSeriesListCommandReportsManifestEvents() {
         val directory = Files.createTempDirectory("radio-oracle-automation-series")
         val manifestPath = directory.resolve("series.radio-oracle.json")
@@ -1114,7 +1155,12 @@ class DesktopAutomationCliTest {
             seriesLink = seriesLink
         )
 
-    private fun categoryData(id: String, name: String, order: Int): EventCategoryData =
+    private fun categoryData(
+        id: String,
+        name: String,
+        order: Int,
+        encryptedCourseInfo: String? = null
+    ): EventCategoryData =
         EventCategoryData(
             category = EventCategory(
                 id = id,
@@ -1129,7 +1175,8 @@ class DesktopAutomationCliTest {
                 raceType = null,
                 raceBand = null,
                 timeLimitSeconds = null,
-                controlPointsString = ""
+                controlPointsString = "",
+                encryptedCourseInfo = encryptedCourseInfo
             ),
             controlPoints = emptyList(),
             competitors = emptyList()
