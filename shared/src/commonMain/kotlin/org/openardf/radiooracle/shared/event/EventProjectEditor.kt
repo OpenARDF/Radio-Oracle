@@ -290,15 +290,31 @@ object EventProjectEditor {
                     data
                 }
             }
+        }.map { data ->
+            data.withoutResultCategory(categoryId)
+        }
+        val unmatchedReadoutData = projectFile.raceData.unmatchedReadoutData.map { readoutData ->
+            readoutData.withoutResultCategory(categoryId)
         }
 
         return projectFile.copy(
             raceData = projectFile.raceData.copy(
                 categories = categories,
-                competitorData = competitorData
+                competitorData = competitorData,
+                unmatchedReadoutData = unmatchedReadoutData
             )
         )
     }
+
+    private fun EventCompetitorData.withoutResultCategory(categoryId: String): EventCompetitorData =
+        copy(readoutData = readoutData?.withoutResultCategory(categoryId))
+
+    private fun EventReadoutData.withoutResultCategory(categoryId: String): EventReadoutData =
+        if (result.categoryId == categoryId) {
+            copy(result = result.copy(categoryId = null))
+        } else {
+            this
+        }
 
     /** Clears all category course fields while keeping category names and competitor assignments. */
     fun removeAllAssignedCategoryControls(projectFile: EventProjectFile): EventProjectFile {

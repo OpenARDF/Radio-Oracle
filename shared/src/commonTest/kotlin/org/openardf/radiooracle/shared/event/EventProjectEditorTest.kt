@@ -176,8 +176,17 @@ class EventProjectEditorTest {
                 categoryData("cat-3", "M40", order = 2)
             ),
             competitors = listOf(
-                competitorData("comp-1", "Alice", "Runner", category = category("cat-1", "M21")),
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    category = category("cat-1", "M21"),
+                    readoutData = readout("result-1", "comp-1", 12345).withResultCategory("cat-1")
+                ),
                 competitorData("comp-2", "Bob", "Racer", category = category("cat-2", "W21"))
+            ),
+            unmatchedReadouts = listOf(
+                readout("unmatched-result-1", null, 54321).withResultCategory("cat-1")
             )
         )
 
@@ -188,7 +197,9 @@ class EventProjectEditorTest {
         assertEquals(listOf(31), updated.raceData.categories.first().controlPoints.map { it.siCode })
         assertEquals(null, updated.raceData.competitorData[0].competitorCategory.competitor.categoryId)
         assertEquals(null, updated.raceData.competitorData[0].competitorCategory.category)
+        assertEquals(null, updated.raceData.competitorData[0].readoutData?.result?.categoryId)
         assertEquals("cat-2", updated.raceData.competitorData[1].competitorCategory.competitor.categoryId)
+        assertEquals(null, updated.raceData.unmatchedReadoutData.single().result.categoryId)
     }
 
     @Test
@@ -197,7 +208,13 @@ class EventProjectEditorTest {
             categories = listOf(categoryData("cat-1", "M21"), categoryData("cat-2", "W21")),
             competitors = listOf(
                 competitorData("comp-1", "Alice", "Runner", category = category("cat-1", "M21")),
-                competitorData("comp-2", "Bob", "Racer", category = category("cat-2", "W21"))
+                competitorData(
+                    "comp-2",
+                    "Bob",
+                    "Racer",
+                    category = category("cat-2", "W21"),
+                    readoutData = readout("result-2", "comp-2", 23456).withResultCategory("cat-1")
+                )
             )
         )
 
@@ -205,6 +222,7 @@ class EventProjectEditorTest {
 
         assertEquals(listOf("cat-2"), updated.raceData.categories.map { it.category.id })
         assertEquals(listOf("comp-2"), updated.raceData.competitorData.map { it.competitorCategory.competitor.id })
+        assertEquals(null, updated.raceData.competitorData.single().readoutData?.result?.categoryId)
     }
 
     @Test
@@ -3447,6 +3465,9 @@ class EventProjectEditorTest {
             ),
             punches = emptyList()
         )
+
+    private fun EventReadoutData.withResultCategory(categoryId: String): EventReadoutData =
+        copy(result = result.copy(categoryId = categoryId))
 
     private fun sportIdentReadout(
         siNumber: Int = 123456,
