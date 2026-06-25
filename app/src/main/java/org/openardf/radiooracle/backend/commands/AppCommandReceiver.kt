@@ -17,7 +17,10 @@ import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.ARDFRepository
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
+import org.openardf.radiooracle.shared.event.EventSeriesPackageFingerprints
+import java.io.ByteArrayInputStream
 import java.util.UUID
+import java.util.zip.ZipInputStream
 
 /**
  * Debug-only command surface for exercising important app operations from adb.
@@ -55,6 +58,7 @@ class AppCommandReceiver : BroadcastReceiver() {
             ACTION_SELECT_EVENT -> selectEvent(dataProcessor, intent)
             ACTION_SEND_EVENT_OR_SERIES_TO_DESKTOP -> sendEventOrSeriesToDesktop(dataProcessor, intent)
             ACTION_SEND_SERIES_TO_DESKTOP -> sendSeriesToDesktop(dataProcessor, intent)
+            ACTION_LOG_SERIES_PACKAGE_FINGERPRINT -> logSeriesPackageFingerprint(dataProcessor, intent)
             ACTION_PRINT_STATUS -> printStatus(context)
             ACTION_PRINT_FINISH_TICKET -> printFinishTicket(dataProcessor, intent)
             ACTION_PRINT_LATEST_FINISH_TICKET -> printLatestFinishTicket(dataProcessor, intent)
@@ -150,6 +154,29 @@ class AppCommandReceiver : BroadcastReceiver() {
             "contentType=${upload.contentType} bytes=${upload.bytes.size}"
         DebugLog.info(TAG, "Command $message")
         Log.i(TAG, message)
+    }
+
+    private suspend fun logSeriesPackageFingerprint(dataProcessor: DataProcessor, intent: Intent) {
+        val seriesId = intent.getStringExtra(EXTRA_SERIES_ID)?.takeIf { it.isNotBlank() }
+        val eventId = intent.uuidExtra(EXTRA_EVENT_ID)
+        val source: String
+        val bytes: ByteArray
+        if (seriesId != null) {
+            source = "series:$seriesId"
+            bytes = dataProcessor.exportEventSeriesPackageBytes(seriesId)
+        } else if (eventId != null) {
+            source = "event:$eventId"
+            bytes = dataProcessor.exportEventSeriesPackageBytesForRace(eventId)
+                ?: return eventWithoutSeries(eventId)
+        } else {
+            return missingSeriesOrEventId()
+        }
+
+        val fingerprint = EventSeriesPackageFingerprints.fromTextEntries(unzipTextEntries(bytes))
+        EventSeriesCommandFingerprintLog.lines(source, bytes.size, fingerprint).forEach { line ->
+            DebugLog.info(TAG, "Command $line")
+            Log.i(TAG, line)
+        }
     }
 
     private suspend fun printStatus(context: Context) {
@@ -253,10 +280,33 @@ class AppCommandReceiver : BroadcastReceiver() {
         Log.w(TAG, "missing or invalid $EXTRA_SERIES_ID")
     }
 
+    private fun missingSeriesOrEventId() {
+        DebugLog.warn(TAG, "Command missing $EXTRA_SERIES_ID or valid $EXTRA_EVENT_ID")
+        Log.w(TAG, "missing $EXTRA_SERIES_ID or valid $EXTRA_EVENT_ID")
+    }
+
+    private fun eventWithoutSeries(eventId: UUID) {
+        DebugLog.warn(TAG, "Command fingerprint ignored because event is not in a series event=$eventId")
+        Log.w(TAG, "event is not in a series id=$eventId")
+    }
+
     private fun missingResultId() {
         DebugLog.warn(TAG, "Command missing or invalid $EXTRA_RESULT_ID")
         Log.w(TAG, "missing or invalid $EXTRA_RESULT_ID")
     }
+
+    private fun unzipTextEntries(bytes: ByteArray): Map<String, String> =
+        ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
+            buildMap {
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    if (!entry.isDirectory) {
+                        put(entry.name, zip.readBytes().toString(Charsets.UTF_8))
+                    }
+                    zip.closeEntry()
+                }
+            }
+        }
 
     private fun String.maskBluetoothAddress(): String =
         split(":").let { parts ->
@@ -281,6 +331,8 @@ class AppCommandReceiver : BroadcastReceiver() {
         const val ACTION_SEND_EVENT_OR_SERIES_TO_DESKTOP =
             "org.openardf.radiooracle.command.SEND_EVENT_OR_SERIES_TO_DESKTOP"
         const val ACTION_SEND_SERIES_TO_DESKTOP = "org.openardf.radiooracle.command.SEND_SERIES_TO_DESKTOP"
+        const val ACTION_LOG_SERIES_PACKAGE_FINGERPRINT =
+            "org.openardf.radiooracle.command.LOG_SERIES_PACKAGE_FINGERPRINT"
         const val ACTION_PRINT_STATUS = "org.openardf.radiooracle.command.PRINT_STATUS"
         const val ACTION_PRINT_FINISH_TICKET = "org.openardf.radiooracle.command.PRINT_FINISH_TICKET"
         const val ACTION_PRINT_LATEST_FINISH_TICKET = "org.openardf.radiooracle.command.PRINT_LATEST_FINISH_TICKET"
