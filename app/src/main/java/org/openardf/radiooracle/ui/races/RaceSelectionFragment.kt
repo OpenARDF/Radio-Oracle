@@ -33,7 +33,6 @@ import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.nambimobile.widgets.efab.FabOption
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.files.DesktopFileTransferUpload
-import org.openardf.radiooracle.backend.files.DesktopFileTransferUploader
 import org.openardf.radiooracle.backend.files.EventFileTransferDownloader
 import org.openardf.radiooracle.backend.files.EventFileTransferUploads
 import org.openardf.radiooracle.backend.logging.DebugLog
@@ -43,6 +42,7 @@ import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
 import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
+import org.openardf.radiooracle.ui.transfer.DesktopFileTransferUploadDialogs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -67,7 +67,6 @@ class RaceSelectionFragment : Fragment() {
     private val raceViewModel: RaceViewModel by activityViewModels()
     private val selectedRaceViewModel: SelectedRaceViewModel by activityViewModels()
     private var raceData: RaceData? = null
-    private var pendingDesktopUpload: DesktopFileTransferUpload? = null
 
     // Race export
     private val getResult = registerForActivityResult(
@@ -428,9 +427,8 @@ class RaceSelectionFragment : Fragment() {
                 val upload = withContext(Dispatchers.IO) {
                     raceViewModel.desktopUploadForRaceOrSeries(race.id)
                 }
-                pendingDesktopUpload = upload
                 progressDialog.dismiss()
-                showSendToDesktopDialog()
+                DesktopFileTransferUploadDialogs.show(this@RaceSelectionFragment, upload)
             } catch (error: Exception) {
                 progressDialog.dismiss()
                 displayAlert(error.message ?: "Could not prepare Event File for desktop upload.")
@@ -451,9 +449,8 @@ class RaceSelectionFragment : Fragment() {
                 val upload = withContext(Dispatchers.IO) {
                     desktopUploadFromUri(uri)
                 }
-                pendingDesktopUpload = upload
                 progressDialog.dismiss()
-                showSendToDesktopDialog()
+                DesktopFileTransferUploadDialogs.show(this@RaceSelectionFragment, upload)
             } catch (error: Exception) {
                 progressDialog.dismiss()
                 displayAlert(error.message ?: "Could not read the selected file.")
@@ -484,88 +481,6 @@ class RaceSelectionFragment : Fragment() {
             }
             ?: uri.lastPathSegment
             ?: ""
-
-    private fun showSendToDesktopDialog() {
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.event_file_send_title)
-            .setMessage(R.string.event_file_send_message)
-            .setPositiveButton(R.string.event_file_send_scan_qr) { _, _ ->
-                scanDesktopReceiveQr()
-            }
-            .setNeutralButton(R.string.event_file_send_enter_url) { _, _ ->
-                showManualDesktopReceiveUrlDialog()
-            }
-            .setNegativeButton(R.string.general_cancel, null)
-            .show()
-    }
-
-    private fun showManualDesktopReceiveUrlDialog() {
-        val input = EditText(requireContext()).apply {
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            hint = getString(R.string.event_file_send_url_hint)
-            setSingleLine(true)
-        }
-
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.event_file_send_title)
-            .setMessage(R.string.event_file_send_message)
-            .setView(input)
-            .setPositiveButton(R.string.race_send_desktop) { _, _ ->
-                sendPendingFileToDesktopUrl(input.text.toString())
-            }
-            .setNegativeButton(R.string.general_cancel, null)
-            .show()
-    }
-
-    private fun scanDesktopReceiveQr() {
-        val options = GmsBarcodeScannerOptions.Builder()
-            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-            .build()
-        val scanner = GmsBarcodeScanning.getClient(requireActivity(), options)
-        scanner.startScan()
-            .addOnSuccessListener { barcode ->
-                val url = barcode.rawValue
-                if (url.isNullOrBlank()) {
-                    displayAlert("The QR code did not contain a desktop receive URL.")
-                } else {
-                    sendPendingFileToDesktopUrl(url)
-                }
-            }
-            .addOnFailureListener { error ->
-                displayAlert(error.message ?: "QR scan failed. Enter the receive URL manually.")
-            }
-    }
-
-    private fun sendPendingFileToDesktopUrl(rawUrl: String) {
-        val upload = pendingDesktopUpload ?: run {
-            displayAlert("Choose a file before sending to desktop.")
-            return
-        }
-        val progressDialog = AlertDialog.Builder(requireContext())
-            .setTitle(R.string.event_file_send_title)
-            .setMessage(R.string.event_file_send_progress)
-            .setCancelable(false)
-            .create()
-        progressDialog.show()
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    DesktopFileTransferUploader().upload(rawUrl, upload)
-                }
-                progressDialog.dismiss()
-                pendingDesktopUpload = null
-                Toast.makeText(
-                    requireContext(),
-                    getString(R.string.event_file_send_success, upload.fileName),
-                    Toast.LENGTH_SHORT
-                ).show()
-            } catch (error: Exception) {
-                progressDialog.dismiss()
-                displayAlert(error.message ?: "Desktop upload failed.")
-            }
-        }
-    }
 
     /**
      * Displays alert dialog to confirm the deletion of the race
