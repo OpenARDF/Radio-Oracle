@@ -56,6 +56,7 @@ class AppCommandReceiver : BroadcastReceiver() {
             ACTION_LIST_SERIES -> listSeries(dataProcessor)
             ACTION_DELETE_EVENT -> deleteEvent(dataProcessor, intent)
             ACTION_SELECT_EVENT -> selectEvent(dataProcessor, intent)
+            ACTION_CREATE_SERIES_FROM_EVENTS -> createSeriesFromEvents(dataProcessor, intent)
             ACTION_SEND_EVENT_OR_SERIES_TO_DESKTOP -> sendEventOrSeriesToDesktop(dataProcessor, intent)
             ACTION_SEND_SERIES_TO_DESKTOP -> sendSeriesToDesktop(dataProcessor, intent)
             ACTION_LOG_SERIES_PACKAGE_FINGERPRINT -> logSeriesPackageFingerprint(dataProcessor, intent)
@@ -132,6 +133,30 @@ class AppCommandReceiver : BroadcastReceiver() {
 
         DebugLog.info(TAG, "Command selected event=$eventId name=${race.name}")
         Log.i(TAG, "selected event id=$eventId name=${race.name}")
+    }
+
+    private suspend fun createSeriesFromEvents(dataProcessor: DataProcessor, intent: Intent) {
+        val seriesName = intent.getStringExtra(EXTRA_SERIES_NAME)?.trim()?.takeIf { it.isNotBlank() }
+            ?: return missingSeriesName()
+        val eventIds = AppCommandEventIds.parse(intent.getStringExtra(EXTRA_EVENT_IDS))
+            ?: return missingEventIds()
+        val races = eventIds.map { eventId ->
+            dataProcessor.getRace(eventId) ?: run {
+                DebugLog.warn(TAG, "Command create series ignored missing event=$eventId")
+                Log.w(TAG, "event not found id=$eventId")
+                return
+            }
+        }
+
+        var seriesData = dataProcessor.createEventSeriesFromRace(races.first().id, seriesName)
+        races.drop(1).forEach { race ->
+            seriesData = dataProcessor.addRaceToEventSeries(race.id, seriesData.series.seriesId)
+        }
+
+        val message = "created series id=${seriesData.series.seriesId} name=${seriesData.series.name} " +
+            "members=${seriesData.members.size}"
+        DebugLog.info(TAG, "Command $message")
+        Log.i(TAG, message)
     }
 
     private suspend fun sendEventOrSeriesToDesktop(dataProcessor: DataProcessor, intent: Intent) {
@@ -285,6 +310,16 @@ class AppCommandReceiver : BroadcastReceiver() {
         Log.w(TAG, "missing $EXTRA_SERIES_ID or valid $EXTRA_EVENT_ID")
     }
 
+    private fun missingSeriesName() {
+        DebugLog.warn(TAG, "Command missing $EXTRA_SERIES_NAME")
+        Log.w(TAG, "missing $EXTRA_SERIES_NAME")
+    }
+
+    private fun missingEventIds() {
+        DebugLog.warn(TAG, "Command missing or invalid $EXTRA_EVENT_IDS")
+        Log.w(TAG, "missing or invalid $EXTRA_EVENT_IDS")
+    }
+
     private fun eventWithoutSeries(eventId: UUID) {
         DebugLog.warn(TAG, "Command fingerprint ignored because event is not in a series event=$eventId")
         Log.w(TAG, "event is not in a series id=$eventId")
@@ -328,6 +363,8 @@ class AppCommandReceiver : BroadcastReceiver() {
         const val ACTION_LIST_SERIES = "org.openardf.radiooracle.command.LIST_SERIES"
         const val ACTION_DELETE_EVENT = "org.openardf.radiooracle.command.DELETE_EVENT"
         const val ACTION_SELECT_EVENT = "org.openardf.radiooracle.command.SELECT_EVENT"
+        const val ACTION_CREATE_SERIES_FROM_EVENTS =
+            "org.openardf.radiooracle.command.CREATE_SERIES_FROM_EVENTS"
         const val ACTION_SEND_EVENT_OR_SERIES_TO_DESKTOP =
             "org.openardf.radiooracle.command.SEND_EVENT_OR_SERIES_TO_DESKTOP"
         const val ACTION_SEND_SERIES_TO_DESKTOP = "org.openardf.radiooracle.command.SEND_SERIES_TO_DESKTOP"
@@ -337,7 +374,9 @@ class AppCommandReceiver : BroadcastReceiver() {
         const val ACTION_PRINT_FINISH_TICKET = "org.openardf.radiooracle.command.PRINT_FINISH_TICKET"
         const val ACTION_PRINT_LATEST_FINISH_TICKET = "org.openardf.radiooracle.command.PRINT_LATEST_FINISH_TICKET"
         const val EXTRA_EVENT_ID = "event_id"
+        const val EXTRA_EVENT_IDS = "event_ids"
         const val EXTRA_SERIES_ID = "series_id"
+        const val EXTRA_SERIES_NAME = "series_name"
         const val EXTRA_RESULT_ID = "result_id"
         const val EXTRA_DESKTOP_RECEIVE_URL = "desktop_receive_url"
     }
