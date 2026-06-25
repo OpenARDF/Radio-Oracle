@@ -281,6 +281,16 @@ Goal: add platform-specific capabilities after the event-admin beta is stable.
   serial numbers/modes/ports, let the user choose or assign active stations,
   and prevent independent polls/readout loops from fighting over the same
   serial device.
+- Add a batch readout time-correction tool for common station clock mistakes,
+  such as one or more controls being exactly one hour early or late because of a
+  time-zone or daylight-saving change. The tool should let an operator preview
+  and select affected punches by control/station, time range, event, or series
+  event; apply a signed time offset to those stored control punches; preserve an
+  auditable before/after trail; and then recompute result status, score, splits,
+  places, export data, and sent/unsent state through shared result recalculation
+  code. It should be conservative by default: never shift start/finish times or
+  unrelated controls without explicit selection, and require a confirmation that
+  reports how many competitors/readouts will change.
 - Add desktop printing behind a platform print interface.
 - Validate and harden Android Bluetooth ESC/POS printing before beta against the
   target Bluetooth printer hardware.
