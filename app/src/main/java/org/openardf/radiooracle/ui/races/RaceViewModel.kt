@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.util.UUID
@@ -25,6 +26,8 @@ class RaceViewModel : ViewModel() {
     private val dataProcessor = DataProcessor.get()
     private val _races: MutableStateFlow<List<Race>> = MutableStateFlow(emptyList())
     val races: StateFlow<List<Race>> get() = _races.asStateFlow()
+    private val _raceListItems: MutableStateFlow<List<RaceListItem>> = MutableStateFlow(emptyList())
+    val raceListItems: StateFlow<List<RaceListItem>> get() = _raceListItems.asStateFlow()
     private val _showStoredSeriesActions: MutableStateFlow<Boolean> = MutableStateFlow(false)
     val showStoredSeriesActions: StateFlow<Boolean> get() = _showStoredSeriesActions.asStateFlow()
 
@@ -130,6 +133,15 @@ class RaceViewModel : ViewModel() {
                 _showStoredSeriesActions.value =
                     EventSeriesUiVisibility.showStoredSeriesActions(eventSeries.size)
             }
+        }
+        viewModelScope.launch {
+            dataProcessor.getRaces()
+                .combine(dataProcessor.getEventSeries()) { races, eventSeries ->
+                    RaceListItems.build(races, eventSeries)
+                }
+                .collect { raceListItems ->
+                    _raceListItems.value = raceListItems
+                }
         }
     }
 }

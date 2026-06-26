@@ -1,25 +1,27 @@
 package org.openardf.radiooracle.ui.races
 
 import android.content.Context
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.widget.PopupMenu
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.room.entity.Race
-import kotlinx.coroutines.runBlocking
 import java.util.UUID
 
 /**
  * Recycler adapter for the race selection list and each race row's context menu.
  */
 class RaceRecyclerViewAdapter(
-    private var values: List<Race>, private val onRaceClicked: (raceId: UUID) -> Unit,
+    private var values: List<RaceListItem>, private val onRaceClicked: (raceId: UUID) -> Unit,
     private val onMoreClicked: (action: Int, position: Int, race: Race) -> Unit,
     private val context: Context
 ) : RecyclerView.Adapter<RaceRecyclerViewAdapter.RaceViewHolder>() {
@@ -37,16 +39,29 @@ class RaceRecyclerViewAdapter(
     /** Binds race summary text and click/context-menu callbacks. */
     override fun onBindViewHolder(holder: RaceViewHolder, position: Int) {
         val item = values[position]
-        holder.title.text = item.name
+        val race = item.race
+        holder.separator.visibility = if (item.showTopSeparator) View.VISIBLE else View.GONE
+        holder.content.setBackgroundColor(
+            if (item.isSeriesMember) {
+                ContextCompat.getColor(context, R.color.series_navigation_background)
+            } else {
+                Color.TRANSPARENT
+            }
+        )
+        holder.series.text = item.seriesName?.let { seriesName ->
+            context.getString(R.string.race_series_label, seriesName)
+        }
+        holder.series.visibility = if (item.seriesName == null) View.GONE else View.VISIBLE
+        holder.title.text = race.name
         holder.date.text =
-            item.startDateTime.toLocalDate()
-                .toString() + " " + TimeProcessor.hoursMinutesFormatter(item.startDateTime)
-        holder.type.text = dataProcessor.raceTypeToString(item.raceType)
+            race.startDateTime.toLocalDate()
+                .toString() + " " + TimeProcessor.hoursMinutesFormatter(race.startDateTime)
+        holder.type.text = dataProcessor.raceTypeToString(race.raceType)
         holder.level.text = dataProcessor.raceLevelToString(
-            item.raceLevel
+            race.raceLevel
         )
         holder.itemView.setOnClickListener {
-            onRaceClicked(item.id)
+            onRaceClicked(race.id)
         }
         holder.itemView.setOnLongClickListener {
             showContextMenu(holder.moreBtn, position, item)
@@ -57,10 +72,10 @@ class RaceRecyclerViewAdapter(
         }
     }
 
-    private fun showContextMenu(anchor: View, position: Int, item: Race) {
+    private fun showContextMenu(anchor: View, position: Int, item: RaceListItem) {
         val popupMenu = PopupMenu(context, anchor)
         popupMenu.inflate(R.menu.context_menu_race)
-        if (isSeriesRace(item.id)) {
+        if (item.isSeriesMember) {
             popupMenu.menu.findItem(R.id.menu_item_export_race)
                 ?.setTitle(R.string.event_series_export)
             popupMenu.menu.findItem(R.id.menu_item_send_race_desktop)
@@ -70,27 +85,27 @@ class RaceRecyclerViewAdapter(
         popupMenu.setOnMenuItemClickListener {
             when (it.itemId) {
                 R.id.menu_item_edit_race -> {
-                    onMoreClicked(0, position, item)
+                    onMoreClicked(0, position, item.race)
                     true
                 }
 
                 R.id.menu_item_export_race -> {
-                    onMoreClicked(1, position, item)
+                    onMoreClicked(1, position, item.race)
                     true
                 }
 
                 R.id.menu_item_send_race_desktop -> {
-                    onMoreClicked(2, position, item)
+                    onMoreClicked(2, position, item.race)
                     true
                 }
 
                 R.id.menu_item_delete_race -> {
-                    onMoreClicked(3, position, item)
+                    onMoreClicked(3, position, item.race)
                     true
                 }
 
                 else -> {
-                    onMoreClicked(4, position, item)
+                    onMoreClicked(4, position, item.race)
                     true
                 }
             }
@@ -98,23 +113,22 @@ class RaceRecyclerViewAdapter(
         popupMenu.show()
     }
 
-    private fun isSeriesRace(raceId: UUID): Boolean = runBlocking {
-        dataProcessor.getEventSeriesForRace(raceId) != null
-    }
-
     /** Returns the number of races currently displayed. */
     override fun getItemCount(): Int = values.size
 
     /** Returns the row's race for swipe and test hooks that operate by adapter position. */
     fun raceAt(position: Int): Race? =
-        values.getOrNull(position)
+        values.getOrNull(position)?.race
 
     /** View holder for one race selection row. */
     inner class RaceViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val separator: View = view.findViewById(R.id.race_item_separator)
+        val content: LinearLayout = view.findViewById(R.id.race_item_content)
         val title: TextView = view.findViewById(R.id.race_item_title)
         val date: TextView = view.findViewById(R.id.race_item_date)
         val level: TextView = view.findViewById(R.id.race_item_level)
         val type: TextView = view.findViewById(R.id.race_item_type)
+        val series: TextView = view.findViewById(R.id.race_item_series)
         val moreBtn: ImageButton = view.findViewById(R.id.race_item_more_btn)
     }
 

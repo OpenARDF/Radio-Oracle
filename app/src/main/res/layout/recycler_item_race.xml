@@ -5,11 +5,13 @@
     android:orientation="vertical">
 
     <View
+        android:id="@+id/race_item_separator"
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="@android:color/black" />
 
     <LinearLayout
+        android:id="@+id/race_item_content"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -49,6 +51,13 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="start" />
+
+            <TextView
+                android:id="@+id/race_item_series"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="start"
+                android:visibility="gone" />
         </LinearLayout>
 
 
