@@ -19,6 +19,7 @@ import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResultListener
@@ -106,8 +107,15 @@ class RaceSelectionFragment : Fragment() {
 
         toolbar = view.findViewById(R.id.race_toolbar)
         toolbar.setTitle(R.string.race_toolbar_title)
-        toolbar.setTitleTextColor(ContextCompat.getColor(requireContext(), R.color.black))
+        val onToolbarColor = ContextCompat.getColor(requireContext(), R.color.white)
+        toolbar.setTitleTextColor(onToolbarColor)
         toolbar.inflateMenu(R.menu.fragment_menu_race)
+        toolbar.overflowIcon = toolbar.overflowIcon?.let { icon ->
+            DrawableCompat.wrap(icon.mutate()).apply {
+                DrawableCompat.setTint(this, onToolbarColor)
+            }
+        }
+        tintMenuIcons(onToolbarColor)
 
         //FAB options
         raceCreateOption = view.findViewById(R.id.race_fab_create)
@@ -169,6 +177,17 @@ class RaceSelectionFragment : Fragment() {
                 }
 
                 else -> false
+            }
+        }
+    }
+
+    private fun tintMenuIcons(color: Int) {
+        for (index in 0 until toolbar.menu.size()) {
+            val item = toolbar.menu.getItem(index)
+            item.icon = item.icon?.let { icon ->
+                DrawableCompat.wrap(icon.mutate()).apply {
+                    DrawableCompat.setTint(this, color)
+                }
             }
         }
     }
