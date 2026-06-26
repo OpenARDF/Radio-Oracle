@@ -8409,7 +8409,9 @@ private fun RadioOManagerDesktopApp(
                 Column(modifier = Modifier.fillMaxSize()) {
                     AppTopBar(
                         projectFile = projectFile,
-                        eventSeriesUiContext = eventSeriesUiContext.takeIf { hasValidSeriesContext }
+                        eventSeriesUiContext = eventSeriesUiContext.takeIf { hasValidSeriesContext },
+                        seriesEventSummaries = seriesEventSummaries,
+                        onOpenSeriesEvent = onOpenSeriesEvent
                     )
                     Row(modifier = Modifier.weight(1f)) {
                         NavigationRail(
@@ -8621,7 +8623,12 @@ private fun RadioOManagerDesktopApp(
 
 /** Renders the Android-style app bar used at the top of the desktop window. */
 @Composable
-private fun AppTopBar(projectFile: EventProjectFile?, eventSeriesUiContext: EventSeriesUiContext?) {
+private fun AppTopBar(
+    projectFile: EventProjectFile?,
+    eventSeriesUiContext: EventSeriesUiContext?,
+    seriesEventSummaries: List<DesktopEventSeriesEventSummary>,
+    onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -8651,14 +8658,116 @@ private fun AppTopBar(projectFile: EventProjectFile?, eventSeriesUiContext: Even
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            TopBarSeriesEventSelector(
+                eventText = desktopTopBarEventText(projectFile),
+                summaries = if (eventSeriesUiContext == null) emptyList() else seriesEventSummaries,
+                onOpenEvent = onOpenSeriesEvent
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopBarSeriesEventSelector(
+    eventText: String,
+    summaries: List<DesktopEventSeriesEventSummary>,
+    onOpenEvent: (DesktopEventSeriesEventSummary) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val hasSelectableEvent = summaries.any { it.exists && !it.isCurrentEvent }
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = if (hasSelectableEvent) {
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = true }
+            } else {
+                Modifier.fillMaxWidth()
+            },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                text = desktopTopBarEventText(projectFile),
+                text = eventText,
                 color = DesktopPalette.White,
                 fontSize = 14.sp,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textDecoration = if (hasSelectableEvent) TextDecoration.Underline else null,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            if (hasSelectableEvent) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "v",
+                    color = DesktopPalette.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.widthIn(min = 360.dp, max = 560.dp)
+        ) {
+            summaries.forEach { summary ->
+                val enabled = summary.exists && !summary.isCurrentEvent
+                DropdownMenuItem(
+                    enabled = enabled,
+                    onClick = {
+                        expanded = false
+                        onOpenEvent(summary)
+                    }
+                ) {
+                    TopBarSeriesEventMenuItem(summary)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopBarSeriesEventMenuItem(summary: DesktopEventSeriesEventSummary) {
+    val statusText = when {
+        summary.isCurrentEvent -> "Current"
+        !summary.exists -> "Missing"
+        else -> "Ready"
+    }
+    val statusColor = when {
+        summary.isCurrentEvent -> DesktopPalette.PrimaryVariant
+        !summary.exists -> DesktopPalette.Error
+        else -> DesktopPalette.Disconnected
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "${summary.displayPosition}. ${summary.displayName}",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            Text(
+                text = statusText,
+                color = statusColor,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
+        Text(
+            text = summary.startDateTimeIso?.let(DesktopDateTimeText::displayIsoOrRaw)
+                ?: summary.eventFilePath,
+            color = DesktopPalette.Disconnected,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
