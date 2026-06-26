@@ -11891,28 +11891,30 @@ private fun ReadoutDetailsPanel(
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
             verticalAlignment = Alignment.Top
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 readouts.forEach { readout ->
-                    ReadoutDeleteButton(readout, onRemoveReadout)
-                }
-            }
-            Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
-                Column(
-                    modifier = Modifier.width(tableWidth),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    readouts.forEach { readout ->
-                        ReadoutDetailRow(
-                            readout = readout,
-                            competitors = competitorsWithoutReadouts,
-                            onUpdateReadoutStatus = onUpdateReadoutStatus,
-                            onEditReadout = onEditReadout,
-                            onAssignUnmatchedReadout = onAssignUnmatchedReadout,
-                            onPreviewFinishTicket = {
-                                ticketPreviewResultId = readout.id
-                                ticketPreviewText = onPreviewFinishTicket(readout.id)
-                            }
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ReadoutDeleteButton(readout, onRemoveReadout)
+                        Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
+                            ReadoutDetailRow(
+                                readout = readout,
+                                competitors = competitorsWithoutReadouts,
+                                onUpdateReadoutStatus = onUpdateReadoutStatus,
+                                onEditReadout = onEditReadout,
+                                onAssignUnmatchedReadout = onAssignUnmatchedReadout,
+                                onPreviewFinishTicket = {
+                                    ticketPreviewResultId = readout.id
+                                    ticketPreviewText = onPreviewFinishTicket(readout.id)
+                                }
+                            )
+                        }
                     }
                 }
             }
