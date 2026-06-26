@@ -18,6 +18,7 @@ import android.widget.Toast
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.Toolbar
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResultListener
@@ -105,6 +106,7 @@ class RaceSelectionFragment : Fragment() {
 
         toolbar = view.findViewById(R.id.race_toolbar)
         toolbar.setTitle(R.string.race_toolbar_title)
+        toolbar.setTitleTextColor(ContextCompat.getColor(requireContext(), R.color.black))
         toolbar.inflateMenu(R.menu.fragment_menu_race)
 
         //FAB options
