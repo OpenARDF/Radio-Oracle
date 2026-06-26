@@ -33,6 +33,7 @@ object EventToolbarSupport {
                 DrawableCompat.setTint(this, onToolbarColor)
             }
         }
+        tintMenuIcons(toolbar.menu, onToolbarColor)
         toolbar.setOnClickListener {
             showSeriesEventDropdown(fragment, toolbar, selectedRaceViewModel)
         }
@@ -81,6 +82,17 @@ object EventToolbarSupport {
                 } ?: false
             }
             show()
+        }
+    }
+
+    private fun tintMenuIcons(menu: Menu, color: Int) {
+        for (index in 0 until menu.size()) {
+            val item = menu.getItem(index)
+            item.icon = item.icon?.let { icon ->
+                DrawableCompat.wrap(icon.mutate()).apply {
+                    DrawableCompat.setTint(this, color)
+                }
+            }
         }
     }
 
