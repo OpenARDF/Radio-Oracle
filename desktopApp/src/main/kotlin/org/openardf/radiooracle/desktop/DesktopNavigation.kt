@@ -537,6 +537,21 @@ object DesktopNavigation {
                             ),
                             DesktopSection.KmlTools,
                             requiresEventFile = false
+                        ),
+                        group(
+                            "setup.tools.sportident",
+                            "sportIDENT",
+                            workflow,
+                            listOf(
+                                item(
+                                    "setup.tools.sportident.time-sync",
+                                    "Time Sync",
+                                    workflow,
+                                    DesktopSection.SportIdentTimeSync,
+                                    requiresEventFile = false
+                                )
+                            ),
+                            requiresEventFile = false
                         )
                     ),
                     DesktopSection.Tools,
@@ -1174,6 +1189,10 @@ object DesktopNavigation {
             "Use Tools to open standalone utilities for course files and other future event-support workflows.",
         "setup.tools.course-tools" to
             "Use Course Tools to analyze or modify course-related files and course data.",
+        "setup.tools.sportident" to
+            "Use sportIDENT tools for station preparation tasks that are not tied to one Event File.",
+        "setup.tools.sportident.time-sync" to
+            "Use Time Sync to inspect the attached SPORTident station before station-clock synchronization.",
         "setup.tools.course-tools.course-analysis" to
             "Use Course Analyzer to inspect stored course routes, ideal routes, climb, distance, time estimates, and classic wait-slot behavior.",
         "setup.tools.course-tools.course-analysis.import-kml-kmz" to

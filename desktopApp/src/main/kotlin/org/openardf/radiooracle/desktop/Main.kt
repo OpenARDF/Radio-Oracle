@@ -112,6 +112,7 @@ import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinterSelector
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardBlockDownload
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentReadoutService
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
+import org.openardf.radiooracle.desktop.usb.DesktopSportIdentTimeSyncService
 import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
@@ -9553,6 +9554,13 @@ private fun SectionWorkspace(
         if (section == DesktopSection.KmlSprintCourseGenerator) {
             KmlSprintCourseGeneratorPanel()
         }
+        if (section == DesktopSection.SportIdentTimeSync) {
+            SportIdentTimeSyncPanel(
+                siReaderState = siReaderState,
+                isStationBusy = isDownloadingSiReadout || isContinuousSiReadoutActive || isReadingCompetitorSiCard,
+                raceClockTick = raceClockTick
+            )
+        }
         if (section == DesktopSection.ElevationCache && projectFile != null) {
             VenueElevationCachePanel(
                 refreshToken = elevationCacheRefreshToken,
@@ -9736,6 +9744,73 @@ private fun SectionWorkspace(
                 fontSize = 13.sp
             )
         }
+    }
+}
+
+/** Shows SPORTident station time-sync readiness without writing station data yet. */
+@Composable
+private fun SportIdentTimeSyncPanel(
+    siReaderState: DesktopSiReaderUiState,
+    isStationBusy: Boolean,
+    raceClockTick: Long
+) {
+    var inspectionStatus by remember { mutableStateOf<String?>(null) }
+    var isInspecting by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val localTimeText = remember(raceClockTick) {
+        DesktopDateTimeText.displayIsoOrRaw(LocalDateTime.now().withNano(0).toString())
+    }
+    val canInspect = !isStationBusy && !isInspecting
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        DetailRow("Computer time", localTimeText)
+        DetailRow("SI station", siReaderState.statusText)
+        inspectionStatus?.let { status ->
+            Text(
+                text = status,
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    isInspecting = true
+                    scope.launch {
+                        val inspection = withContext(Dispatchers.IO) {
+                            DesktopSportIdentTimeSyncService().inspectDownloadStation()
+                        }
+                        inspectionStatus = listOfNotNull(
+                            inspection.statusText,
+                            inspection.portInfo?.describe()?.let { "Port: $it" },
+                            inspection.baudRate?.let { "Baud: $it" },
+                            inspection.disabledReason
+                        ).joinToString(" ")
+                        isInspecting = false
+                    }
+                },
+                enabled = canInspect
+            ) {
+                ButtonLabel(if (isInspecting) "Inspecting" else "Inspect Station")
+            }
+            Button(
+                onClick = {},
+                enabled = false
+            ) {
+                ButtonLabel("Sync Time")
+            }
+        }
+        val statusText = when {
+            isStationBusy -> "Station is busy with SI-card readout."
+            siReaderState.severity == DesktopSiReaderSeverity.DISCONNECTED -> "Connect a SPORTident download station."
+            siReaderState.severity == DesktopSiReaderSeverity.ERROR -> "Resolve the station connection error before syncing time."
+            else -> "Time sync write support is pending SPORTident protocol validation."
+        }
+        Text(
+            text = statusText,
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
     }
 }
 

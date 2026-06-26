@@ -524,6 +524,32 @@ compares raw system-info offsets against the first detected station. Use
 `RADIO_ORACLE_SI_PORTS=/dev/cu.SLAB_USBtoUART,/dev/cu.SLAB_USBtoUART5` to force
 an explicit comparison order.
 
+Time-sync readiness can be checked without writing station data:
+
+```shell
+npm run desktop:usb-time-sync-inspect
+```
+
+To force a specific device node:
+
+```shell
+RADIO_ORACLE_SI_PORT=/dev/cu.SLAB_USBtoUART npm run desktop:usb-time-sync-inspect
+```
+
+SPORTident time-write support must be validated from captured SI Config+
+traffic before Radio-Oracle enables station writes. To inspect copied capture
+hex without touching attached hardware, save the captured bytes to a text file
+and run:
+
+```shell
+npm run desktop:usb-capture-analyze -- --args=/path/to/si-config-capture.txt
+```
+
+The analyzer accepts whitespace-separated hex such as `FF 02 F0 ...`, extracts
+SPORTident frames, reports command bytes, payloads, frame type, and CRC status.
+Use it to compare SI Config+ remote-mode time sync traffic with Radio-Oracle's
+known probe and system-info frames before implementing the write command.
+
 For local macOS smoke tests, prefer copying the generated `.app` and sample
 Event File to `/tmp` before launching with `open ... --args <sample.rom.json>`.
 Launching the checkout-built app bundle directly from `Documents/GitHub` can
