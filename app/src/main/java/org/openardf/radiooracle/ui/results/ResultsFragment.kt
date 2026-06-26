@@ -25,6 +25,7 @@ import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.databinding.FragmentResultsBinding
+import org.openardf.radiooracle.ui.EventToolbarSupport
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
 import org.openardf.radiooracle.ui.races.RaceEditDialogFragment
@@ -75,10 +76,8 @@ class ResultsFragment : Fragment() {
             return@setOnMenuItemClickListener setFragmentMenuActions(it)
         }
 
-        // Set the toolbar as the action bar
-        selectedRaceViewModel.race.observe(viewLifecycleOwner) { race ->
-            resultsToolbar.title = race?.name
-            race?.let { resultsToolbar.subtitle = dataProcessor.raceTypeToString(it.raceType) }
+        EventToolbarSupport.bind(this, resultsToolbar, selectedRaceViewModel) { race ->
+            dataProcessor.raceTypeToString(race.raceType)
         }
 
         // Set results service icon

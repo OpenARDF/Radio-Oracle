@@ -11,7 +11,7 @@
         android:id="@+id/readouts_toolbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="?attr/colorPrimary"
+        android:background="@color/event_toolbar_background"
         android:minHeight="?attr/actionBarSize"
         android:theme="@style/Theme.RadioOracle"
         app:layout_constraintTop_toTopOf="parent" />

@@ -28,6 +28,7 @@ import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.databinding.FragmentReadoutsBinding
+import org.openardf.radiooracle.ui.EventToolbarSupport
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
 import org.openardf.radiooracle.ui.races.RaceEditDialogFragment
@@ -98,9 +99,8 @@ class ReadoutFragment : Fragment() {
             return@setOnMenuItemClickListener setFragmentMenuActions(it)
         }
 
-        selectedRaceViewModel.race.observe(viewLifecycleOwner) { race ->
-            readoutToolbar.title = race?.name
-            race?.let { readoutToolbar.subtitle = dataProcessor.raceTypeToString(it.raceType) }
+        EventToolbarSupport.bind(this, readoutToolbar, selectedRaceViewModel) { race ->
+            dataProcessor.raceTypeToString(race.raceType)
         }
 
         readoutAddFab.setOnClickListener {
