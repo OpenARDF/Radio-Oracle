@@ -4,6 +4,7 @@ import android.view.Menu
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -24,8 +25,14 @@ object EventToolbarSupport {
         toolbar.setBackgroundColor(
             ContextCompat.getColor(fragment.requireContext(), R.color.event_toolbar_background)
         )
-        toolbar.setTitleTextColor(ContextCompat.getColor(fragment.requireContext(), R.color.black))
-        toolbar.setSubtitleTextColor(ContextCompat.getColor(fragment.requireContext(), R.color.black))
+        val onToolbarColor = ContextCompat.getColor(fragment.requireContext(), R.color.white)
+        toolbar.setTitleTextColor(onToolbarColor)
+        toolbar.setSubtitleTextColor(onToolbarColor)
+        toolbar.overflowIcon = toolbar.overflowIcon?.let { icon ->
+            DrawableCompat.wrap(icon.mutate()).apply {
+                DrawableCompat.setTint(this, onToolbarColor)
+            }
+        }
         toolbar.setOnClickListener {
             showSeriesEventDropdown(fragment, toolbar, selectedRaceViewModel)
         }
