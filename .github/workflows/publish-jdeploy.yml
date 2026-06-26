@@ -47,7 +47,6 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "24"
-          registry-url: https://registry.npmjs.org
 
       - name: Print tool versions
         run: |
@@ -92,7 +91,7 @@ jobs:
 
       - name: Publish to npm with trusted publishing
         if: inputs.mode == 'publish'
-        run: npm publish --access public
+        run: node ./scripts/publish-jdeploy-trusted.mjs
 
       - name: Dry-run complete
         if: inputs.mode != 'publish'

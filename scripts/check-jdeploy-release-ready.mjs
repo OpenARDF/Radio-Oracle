@@ -43,6 +43,12 @@ function requireIncludes(label, text, expected) {
   }
 }
 
+function requireNotIncludes(label, text, unexpected) {
+  if (text.includes(unexpected)) {
+    fail(`${label} must not include ${unexpected}`);
+  }
+}
+
 function gradleCommand() {
   return platform() === "win32" ? resolve("gradlew.bat") : resolve("gradlew");
 }
@@ -114,7 +120,13 @@ requireIncludes("npm publish workflow", npmPublishWorkflow, "id-token: write");
 requireIncludes("npm publish workflow", npmPublishWorkflow, "node-version: \"24\"");
 requireIncludes("npm publish workflow", npmPublishWorkflow, "RADIO_ORACLE_ALLOW_JDEPLOY_PUBLISH: \"1\"");
 requireIncludes("npm publish workflow", npmPublishWorkflow, "RADIO_ORACLE_RELEASE_BUILD: \"1\"");
-requireIncludes("npm publish workflow", npmPublishWorkflow, "npm publish --access public");
+requireIncludes("npm publish workflow", npmPublishWorkflow, "node ./scripts/publish-jdeploy-trusted.mjs");
+requireNotIncludes("npm publish workflow", npmPublishWorkflow, "registry-url: https://registry.npmjs.org");
+const trustedPublishScript = readFileSync("scripts/publish-jdeploy-trusted.mjs", "utf8");
+requireIncludes("trusted npm publish script", trustedPublishScript, "delete publishEnv.NODE_AUTH_TOKEN");
+requireIncludes("trusted npm publish script", trustedPublishScript, "NPM_CONFIG_USERCONFIG");
+requireIncludes("trusted npm publish script", trustedPublishScript, "\"--provenance\"");
+requireIncludes("trusted npm publish script", trustedPublishScript, "dist?.attestations?.provenance");
 
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "tags:");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "- \"v*\"");
