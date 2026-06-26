@@ -13,6 +13,7 @@ import android.widget.Toast
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.Toolbar
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
@@ -65,6 +66,7 @@ class EventSeriesFragment : Fragment() {
         emptyView = view.findViewById(R.id.event_series_empty)
 
         toolbar.setTitle(R.string.event_series_toolbar_title)
+        toolbar.setTitleTextColor(ContextCompat.getColor(requireContext(), R.color.black))
         toolbar.setNavigationIcon(R.drawable.ic_back)
         toolbar.setNavigationOnClickListener { closeSeriesPage() }
 

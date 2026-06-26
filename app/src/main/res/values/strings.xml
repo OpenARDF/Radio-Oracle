@@ -122,7 +122,7 @@
     <string name="event_series_remove_grouping_success">Series grouping removed</string>
     <string name="event_series_toolbar_title">Series</string>
     <string name="event_series_empty">No Event Series are stored on this device.</string>
-    <string name="race_toolbar_title">Events</string>
+    <string name="race_toolbar_title">Series Events</string>
     <string name="race_level">Level</string>
     <string name="race_type">Race type</string>
     <string name="race_api_key">API key</string>

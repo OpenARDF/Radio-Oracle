@@ -9,7 +9,7 @@
     <string name="data_import_preview_info">Počet záznamů: %1$d</string>
     <string name="data_import_file_error">Chyba při otevírání souboru</string>
     <string name="race_import_file">Otevřít soubor události</string>
-    <string name="race_toolbar_title">Události</string>
+    <string name="race_toolbar_title">Události série</string>
     <string name="preferences_about_app">O aplikaci</string>
     <string name="race_level_international">Mezinárodní</string>
     <string name="race_level_national">Národní</string>
