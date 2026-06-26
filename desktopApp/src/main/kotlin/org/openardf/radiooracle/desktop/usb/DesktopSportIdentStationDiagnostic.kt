@@ -4,7 +4,6 @@ import kotlin.math.roundToInt
 import kotlin.math.pow
 import kotlin.system.measureNanoTime
 import org.openardf.radiooracle.shared.sportident.SportIdentFrame
-import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfoParser
@@ -76,6 +75,11 @@ class DesktopSportIdentStationDiagnostic(
     private val writeTimeoutMs: Int = 1200,
     private val openWaitTimeMs: Int = 200
 ) {
+    private val commandClient = DesktopSportIdentStationCommandClient(
+        readTimeoutMs = readTimeoutMs,
+        maxReplyBytes = SYSTEM_INFO_LONG_REPLY_BYTES
+    )
+
     fun run(port: DesktopSerialPort): DesktopSportIdentStationDiagnosticResult {
         require(attempts > 0) { "Diagnostic attempts must be positive." }
 
@@ -107,7 +111,7 @@ class DesktopSportIdentStationDiagnostic(
         for (baudRate in listOf(SportIdentProtocol.BAUDRATE_HIGH, SportIdentProtocol.BAUDRATE_LOW)) {
             runCatching {
                 openConfigured(port, baudRate)
-                sendCommand(port, SportIdentProtocol.PROBE_COMMAND, PROBE_PAYLOAD, PROBE_REPLY_BYTES)
+                commandClient.sendCommand(port, SportIdentProtocol.PROBE_COMMAND, PROBE_PAYLOAD)
             }.getOrNull()?.let {
                 closeIfOpen(port)
                 return baudRate
@@ -123,7 +127,7 @@ class DesktopSportIdentStationDiagnostic(
 
             var probeFrame: SportIdentFrame? = null
             val probeTimingMs = measureMillis {
-                probeFrame = sendCommand(port, SportIdentProtocol.PROBE_COMMAND, PROBE_PAYLOAD, PROBE_REPLY_BYTES)
+                probeFrame = commandClient.sendCommand(port, SportIdentProtocol.PROBE_COMMAND, PROBE_PAYLOAD)
             }
             if (probeFrame == null) {
                 error("SPORTident station did not respond to the probe.")
@@ -131,12 +135,7 @@ class DesktopSportIdentStationDiagnostic(
 
             var systemInfoFrame: SportIdentFrame? = null
             val systemInfoTimingMs = measureMillis {
-                systemInfoFrame = sendCommand(
-                    port,
-                    SportIdentProtocol.GET_SYSTEM_INFO,
-                    SYSTEM_INFO_LONG_PAYLOAD,
-                    SYSTEM_INFO_LONG_REPLY_BYTES
-                )
+                systemInfoFrame = commandClient.sendCommand(port, SportIdentProtocol.GET_SYSTEM_INFO, SYSTEM_INFO_LONG_PAYLOAD)
             }
             val frame = systemInfoFrame ?: error("SPORTident station did not return long system info.")
             val info = SportIdentStationInfoParser.fromSystemInfoFrame(frame)
@@ -166,22 +165,6 @@ class DesktopSportIdentStationDiagnostic(
         }
     }
 
-    private fun sendCommand(
-        port: DesktopSerialPort,
-        command: Byte,
-        data: ByteArray,
-        expectedReplyBytes: Int
-    ): SportIdentFrame? {
-        val request = SportIdentProtocol.buildExtendedMessage(command, data)
-        if (port.write(request) != request.size) {
-            return null
-        }
-        return SportIdentFrameParser.firstFrame(
-            port.read(expectedReplyBytes),
-            commandFilter = command
-        )
-    }
-
     private data class StationInfoMeasurement(
         val probeTimingMs: Double,
         val systemInfoTimingMs: Double,
@@ -190,7 +173,6 @@ class DesktopSportIdentStationDiagnostic(
     )
 
     private companion object {
-        const val PROBE_REPLY_BYTES = 9
         const val SYSTEM_INFO_LONG_REPLY_BYTES = 126
         val PROBE_PAYLOAD = byteArrayOf(0x4d)
         val SYSTEM_INFO_LONG_PAYLOAD = byteArrayOf(0x00, 0x75)

@@ -68,6 +68,7 @@ enum class DesktopSection(val label: String) {
     ElevationCacheImport("Import Elevation Data"),
     Tools("Tools"),
     KmlTools("Course Tools"),
+    SportIdentTimeSync("Time Sync"),
     KmlMoveCourse("Move Course"),
     KmlClassicCourseGenerator("Classic Course Generator"),
     KmlFoxoringCourseGenerator("Foxoring Course Generator"),

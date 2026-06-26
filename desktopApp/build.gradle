@@ -385,6 +385,24 @@ tasks.register("desktopUsbStationDiagnostic", JavaExec) {
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationDiagnosticKt")
 }
 
+tasks.register("desktopUsbTimeSyncInspect", JavaExec) {
+    group = "verification"
+    description = "Inspects SPORTident time-sync readiness without writing station data."
+
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentTimeSyncInspectKt")
+}
+
+tasks.register("desktopUsbCaptureAnalyze", JavaExec) {
+    group = "verification"
+    description = "Parses copied SPORTident serial capture hex and prints decoded frame summaries."
+
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentCaptureAnalyzerKt")
+}
+
 tasks.register("desktopAutomation", JavaExec) {
     group = "verification"
     description = "Runs Radio-Oracle desktop automation and debug-control commands."

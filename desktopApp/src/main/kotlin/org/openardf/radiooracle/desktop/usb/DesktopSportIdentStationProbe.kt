@@ -20,6 +20,11 @@ class DesktopSportIdentStationProbe(
     private val writeTimeoutMs: Int = 1200,
     private val openWaitTimeMs: Int = 200
 ) {
+    private val commandClient = DesktopSportIdentStationCommandClient(
+        readTimeoutMs = readTimeoutMs,
+        maxReplyBytes = MAX_REPLY_BYTES
+    )
+
     fun probe(port: DesktopSerialPort): DesktopSportIdentProbeResult {
         try {
             configure(port, SportIdentProtocol.BAUDRATE_HIGH)
@@ -63,7 +68,7 @@ class DesktopSportIdentStationProbe(
                 error("Failed to open serial port ${port.info.systemPortPath}.")
             }
 
-            val highBaudReply = sendCommand(port, SportIdentProtocol.PROBE_COMMAND, PROBE_PAYLOAD)
+            val highBaudReply = commandClient.sendCommand(port, SportIdentProtocol.PROBE_COMMAND, PROBE_PAYLOAD)
             if (highBaudReply != null) {
                 return DesktopSportIdentStationConnection(
                     baudRate = SportIdentProtocol.BAUDRATE_HIGH,
@@ -73,7 +78,7 @@ class DesktopSportIdentStationProbe(
             }
 
             configure(port, SportIdentProtocol.BAUDRATE_LOW)
-            val lowBaudReply = sendCommand(port, SportIdentProtocol.PROBE_COMMAND, PROBE_PAYLOAD)
+            val lowBaudReply = commandClient.sendCommand(port, SportIdentProtocol.PROBE_COMMAND, PROBE_PAYLOAD)
             if (lowBaudReply != null) {
                 return DesktopSportIdentStationConnection(
                     baudRate = SportIdentProtocol.BAUDRATE_LOW,
@@ -96,41 +101,19 @@ class DesktopSportIdentStationProbe(
     }
 
     private fun sendProbe(port: DesktopSerialPort): ByteArray {
-        return sendCommand(port, SportIdentProtocol.PROBE_COMMAND, PROBE_PAYLOAD)?.raw ?: byteArrayOf()
+        return commandClient.sendCommand(port, SportIdentProtocol.PROBE_COMMAND, PROBE_PAYLOAD)?.raw ?: byteArrayOf()
     }
 
     private fun readStationInfo(port: DesktopSerialPort): SportIdentStationInfo {
-        val longInfo = sendCommand(port, SportIdentProtocol.GET_SYSTEM_INFO, byteArrayOf(0x00, 0x75))
+        val longInfo = commandClient.sendCommand(port, SportIdentProtocol.GET_SYSTEM_INFO, byteArrayOf(0x00, 0x75))
             ?.let(SportIdentStationInfoParser::fromSystemInfoFrame)
         if (longInfo != null) {
             return longInfo
         }
 
-        val shortInfo = sendCommand(port, SportIdentProtocol.GET_SYSTEM_INFO, byteArrayOf(0x00, 0x07))
+        val shortInfo = commandClient.sendCommand(port, SportIdentProtocol.GET_SYSTEM_INFO, byteArrayOf(0x00, 0x07))
             ?.let(SportIdentStationInfoParser::fromSystemInfoFrame)
         return shortInfo ?: error("SPORTident station did not return readable system info.")
-    }
-
-    private fun sendCommand(
-        port: DesktopSerialPort,
-        command: Byte,
-        data: ByteArray
-    ): org.openardf.radiooracle.shared.sportident.SportIdentFrame? {
-        val request = SportIdentProtocol.buildExtendedMessage(command, data)
-        val written = port.write(request)
-        if (written != request.size) {
-            return null
-        }
-
-        val deadline = System.currentTimeMillis() + readTimeoutMs
-        val stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_REPLY_BYTES)
-        while (System.currentTimeMillis() < deadline) {
-            val frame = stream.nextFrame(deadline) ?: return null
-            if (frame.command == command) {
-                return frame
-            }
-        }
-        return null
     }
 
     private companion object {

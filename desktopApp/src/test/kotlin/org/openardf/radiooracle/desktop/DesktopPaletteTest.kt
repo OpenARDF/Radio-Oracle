@@ -27,6 +27,7 @@ class DesktopPaletteTest {
                 "Import Elevation Data",
                 "Tools",
                 "Course Tools",
+                "Time Sync",
                 "Move Course",
                 "Classic Course Generator",
                 "Foxoring Course Generator",
