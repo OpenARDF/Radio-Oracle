@@ -31,6 +31,7 @@ import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.EventSeriesData
 import org.openardf.radiooracle.databinding.FragmentCategoriesBinding
+import org.openardf.radiooracle.ui.EventToolbarSupport
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
 import org.openardf.radiooracle.ui.races.RaceEditDialogFragment
@@ -94,9 +95,8 @@ class CategoryFragment : Fragment() {
             mLastClickTime = SystemClock.elapsedRealtime()
         }
 
-        selectedRaceViewModel.race.observe(viewLifecycleOwner) { race ->
-            categoryToolbar.title = race?.name
-            race?.let { categoryToolbar.subtitle = dataProcessor.raceTypeToString(it.raceType) }
+        EventToolbarSupport.bind(this, categoryToolbar, selectedRaceViewModel) { race ->
+            dataProcessor.raceTypeToString(race.raceType)
         }
         setFragmentListener()
         setRecyclerViewAdapter()

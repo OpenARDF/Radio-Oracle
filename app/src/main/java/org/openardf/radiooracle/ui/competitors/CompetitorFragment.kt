@@ -31,6 +31,7 @@ import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.databinding.FragmentCompetitorsBinding
+import org.openardf.radiooracle.ui.EventToolbarSupport
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
 import org.openardf.radiooracle.ui.races.RaceEditDialogFragment
@@ -78,9 +79,8 @@ class CompetitorFragment : Fragment() {
             return@setOnMenuItemClickListener setFragmentMenuActions(it)
         }
 
-        selectedRaceViewModel.race.observe(viewLifecycleOwner) { race ->
-            competitorToolbar.title = race?.name
-            race?.let { competitorToolbar.subtitle = dataProcessor.raceTypeToString(it.raceType) }
+        EventToolbarSupport.bind(this, competitorToolbar, selectedRaceViewModel) { race ->
+            dataProcessor.raceTypeToString(race.raceType)
         }
 
         competitorDisplayTypePicker.setOnItemClickListener { _, _, _, pos ->
