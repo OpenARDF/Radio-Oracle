@@ -570,10 +570,10 @@ class RaceSelectionFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
 
-                raceViewModel.races.collect { races ->
+                raceViewModel.raceListItems.collect { raceListItems ->
                     recyclerView.adapter =
                         RaceRecyclerViewAdapter(
-                            races, { raceId ->
+                            raceListItems, { raceId ->
 
                                 // Pass the race id into view Model
                                 selectedRaceViewModel.setRace(raceId)
