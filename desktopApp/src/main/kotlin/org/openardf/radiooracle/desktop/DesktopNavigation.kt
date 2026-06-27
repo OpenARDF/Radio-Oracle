@@ -521,24 +521,10 @@ object DesktopNavigation {
                                     requiresEventFile = false
                                 ),
                                 item(
-                                    "setup.tools.course-tools.classic-course-generator",
-                                    "Classic Route Generator",
+                                    "setup.tools.course-tools.route-generator",
+                                    "Route Generator",
                                     workflow,
-                                    DesktopSection.KmlClassicCourseGenerator,
-                                    requiresEventFile = false
-                                ),
-                                item(
-                                    "setup.tools.course-tools.foxoring-course-generator",
-                                    "Foxoring Route Generator",
-                                    workflow,
-                                    DesktopSection.KmlFoxoringCourseGenerator,
-                                    requiresEventFile = false
-                                ),
-                                item(
-                                    "setup.tools.course-tools.sprint-course-generator",
-                                    "Sprint Route Generator",
-                                    workflow,
-                                    DesktopSection.KmlSprintCourseGenerator,
+                                    DesktopSection.KmlRouteGenerator,
                                     requiresEventFile = false
                                 )
                             ),
@@ -1210,12 +1196,8 @@ object DesktopNavigation {
             "Use Move Course to create a translated KML/KMZ copy where the Start point is moved to a new latitude and longitude and all other coordinates move by the same offset.",
         "setup.tools.course-tools.create-course" to
             "Use Create Course to write a starter KML for a Classic, Sprint, or Foxoring course near a supplied latitude and longitude.",
-        "setup.tools.course-tools.classic-course-generator" to
-            "Use Classic Route Generator to read Start, Finish, Beacon, and fox point placemarks from a KML/KMZ file and list ideal Classic route combinations with category matches.",
-        "setup.tools.course-tools.foxoring-course-generator" to
-            "Use Foxoring Route Generator to read Start, Finish, optional Beacon, and fox point placemarks from a KML/KMZ file and list ideal Foxoring route combinations with category matches.",
-        "setup.tools.course-tools.sprint-course-generator" to
-            "Use Sprint Route Generator to read Start, Finish, Beacon, optional Spectator, five slow foxes, and five fast foxes from a KML/KMZ file and list ideal Sprint route combinations with category matches.",
+        "setup.tools.course-tools.route-generator" to
+            "Use Route Generator to read a KML/KMZ course-points file, identify or choose Classic, Foxoring, or Sprint, and list ideal route combinations with category matches.",
         "race.readouts" to
             "Use Readouts to download, review, match, edit, remove, print, and manually add SI-card readouts during race operations.",
         "race.si-readout" to

@@ -9657,14 +9657,8 @@ private fun SectionWorkspace(
         if (section == DesktopSection.KmlCreateCourse) {
             KmlCreateCoursePanel(projectFile)
         }
-        if (section == DesktopSection.KmlClassicCourseGenerator) {
-            KmlClassicCourseGeneratorPanel()
-        }
-        if (section == DesktopSection.KmlFoxoringCourseGenerator) {
-            KmlFoxoringCourseGeneratorPanel()
-        }
-        if (section == DesktopSection.KmlSprintCourseGenerator) {
-            KmlSprintCourseGeneratorPanel()
+        if (section == DesktopSection.KmlRouteGenerator) {
+            KmlRouteGeneratorPanel()
         }
         if (section == DesktopSection.SportIdentTimeSync) {
             SportIdentTimeSyncPanel(
@@ -13543,59 +13537,54 @@ private fun openKmlToolsOutputFolder(path: Path): String? =
     }
 
 @Composable
-private fun KmlClassicCourseGeneratorPanel() {
-    CourseGeneratorPanel(
-        title = "Classic Route Generator",
-        description = "Choose a KML/KMZ course points file containing one Start, one Finish, and 3-5 fox point placemarks. LineString route placemarks are ignored. If a Beacon is present, it is inserted immediately before Finish.",
-        progressTitle = "Generating Classic routes",
-        progressMessage = "Calculating ideal route combinations, sampled elevations, effective lengths, category matches, and course requirement warnings.",
-        generateResult = DesktopClassicCourseGenerator::generate,
-        defaultPdfFileName = DesktopClassicCourseGenerator::defaultPdfFileName,
-        exportPdfAndKml = DesktopClassicCourseGenerator::exportPdfAndKml
-    )
-}
-
-@Composable
-private fun KmlFoxoringCourseGeneratorPanel() {
-    CourseGeneratorPanel(
-        title = "Foxoring Route Generator",
-        description = "Choose a KML/KMZ course points file containing one Start, one Finish, and 5-12 fox point placemarks. LineString route placemarks are ignored. If a Beacon is present, it is inserted immediately before Finish. Routes are generated from four foxes through the total available fox count.",
-        progressTitle = "Generating Foxoring routes",
-        progressMessage = "Exhaustively calculating Foxoring route combinations, sampled elevations, effective lengths, category matches, and course requirement warnings.",
-        generateResult = DesktopFoxoringCourseGenerator::generate,
-        defaultPdfFileName = DesktopFoxoringCourseGenerator::defaultPdfFileName,
-        exportPdfAndKml = DesktopFoxoringCourseGenerator::exportPdfAndKml
-    )
-}
-
-@Composable
-private fun KmlSprintCourseGeneratorPanel() {
-    CourseGeneratorPanel(
-        title = "Sprint Route Generator",
-        description = "Choose a KML/KMZ sprint course points file containing one Start, one Finish, one Beacon, five slow fox point placemarks, five fast fox point placemarks, and optionally one Spectator. LineString route placemarks are ignored. Routes are generated with at least one slow-loop fox and at least one fast-loop fox; total fox counts follow doubled Classic category requirements.",
-        progressTitle = "Generating Sprint routes",
-        progressMessage = "Calculating Sprint slow-loop and fast-loop route combinations, sampled elevations, effective lengths, category matches, and recommended route sets.",
-        generateResult = DesktopSprintCourseGenerator::generate,
-        defaultPdfFileName = DesktopSprintCourseGenerator::defaultPdfFileName,
-        exportPdfAndKml = DesktopSprintCourseGenerator::exportPdfAndKml
-    )
-}
-
-@Composable
-private fun CourseGeneratorPanel(
-    title: String,
-    description: String,
-    progressTitle: String,
-    progressMessage: String,
-    generateResult: (Path) -> ClassicCourseGeneratorResult,
-    defaultPdfFileName: (ClassicCourseGeneratorResult) -> String,
-    exportPdfAndKml: (Path, ClassicCourseGeneratorResult) -> ClassicCourseGeneratorExportPaths
-) {
+private fun KmlRouteGeneratorPanel() {
     var selectedPath by remember { mutableStateOf<Path?>(null) }
     var result by remember { mutableStateOf<ClassicCourseGeneratorResult?>(null) }
     var statusText by remember { mutableStateOf<String?>(null) }
     var isGenerating by remember { mutableStateOf(false) }
+    var activeMode by remember { mutableStateOf<RouteGeneratorMode?>(null) }
+    var pendingTypeChoice by remember { mutableStateOf<RouteGeneratorTypeChoice?>(null) }
     val generationScope = rememberCoroutineScope()
+    val title = "Route Generator"
+
+    fun generationStatus(generated: ClassicCourseGeneratorResult): String {
+        val elevationStatus = when {
+            generated.missingElevationPointCount == 0 && generated.elevationResolvedPointCount > 0 ->
+                " Filled ${generated.elevationResolvedPointCount} missing elevations from the local cache."
+            generated.missingElevationPointCount > 0 ->
+                " ${generated.missingElevationPointCount} point elevations are still missing; category matches require complete elevations."
+            else -> ""
+        }
+        return "Generated ${generated.rows.size} ideal ${generated.formatLabel} route combinations from ${generated.foxes.size} foxes.$elevationStatus"
+    }
+
+    fun startGeneration(
+        path: Path,
+        courseData: DesktopCourseKmlData,
+        mode: RouteGeneratorMode
+    ) {
+        if (isGenerating) return
+        isGenerating = true
+        activeMode = mode
+        result = null
+        statusText = null
+        generationScope.launch {
+            try {
+                delay(100)
+                val generated = withContext(Dispatchers.Default) {
+                    mode.generateResult(path, courseData)
+                }
+                result = generated
+                statusText = generationStatus(generated)
+            } catch (error: Throwable) {
+                result = null
+                statusText = "${mode.title} failed: ${error.message ?: error::class.simpleName}"
+            } finally {
+                isGenerating = false
+                activeMode = null
+            }
+        }
+    }
 
     fun chooseFile() {
         if (isGenerating) return
@@ -13603,35 +13592,46 @@ private fun CourseGeneratorPanel(
             selectedPath = path
             result = null
             statusText = null
-        }
-    }
-
-    fun generate() {
-        val path = selectedPath ?: return
-        if (isGenerating) return
-        isGenerating = true
-        result = null
-        statusText = null
-        generationScope.launch {
-            try {
-                delay(100)
-                val generated = withContext(Dispatchers.Default) {
-                    generateResult(path)
+            pendingTypeChoice = null
+            isGenerating = true
+            activeMode = null
+            generationScope.launch {
+                try {
+                    delay(100)
+                    val courseData = withContext(Dispatchers.IO) {
+                        DesktopCourseFileReader.read(path)
+                    }
+                    val detectedType = DesktopCourseFormatDetector.detectedGeneratorRaceType(
+                        sourceName = path.fileName.toString(),
+                        courseData = courseData
+                    )
+                    if (detectedType == null) {
+                        val inferredTypes = DesktopCourseFormatDetector.inferredRaceTypes(
+                            path.fileName.toString(),
+                            courseData
+                        ).distinct().filter { it in DesktopCourseFormatDetector.supportedGeneratorRaceTypes }
+                        pendingTypeChoice = RouteGeneratorTypeChoice(
+                            path = path,
+                            courseData = courseData,
+                            inferredTypes = inferredTypes
+                        )
+                        statusText = "Choose a route type for ${path.fileName}."
+                        return@launch
+                    }
+                    val mode = routeGeneratorMode(detectedType)
+                    activeMode = mode
+                    val generated = withContext(Dispatchers.Default) {
+                        mode.generateResult(path, courseData)
+                    }
+                    result = generated
+                    statusText = generationStatus(generated)
+                } catch (error: Throwable) {
+                    result = null
+                    statusText = "$title failed: ${error.message ?: error::class.simpleName}"
+                } finally {
+                    isGenerating = false
+                    activeMode = null
                 }
-                result = generated
-                val elevationStatus = when {
-                    generated.missingElevationPointCount == 0 && generated.elevationResolvedPointCount > 0 ->
-                        " Filled ${generated.elevationResolvedPointCount} missing elevations from the local cache."
-                    generated.missingElevationPointCount > 0 ->
-                        " ${generated.missingElevationPointCount} point elevations are still missing; category matches require complete elevations."
-                    else -> ""
-                }
-                statusText = "Generated ${generated.rows.size} ideal course combinations from ${generated.foxes.size} foxes.$elevationStatus"
-            } catch (error: Throwable) {
-                result = null
-                statusText = "$title failed: ${error.message ?: error::class.simpleName}"
-            } finally {
-                isGenerating = false
             }
         }
     }
@@ -13639,15 +13639,15 @@ private fun CourseGeneratorPanel(
     fun exportResults() {
         val generated = result ?: return
         DesktopFileDialogs.chooseExportCourseGeneratorPdf(
-            title = "Export $title PDF",
-            defaultFileName = defaultPdfFileName(generated)
+            title = "Export ${generated.generatorTitle} PDF",
+            defaultFileName = routeGeneratorMode(generated).defaultPdfFileName(generated)
         )?.let { path ->
             runCatching {
-                exportPdfAndKml(path, generated)
+                routeGeneratorMode(generated).exportPdfAndKml(path, generated)
             }.onSuccess { exports ->
                 statusText = "Exported ${exports.pdfPath.fileName} and ${exports.kmlPath.fileName}"
             }.onFailure { error ->
-                statusText = "$title export failed: ${error.message ?: error::class.simpleName}"
+                statusText = "${generated.generatorTitle} export failed: ${error.message ?: error::class.simpleName}"
             }
         }
     }
@@ -13663,7 +13663,7 @@ private fun CourseGeneratorPanel(
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = description,
+            text = "Choose a KML/KMZ course-points file. If the file name or course elements identify Classic, Foxoring, or Sprint, generation starts immediately. If the type is ambiguous, choose the route type when prompted.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -13676,12 +13676,6 @@ private fun CourseGeneratorPanel(
                 enabled = !isGenerating
             ) {
                 ButtonLabel("Choose KML/KMZ...")
-            }
-            Button(
-                onClick = ::generate,
-                enabled = selectedPath != null && !isGenerating
-            ) {
-                ButtonLabel("Generate")
             }
             Button(
                 onClick = ::exportResults,
@@ -13711,11 +13705,126 @@ private fun CourseGeneratorPanel(
         }
     }
     if (isGenerating) {
+        val mode = activeMode
         IndeterminateProgressDialog(
-            title = progressTitle,
-            message = progressMessage
+            title = mode?.progressTitle ?: "Opening Route Generator file",
+            message = mode?.progressMessage ?: "Reading course points and identifying the route generator type."
         )
     }
+    pendingTypeChoice?.let { choice ->
+        RouteGeneratorTypeChoiceDialog(
+            choice = choice,
+            onChoose = { eventType ->
+                pendingTypeChoice = null
+                statusText = null
+                startGeneration(choice.path, choice.courseData, routeGeneratorMode(eventType))
+            },
+            onCancel = {
+                pendingTypeChoice = null
+                statusText = "Route generation canceled."
+            }
+        )
+    }
+}
+
+private data class RouteGeneratorMode(
+    val raceType: RaceType,
+    val title: String,
+    val progressTitle: String,
+    val progressMessage: String,
+    val generateResult: (Path, DesktopCourseKmlData) -> ClassicCourseGeneratorResult,
+    val defaultPdfFileName: (ClassicCourseGeneratorResult) -> String,
+    val exportPdfAndKml: (Path, ClassicCourseGeneratorResult) -> ClassicCourseGeneratorExportPaths
+)
+
+private data class RouteGeneratorTypeChoice(
+    val path: Path,
+    val courseData: DesktopCourseKmlData,
+    val inferredTypes: List<RaceType>
+)
+
+private fun routeGeneratorMode(raceType: RaceType): RouteGeneratorMode =
+    when (raceType) {
+        RaceType.FOXORING -> RouteGeneratorMode(
+            raceType = RaceType.FOXORING,
+            title = "Foxoring Route Generator",
+            progressTitle = "Generating Foxoring routes",
+            progressMessage = "Exhaustively calculating Foxoring route combinations, sampled elevations, effective lengths, category matches, and course requirement warnings.",
+            generateResult = { path, data -> DesktopFoxoringCourseGenerator.generate(path, data) },
+            defaultPdfFileName = DesktopFoxoringCourseGenerator::defaultPdfFileName,
+            exportPdfAndKml = DesktopFoxoringCourseGenerator::exportPdfAndKml
+        )
+        RaceType.SPRINT -> RouteGeneratorMode(
+            raceType = RaceType.SPRINT,
+            title = "Sprint Route Generator",
+            progressTitle = "Generating Sprint routes",
+            progressMessage = "Calculating Sprint slow-loop and fast-loop route combinations, sampled elevations, effective lengths, category matches, and recommended route sets.",
+            generateResult = { path, data -> DesktopSprintCourseGenerator.generate(path, data) },
+            defaultPdfFileName = DesktopSprintCourseGenerator::defaultPdfFileName,
+            exportPdfAndKml = DesktopSprintCourseGenerator::exportPdfAndKml
+        )
+        else -> RouteGeneratorMode(
+            raceType = RaceType.CLASSIC,
+            title = "Classic Route Generator",
+            progressTitle = "Generating Classic routes",
+            progressMessage = "Calculating ideal route combinations, sampled elevations, effective lengths, category matches, and course requirement warnings.",
+            generateResult = { path, data -> DesktopClassicCourseGenerator.generate(path, data) },
+            defaultPdfFileName = DesktopClassicCourseGenerator::defaultPdfFileName,
+            exportPdfAndKml = DesktopClassicCourseGenerator::exportPdfAndKml
+        )
+    }
+
+private fun routeGeneratorMode(result: ClassicCourseGeneratorResult): RouteGeneratorMode =
+    routeGeneratorMode(
+        when (result.formatLabel) {
+            "Foxoring" -> RaceType.FOXORING
+            "Sprint" -> RaceType.SPRINT
+            else -> RaceType.CLASSIC
+        }
+    )
+
+@Composable
+private fun RouteGeneratorTypeChoiceDialog(
+    choice: RouteGeneratorTypeChoice,
+    onChoose: (RaceType) -> Unit,
+    onCancel: () -> Unit
+) {
+    val inferredText = choice.inferredTypes
+        .takeIf { it.isNotEmpty() }
+        ?.joinToString(" or ") { DesktopCourseFormatDetector.run { it.displayName() } }
+        ?: "unknown"
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Choose route type") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Radio-Oracle could not identify one route-generator type for ${choice.path.fileName}.",
+                    color = DesktopPalette.Black,
+                    fontSize = 13.sp
+                )
+                Text(
+                    text = "Detected type: $inferredText",
+                    color = DesktopPalette.Black,
+                    fontSize = 13.sp
+                )
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DesktopCourseFormatDetector.supportedGeneratorRaceTypes.forEach { raceType ->
+                    Button(onClick = { onChoose(raceType) }) {
+                        ButtonLabel(DesktopCourseFormatDetector.run { raceType.displayName() })
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                ButtonLabel("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
