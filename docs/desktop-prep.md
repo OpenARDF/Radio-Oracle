@@ -547,8 +547,78 @@ npm run desktop:usb-capture-analyze -- --args=/path/to/si-config-capture.txt
 
 The analyzer accepts whitespace-separated hex such as `FF 02 F0 ...`, extracts
 SPORTident frames, reports command bytes, payloads, frame type, and CRC status.
+For station time frames it also decodes the observed `F6`/`F7` time payload.
 Use it to compare SI Config+ remote-mode time sync traffic with Radio-Oracle's
-known probe and system-info frames before implementing the write command.
+known probe and system-info frames before enabling the write command.
+
+### SPORTident station time-write protocol findings
+
+The current time-sync understanding is based on two SI Config+ USBPcap captures
+from June 27, 2026: one setting a coupled SI-Master near 4:50 PM, and one
+setting it near 3:10 AM. Treat these findings as capture-proven for the tested
+station path, but keep UI writes disabled until the app performs a real
+write/read-back validation against expendable hardware.
+
+The captured Config+ remote-mode sequence is:
+
+1. `F0` with payload `53`: probe or enter/configure remote mode.
+2. `83` with payload `00 80`: read long system information.
+3. `F7` with no payload: read current station time.
+4. `F6` with a seven-byte payload: write station time.
+5. `F9` with payload `01`: apply/commit the write.
+6. `F0` with payload `4D`: return to normal probe/finish state.
+
+All of these are SPORTident extended frames using the existing `0x8005` CRC
+implementation in `SportIdentProtocol.buildExtendedMessage`.
+
+The station-time payload is not BCD. The observed seven-byte payload is:
+
+```text
+YY MM DD DAY_HALF SECONDS_HI SECONDS_LO TICK
+```
+
+The fields are:
+
+- `YY`: binary two-digit year, so `1A` means 2026.
+- `MM`: binary month, one-based.
+- `DD`: binary day of month.
+- `DAY_HALF`: `(siDayOfWeek << 1) | halfDayFlag`.
+- `SECONDS_HI SECONDS_LO`: big-endian seconds within the current 12-hour
+  half-day.
+- `TICK`: subsecond/tick byte. Config+ writes `00`; station replies may return a
+  non-zero tick.
+
+The SI day-of-week mapping follows the existing card-punch parser convention:
+Sunday is `0`, Monday is `1`, through Saturday as `6`. `halfDayFlag` is `0` for
+AM and `1` for PM.
+
+Captured examples:
+
+```text
+2026-06-27 16:50:12
+F6 payload: 1A 06 1B 0D 44 04 00
+YY=1A, MM=06, DD=1B, DAY_HALF=0D -> siDay=6 and PM,
+SECONDS=4404 -> 17412 seconds -> 04:50:12 within PM half-day, TICK=00
+
+2026-06-27 03:10:18
+F6 payload: 1A 06 1B 0C 2C 9A 00
+YY=1A, MM=06, DD=1B, DAY_HALF=0C -> siDay=6 and AM,
+SECONDS=2C9A -> 11418 seconds -> 03:10:18 within AM half-day, TICK=00
+```
+
+The existing frame builder reproduces the captured SI Config+ write frames
+exactly:
+
+```text
+FF 02 F6 07 1A 06 1B 0D 44 04 00 10 91 03
+FF 02 F6 07 1A 06 1B 0C 2C 9A 00 63 C7 03
+```
+
+Before enabling the `Time Sync` button, add a hardware-gated command that sends
+the captured command sequence, immediately reads `F7` back, decodes the reply
+with `DesktopSportIdentStationTimeCodec`, and fails unless the station time
+matches the requested time within an explicit tolerance. Validate that path on
+non-critical hardware across AM, PM, near-noon, and near-midnight cases.
 
 For local macOS smoke tests, prefer copying the generated `.app` and sample
 Event File to `/tmp` before launching with `open ... --args <sample.rom.json>`.
