@@ -226,7 +226,8 @@ data class DesktopCourseLegRow(
     val splitSeconds: Int?,
     val cumulativeSeconds: Int?,
     val waitSeconds: Int? = null,
-    val findPunchSeconds: Int? = null
+    val findPunchSeconds: Int? = null,
+    val speedFactorOverride: Double? = null
 )
 
 data class DesktopCourseWaitRenumbering(
@@ -307,7 +308,7 @@ object DesktopCourseAnalyzer {
     private const val MAP_KNOWLEDGE_NO_WAIT_LIMITATION_NOTE =
         "The analyzer does not currently know map passability, so out-of-bounds areas, dense vegetation, water, uncrossable features, and other impediments can make the true on-foot route and timing differ from this estimate."
     private const val SPEED_MODEL_NOTE =
-        "Estimated times use an elite-competitor baseline pace by race format, then apply a category age/gender multiplier and the event-wide Course Analyzer speed factor. When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not part of ideal-route selection; it can affect ideal time, but this estimate does not apply a separate accumulated-fatigue adjustment."
+        "Estimated times use an elite-competitor baseline pace by race format, then apply a category age/gender multiplier and the event-wide Course Analyzer speed factor. Imported KML/KMZ SS=#.## speed specifiers on route objects replace the event-wide factor for the following leg only. When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not part of ideal-route selection; it can affect ideal time, but this estimate does not apply a separate accumulated-fatigue adjustment."
     private const val CLASSIC_WAIT_TIMING_NOTE =
         "For Classic-style fox controls, timing assumes the competitor waits if the fox is off the air, then spends 30 seconds finding and punching before departing for the next leg; that delay affects later arrival phases."
     private val CATEGORY_SPEED_FACTOR_TABLE = DesktopCourseSpeedFactors.provisionalCategoryTable
@@ -429,6 +430,7 @@ object DesktopCourseAnalyzer {
             missing += "Route data is locked by the Event Password or has not been imported for ${category.name}."
         }
         val courseObjectPoints = protectedCourseInfo?.effectiveCourseObjectPoints().orEmpty()
+        val legSpeedFactors = protectedCourseInfo?.legSpeedFactors() ?: CourseLegSpeedFactors.Empty
         val route = normalizedImportedRoute(
             protectedCourseInfo?.route.orEmpty().map {
                 CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters)
@@ -579,7 +581,8 @@ object DesktopCourseAnalyzer {
             controls = providedControls,
             controlsWithPoints = controlsWithPoints,
             raceType = raceType,
-            speedModel = speedModel
+            speedModel = speedModel,
+            speedFactors = legSpeedFactors
         )
         val providedLegRows = providedTiming.legRows
         val waitRows = providedTiming.waitRows
@@ -598,7 +601,8 @@ object DesktopCourseAnalyzer {
                     controlsWithPoints = controlsWithPoints,
                     raceType = raceType,
                     speedModel = speedModel,
-                    slotOverrides = slotOverrides
+                    slotOverrides = slotOverrides,
+                    speedFactors = legSpeedFactors
                 )
             }
         } else {
@@ -627,7 +631,8 @@ object DesktopCourseAnalyzer {
                         raceType = raceType,
                         speedModel = speedModel,
                         slotOverrides = slotOverrides,
-                        elevationLookup = elevationLookup
+                        elevationLookup = elevationLookup,
+                        speedFactors = legSpeedFactors
                     )
                 }
             }
@@ -654,7 +659,8 @@ object DesktopCourseAnalyzer {
                 raceType = raceType,
                 speedModel = speedModel,
                 slotOverrides = calculatedSlotOverrides,
-                elevationLookup = elevationLookup
+                elevationLookup = elevationLookup,
+                speedFactors = legSpeedFactors
             )
         } ?: RouteTimingAnalysis.Empty
         val calculatedLegRows = calculatedTiming.legRows
@@ -1394,7 +1400,7 @@ object DesktopCourseAnalyzer {
             " Assumed running speed is ${twoDecimals(speedModel.effectiveSpeedMetersPerSecond)} m/s: " +
                 "${twoDecimals(speedModel.formatSpeedMetersPerSecond)} m/s race-format baseline x " +
                 "${speedModel.categoryModelLabel} category multiplier ${twoDecimals(speedModel.categorySpeedMultiplier)} x " +
-                "event speed factor ${twoDecimals(speedModel.compensationFactor)}. The event speed factor is the single event-wide adjustment for terrain, weather, or other conditions; below 1.00 slows all category estimates, and above 1.00 speeds them."
+                "event speed factor ${twoDecimals(speedModel.compensationFactor)}. The event speed factor is the default event-wide adjustment for terrain, weather, or other conditions; below 1.00 slows category estimates, and above 1.00 speeds them. Imported KML/KMZ SS=#.## speed specifiers replace the event factor for the following leg only."
         val waitImprovementText = if (includeWaitAnalysis) {
             waitRenumbering
             ?.takeIf { it.improvesWait }
@@ -2232,20 +2238,21 @@ object DesktopCourseAnalyzer {
         controlsWithPoints: List<ControlAnalysisPoint>,
         raceType: RaceType,
         speedModel: DesktopCourseSpeedModel,
-        slotOverrides: Map<String, RenumberingSlot> = emptyMap()
+        slotOverrides: Map<String, RenumberingSlot> = emptyMap(),
+        speedFactors: CourseLegSpeedFactors = CourseLegSpeedFactors.Empty
     ): RouteTimingAnalysis {
         if (route.size < 2) {
             return RouteTimingAnalysis.Empty
         }
         val stops = buildList {
-            add(RouteStop("S", route.first(), 0, null))
+            add(RouteStop("S", route.first(), 0, null, speedFactors.startSpeedFactor))
             controls.mapNotNull { control ->
                 val point = controlsWithPoints.firstOrNull { it.control.id == control.id }?.point ?: return@mapNotNull null
                 val nearestIndex = route.indices.minByOrNull { route[it].distanceMetersTo(point) } ?: return@mapNotNull null
-                RouteStop(control.analysisRouteLabel(), point, nearestIndex, control)
+                RouteStop(control.analysisRouteLabel(), point, nearestIndex, control, speedFactors.forControl(control))
             }
                 .forEach(::add)
-            add(RouteStop("F", route.last(), route.lastIndex, null))
+            add(RouteStop("F", route.last(), route.lastIndex, null, null))
         }.sortedBy { it.routeIndex }
         if (stops.size < 2) {
             return RouteTimingAnalysis.Empty
@@ -2260,7 +2267,7 @@ object DesktopCourseAnalyzer {
             val movementSeconds = if (from.routeIndex == to.routeIndex) {
                 0.0
             } else {
-                estimatedIdealSecondsDouble(segment, speedModel)
+                estimatedIdealSecondsDouble(segment, speedModel, from.speedFactorOverride)
             }
             val startSeconds = cumulativeSeconds
             val arrivalSeconds = if (startSeconds != null && movementSeconds != null) {
@@ -2294,7 +2301,8 @@ object DesktopCourseAnalyzer {
                 splitSeconds = splitSeconds?.roundToInt(),
                 cumulativeSeconds = cumulativeSeconds?.roundToInt(),
                 waitSeconds = service.waitSeconds,
-                findPunchSeconds = service.findPunchSeconds
+                findPunchSeconds = service.findPunchSeconds,
+                speedFactorOverride = from.speedFactorOverride
             )
         }
         return RouteTimingAnalysis(
@@ -2312,17 +2320,18 @@ object DesktopCourseAnalyzer {
         raceType: RaceType,
         speedModel: DesktopCourseSpeedModel,
         slotOverrides: Map<String, RenumberingSlot> = emptyMap(),
-        elevationLookup: (CourseGeoPoint) -> Double? = { null }
+        elevationLookup: (CourseGeoPoint) -> Double? = { null },
+        speedFactors: CourseLegSpeedFactors = CourseLegSpeedFactors.Empty
     ): RouteTimingAnalysis {
         if (start == null) {
             return RouteTimingAnalysis.Empty
         }
         val timingStops = buildList {
-            add(StraightLineStop("S", start, null))
+            add(StraightLineStop("S", start, null, speedFactors.startSpeedFactor))
             stops.map { stop ->
-                StraightLineStop(stop.label, stop.point, stop.control)
+                StraightLineStop(stop.label, stop.point, stop.control, speedFactors.forControl(stop.control))
             }.forEach(::add)
-            finish?.let { add(StraightLineStop("F", it, null)) }
+            finish?.let { add(StraightLineStop("F", it, null, null)) }
         }
         if (timingStops.size < 2) {
             return RouteTimingAnalysis.Empty
@@ -2334,7 +2343,7 @@ object DesktopCourseAnalyzer {
         timingStops.zipWithNext().forEach { (from, to) ->
             val legPoints = DesktopCourseRouteSampler.sampledStraightLegPoints(from.point, to.point, elevationLookup)
             val lengthMeters = legPoints.straightLineMeters().roundToInt()
-            val movementSeconds = estimatedIdealSecondsDouble(legPoints, speedModel) ?: 0.0
+            val movementSeconds = estimatedIdealSecondsDouble(legPoints, speedModel, from.speedFactorOverride) ?: 0.0
             val startSeconds = cumulativeSeconds
             val arrivalSeconds = if (startSeconds != null) {
                 startSeconds + movementSeconds
@@ -2371,7 +2380,8 @@ object DesktopCourseAnalyzer {
                 splitSeconds = splitSeconds?.roundToInt(),
                 cumulativeSeconds = cumulativeSeconds?.roundToInt(),
                 waitSeconds = service.waitSeconds,
-                findPunchSeconds = service.findPunchSeconds
+                findPunchSeconds = service.findPunchSeconds,
+                speedFactorOverride = from.speedFactorOverride
             )
         }
         return RouteTimingAnalysis(
@@ -2475,12 +2485,16 @@ object DesktopCourseAnalyzer {
             labels
         }
 
-    private fun estimatedIdealSecondsDouble(route: List<CourseGeoPoint>, speedModel: DesktopCourseSpeedModel): Double? {
+    private fun estimatedIdealSecondsDouble(
+        route: List<CourseGeoPoint>,
+        speedModel: DesktopCourseSpeedModel,
+        speedFactorOverride: Double? = null
+    ): Double? {
         if (route.size < 2) {
             return null
         }
         return route.zipWithNext()
-            .sumOf { (start, end) -> segmentSeconds(start, end, speedModel) }
+            .sumOf { (start, end) -> segmentSeconds(start, end, speedModel, speedFactorOverride) }
     }
 
     private fun elevationProfile(route: List<CourseGeoPoint>): List<DesktopCourseElevationProfilePoint> {
@@ -2567,11 +2581,29 @@ object DesktopCourseAnalyzer {
                         type = controlPoint.type.toProtectedCourseObjectType(),
                         latitude = controlPoint.latitude,
                         longitude = controlPoint.longitude,
-                        elevationMeters = controlPoint.elevationMeters
+                        elevationMeters = controlPoint.elevationMeters,
+                        speedFactor = controlPoint.speedFactor
                     )
                 )
             }
         }
+
+    private fun ProtectedCourseInfo.legSpeedFactors(): CourseLegSpeedFactors {
+        val startSpeedFactor = courseObjects
+            .firstOrNull { it.type == ProtectedCourseObjectType.START }
+            ?.speedFactor
+        val byControlId = buildMap {
+            controlPoints.forEach { controlPoint ->
+                controlPoint.speedFactor?.let { speedFactor -> put(controlPoint.controlId, speedFactor) }
+            }
+            courseObjects.forEach { courseObject ->
+                if (courseObject.type != ProtectedCourseObjectType.START && courseObject.type != ProtectedCourseObjectType.FINISH) {
+                    courseObject.speedFactor?.let { speedFactor -> put(courseObject.id, speedFactor) }
+                }
+            }
+        }
+        return CourseLegSpeedFactors(startSpeedFactor = startSpeedFactor, controlSpeedFactorsById = byControlId)
+    }
 
     private fun normalizedImportedRoute(
         route: List<CourseGeoPoint>,
@@ -2664,17 +2696,18 @@ object DesktopCourseAnalyzer {
             return emptyList()
         }
         val stops = buildList {
-            add(StraightLineStop("S", start, null))
+            add(StraightLineStop("S", start, null, null))
             controls.mapNotNull { controlPoint ->
                 controlPoint.point?.let { point ->
                     StraightLineStop(
                         labelOverrides[controlPoint.control.id] ?: controlPoint.control.analysisRouteLabel(),
                         point,
-                        controlPoint.control
+                        controlPoint.control,
+                        null
                     )
                 }
             }.forEach(::add)
-            add(StraightLineStop("F", finish, null))
+            add(StraightLineStop("F", finish, null, null))
         }
         if (stops.size < 2) {
             return emptyList()
@@ -3047,7 +3080,12 @@ object DesktopCourseAnalyzer {
         return stops
     }
 
-    private fun segmentSeconds(start: CourseGeoPoint, end: CourseGeoPoint, speedModel: DesktopCourseSpeedModel): Double {
+    private fun segmentSeconds(
+        start: CourseGeoPoint,
+        end: CourseGeoPoint,
+        speedModel: DesktopCourseSpeedModel,
+        speedFactorOverride: Double? = null
+    ): Double {
         val horizontal = max(1.0, start.distanceMetersTo(end))
         val climb = if (start.elevationMeters != null && end.elevationMeters != null) {
             max(0.0, requireNotNull(end.elevationMeters) - requireNotNull(start.elevationMeters))
@@ -3056,8 +3094,19 @@ object DesktopCourseAnalyzer {
         }
         // Do not also apply a separate gradient-speed model here. Effective length is the elevation
         // compensation: horizontal distance plus ten times positive climb, divided by format pace.
+        // KML/KMZ SS values replace only the event-wide speed factor on the leg that follows the
+        // annotated route object; they do not add a second elevation-gradient adjustment.
         val movementMeters = horizontal + 10.0 * climb
-        return movementMeters / speedModel.effectiveSpeedMetersPerSecond
+        return movementMeters / speedModel.speedMetersPerSecond(speedFactorOverride)
+    }
+
+    private fun DesktopCourseSpeedModel.speedMetersPerSecond(speedFactorOverride: Double?): Double {
+        val factor = speedFactorOverride
+            ?.takeIf { it.isFinite() }
+            ?.coerceIn(0.01, 4.99)
+            ?: compensationFactor
+        return (formatSpeedMetersPerSecond * categorySpeedMultiplier * factor)
+            .coerceAtLeast(MIN_EFFECTIVE_SPEED_MPS)
     }
 
     private fun controlServiceTiming(
@@ -3855,14 +3904,28 @@ private data class RouteStop(
     val label: String,
     val point: CourseGeoPoint,
     val routeIndex: Int,
-    val control: EventControl?
+    val control: EventControl?,
+    val speedFactorOverride: Double?
 )
 
 private data class StraightLineStop(
     val label: String,
     val point: CourseGeoPoint,
-    val control: EventControl?
+    val control: EventControl?,
+    val speedFactorOverride: Double?
 )
+
+private data class CourseLegSpeedFactors(
+    val startSpeedFactor: Double? = null,
+    val controlSpeedFactorsById: Map<String, Double> = emptyMap()
+) {
+    fun forControl(control: EventControl?): Double? =
+        control?.let { controlSpeedFactorsById[it.id] }
+
+    companion object {
+        val Empty = CourseLegSpeedFactors()
+    }
+}
 
 private data class RouteTimingAnalysis(
     val legRows: List<DesktopCourseLegRow>,

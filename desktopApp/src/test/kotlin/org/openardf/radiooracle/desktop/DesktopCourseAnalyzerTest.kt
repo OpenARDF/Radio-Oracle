@@ -152,7 +152,8 @@ class DesktopCourseAnalyzerTest {
         assertTrue(summary.categorySpeedFactors.any { it.categoryCodes == listOf("W75") && it.multiplier == 0.47 })
         assertTrue(summary.categorySpeedFactors.any { it.categoryCodes == listOf("M19", "M40") && it.multiplier == 0.95 })
         assertTrue(summary.summaryExplanation.contains("event speed factor 1.00"))
-        assertTrue(summary.summaryExplanation.contains("below 1.00 slows all category estimates"))
+        assertTrue(summary.summaryExplanation.contains("below 1.00 slows category estimates"))
+        assertTrue(summary.summaryExplanation.contains("SS=#.## speed specifiers replace the event factor"))
         assertEquals(1, summary.profileComparison.size)
         assertEquals(listOf("31", "32", "33"), summary.profileComparison.first { it.title == "Imported route" }.markers.map { it.label })
         assertEquals(1, summary.routeMaps.size)
@@ -241,6 +242,49 @@ class DesktopCourseAnalyzerTest {
         assertTrue(reportText.contains("M19/M40: x0.95"))
         assertTrue(reportText.contains("W75: x0.47"))
         assertTrue(reportText.contains("Unmatched categories: x1.00"))
+    }
+
+    @Test
+    fun importedSpeedSpecifiersOverrideTheFollowingLegTiming() {
+        val baseInfo = protectedInfo(foxCount = 3)
+        val protectedInfo = baseInfo.copy(
+            controlPoints = baseInfo.controlPoints.map { control ->
+                if (control.controlId == "control-1") {
+                    control.copy(speedFactor = 0.50)
+                } else {
+                    control
+                }
+            },
+            courseObjects = baseInfo.courseObjects.map { courseObject ->
+                when (courseObject.id) {
+                    "start" -> courseObject.copy(speedFactor = 0.75)
+                    "control-1" -> courseObject.copy(speedFactor = 0.50)
+                    "finish" -> courseObject.copy(speedFactor = 0.25)
+                    else -> courseObject
+                }
+            }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 3, raceType = RaceType.FOXORING),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = protectedInfo.idealOrder
+        )
+
+        val firstLeg = summary.providedLegRows.single { it.fromLabel == "S" && it.toLabel == "31" }
+        val secondLeg = summary.providedLegRows.single { it.fromLabel == "31" && it.toLabel == "32" }
+        val thirdLeg = summary.providedLegRows.single { it.fromLabel == "32" && it.toLabel == "33" }
+        val finalLeg = summary.providedLegRows.single { it.fromLabel == "B" && it.toLabel == "F" }
+        assertEquals(0.75, firstLeg.speedFactorOverride ?: -1.0, 0.001)
+        assertEquals(0.50, secondLeg.speedFactorOverride ?: -1.0, 0.001)
+        assertNull(thirdLeg.speedFactorOverride)
+        assertNull(finalLeg.speedFactorOverride)
+        assertTrue(requireNotNull(secondLeg.splitSeconds) > requireNotNull(thirdLeg.splitSeconds))
+
+        val reportText = DesktopCourseAnalysisExports.reportText(summary)
+        assertTrue(reportText.contains("(speed x0.75)"))
+        assertTrue(reportText.contains("(speed x0.50)"))
     }
 
     @Test

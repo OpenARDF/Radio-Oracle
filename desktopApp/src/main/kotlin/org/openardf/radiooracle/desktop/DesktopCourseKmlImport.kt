@@ -455,7 +455,8 @@ object DesktopCourseKmlImporter {
                         latitude = control.point.latitude,
                         longitude = control.point.longitude,
                         type = control.type,
-                        elevationMeters = elevation
+                        elevationMeters = elevation,
+                        speedFactor = control.speedFactorHint
                     )
                 }.toMap()
                 val controlPoints = routeControls.mapNotNull { allProtectedControlPoints[it.controlId] }
@@ -467,13 +468,19 @@ object DesktopCourseKmlImporter {
                         latitude = waypoint.point.latitude,
                         longitude = waypoint.point.longitude,
                         elevationMeters = sameSourceCourseInfo?.elevationForWaypoint(waypoint)
-                            ?: elevationProvider(waypoint.point)
+                            ?: elevationProvider(waypoint.point),
+                        speedFactor = waypoint.speedFactorHint
                     )
                 }
+                val firstLegSpeedFactor = routeImportedControls
+                    .firstOrNull { it.isCourseStartPoint() && it.point.sameRoutePoint(routeGeometry.first()) }
+                    ?.speedFactorHint
+                    ?: route.speedFactorHint
                 val courseObjects = courseObjectsForRoute(
                     route = sampledRoute,
                     controls = allProtectedControlPoints.values.toList(),
-                    waypoints = protectedRouteWaypoints
+                    waypoints = protectedRouteWaypoints,
+                    firstLegSpeedFactor = firstLegSpeedFactor
                 )
                 DesktopDebugLog.info(
                     "CourseKml",
@@ -1080,7 +1087,8 @@ object DesktopCourseKmlImporter {
                     siCode = control.siCode,
                     siCodeHint = imported.siCodeHint,
                     type = control.type,
-                    point = imported.point
+                    point = imported.point,
+                    speedFactorHint = imported.speedFactorHint
                 )
             }
         }
@@ -1606,7 +1614,14 @@ object DesktopCourseKmlImporter {
                 // actually pass through them. Keep them out of idealOrder so they cannot become
                 // scored controls or public category assignments.
                 distanceAlongRouteOrNull(route, importedPoint.point, CONTROL_ROUTE_TOLERANCE_METERS)
-                    ?.let { alongDistance -> CourseRouteWaypoint(importedPoint.name, importedPoint.point, alongDistance) }
+                    ?.let { alongDistance ->
+                        CourseRouteWaypoint(
+                            label = importedPoint.name,
+                            point = importedPoint.point,
+                            alongDistanceMeters = alongDistance,
+                            speedFactorHint = importedPoint.speedFactorHint
+                        )
+                    }
             }
             .sortedBy { it.alongDistanceMeters }
             .distinctBy { "${it.label.normalizedCourseName()}|${it.point.locationKey()}" }
@@ -1615,7 +1630,8 @@ object DesktopCourseKmlImporter {
     private fun courseObjectsForRoute(
         route: List<CourseGeoPoint>,
         controls: List<ProtectedCourseControlPoint>,
-        waypoints: List<ProtectedCourseObjectPoint> = emptyList()
+        waypoints: List<ProtectedCourseObjectPoint> = emptyList(),
+        firstLegSpeedFactor: Double? = null
     ): List<ProtectedCourseObjectPoint> =
         buildList {
             route.firstOrNull()?.let { start ->
@@ -1626,7 +1642,8 @@ object DesktopCourseKmlImporter {
                         type = ProtectedCourseObjectType.START,
                         latitude = start.latitude,
                         longitude = start.longitude,
-                        elevationMeters = start.elevationMeters
+                        elevationMeters = start.elevationMeters,
+                        speedFactor = firstLegSpeedFactor
                     )
                 )
             }
@@ -1637,7 +1654,8 @@ object DesktopCourseKmlImporter {
                     type = control.type.toProtectedCourseObjectType(),
                     latitude = control.latitude,
                     longitude = control.longitude,
-                    elevationMeters = control.elevationMeters
+                    elevationMeters = control.elevationMeters,
+                    speedFactor = control.speedFactor
                 )
             } + waypoints
             routeObjects
@@ -1835,7 +1853,8 @@ private data class CourseMatchedControl(
     val siCode: Int,
     val siCodeHint: Int?,
     val type: ControlPointType,
-    val point: CourseGeoPoint
+    val point: CourseGeoPoint,
+    val speedFactorHint: Double? = null
 )
 
 private fun CourseMatchedControl.hasSiCodeConflict(): Boolean =
@@ -1849,7 +1868,8 @@ private data class CourseMatchedControlResult(
 private data class CourseRouteWaypoint(
     val label: String,
     val point: CourseGeoPoint,
-    val alongDistanceMeters: Double
+    val alongDistanceMeters: Double,
+    val speedFactorHint: Double? = null
 )
 
 private data class ControlMatchToken(

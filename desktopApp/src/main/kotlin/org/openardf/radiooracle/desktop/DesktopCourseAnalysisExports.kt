@@ -220,7 +220,8 @@ object DesktopCourseAnalysisExports {
     private fun speedFactorExplanation(speedModel: DesktopCourseSpeedModel): String =
         "Assumed running speed equals race-format baseline speed x category multiplier x event speed factor. " +
             "${speedModel.categoryFactorSourceLabel}: ${speedModel.categoryFactorExplanation} " +
-            "The event speed factor is adjustable, saved in the Event File, and applies to every category; the current event factor is x${twoDecimalText(speedModel.compensationFactor)}."
+            "The event speed factor is adjustable, saved in the Event File, and applies to every category by default; the current event factor is x${twoDecimalText(speedModel.compensationFactor)}. " +
+            "Imported KML/KMZ SS=#.## speed specifiers replace the event factor for the following leg only."
 
     private fun kmlText(result: DesktopCourseAnalysisSummary, kmlFileStem: String): String =
         buildString {
@@ -364,10 +365,13 @@ object DesktopCourseAnalysisExports {
             return
         }
         legs.forEach { leg ->
+            val speedText = leg.speedFactorOverride
+                ?.let { " (speed x${twoDecimalText(it)})" }
+                .orEmpty()
             val waitText = leg.waitSeconds?.let { " (waits ${secondsText(it)})" }.orEmpty()
             appendLine(
                 "${leg.fromLabel} -> ${leg.toLabel}: ${kilometersText(leg.lengthMeters)}  " +
-                    "split ${secondsText(leg.splitSeconds)}  cumulative ${secondsText(leg.cumulativeSeconds)}$waitText"
+                    "split ${secondsText(leg.splitSeconds)}  cumulative ${secondsText(leg.cumulativeSeconds)}$waitText$speedText"
             )
         }
     }
