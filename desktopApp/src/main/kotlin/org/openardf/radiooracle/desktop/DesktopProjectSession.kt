@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import java.nio.file.Path
 
 /** Storage boundary used by desktop Event File session logic. */
@@ -67,7 +68,9 @@ class DesktopProjectSession(private val store: ProjectFileStore) {
         val projectFile = requireNotNull(currentProject) {
             "Cannot save before an Event File is open."
         }
-        store.write(path, projectFile)
+        val savedProject = EventProjectFileJson.normalizedForStorage(projectFile)
+        store.write(path, savedProject)
+        currentProject = savedProject
         currentPath = path
         hasUnsavedChanges = false
     }
@@ -77,7 +80,7 @@ class DesktopProjectSession(private val store: ProjectFileStore) {
         val projectFile = requireNotNull(currentProject) {
             "Cannot export before an Event File is open."
         }
-        store.write(path, projectFile)
+        store.write(path, EventProjectFileJson.normalizedForStorage(projectFile))
     }
 
     /** Clears the active Event File, optionally discarding pending edits after user confirmation. */

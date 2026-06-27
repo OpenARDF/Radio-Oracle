@@ -24,6 +24,7 @@ class EventCompetitorDetailsTest {
         assertEquals("101", rows[0].startNumberText)
         assertEquals("10:15", rows[0].startTimeText)
         assertEquals("123456", rows[0].siNumberText)
+        assertEquals(emptyList(), rows[0].warningReasons)
 
         assertEquals("Bob", rows[1].id)
         assertEquals("RUNNER Bob", rows[1].fullName)
@@ -32,13 +33,45 @@ class EventCompetitorDetailsTest {
         assertEquals("102", rows[1].startNumberText)
         assertEquals("", rows[1].startTimeText)
         assertEquals("", rows[1].siNumberText)
+        assertEquals(listOf("No SI number is assigned.", "No category is assigned."), rows[1].warningReasons)
     }
 
-    private fun raceData(): EventRaceData {
+    @Test
+    fun warnsWhenCompetitorAppearsTooYoungForAdultCategory() {
+        val rows = EventCompetitorDetails.from(
+            raceData(
+                categoryName = "M50",
+                competitors = listOf(
+                    competitorData(
+                        firstName = "Junior",
+                        categoryId = "category",
+                        siNumber = 222222,
+                        startNumber = 1,
+                        birthYear = 2010
+                    )
+                )
+            )
+        )
+
+        assertEquals(
+            listOf(
+                "Apparent birth year/category discrepancy: competitor appears to be 16 on the event date, too young for M50."
+            ),
+            rows.single().warningReasons
+        )
+    }
+
+    private fun raceData(
+        categoryName: String = "W21",
+        competitors: List<EventCompetitorData> = listOf(
+            competitorData("Alice", categoryId = "category", siNumber = 123456, startNumber = 101),
+            competitorData("Bob", categoryId = null, siNumber = null, startNumber = 102)
+        )
+    ): EventRaceData {
         val category = EventCategory(
             id = "category",
             raceId = "race",
-            name = "W21",
+            name = categoryName,
             isMan = false,
             maxAge = null,
             lengthMeters = 5_000,
@@ -63,10 +96,7 @@ class EventCompetitorDetailsTest {
             ),
             categories = listOf(EventCategoryData(category, emptyList(), emptyList())),
             aliases = emptyList(),
-            competitorData = listOf(
-                competitorData("Alice", categoryId = "category", siNumber = 123456, startNumber = 101),
-                competitorData("Bob", categoryId = null, siNumber = null, startNumber = 102)
-            ),
+            competitorData = competitors,
             unmatchedReadoutData = emptyList()
         )
     }
@@ -75,7 +105,8 @@ class EventCompetitorDetailsTest {
         firstName: String,
         categoryId: String?,
         siNumber: Int?,
-        startNumber: Int
+        startNumber: Int,
+        birthYear: Int? = if (firstName == "Alice") 1985 else null
     ): EventCompetitorData =
         EventCompetitorData(
             competitorCategory = EventCompetitorCategory(
@@ -88,7 +119,7 @@ class EventCompetitorDetailsTest {
                     club = if (firstName == "Alice") "OK Test" else "",
                     index = if (firstName == "Alice") "A101" else "",
                     isMan = true,
-                    birthYear = if (firstName == "Alice") 1985 else null,
+                    birthYear = birthYear,
                     siNumber = siNumber,
                     siRent = false,
                     startNumber = startNumber,
