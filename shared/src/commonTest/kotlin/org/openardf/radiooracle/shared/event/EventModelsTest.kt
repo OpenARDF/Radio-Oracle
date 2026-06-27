@@ -23,7 +23,7 @@ class EventModelsTest {
     }
 
     @Test
-    fun categoryUsesOverridesWhenDifferent() {
+    fun categoryIgnoresLegacyOverridesWhenDifferent() {
         val race = race()
         val category = category(
             differentProperties = true,
@@ -32,9 +32,9 @@ class EventModelsTest {
             timeLimitSeconds = 3_600
         )
 
-        assertEquals(RaceType.SPRINT, category.effectiveRaceType(race))
-        assertEquals(RaceBand.M2, category.effectiveRaceBand(race))
-        assertEquals(3_600, category.effectiveTimeLimitSeconds(race))
+        assertEquals(RaceType.CLASSIC, category.effectiveRaceType(race))
+        assertEquals(RaceBand.M80, category.effectiveRaceBand(race))
+        assertEquals(7_200, category.effectiveTimeLimitSeconds(race))
     }
 
     @Test

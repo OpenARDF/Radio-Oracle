@@ -75,12 +75,10 @@ object FinalResultJsonExports {
             categoryControlPoints = controlPoints
                 .sortedBy { it.order }
                 .map { it.toFinalControlPoint(controlsById) },
-            categoryDifferentProperties = category.differentProperties,
-            categoryRaceType = category.raceType,
-            categoryTimeLimit = category.timeLimitSeconds
-                ?.let { DurationFormatter.secondsToFormattedString(it, useMinutes = true) }
-                ?: "",
-            categoryBand = category.raceBand
+            categoryDifferentProperties = false,
+            categoryRaceType = null,
+            categoryTimeLimit = "",
+            categoryBand = null
         )
     }
 

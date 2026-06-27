@@ -150,6 +150,36 @@ class EventValidationRulesTest {
     }
 
     @Test
+    fun warnsAndValidatesAgainstEventRaceTypeWhenCategoryHasLegacySettings() {
+        val issues = EventValidationRules.validateRaceData(
+            raceData(
+                race = race().copy(raceType = RaceType.CLASSIC),
+                categories = listOf(
+                    categoryData(
+                        name = "W21",
+                        controlPointsString = "31 32 33 50B",
+                        differentProperties = true,
+                        raceType = RaceType.SPRINT
+                    )
+                )
+            )
+        )
+
+        assertTrue(
+            issues.contains(
+                EventValidationIssue.LegacyCategoryRaceSettings(categoryName = "W21")
+            )
+        )
+        assertFalse(
+            issues.any {
+                it is EventValidationIssue.CategoryCourseRequirementIssue &&
+                    it.categoryName == "W21" &&
+                    it.message.contains("Sprint category must assign exactly 10 foxes")
+            }
+        )
+    }
+
+    @Test
     fun warnsAboutControlCodesAboveLegacyCompatibilityRange() {
         val issues = EventValidationRules.validateRaceData(
             raceData(
@@ -191,7 +221,12 @@ class EventValidationRulesTest {
             timeLimitSeconds = 7_200
         )
 
-    private fun categoryData(name: String, controlPointsString: String = ""): EventCategoryData =
+    private fun categoryData(
+        name: String,
+        controlPointsString: String = "",
+        differentProperties: Boolean = false,
+        raceType: RaceType? = null
+    ): EventCategoryData =
         EventCategoryData(
             category = EventCategory(
                 id = name,
@@ -202,8 +237,8 @@ class EventValidationRulesTest {
                 lengthMeters = 0,
                 climbMeters = 0,
                 order = 0,
-                differentProperties = false,
-                raceType = null,
+                differentProperties = differentProperties,
+                raceType = raceType,
                 raceBand = null,
                 timeLimitSeconds = null,
                 controlPointsString = controlPointsString

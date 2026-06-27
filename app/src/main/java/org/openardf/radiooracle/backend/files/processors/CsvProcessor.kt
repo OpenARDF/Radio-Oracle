@@ -140,17 +140,17 @@ object CsvProcessor : FormatProcessor {
                     row.lengthMeters,
                     row.climbMeters,
                     0,
-                    !row.followsRacePresets,
-                    if (row.followsRacePresets) race.raceType else row.raceType,
-                    if (row.followsRacePresets) race.raceBand else row.raceBand,
-                    if (row.followsRacePresets) race.timeLimit else row.timeLimitMinutes?.let(Duration::ofMinutes),
+                    false,
+                    null,
+                    null,
+                    null,
                     ""
                 )
 
                 val controlPoints = ControlPointsHelper.getControlPointsFromString(
                     row.controlPointsText,
                     category.id,
-                    category.raceType ?: race.raceType,
+                    race.raceType,
                     context
                 )
                 category.controlPointsString = row.controlPointsText

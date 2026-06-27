@@ -88,7 +88,7 @@ class ArdfJsonExportsTest {
     }
 
     @Test
-    fun exportsCategoryOverridesWhenPresent() {
+    fun clearsLegacyCategoryOverridesWhenPresent() {
         val raceData = raceData(
             category = category().copy(
                 differentProperties = true,
@@ -102,10 +102,10 @@ class ArdfJsonExportsTest {
             .jsonObject["races"]!!.jsonArray.single().jsonObject["categories"]!!
             .jsonArray.single().jsonObject
 
-        assertTrue(category["category_different_properties"]!!.jsonPrimitive.boolean)
-        assertEquals("SPRINT", category["category_race_type"]!!.jsonPrimitive.content)
-        assertEquals("M2", category["category_band"]!!.jsonPrimitive.content)
-        assertEquals(45, category["category_time_limit"]!!.jsonPrimitive.int)
+        assertEquals(false, category.containsKey("category_different_properties"))
+        assertEquals(false, category.containsKey("category_race_type"))
+        assertEquals(false, category.containsKey("category_band"))
+        assertEquals(false, category.containsKey("category_time_limit"))
     }
 
     @Test

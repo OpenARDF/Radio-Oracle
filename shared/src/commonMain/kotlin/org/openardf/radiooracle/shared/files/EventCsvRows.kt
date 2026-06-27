@@ -2,7 +2,6 @@ package org.openardf.radiooracle.shared.files
 
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCompetitor
-import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** A control punch rendered as a pair of SI code and already formatted time text. */
@@ -15,17 +14,16 @@ data class TimedPunchCsvField(
 object EventCsvRows {
     /** Formats a category row in the legacy semicolon-delimited category export shape. */
     fun categoryRow(category: EventCategory): String {
-        val followsRacePresets = if (category.differentProperties) 0 else 1
         return csvRow(
             category.name,
             category.isMan.compareTo(false),
             category.maxAge ?: EventCsvFormat.Category.OPEN_MAX_AGE,
             category.lengthMeters,
             category.climbMeters,
-            followsRacePresets,
-            category.raceType?.name ?: "",
-            category.timeLimitSeconds?.div(60) ?: "",
-            category.raceBand?.toDisplayLabel() ?: ""
+            1,
+            "",
+            "",
+            ""
         )
     }
 

@@ -7,7 +7,6 @@ import org.openardf.radiooracle.shared.domain.ResultStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class EventInForestDetailsTest {
     @Test
@@ -23,8 +22,8 @@ class EventInForestDetailsTest {
         assertEquals("RUNNER Late (3)", details.inForestRows[0].competitorName)
         assertEquals("10:00", details.inForestRows[0].startTimeText)
         assertEquals("80:00", details.inForestRows[0].elapsedText)
-        assertEquals("60:00", details.inForestRows[0].limitText)
-        assertTrue(details.inForestRows[0].overLimit)
+        assertEquals("120:00", details.inForestRows[0].limitText)
+        assertFalse(details.inForestRows[0].overLimit)
 
         assertEquals("active", details.inForestRows[1].competitorId)
         assertEquals("40:00", details.inForestRows[1].startTimeText)

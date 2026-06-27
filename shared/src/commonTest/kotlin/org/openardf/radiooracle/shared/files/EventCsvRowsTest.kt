@@ -25,7 +25,7 @@ class EventCsvRowsTest {
             controlPointsString = "31 32"
         )
 
-        assertEquals("M21;1;99;5000;100;0;SPRINT;45;", EventCsvRows.categoryRow(category))
+        assertEquals("M21;1;99;5000;100;1;;;", EventCsvRows.categoryRow(category))
     }
 
     @Test
@@ -46,7 +46,7 @@ class EventCsvRowsTest {
             controlPointsString = "31 32"
         )
 
-        assertEquals("\"M;21\";1;99;5000;100;0;SPRINT;45;", EventCsvRows.categoryRow(category))
+        assertEquals("\"M;21\";1;99;5000;100;1;;;", EventCsvRows.categoryRow(category))
     }
 
     @Test

@@ -147,7 +147,7 @@ class AssignControlPointsDialogFragment : DialogFragment() {
             return ControlPointsHelper.getControlPointsFromString(
                 controlPointsString,
                 category.id,
-                category.raceType ?: race.raceType,
+                race.raceType,
                 requireContext()
             )
         }

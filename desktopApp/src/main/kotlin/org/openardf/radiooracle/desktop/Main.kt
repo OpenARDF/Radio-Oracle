@@ -252,9 +252,9 @@ private val CategoryTableColumns = listOf(
     FixedTableColumn("Gender", 92.dp),
     FixedTableColumn("Length (m)", 96.dp),
     FixedTableColumn("Climb (m)", 92.dp),
-    FixedTableColumn("Type", 96.dp),
-    FixedTableColumn("Band", 104.dp),
-    FixedTableColumn("Limit (min.)", 104.dp),
+    FixedTableColumn("Event Type", 96.dp),
+    FixedTableColumn("Event Band", 104.dp),
+    FixedTableColumn("Event Limit (min.)", 120.dp),
     FixedTableColumn("Assigned Controls", 320.dp)
 )
 
@@ -263,9 +263,9 @@ private val CategoryTableColumnHints = mapOf(
     "Gender" to "Category gender used for exports and age/gender result grouping.",
     "Length (m)" to "Course length for this category in meters. This public value is used in exports and result displays.",
     "Climb (m)" to "Total climb for this category in meters. This public value is used in exports and result displays.",
-    "Type" to "Race type used by this category. It normally follows the Event File setting unless category-specific properties are imported.",
-    "Band" to "Frequency band used by this category. It normally follows the Event File setting unless category-specific properties are imported.",
-    "Limit (min.)" to "Time limit for this category in minutes. It normally follows the Event File setting unless category-specific properties are imported.",
+    "Event Type" to "Race type inherited from the Event File. Category-specific race types are legacy data and are ignored.",
+    "Event Band" to "Frequency band inherited from the Event File. Category-specific bands are legacy data and are ignored.",
+    "Event Limit (min.)" to "Time limit inherited from the Event File. Category-specific time limits are legacy data and are ignored.",
     "Assigned Controls" to "Ordered controls for this category. Separate entries with spaces, commas, or semicolons. Use the picker to insert Public labels. Manual entries may use SI codes, defined control labels, or Public label values; put labels containing spaces in single or double quotes, such as 'Fox 1'."
 )
 private val CategoryMenBackground = Color(0xFFE8F3FF)

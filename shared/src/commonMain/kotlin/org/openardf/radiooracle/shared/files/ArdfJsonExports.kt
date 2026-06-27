@@ -7,7 +7,6 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.PunchStatus
-import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
@@ -104,10 +103,10 @@ object ArdfJsonExports {
             categoryControlPoints = controlPoints
                 .sortedBy { it.order }
                 .map { it.toArdfControlPoint(controlsById) },
-            categoryDifferentProperties = category.differentProperties,
-            categoryRaceType = category.raceType?.takeIf { category.differentProperties }?.toArdfRaceType(),
-            categoryTimeLimit = category.timeLimitSeconds?.takeIf { category.differentProperties }?.toMinutes(),
-            categoryBand = category.raceBand?.takeIf { category.differentProperties }?.toArdfCategoryBand()
+            categoryDifferentProperties = false,
+            categoryRaceType = null,
+            categoryTimeLimit = null,
+            categoryBand = null
         )
     }
 
@@ -207,9 +206,6 @@ object ArdfJsonExports {
         categoryId?.let { id -> categories.firstOrNull { it.category.id == id }?.category?.name } ?: ""
 
     private fun RaceType.toArdfRaceType(): String = name
-
-    private fun RaceBand.toArdfCategoryBand(): String? =
-        takeUnless { it == RaceBand.NONE }?.name
 
     private fun ControlPointType.toArdfControlType(): String =
         when (this) {
