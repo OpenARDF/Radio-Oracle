@@ -26,6 +26,7 @@ class DesktopPaletteTest {
                 "Elevation Data",
                 "Import Elevation Data",
                 "Tools",
+                "Event Validator",
                 "Course Tools",
                 "Time Sync",
                 "Move Course",

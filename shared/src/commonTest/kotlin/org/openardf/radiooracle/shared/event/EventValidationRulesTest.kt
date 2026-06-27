@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.shared.event
 
 import org.openardf.radiooracle.shared.domain.PunchStatus
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -90,13 +91,8 @@ class EventValidationRulesTest {
             )
         )
 
-        assertEquals(
-            listOf(
-                EventValidationIssue.MultipleStartPunches(123),
-                EventValidationIssue.MultipleFinishPunches(123)
-            ),
-            issues
-        )
+        assertTrue(issues.contains(EventValidationIssue.MultipleStartPunches(123)))
+        assertTrue(issues.contains(EventValidationIssue.MultipleFinishPunches(123)))
     }
 
     @Test
@@ -107,17 +103,50 @@ class EventValidationRulesTest {
             )
         )
 
-        assertEquals(
-            listOf(
+        assertTrue(
+            issues.contains(
                 EventValidationIssue.InvalidCategoryControlPoints(
                     categoryName = "M21",
                     error = org.openardf.radiooracle.shared.course.ControlPointValidationError.ASSIGNED_DUPLICATE,
                     token = null,
                     siCode = 31
                 )
-            ),
-            issues
+            )
         )
+    }
+
+    @Test
+    fun reportsEventReadinessProblems() {
+        val issues = EventValidationRules.validateRaceData(
+            raceData(
+                categories = emptyList(),
+                controls = listOf(control("fox-extra", 36, "Extra")),
+                competitors = listOf(competitorData("one", siNumber = null))
+            )
+        )
+
+        assertTrue(issues.contains(EventValidationIssue.NoCategories))
+        assertTrue(
+            issues.contains(
+                EventValidationIssue.ControlInventoryIssue("Classic events should define exactly 5 fox controls; found 1.")
+            )
+        )
+        assertTrue(issues.contains(EventValidationIssue.MissingCompetitorSiNumbers(setOf("RUNNER one"))))
+    }
+
+    @Test
+    fun reportsUnusedControlsAndPublicLabelProblems() {
+        val issues = EventValidationRules.validateRaceData(
+            raceData(
+                controls = classicControls() +
+                    control("unused", 36, "Fox 1") +
+                    control("missing-label", 37, "")
+            )
+        )
+
+        assertTrue(issues.contains(EventValidationIssue.UnusedControls(setOf("Fox 1", "37"))))
+        assertTrue(issues.contains(EventValidationIssue.MissingPublicLabels(setOf("37"))))
+        assertTrue(issues.contains(EventValidationIssue.DuplicatePublicLabels(setOf("Fox 1"))))
     }
 
     @Test
@@ -138,14 +167,16 @@ class EventValidationRulesTest {
         categories: List<EventCategoryData> = listOf(categoryData("M21")),
         aliases: List<EventAlias> = listOf(alias("F1", 31)),
         competitors: List<EventCompetitorData> = listOf(competitorData("one")),
-        unmatchedReadoutData: List<EventReadoutData> = emptyList()
+        unmatchedReadoutData: List<EventReadoutData> = emptyList(),
+        controls: List<EventControl> = classicControls()
     ): EventRaceData =
         EventRaceData(
             race = race,
             categories = categories,
             aliases = aliases,
             competitorData = competitors,
-            unmatchedReadoutData = unmatchedReadoutData
+            unmatchedReadoutData = unmatchedReadoutData,
+            controls = controls
         )
 
     private fun race(name: String = "Race"): EventRace =
@@ -177,8 +208,40 @@ class EventValidationRulesTest {
                 timeLimitSeconds = null,
                 controlPointsString = controlPointsString
             ),
-            controlPoints = emptyList(),
+            controlPoints = if (controlPointsString.isBlank()) classicControlPoints(name) else emptyList(),
             competitors = emptyList()
+        )
+
+    private fun classicControlPoints(categoryId: String): List<EventControlPoint> =
+        classicControls().mapIndexed { index, control ->
+            EventControlPoint(
+                id = "$categoryId-${control.id}",
+                categoryId = categoryId,
+                siCode = control.siCode,
+                type = control.type,
+                order = index + 1,
+                controlId = control.id
+            )
+        }
+
+    private fun classicControls(): List<EventControl> =
+        (1..5).map { number ->
+            control("fox-$number", 30 + number, "Fox $number")
+        } + control("beacon", 50, "B", ControlPointType.BEACON)
+
+    private fun control(
+        id: String,
+        siCode: Int,
+        publicLabel: String,
+        type: ControlPointType = ControlPointType.CONTROL
+    ): EventControl =
+        EventControl(
+            id = id,
+            raceId = "race",
+            label = siCode.toString(),
+            siCode = siCode,
+            type = type,
+            publicLabel = publicLabel.takeIf { it.isNotBlank() }
         )
 
     private fun alias(name: String, siCode: Int): EventAlias =

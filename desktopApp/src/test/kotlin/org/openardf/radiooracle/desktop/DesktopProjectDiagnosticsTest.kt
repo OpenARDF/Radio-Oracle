@@ -7,11 +7,13 @@ import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
 import org.openardf.radiooracle.shared.event.EventProjectFile
@@ -79,7 +81,7 @@ class DesktopProjectDiagnosticsTest {
             )
         )
 
-        assertEquals("1 validation issue; 1 readiness issue", diagnostics.validationState)
+        assertEquals("2 validation issues; 1 readiness issue", diagnostics.validationState)
         assertTrue(
             diagnostics.validationIssues.any {
                 it.contains("Invalid control points for M21") &&
@@ -111,7 +113,7 @@ class DesktopProjectDiagnosticsTest {
 
     private fun projectFile(
         raceName: String = "Diagnostics Race",
-        categories: List<EventCategoryData> = emptyList(),
+        categories: List<EventCategoryData>? = null,
         readout: EventResult? = null,
         competitorCategory: EventCategory? = null
     ): EventProjectFile {
@@ -125,17 +127,23 @@ class DesktopProjectDiagnosticsTest {
             raceBand = RaceBand.M80,
             timeLimitSeconds = 7_200
         )
+        val effectiveCategories = categories ?: listOf(categoryData(name = "M21", controlPointsString = "31 32 33 34 35 50B"))
+        val effectiveCompetitorCategory = if (categories == null) {
+            effectiveCategories.first().category
+        } else {
+            competitorCategory
+        }
         val competitor = EventCompetitor(
             id = "competitor",
             raceId = race.id,
-            categoryId = competitorCategory?.id,
+            categoryId = effectiveCompetitorCategory?.id,
             firstName = "Test",
             lastName = "Runner",
             club = "",
             index = "",
             isMan = true,
             birthYear = null,
-            siNumber = null,
+            siNumber = 123456,
             siRent = false,
             startNumber = null,
             drawnStartTimeSeconds = null
@@ -144,11 +152,11 @@ class DesktopProjectDiagnosticsTest {
         return EventProjectFile(
             raceData = EventRaceData(
                 race = race,
-                categories = categories,
+                categories = effectiveCategories,
                 aliases = emptyList(),
                 competitorData = listOf(
                     EventCompetitorData(
-                        competitorCategory = EventCompetitorCategory(competitor, competitorCategory),
+                        competitorCategory = EventCompetitorCategory(competitor, effectiveCompetitorCategory),
                         readoutData = readout?.let { EventReadoutData(it, emptyList()) }
                     )
                 ),
@@ -156,7 +164,8 @@ class DesktopProjectDiagnosticsTest {
                     emptyList()
                 } else {
                     listOf(EventReadoutData(result(id = "unmatched", sent = false), emptyList()))
-                }
+                },
+                controls = classicControls()
             )
         )
     }
@@ -199,5 +208,24 @@ class DesktopProjectDiagnosticsTest {
             ),
             controlPoints = emptyList(),
             competitors = emptyList()
+        )
+
+    private fun classicControls(): List<EventControl> =
+        (1..5).map { number ->
+            EventControl(
+                id = "fox-$number",
+                raceId = "race",
+                label = number.toString(),
+                siCode = 30 + number,
+                type = ControlPointType.CONTROL,
+                publicLabel = "Fox $number"
+            )
+        } + EventControl(
+            id = "beacon",
+            raceId = "race",
+            label = "B",
+            siCode = 50,
+            type = ControlPointType.BEACON,
+            publicLabel = "B"
         )
 }

@@ -945,7 +945,7 @@ class DesktopNavigationTest {
             courseTools.children.map { it.label }
         )
         assertEquals(
-            listOf("Course Tools", "sportIDENT"),
+            listOf("Event Validator", "Course Tools", "sportIDENT"),
             tools.children.map { it.label }
         )
         assertEquals(DesktopSection.CourseAnalysis, courseAnalyzer.section)

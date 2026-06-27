@@ -15,6 +15,8 @@ import org.openardf.radiooracle.shared.event.EventSeriesValidationIssue
 import org.openardf.radiooracle.shared.event.EventSeriesIssueSeverity
 import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
 import org.openardf.radiooracle.shared.event.isEventSeriesFileName
+import org.openardf.radiooracle.shared.event.EventValidationIssueSeverity
+import org.openardf.radiooracle.shared.event.EventValidationRules
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -229,8 +231,23 @@ class DesktopEventSeriesSession(private val store: EventSeriesStore) {
                 loadedEvents += EventSeriesLinkedEvent(event, store.readEvent(path))
             }
         }
-        return issues + EventSeriesSupport.validateLinkedEvents(seriesFile, loadedEvents)
+        return issues + validateLoadedEventFiles(loadedEvents) + EventSeriesSupport.validateLinkedEvents(seriesFile, loadedEvents)
     }
+
+    private fun validateLoadedEventFiles(loadedEvents: List<EventSeriesLinkedEvent>): List<EventSeriesValidationIssue> =
+        loadedEvents.flatMap { linkedEvent ->
+            EventValidationRules.validateRaceData(linkedEvent.projectFile.raceData).map { issue ->
+                EventSeriesValidationIssue(
+                    severity = when (EventValidationRules.severity(issue)) {
+                        EventValidationIssueSeverity.ERROR -> EventSeriesIssueSeverity.ERROR
+                        EventValidationIssueSeverity.WARNING -> EventSeriesIssueSeverity.WARNING
+                    },
+                    message = "Event '${linkedEvent.event.displayName}' self-validation: " +
+                        DesktopEventValidationText.messageFor(issue),
+                    seriesEventId = linkedEvent.event.seriesEventId
+                )
+            }
+        }
 }
 
 /** High-level desktop operations for Event Series membership and clean export. */
