@@ -540,7 +540,7 @@ object DesktopNavigation {
                         ),
                         group(
                             "setup.tools.sportident",
-                            "sportIDENT",
+                            "SPORTident",
                             workflow,
                             listOf(
                                 item(
@@ -551,6 +551,7 @@ object DesktopNavigation {
                                     requiresEventFile = false
                                 )
                             ),
+                            DesktopSection.SportIdentTools,
                             requiresEventFile = false
                         )
                     ),
@@ -1197,7 +1198,7 @@ object DesktopNavigation {
         "setup.tools.course-tools" to
             "Use Course Tools to analyze or modify course-related files and course data.",
         "setup.tools.sportident" to
-            "Use sportIDENT tools for station preparation tasks that are not tied to one Event File.",
+            "Use SPORTident tools for station preparation tasks that are not tied to one Event File.",
         "setup.tools.sportident.time-sync" to
             "Use Time Sync to inspect the attached SPORTident station before station-clock synchronization.",
         "setup.tools.course-tools.course-analysis" to

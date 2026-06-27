@@ -28,6 +28,7 @@ class DesktopPaletteTest {
                 "Tools",
                 "Event Validator",
                 "Course Tools",
+                "SPORTident",
                 "Time Sync",
                 "Move Course",
                 "Create Course",

@@ -9698,6 +9698,9 @@ private fun SectionWorkspace(
         if (section == DesktopSection.KmlRouteGenerator) {
             KmlRouteGeneratorPanel()
         }
+        if (section == DesktopSection.SportIdentTools) {
+            SportIdentToolsPanel()
+        }
         if (section == DesktopSection.SportIdentTimeSync) {
             SportIdentTimeSyncPanel(
                 siReaderState = siReaderState,
@@ -9892,6 +9895,16 @@ private fun SectionWorkspace(
             )
         }
     }
+}
+
+/** Explains the SPORTident tool group while individual station utilities are added. */
+@Composable
+private fun SportIdentToolsPanel() {
+    Text(
+        text = "This area is a placeholder for future SPORTident tools.",
+        color = DesktopPalette.Black,
+        fontSize = 14.sp
+    )
 }
 
 /** Shows SPORTident station time-sync readiness without writing station data yet. */

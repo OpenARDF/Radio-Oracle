@@ -73,6 +73,7 @@ enum class DesktopSection(val label: String) {
     Tools("Tools"),
     EventValidator("Event Validator"),
     KmlTools("Course Tools"),
+    SportIdentTools("SPORTident"),
     SportIdentTimeSync("Time Sync"),
     KmlMoveCourse("Move Course"),
     KmlCreateCourse("Create Course"),
