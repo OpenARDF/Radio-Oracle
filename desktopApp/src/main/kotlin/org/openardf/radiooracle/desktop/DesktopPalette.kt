@@ -18,6 +18,7 @@ object DesktopPalette {
     const val ERROR_ARGB = 0xFFC62828L
     const val DISCONNECTED_ARGB = 0xFF505050L
     const val READING_ARGB = 0xFFFD8204L
+    const val ORIENTEERING_FLAG_ORANGE_ARGB = 0xFFFF7A00L
     const val CONNECTED_ARGB = 0xFF0AE62FL
     const val WARNING_ARGB = 0xFFFFFF00L
     const val WARNING_BACKGROUND_ARGB = 0xFFFFFDE7L
@@ -34,6 +35,7 @@ object DesktopPalette {
     val Error = Color(ERROR_ARGB)
     val Disconnected = Color(DISCONNECTED_ARGB)
     val Reading = Color(READING_ARGB)
+    val OrienteeringFlagOrange = Color(ORIENTEERING_FLAG_ORANGE_ARGB)
     val Connected = Color(CONNECTED_ARGB)
     val Warning = Color(WARNING_ARGB)
     val WarningBackground = Color(WARNING_BACKGROUND_ARGB)
@@ -67,6 +69,7 @@ enum class DesktopSection(val label: String) {
     ElevationCache("Elevation Data"),
     ElevationCacheImport("Import Elevation Data"),
     Tools("Tools"),
+    EventValidator("Event Validator"),
     KmlTools("Course Tools"),
     SportIdentTimeSync("Time Sync"),
     KmlMoveCourse("Move Course"),

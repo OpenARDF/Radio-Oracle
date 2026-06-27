@@ -79,11 +79,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
@@ -148,6 +152,9 @@ import org.openardf.radiooracle.shared.event.EventSeriesValidationIssue
 import org.openardf.radiooracle.shared.event.EventStartListDetails
 import org.openardf.radiooracle.shared.event.EventStartListRuleSeverity
 import org.openardf.radiooracle.shared.event.EventStartListRow
+import org.openardf.radiooracle.shared.event.EventValidationIssue
+import org.openardf.radiooracle.shared.event.EventValidationIssueSeverity
+import org.openardf.radiooracle.shared.event.EventValidationRules
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.ResultRecalculationOutcome
@@ -8652,12 +8659,7 @@ private fun AppTopBar(
             .padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "Radio-Oracle",
-            color = DesktopPalette.White,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
-        )
+        RadioOracleBrandName()
         Spacer(modifier = Modifier.width(16.dp))
         Column(
             modifier = Modifier.weight(1f),
@@ -8680,6 +8682,25 @@ private fun AppTopBar(
             )
         }
     }
+}
+
+@Composable
+private fun RadioOracleBrandName() {
+    Text(
+        text = buildAnnotatedString {
+            withStyle(SpanStyle(color = DesktopPalette.White)) {
+                append("Radio-O")
+            }
+            withStyle(SpanStyle(color = DesktopPalette.OrienteeringFlagOrange)) {
+                append("racle")
+            }
+        },
+        fontSize = 20.sp,
+        fontWeight = FontWeight.Bold,
+        fontFamily = FontFamily.SansSerif,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
 }
 
 @Composable
@@ -9682,6 +9703,9 @@ private fun SectionWorkspace(
                 isStationBusy = isDownloadingSiReadout || isContinuousSiReadoutActive || isReadingCompetitorSiCard,
                 raceClockTick = raceClockTick
             )
+        }
+        if (section == DesktopSection.EventValidator) {
+            EventValidatorPanel(projectFile)
         }
         if (section == DesktopSection.ElevationCache && projectFile != null) {
             VenueElevationCachePanel(
@@ -11026,6 +11050,126 @@ private fun EventSeriesValidationIssueRow(issue: EventSeriesValidationIssue) {
         )
         Text(
             text = issue.message,
+            modifier = Modifier.weight(1f),
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+    }
+}
+
+/** Shows self-validation results for the currently open Event File. */
+@Composable
+private fun EventValidatorPanel(projectFile: EventProjectFile?) {
+    var validationRefreshToken by remember(projectFile?.raceData) { mutableStateOf(0) }
+    val issues = remember(projectFile, validationRefreshToken) {
+        projectFile?.let { EventValidationRules.validateRaceData(it.raceData) }.orEmpty()
+    }
+    val errorCount = issues.count {
+        DesktopEventValidationText.severityFor(it) == EventValidationIssueSeverity.ERROR
+    }
+    val warningCount = issues.count {
+        DesktopEventValidationText.severityFor(it) == EventValidationIssueSeverity.WARNING
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(
+                onClick = { validationRefreshToken++ },
+                enabled = projectFile != null
+            ) {
+                ButtonLabel("Validate Event")
+            }
+            Text(
+                text = projectFile?.raceData?.race?.name?.takeIf { it.isNotBlank() } ?: "No Event File open",
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
+
+        Text(
+            text = "Checks the current Event File for internal consistency before Race Ops, Results, export, or Series workflows. Series validation can reuse these event-level checks before comparing member events to one another.",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+
+        if (projectFile == null) {
+            Text(
+                text = "Open or create an Event File before validating.",
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+            return@Column
+        }
+
+        DetailHeaderRow(listOf("Errors", "Warnings", "Total issues"))
+        DetailGridRow(
+            listOf(
+                errorCount.toString(),
+                warningCount.toString(),
+                issues.size.toString()
+            )
+        )
+
+        if (issues.isEmpty()) {
+            Text(
+                text = "No event validation issues found.",
+                color = DesktopPalette.PrimaryVariant,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                EventValidationHeaderRow()
+                issues.forEach { issue ->
+                    EventValidationIssueRow(issue)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventValidationHeaderRow() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Severity", modifier = Modifier.width(96.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Area", modifier = Modifier.width(128.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Issue", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun EventValidationIssueRow(issue: EventValidationIssue) {
+    val severity = DesktopEventValidationText.severityFor(issue)
+    val color = when (severity) {
+        EventValidationIssueSeverity.ERROR -> DesktopPalette.Error
+        EventValidationIssueSeverity.WARNING -> DesktopPalette.Warning
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = severity.name.lowercase().replaceFirstChar { it.uppercase() },
+            modifier = Modifier.width(96.dp),
+            color = color,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = DesktopEventValidationText.areaFor(issue),
+            modifier = Modifier.width(128.dp),
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = DesktopEventValidationText.messageFor(issue),
             modifier = Modifier.weight(1f),
             color = DesktopPalette.Black,
             fontSize = 13.sp

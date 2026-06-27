@@ -56,7 +56,7 @@ class DesktopAutomationCliTest {
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"command\":\"open-event-file\""))
         assertTrue(result.stdout.contains("\"raceName\":\"Automation Event\""))
-        assertTrue(result.stdout.contains("\"validationErrorCount\":0"))
+        assertTrue(result.stdout.contains("\"validationErrorCount\":2"))
     }
 
     @Test
@@ -100,7 +100,7 @@ class DesktopAutomationCliTest {
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"command\":\"readiness-summary\""))
         assertTrue(result.stdout.contains("\"raceName\":\"Automation Event\""))
-        assertTrue(result.stdout.contains("\"validationIssueCount\":0"))
+        assertTrue(result.stdout.contains("\"validationIssueCount\":2"))
         assertTrue(result.stdout.contains("\"readinessIssueCount\":0"))
     }
 
@@ -621,11 +621,12 @@ class DesktopAutomationCliTest {
 
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"command\":\"event-series-validate\""))
-        assertTrue(result.stdout.contains("\"issueCount\":2"))
+        assertTrue(result.stdout.contains("\"issueCount\":6"))
         assertTrue(result.stdout.contains("\"warningCount\":2"))
-        assertTrue(result.stdout.contains("\"errorCount\":0"))
+        assertTrue(result.stdout.contains("\"errorCount\":4"))
         assertTrue(result.stdout.contains("\"requireClean\":false"))
         assertTrue(result.stdout.contains("duplicate race ID"))
+        assertTrue(result.stdout.contains("self-validation"))
 
         val requireCleanResult = runAutomation(
             "event-series-validate",
@@ -635,7 +636,7 @@ class DesktopAutomationCliTest {
 
         assertEquals(69, requireCleanResult.exitCode)
         assertTrue(requireCleanResult.stdout.contains("\"requireClean\":true"))
-        assertTrue(requireCleanResult.stdout.contains("\"issueCount\":2"))
+        assertTrue(requireCleanResult.stdout.contains("\"issueCount\":6"))
     }
 
     @Test

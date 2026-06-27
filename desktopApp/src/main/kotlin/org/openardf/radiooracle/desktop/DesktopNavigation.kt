@@ -481,6 +481,12 @@ object DesktopNavigation {
                     "Tools",
                     workflow,
                     listOf(
+                        item(
+                            "setup.tools.event-validator",
+                            "Event Validator",
+                            workflow,
+                            DesktopSection.EventValidator
+                        ),
                         group(
                             "setup.tools.course-tools",
                             "Course Tools",
@@ -1180,6 +1186,8 @@ object DesktopNavigation {
             "Use Export IOF Start List XML to write an IOF-compatible start-list file.",
         "setup.tools" to
             "Use Tools to open standalone utilities for course files and other future event-support workflows.",
+        "setup.tools.event-validator" to
+            "Use Event Validator to check whether the current Event File is internally consistent before race-day workflows.",
         "setup.tools.course-tools" to
             "Use Course Tools to analyze or modify course-related files and course data.",
         "setup.tools.sportident" to

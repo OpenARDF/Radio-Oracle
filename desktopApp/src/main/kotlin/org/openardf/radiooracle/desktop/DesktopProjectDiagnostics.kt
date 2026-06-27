@@ -2,7 +2,6 @@ package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectSummary
-import org.openardf.radiooracle.shared.event.EventValidationIssue
 import org.openardf.radiooracle.shared.event.EventValidationRules
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.results.EventResultSending
@@ -32,7 +31,7 @@ data class DesktopProjectDiagnostics(
             val summary = projectFile?.let(EventProjectSummary::from)
             val validationIssues = projectFile
                 ?.let { EventValidationRules.validateRaceData(it.raceData) }
-                ?.map(::validationIssueText)
+                ?.map(DesktopEventValidationText::messageFor)
                 ?: emptyList()
             val readinessIssues = projectFile
                 ?.let { readinessIssueText(it, protectedCourseInfoByCategoryId) }
@@ -74,45 +73,6 @@ data class DesktopProjectDiagnostics(
                 )
             )
         }
-
-        private fun validationIssueText(issue: EventValidationIssue): String =
-            when (issue) {
-                EventValidationIssue.BlankRaceName -> "Event name is blank."
-                is EventValidationIssue.DuplicateCategoryNames ->
-                    "Duplicate category names: ${issue.names.joinToString()}."
-                is EventValidationIssue.DuplicateAliasNames ->
-                    "Duplicate alias names: ${issue.names.joinToString()}."
-                is EventValidationIssue.DuplicateAliasCodes ->
-                    "Duplicate alias SI codes: ${issue.codes.joinToString()}."
-                is EventValidationIssue.DuplicateControlIds ->
-                    "Duplicate control IDs: ${issue.ids.joinToString()}."
-                is EventValidationIssue.DuplicateControlLabels ->
-                    "Duplicate control labels: ${issue.labels.joinToString()}."
-                is EventValidationIssue.InvalidStartNumberAssignments ->
-                    "Start numbers do not match assigned start times for ${issue.competitorIds.size} competitor(s)."
-                is EventValidationIssue.DuplicateSINumbers ->
-                    "Duplicate SI numbers: ${issue.siNumbers.joinToString()}."
-                is EventValidationIssue.DuplicateBibNumbers ->
-                    "Duplicate bib numbers: ${issue.bibNumbers.joinToString()}."
-                is EventValidationIssue.DuplicateCallSigns ->
-                    "Duplicate call signs: ${issue.callSigns.joinToString()}."
-                is EventValidationIssue.MultipleStartPunches ->
-                    "Readout has multiple start punches: ${issue.siNumber ?: "unknown SI"}."
-                is EventValidationIssue.MultipleFinishPunches ->
-                    "Readout has multiple finish punches: ${issue.siNumber ?: "unknown SI"}."
-                is EventValidationIssue.LegacyIncompatibleCategoryControlCodes ->
-                    "Category ${issue.categoryName} uses control codes above 255: ${issue.codes.joinToString()}."
-                is EventValidationIssue.LegacyIncompatibleAliasCodes ->
-                    "Aliases use control codes above 255: ${issue.codes.joinToString()}."
-                is EventValidationIssue.LegacyIncompatibleControlCodes ->
-                    "Controls use codes above 255: ${issue.codes.joinToString()}."
-                is EventValidationIssue.MissingCategoryControlReferences ->
-                    "Category ${issue.categoryName} references missing controls: ${issue.controlIds.joinToString()}."
-                is EventValidationIssue.InvalidCategoryControlPoints ->
-                    "Invalid control points for ${issue.categoryName}: ${
-                        DesktopControlPointValidationText.messageFor(issue.error, issue.token, issue.siCode)
-                    }"
-            }
 
         private fun readinessIssueText(
             projectFile: EventProjectFile,
