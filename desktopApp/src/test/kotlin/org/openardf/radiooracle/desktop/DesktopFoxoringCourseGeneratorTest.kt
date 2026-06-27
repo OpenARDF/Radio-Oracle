@@ -14,7 +14,7 @@ class DesktopFoxoringCourseGeneratorTest {
 
         val result = DesktopFoxoringCourseGenerator.generate(path, elevationLookup = { null })
 
-        assertEquals("Foxoring Course Generator", result.generatorTitle)
+        assertEquals("Foxoring Route Generator", result.generatorTitle)
         assertEquals("Foxoring", result.formatLabel)
         assertEquals(7, result.foxes.size)
         assertEquals(listOf(4, 5, 6, 7), result.groups.map { it.foxCount })
@@ -43,11 +43,11 @@ class DesktopFoxoringCourseGeneratorTest {
 
         val pdfText = Files.readString(exports.pdfPath)
         assertTrue(pdfText.startsWith("%PDF-1.4"))
-        assertTrue(pdfText.contains("Foxoring Course Generator"))
+        assertTrue(pdfText.contains("Foxoring Route Generator"))
         assertTrue(pdfText.contains("FOUR-FOX COURSES"))
 
         val kmlText = Files.readString(exports.kmlPath)
-        assertTrue(kmlText.contains("Foxoring Course Generator"))
+        assertTrue(kmlText.contains("Foxoring Route Generator"))
         assertTrue(kmlText.contains("<name>Course Objects</name>"))
         assertTrue(kmlText.contains("<name>Category-matching course candidates</name>"))
         assertEquals(result.rows.count { it.hasCategoryMatch }, kmlText.countOccurrences("<LineString>"))

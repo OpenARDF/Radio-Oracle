@@ -27,6 +27,7 @@ object DesktopProjectFilePaths {
     const val CSV_EXTENSION = ".csv"
     const val HTML_EXTENSION = ".html"
     const val PDF_EXTENSION = ".pdf"
+    const val KML_EXTENSION = ".kml"
     const val TXT_EXTENSION = ".txt"
 
     /** Returns a path with the standard Radio-Oracle desktop Event File extension. */
@@ -143,6 +144,13 @@ object DesktopProjectFilePaths {
             path
         } else {
             path.resolveSibling("${path.fileName}$PDF_EXTENSION")
+        }
+
+    fun withKmlExtension(path: Path): Path =
+        if (path.fileName.toString().endsWith(KML_EXTENSION, ignoreCase = true)) {
+            path
+        } else {
+            path.resolveSibling("${path.fileName}$KML_EXTENSION")
         }
 
     fun withTxtExtension(path: Path): Path =
@@ -334,7 +342,7 @@ object DesktopFileDialogs {
 
     fun chooseExportClassicCourseGeneratorPdf(defaultFileName: String? = null): Path? =
         chooseExportCourseGeneratorPdf(
-            title = "Export Classic Course Generator PDF",
+            title = "Export Classic Route Generator PDF",
             defaultFileName = defaultFileName
         )
 
@@ -344,6 +352,13 @@ object DesktopFileDialogs {
             extension = DesktopProjectFilePaths.PDF_EXTENSION,
             defaultFileName = defaultFileName
         ) { DesktopProjectFilePaths.withPdfExtension(it) }
+
+    fun chooseExportCreateCourseKml(defaultFileName: String? = null): Path? =
+        chooseSaveFile(
+            title = "Create Course KML",
+            extension = DesktopProjectFilePaths.KML_EXTENSION,
+            defaultFileName = defaultFileName
+        ) { DesktopProjectFilePaths.withKmlExtension(it) }
 
     fun chooseExportTxt(title: String): Path? =
         chooseSaveFile(title, DesktopProjectFilePaths.TXT_EXTENSION) {

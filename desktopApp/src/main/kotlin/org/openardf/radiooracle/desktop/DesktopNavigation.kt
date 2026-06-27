@@ -514,22 +514,29 @@ object DesktopNavigation {
                                     requiresEventFile = false
                                 ),
                                 item(
+                                    "setup.tools.course-tools.create-course",
+                                    "Create Course",
+                                    workflow,
+                                    DesktopSection.KmlCreateCourse,
+                                    requiresEventFile = false
+                                ),
+                                item(
                                     "setup.tools.course-tools.classic-course-generator",
-                                    "Classic Course Generator",
+                                    "Classic Route Generator",
                                     workflow,
                                     DesktopSection.KmlClassicCourseGenerator,
                                     requiresEventFile = false
                                 ),
                                 item(
                                     "setup.tools.course-tools.foxoring-course-generator",
-                                    "Foxoring Course Generator",
+                                    "Foxoring Route Generator",
                                     workflow,
                                     DesktopSection.KmlFoxoringCourseGenerator,
                                     requiresEventFile = false
                                 ),
                                 item(
                                     "setup.tools.course-tools.sprint-course-generator",
-                                    "Sprint Course Generator",
+                                    "Sprint Route Generator",
                                     workflow,
                                     DesktopSection.KmlSprintCourseGenerator,
                                     requiresEventFile = false
@@ -1201,12 +1208,14 @@ object DesktopNavigation {
             "Use Import Course GPX to bring in control waypoints and required category routes or tracks for course analysis and category course assignments.",
         "setup.tools.course-tools.move-course" to
             "Use Move Course to create a translated KML/KMZ copy where the Start point is moved to a new latitude and longitude and all other coordinates move by the same offset.",
+        "setup.tools.course-tools.create-course" to
+            "Use Create Course to write a starter KML for a Classic, Sprint, or Foxoring course near a supplied latitude and longitude.",
         "setup.tools.course-tools.classic-course-generator" to
-            "Use Classic Course Generator to read Start, Finish, Beacon, and fox point placemarks from a KML/KMZ file and list ideal Classic course combinations with category matches.",
+            "Use Classic Route Generator to read Start, Finish, Beacon, and fox point placemarks from a KML/KMZ file and list ideal Classic route combinations with category matches.",
         "setup.tools.course-tools.foxoring-course-generator" to
-            "Use Foxoring Course Generator to read Start, Finish, optional Beacon, and fox point placemarks from a KML/KMZ file and list ideal Foxoring course combinations with category matches.",
+            "Use Foxoring Route Generator to read Start, Finish, optional Beacon, and fox point placemarks from a KML/KMZ file and list ideal Foxoring route combinations with category matches.",
         "setup.tools.course-tools.sprint-course-generator" to
-            "Use Sprint Course Generator to read Start, Finish, Beacon, optional Spectator, five slow foxes, and five fast foxes from a KML/KMZ file and list ideal Sprint course combinations with category matches.",
+            "Use Sprint Route Generator to read Start, Finish, Beacon, optional Spectator, five slow foxes, and five fast foxes from a KML/KMZ file and list ideal Sprint route combinations with category matches.",
         "race.readouts" to
             "Use Readouts to download, review, match, edit, remove, print, and manually add SI-card readouts during race operations.",
         "race.si-readout" to

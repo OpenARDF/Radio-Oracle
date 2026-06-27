@@ -77,7 +77,7 @@ object DesktopCourseFormatDetector {
         val expectedText = expected.displayName()
         val detectedText = inferredTypes.joinToString(" or ") { it.displayName() }
         throw IllegalArgumentException(
-            "$expectedText Course Generator expected a $expectedText course points file, " +
+            "$expectedText Route Generator expected a $expectedText course points file, " +
                 "but $sourceName appears to be $detectedText."
         )
     }

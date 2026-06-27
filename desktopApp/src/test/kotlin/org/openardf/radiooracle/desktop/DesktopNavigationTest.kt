@@ -936,7 +936,14 @@ class DesktopNavigationTest {
         assertFalse(tools.requiresEventFile)
         assertFalse(courseTools.requiresEventFile)
         assertEquals(
-            listOf("Course Analyzer", "Move Course", "Classic Course Generator", "Foxoring Course Generator", "Sprint Course Generator"),
+            listOf(
+                "Course Analyzer",
+                "Move Course",
+                "Create Course",
+                "Classic Route Generator",
+                "Foxoring Route Generator",
+                "Sprint Route Generator"
+            ),
             courseTools.children.map { it.label }
         )
         assertEquals(
@@ -970,21 +977,23 @@ class DesktopNavigationTest {
         assertEquals(DesktopNavAction.ImportCourseGpx, courseAnalyzer.children.last().action)
         assertEquals(DesktopSection.KmlMoveCourse, courseTools.children.first { it.label == "Move Course" }.section)
         assertFalse(courseTools.children.first { it.label == "Move Course" }.requiresEventFile)
+        assertEquals(DesktopSection.KmlCreateCourse, courseTools.children.first { it.label == "Create Course" }.section)
+        assertFalse(courseTools.children.first { it.label == "Create Course" }.requiresEventFile)
         assertEquals(
             DesktopSection.KmlClassicCourseGenerator,
-            courseTools.children.first { it.label == "Classic Course Generator" }.section
+            courseTools.children.first { it.label == "Classic Route Generator" }.section
         )
-        assertFalse(courseTools.children.first { it.label == "Classic Course Generator" }.requiresEventFile)
+        assertFalse(courseTools.children.first { it.label == "Classic Route Generator" }.requiresEventFile)
         assertEquals(
             DesktopSection.KmlFoxoringCourseGenerator,
-            courseTools.children.first { it.label == "Foxoring Course Generator" }.section
+            courseTools.children.first { it.label == "Foxoring Route Generator" }.section
         )
-        assertFalse(courseTools.children.first { it.label == "Foxoring Course Generator" }.requiresEventFile)
+        assertFalse(courseTools.children.first { it.label == "Foxoring Route Generator" }.requiresEventFile)
         assertEquals(
             DesktopSection.KmlSprintCourseGenerator,
-            courseTools.children.first { it.label == "Sprint Course Generator" }.section
+            courseTools.children.first { it.label == "Sprint Route Generator" }.section
         )
-        assertFalse(courseTools.children.first { it.label == "Sprint Course Generator" }.requiresEventFile)
+        assertFalse(courseTools.children.first { it.label == "Sprint Route Generator" }.requiresEventFile)
         val sportIdentTools = tools.children.first { it.label == "sportIDENT" }
         val timeSync = sportIdentTools.children.first { it.label == "Time Sync" }
         assertEquals(DesktopSection.SportIdentTimeSync, timeSync.section)
