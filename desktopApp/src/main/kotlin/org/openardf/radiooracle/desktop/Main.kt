@@ -42,6 +42,7 @@ import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.LinearProgressIndicator
+import androidx.compose.material.LocalTextStyle
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
@@ -9642,6 +9643,7 @@ private fun SectionWorkspace(
         if (section == DesktopSection.Controls && projectFile != null) {
             ControlDetailsPanel(
                 controls = EventControlDetails.from(projectFile.raceData),
+                categories = projectFile.raceData.categories,
                 raceType = projectFile.raceData.race.raceType,
                 onUpdateControl = onUpdateControl,
                 onAddControl = onAddControl,
@@ -13064,6 +13066,7 @@ private fun CategoryPicker(
 @Composable
 private fun ControlDetailsPanel(
     controls: List<EventControlDetails>,
+    categories: List<EventCategoryData>,
     raceType: RaceType,
     onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit,
     onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean,
@@ -13072,6 +13075,9 @@ private fun ControlDetailsPanel(
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(ControlTableColumns)
     val orderedControls = remember(controls, raceType) { controls.customaryDisplayOrder(raceType) }
+    val warningReasonsByControlId = remember(controls, categories) {
+        controlSuspicionReasonsByControlId(controls, categories)
+    }
     var siCodeDraft by remember { mutableStateOf("") }
     var typeDraft by remember { mutableStateOf(ControlPointType.CONTROL) }
     var publicLabelDraft by remember { mutableStateOf("") }
@@ -13150,9 +13156,11 @@ private fun ControlDetailsPanel(
                 ) {
                     orderedControls.forEach { control ->
                         key(control.id) {
+                            val warningReasons = warningReasonsByControlId[control.id].orEmpty()
                             ControlDetailRow(
                                 control = control,
                                 raceType = raceType,
+                                warningReasons = warningReasons,
                                 onUpdateControl = onUpdateControl
                             )
                         }
@@ -13169,6 +13177,7 @@ private fun ControlStatsRow(
     raceType: RaceType
 ) {
     val items = controlStatsItems(controls, raceType)
+    val firstWarningLabel = items.firstOrNull { !it.isCompliant }?.label
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(18.dp),
@@ -13178,7 +13187,8 @@ private fun ControlStatsRow(
             ControlStatsText(
                 label = item.label,
                 count = item.count,
-                isCompliant = item.isCompliant
+                isCompliant = item.isCompliant,
+                showWarningPrefix = item.label == firstWarningLabel
             )
         }
     }
@@ -13188,10 +13198,11 @@ private fun ControlStatsRow(
 private fun ControlStatsText(
     label: String,
     count: Int,
-    isCompliant: Boolean
+    isCompliant: Boolean,
+    showWarningPrefix: Boolean
 ) {
     Text(
-        text = "$label: $count",
+        text = "${if (showWarningPrefix) "WARNING: " else ""}$label: $count",
         color = if (isCompliant) ControlStatsOkColor else DesktopPalette.Error,
         fontSize = 13.sp,
         fontWeight = FontWeight.Bold
@@ -15774,6 +15785,7 @@ private fun ControlAddRow(
 private fun ControlDetailRow(
     control: EventControlDetails,
     raceType: RaceType,
+    warningReasons: List<String>,
     onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit
 ) {
     var siCodeDraft by remember(control.id) { mutableStateOf(control.siCodeText) }
@@ -15831,6 +15843,10 @@ private fun ControlDetailRow(
         updateControl(publicLabel = normalizedDraft)
     }
 
+    val warningText = warningReasons.joinToString(separator = "\n")
+    val rowTextColor = if (warningReasons.isEmpty()) LocalTextStyle.current.color else DesktopPalette.Error
+    val textFieldStyle = LocalTextStyle.current.copy(color = rowTextColor)
+
     Column(
         modifier = Modifier.width(fixedTableWidth(ControlTableColumns)),
     ) {
@@ -15838,52 +15854,82 @@ private fun ControlDetailRow(
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextField(
-                value = siCodeDraft,
-                onValueChange = { siCodeDraft = it },
-                modifier = Modifier
-                    .width(ControlTableColumns[0].width)
-                    .onFocusChanged { focusState ->
-                        val wasFocused = isSiCodeFocused
-                        isSiCodeFocused = focusState.isFocused
-                        if (wasFocused && !focusState.isFocused) {
-                            commitSiCodeDraft()
+            ControlWarningTooltip(warningText) {
+                TextField(
+                    value = siCodeDraft,
+                    onValueChange = { siCodeDraft = it },
+                    modifier = Modifier
+                        .width(ControlTableColumns[0].width)
+                        .onFocusChanged { focusState ->
+                            val wasFocused = isSiCodeFocused
+                            isSiCodeFocused = focusState.isFocused
+                            if (wasFocused && !focusState.isFocused) {
+                                commitSiCodeDraft()
+                            }
                         }
-                    }
-                    .commitOnEnter(::commitSiCodeDraft),
-                singleLine = true,
-                label = { Text("SI code") }
-            )
-            ControlTypeDropdown(
-                type = control.type,
-                raceType = raceType,
-                onTypeChange = { updateControl(type = it, scored = it.defaultScored()) },
-                modifier = Modifier.width(ControlTableColumns[1].width)
-            )
-            TextField(
-                value = publicLabelDraft,
-                onValueChange = { publicLabelDraft = it },
-                modifier = Modifier
-                    .width(ControlTableColumns[2].width)
-                    .onFocusChanged { focusState ->
-                        val wasFocused = isPublicLabelFocused
-                        isPublicLabelFocused = focusState.isFocused
-                        if (wasFocused && !focusState.isFocused) {
-                            commitPublicLabelDraft()
+                        .commitOnEnter(::commitSiCodeDraft),
+                    singleLine = true,
+                    label = { Text("SI code", color = rowTextColor) },
+                    textStyle = textFieldStyle
+                )
+            }
+            ControlWarningTooltip(warningText) {
+                ControlTypeDropdown(
+                    type = control.type,
+                    raceType = raceType,
+                    onTypeChange = { updateControl(type = it, scored = it.defaultScored()) },
+                    modifier = Modifier.width(ControlTableColumns[1].width),
+                    textColor = rowTextColor
+                )
+            }
+            ControlWarningTooltip(warningText) {
+                TextField(
+                    value = publicLabelDraft,
+                    onValueChange = { publicLabelDraft = it },
+                    modifier = Modifier
+                        .width(ControlTableColumns[2].width)
+                        .onFocusChanged { focusState ->
+                            val wasFocused = isPublicLabelFocused
+                            isPublicLabelFocused = focusState.isFocused
+                            if (wasFocused && !focusState.isFocused) {
+                                commitPublicLabelDraft()
+                            }
                         }
-                    }
-                    .commitOnEnter(::commitPublicLabelDraft),
-                singleLine = true,
-                label = { Text("Public label") }
-            )
-            TextField(
-                value = control.notes,
-                onValueChange = { updateControl(notes = it) },
-                modifier = Modifier.width(ControlTableColumns[3].width),
-                singleLine = true,
-                label = { Text("Notes") }
-            )
+                        .commitOnEnter(::commitPublicLabelDraft),
+                    singleLine = true,
+                    label = { Text("Public label", color = rowTextColor) },
+                    textStyle = textFieldStyle
+                )
+            }
+            ControlWarningTooltip(warningText) {
+                TextField(
+                    value = control.notes,
+                    onValueChange = { updateControl(notes = it) },
+                    modifier = Modifier.width(ControlTableColumns[3].width),
+                    singleLine = true,
+                    label = { Text("Notes", color = rowTextColor) },
+                    textStyle = textFieldStyle
+                )
+            }
             Spacer(modifier = Modifier.width(ControlTableColumns[4].width))
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+private fun ControlWarningTooltip(
+    warningText: String,
+    content: @Composable () -> Unit
+) {
+    if (warningText.isBlank()) {
+        content()
+    } else {
+        TooltipArea(
+            tooltip = { DisabledReasonTooltipContent(warningText) },
+            delayMillis = 2350
+        ) {
+            content()
         }
     }
 }
@@ -15932,7 +15978,8 @@ private fun ControlTypeDropdown(
     type: ControlPointType,
     raceType: RaceType,
     onTypeChange: (ControlPointType) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    textColor: Color = Color.Black
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
@@ -15941,7 +15988,7 @@ private fun ControlTypeDropdown(
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
                 backgroundColor = controlRoleBackgroundColor(type),
-                contentColor = Color.Black
+                contentColor = textColor
             )
         ) {
             ButtonLabel(controlRoleLabel(type, raceType))
