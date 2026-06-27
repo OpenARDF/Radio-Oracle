@@ -14814,7 +14814,7 @@ private fun CourseAnalysisPanel(
         }
         Text(
             text = speedStatusText
-                ?: "Speed factor is event-wide: 1.00 normal, below 1.00 slower conditions, above 1.00 faster conditions.",
+                ?: "Speed factor is event-wide by default: 1.00 normal, below 1.00 slower conditions, above 1.00 faster conditions. Per-leg speed factors specified in course component descriptions with SS=#.## override the event-wide factor for the following leg.",
             color = if (speedStatusText?.contains("failed", ignoreCase = true) == true ||
                 speedStatusText?.contains("must be", ignoreCase = true) == true
             ) {
