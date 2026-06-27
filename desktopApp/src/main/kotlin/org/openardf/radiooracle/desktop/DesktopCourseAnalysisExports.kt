@@ -230,22 +230,7 @@ object DesktopCourseAnalysisExports {
             appendLine("    <name>${DesktopExportPrimitives.xmlText(kmlFileStem)}</name>")
             appendLine("    <Style id=\"storedRouteStyle\"><LineStyle><color>ff0057b8</color><width>4</width></LineStyle></Style>")
             appendLine("    <Style id=\"calculatedRouteStyle\"><LineStyle><color>ff00a676</color><width>4</width></LineStyle></Style>")
-            appendCoursePointStyle(
-                styleId = DesktopCourseKmlStyle.DonutStyleId,
-                iconUrl = DesktopCourseKmlStyle.DonutIconUrl
-            )
-            appendCoursePointStyle(
-                styleId = DesktopCourseKmlStyle.StartStyleId,
-                iconUrl = DesktopCourseKmlStyle.StartIconUrl
-            )
-            appendCoursePointStyle(
-                styleId = DesktopCourseKmlStyle.FinishStyleId,
-                iconUrl = DesktopCourseKmlStyle.FinishIconUrl
-            )
-            appendCoursePointStyle(
-                styleId = DesktopCourseKmlStyle.WaypointStyleId,
-                iconUrl = DesktopCourseKmlStyle.WaypointIconUrl
-            )
+            append(DesktopCourseKmlStyle.pointStyleDefinitions(includeWaypoint = true))
             result.kmlFolders.forEach { folder ->
                 val routeStyleId = if (folder.title.startsWith("Imported")) {
                     "storedRouteStyle"
@@ -298,18 +283,6 @@ object DesktopCourseAnalysisExports {
             appendLine("      </Placemark>")
         }
         appendLine("    </Folder>")
-    }
-
-    private fun StringBuilder.appendCoursePointStyle(styleId: String, iconUrl: String) {
-        appendLine("    <Style id=\"$styleId\">")
-        appendLine("      <IconStyle>")
-        appendLine("        <scale>${DesktopCourseKmlStyle.MarkerScale}</scale>")
-        appendLine("        <color>${DesktopCourseKmlStyle.MarkerColor}</color>")
-        appendLine("        <colorMode>normal</colorMode>")
-        appendLine("        <Icon><href>$iconUrl</href></Icon>")
-        appendLine("      </IconStyle>")
-        appendLine("      <LabelStyle><color>${DesktopCourseKmlStyle.MarkerColor}</color><colorMode>normal</colorMode></LabelStyle>")
-        appendLine("    </Style>")
     }
 
     private fun courseObjectStyleId(type: DesktopCourseKmlExportPointType): String =

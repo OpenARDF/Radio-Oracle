@@ -151,7 +151,7 @@ class DesktopClassicCourseGeneratorTest {
         val bytes = Files.readAllBytes(exports.pdfPath)
         assertTrue(String(bytes.take(8).toByteArray()).startsWith("%PDF-1.4"))
         val text = String(bytes)
-        assertTrue(text.contains("Classic Course Generator"))
+        assertTrue(text.contains("Classic Route Generator"))
         assertTrue(text.contains("Points: Start, 5 foxes, beacon, Finish"))
         assertTrue(text.contains("Elevation: complete point elevations available."))
         assertTrue(text.contains("THREE-FOX COURSES"))

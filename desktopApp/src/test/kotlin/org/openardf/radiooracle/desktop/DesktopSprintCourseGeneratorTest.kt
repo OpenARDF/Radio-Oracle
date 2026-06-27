@@ -14,7 +14,7 @@ class DesktopSprintCourseGeneratorTest {
 
         val result = DesktopSprintCourseGenerator.generate(path, elevationLookup = { null })
 
-        assertEquals("Sprint Course Generator", result.generatorTitle)
+        assertEquals("Sprint Route Generator", result.generatorTitle)
         assertEquals("Sprint", result.formatLabel)
         assertEquals("Start, 5 slow foxes, spectator, 5 fast foxes, Beacon, Finish", result.pointSummary)
         assertEquals(10, result.foxes.size)
@@ -75,7 +75,7 @@ class DesktopSprintCourseGeneratorTest {
         )
         assertTrue(reportText.contains("RECOMMENDED SPRINT COURSE SETS"))
         assertTrue(reportText.contains("Set #1"))
-        assertTrue(pdfText.contains("Sprint Course Generator"))
+        assertTrue(pdfText.contains("Sprint Route Generator"))
         assertTrue(pdfText.contains("Points: Start, 5 slow foxes, spectator, 5 fast foxes, Beacon, Finish"))
         assertTrue(pdfText.contains("Recommended Sprint course sets"))
         assertTrue(kmlText.contains("<name>Course Objects</name>"))

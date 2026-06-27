@@ -20,7 +20,7 @@ data class ClassicCourseGeneratorResult(
     val groups: List<ClassicCourseGeneratorGroup>,
     val elevationResolvedPointCount: Int,
     val missingElevationPointCount: Int,
-    val generatorTitle: String = "Classic Course Generator",
+    val generatorTitle: String = "Classic Route Generator",
     val formatLabel: String = "Classic",
     val pointSummary: String = "Start, ${foxes.size} foxes, ${if (beacon == null) "no beacon" else "beacon"}, Finish"
 ) {
@@ -96,7 +96,7 @@ object DesktopClassicCourseGenerator {
         "ffff9999" // light blue
     )
     private val classicConfig = CourseGeneratorConfig(
-        generatorTitle = "Classic Course Generator",
+        generatorTitle = "Classic Route Generator",
         formatLabel = "Classic",
         minimumFoxes = 3,
         maximumFoxes = 5,
@@ -107,7 +107,7 @@ object DesktopClassicCourseGenerator {
         useSubsetDynamicProgramming = false
     )
     private val foxoringConfig = CourseGeneratorConfig(
-        generatorTitle = "Foxoring Course Generator",
+        generatorTitle = "Foxoring Route Generator",
         formatLabel = "Foxoring",
         minimumFoxes = 5,
         maximumFoxes = 12,
@@ -119,7 +119,7 @@ object DesktopClassicCourseGenerator {
         recommendCourseSets = true
     )
     private val sprintConfig = CourseGeneratorConfig(
-        generatorTitle = "Sprint Course Generator",
+        generatorTitle = "Sprint Route Generator",
         formatLabel = "Sprint",
         minimumFoxes = 10,
         maximumFoxes = 10,
@@ -1244,18 +1244,7 @@ object DesktopClassicCourseGenerator {
             appendLine("""<kml xmlns="http://www.opengis.net/kml/2.2">""")
             appendLine("  <Document>")
             appendLine("    <name>${DesktopExportPrimitives.xmlText(result.sourcePath.fileName.toString())} ${DesktopExportPrimitives.xmlText(result.generatorTitle)}</name>")
-            appendCoursePointStyle(
-                styleId = DesktopCourseKmlStyle.DonutStyleId,
-                iconUrl = DesktopCourseKmlStyle.DonutIconUrl
-            )
-            appendCoursePointStyle(
-                styleId = DesktopCourseKmlStyle.StartStyleId,
-                iconUrl = DesktopCourseKmlStyle.StartIconUrl
-            )
-            appendCoursePointStyle(
-                styleId = DesktopCourseKmlStyle.FinishStyleId,
-                iconUrl = DesktopCourseKmlStyle.FinishIconUrl
-            )
+            append(DesktopCourseKmlStyle.pointStyleDefinitions(includeWaypoint = false))
             greenRows.indices.forEach { index ->
                 appendCandidateRouteStyle(index)
             }
@@ -1322,18 +1311,6 @@ object DesktopClassicCourseGenerator {
         appendLine("$indent    </coordinates>")
         appendLine("$indent  </LineString>")
         appendLine("$indent</Placemark>")
-    }
-
-    private fun StringBuilder.appendCoursePointStyle(styleId: String, iconUrl: String) {
-        appendLine("    <Style id=\"$styleId\">")
-        appendLine("      <IconStyle>")
-        appendLine("        <scale>${DesktopCourseKmlStyle.MarkerScale}</scale>")
-        appendLine("        <color>${DesktopCourseKmlStyle.MarkerColor}</color>")
-        appendLine("        <colorMode>normal</colorMode>")
-        appendLine("        <Icon><href>$iconUrl</href></Icon>")
-        appendLine("      </IconStyle>")
-        appendLine("      <LabelStyle><color>${DesktopCourseKmlStyle.MarkerColor}</color><colorMode>normal</colorMode></LabelStyle>")
-        appendLine("    </Style>")
     }
 
     private fun StringBuilder.appendCandidateRouteStyle(index: Int) {

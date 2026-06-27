@@ -15,4 +15,23 @@ internal object DesktopCourseKmlStyle {
     const val StartStyleId = "courseStartStyle"
     const val FinishStyleId = "courseFinishStyle"
     const val WaypointStyleId = "courseWaypointCircleStyle"
+
+    fun pointStyleDefinitions(indent: String = "    ", includeWaypoint: Boolean = true): String =
+        buildString {
+            appendPointStyle(indent, DonutStyleId, DonutIconUrl)
+            appendPointStyle(indent, FinishStyleId, FinishIconUrl)
+            appendPointStyle(indent, StartStyleId, StartIconUrl)
+            if (includeWaypoint) {
+                appendPointStyle(indent, WaypointStyleId, WaypointIconUrl)
+            }
+        }
+
+    private fun StringBuilder.appendPointStyle(indent: String, styleId: String, iconUrl: String) {
+        appendLine("$indent<Style id=\"$styleId\">")
+        appendLine("$indent  <IconStyle><scale>$MarkerScale</scale><color>$MarkerColor</color><colorMode>normal</colorMode>")
+        appendLine("$indent    <Icon><href>$iconUrl</href></Icon>")
+        appendLine("$indent  </IconStyle>")
+        appendLine("$indent  <LabelStyle><color>$MarkerColor</color><colorMode>normal</colorMode></LabelStyle>")
+        appendLine("$indent</Style>")
+    }
 }

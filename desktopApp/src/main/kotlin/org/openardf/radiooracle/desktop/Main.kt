@@ -9654,6 +9654,9 @@ private fun SectionWorkspace(
         if (section == DesktopSection.KmlMoveCourse) {
             KmlMoveCoursePanel()
         }
+        if (section == DesktopSection.KmlCreateCourse) {
+            KmlCreateCoursePanel(projectFile)
+        }
         if (section == DesktopSection.KmlClassicCourseGenerator) {
             KmlClassicCourseGeneratorPanel()
         }
@@ -13304,21 +13307,6 @@ private fun KmlMoveCoursePanel() {
         }
     }
 
-    fun openOutputFolder(path: Path): String? =
-        runCatching {
-            val directory = path.parent ?: Path.of(".").toAbsolutePath()
-            if (!Desktop.isDesktopSupported()) {
-                error("Opening folders is not supported on this system.")
-            }
-            val desktop = Desktop.getDesktop()
-            if (!desktop.isSupported(Desktop.Action.OPEN)) {
-                error("Opening folders is not supported on this system.")
-            }
-            desktop.open(directory.toFile())
-        }.exceptionOrNull()?.let { error ->
-            " Could not open output folder: ${error.message ?: error::class.simpleName}"
-        }
-
     fun applyMoveCourse() {
         val path = selectedPath ?: return
         val latitude = parsedLatitude ?: return
@@ -13329,7 +13317,7 @@ private fun KmlMoveCoursePanel() {
                 newStart = DesktopKmlToolsPoint(latitude = latitude, longitude = longitude)
             )
         }.onSuccess { result ->
-            val folderStatus = openOutputFolder(result.outputPath).orEmpty()
+            val folderStatus = openKmlToolsOutputFolder(result.outputPath).orEmpty()
             statusText = "Created ${result.outputPath.fileName}; moved ${result.translatedCoordinateCount} coordinates.$folderStatus"
         }.onFailure { error ->
             statusText = "Move Course failed: ${error.message ?: error::class.simpleName}"
@@ -13399,12 +13387,168 @@ private fun KmlMoveCoursePanel() {
 }
 
 @Composable
+private fun KmlCreateCoursePanel(projectFile: EventProjectFile?) {
+    val defaultEventType = projectFile
+        ?.raceData
+        ?.race
+        ?.raceType
+        ?.takeIf { it in DesktopCreateCourseKml.supportedEventTypes }
+        ?: RaceType.CLASSIC
+    var selectedEventType by remember(projectFile?.raceData?.race?.id) { mutableStateOf(defaultEventType) }
+    var isEventTypeMenuExpanded by remember { mutableStateOf(false) }
+    var selectedPath by remember { mutableStateOf<Path?>(null) }
+    var latitudeDraft by remember { mutableStateOf("") }
+    var longitudeDraft by remember { mutableStateOf("") }
+    var statusText by remember { mutableStateOf<String?>(null) }
+    val parsedLatitude = latitudeDraft.trim().toDoubleOrNull()
+    val parsedLongitude = longitudeDraft.trim().toDoubleOrNull()
+    val canCreate = selectedPath != null &&
+        parsedLatitude != null &&
+        parsedLatitude in -90.0..90.0 &&
+        parsedLongitude != null &&
+        parsedLongitude in -180.0..180.0
+
+    fun chooseOutputFile() {
+        DesktopFileDialogs.chooseExportCreateCourseKml(
+            defaultFileName = DesktopCreateCourseKml.defaultFileName(
+                eventName = projectFile?.raceData?.race?.name,
+                eventType = selectedEventType
+            )
+        )?.let { path ->
+            selectedPath = path
+            statusText = null
+        }
+    }
+
+    fun createCourse() {
+        val path = selectedPath ?: return
+        val latitude = parsedLatitude ?: return
+        val longitude = parsedLongitude ?: return
+        runCatching {
+            DesktopCreateCourseKml.create(
+                outputPath = path,
+                eventType = selectedEventType,
+                center = DesktopKmlToolsPoint(latitude = latitude, longitude = longitude),
+                projectFile = projectFile
+            )
+        }.onSuccess { result ->
+            val reuseText = if (result.reusedControlCount > 0) {
+                " reused ${result.reusedControlCount} Event File controls."
+            } else {
+                " no Event File controls reused."
+            }
+            val folderStatus = openKmlToolsOutputFolder(result.outputPath).orEmpty()
+            statusText = "Created ${result.outputPath.fileName}; wrote ${result.pointCount} ${result.eventType.createCourseTypeLabel()} course points;$reuseText$folderStatus"
+        }.onFailure { error ->
+            statusText = "Create Course failed: ${error.message ?: error::class.simpleName}"
+        }
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = "Create Course",
+            color = DesktopPalette.Black,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box {
+                Button(onClick = { isEventTypeMenuExpanded = true }) {
+                    ButtonLabel(selectedEventType.createCourseTypeLabel())
+                }
+                DropdownMenu(
+                    expanded = isEventTypeMenuExpanded,
+                    onDismissRequest = { isEventTypeMenuExpanded = false }
+                ) {
+                    DesktopCreateCourseKml.supportedEventTypes.forEach { eventType ->
+                        DropdownMenuItem(
+                            onClick = {
+                                selectedEventType = eventType
+                                isEventTypeMenuExpanded = false
+                                statusText = null
+                            }
+                        ) {
+                            Text(eventType.createCourseTypeLabel())
+                        }
+                    }
+                }
+            }
+            Button(onClick = ::chooseOutputFile) {
+                ButtonLabel("Choose Output...")
+            }
+            Text(
+                text = selectedPath?.fileName?.toString() ?: "No file selected",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = latitudeDraft,
+                onValueChange = { latitudeDraft = it },
+                label = { Text("Location latitude") },
+                singleLine = true,
+                modifier = Modifier
+                    .width(180.dp)
+                    .commitOnEnter(::createCourse)
+            )
+            TextField(
+                value = longitudeDraft,
+                onValueChange = { longitudeDraft = it },
+                label = { Text("Location longitude") },
+                singleLine = true,
+                modifier = Modifier
+                    .width(180.dp)
+                    .commitOnEnter(::createCourse)
+            )
+            Button(
+                onClick = ::createCourse,
+                enabled = canCreate
+            ) {
+                ButtonLabel("Create")
+            }
+        }
+        statusText?.let { text ->
+            Text(
+                text = text,
+                color = if (text.startsWith("Create Course failed")) DesktopPalette.Error else DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
+    }
+}
+
+private fun openKmlToolsOutputFolder(path: Path): String? =
+    runCatching {
+        val directory = path.parent ?: Path.of(".").toAbsolutePath()
+        if (!Desktop.isDesktopSupported()) {
+            error("Opening folders is not supported on this system.")
+        }
+        val desktop = Desktop.getDesktop()
+        if (!desktop.isSupported(Desktop.Action.OPEN)) {
+            error("Opening folders is not supported on this system.")
+        }
+        desktop.open(directory.toFile())
+    }.exceptionOrNull()?.let { error ->
+        " Could not open output folder: ${error.message ?: error::class.simpleName}"
+    }
+
+@Composable
 private fun KmlClassicCourseGeneratorPanel() {
     CourseGeneratorPanel(
-        title = "Classic Course Generator",
+        title = "Classic Route Generator",
         description = "Choose a KML/KMZ course points file containing one Start, one Finish, and 3-5 fox point placemarks. LineString route placemarks are ignored. If a Beacon is present, it is inserted immediately before Finish.",
-        progressTitle = "Generating Classic courses",
-        progressMessage = "Calculating ideal course combinations, sampled elevations, effective lengths, category matches, and course requirement warnings.",
+        progressTitle = "Generating Classic routes",
+        progressMessage = "Calculating ideal route combinations, sampled elevations, effective lengths, category matches, and course requirement warnings.",
         generateResult = DesktopClassicCourseGenerator::generate,
         defaultPdfFileName = DesktopClassicCourseGenerator::defaultPdfFileName,
         exportPdfAndKml = DesktopClassicCourseGenerator::exportPdfAndKml
@@ -13414,10 +13558,10 @@ private fun KmlClassicCourseGeneratorPanel() {
 @Composable
 private fun KmlFoxoringCourseGeneratorPanel() {
     CourseGeneratorPanel(
-        title = "Foxoring Course Generator",
-        description = "Choose a KML/KMZ course points file containing one Start, one Finish, and 5-12 fox point placemarks. LineString route placemarks are ignored. If a Beacon is present, it is inserted immediately before Finish. Courses are generated from four foxes through the total available fox count.",
-        progressTitle = "Generating Foxoring courses",
-        progressMessage = "Exhaustively calculating Foxoring course combinations, sampled elevations, effective lengths, category matches, and course requirement warnings.",
+        title = "Foxoring Route Generator",
+        description = "Choose a KML/KMZ course points file containing one Start, one Finish, and 5-12 fox point placemarks. LineString route placemarks are ignored. If a Beacon is present, it is inserted immediately before Finish. Routes are generated from four foxes through the total available fox count.",
+        progressTitle = "Generating Foxoring routes",
+        progressMessage = "Exhaustively calculating Foxoring route combinations, sampled elevations, effective lengths, category matches, and course requirement warnings.",
         generateResult = DesktopFoxoringCourseGenerator::generate,
         defaultPdfFileName = DesktopFoxoringCourseGenerator::defaultPdfFileName,
         exportPdfAndKml = DesktopFoxoringCourseGenerator::exportPdfAndKml
@@ -13427,10 +13571,10 @@ private fun KmlFoxoringCourseGeneratorPanel() {
 @Composable
 private fun KmlSprintCourseGeneratorPanel() {
     CourseGeneratorPanel(
-        title = "Sprint Course Generator",
-        description = "Choose a KML/KMZ sprint course points file containing one Start, one Finish, one Beacon, five slow fox point placemarks, five fast fox point placemarks, and optionally one Spectator. LineString route placemarks are ignored. Courses are generated with at least one slow-loop fox and at least one fast-loop fox; total fox counts follow doubled Classic category requirements.",
-        progressTitle = "Generating Sprint courses",
-        progressMessage = "Calculating Sprint slow-loop and fast-loop course combinations, sampled elevations, effective lengths, category matches, and recommended course sets.",
+        title = "Sprint Route Generator",
+        description = "Choose a KML/KMZ sprint course points file containing one Start, one Finish, one Beacon, five slow fox point placemarks, five fast fox point placemarks, and optionally one Spectator. LineString route placemarks are ignored. Routes are generated with at least one slow-loop fox and at least one fast-loop fox; total fox counts follow doubled Classic category requirements.",
+        progressTitle = "Generating Sprint routes",
+        progressMessage = "Calculating Sprint slow-loop and fast-loop route combinations, sampled elevations, effective lengths, category matches, and recommended route sets.",
         generateResult = DesktopSprintCourseGenerator::generate,
         defaultPdfFileName = DesktopSprintCourseGenerator::defaultPdfFileName,
         exportPdfAndKml = DesktopSprintCourseGenerator::exportPdfAndKml
