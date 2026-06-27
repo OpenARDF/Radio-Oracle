@@ -2970,6 +2970,14 @@ fun main(args: Array<String>) = application {
             overwriteImportedSiNumbers: Boolean
         ) {
             val formatLabel = controlsRouteImportFormatLabel(review.sourceName)
+            if (
+                !createMissingCategories &&
+                (review.summary.missingCategoryNames.isNotEmpty() || review.summary.missingControlNames.isNotEmpty())
+            ) {
+                projectStatusText =
+                    "Controls/route $formatLabel import was not applied because listed categories or controls are missing."
+                return
+            }
             val overwriteProject = if (createMissingCategories) {
                 review.overwriteSiCreatedMissingCategoryProject
             } else {
@@ -6442,6 +6450,8 @@ private fun CourseKmlKmzImportReviewDialog(
     } else {
         summary
     }
+    val hasMissingImportItems = summary.missingCategoryNames.isNotEmpty() || summary.missingControlNames.isNotEmpty()
+    val blocksKeepForMissingItems = hasMissingImportItems && !createMissingCategories
     val categoriesText = selectedSummary.matchedCategoryNames
         .ifEmpty { listOf("None") }
         .joinToString()
@@ -6550,10 +6560,11 @@ private fun CourseKmlKmzImportReviewDialog(
                                 text = if (createMissingCategories) {
                                     "Created categories will be saved without competitors. Created controls will be added to Setup > Controls so route analysis and category assignments can use them."
                                 } else {
-                                    "Missing categories or controls will be left out of this import. Add them or reimport the $formatLabel later to store full course data."
+                                    "Route-bearing imports cannot be kept while listed categories or controls are missing. Create them, or cancel and add them manually before importing again."
                                 },
                                 fontSize = 12.sp,
-                                color = Color.DarkGray
+                                color = if (blocksKeepForMissingItems) DesktopPalette.Error else Color.DarkGray,
+                                fontWeight = if (blocksKeepForMissingItems) FontWeight.Bold else FontWeight.Normal
                             )
                         }
                         if (selectedSummary.importedCategoryCount > 0) {
@@ -6681,14 +6692,17 @@ private fun CourseKmlKmzImportReviewDialog(
                         Text("Cancel")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = {
-                        onKeep(
-                            fetchElevations,
-                            applyCategoryAssignments,
-                            createMissingCategories,
-                            overwriteImportedSiNumbers
-                        )
-                    }) {
+                    Button(
+                        enabled = !blocksKeepForMissingItems,
+                        onClick = {
+                            onKeep(
+                                fetchElevations,
+                                applyCategoryAssignments,
+                                createMissingCategories,
+                                overwriteImportedSiNumbers
+                            )
+                        }
+                    ) {
                         Text(
                             if (selectedSummary.isDuplicateOnly) {
                                 "Continue"
