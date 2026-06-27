@@ -1264,7 +1264,7 @@ object EventProjectEditor {
                 ?: throw IllegalArgumentException("SI number is invalid.")
         }
         require(siNumberValue == null || SportIdentCodes.isSINumberValid(siNumberValue)) {
-            "SI number is outside the supported SportIdent card range."
+            "SI number is outside the supported SPORTident card range."
         }
         require(
             siNumberValue == null || projectFile.raceData.competitorData.noneIndexed { index, data ->
@@ -2738,7 +2738,7 @@ object EventProjectEditor {
         val code = trimmedCode.toIntOrNull()
             ?: throw IllegalArgumentException("Control SI code is invalid.")
         require(SportIdentCodes.isSICodeValid(code)) {
-            "Control SI code is outside the supported SportIdent station range."
+            "Control SI code is outside the supported SPORTident station range."
         }
         val trimmedLabel = label.trim().takeIf { it.isNotEmpty() }
             ?: EventControlCatalog.defaultLabel(code, type)
@@ -2899,7 +2899,7 @@ object EventProjectEditor {
                 ?: throw IllegalArgumentException("SI number is invalid.")
         }
         require(siNumberValue == null || SportIdentCodes.isSINumberValid(siNumberValue)) {
-            "SI number is outside the supported SportIdent card range."
+            "SI number is outside the supported SPORTident card range."
         }
         return siNumberValue
     }
@@ -2926,7 +2926,7 @@ object EventProjectEditor {
                 val code = token.toIntOrNull()
                     ?: throw IllegalArgumentException("Control code is invalid: $token")
                 require(SportIdentCodes.isSICodeValid(code)) {
-                    "Control code is outside the supported SportIdent station range: $code"
+                    "Control code is outside the supported SPORTident station range: $code"
                 }
                 code
             }
@@ -2984,7 +2984,7 @@ object EventProjectEditor {
         val directCode = controlText.toIntOrNull()
         if (directCode != null) {
             require(SportIdentCodes.isSICodeValid(directCode)) {
-                "Control code is outside the supported SportIdent station range: $directCode"
+                "Control code is outside the supported SPORTident station range: $directCode"
             }
             return directCode
         }
@@ -3364,7 +3364,7 @@ object EventProjectEditor {
                 ?: throw IllegalArgumentException("SI number is invalid.")
         }
         require(siNumberValue == null || SportIdentCodes.isSINumberValid(siNumberValue)) {
-            "SI number is outside the supported SportIdent card range."
+            "SI number is outside the supported SPORTident card range."
         }
         require(
             siNumberValue == null || existingCompetitors.noneIndexed { index, data ->

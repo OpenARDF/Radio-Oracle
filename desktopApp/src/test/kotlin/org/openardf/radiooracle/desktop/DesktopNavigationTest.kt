@@ -964,7 +964,7 @@ class DesktopNavigationTest {
             courseTools.children.map { it.label }
         )
         assertEquals(
-            listOf("Event Validator", "Course Tools", "sportIDENT"),
+            listOf("Event Validator", "Course Tools", "SPORTident"),
             tools.children.map { it.label }
         )
         assertEquals(DesktopSection.CourseAnalysis, courseAnalyzer.section)
@@ -998,8 +998,9 @@ class DesktopNavigationTest {
         assertFalse(courseTools.children.first { it.label == "Create Course" }.requiresEventFile)
         assertEquals(DesktopSection.KmlRouteGenerator, courseTools.children.first { it.label == "Route Generator" }.section)
         assertFalse(courseTools.children.first { it.label == "Route Generator" }.requiresEventFile)
-        val sportIdentTools = tools.children.first { it.label == "sportIDENT" }
+        val sportIdentTools = tools.children.first { it.label == "SPORTident" }
         val timeSync = sportIdentTools.children.first { it.label == "Time Sync" }
+        assertEquals(DesktopSection.SportIdentTools, sportIdentTools.section)
         assertEquals(DesktopSection.SportIdentTimeSync, timeSync.section)
         assertFalse(sportIdentTools.requiresEventFile)
         assertFalse(timeSync.requiresEventFile)
