@@ -54,11 +54,10 @@ internal object DesktopSportIdentTimeSyncProtocol {
     fun validatedWriteSequence(sourceTime: LocalDateTime): List<DesktopSportIdentTimeSyncCommandStep> =
         listOf(
             enterRemoteModeStep(),
-            readSystemInfoStep(),
+            readCompatibleSystemInfoStep(),
             readStationTimeStep("Read station time before write"),
             writeStationTimeStep(sourceTime),
             applyStationTimeStep(),
-            readStationTimeStep("Read station time after write"),
             exitRemoteModeStep()
         )
 
@@ -74,6 +73,13 @@ internal object DesktopSportIdentTimeSyncProtocol {
             label = "Read long system information",
             command = SportIdentProtocol.GET_SYSTEM_INFO,
             payload = byteArrayOf(0x00, 0x80.toByte())
+        )
+
+    fun readCompatibleSystemInfoStep(): DesktopSportIdentTimeSyncCommandStep =
+        DesktopSportIdentTimeSyncCommandStep(
+            label = "Read compatible system information",
+            command = SportIdentProtocol.GET_SYSTEM_INFO,
+            payload = byteArrayOf(0x00, 0x75)
         )
 
     fun readStationTimeStep(label: String): DesktopSportIdentTimeSyncCommandStep =

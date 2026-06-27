@@ -150,7 +150,10 @@ internal class DesktopSportIdentTimeSyncService(
 
             val systemInfoFrame = requireReply(
                 port = port,
-                step = DesktopSportIdentTimeSyncProtocol.readSystemInfoStep()
+                step = DesktopSportIdentTimeSyncProtocol.readCompatibleSystemInfoStep(),
+                attempts = READ_ONLY_COMMAND_ATTEMPTS,
+                failureMessage = "Remote/coupled SPORTident station did not answer system-info read. " +
+                    "Confirm the target station is awake and coupled to the download station."
             )
             val stationInfo = SportIdentStationInfoParser.fromSystemInfoFrame(systemInfoFrame)
                 ?: error("SPORTident station returned unreadable system info.")
@@ -160,20 +163,10 @@ internal class DesktopSportIdentTimeSyncService(
                 step = DesktopSportIdentTimeSyncProtocol.readStationTimeStep("Read station time before write")
             ).data.decodeStationTime("before-write station time").dateTime
 
-            requireReply(
-                port = port,
-                step = DesktopSportIdentTimeSyncProtocol.writeStationTimeStep(targetTime)
-            ).data.decodeStationTime("write acknowledgement station time")
-
-            requireReply(
-                port = port,
-                step = DesktopSportIdentTimeSyncProtocol.applyStationTimeStep()
-            )
-
             val confirmedTime = requireReply(
                 port = port,
-                step = DesktopSportIdentTimeSyncProtocol.readStationTimeStep("Read station time after write")
-            ).data.decodeStationTime("read-back station time").dateTime
+                step = DesktopSportIdentTimeSyncProtocol.writeStationTimeStep(targetTime)
+            ).data.decodeStationTime("write acknowledgement station time").dateTime
 
             val deltaSeconds = abs(Duration.between(targetTime, confirmedTime).seconds)
             if (deltaSeconds > toleranceSeconds) {
@@ -182,6 +175,11 @@ internal class DesktopSportIdentTimeSyncService(
                         "$targetTime by ${deltaSeconds}s, tolerance ${toleranceSeconds}s."
                 )
             }
+
+            requireReply(
+                port = port,
+                step = DesktopSportIdentTimeSyncProtocol.applyStationTimeStep()
+            )
 
             return DesktopSportIdentTimeSyncResult(
                 stationInfo = stationInfo,
@@ -234,12 +232,20 @@ internal class DesktopSportIdentTimeSyncService(
 
     private fun requireReply(
         port: DesktopSerialPort,
-        step: DesktopSportIdentTimeSyncCommandStep
-    ) = commandClient.sendCommand(
-        port = port,
-        command = step.command,
-        data = step.payload
-    ) ?: error("SPORTident station did not reply to ${step.label}.")
+        step: DesktopSportIdentTimeSyncCommandStep,
+        attempts: Int = 1,
+        failureMessage: String = "SPORTident station did not reply to ${step.label}."
+    ): org.openardf.radiooracle.shared.sportident.SportIdentFrame {
+        require(attempts > 0) { "SPORTident command attempts must be positive." }
+        repeat(attempts) {
+            commandClient.sendCommand(
+                port = port,
+                command = step.command,
+                data = step.payload
+            )?.let { return it }
+        }
+        error(failureMessage)
+    }
 
     private fun ByteArray.decodeStationTime(context: String): DesktopSportIdentStationTime =
         DesktopSportIdentStationTimeCodec.decodePayload(this)
@@ -251,5 +257,6 @@ internal class DesktopSportIdentTimeSyncService(
         const val OPEN_WAIT_TIME_MS = 200
         const val MAX_REPLY_BYTES = 256
         const val DEFAULT_TOLERANCE_SECONDS = 2L
+        const val READ_ONLY_COMMAND_ATTEMPTS = 3
     }
 }

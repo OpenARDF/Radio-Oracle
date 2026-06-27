@@ -60,10 +60,10 @@ fun main(args: Array<String>) {
         println("Captured SI Config+ sequence:")
         dryRun.configPlusSequence.printSteps()
         println()
-        println("Hardware validation sequence adds a read-back step before exit:")
+        println("Hardware validation sequence decodes the F6 acknowledgement before applying the write:")
         dryRun.validatedWriteSequence.printSteps()
         println()
-        println("Set RADIO_ORACLE_SI_TIME_SYNC_WRITE=YES to run the hardware write/read-back path.")
+        println("Set RADIO_ORACLE_SI_TIME_SYNC_WRITE=YES to run the hardware write/acknowledgement validation path.")
         return
     }
 

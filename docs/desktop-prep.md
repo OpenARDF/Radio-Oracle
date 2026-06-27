@@ -558,9 +558,10 @@ npm run desktop:usb-time-sync-write -- --args=--time=2026-06-27T03:10:18
 ```
 
 Dry-run mode prints both the exact captured SI Config+ sequence and the
-Radio-Oracle hardware-validation sequence, which adds an `F7` read-back before
-leaving remote/config mode. It does not open a serial port or write station
-data.
+Radio-Oracle hardware-validation sequence. The validation sequence decodes the
+`F6` acknowledgement as the confirmed station-time echo, then sends `F9` to
+apply/commit the write and exits remote/config mode. It does not open a serial
+port or write station data.
 
 Actual station writes require explicit opt-in:
 
@@ -573,8 +574,9 @@ Optional environment variables:
 - `RADIO_ORACLE_SI_PORT=/dev/cu.SLAB_USBtoUART`: force a specific serial node.
 - `RADIO_ORACLE_SI_TIME_SYNC_AT=2026-06-27T03:10:18`: write a fixed local time
   instead of the current computer time.
-- `RADIO_ORACLE_SI_TIME_SYNC_TOLERANCE_SECONDS=2`: set the allowed read-back
-  difference.
+- `RADIO_ORACLE_SI_TIME_SYNC_TOLERANCE_SECONDS=2`: set the allowed difference
+  between requested time and the station time echoed by the `F6`
+  acknowledgement.
 
 Do not run the write-enabled command on event-critical hardware until the
 non-critical validation matrix below has passed.
@@ -586,6 +588,12 @@ from June 27, 2026: one setting a coupled SI-Master near 4:50 PM, and one
 setting it near 3:10 AM. Treat these findings as capture-proven for the tested
 station path, but keep UI writes disabled until the app performs a real
 write/read-back validation against expendable hardware.
+
+As of the first successful spare-station test, the coupled target must already
+be awake. Manually waking the target station by inserting an SI card, then
+coupling it to the SI-Master/download station, allowed the write path to
+complete. When the coupled target was asleep, the command stopped before `F6`
+with no time write sent. A software-only wake mechanism is not yet known.
 
 The captured Config+ remote-mode sequence is:
 
@@ -654,10 +662,14 @@ non-critical hardware and record the results:
 7. Master station, near noon.
 8. Master station, near midnight.
 
-For each run, require the command to write `F6`, apply `F9`, read `F7` back,
-decode the reply with `DesktopSportIdentStationTimeCodec`, and fail unless the
-confirmed station time matches the requested time within the configured
-tolerance.
+For each run, require the command to read the station time before writing, write
+`F6`, decode the `F6` acknowledgement with `DesktopSportIdentStationTimeCodec`,
+fail before `F9` if the echoed station time is outside the configured tolerance,
+then apply the write with `F9`. The first successful spare-station run wrote
+requested time `2026-06-27T17:52:02`, decoded `F6` confirmation
+`2026-06-27T17:52:02`, then applied the write. The station beeped during the
+earlier attempt that reached `F6`/`F9`; an extra post-apply `F7` read failed on
+that hardware and should not be treated as part of the validation sequence.
 
 For local macOS smoke tests, prefer copying the generated `.app` and sample
 Event File to `/tmp` before launching with `open ... --args <sample.rom.json>`.

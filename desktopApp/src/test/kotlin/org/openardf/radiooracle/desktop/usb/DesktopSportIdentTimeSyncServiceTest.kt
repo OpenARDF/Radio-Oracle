@@ -123,8 +123,8 @@ class DesktopSportIdentTimeSyncServiceTest {
             DesktopSportIdentCaptureAnalyzer.hexToBytes("FF 02 F0 01 4D 6D 0A 03"),
             dryRun.configPlusSequence[5].frameBytes
         )
-        assertEquals(7, dryRun.validatedWriteSequence.size)
-        assertEquals(DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND, dryRun.validatedWriteSequence[5].command)
+        assertEquals(6, dryRun.validatedWriteSequence.size)
+        assertEquals(SportIdentProtocol.PROBE_COMMAND, dryRun.validatedWriteSequence[5].command)
     }
 
     @Test
@@ -152,7 +152,6 @@ class DesktopSportIdentTimeSyncServiceTest {
                 stationTimeReply(targetTime.minusMinutes(1), tick = 0x01),
                 stationWriteReply(targetTime, tick = 0x05),
                 applyReply(),
-                stationTimeReply(targetTime, tick = 0x06),
                 normalModeReply()
             )
         )
@@ -176,7 +175,6 @@ class DesktopSportIdentTimeSyncServiceTest {
                 DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
                 DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
                 DesktopSportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND,
-                DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
                 SportIdentProtocol.PROBE_COMMAND
             ),
             port.writeRequests.map { SportIdentFrameParser.firstFrame(it, requireValidCrc = true)?.command }
@@ -188,6 +186,37 @@ class DesktopSportIdentTimeSyncServiceTest {
     }
 
     @Test
+    fun writeTimeWithReadBackReportsSleepingCoupledStationBeforeWritingTime() {
+        val targetTime = LocalDateTime.parse("2026-06-27T03:10:18")
+        val port = FakePort(
+            readChunks = listOf(
+                remoteModeReply(),
+                remoteModeReply(),
+                normalModeReply()
+            )
+        )
+        val service = DesktopSportIdentTimeSyncService(portProvider = FakePortProvider(listOf(port)))
+
+        val error = assertThrows(IllegalStateException::class.java) {
+            service.writeTimeWithReadBack(
+                sourceTime = targetTime,
+                writeEnabled = true,
+                toleranceSeconds = 0
+            )
+        }
+
+        assertEquals(
+            "Remote/coupled SPORTident station did not answer system-info read. " +
+                "Confirm the target station is awake and coupled to the download station.",
+            error.message
+        )
+        val writtenCommands = port.writeRequests.map {
+            SportIdentFrameParser.firstFrame(it, requireValidCrc = true)?.command
+        }
+        assertFalse(writtenCommands.contains(DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND))
+    }
+
+    @Test
     fun writeTimeWithReadBackFailsWhenReadBackIsOutsideTolerance() {
         val targetTime = LocalDateTime.parse("2026-06-27T03:10:18")
         val port = FakePort(
@@ -196,9 +225,7 @@ class DesktopSportIdentTimeSyncServiceTest {
                 remoteModeReply(),
                 systemInfoReply(),
                 stationTimeReply(targetTime.minusMinutes(1), tick = 0x01),
-                stationWriteReply(targetTime, tick = 0x05),
-                applyReply(),
-                stationTimeReply(targetTime.plusSeconds(5), tick = 0x06),
+                stationWriteReply(targetTime.plusSeconds(5), tick = 0x05),
                 normalModeReply()
             )
         )
