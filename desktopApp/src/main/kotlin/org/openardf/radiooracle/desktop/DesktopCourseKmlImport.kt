@@ -1600,6 +1600,11 @@ object DesktopCourseKmlImporter {
         importedPoints
             .asSequence()
             .filterNot { it.name.isCourseEndpointName() }
+            // A named point that looks like a fox, beacon, spectator, or SI-coded control should
+            // stay in the missing-control review path if it did not match the Event File. Treating
+            // it as a mandatory waypoint makes the analyzer appear to recognize the location while
+            // silently excluding it from fox/beacon assignment and scoring logic.
+            .filterNot { it.isLikelyCourseControlPoint() }
             .filterNot { importedPoint ->
                 matchedControls.any { control ->
                     // A corridor or similar mandatory waypoint can legitimately sit close to a
@@ -1948,6 +1953,10 @@ private fun CourseControlPoint.isCourseStartPoint(): Boolean =
 
 private fun CourseControlPoint.isCourseFinishPoint(): Boolean =
     name.isCourseFinishName()
+
+private fun CourseControlPoint.isLikelyCourseControlPoint(): Boolean =
+    siCodeHint?.takeIf(SportIdentCodes::isSICodeValid) != null ||
+        ControlRoleLabelRules.inferredRole(name) != null
 
 private fun String.isCourseEndpointName(): Boolean =
     DesktopCoursePointLabelClassifier.isCourseEndpointName(this)

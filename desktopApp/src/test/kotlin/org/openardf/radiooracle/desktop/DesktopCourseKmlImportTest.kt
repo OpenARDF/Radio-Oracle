@@ -111,6 +111,68 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun missingKmlFoxesAreNotDowngradedToMandatoryWaypoints() {
+        val kmlPath = Files.createTempFile("2m Practice", ".kml")
+        Files.writeString(kmlPath, sampleTwoMeterPracticeKml())
+        val project = EventProjectEditor.addCategory(
+            partialTwoMeterProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { 100.0 }
+        )
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals(listOf("Fox 2", "Fox 3", "Fox 4", "Fox 5"), summary.missingControlNames)
+        assertEquals("'Fox 1' Beacon", protectedCourseInfo.idealOrder)
+        assertEquals(
+            emptyList<String>(),
+            protectedCourseInfo.courseObjects
+                .filter { it.type == ProtectedCourseObjectType.WAYPOINT }
+                .map { it.label }
+        )
+    }
+
+    @Test
+    fun creatingMissingKmlFoxesImportsThemAsControls() {
+        val kmlPath = Files.createTempFile("2m Practice", ".kml")
+        Files.writeString(kmlPath, sampleTwoMeterPracticeKml())
+        val project = EventProjectEditor.addCategory(
+            partialTwoMeterProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { 100.0 },
+            createMissingControls = true
+        )
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals(listOf("Fox 2", "Fox 3", "Fox 4", "Fox 5"), summary.createdControlNames)
+        assertEquals(6, summary.matchedControlPointCount)
+        assertEquals("'Fox 1' 'Fox 2' 'Fox 3' 'Fox 4' 'Fox 5' Beacon", protectedCourseInfo.idealOrder)
+        assertEquals(
+            listOf("'Fox 1'", "'Fox 2'", "'Fox 3'", "'Fox 4'", "'Fox 5'", "Beacon"),
+            protectedCourseInfo.controlPoints.map { it.label }
+        )
+    }
+
+    @Test
     fun importsNonControlPointsVisitedByRouteAsMandatoryWaypoints() {
         val kmlPath = Files.createTempFile("radio-oracle-course-waypoint", ".kml")
         Files.writeString(kmlPath, sampleKmlWithMandatoryWaypoint())
@@ -2017,6 +2079,68 @@ class DesktopCourseKmlImportTest {
         </kml>
         """.trimIndent()
 
+    private fun sampleTwoMeterPracticeKml(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9990,39.0000,0
+                  -94.9980,39.0000,0
+                  -94.9970,39.0000,0
+                  -94.9960,39.0000,0
+                  -94.9950,39.0000,0
+                  -94.9940,39.0000,0
+                  -94.9930,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>Start</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Fox 1</name>
+              <description>SI=221</description>
+              <Point><coordinates>-94.9990,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Fox 2</name>
+              <description>SI=222</description>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Fox 3</name>
+              <description>SI=223</description>
+              <Point><coordinates>-94.9970,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Fox 4</name>
+              <description>SI=224</description>
+              <Point><coordinates>-94.9960,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Fox 5</name>
+              <description>SI=225</description>
+              <Point><coordinates>-94.9950,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Beacon</name>
+              <description>SI=136</description>
+              <Point><coordinates>-94.9940,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Finish</name>
+              <Point><coordinates>-94.9930,39.0000,0</coordinates></Point>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
     private fun sampleKmlWithSpeedSpecifiers(
         startDescription: String = "SS=0.75",
         foxDescription: String = "SS=0.60",
@@ -3046,6 +3170,36 @@ class DesktopCourseKmlImportTest {
         return project.copy(
             raceData = project.raceData.copy(
                 controls = EventControlCatalog.classicPreset(raceId)
+            )
+        )
+    }
+
+    private fun partialTwoMeterProject(): EventProjectFile {
+        val project = EventProjectFactory.createEmptyProject(
+            raceId = "race",
+            raceName = "2m Practice",
+            startDateTimeIso = "2026-06-27T09:00"
+        )
+        return project.copy(
+            raceData = project.raceData.copy(
+                controls = listOf(
+                    EventControl(
+                        id = "control-fox-1",
+                        raceId = "race",
+                        label = "Fox 1",
+                        siCode = 221,
+                        type = ControlPointType.CONTROL,
+                        publicLabel = "Fox 1"
+                    ),
+                    EventControl(
+                        id = "control-beacon",
+                        raceId = "race",
+                        label = "Beacon",
+                        siCode = 136,
+                        type = ControlPointType.BEACON,
+                        publicLabel = "Beacon"
+                    )
+                )
             )
         )
     }
