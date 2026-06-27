@@ -233,11 +233,6 @@ private fun EventRaceData.containsReadoutForSiNumber(siNumber: Int): Boolean =
     competitorData.any { it.readoutData?.result?.siNumber == siNumber } ||
         unmatchedReadoutData.any { it.result.siNumber == siNumber }
 
-private fun desktopTimeLimitText(timeLimitText: String): String {
-    val minutes = timeLimitText.substringBefore(':').toLongOrNull()
-    return if (minutes != null) "$minutes min" else timeLimitText
-}
-
 private enum class DesktopSportIdentAppendOutcome {
     Added,
     PracticeInForestStarted,
@@ -252,9 +247,6 @@ private val CategoryTableColumns = listOf(
     FixedTableColumn("Gender", 92.dp),
     FixedTableColumn("Length (m)", 96.dp),
     FixedTableColumn("Climb (m)", 92.dp),
-    FixedTableColumn("Event Type", 96.dp),
-    FixedTableColumn("Event Band", 104.dp),
-    FixedTableColumn("Event Limit (min.)", 120.dp),
     FixedTableColumn("Assigned Controls", 320.dp)
 )
 
@@ -263,9 +255,6 @@ private val CategoryTableColumnHints = mapOf(
     "Gender" to "Category gender used for exports and age/gender result grouping.",
     "Length (m)" to "Course length for this category in meters. This public value is used in exports and result displays.",
     "Climb (m)" to "Total climb for this category in meters. This public value is used in exports and result displays.",
-    "Event Type" to "Race type inherited from the Event File. Category-specific race types are legacy data and are ignored.",
-    "Event Band" to "Frequency band inherited from the Event File. Category-specific bands are legacy data and are ignored.",
-    "Event Limit (min.)" to "Time limit inherited from the Event File. Category-specific time limits are legacy data and are ignored.",
     "Assigned Controls" to "Ordered controls for this category. Separate entries with spaces, commas, or semicolons. Use the picker to insert Public labels. Manual entries may use SI codes, defined control labels, or Public label values; put labels containing spaces in single or double quotes, such as 'Fox 1'."
 )
 private val CategoryMenBackground = Color(0xFFE8F3FF)
@@ -11060,8 +11049,7 @@ private fun EventSeriesValidationIssueRow(issue: EventSeriesValidationIssue) {
 /** Shows self-validation results for the currently open Event File. */
 @Composable
 private fun EventValidatorPanel(projectFile: EventProjectFile?) {
-    var validationRefreshToken by remember(projectFile?.raceData) { mutableStateOf(0) }
-    val issues = remember(projectFile, validationRefreshToken) {
+    val issues = remember(projectFile) {
         projectFile?.let { EventValidationRules.validateRaceData(it.raceData) }.orEmpty()
     }
     val errorCount = issues.count {
@@ -11072,23 +11060,9 @@ private fun EventValidatorPanel(projectFile: EventProjectFile?) {
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(
-                onClick = { validationRefreshToken++ },
-                enabled = projectFile != null
-            ) {
-                ButtonLabel("Validate Event")
-            }
-            Text(
-                text = projectFile?.raceData?.race?.name?.takeIf { it.isNotBlank() } ?: "No Event File open",
-                color = DesktopPalette.Disconnected,
-                fontSize = 13.sp
-            )
-        }
-
         Text(
-            text = "Checks the current Event File for internal consistency before Race Ops, Results, export, or Series workflows. Series validation can reuse these event-level checks before comparing member events to one another.",
-            color = DesktopPalette.Black,
+            text = projectFile?.raceData?.race?.name?.takeIf { it.isNotBlank() } ?: "No Event File open",
+            color = DesktopPalette.Disconnected,
             fontSize = 13.sp
         )
 
@@ -12945,6 +12919,9 @@ private fun CompetitorDetailRow(
     }
     var siNumberDraft by remember(competitor.id, competitor.siNumberText) { mutableStateOf(competitor.siNumberText) }
     var selectedCategoryId by remember(competitor.id, competitor.categoryId) { mutableStateOf(competitor.categoryId) }
+    val warningText = competitor.warningReasons.joinToString(separator = "\n")
+    val rowTextColor = if (competitor.warningReasons.isEmpty()) LocalTextStyle.current.color else DesktopPalette.Error
+    val textFieldStyle = LocalTextStyle.current.copy(color = rowTextColor)
     fun applyPendingDrafts() {
         if (firstNameDraft != competitor.firstName || lastNameDraft != competitor.lastName) {
             if (firstNameDraft.isNotBlank() && lastNameDraft.isNotBlank()) {
@@ -12990,128 +12967,157 @@ private fun CompetitorDetailRow(
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TextField(
-            value = firstNameDraft,
-            onValueChange = { firstNameDraft = it },
-            modifier = Modifier
-                .width(CompetitorTableColumns[0].width)
-                .onFocusChanged { focusState ->
-                    if (!focusState.isFocused) {
-                        applyPendingDrafts()
+        ControlWarningTooltip(warningText) {
+            TextField(
+                value = firstNameDraft,
+                onValueChange = { firstNameDraft = it },
+                modifier = Modifier
+                    .width(CompetitorTableColumns[0].width)
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused) {
+                            applyPendingDrafts()
+                        }
                     }
-                }
-                .commitOnEnter(::applyPendingDrafts),
-            singleLine = true,
-            label = { Text("First") }
-        )
-        TextField(
-            value = lastNameDraft,
-            onValueChange = { lastNameDraft = it },
-            modifier = Modifier
-                .width(CompetitorTableColumns[1].width)
-                .onFocusChanged { focusState ->
-                    if (!focusState.isFocused) {
-                        applyPendingDrafts()
+                    .commitOnEnter(::applyPendingDrafts),
+                singleLine = true,
+                label = { Text("First", color = rowTextColor) },
+                textStyle = textFieldStyle
+            )
+        }
+        ControlWarningTooltip(warningText) {
+            TextField(
+                value = lastNameDraft,
+                onValueChange = { lastNameDraft = it },
+                modifier = Modifier
+                    .width(CompetitorTableColumns[1].width)
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused) {
+                            applyPendingDrafts()
+                        }
                     }
-                }
-                .commitOnEnter(::applyPendingDrafts),
-            singleLine = true,
-            label = { Text("Last") }
-        )
-        TextField(
-            value = clubDraft,
-            onValueChange = { clubDraft = it },
-            modifier = Modifier
-                .width(CompetitorTableColumns[2].width)
-                .onFocusChanged { focusState ->
-                    if (!focusState.isFocused) {
-                        applyPendingDrafts()
+                    .commitOnEnter(::applyPendingDrafts),
+                singleLine = true,
+                label = { Text("Last", color = rowTextColor) },
+                textStyle = textFieldStyle
+            )
+        }
+        ControlWarningTooltip(warningText) {
+            TextField(
+                value = clubDraft,
+                onValueChange = { clubDraft = it },
+                modifier = Modifier
+                    .width(CompetitorTableColumns[2].width)
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused) {
+                            applyPendingDrafts()
+                        }
                     }
-                }
-                .commitOnEnter(::applyPendingDrafts),
-            singleLine = true,
-            label = { Text("Club") }
-        )
-        TextField(
-            value = bibNumberDraft,
-            onValueChange = { bibNumberDraft = it },
-            modifier = Modifier
-                .width(CompetitorTableColumns[3].width)
-                .onFocusChanged { focusState ->
-                    if (!focusState.isFocused) {
-                        applyPendingDrafts()
+                    .commitOnEnter(::applyPendingDrafts),
+                singleLine = true,
+                label = { Text("Club", color = rowTextColor) },
+                textStyle = textFieldStyle
+            )
+        }
+        ControlWarningTooltip(warningText) {
+            TextField(
+                value = bibNumberDraft,
+                onValueChange = { bibNumberDraft = it },
+                modifier = Modifier
+                    .width(CompetitorTableColumns[3].width)
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused) {
+                            applyPendingDrafts()
+                        }
                     }
-                }
-                .commitOnEnter(::applyPendingDrafts),
-            singleLine = true,
-            label = { Text("Bib") }
-        )
-        TextField(
-            value = callSignDraft,
-            onValueChange = { callSignDraft = it },
-            modifier = Modifier
-                .width(CompetitorTableColumns[4].width)
-                .onFocusChanged { focusState ->
-                    if (!focusState.isFocused) {
-                        applyPendingDrafts()
+                    .commitOnEnter(::applyPendingDrafts),
+                singleLine = true,
+                label = { Text("Bib", color = rowTextColor) },
+                textStyle = textFieldStyle
+            )
+        }
+        ControlWarningTooltip(warningText) {
+            TextField(
+                value = callSignDraft,
+                onValueChange = { callSignDraft = it },
+                modifier = Modifier
+                    .width(CompetitorTableColumns[4].width)
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused) {
+                            applyPendingDrafts()
+                        }
                     }
-                }
-                .commitOnEnter(::applyPendingDrafts),
-            singleLine = true,
-            label = { Text("Call") }
-        )
-        TextField(
-            value = birthYearDraft,
-            onValueChange = { birthYearDraft = it },
-            modifier = Modifier
-                .width(CompetitorTableColumns[5].width)
-                .onFocusChanged { focusState ->
-                    if (!focusState.isFocused) {
-                        applyPendingDrafts()
+                    .commitOnEnter(::applyPendingDrafts),
+                singleLine = true,
+                label = { Text("Call", color = rowTextColor) },
+                textStyle = textFieldStyle
+            )
+        }
+        ControlWarningTooltip(warningText) {
+            TextField(
+                value = birthYearDraft,
+                onValueChange = { birthYearDraft = it },
+                modifier = Modifier
+                    .width(CompetitorTableColumns[5].width)
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused) {
+                            applyPendingDrafts()
+                        }
                     }
-                }
-                .commitOnEnter(::applyPendingDrafts),
-            singleLine = true,
-            label = { Text("Birth") }
-        )
-        CategoryPicker(
-            selectedCategoryId = selectedCategoryId,
-            categories = categories,
-            onCategorySelected = {
-                selectedCategoryId = it
-                onAssignCompetitorCategory(competitor.id, it)
-            },
-            modifier = Modifier.width(CompetitorTableColumns[6].width)
-        )
-        FixedTableText(competitor.startNumberText, CompetitorTableColumns[7].width)
-        TextField(
-            value = startTimeDraft,
-            onValueChange = { startTimeDraft = it },
-            modifier = Modifier
-                .width(CompetitorTableColumns[8].width)
-                .onFocusChanged { focusState ->
-                    if (!focusState.isFocused) {
-                        applyPendingDrafts()
+                    .commitOnEnter(::applyPendingDrafts),
+                singleLine = true,
+                label = { Text("Birth", color = rowTextColor) },
+                textStyle = textFieldStyle
+            )
+        }
+        ControlWarningTooltip(warningText) {
+            CategoryPicker(
+                selectedCategoryId = selectedCategoryId,
+                categories = categories,
+                onCategorySelected = {
+                    selectedCategoryId = it
+                    onAssignCompetitorCategory(competitor.id, it)
+                },
+                modifier = Modifier.width(CompetitorTableColumns[6].width),
+                textColor = rowTextColor
+            )
+        }
+        ControlWarningTooltip(warningText) {
+            FixedTableText(competitor.startNumberText, CompetitorTableColumns[7].width, color = rowTextColor)
+        }
+        ControlWarningTooltip(warningText) {
+            TextField(
+                value = startTimeDraft,
+                onValueChange = { startTimeDraft = it },
+                modifier = Modifier
+                    .width(CompetitorTableColumns[8].width)
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused) {
+                            applyPendingDrafts()
+                        }
                     }
-                }
-                .commitOnEnter(::applyPendingDrafts),
-            singleLine = true,
-            label = { Text("mmm:ss") }
-        )
-        TextField(
-            value = siNumberDraft,
-            onValueChange = { siNumberDraft = it },
-            modifier = Modifier
-                .width(CompetitorTableColumns[9].width)
-                .onFocusChanged { focusState ->
-                    if (!focusState.isFocused) {
-                        applyPendingDrafts()
+                    .commitOnEnter(::applyPendingDrafts),
+                singleLine = true,
+                label = { Text("mmm:ss", color = rowTextColor) },
+                textStyle = textFieldStyle
+            )
+        }
+        ControlWarningTooltip(warningText) {
+            TextField(
+                value = siNumberDraft,
+                onValueChange = { siNumberDraft = it },
+                modifier = Modifier
+                    .width(CompetitorTableColumns[9].width)
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused) {
+                            applyPendingDrafts()
+                        }
                     }
-                }
-                .commitOnEnter(::applyPendingDrafts),
-            singleLine = true,
-            label = { Text("SI") }
-        )
+                    .commitOnEnter(::applyPendingDrafts),
+                singleLine = true,
+                label = { Text("SI", color = rowTextColor) },
+                textStyle = textFieldStyle
+            )
+        }
     }
 }
 
@@ -13168,7 +13174,8 @@ private fun CategoryPicker(
     selectedCategoryId: String?,
     categories: List<EventCategoryDetails>,
     onCategorySelected: (String?) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    textColor: Color = DesktopPalette.Black
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selectedCategoryName = categories.firstOrNull { it.id == selectedCategoryId }?.name ?: "Unassigned"
@@ -13176,7 +13183,8 @@ private fun CategoryPicker(
     Box(modifier = modifier) {
         Button(
             onClick = { expanded = true },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(contentColor = textColor)
         ) {
             Text(selectedCategoryName)
         }
@@ -16702,13 +16710,10 @@ private fun CategoryAddRow(
         Spacer(modifier = Modifier.width(CategoryTableColumns[2].width))
         Spacer(modifier = Modifier.width(CategoryTableColumns[3].width))
         Spacer(modifier = Modifier.width(CategoryTableColumns[4].width))
-        Spacer(modifier = Modifier.width(CategoryTableColumns[5].width))
-        Spacer(modifier = Modifier.width(CategoryTableColumns[6].width))
-        Spacer(modifier = Modifier.width(CategoryTableColumns[7].width))
     }
 }
 
-/** Shows one editable category-name row plus read-only derived category settings. */
+/** Shows one editable category row with category-owned metadata and assigned controls. */
 @Composable
 private fun CategoryDetailRow(
     category: EventCategoryDetails,
@@ -16796,24 +16801,6 @@ private fun CategoryDetailRow(
             singleLine = true,
             label = { Text("Climb m") }
         )
-        Text(
-            category.raceTypeLabel,
-            modifier = Modifier.width(CategoryTableColumns[4].width),
-            color = DesktopPalette.Black,
-            fontSize = 13.sp
-        )
-        Text(
-            category.raceBandLabel,
-            modifier = Modifier.width(CategoryTableColumns[5].width),
-            color = DesktopPalette.Black,
-            fontSize = 13.sp
-        )
-        Text(
-            desktopTimeLimitText(category.timeLimitText),
-            modifier = Modifier.width(CategoryTableColumns[6].width),
-            color = DesktopPalette.Black,
-            fontSize = 13.sp
-        )
         AssignedControlsEditor(
             controlPointsDraft = controlPointsDraft,
             controls = controls,
@@ -16824,7 +16811,7 @@ private fun CategoryDetailRow(
                 controlPointsDraft = text
                 onUpdateCategoryControlPoints(category.id, text, shouldCheckRequiredControls)
             },
-            modifier = Modifier.width(CategoryTableColumns[7].width)
+            modifier = Modifier.width(CategoryTableColumns[4].width)
         )
     }
 }

@@ -46,9 +46,13 @@ object EventProjectFileJson {
         prettyPrint = true
     }
 
+    /** Returns the in-memory form that will be persisted when this Event File is written. */
+    fun normalizedForStorage(projectFile: EventProjectFile): EventProjectFile =
+        clearPublicControlLocations(clearLegacyCategoryRaceSettings(projectFile))
+
     /** Encodes an Event File using the stable, shared desktop-beta JSON format. */
     fun encode(projectFile: EventProjectFile): String =
-        json.encodeToString(clearPublicControlLocations(clearLegacyCategoryRaceSettings(projectFile)))
+        json.encodeToString(normalizedForStorage(projectFile))
 
     /**
      * Decodes an Event File and rejects schema versions this build does not support.
