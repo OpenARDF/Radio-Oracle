@@ -21,7 +21,7 @@ android {
         applicationId = "org.openardf.radiooracle"
         minSdk = 26
         targetSdk = 35
-        versionCode = 25
+        versionCode = 26
         versionName = rootProject.ext.radioOracleVersion
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
