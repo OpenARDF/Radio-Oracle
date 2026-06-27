@@ -37,6 +37,7 @@
     "desktop:usb-card-loop": "./gradlew :desktopApp:desktopUsbCardLoopProbe",
     "desktop:usb-capture-analyze": "./gradlew :desktopApp:desktopUsbCaptureAnalyze",
     "desktop:usb-time-sync-inspect": "./gradlew :desktopApp:desktopUsbTimeSyncInspect",
+    "desktop:usb-time-sync-write": "./gradlew :desktopApp:desktopUsbTimeSyncWrite",
     "prepublishOnly": "node ./scripts/check-jdeploy-publish.mjs"
   },
   "dependencies": {

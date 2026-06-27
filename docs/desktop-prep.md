@@ -551,6 +551,34 @@ For station time frames it also decodes the observed `F6`/`F7` time payload.
 Use it to compare SI Config+ remote-mode time sync traffic with Radio-Oracle's
 known probe and system-info frames before enabling the write command.
 
+The hidden time-sync write command defaults to a no-hardware dry run:
+
+```shell
+npm run desktop:usb-time-sync-write -- --args=--time=2026-06-27T03:10:18
+```
+
+Dry-run mode prints both the exact captured SI Config+ sequence and the
+Radio-Oracle hardware-validation sequence, which adds an `F7` read-back before
+leaving remote/config mode. It does not open a serial port or write station
+data.
+
+Actual station writes require explicit opt-in:
+
+```shell
+RADIO_ORACLE_SI_TIME_SYNC_WRITE=YES npm run desktop:usb-time-sync-write
+```
+
+Optional environment variables:
+
+- `RADIO_ORACLE_SI_PORT=/dev/cu.SLAB_USBtoUART`: force a specific serial node.
+- `RADIO_ORACLE_SI_TIME_SYNC_AT=2026-06-27T03:10:18`: write a fixed local time
+  instead of the current computer time.
+- `RADIO_ORACLE_SI_TIME_SYNC_TOLERANCE_SECONDS=2`: set the allowed read-back
+  difference.
+
+Do not run the write-enabled command on event-critical hardware until the
+non-critical validation matrix below has passed.
+
 ### SPORTident station time-write protocol findings
 
 The current time-sync understanding is based on two SI Config+ USBPcap captures
@@ -614,11 +642,22 @@ FF 02 F6 07 1A 06 1B 0D 44 04 00 10 91 03
 FF 02 F6 07 1A 06 1B 0C 2C 9A 00 63 C7 03
 ```
 
-Before enabling the `Time Sync` button, add a hardware-gated command that sends
-the captured command sequence, immediately reads `F7` back, decodes the reply
-with `DesktopSportIdentStationTimeCodec`, and fails unless the station time
-matches the requested time within an explicit tolerance. Validate that path on
-non-critical hardware across AM, PM, near-noon, and near-midnight cases.
+Before enabling the `Time Sync` button, run the hardware-gated command against
+non-critical hardware and record the results:
+
+1. Non-critical ordinary station, AM time.
+2. Non-critical ordinary station, PM time.
+3. Non-critical ordinary station, near noon.
+4. Non-critical ordinary station, near midnight.
+5. Master station, AM time.
+6. Master station, PM time.
+7. Master station, near noon.
+8. Master station, near midnight.
+
+For each run, require the command to write `F6`, apply `F9`, read `F7` back,
+decode the reply with `DesktopSportIdentStationTimeCodec`, and fail unless the
+confirmed station time matches the requested time within the configured
+tolerance.
 
 For local macOS smoke tests, prefer copying the generated `.app` and sample
 Event File to `/tmp` before launching with `open ... --args <sample.rom.json>`.

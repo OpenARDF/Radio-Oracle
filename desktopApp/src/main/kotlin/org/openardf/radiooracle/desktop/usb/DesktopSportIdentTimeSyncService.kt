@@ -24,8 +24,13 @@
 
 package org.openardf.radiooracle.desktop.usb
 
+import java.time.Duration
 import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
+import kotlin.math.abs
+import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
+import org.openardf.radiooracle.shared.sportident.SportIdentStationInfoParser
 
 data class DesktopSportIdentTimeSyncInspection(
     val portInfo: DesktopSerialPortInfo?,
@@ -51,14 +56,26 @@ data class DesktopSportIdentTimeSyncInspection(
 data class DesktopSportIdentTimeSyncResult(
     val stationInfo: SportIdentStationInfo,
     val sourceTime: LocalDateTime,
-    val confirmedTime: LocalDateTime?
+    val confirmedTime: LocalDateTime?,
+    val beforeTime: LocalDateTime?,
+    val toleranceSeconds: Long
 )
 
-class DesktopSportIdentTimeSyncService(
+internal data class DesktopSportIdentTimeSyncDryRun(
+    val sourceTime: LocalDateTime,
+    val configPlusSequence: List<DesktopSportIdentTimeSyncCommandStep>,
+    val validatedWriteSequence: List<DesktopSportIdentTimeSyncCommandStep>
+)
+
+internal class DesktopSportIdentTimeSyncService(
     private val portProvider: DesktopSerialPortProvider = JSerialCommDesktopSerialPortProvider,
     private val connectStation: (DesktopSerialPort) -> DesktopSportIdentStationConnection = {
         DesktopSportIdentStationProbe().connect(it)
-    }
+    },
+    private val commandClient: DesktopSportIdentStationCommandClient = DesktopSportIdentStationCommandClient(
+        readTimeoutMs = READ_TIMEOUT_MS,
+        maxReplyBytes = MAX_REPLY_BYTES
+    )
 ) {
     fun inspectDownloadStation(): DesktopSportIdentTimeSyncInspection {
         val port = portProvider.listPorts().firstOrNull { it.info.matchesSportIdent() }
@@ -92,5 +109,147 @@ class DesktopSportIdentTimeSyncService(
         throw UnsupportedOperationException(
             "SPORTident time sync write support is not implemented yet. Source time was $sourceTime."
         )
+    }
+
+    fun dryRun(sourceTime: LocalDateTime = LocalDateTime.now()): DesktopSportIdentTimeSyncDryRun {
+        val normalizedTime = sourceTime.truncatedTo(ChronoUnit.SECONDS)
+        return DesktopSportIdentTimeSyncDryRun(
+            sourceTime = normalizedTime,
+            configPlusSequence = DesktopSportIdentTimeSyncProtocol.configPlusWriteSequence(normalizedTime),
+            validatedWriteSequence = DesktopSportIdentTimeSyncProtocol.validatedWriteSequence(normalizedTime)
+        )
+    }
+
+    fun writeTimeWithReadBack(
+        sourceTime: LocalDateTime = LocalDateTime.now(),
+        writeEnabled: Boolean,
+        toleranceSeconds: Long = DEFAULT_TOLERANCE_SECONDS
+    ): DesktopSportIdentTimeSyncResult {
+        require(writeEnabled) {
+            "SPORTident time sync writes require explicit hardware opt-in."
+        }
+        require(toleranceSeconds >= 0) {
+            "Time sync tolerance must not be negative."
+        }
+
+        val targetTime = sourceTime.truncatedTo(ChronoUnit.SECONDS)
+        val port = portProvider.listPorts().firstOrNull { it.info.matchesSportIdent() }
+            ?: error("No SPORTident USB station detected.")
+
+        try {
+            val baudRate = selectBaudRate(port)
+            configure(port, baudRate)
+            if (!port.open(OPEN_WAIT_TIME_MS)) {
+                error("Failed to open serial port ${port.info.systemPortPath}.")
+            }
+
+            requireReply(
+                port = port,
+                step = DesktopSportIdentTimeSyncProtocol.enterRemoteModeStep()
+            )
+
+            val systemInfoFrame = requireReply(
+                port = port,
+                step = DesktopSportIdentTimeSyncProtocol.readSystemInfoStep()
+            )
+            val stationInfo = SportIdentStationInfoParser.fromSystemInfoFrame(systemInfoFrame)
+                ?: error("SPORTident station returned unreadable system info.")
+
+            val beforeTime = requireReply(
+                port = port,
+                step = DesktopSportIdentTimeSyncProtocol.readStationTimeStep("Read station time before write")
+            ).data.decodeStationTime("before-write station time").dateTime
+
+            requireReply(
+                port = port,
+                step = DesktopSportIdentTimeSyncProtocol.writeStationTimeStep(targetTime)
+            ).data.decodeStationTime("write acknowledgement station time")
+
+            requireReply(
+                port = port,
+                step = DesktopSportIdentTimeSyncProtocol.applyStationTimeStep()
+            )
+
+            val confirmedTime = requireReply(
+                port = port,
+                step = DesktopSportIdentTimeSyncProtocol.readStationTimeStep("Read station time after write")
+            ).data.decodeStationTime("read-back station time").dateTime
+
+            val deltaSeconds = abs(Duration.between(targetTime, confirmedTime).seconds)
+            if (deltaSeconds > toleranceSeconds) {
+                error(
+                    "SPORTident station time read-back $confirmedTime differed from requested " +
+                        "$targetTime by ${deltaSeconds}s, tolerance ${toleranceSeconds}s."
+                )
+            }
+
+            return DesktopSportIdentTimeSyncResult(
+                stationInfo = stationInfo,
+                sourceTime = targetTime,
+                confirmedTime = confirmedTime,
+                beforeTime = beforeTime,
+                toleranceSeconds = toleranceSeconds
+            )
+        } finally {
+            if (port.isOpen) {
+                runCatching {
+                    val exitStep = DesktopSportIdentTimeSyncProtocol.exitRemoteModeStep()
+                    commandClient.sendCommand(
+                        port = port,
+                        command = exitStep.command,
+                        data = exitStep.payload
+                    )
+                }
+                port.close()
+            }
+        }
+    }
+
+    private fun selectBaudRate(port: DesktopSerialPort): Int {
+        for (baudRate in listOf(SportIdentProtocol.BAUDRATE_HIGH, SportIdentProtocol.BAUDRATE_LOW)) {
+            runCatching {
+                configure(port, baudRate)
+                if (!port.open(OPEN_WAIT_TIME_MS)) {
+                    error("Failed to open serial port ${port.info.systemPortPath}.")
+                }
+                commandClient.sendCommand(
+                    port = port,
+                    command = DesktopSportIdentTimeSyncProtocol.enterRemoteModeStep().command,
+                    data = DesktopSportIdentTimeSyncProtocol.enterRemoteModeStep().payload
+                )
+            }.getOrNull()?.let {
+                port.close()
+                return baudRate
+            }
+            if (port.isOpen) {
+                port.close()
+            }
+        }
+        error("SPORTident station did not respond to the time-sync remote-mode probe.")
+    }
+
+    private fun configure(port: DesktopSerialPort, baudRate: Int) {
+        port.configure(baudRate, READ_TIMEOUT_MS, WRITE_TIMEOUT_MS)
+    }
+
+    private fun requireReply(
+        port: DesktopSerialPort,
+        step: DesktopSportIdentTimeSyncCommandStep
+    ) = commandClient.sendCommand(
+        port = port,
+        command = step.command,
+        data = step.payload
+    ) ?: error("SPORTident station did not reply to ${step.label}.")
+
+    private fun ByteArray.decodeStationTime(context: String): DesktopSportIdentStationTime =
+        DesktopSportIdentStationTimeCodec.decodePayload(this)
+            ?: error("SPORTident station returned unreadable $context.")
+
+    private companion object {
+        const val READ_TIMEOUT_MS = 1200
+        const val WRITE_TIMEOUT_MS = 1200
+        const val OPEN_WAIT_TIME_MS = 200
+        const val MAX_REPLY_BYTES = 256
+        const val DEFAULT_TOLERANCE_SECONDS = 2L
     }
 }
