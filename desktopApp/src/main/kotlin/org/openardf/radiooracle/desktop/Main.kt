@@ -9116,6 +9116,54 @@ private fun NavigationRail(
 ) {
     val items = DesktopNavigation.currentItems(navState)
     val navigationItems = items.filterNot { it.action == DesktopNavAction.SaveEventFile }
+    val detachedToolsItem = navigationItems.firstOrNull(DesktopNavigation::isToolsRootMenuItem)
+    val workflowNavigationItems = navigationItems.filterNot(DesktopNavigation::isToolsRootMenuItem)
+
+    @Composable
+    fun NavigationMenuButton(item: DesktopNavItem) {
+        val isSelected = item.id == navState.selectedItemId && item.children.isEmpty()
+        val isNavigationEnabled = DesktopNavigation.isItemEnabled(item, navigationReadiness)
+        val actionEnabled = item.action?.let(isNavActionEnabled) ?: true
+        val isEnabled = isNavigationEnabled && actionEnabled
+        val canLongClickOverride = DesktopNavigation.canLongClickOverrideDisabledMenu(item, navigationReadiness)
+        val disabledReason = DesktopNavigation.disabledItemReasonWithMenuOverrideHint(item, navigationReadiness)
+            ?: item.action?.let(disabledNavActionReason)
+        DisabledReasonTooltip(
+            reason = disabledReason,
+            placement = DisabledReasonTooltipPlacement.RightOfCursor
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .disabledMenuLongClickOverride(canLongClickOverride) { onItemSelected(item, true) }
+            ) {
+                Button(
+                    onClick = { onItemSelected(item, false) },
+                    enabled = isEnabled,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 34.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    colors = navigationItemButtonColors(
+                        navState.workflow,
+                        item.action,
+                        DesktopNavigation.usesSeriesNavigationColor(navState, item),
+                        DesktopNavigation.usesToolsNavigationColor(navState, item)
+                    )
+                ) {
+                    Text(
+                        text = if (DesktopNavigation.showsMenuIndicator(item)) "${item.label} >" else item.label,
+                        fontSize = 13.sp,
+                        lineHeight = 15.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .width(220.dp)
@@ -9131,48 +9179,8 @@ private fun NavigationRail(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            navigationItems.forEach { item ->
-                val isSelected = item.id == navState.selectedItemId && item.children.isEmpty()
-                val isNavigationEnabled = DesktopNavigation.isItemEnabled(item, navigationReadiness)
-                val actionEnabled = item.action?.let(isNavActionEnabled) ?: true
-                val isEnabled = isNavigationEnabled && actionEnabled
-                val canLongClickOverride = DesktopNavigation.canLongClickOverrideDisabledMenu(item, navigationReadiness)
-                val disabledReason = DesktopNavigation.disabledItemReasonWithMenuOverrideHint(item, navigationReadiness)
-                    ?: item.action?.let(disabledNavActionReason)
-                DisabledReasonTooltip(
-                    reason = disabledReason,
-                    placement = DisabledReasonTooltipPlacement.RightOfCursor
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .disabledMenuLongClickOverride(canLongClickOverride) { onItemSelected(item, true) }
-                    ) {
-                        Button(
-                            onClick = { onItemSelected(item, false) },
-                            enabled = isEnabled,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 34.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            colors = navigationItemButtonColors(
-                                navState.workflow,
-                                item.action,
-                                DesktopNavigation.usesSeriesNavigationColor(navState, item),
-                                DesktopNavigation.usesToolsNavigationColor(navState, item)
-                            )
-                        ) {
-                            Text(
-                                text = if (DesktopNavigation.showsMenuIndicator(item)) "${item.label} >" else item.label,
-                                fontSize = 13.sp,
-                                lineHeight = 15.sp,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    }
-                }
+            workflowNavigationItems.forEach { item ->
+                NavigationMenuButton(item)
             }
         }
         Column(
@@ -9187,6 +9195,9 @@ private fun NavigationRail(
                 onApplyCalculatedRoute = onApplyCalculatedRoute,
                 onApplyFoxRenumberingOnly = onApplyFoxRenumberingOnly
             )
+            detachedToolsItem?.let { item ->
+                NavigationMenuButton(item)
+            }
             DisabledReasonTooltip(
                 reason = disabledNavActionReason(DesktopNavAction.SaveEventFile),
                 placement = DisabledReasonTooltipPlacement.RightOfCursor
