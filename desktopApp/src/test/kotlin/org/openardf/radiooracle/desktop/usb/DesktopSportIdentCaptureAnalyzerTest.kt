@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop.usb
 
+import java.time.LocalDateTime
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -75,5 +76,45 @@ class DesktopSportIdentCaptureAnalyzerTest {
         assertEquals("#1 command=0x06 ACK extended=false crc=n/a dataLen=0", DesktopSportIdentCaptureAnalyzer.describeFrame(1, ack))
         assertTrue(DesktopSportIdentCaptureAnalyzer.describeFrame(2, probe).contains("command=0xF0 PROBE"))
         assertTrue(DesktopSportIdentCaptureAnalyzer.describeFrame(2, probe).contains("data=4D"))
+    }
+
+    @Test
+    fun decodesStationTimeFramesCapturedFromConfigPlus() {
+        val pmSetFrame = DesktopSportIdentCaptureAnalyzer.framesFrom(
+            DesktopSportIdentCaptureAnalyzer.hexToBytes("02 F6 07 1A 06 1B 0D 44 04 00 10 91 03")
+        ).single()
+        val amSetFrame = DesktopSportIdentCaptureAnalyzer.framesFrom(
+            DesktopSportIdentCaptureAnalyzer.hexToBytes("02 F6 07 1A 06 1B 0C 2C 9A 00 63 C7 03")
+        ).single()
+        val amReplyFrame = DesktopSportIdentCaptureAnalyzer.framesFrom(
+            DesktopSportIdentCaptureAnalyzer.hexToBytes("02 F6 09 00 01 1A 06 1B 0C 2C 9A 05 FB A0 03")
+        ).single()
+
+        val pmPayload = DesktopSportIdentStationTimeCodec.encodePayload(LocalDateTime.parse("2026-06-27T16:50:12"))
+        val amPayload = DesktopSportIdentStationTimeCodec.encodePayload(LocalDateTime.parse("2026-06-27T03:10:18"))
+
+        assertArrayEquals(byteArrayOf(0x1A, 0x06, 0x1B, 0x0D, 0x44, 0x04, 0x00), pmPayload)
+        assertArrayEquals(byteArrayOf(0x1A, 0x06, 0x1B, 0x0C, 0x2C, 0x9A.toByte(), 0x00), amPayload)
+        assertArrayEquals(
+            DesktopSportIdentCaptureAnalyzer.hexToBytes("FF 02 F6 07 1A 06 1B 0D 44 04 00 10 91 03"),
+            SportIdentProtocol.buildExtendedMessage(0xF6.toByte(), pmPayload)
+        )
+        assertArrayEquals(
+            DesktopSportIdentCaptureAnalyzer.hexToBytes("FF 02 F6 07 1A 06 1B 0C 2C 9A 00 63 C7 03"),
+            SportIdentProtocol.buildExtendedMessage(0xF6.toByte(), amPayload)
+        )
+
+        assertTrue(
+            DesktopSportIdentCaptureAnalyzer.describeFrame(1, pmSetFrame)
+                .contains("stationTime=2026-06-27T16:50:12 siDay=6 half=PM halfDaySeconds=17412 tick=0x00")
+        )
+        assertTrue(
+            DesktopSportIdentCaptureAnalyzer.describeFrame(1, amSetFrame)
+                .contains("stationTime=2026-06-27T03:10:18 siDay=6 half=AM halfDaySeconds=11418 tick=0x00")
+        )
+        assertTrue(
+            DesktopSportIdentCaptureAnalyzer.describeFrame(1, amReplyFrame)
+                .contains("stationTime=2026-06-27T03:10:18 siDay=6 half=AM halfDaySeconds=11418 tick=0x05")
+        )
     }
 }

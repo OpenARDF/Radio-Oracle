@@ -89,6 +89,10 @@ object DesktopSportIdentCaptureAnalyzer {
                 append(" data=")
                 append(frame.data.toHexString())
             }
+            stationTimeDescription(frame)?.let { stationTime ->
+                append(" stationTime=")
+                append(stationTime)
+            }
         }
 
     private fun commandLabel(command: Byte): String =
@@ -104,8 +108,28 @@ object DesktopSportIdentCaptureAnalyzer {
             SportIdentProtocol.SI_CARD6 -> "SI_CARD6"
             SportIdentProtocol.SI_CARD8_9_SIAC -> "SI_CARD8_9_SIAC"
             SportIdentProtocol.SI_CARD_REMOVED -> "SI_CARD_REMOVED"
+            SET_STATION_TIME_COMMAND -> "SET_STATION_TIME"
+            GET_STATION_TIME_COMMAND -> "GET_STATION_TIME"
             else -> "UNKNOWN"
         }
+
+    private fun stationTimeDescription(frame: SportIdentFrame): String? {
+        if (frame.command != SET_STATION_TIME_COMMAND && frame.command != GET_STATION_TIME_COMMAND) {
+            return null
+        }
+        val stationTime = DesktopSportIdentStationTimeCodec.decodePayload(frame.data) ?: return null
+        return buildString {
+            append(stationTime.dateTime)
+            append(" siDay=")
+            append(stationTime.siDayOfWeek)
+            append(" half=")
+            append(stationTime.halfDayLabel)
+            append(" halfDaySeconds=")
+            append(stationTime.halfDaySeconds)
+            append(" tick=")
+            append(stationTime.tick.toHexByte())
+        }
+    }
 
     private fun ByteArray.indexOf(needle: ByteArray): Int {
         if (needle.isEmpty() || needle.size > size) {
@@ -129,8 +153,13 @@ object DesktopSportIdentCaptureAnalyzer {
     private fun Byte.toHexByte(): String =
         "0x${(toInt() and 0xff).toString(16).uppercase().padStart(2, '0')}"
 
+    private fun Int.toHexByte(): String =
+        "0x${(this and 0xff).toString(16).uppercase().padStart(2, '0')}"
+
     private fun ByteArray.toHexString(): String =
         joinToString(" ") { (it.toInt() and 0xff).toString(16).uppercase().padStart(2, '0') }
 
     private val HEX_PAIR_REGEX = Regex("(?i)(?<![0-9a-f])[0-9a-f]{2}(?![0-9a-f])")
+    private val SET_STATION_TIME_COMMAND = 0xF6.toByte()
+    private val GET_STATION_TIME_COMMAND = 0xF7.toByte()
 }
