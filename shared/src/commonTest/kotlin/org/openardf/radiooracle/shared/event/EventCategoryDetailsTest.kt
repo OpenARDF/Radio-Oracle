@@ -9,7 +9,7 @@ import kotlin.test.assertEquals
 
 class EventCategoryDetailsTest {
     @Test
-    fun buildsDisplayRowsUsingRaceDefaultsAndCategoryOverrides() {
+    fun buildsDisplayRowsUsingEventRaceSettings() {
         val rows = EventCategoryDetails.from(raceData())
 
         assertEquals(2, rows.size)
@@ -18,9 +18,9 @@ class EventCategoryDetailsTest {
         assertEquals(false, rows[0].isMan)
         assertEquals("5000", rows[0].lengthMetersText)
         assertEquals("100", rows[0].climbMetersText)
-        assertEquals("Sprint", rows[0].raceTypeLabel)
-        assertEquals("2m", rows[0].raceBandLabel)
-        assertEquals("60:00", rows[0].timeLimitText)
+        assertEquals("Classic", rows[0].raceTypeLabel)
+        assertEquals("80m", rows[0].raceBandLabel)
+        assertEquals("120:00", rows[0].timeLimitText)
         assertEquals("Foxhole 32", rows[0].controlPointsText)
         assertEquals(0, rows[0].assignedCompetitorCount)
 

@@ -54,8 +54,8 @@ class DesktopEventDataGeneratedCoverageTest {
             """
             M21;1;99;9000;300;1;;;;6;31,32,33,34,35,99B
             W21;0;99;7000;200;1;;;;4;31,33,35,99B
-            SPRINT-M21;1;99;3500;80;0;SPRINT;45;80m;6;31,32,46!,41,42,99B
-            FOX-M21;1;99;8000;150;0;FOXORING;90;80m;11;31,32,33,34,35,36,37,38,39,40,99B
+            LEGACY-SPRINT-M21;1;99;3500;80;0;SPRINT;45;80m;4;31,32,33,99B
+            LEGACY-FOX-M21;1;99;8000;150;0;FOXORING;90;80m;4;31,33,35,99B
             bad-row
             """.trimIndent()
         )
@@ -69,11 +69,10 @@ class DesktopEventDataGeneratedCoverageTest {
             categoryIdFactory = idFactory("cat"),
             controlPointIdFactory = { categoryId, index -> "$categoryId-cp-$index" }
         )
-        assertEquals(listOf("M21", "W21", "SPRINT-M21", "FOX-M21"), imported.raceData.categories.map { it.category.name })
+        assertEquals(listOf("M21", "W21", "LEGACY-SPRINT-M21", "LEGACY-FOX-M21"), imported.raceData.categories.map { it.category.name })
         assertEquals(listOf(31, 32, 33, 34, 35, 99), imported.assignedSiCodes("M21"))
-        assertEquals(RaceType.SPRINT, imported.category("SPRINT-M21").category.raceType)
-        assertEquals(RaceType.FOXORING, imported.category("FOX-M21").category.raceType)
-        assertTrue(imported.raceData.controls.any { it.siCode == 40 && it.type == ControlPointType.CONTROL })
+        assertEquals(null, imported.category("LEGACY-SPRINT-M21").category.raceType)
+        assertEquals(null, imported.category("LEGACY-FOX-M21").category.raceType)
 
         val reimported = EventProjectEditor.importCategoryRows(
             projectFile = imported,

@@ -238,18 +238,10 @@ object TextProcessor : FormatProcessor {
         params[FileConstants.KEY_TITLE_CATEGORY] = context.getString(R.string.general_category)
         params[FileConstants.KEY_CAT_NAME] = category.name
         params[FileConstants.KEY_TITLE_LIMIT] = context.getString(R.string.general_limit)
-        params[FileConstants.KEY_CAT_LIMIT] = if (category.timeLimit != null) {
-            category.timeLimit!!.toMinutes().toString()
-        } else {
-            race.timeLimit.toMinutes().toString()
-        }
+        params[FileConstants.KEY_CAT_LIMIT] = race.timeLimit.toMinutes().toString()
 
         params[FileConstants.KEY_TITLE_BAND] = context.getString(R.string.general_band)
-        params[FileConstants.KEY_CAT_BAND] = if (category.categoryBand != null) {
-            dataProcessor.raceBandToString(category.categoryBand!!)
-        } else {
-            dataProcessor.raceBandToString(race.raceBand)
-        }
+        params[FileConstants.KEY_CAT_BAND] = dataProcessor.raceBandToString(race.raceBand)
 
         params[FileConstants.KEY_TITLE_LENGTH] = context.getString(R.string.general_length)
         params[FileConstants.KEY_CAT_LENGTH] = category.length.toString()

@@ -159,11 +159,10 @@ object RaceBackupJsonImports {
             lengthMeters = categoryJson.int("category_length") ?: 0,
             climbMeters = categoryJson.int("category_climb") ?: 0,
             order = order,
-            differentProperties = categoryJson.boolean("category_different_properties") ?: false,
-            raceType = categoryJson.enumValueOrNull<RaceType>("category_race_type"),
-            raceBand = categoryJson.enumValueOrNull<RaceBand>("category_band")
-                ?: categoryJson.enumValueOrNull<RaceBand>("category_race_band"),
-            timeLimitSeconds = categoryJson.durationSeconds("category_time_limit"),
+            differentProperties = false,
+            raceType = null,
+            raceBand = null,
+            timeLimitSeconds = null,
             controlPointsString = controlPoints.joinToString(" ") { it.controlPointToken() }
         )
         return EventCategoryData(

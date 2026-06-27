@@ -53,17 +53,11 @@ class CategoryRecyclerViewAdapter(
             "(${item.competitors.size} ${
                 context.getString(R.string.general_competitors).lowercase()
             })"
-        holder.type.text = dataProcessor.raceTypeToString(
-            item.category.raceType ?: (selectedRaceViewModel.getCurrentRace()?.raceType
-                ?: RaceType.CLASSIC)
-        )
+        holder.type.text = dataProcessor.raceTypeToString(currentRaceType())
 
-        holder.band.text = dataProcessor.raceBandToString(
-            item.category.categoryBand ?: (selectedRaceViewModel.getCurrentRace()?.raceBand
-                ?: RaceBand.M80)
-        )
+        holder.band.text = dataProcessor.raceBandToString(currentRaceBand())
         holder.gender.text = dataProcessor.genderToString(item.category.isMan)
-        holder.siCodes.text = getDisplayControlPoints(item, item.category.raceType ?: currentRaceType())
+        holder.siCodes.text = getDisplayControlPoints(item, currentRaceType())
 
         holder.maxAge.text = item.category.maxAge?.toString().orEmpty()
 
@@ -163,6 +157,9 @@ class CategoryRecyclerViewAdapter(
 
     private fun currentRaceType(): RaceType =
         selectedRaceViewModel.getCurrentRace()?.raceType ?: RaceType.CLASSIC
+
+    private fun currentRaceBand(): RaceBand =
+        selectedRaceViewModel.getCurrentRace()?.raceBand ?: RaceBand.M80
 
     private fun categoryBackgroundColor(isMan: Boolean): Int {
         val colorRes = if (isMan) {

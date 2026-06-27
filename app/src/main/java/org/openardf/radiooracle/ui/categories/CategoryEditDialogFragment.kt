@@ -25,7 +25,6 @@ import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import kotlinx.coroutines.runBlocking
-import java.time.Duration
 import java.util.UUID
 
 
@@ -122,9 +121,9 @@ class CategoryEditDialogFragment : DialogFragment() {
                 0,
                 order,
                 false,
-                race.raceType,
-                race.raceBand,
-                race.timeLimit,
+                null,
+                null,
+                null,
                 args.controlPoints
             )
 
@@ -162,31 +161,24 @@ class CategoryEditDialogFragment : DialogFragment() {
                 climbEditText.setText(category.climb.toString())
             }
 
-            // Custom properties
-            if (category.differentProperties) {
-                samePropertiesCheckBox.isChecked = false
-            } else {
-                raceTypeLayout.isEnabled = false
-                limitLayout.isEnabled = false
-                bandLayout.isEnabled = false
-            }
-
             raceTypePicker.setText(
-                dataProcessor.raceTypeToString(category.raceType ?: race.raceType),
+                dataProcessor.raceTypeToString(race.raceType),
                 false
             )
             bandPicker.setText(
-                dataProcessor.raceBandToString(category.categoryBand ?: race.raceBand),
+                dataProcessor.raceBandToString(race.raceBand),
                 false
             )
-            limitEditText.setText(
-                if (category.timeLimit != null) {
-                    category.timeLimit!!.toMinutes().toString()
-                } else {
-                    race.timeLimit.toMinutes().toString()
-                }
-            )
+            limitEditText.setText(race.timeLimit.toMinutes().toString())
         }
+
+        samePropertiesCheckBox.isChecked = true
+        // Legacy category-level race settings remain in the layout for compatibility, but the app
+        // now inherits event type, band, and time limit from the Race and clears category overrides.
+        samePropertiesCheckBox.visibility = View.GONE
+        raceTypeLayout.visibility = View.GONE
+        bandLayout.visibility = View.GONE
+        limitLayout.visibility = View.GONE
 
         //Set gender
         genderPicker.setText(dataProcessor.genderToString(category.isMan), false)
@@ -196,10 +188,6 @@ class CategoryEditDialogFragment : DialogFragment() {
         raceTypePicker.isSaveEnabled = false
     }
 
-
-    private fun raceTypeWatcher(position: Int) {
-        category.raceType = RaceType.getByValue(position)
-    }
 
     private fun checkFields(): Boolean {
         var valid = true
@@ -215,20 +203,6 @@ class CategoryEditDialogFragment : DialogFragment() {
             if (orig != null && orig.id != category.id) {
                 valid = false
                 nameEditText.error = getString(R.string.category_exists)
-            }
-        }
-
-        if (!samePropertiesCheckBox.isChecked) {
-            if (limitEditText.text?.isBlank() == false) {
-                try {
-                    Duration.ofMinutes(limitEditText.text.toString().toLong())
-                } catch (e: Exception) {
-                    limitEditText.error = getString(R.string.general_invalid)
-                    valid = false
-                }
-            } else {
-                limitEditText.error = getString(R.string.general_required)
-                valid = false
             }
         }
 
@@ -249,8 +223,6 @@ class CategoryEditDialogFragment : DialogFragment() {
     }
 
     private fun setButtons() {
-        val race = args.race
-
         controlPointsEditText.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
 
@@ -260,37 +232,6 @@ class CategoryEditDialogFragment : DialogFragment() {
 
             override fun afterTextChanged(s: Editable?) {}
         })
-
-        //Set the race type checkbox functionality
-        samePropertiesCheckBox.setOnClickListener {
-
-            if (samePropertiesCheckBox.isChecked) {
-                raceTypePicker.setText(
-                    dataProcessor.raceTypeToString(race.raceType),
-                    false
-                )
-                raceTypeWatcher(race.raceType.value)
-                bandPicker.setText(
-                    dataProcessor.raceBandToString(race.raceBand),
-                    false
-                )
-                limitEditText.setText(race.timeLimit.toMinutes().toString())
-
-                raceTypeLayout.isEnabled = false
-                bandLayout.isEnabled = false
-                limitLayout.isEnabled = false
-            }
-
-            //Hide the shading and enable input
-            else {
-                raceTypeLayout.isEnabled = true
-                limitLayout.isEnabled = true
-                bandLayout.isEnabled = true
-                raceTypePicker.setOnItemClickListener { _, _, position, _ ->
-                    raceTypeWatcher(position)
-                }
-            }
-        }
 
         okButton.setOnClickListener {
             if (checkFields()) {
@@ -312,17 +253,10 @@ class CategoryEditDialogFragment : DialogFragment() {
                 //Set the data from pickers
                 category.isMan = getGenderFromPicker()
 
-                category.differentProperties = !samePropertiesCheckBox.isChecked
-                if (category.differentProperties) {
-                    category.raceType =
-                        dataProcessor.raceTypeStringToEnum(raceTypePicker.text.toString())
-                    category.categoryBand =
-                        dataProcessor.raceBandStringToEnum(bandPicker.text.toString())
-                    category.timeLimit = Duration.ofMinutes(limitEditText.text.toString().toLong())
-                } else {
-                    category.raceType = null
-                    category.timeLimit = null
-                }
+                category.differentProperties = false
+                category.raceType = null
+                category.categoryBand = null
+                category.timeLimit = null
                 val controlPointsString =
                     controlPointsEditText.text.toString().trim()
                 //Get control points
@@ -378,7 +312,7 @@ class CategoryEditDialogFragment : DialogFragment() {
             ControlPointsHelper.getControlPointsFromDisplayString(
                 input,
                 categoryId,
-                category.raceType ?: args.race.raceType,
+                args.race.raceType,
                 getRaceAliases(),
                 requireContext()
             )
@@ -386,13 +320,13 @@ class CategoryEditDialogFragment : DialogFragment() {
             ControlPointsHelper.getControlPointsFromString(
                 input,
                 categoryId,
-                category.raceType ?: args.race.raceType,
+                args.race.raceType,
                 requireContext()
             )
         }
 
     private fun shouldUseAliasEditor(): Boolean =
-        (category.raceType ?: args.race.raceType) != RaceType.ORIENTEERING &&
+        args.race.raceType != RaceType.ORIENTEERING &&
                 ControlPointsHelper.shouldUseAliases(requireContext())
 
     private fun getRaceAliases(): List<Alias> =

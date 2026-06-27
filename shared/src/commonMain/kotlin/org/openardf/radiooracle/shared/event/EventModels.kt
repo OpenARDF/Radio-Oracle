@@ -23,7 +23,13 @@ data class EventRace(
     val courseAnalyzerSpeedCompensationFactor: Double = 1.0
 )
 
-/** Portable category definition, including optional category-level race overrides. */
+/**
+ * Portable category definition.
+ *
+ * The category race-setting fields are retained for backward compatibility with older Android
+ * databases, CSV files, and Event Files. Current Radio-Oracle behavior treats the Event File race
+ * settings as authoritative: categories do not override event type, band, or time limit.
+ */
 @Serializable
 data class EventCategory(
     val id: String,
@@ -43,17 +49,17 @@ data class EventCategory(
     val encryptedIdealOrder: String? = null,
     val encryptedCourseInfo: String? = null
 ) {
-    /** Returns the race type that should be used for this category. */
+    /** Returns the event race type; legacy category-specific race type is ignored. */
     fun effectiveRaceType(race: EventRace): RaceType =
-        if (differentProperties) raceType ?: race.raceType else race.raceType
+        race.raceType
 
-    /** Returns the frequency band that should be used for this category. */
+    /** Returns the event frequency band; legacy category-specific band is ignored. */
     fun effectiveRaceBand(race: EventRace): RaceBand =
-        if (differentProperties) raceBand ?: race.raceBand else race.raceBand
+        race.raceBand
 
-    /** Returns the time limit that should be used for this category, expressed in seconds. */
+    /** Returns the event time limit; legacy category-specific time limit is ignored. */
     fun effectiveTimeLimitSeconds(race: EventRace): Long =
-        if (differentProperties) timeLimitSeconds ?: race.timeLimitSeconds else race.timeLimitSeconds
+        race.timeLimitSeconds
 }
 
 /**

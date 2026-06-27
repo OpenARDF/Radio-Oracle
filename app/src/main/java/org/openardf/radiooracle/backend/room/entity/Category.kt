@@ -15,7 +15,13 @@ import java.io.Serializable
 import java.time.Duration
 import java.util.UUID
 
-/** Room entity for a competition category and its category-specific course settings. */
+/**
+ * Room entity for a competition category and its assigned controls.
+ *
+ * The race-setting columns are legacy storage retained for database compatibility. Current
+ * behavior uses the owning Race for event type, band, and time limit, and category saves clear
+ * these fields instead of treating them as overrides.
+ */
 @Entity(
     tableName = "category", indices = [
         Index(

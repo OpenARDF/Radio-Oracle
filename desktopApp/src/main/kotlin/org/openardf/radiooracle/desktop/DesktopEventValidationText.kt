@@ -15,6 +15,7 @@ object DesktopEventValidationText {
             EventValidationIssue.NoCategories,
             is EventValidationIssue.DuplicateCategoryNames,
             is EventValidationIssue.InvalidCategoryControlPoints,
+            is EventValidationIssue.LegacyCategoryRaceSettings,
             is EventValidationIssue.MissingCategoryAssignedControls,
             is EventValidationIssue.MissingCategoryControlReferences,
             is EventValidationIssue.CategoryCourseRequirementIssue,
@@ -81,6 +82,9 @@ object DesktopEventValidationText {
                 "Controls use codes above 255: ${issue.codes.joinToString()}."
             is EventValidationIssue.MissingCategoryControlReferences ->
                 "Category ${issue.categoryName} references missing controls: ${issue.controlIds.joinToString()}."
+            is EventValidationIssue.LegacyCategoryRaceSettings ->
+                "Category ${issue.categoryName} contains legacy category-specific race settings. " +
+                    "Radio-Oracle ignores them and will clear them when the Event File is saved."
             is EventValidationIssue.MissingCategoryAssignedControls ->
                 "Category ${issue.categoryName} has no assigned controls."
             is EventValidationIssue.CategoryCourseRequirementIssue ->

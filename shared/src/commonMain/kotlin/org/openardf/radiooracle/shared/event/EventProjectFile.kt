@@ -48,7 +48,7 @@ object EventProjectFileJson {
 
     /** Encodes an Event File using the stable, shared desktop-beta JSON format. */
     fun encode(projectFile: EventProjectFile): String =
-        json.encodeToString(clearPublicControlLocations(projectFile))
+        json.encodeToString(clearPublicControlLocations(clearLegacyCategoryRaceSettings(projectFile)))
 
     /**
      * Decodes an Event File and rejects schema versions this build does not support.
@@ -97,6 +97,30 @@ object EventProjectFileJson {
             )
         )
     }
+
+    private fun clearLegacyCategoryRaceSettings(projectFile: EventProjectFile): EventProjectFile {
+        if (projectFile.raceData.categories.none { it.category.hasLegacyRaceSettings() }) {
+            return projectFile
+        }
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                categories = projectFile.raceData.categories.map { categoryData ->
+                    categoryData.copy(category = categoryData.category.withEventLevelRaceSettings())
+                }
+            )
+        )
+    }
+
+    private fun EventCategory.hasLegacyRaceSettings(): Boolean =
+        differentProperties || raceType != null || raceBand != null || timeLimitSeconds != null
+
+    private fun EventCategory.withEventLevelRaceSettings(): EventCategory =
+        copy(
+            differentProperties = false,
+            raceType = null,
+            raceBand = null,
+            timeLimitSeconds = null
+        )
 }
 
 /** Schema metadata for portable Radio-Oracle Event Files. */

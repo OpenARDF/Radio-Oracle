@@ -34,8 +34,10 @@ class RaceBackupJsonImportsTest {
 
         assertEquals("M21", category.category.name)
         assertEquals(true, category.category.isMan)
-        assertEquals(RaceBand.M2, category.category.raceBand)
-        assertEquals(5_400, category.category.timeLimitSeconds)
+        assertEquals(false, category.category.differentProperties)
+        assertEquals(null, category.category.raceType)
+        assertEquals(null, category.category.raceBand)
+        assertEquals(null, category.category.timeLimitSeconds)
         assertEquals("31 90B", category.category.controlPointsString)
         assertEquals(ControlPointType.BEACON, category.controlPoints.last().type)
         assertEquals(1, category.competitors.size)

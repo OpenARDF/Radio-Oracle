@@ -180,6 +180,32 @@ class EventProjectFileTest {
         assertFalse(decoded.raceData.controls.single().mandatory)
     }
 
+    @Test
+    fun clearsLegacyCategoryRaceSettingsOnEncode() {
+        val baseRaceData = raceData()
+        val legacyCategoryData = baseRaceData.categories.single().let { categoryData ->
+            categoryData.copy(
+                category = categoryData.category.copy(
+                    differentProperties = true,
+                    raceType = RaceType.SPRINT,
+                    raceBand = RaceBand.M2,
+                    timeLimitSeconds = 3_600
+                )
+            )
+        }
+        val projectFile = EventProjectFile(
+            raceData = baseRaceData.copy(categories = listOf(legacyCategoryData))
+        )
+
+        val decoded = EventProjectFileJson.decode(EventProjectFileJson.encode(projectFile))
+            .raceData.categories.single().category
+
+        assertFalse(decoded.differentProperties)
+        assertEquals(null, decoded.raceType)
+        assertEquals(null, decoded.raceBand)
+        assertEquals(null, decoded.timeLimitSeconds)
+    }
+
     private fun raceData(): EventRaceData =
         EventRaceData(
             race = EventRace(

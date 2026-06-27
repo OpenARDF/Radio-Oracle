@@ -62,10 +62,10 @@ fun Category.toEventCategory(): EventCategory =
         lengthMeters = length,
         climbMeters = climb,
         order = order,
-        differentProperties = differentProperties,
-        raceType = raceType,
-        raceBand = categoryBand,
-        timeLimitSeconds = timeLimit?.seconds,
+        differentProperties = false,
+        raceType = null,
+        raceBand = null,
+        timeLimitSeconds = null,
         controlPointsString = controlPointsString
     )
 
@@ -222,10 +222,10 @@ private fun EventCategory.toRoomCategory(idMapper: RoomIdMapper): Category =
         length = lengthMeters,
         climb = climbMeters,
         order = order,
-        differentProperties = differentProperties,
-        raceType = raceType,
-        categoryBand = raceBand,
-        timeLimit = timeLimitSeconds?.let(Duration::ofSeconds),
+        differentProperties = false,
+        raceType = null,
+        categoryBand = null,
+        timeLimit = null,
         controlPointsString = controlPointsString
     )
 
@@ -360,7 +360,7 @@ private fun EventCategoryData.toRoomCategoryData(
     controlsById: Map<String, EventControl>,
     race: EventRace?
 ): CategoryData {
-    val raceType = race?.let(category::effectiveRaceType) ?: category.raceType ?: RaceType.CLASSIC
+    val raceType = race?.raceType ?: RaceType.CLASSIC
     val controlPoints = androidImportControlPoints(controlsById, raceType)
         .mapIndexed { index, controlPoint ->
             controlPoint.toRoomControlPoint(idMapper, controlsById).also { roomControlPoint ->

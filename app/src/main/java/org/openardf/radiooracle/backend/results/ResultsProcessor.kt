@@ -565,11 +565,7 @@ object ResultsProcessor {
             result.runTime = Duration.ofSeconds(runTiming.runTimeSeconds)
 
             // Check time limit
-            val timeLimit = if (category?.differentProperties == true) {
-                category.timeLimit
-            } else {
-                race.timeLimit
-            }
+            val timeLimit = race.timeLimit
 
             if (result.runTime > timeLimit) {
                 result.resultStatus = ResultStatus.OVER_TIME_LIMIT
@@ -641,12 +637,7 @@ object ResultsProcessor {
         }
         result.points = 0
 
-        val raceType = if (category.differentProperties) {
-            category.raceType!!
-        } else {
-            race.raceType
-        }
-        when (raceType) {
+        when (race.raceType) {
             RaceType.CLASSIC, RaceType.SHORT, RaceType.FOXORING -> evaluateClassics(
                 punches,
                 controlPoints,

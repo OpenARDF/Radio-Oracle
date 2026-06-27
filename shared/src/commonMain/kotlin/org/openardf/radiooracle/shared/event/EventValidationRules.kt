@@ -55,6 +55,7 @@ object EventValidationRules {
             is EventValidationIssue.LegacyIncompatibleAliasCodes,
             is EventValidationIssue.LegacyIncompatibleCategoryControlCodes,
             is EventValidationIssue.LegacyIncompatibleControlCodes,
+            is EventValidationIssue.LegacyCategoryRaceSettings,
             is EventValidationIssue.MissingCompetitorSiNumbers,
             is EventValidationIssue.MissingPublicLabels,
             is EventValidationIssue.UnusedControls -> EventValidationIssueSeverity.WARNING
@@ -71,13 +72,15 @@ object EventValidationRules {
             val controlsById = raceData.controls.associateBy { it.id }
             raceData.categories.forEach { data ->
                 try {
+                    validateLegacyCategoryRaceSettings(data.category, this)
+                    val raceType = raceData.race.raceType
                     val definitions = if (data.controlPoints.isEmpty() &&
                         data.publicControlIds.isEmpty() &&
                         data.category.controlPointsString.isNotBlank()
                     ) {
                         ControlPointRules.parseAssignedControlPoints(
                             data.category.controlPointsString.trim(),
-                            data.category.effectiveRaceType(raceData.race)
+                            raceType
                         )
                     } else {
                         val controlPoints = when {
@@ -112,7 +115,7 @@ object EventValidationRules {
                     }
                     ControlPointRules.parseAssignedControlPoints(
                         ControlPointRules.formatControlPoints(definitions),
-                        data.category.effectiveRaceType(raceData.race)
+                        raceType
                     )
                     definitions
                         .map { it.siCode }
@@ -124,7 +127,7 @@ object EventValidationRules {
                         }
                     validateCategoryCourseRequirements(
                         categoryName = data.category.name,
-                        raceType = data.category.effectiveRaceType(raceData.race),
+                        raceType = raceType,
                         definitions = definitions,
                         issues = this
                     )
@@ -140,6 +143,20 @@ object EventValidationRules {
                 }
             }
         }
+
+    private fun validateLegacyCategoryRaceSettings(
+        category: EventCategory,
+        issues: MutableList<EventValidationIssue>
+    ) {
+        if (
+            category.differentProperties ||
+            category.raceType != null ||
+            category.raceBand != null ||
+            category.timeLimitSeconds != null
+        ) {
+            issues.add(EventValidationIssue.LegacyCategoryRaceSettings(category.name))
+        }
+    }
 
     private fun validateControls(raceData: EventRaceData): List<EventValidationIssue> =
         buildList {
@@ -373,7 +390,7 @@ object EventValidationRules {
                     runCatching {
                         ControlPointRules.parseAssignedControlPoints(
                             categoryData.category.controlPointsString.trim(),
-                            categoryData.category.effectiveRaceType(raceData.race)
+                            raceData.race.raceType
                         ).flatMap { definition ->
                             idsByLegacyDefinition[definition.siCode to definition.type].orEmpty()
                         }
@@ -432,6 +449,7 @@ sealed interface EventValidationIssue {
     data class LegacyIncompatibleAliasCodes(val codes: Set<Int>) : EventValidationIssue
     data class LegacyIncompatibleControlCodes(val codes: Set<Int>) : EventValidationIssue
     data class MissingCategoryControlReferences(val categoryName: String, val controlIds: Set<String>) : EventValidationIssue
+    data class LegacyCategoryRaceSettings(val categoryName: String) : EventValidationIssue
     data class MissingCategoryAssignedControls(val categoryName: String) : EventValidationIssue
     data class CategoryCourseRequirementIssue(val categoryName: String, val message: String) : EventValidationIssue
     data class InvalidCategoryControlPoints(
