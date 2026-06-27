@@ -14475,6 +14475,7 @@ private fun CourseAnalyzerGuidance() {
             fontSize = 13.sp
         )
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            KmlImportInstruction("Optional KML/KMZ SS=#.## values in Start, fox, beacon, spectator, or LineString descriptions replace the event speed factor for the following leg; Finish SS values are ignored.")
             KmlImportInstruction("Choose a category, then Analyze to compare the imported route with the calculated route candidate.")
             KmlImportInstruction("Export Analysis writes the displayed analysis plus route/control data for external review.")
             KmlImportInstruction("Apply Calculated Route replaces imported route and numbering data when the calculated route is available.")
@@ -15273,10 +15274,13 @@ private fun CourseAnalysisLegRows(title: String, legs: List<DesktopCourseLegRow>
             return@Column
         }
         legs.forEach { leg ->
+            val speedText = leg.speedFactorOverride
+                ?.let { " (speed x${twoDecimalText(it)})" }
+                .orEmpty()
             val waitText = leg.waitSeconds?.let { " (waits ${secondsText(it)})" }.orEmpty()
             CourseAnalysisRow(
                 label = "${leg.fromLabel} -> ${leg.toLabel}",
-                value = "${kilometersText(leg.lengthMeters)}  split ${secondsText(leg.splitSeconds)}  cumulative ${secondsText(leg.cumulativeSeconds)}$waitText"
+                value = "${kilometersText(leg.lengthMeters)}  split ${secondsText(leg.splitSeconds)}  cumulative ${secondsText(leg.cumulativeSeconds)}$waitText$speedText"
             )
         }
     }
@@ -15672,7 +15676,8 @@ private fun courseAnalysisSpeedModelText(speedModel: DesktopCourseSpeedModel): S
 private fun courseAnalysisSpeedFactorExplanation(speedModel: DesktopCourseSpeedModel): String =
     "Assumed running speed equals race-format baseline speed x category multiplier x event speed factor. " +
         "${speedModel.categoryFactorSourceLabel}: ${speedModel.categoryFactorExplanation} " +
-        "The event speed factor is adjustable, saved in the Event File, and applies to every category; the current event factor is x${twoDecimalText(speedModel.compensationFactor)}."
+        "The event speed factor is adjustable, saved in the Event File, and applies to every category by default; the current event factor is x${twoDecimalText(speedModel.compensationFactor)}. " +
+        "Imported KML/KMZ SS=#.## speed specifiers replace the event factor for the following leg only."
 
 private fun secondsText(value: Int?): String =
     value?.let(::compactSecondsText) ?: "Unknown"

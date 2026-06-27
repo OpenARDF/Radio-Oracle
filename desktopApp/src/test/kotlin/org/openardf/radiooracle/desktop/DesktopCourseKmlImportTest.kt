@@ -81,6 +81,36 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun importsSpeedSpecifiersIntoProtectedCourseInfo() {
+        val kmlPath = Files.createTempFile("radio-oracle-course-speed", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithImportSpeedSpecifiers())
+        val project = EventProjectEditor.addCategory(
+            classicPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { 100.0 }
+        )
+
+        assertEquals(1, summary.importedCategoryCount)
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            updated.raceData.categories.single().category.encryptedCourseInfo!!,
+            "course-key"
+        )
+        assertEquals(0.85, protectedCourseInfo.courseObjects.single { it.label == "Start" }.speedFactor ?: -1.0, 0.001)
+        assertEquals(0.50, protectedCourseInfo.courseObjects.single { it.label == "31" }.speedFactor ?: -1.0, 0.001)
+        assertEquals(1.20, protectedCourseInfo.courseObjects.single { it.label == "32" }.speedFactor ?: -1.0, 0.001)
+        assertNull(protectedCourseInfo.courseObjects.single { it.label == "Finish" }.speedFactor)
+        assertEquals(0.50, protectedCourseInfo.controlPoints.single { it.label == "31" }.speedFactor ?: -1.0, 0.001)
+        assertEquals(1.20, protectedCourseInfo.controlPoints.single { it.label == "32" }.speedFactor ?: -1.0, 0.001)
+    }
+
+    @Test
     fun importsNonControlPointsVisitedByRouteAsMandatoryWaypoints() {
         val kmlPath = Files.createTempFile("radio-oracle-course-waypoint", ".kml")
         Files.writeString(kmlPath, sampleKmlWithMandatoryWaypoint())
@@ -1845,6 +1875,45 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun parsesPerLegSpeedSpecifiersFromKmlDescriptions() {
+        val kmlPath = Files.createTempFile("radio-oracle-course-speed", ".kml").also {
+            Files.writeString(it, sampleKmlWithSpeedSpecifiers())
+        }
+
+        val parsed = DesktopCourseFileReader.read(kmlPath)
+
+        assertEquals(0.75, parsed.controls.single { it.name == "Start" }.speedFactorHint ?: -1.0, 0.001)
+        assertEquals(0.60, parsed.controls.single { it.name == "31" }.speedFactorHint ?: -1.0, 0.001)
+        assertNull(parsed.controls.single { it.name == "Finish" }.speedFactorHint)
+        assertEquals(0.90, parsed.routes.single { it.name == "M21" }.speedFactorHint ?: -1.0, 0.001)
+    }
+
+    @Test
+    fun rejectsInvalidPerLegSpeedSpecifiersExceptOnFinish() {
+        val finishIgnoredPath = Files.createTempFile("radio-oracle-finish-speed", ".kml").also {
+            Files.writeString(
+                it,
+                sampleKmlWithSpeedSpecifiers(
+                    startDescription = "SS=1.10",
+                    foxDescription = "SS=0.70",
+                    routeDescription = "SS=0.95",
+                    finishDescription = "SS=not-a-number"
+                )
+            )
+        }
+        val parsed = DesktopCourseFileReader.read(finishIgnoredPath)
+        assertNull(parsed.controls.single { it.name == "Finish" }.speedFactorHint)
+
+        val invalidFoxPath = Files.createTempFile("radio-oracle-bad-speed", ".kml").also {
+            Files.writeString(it, sampleKmlWithSpeedSpecifiers(foxDescription = "SS=5.00"))
+        }
+
+        val error = runCatching { DesktopCourseFileReader.read(invalidFoxPath) }.exceptionOrNull()
+        assertNotNull(error)
+        assertTrue(error?.message.orEmpty().contains("Invalid SS speed specifier"))
+    }
+
+    @Test
     fun parsesKmzKmlDocuments() {
         val kmzPath = Files.createTempFile("radio-oracle-course", ".kmz")
         ZipOutputStream(Files.newOutputStream(kmzPath)).use { zip ->
@@ -1896,6 +1965,86 @@ class DesktopCourseKmlImportTest {
             </Placemark>
             <Placemark>
               <name>$routeName</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9990,39.0000,0
+                  -94.9980,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleKmlWithImportSpeedSpecifiers(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>Start</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>31</name>
+              <description>SS=0.50</description>
+              <Point><coordinates>-94.9990,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <description>SS=1.20</description>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Finish</name>
+              <description>SS=bad-finish-value</description>
+              <Point><coordinates>-94.9970,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <description>SS=0.85</description>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9990,39.0000,0
+                  -94.9980,39.0000,0
+                  -94.9970,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleKmlWithSpeedSpecifiers(
+        startDescription: String = "SS=0.75",
+        foxDescription: String = "SS=0.60",
+        routeDescription: String = "SS=0.90",
+        finishDescription: String = "SS=0.25"
+    ): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>Start</name>
+              <description>$startDescription</description>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>31</name>
+              <description>$foxDescription</description>
+              <Point><coordinates>-94.9990,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Finish</name>
+              <description>$finishDescription</description>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <description>$routeDescription</description>
               <LineString>
                 <coordinates>
                   -95.0000,39.0000,0

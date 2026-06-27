@@ -42,10 +42,16 @@ object DesktopCourseFileReader {
                 ?.let(::parseCoordinates)
                 ?.firstOrNull()
             if (pointCoordinates != null) {
+                val description = placemark.childText("description")
                 controls += CourseControlPoint(
                     name = name,
                     point = pointCoordinates,
-                    siCodeHint = placemark.childText("description").siCodeHint()
+                    siCodeHint = description.siCodeHint(),
+                    speedFactorHint = if (DesktopCoursePointLabelClassifier.isEndpointFinishName(name)) {
+                        null
+                    } else {
+                        description.speedFactorHint(name)
+                    }
                 )
                 return@repeat
             }
@@ -54,7 +60,11 @@ object DesktopCourseFileReader {
                 ?.let(::parseCoordinates)
                 .orEmpty()
             if (lineCoordinates.size >= 2) {
-                routes += CourseRoute(name = name, points = lineCoordinates)
+                routes += CourseRoute(
+                    name = name,
+                    points = lineCoordinates,
+                    speedFactorHint = placemark.childText("description").speedFactorHint(name)
+                )
             }
         }
         require(controls.isNotEmpty()) {
@@ -163,12 +173,14 @@ data class DesktopCourseKmlData(
 data class CourseControlPoint(
     val name: String,
     val point: CourseGeoPoint,
-    val siCodeHint: Int? = null
+    val siCodeHint: Int? = null,
+    val speedFactorHint: Double? = null
 )
 
 data class CourseRoute(
     val name: String,
-    val points: List<CourseGeoPoint>
+    val points: List<CourseGeoPoint>,
+    val speedFactorHint: Double? = null
 )
 
 data class CourseGeoPoint(
@@ -228,6 +240,17 @@ private fun String?.siCodeHint(): Int? =
                 ?.takeIf(SportIdentCodes::isSICodeValid)
         }
         ?.firstOrNull()
+
+private fun String?.speedFactorHint(placemarkName: String): Double? {
+    val text = this ?: return null
+    val match = Regex("""(?i)(?:^|[\s;,])SS\s*=\s*([^\s;,<]+)""").find(text) ?: return null
+    val token = match.groupValues.getOrNull(1).orEmpty()
+    val value = token.toDoubleOrNull()
+    require(value != null && value in 0.01..4.99) {
+        "Invalid SS speed specifier for $placemarkName: '$token'. Use SS=#.## with a value from 0.01 through 4.99."
+    }
+    return value
+}
 
 private fun String.normalizedCourseFileName(): String =
     trim().lowercase().replace(Regex("\\s+"), " ")
