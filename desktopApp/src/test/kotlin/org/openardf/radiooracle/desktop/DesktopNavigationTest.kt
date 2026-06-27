@@ -270,11 +270,13 @@ class DesktopNavigationTest {
         val tools = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Tools" }
         val toolsState = rootState.enter(tools)
 
+        assertTrue(DesktopNavigation.isToolsRootMenuItem(tools))
         assertTrue(DesktopNavigation.usesToolsNavigationColor(rootState, tools))
         assertTrue(
             DesktopNavigation.currentItems(toolsState)
                 .all { DesktopNavigation.usesToolsNavigationColor(toolsState, it) }
         )
+        assertFalse(DesktopNavigation.currentItems(toolsState).any(DesktopNavigation::isToolsRootMenuItem))
         assertFalse(
             DesktopNavigation.usesToolsNavigationColor(
                 rootState,

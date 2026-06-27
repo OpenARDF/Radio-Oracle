@@ -818,6 +818,9 @@ object DesktopNavigation {
     fun showsMenuIndicator(item: DesktopNavItem): Boolean =
         item.action == null
 
+    fun isToolsRootMenuItem(item: DesktopNavItem): Boolean =
+        item.id == ToolsMenuId
+
     fun usesSeriesNavigationColor(state: DesktopNavState, item: DesktopNavItem): Boolean =
         item.workflow == DesktopWorkflow.Series ||
             item.id == EventSeriesSettingsMenuId ||
