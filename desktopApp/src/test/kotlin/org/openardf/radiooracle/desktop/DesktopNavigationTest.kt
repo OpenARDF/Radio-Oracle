@@ -940,9 +940,7 @@ class DesktopNavigationTest {
                 "Course Analyzer",
                 "Move Course",
                 "Create Course",
-                "Classic Route Generator",
-                "Foxoring Route Generator",
-                "Sprint Route Generator"
+                "Route Generator"
             ),
             courseTools.children.map { it.label }
         )
@@ -979,21 +977,8 @@ class DesktopNavigationTest {
         assertFalse(courseTools.children.first { it.label == "Move Course" }.requiresEventFile)
         assertEquals(DesktopSection.KmlCreateCourse, courseTools.children.first { it.label == "Create Course" }.section)
         assertFalse(courseTools.children.first { it.label == "Create Course" }.requiresEventFile)
-        assertEquals(
-            DesktopSection.KmlClassicCourseGenerator,
-            courseTools.children.first { it.label == "Classic Route Generator" }.section
-        )
-        assertFalse(courseTools.children.first { it.label == "Classic Route Generator" }.requiresEventFile)
-        assertEquals(
-            DesktopSection.KmlFoxoringCourseGenerator,
-            courseTools.children.first { it.label == "Foxoring Route Generator" }.section
-        )
-        assertFalse(courseTools.children.first { it.label == "Foxoring Route Generator" }.requiresEventFile)
-        assertEquals(
-            DesktopSection.KmlSprintCourseGenerator,
-            courseTools.children.first { it.label == "Sprint Route Generator" }.section
-        )
-        assertFalse(courseTools.children.first { it.label == "Sprint Route Generator" }.requiresEventFile)
+        assertEquals(DesktopSection.KmlRouteGenerator, courseTools.children.first { it.label == "Route Generator" }.section)
+        assertFalse(courseTools.children.first { it.label == "Route Generator" }.requiresEventFile)
         val sportIdentTools = tools.children.first { it.label == "sportIDENT" }
         val timeSync = sportIdentTools.children.first { it.label == "Time Sync" }
         assertEquals(DesktopSection.SportIdentTimeSync, timeSync.section)

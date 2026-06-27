@@ -5,6 +5,8 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import java.util.Locale
 
 object DesktopCourseFormatDetector {
+    val supportedGeneratorRaceTypes: List<RaceType> = listOf(RaceType.CLASSIC, RaceType.FOXORING, RaceType.SPRINT)
+
     fun inferredRaceTypes(
         sourceName: String,
         courseData: DesktopCourseKmlData
@@ -81,6 +83,12 @@ object DesktopCourseFormatDetector {
                 "but $sourceName appears to be $detectedText."
         )
     }
+
+    fun detectedGeneratorRaceType(sourceName: String, courseData: DesktopCourseKmlData): RaceType? =
+        inferredRaceTypes(sourceName, courseData)
+            .distinct()
+            .filter { it in supportedGeneratorRaceTypes }
+            .singleOrNull()
 
     fun RaceType.displayName(): String =
         name.lowercase().replaceFirstChar { it.titlecase(Locale.US) }
