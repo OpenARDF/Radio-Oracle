@@ -64,4 +64,9 @@ class DesktopPaletteTest {
     fun keepsSeriesNavigationVisuallyDistinctFromEventWorkflows() {
         assertEquals(0xFFFFD59EL, DesktopPalette.SERIES_NAVIGATION_ARGB)
     }
+
+    @Test
+    fun keepsToolsNavigationVisuallyDistinctFromWorkflowMenus() {
+        assertEquals(0xFFFFF176L, DesktopPalette.TOOLS_NAVIGATION_ARGB)
+    }
 }

@@ -265,6 +265,25 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun toolsMenuAndDescendantsUseToolsNavigationColor() {
+        val rootState = DesktopNavState()
+        val tools = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Tools" }
+        val toolsState = rootState.enter(tools)
+
+        assertTrue(DesktopNavigation.usesToolsNavigationColor(rootState, tools))
+        assertTrue(
+            DesktopNavigation.currentItems(toolsState)
+                .all { DesktopNavigation.usesToolsNavigationColor(toolsState, it) }
+        )
+        assertFalse(
+            DesktopNavigation.usesToolsNavigationColor(
+                rootState,
+                DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Controls" }
+            )
+        )
+    }
+
+    @Test
     fun switchingWorkflowClearsSubmenuStackAndSelectsDefaultSection() {
         val state = DesktopNavState(submenuStack = listOf("setup.start-list"), selectedSection = DesktopSection.StartList)
             .switchWorkflow(DesktopWorkflow.RaceOps)

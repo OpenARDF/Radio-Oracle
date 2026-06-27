@@ -9012,11 +9012,13 @@ private fun saveEventButtonColors() =
 private fun navigationItemButtonColors(
     workflow: DesktopWorkflow,
     action: DesktopNavAction?,
-    useSeriesNavigationColor: Boolean = workflow == DesktopWorkflow.Series
+    useSeriesNavigationColor: Boolean = workflow == DesktopWorkflow.Series,
+    useToolsNavigationColor: Boolean = false
 ) =
     when {
         action == DesktopNavAction.SaveEventFile -> saveEventButtonColors()
         useSeriesNavigationColor -> seriesNavigationButtonColors()
+        useToolsNavigationColor -> toolsNavigationButtonColors()
         else -> ButtonDefaults.buttonColors()
     }
 
@@ -9049,6 +9051,15 @@ private fun workflowButtonColors(workflow: DesktopWorkflow, isBypassedDisabled: 
 private fun seriesNavigationButtonColors() =
     ButtonDefaults.buttonColors(
         backgroundColor = DesktopPalette.SeriesNavigation,
+        contentColor = DesktopPalette.Black,
+        disabledBackgroundColor = DesktopPalette.LightGrey,
+        disabledContentColor = DesktopPalette.Disconnected
+    )
+
+@Composable
+private fun toolsNavigationButtonColors() =
+    ButtonDefaults.buttonColors(
+        backgroundColor = DesktopPalette.ToolsNavigation,
         contentColor = DesktopPalette.Black,
         disabledBackgroundColor = DesktopPalette.LightGrey,
         disabledContentColor = DesktopPalette.Disconnected
@@ -9147,7 +9158,8 @@ private fun NavigationRail(
                             colors = navigationItemButtonColors(
                                 navState.workflow,
                                 item.action,
-                                DesktopNavigation.usesSeriesNavigationColor(navState, item)
+                                DesktopNavigation.usesSeriesNavigationColor(navState, item),
+                                DesktopNavigation.usesToolsNavigationColor(navState, item)
                             )
                         ) {
                             Text(
