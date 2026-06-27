@@ -30,6 +30,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
@@ -50,7 +51,7 @@ class DesktopSportIdentTimeSyncServiceTest {
     }
 
     @Test
-    fun inspectReportsConnectedStationWithoutEnablingWritesYet() {
+    fun inspectReportsConnectedSiMasterAsTimeSyncCapable() {
         val port = FakePort()
         val service = DesktopSportIdentTimeSyncService(
             portProvider = FakePortProvider(listOf(port)),
@@ -73,21 +74,64 @@ class DesktopSportIdentTimeSyncServiceTest {
         assertEquals("SI station 554896 connected in SI MASTER mode.", inspection.statusText)
         assertEquals(SportIdentProtocol.BAUDRATE_HIGH, inspection.baudRate)
         assertEquals(554896, inspection.stationInfo?.serialNumber)
-        assertFalse(inspection.canSyncTime)
-        assertEquals("Time sync write support is pending SPORTident protocol validation.", inspection.disabledReason)
+        assertTrue(inspection.canSyncTime)
+        assertNull(inspection.disabledReason)
     }
 
     @Test
-    fun syncTimeIsExplicitlyUnsupportedUntilWriteProtocolIsImplemented() {
-        val service = DesktopSportIdentTimeSyncService(portProvider = FakePortProvider(emptyList()))
+    fun inspectDoesNotEnableTimeSyncForNonMasterStation() {
+        val port = FakePort()
+        val service = DesktopSportIdentTimeSyncService(
+            portProvider = FakePortProvider(listOf(port)),
+            connectStation = {
+                DesktopSportIdentStationConnection(
+                    baudRate = SportIdentProtocol.BAUDRATE_HIGH,
+                    probeReply = byteArrayOf(),
+                    stationInfo = SportIdentStationInfo(
+                        serialNumber = 554896,
+                        extendedMode = true,
+                        stationCodeNumber = 1,
+                        stationModeCode = 5
+                    )
+                )
+            }
+        )
 
-        val error = assertThrows(UnsupportedOperationException::class.java) {
-            service.syncTime(LocalDateTime.parse("2026-06-25T12:34:56"))
-        }
+        val inspection = service.inspectDownloadStation()
 
+        assertEquals("SI station 554896 connected in READOUT mode.", inspection.statusText)
+        assertFalse(inspection.canSyncTime)
         assertEquals(
-            "SPORTident time sync write support is not implemented yet. Source time was 2026-06-25T12:34:56.",
-            error.message
+            "Configure the attached SPORTident station in SI MASTER mode before syncing time.",
+            inspection.disabledReason
+        )
+    }
+
+    @Test
+    fun syncTimeRunsValidatedWritePath() {
+        val targetTime = LocalDateTime.parse("2026-06-27T16:50:12")
+        val port = FakePort(
+            readChunks = listOf(
+                remoteModeReply(),
+                remoteModeReply(),
+                systemInfoReply(),
+                stationTimeReply(targetTime.minusMinutes(1), tick = 0x01),
+                stationWriteReply(targetTime, tick = 0x05),
+                applyReply(),
+                normalModeReply()
+            )
+        )
+        val service = DesktopSportIdentTimeSyncService(portProvider = FakePortProvider(listOf(port)))
+
+        val result = service.syncTime(targetTime)
+
+        assertEquals(554896, result.stationInfo.serialNumber)
+        assertEquals(targetTime.minusMinutes(1), result.beforeTime)
+        assertEquals(targetTime, result.confirmedTime)
+        assertEquals(targetTime, result.sourceTime)
+        assertEquals(
+            DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
+            SportIdentFrameParser.firstFrame(port.writeRequests[4], requireValidCrc = true)?.command
         )
     }
 

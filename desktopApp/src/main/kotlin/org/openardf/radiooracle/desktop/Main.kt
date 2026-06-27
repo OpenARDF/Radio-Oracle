@@ -9950,12 +9950,19 @@ private fun SportIdentTimeSyncPanel(
     raceClockTick: Long
 ) {
     var inspectionStatus by remember { mutableStateOf<String?>(null) }
+    var syncStatus by remember { mutableStateOf<String?>(null) }
+    var syncStatusColor by remember { mutableStateOf(DesktopPalette.Disconnected) }
     var isInspecting by remember { mutableStateOf(false) }
+    var isSyncing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val localTimeText = remember(raceClockTick) {
         DesktopDateTimeText.displayIsoOrRaw(LocalDateTime.now().withNano(0).toString())
     }
     val canInspect = !isStationBusy && !isInspecting
+    val canSync = !isStationBusy &&
+        !isInspecting &&
+        !isSyncing &&
+        siReaderState.severity == DesktopSiReaderSeverity.CONNECTED
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DetailRow("Computer time", localTimeText)
@@ -9989,17 +9996,51 @@ private fun SportIdentTimeSyncPanel(
                 ButtonLabel(if (isInspecting) "Inspecting" else "Inspect Station")
             }
             Button(
-                onClick = {},
-                enabled = false
+                onClick = {
+                    isSyncing = true
+                    syncStatus = "Syncing current computer time to the awake coupled station..."
+                    syncStatusColor = DesktopPalette.Disconnected
+                    scope.launch {
+                        val outcome = runCatching {
+                            withContext(Dispatchers.IO) {
+                                DesktopSportIdentTimeSyncService().syncTime()
+                            }
+                        }
+                        syncStatus = outcome.fold(
+                            onSuccess = { result ->
+                                val requested = DesktopDateTimeText.displayIsoOrRaw(result.sourceTime.toString())
+                                val before = result.beforeTime
+                                    ?.let { DesktopDateTimeText.displayIsoOrRaw(it.toString()) }
+                                    ?: "unknown"
+                                syncStatusColor = DesktopPalette.Connected
+                                "Synced station ${result.stationInfo.serialNumber} to $requested. Previous station time: $before."
+                            },
+                            onFailure = { error ->
+                                syncStatusColor = DesktopPalette.Error
+                                "Time sync failed: ${error.message ?: error::class.simpleName}"
+                            }
+                        )
+                        isSyncing = false
+                    }
+                },
+                enabled = canSync
             ) {
-                ButtonLabel("Sync Time")
+                ButtonLabel(if (isSyncing) "Syncing" else "Sync Time")
             }
+        }
+        syncStatus?.let { status ->
+            Text(
+                text = status,
+                color = syncStatusColor,
+                fontSize = 13.sp
+            )
         }
         val statusText = when {
             isStationBusy -> "Station is busy with SI-card readout."
             siReaderState.severity == DesktopSiReaderSeverity.DISCONNECTED -> "Connect a SPORTident download station."
             siReaderState.severity == DesktopSiReaderSeverity.ERROR -> "Resolve the station connection error before syncing time."
-            else -> "Time sync write support is pending SPORTident protocol validation."
+            siReaderState.severity == DesktopSiReaderSeverity.WARNING -> "Inspect the attached SPORTident station before syncing time."
+            else -> "Wake the target station with an SI card, keep it coupled to the download station, then sync."
         }
         Text(
             text = statusText,

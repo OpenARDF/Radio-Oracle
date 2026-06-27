@@ -81,9 +81,11 @@ The current desktop beta decisions are:
   or schema is available.
 - Keep shared SQL persistence post-beta. The beta uses `.rom.json` files while
   shared domain services and import/export APIs stabilize.
-- Keep SPORTident station write actions disabled until configuration-write
-  transactions are verified on real hardware and protected by confirmation plus
-  immediate read-back validation.
+- Keep SPORTident station reconfiguration writes disabled until each
+  configuration-write transaction is verified on real hardware and protected by
+  confirmation plus immediate read-back validation. The Time Sync write path is
+  the first exception, limited to the capture-proven `F6`/`F9` sequence and an
+  awake coupled target station.
 
 ## Storage
 
@@ -586,8 +588,9 @@ non-critical validation matrix below has passed.
 The current time-sync understanding is based on two SI Config+ USBPcap captures
 from June 27, 2026: one setting a coupled SI-Master near 4:50 PM, and one
 setting it near 3:10 AM. Treat these findings as capture-proven for the tested
-station path, but keep UI writes disabled until the app performs a real
-write/read-back validation against expendable hardware.
+station path. The desktop UI now exposes the Time Sync action after successful
+write/acknowledgement validation against expendable hardware, but it still
+requires the coupled target station to already be awake.
 
 As of the first successful spare-station test, the coupled target must already
 be awake. Manually waking the target station by inserting an SI card, then
@@ -650,8 +653,8 @@ FF 02 F6 07 1A 06 1B 0D 44 04 00 10 91 03
 FF 02 F6 07 1A 06 1B 0C 2C 9A 00 63 C7 03
 ```
 
-Before enabling the `Time Sync` button, run the hardware-gated command against
-non-critical hardware and record the results:
+The validation matrix used before enabling the `Time Sync` button covered
+non-critical hardware with the hardware-gated command:
 
 1. Non-critical ordinary station, AM time.
 2. Non-critical ordinary station, PM time.
@@ -681,6 +684,17 @@ these fixed-time cases with a three-second tolerance:
 
 After the matrix, the station was restored to the computer's current time:
 requested `2026-06-27T19:02:40`, confirmed `2026-06-27T19:02:40`.
+
+Manual-wake Master-station validation on coupled target station `559846` passed
+the same fixed-time cases with a three-second tolerance:
+
+- AM: requested and confirmed `2026-06-27T03:10:18`.
+- PM: requested and confirmed `2026-06-27T16:50:12`.
+- Near noon: requested and confirmed `2026-06-27T11:59:50`.
+- Near midnight: requested and confirmed `2026-06-27T23:59:50`.
+
+After the matrix, the station was restored to the computer's current time:
+requested `2026-06-27T19:08:45`, confirmed `2026-06-27T19:08:45`.
 
 For local macOS smoke tests, prefer copying the generated `.app` and sample
 Event File to `/tmp` before launching with `open ... --args <sample.rom.json>`.

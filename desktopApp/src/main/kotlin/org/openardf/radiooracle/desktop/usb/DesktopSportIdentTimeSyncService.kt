@@ -85,13 +85,18 @@ internal class DesktopSportIdentTimeSyncService(
             val connection = connectStation(port)
             val stationInfo = connection.stationInfo
             val modeLabel = stationInfo.stationModeLabel ?: "unknown"
+            val canSyncTime = stationInfo.canRelayTimeSync()
             DesktopSportIdentTimeSyncInspection(
                 portInfo = port.info,
                 baudRate = connection.baudRate,
                 stationInfo = stationInfo,
                 statusText = "SI station ${stationInfo.serialNumber} connected in $modeLabel mode.",
-                canSyncTime = false,
-                disabledReason = "Time sync write support is pending SPORTident protocol validation."
+                canSyncTime = canSyncTime,
+                disabledReason = if (canSyncTime) {
+                    null
+                } else {
+                    "Configure the attached SPORTident station in SI MASTER mode before syncing time."
+                }
             )
         }.getOrElse { error ->
             DesktopSportIdentTimeSyncInspection(
@@ -106,8 +111,10 @@ internal class DesktopSportIdentTimeSyncService(
     }
 
     fun syncTime(sourceTime: LocalDateTime = LocalDateTime.now()): DesktopSportIdentTimeSyncResult {
-        throw UnsupportedOperationException(
-            "SPORTident time sync write support is not implemented yet. Source time was $sourceTime."
+        return writeTimeWithReadBack(
+            sourceTime = sourceTime,
+            writeEnabled = true,
+            toleranceSeconds = DEFAULT_TOLERANCE_SECONDS
         )
     }
 
@@ -250,6 +257,9 @@ internal class DesktopSportIdentTimeSyncService(
     private fun ByteArray.decodeStationTime(context: String): DesktopSportIdentStationTime =
         DesktopSportIdentStationTimeCodec.decodePayload(this)
             ?: error("SPORTident station returned unreadable $context.")
+
+    private fun SportIdentStationInfo.canRelayTimeSync(): Boolean =
+        stationModeLabel?.startsWith("SI MASTER") == true
 
     private companion object {
         const val READ_TIMEOUT_MS = 1200
