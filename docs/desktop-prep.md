@@ -671,6 +671,17 @@ requested time `2026-06-27T17:52:02`, decoded `F6` confirmation
 earlier attempt that reached `F6`/`F9`; an extra post-apply `F7` read failed on
 that hardware and should not be treated as part of the validation sequence.
 
+Manual-wake spare-station validation on coupled target station `575853` passed
+these fixed-time cases with a three-second tolerance:
+
+- AM: requested and confirmed `2026-06-27T03:10:18`.
+- PM: requested and confirmed `2026-06-27T16:50:12`.
+- Near noon: requested and confirmed `2026-06-27T11:59:50`.
+- Near midnight: requested and confirmed `2026-06-27T23:59:50`.
+
+After the matrix, the station was restored to the computer's current time:
+requested `2026-06-27T19:02:40`, confirmed `2026-06-27T19:02:40`.
+
 For local macOS smoke tests, prefer copying the generated `.app` and sample
 Event File to `/tmp` before launching with `open ... --args <sample.rom.json>`.
 Launching the checkout-built app bundle directly from `Documents/GitHub` can
