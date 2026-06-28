@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import struct
+import subprocess
 from pathlib import Path
+from shutil import which
 
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -271,7 +273,34 @@ def write_icns(path: Path, chunks: list[tuple[str, Image.Image]]) -> None:
     path.write_bytes(b"icns" + struct.pack(">I", 8 + len(body)) + body)
 
 
-def write_desktop_packaging_icons(master: Image.Image) -> None:
+def write_macos_icns(path: Path, iconset_dir: Path, fallback_master: Image.Image) -> None:
+    iconutil = which("iconutil")
+    if iconutil is not None:
+        try:
+            subprocess.run(
+                [iconutil, "-c", "icns", str(iconset_dir), "-o", str(path)],
+                check=True,
+                capture_output=True,
+            )
+            return
+        except subprocess.CalledProcessError:
+            pass
+
+    write_icns(
+        path,
+        [
+            ("icp4", fallback_master.resize((16, 16), Image.Resampling.LANCZOS)),
+            ("icp5", fallback_master.resize((32, 32), Image.Resampling.LANCZOS)),
+            ("icp6", fallback_master.resize((64, 64), Image.Resampling.LANCZOS)),
+            ("ic07", fallback_master.resize((128, 128), Image.Resampling.LANCZOS)),
+            ("ic08", fallback_master.resize((256, 256), Image.Resampling.LANCZOS)),
+            ("ic09", fallback_master.resize((512, 512), Image.Resampling.LANCZOS)),
+            ("ic10", fallback_master.resize((1024, 1024), Image.Resampling.LANCZOS)),
+        ],
+    )
+
+
+def write_desktop_packaging_icons(master: Image.Image, mac_master: Image.Image) -> None:
     PACKAGING_DIR.mkdir(parents=True, exist_ok=True)
     MAC_ICONSET_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -288,20 +317,9 @@ def write_desktop_packaging_icons(master: Image.Image) -> None:
         "icon_512x512@2x.png": 1024,
     }
     for filename, size in iconset_sizes.items():
-        master.resize((size, size), Image.Resampling.LANCZOS).save(MAC_ICONSET_DIR / filename)
+        mac_master.resize((size, size), Image.Resampling.LANCZOS).save(MAC_ICONSET_DIR / filename)
 
-    write_icns(
-        MAC_ICON,
-        [
-            ("icp4", master.resize((16, 16), Image.Resampling.LANCZOS)),
-            ("icp5", master.resize((32, 32), Image.Resampling.LANCZOS)),
-            ("icp6", master.resize((64, 64), Image.Resampling.LANCZOS)),
-            ("ic07", master.resize((128, 128), Image.Resampling.LANCZOS)),
-            ("ic08", master.resize((256, 256), Image.Resampling.LANCZOS)),
-            ("ic09", master.resize((512, 512), Image.Resampling.LANCZOS)),
-            ("ic10", master.resize((1024, 1024), Image.Resampling.LANCZOS)),
-        ],
-    )
+    write_macos_icns(MAC_ICON, MAC_ICONSET_DIR, mac_master)
     write_ico(
         WINDOWS_ICON,
         [(16, master.resize((16, 16), Image.Resampling.LANCZOS)),
@@ -339,11 +357,15 @@ def main() -> None:
         render_foreground(size).save(RES / folder / "ic_runner_foreground.png")
 
     play_icon = render_full_icon(512)
+    desktop_launcher_icon = render_full_icon(512, rounded=True)
     play_icon.save(ROOT / "app" / "src" / "main" / "ic_runner-playstore.png")
     play_icon.save(DESKTOP_RESOURCE)
-    play_icon.save(ROOT_ICON)
-    play_icon.save(JDEPLOY_BUNDLE_ICON)
-    write_desktop_packaging_icons(render_full_icon(1024))
+    desktop_launcher_icon.save(ROOT_ICON)
+    desktop_launcher_icon.save(JDEPLOY_BUNDLE_ICON)
+    write_desktop_packaging_icons(
+        render_full_icon(1024),
+        mac_master=render_full_icon(1024, rounded=True),
+    )
 
 
 if __name__ == "__main__":
