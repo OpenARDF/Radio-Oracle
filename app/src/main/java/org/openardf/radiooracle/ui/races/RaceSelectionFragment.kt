@@ -200,6 +200,11 @@ class RaceSelectionFragment : Fragment() {
                     true
                 }
 
+                R.id.race_menu_about -> {
+                    findNavController().navigate(RaceSelectionFragmentDirections.openAboutApp())
+                    true
+                }
+
                 else -> false
             }
         }

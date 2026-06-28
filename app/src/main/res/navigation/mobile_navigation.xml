@@ -19,6 +19,9 @@
             android:id="@+id/openSettings"
             app:destination="@id/settingsFragment" />
         <action
+            android:id="@+id/openAboutApp"
+            app:destination="@id/aboutAppDialogFragment" />
+        <action
             android:id="@+id/importRobis"
             app:destination="@id/InternetImportDialogFragment" />
         <action
