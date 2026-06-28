@@ -82,6 +82,13 @@ requireEqual("package name", packageJson.name, expectedPackageName);
 requireEqual("package-lock name", packageLock.name, expectedPackageName);
 requireEqual("package-lock version", packageLock.version, packageJson.version);
 
+if (!existsSync("icon.png")) {
+  fail("icon.png is missing. Restore the baseline jDeploy icon before releasing.");
+}
+if (!packageJson.files?.includes("icon.png")) {
+  fail("package.json must include icon.png in files so jDeploy downloads show the app icon");
+}
+
 const expectedBundledDependencies = ["node-fetch", "shelljs", "tar", "yauzl"];
 const bundledDependencies = packageJson.bundledDependencies || packageJson.bundleDependencies || [];
 for (const dependency of expectedBundledDependencies) {
@@ -102,6 +109,18 @@ requireIncludes("Gradle repositories", settingsGradle, "https://maven.pkg.jetbra
 
 if (!desktopBuildGradle.includes("packageVersion = rootProject.ext.radioOracleVersion")) {
   fail("desktop native packageVersion must use rootProject.ext.radioOracleVersion");
+}
+requireIncludes("desktop native packaging icon configuration", desktopBuildGradle, "Radio-Oracle.icns");
+requireIncludes("desktop native packaging icon configuration", desktopBuildGradle, "Radio-Oracle.ico");
+requireIncludes("desktop native packaging icon configuration", desktopBuildGradle, "Radio-Oracle.png");
+for (const iconPath of [
+  "desktopApp/packaging/icons/Radio-Oracle.icns",
+  "desktopApp/packaging/icons/Radio-Oracle.ico",
+  "desktopApp/packaging/icons/Radio-Oracle.png"
+]) {
+  if (!existsSync(iconPath)) {
+    fail(`desktop packaging icon is missing: ${iconPath}`);
+  }
 }
 requireIncludes("desktop jDeploy runtime configuration", desktopBuildGradle, "desktopJdeployRuntimeClasspath");
 for (const artifact of requiredJdeploySkikoRuntimeArtifacts) {

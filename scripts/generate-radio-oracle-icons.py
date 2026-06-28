@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import struct
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
@@ -8,6 +9,14 @@ from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[1]
 RES = ROOT / "app" / "src" / "main" / "res"
+DESKTOP_RESOURCE = ROOT / "desktopApp" / "src" / "main" / "resources" / "radio-oracle-logo.png"
+PACKAGING_DIR = ROOT / "desktopApp" / "packaging" / "icons"
+MAC_ICONSET_DIR = PACKAGING_DIR / "Radio-Oracle.iconset"
+ROOT_ICON = ROOT / "icon.png"
+JDEPLOY_BUNDLE_ICON = ROOT / "jdeploy-bundle" / "icon.png"
+MAC_ICON = PACKAGING_DIR / "Radio-Oracle.icns"
+WINDOWS_ICON = PACKAGING_DIR / "Radio-Oracle.ico"
+LINUX_ICON = PACKAGING_DIR / "Radio-Oracle.png"
 
 BG_TOP = (12, 54, 67)
 BG_BOTTOM = (13, 104, 91)
@@ -216,6 +225,93 @@ def save_webp(path: Path, image: Image.Image) -> None:
     image.save(path, "WEBP", quality=95, method=6)
 
 
+def write_ico(path: Path, images: list[tuple[int, Image.Image]]) -> None:
+    encoded_images = []
+    for size, image in images:
+        temp_path = path.with_name(f".ico-{size}.png")
+        image.save(temp_path, "PNG")
+        encoded_images.append((size, temp_path.read_bytes()))
+        temp_path.unlink()
+
+    header = struct.pack("<HHH", 0, 1, len(encoded_images))
+    entries = bytearray()
+    payload = bytearray()
+    offset = 6 + 16 * len(encoded_images)
+    for size, png_data in encoded_images:
+        dimension = 0 if size >= 256 else size
+        entries.extend(
+            struct.pack(
+                "<BBBBHHII",
+                dimension,
+                dimension,
+                0,
+                0,
+                1,
+                32,
+                len(png_data),
+                offset,
+            )
+        )
+        payload.extend(png_data)
+        offset += len(png_data)
+
+    path.write_bytes(header + entries + payload)
+
+
+def write_icns(path: Path, chunks: list[tuple[str, Image.Image]]) -> None:
+    body = bytearray()
+    for icon_type, image in chunks:
+        temp_path = path.with_name(f".{icon_type}.png")
+        image.save(temp_path, "PNG")
+        png_data = temp_path.read_bytes()
+        temp_path.unlink()
+        body.extend(icon_type.encode("ascii"))
+        body.extend(struct.pack(">I", 8 + len(png_data)))
+        body.extend(png_data)
+    path.write_bytes(b"icns" + struct.pack(">I", 8 + len(body)) + body)
+
+
+def write_desktop_packaging_icons(master: Image.Image) -> None:
+    PACKAGING_DIR.mkdir(parents=True, exist_ok=True)
+    MAC_ICONSET_DIR.mkdir(parents=True, exist_ok=True)
+
+    iconset_sizes = {
+        "icon_16x16.png": 16,
+        "icon_16x16@2x.png": 32,
+        "icon_32x32.png": 32,
+        "icon_32x32@2x.png": 64,
+        "icon_128x128.png": 128,
+        "icon_128x128@2x.png": 256,
+        "icon_256x256.png": 256,
+        "icon_256x256@2x.png": 512,
+        "icon_512x512.png": 512,
+        "icon_512x512@2x.png": 1024,
+    }
+    for filename, size in iconset_sizes.items():
+        master.resize((size, size), Image.Resampling.LANCZOS).save(MAC_ICONSET_DIR / filename)
+
+    write_icns(
+        MAC_ICON,
+        [
+            ("icp4", master.resize((16, 16), Image.Resampling.LANCZOS)),
+            ("icp5", master.resize((32, 32), Image.Resampling.LANCZOS)),
+            ("icp6", master.resize((64, 64), Image.Resampling.LANCZOS)),
+            ("ic07", master.resize((128, 128), Image.Resampling.LANCZOS)),
+            ("ic08", master.resize((256, 256), Image.Resampling.LANCZOS)),
+            ("ic09", master.resize((512, 512), Image.Resampling.LANCZOS)),
+            ("ic10", master.resize((1024, 1024), Image.Resampling.LANCZOS)),
+        ],
+    )
+    write_ico(
+        WINDOWS_ICON,
+        [(16, master.resize((16, 16), Image.Resampling.LANCZOS)),
+         (32, master.resize((32, 32), Image.Resampling.LANCZOS)),
+         (48, master.resize((48, 48), Image.Resampling.LANCZOS)),
+         (256, master.resize((256, 256), Image.Resampling.LANCZOS))],
+    )
+    master.resize((512, 512), Image.Resampling.LANCZOS).save(LINUX_ICON)
+
+
 def main() -> None:
     density_sizes = {
         "mipmap-mdpi": 48,
@@ -242,7 +338,12 @@ def main() -> None:
     for folder, size in foreground_sizes.items():
         render_foreground(size).save(RES / folder / "ic_runner_foreground.png")
 
-    render_full_icon(512).save(ROOT / "app" / "src" / "main" / "ic_runner-playstore.png")
+    play_icon = render_full_icon(512)
+    play_icon.save(ROOT / "app" / "src" / "main" / "ic_runner-playstore.png")
+    play_icon.save(DESKTOP_RESOURCE)
+    play_icon.save(ROOT_ICON)
+    play_icon.save(JDEPLOY_BUNDLE_ICON)
+    write_desktop_packaging_icons(render_full_icon(1024))
 
 
 if __name__ == "__main__":

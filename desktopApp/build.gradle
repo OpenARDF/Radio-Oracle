@@ -36,6 +36,7 @@ kotlin {
 }
 
 version = rootProject.ext.radioOracleVersion
+def desktopPackagingIconDir = layout.projectDirectory.dir("packaging/icons")
 
 dependencies {
     implementation(project(":shared"))
@@ -62,6 +63,13 @@ compose.desktop {
 
             macOS {
                 bundleID = "org.openardf.radiooracle.desktop"
+                iconFile.set(desktopPackagingIconDir.file("Radio-Oracle.icns").asFile)
+            }
+            windows {
+                iconFile.set(desktopPackagingIconDir.file("Radio-Oracle.ico").asFile)
+            }
+            linux {
+                iconFile.set(desktopPackagingIconDir.file("Radio-Oracle.png").asFile)
             }
         }
     }

@@ -10,6 +10,7 @@
   },
   "files": [
     "README.md",
+    "icon.png",
     "jdeploy-bundle/**"
   ],
   "bin": {

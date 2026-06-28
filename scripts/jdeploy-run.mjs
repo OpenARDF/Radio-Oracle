@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { platform } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 function fail(message) {
   console.error(`ERROR: ${message}`);
@@ -16,6 +16,16 @@ if (!javaHome && platform() === "darwin" && existsSync("/usr/libexec/java_home")
 }
 if (!javaHome) {
   fail("Set JAVA_HOME to a full JDK 17 installation.");
+}
+
+function syncJdeployIcon() {
+  const sourceIcon = resolve("icon.png");
+  const bundleIcon = resolve("jdeploy-bundle", "icon.png");
+  if (!existsSync(sourceIcon)) {
+    fail("icon.png is missing. Run scripts/generate-radio-oracle-icons.py before packaging jDeploy.");
+  }
+  mkdirSync(dirname(bundleIcon), { recursive: true });
+  copyFileSync(sourceIcon, bundleIcon);
 }
 
 const args = process.argv.slice(2);
@@ -38,4 +48,8 @@ if (platform() === "win32") {
   execFileSync("cmd.exe", ["/d", "/c", "call", npx, ...npxArgs], options);
 } else {
   execFileSync(npx, npxArgs, options);
+}
+
+if (args[0] === "package") {
+  syncJdeployIcon();
 }

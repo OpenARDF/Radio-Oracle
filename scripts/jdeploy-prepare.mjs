@@ -1,13 +1,23 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { platform } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 function fail(message) {
   console.error(`ERROR: ${message}`);
   process.exit(1);
+}
+
+function syncJdeployIcon() {
+  const sourceIcon = resolve("icon.png");
+  const bundleIcon = resolve("jdeploy-bundle", "icon.png");
+  if (!existsSync(sourceIcon)) {
+    fail("icon.png is missing. Run scripts/generate-radio-oracle-icons.py before packaging jDeploy.");
+  }
+  mkdirSync(dirname(bundleIcon), { recursive: true });
+  copyFileSync(sourceIcon, bundleIcon);
 }
 
 function gradleCommand() {
@@ -49,3 +59,4 @@ runGradle(
     }
   }
 );
+syncJdeployIcon();
