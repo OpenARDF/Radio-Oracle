@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package org.openardf.radiooracle.desktop
+package org.openardf.radiooracle.shared.event
 
 import org.openardf.radiooracle.shared.domain.RaceType
 
@@ -43,7 +43,7 @@ data class CourseRuleRequirement(
             "${meters / 1000}"
         } else {
             "${meters / 1000}.${(meters % 1000).toString().padStart(3, '0').trimEnd('0')}"
-        }
+    }
 }
 
 data class CourseSpacingRuleSet(
@@ -55,8 +55,8 @@ data class CourseSpacingRuleSet(
     val includeBeaconInPairCheck: Boolean
 )
 
-object DesktopCourseRuleCatalog {
-    const val CLASSIC_CLIMB_LIMIT_PERCENT = 6.0
+object EventCourseRuleCatalog {
+    const val CLIMB_LIMIT_PERCENT = 6.0
 
     val classicRequirements: LinkedHashMap<String, CourseRuleRequirement> = linkedMapOf(
         "W12" to CourseRuleRequirement(3, 3, 2_000, 3_000),

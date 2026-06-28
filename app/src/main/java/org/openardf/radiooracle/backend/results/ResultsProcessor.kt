@@ -50,7 +50,6 @@ import org.openardf.radiooracle.backend.room.enums.ResultStatus
 import org.openardf.radiooracle.backend.room.enums.SIRecordType
 import org.openardf.radiooracle.backend.shared.toEventCompetitorData
 import org.openardf.radiooracle.backend.sounds.SoundProcessor
-import org.openardf.radiooracle.backend.sounds.SoundType
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.sportident.SIPort.CardData
 import org.openardf.radiooracle.backend.sportident.SITime
@@ -63,6 +62,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.openardf.radiooracle.shared.results.CourseEvaluator
 import org.openardf.radiooracle.shared.results.EventResultPlacement
+import org.openardf.radiooracle.shared.sound.SoundType
 import org.openardf.radiooracle.shared.results.EvaluationControlPoint
 import org.openardf.radiooracle.shared.results.EvaluationPunch
 import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming

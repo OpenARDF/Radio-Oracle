@@ -114,6 +114,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -123,7 +124,9 @@ import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -133,6 +136,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.awt.Dimension
 import java.awt.datatransfer.StringSelection
 import java.awt.image.BufferedImage
 import org.openardf.radiooracle.desktop.printing.DesktopPrinterDiagnostics
@@ -390,8 +394,22 @@ private val ControlTableColumnHints = mapOf(
 
 /** Starts the first Compose Desktop shell for Radio-Oracle. */
 fun main(args: Array<String>) = application {
+    val restoredWindowBounds = remember { DesktopAppSettingsPreferences.windowBounds() }
+    val windowState = rememberWindowState(
+        position = restoredWindowBounds?.let { bounds ->
+            WindowPosition.Absolute(bounds.x.dp, bounds.y.dp)
+        } ?: WindowPosition.PlatformDefault,
+        size = DpSize(
+            width = (restoredWindowBounds?.width ?: DesktopWindowBounds.DEFAULT_WIDTH).dp,
+            height = (restoredWindowBounds?.height ?: DesktopWindowBounds.DEFAULT_HEIGHT).dp
+        )
+    )
     lateinit var requestWindowClose: () -> Unit
-    Window(onCloseRequest = { requestWindowClose() }, title = DesktopBuildInfo.windowTitle) {
+    Window(onCloseRequest = { requestWindowClose() }, title = DesktopBuildInfo.windowTitle, state = windowState) {
+        DisposableEffect(Unit) {
+            window.minimumSize = Dimension(DesktopWindowBounds.MIN_WIDTH, DesktopWindowBounds.MIN_HEIGHT)
+            onDispose {}
+        }
         val startupPath = remember(args.toList()) {
             startupProjectPath(args.firstOrNull()?.let(Path::of))
         }
@@ -4001,6 +4019,18 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun closeApplication() {
+            DesktopAppSettingsPreferences.setWindowBounds(
+                DesktopWindowBounds(
+                    x = window.x,
+                    y = window.y,
+                    width = window.width,
+                    height = window.height
+                )
+            )
+            exitApplication()
+        }
+
         fun continuePendingDirtyAction(saveFirst: Boolean) {
             val action = pendingDirtyProjectAction ?: return
             if (saveFirst && !saveCurrentProject()) {
@@ -4009,7 +4039,7 @@ fun main(args: Array<String>) = application {
             pendingDirtyProjectAction = null
             when (action) {
                 PendingDirtyProjectAction.ExitApplication -> {
-                    exitApplication()
+                    closeApplication()
                 }
                 PendingDirtyProjectAction.NewProject -> createNewProject()
                 is PendingDirtyProjectAction.OpenProject -> openProject(action.path)
@@ -4026,7 +4056,7 @@ fun main(args: Array<String>) = application {
                 PendingDirtyProjectAction.ExitApplication
             )
             if (pendingDirtyProjectAction == null) {
-                exitApplication()
+                closeApplication()
             }
         }
 
@@ -8699,21 +8729,35 @@ private fun AppTopBar(
 
 @Composable
 private fun RadioOracleBrandName() {
-    Text(
-        text = buildAnnotatedString {
-            withStyle(SpanStyle(color = DesktopPalette.White)) {
-                append("Radio-O")
-            }
-            withStyle(SpanStyle(color = DesktopPalette.OrienteeringFlagOrange)) {
-                append("racle")
-            }
-        },
-        fontSize = 20.sp,
-        fontWeight = FontWeight.Bold,
-        fontFamily = FontFamily.SansSerif,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis
-    )
+    val logoBitmap = rememberRadioOracleLogoBitmap()
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Image(
+            bitmap = logoBitmap,
+            contentDescription = "Radio-Oracle logo",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .width(44.dp)
+                .height(44.dp)
+        )
+        Text(
+            text = buildAnnotatedString {
+                withStyle(SpanStyle(color = DesktopPalette.White)) {
+                    append("Radio-O")
+                }
+                withStyle(SpanStyle(color = DesktopPalette.OrienteeringFlagOrange)) {
+                    append("racle")
+                }
+            },
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.SansSerif,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
 }
 
 @Composable

@@ -247,22 +247,23 @@ object EventValidationRules {
             return
         }
         val counts = controlRoleCounts(definitions)
+        val categoryFoxRequirementMessage = categoryFoxRequirementMessage(categoryName, raceType, counts.foxes)
         val message = when (raceType) {
             RaceType.CLASSIC,
             RaceType.SHORT -> when {
-                counts.foxes <= 0 -> "Classic category must assign at least one fox."
+                categoryFoxRequirementMessage != null -> categoryFoxRequirementMessage
                 counts.beacons != 1 -> "Classic category must assign exactly one finish beacon; found ${counts.beacons}."
                 counts.spectators != 0 -> "Classic category must not assign spectator controls; found ${counts.spectators}."
                 else -> null
             }
             RaceType.SPRINT -> when {
-                counts.foxes != 10 -> "Sprint category must assign exactly 10 foxes; found ${counts.foxes}."
+                categoryFoxRequirementMessage != null -> categoryFoxRequirementMessage
                 counts.beacons != 1 -> "Sprint category must assign exactly one finish beacon; found ${counts.beacons}."
                 counts.spectators > 1 -> "Sprint category must assign at most one spectator; found ${counts.spectators}."
                 else -> null
             }
             RaceType.FOXORING -> when {
-                counts.foxes <= 0 -> "Foxoring category must assign at least one fox."
+                categoryFoxRequirementMessage != null -> categoryFoxRequirementMessage
                 counts.beacons != 1 -> "Foxoring category must assign exactly one finish beacon; found ${counts.beacons}."
                 counts.spectators != 0 -> "Foxoring category must not assign spectator controls; found ${counts.spectators}."
                 else -> null
@@ -273,6 +274,24 @@ object EventValidationRules {
             }
         }
         message?.let { issues.add(EventValidationIssue.CategoryCourseRequirementIssue(categoryName, it)) }
+    }
+
+    private fun categoryFoxRequirementMessage(categoryName: String, raceType: RaceType, foxes: Int): String? {
+        val requirement = EventCourseRuleCatalog.categoryRequirement(categoryName, raceType)
+        val formatLabel = raceType.toDisplayLabel()
+        if (requirement == null) {
+            return if (foxes <= 0) "$formatLabel category must assign at least one fox." else null
+        }
+        if (foxes in requirement.minControls..requirement.maxControls) {
+            return null
+        }
+        val rangeText = requirement.controlRangeText()
+        val requirementText = if (requirement.minControls == requirement.maxControls) {
+            "exactly $rangeText foxes"
+        } else {
+            "$rangeText foxes"
+        }
+        return "$formatLabel category must assign $requirementText; found $foxes."
     }
 
     private fun validatePublicLabels(

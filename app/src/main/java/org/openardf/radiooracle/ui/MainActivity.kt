@@ -54,8 +54,8 @@ import org.openardf.radiooracle.backend.files.FileProcessor
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.ARDFRepository
 import org.openardf.radiooracle.backend.sportident.SIConstants
-import org.openardf.radiooracle.backend.sportident.SIReaderStatus
 import org.openardf.radiooracle.databinding.ActivityMainBinding
+import org.openardf.radiooracle.shared.device.SIReaderStatus
 import org.openardf.radiooracle.shared.sportident.SportIdentStationMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

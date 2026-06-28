@@ -181,6 +181,12 @@ Goal: move event-domain behavior behind platform-neutral models and services.
 - Move category validation, competitor validation, alias/control-point
   management, readout/result recalculation, result grouping, and place assignment
   into shared services.
+- Gradually remove remaining Android compatibility alias facades by replacing
+  callers with direct shared imports in small, compile-proven stages. Start with
+  file import/export aliases such as `DataFormat` and `DataType`, then low-use
+  Room enum aliases such as `StandardCategoryType`, `ProviderType`, and
+  `ResultServiceStatus`, and leave heavily used Room enum aliases for later
+  focused slices.
 - Use test-driven slices: write shared common tests first, then delegate Android
   code.
 

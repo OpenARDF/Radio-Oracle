@@ -22,7 +22,30 @@
  * SOFTWARE.
  */
 
-package org.openardf.radiooracle.backend.sportident
+package org.openardf.radiooracle.desktop
 
-/** Android compatibility alias for shared SI reader state. */
-typealias SIReaderState = org.openardf.radiooracle.shared.device.SIReaderState
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class DesktopAppSettingsPreferencesTest {
+    @Test
+    fun normalizesTinyWindowBoundsToMinimumUsableSize() {
+        val bounds = DesktopWindowBounds(x = 40, y = 50, width = 320, height = 240).normalized()
+
+        assertEquals(
+            DesktopWindowBounds(
+                x = 40,
+                y = 50,
+                width = DesktopWindowBounds.MIN_WIDTH,
+                height = DesktopWindowBounds.MIN_HEIGHT
+            ),
+            bounds
+        )
+    }
+
+    @Test
+    fun rejectsInvalidWindowLocations() {
+        assertNull(DesktopWindowBounds(x = 40_000, y = 50, width = 1200, height = 800).normalized())
+    }
+}

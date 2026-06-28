@@ -31,6 +31,37 @@ interface DesktopAppSettingsStore {
     fun setUpdateCheckingEnabled(enabled: Boolean)
     fun cloudflarePagesPublishSettings(): DesktopCloudflarePagesPublishSettings
     fun setCloudflarePagesPublishSettings(settings: DesktopCloudflarePagesPublishSettings)
+    fun windowBounds(): DesktopWindowBounds?
+    fun setWindowBounds(bounds: DesktopWindowBounds)
+}
+
+data class DesktopWindowBounds(
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int
+) {
+    fun normalized(): DesktopWindowBounds? {
+        if (x !in MIN_POSITION..MAX_POSITION || y !in MIN_POSITION..MAX_POSITION) {
+            return null
+        }
+        if (width <= 0 || height <= 0) {
+            return null
+        }
+        return copy(
+            width = width.coerceAtLeast(MIN_WIDTH),
+            height = height.coerceAtLeast(MIN_HEIGHT)
+        )
+    }
+
+    companion object {
+        const val DEFAULT_WIDTH = 1280
+        const val DEFAULT_HEIGHT = 820
+        const val MIN_WIDTH = 960
+        const val MIN_HEIGHT = 640
+        private const val MIN_POSITION = -20_000
+        private const val MAX_POSITION = 20_000
+    }
 }
 
 data class DesktopCloudflarePagesPublishSettings(
@@ -65,6 +96,11 @@ object DesktopAppSettingsPreferences : DesktopAppSettingsStore {
     private const val CLOUDFLARE_BRANCH_KEY = "cloudflarePagesBranch"
     private const val CLOUDFLARE_ACCOUNT_ID_KEY = "cloudflarePagesAccountId"
     private const val CLOUDFLARE_API_TOKEN_KEY = "cloudflarePagesApiToken"
+    private const val WINDOW_X_KEY = "windowX"
+    private const val WINDOW_Y_KEY = "windowY"
+    private const val WINDOW_WIDTH_KEY = "windowWidth"
+    private const val WINDOW_HEIGHT_KEY = "windowHeight"
+    private const val MISSING_WINDOW_VALUE = Int.MIN_VALUE
     private val preferences: Preferences =
         Preferences.userNodeForPackage(DesktopAppSettingsPreferences::class.java)
 
@@ -89,5 +125,24 @@ object DesktopAppSettingsPreferences : DesktopAppSettingsStore {
         preferences.put(CLOUDFLARE_BRANCH_KEY, normalized.branch)
         preferences.put(CLOUDFLARE_ACCOUNT_ID_KEY, normalized.accountId)
         preferences.put(CLOUDFLARE_API_TOKEN_KEY, normalized.apiToken)
+    }
+
+    override fun windowBounds(): DesktopWindowBounds? {
+        val x = preferences.getInt(WINDOW_X_KEY, MISSING_WINDOW_VALUE)
+        val y = preferences.getInt(WINDOW_Y_KEY, MISSING_WINDOW_VALUE)
+        val width = preferences.getInt(WINDOW_WIDTH_KEY, MISSING_WINDOW_VALUE)
+        val height = preferences.getInt(WINDOW_HEIGHT_KEY, MISSING_WINDOW_VALUE)
+        if (listOf(x, y, width, height).any { it == MISSING_WINDOW_VALUE }) {
+            return null
+        }
+        return DesktopWindowBounds(x = x, y = y, width = width, height = height).normalized()
+    }
+
+    override fun setWindowBounds(bounds: DesktopWindowBounds) {
+        val normalized = bounds.normalized() ?: return
+        preferences.putInt(WINDOW_X_KEY, normalized.x)
+        preferences.putInt(WINDOW_Y_KEY, normalized.y)
+        preferences.putInt(WINDOW_WIDTH_KEY, normalized.width)
+        preferences.putInt(WINDOW_HEIGHT_KEY, normalized.height)
     }
 }

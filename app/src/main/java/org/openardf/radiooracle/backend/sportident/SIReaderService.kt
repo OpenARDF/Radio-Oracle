@@ -43,6 +43,8 @@ import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.sportident.SIConstants.SI_PRODUCT_ID
 import org.openardf.radiooracle.backend.sportident.SIConstants.SI_VENDOR_ID
+import org.openardf.radiooracle.shared.device.SIReaderState
+import org.openardf.radiooracle.shared.device.SIReaderStatus
 import kotlinx.coroutines.Job
 
 

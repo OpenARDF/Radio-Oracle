@@ -30,30 +30,31 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.EventCourseRuleCatalog
 
 class DesktopCourseSharedRulesTest {
     @Test
     fun ruleCatalogResolvesClassicYouthAdultFoxoringAndSprintRequirements() {
-        assertEquals("W65", DesktopCourseRuleCatalog.categoryRuleKey("Women W65"))
-        assertEquals("W45", DesktopCourseRuleCatalog.categoryRuleKey("D45"))
-        assertNull(DesktopCourseRuleCatalog.categoryRuleKey("Open"))
+        assertEquals("W65", EventCourseRuleCatalog.categoryRuleKey("Women W65"))
+        assertEquals("W45", EventCourseRuleCatalog.categoryRuleKey("D45"))
+        assertNull(EventCourseRuleCatalog.categoryRuleKey("Open"))
 
-        val youthClassic = DesktopCourseRuleCatalog.categoryRequirement("W14", RaceType.CLASSIC)
+        val youthClassic = EventCourseRuleCatalog.categoryRequirement("W14", RaceType.CLASSIC)
         assertEquals(4, youthClassic?.minControls)
         assertEquals(4, youthClassic?.maxControls)
         assertEquals("2.5-3 km", youthClassic?.lengthRangeText())
 
-        val adultClassic = DesktopCourseRuleCatalog.categoryRequirement("M50", RaceType.CLASSIC)
+        val adultClassic = EventCourseRuleCatalog.categoryRequirement("M50", RaceType.CLASSIC)
         assertEquals(4, adultClassic?.minControls)
         assertEquals(5, adultClassic?.maxControls)
         assertEquals("6-8 km", adultClassic?.lengthRangeText())
 
-        val foxoring = DesktopCourseRuleCatalog.categoryRequirement("W21", RaceType.FOXORING)
+        val foxoring = EventCourseRuleCatalog.categoryRequirement("W21", RaceType.FOXORING)
         assertEquals(6, foxoring?.minControls)
         assertEquals(10, foxoring?.maxControls)
         assertEquals("5-7 km", foxoring?.lengthRangeText())
 
-        val sprint = DesktopCourseRuleCatalog.categoryRequirement("M21", RaceType.SPRINT)
+        val sprint = EventCourseRuleCatalog.categoryRequirement("M21", RaceType.SPRINT)
         assertEquals(10, sprint?.minControls)
         assertEquals(10, sprint?.maxControls)
         assertEquals("9-12 km", sprint?.lengthRangeText())
@@ -61,32 +62,32 @@ class DesktopCourseSharedRulesTest {
 
     @Test
     fun ruleCatalogProvidesSpacingAndClimbPolicy() {
-        val youthClassic = DesktopCourseRuleCatalog.spacingRuleSet(RaceType.CLASSIC, "W14")
+        val youthClassic = EventCourseRuleCatalog.spacingRuleSet(RaceType.CLASSIC, "W14")
         assertEquals("Youth Classic", youthClassic?.formatLabel)
         assertEquals(500, youthClassic?.startMinMeters)
         assertEquals(400, youthClassic?.pairMinMeters)
         assertTrue(youthClassic?.includeBeaconInStartCheck == true)
         assertFalse(youthClassic?.includeSpectatorInPairCheck == true)
 
-        val classic = DesktopCourseRuleCatalog.spacingRuleSet(RaceType.CLASSIC, "M21")
+        val classic = EventCourseRuleCatalog.spacingRuleSet(RaceType.CLASSIC, "M21")
         assertEquals("Classic", classic?.formatLabel)
         assertEquals(750, classic?.startMinMeters)
         assertEquals(400, classic?.pairMinMeters)
 
-        val sprint = DesktopCourseRuleCatalog.spacingRuleSet(RaceType.SPRINT, "M21")
+        val sprint = EventCourseRuleCatalog.spacingRuleSet(RaceType.SPRINT, "M21")
         assertEquals("Sprint", sprint?.formatLabel)
         assertEquals(100, sprint?.startMinMeters)
         assertFalse(sprint?.includeBeaconInStartCheck == true)
         assertTrue(sprint?.includeSpectatorInPairCheck == true)
 
-        val foxoring = DesktopCourseRuleCatalog.spacingRuleSet(RaceType.FOXORING, "M21")
+        val foxoring = EventCourseRuleCatalog.spacingRuleSet(RaceType.FOXORING, "M21")
         assertEquals("Foxoring", foxoring?.formatLabel)
         assertEquals(250, foxoring?.startMinMeters)
         assertFalse(foxoring?.includeSpectatorInPairCheck == true)
 
-        assertTrue(DesktopCourseRuleCatalog.hasClimbLimit(RaceType.CLASSIC))
-        assertTrue(DesktopCourseRuleCatalog.hasClimbLimit(RaceType.SPRINT))
-        assertFalse(DesktopCourseRuleCatalog.hasClimbLimit(RaceType.ORIENTEERING))
+        assertTrue(EventCourseRuleCatalog.hasClimbLimit(RaceType.CLASSIC))
+        assertTrue(EventCourseRuleCatalog.hasClimbLimit(RaceType.SPRINT))
+        assertFalse(EventCourseRuleCatalog.hasClimbLimit(RaceType.ORIENTEERING))
     }
 
     @Test

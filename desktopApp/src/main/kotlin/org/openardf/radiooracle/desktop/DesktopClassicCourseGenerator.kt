@@ -25,6 +25,8 @@
 package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.CourseRuleRequirement
+import org.openardf.radiooracle.shared.event.EventCourseRuleCatalog
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -125,9 +127,9 @@ object DesktopClassicCourseGenerator {
         minimumFoxes = 3,
         maximumFoxes = 5,
         foxCounts = { totalFoxes -> 3..totalFoxes },
-        requirements = DesktopCourseRuleCatalog.classicRequirements,
-        startExclusionMeters = DesktopCourseRuleCatalog.spacingRuleSet(RaceType.CLASSIC)?.startMinMeters ?: 750,
-        transmitterSeparationMeters = DesktopCourseRuleCatalog.spacingRuleSet(RaceType.CLASSIC)?.pairMinMeters ?: 400,
+        requirements = EventCourseRuleCatalog.classicRequirements,
+        startExclusionMeters = EventCourseRuleCatalog.spacingRuleSet(RaceType.CLASSIC)?.startMinMeters ?: 750,
+        transmitterSeparationMeters = EventCourseRuleCatalog.spacingRuleSet(RaceType.CLASSIC)?.pairMinMeters ?: 400,
         useSubsetDynamicProgramming = false
     )
     private val foxoringConfig = CourseGeneratorConfig(
@@ -136,9 +138,9 @@ object DesktopClassicCourseGenerator {
         minimumFoxes = 5,
         maximumFoxes = 12,
         foxCounts = { totalFoxes -> 4..totalFoxes },
-        requirements = DesktopCourseRuleCatalog.foxoringRequirements,
-        startExclusionMeters = DesktopCourseRuleCatalog.spacingRuleSet(RaceType.FOXORING)?.startMinMeters ?: 250,
-        transmitterSeparationMeters = DesktopCourseRuleCatalog.spacingRuleSet(RaceType.FOXORING)?.pairMinMeters ?: 250,
+        requirements = EventCourseRuleCatalog.foxoringRequirements,
+        startExclusionMeters = EventCourseRuleCatalog.spacingRuleSet(RaceType.FOXORING)?.startMinMeters ?: 250,
+        transmitterSeparationMeters = EventCourseRuleCatalog.spacingRuleSet(RaceType.FOXORING)?.pairMinMeters ?: 250,
         useSubsetDynamicProgramming = true,
         recommendCourseSets = true
     )
@@ -148,9 +150,9 @@ object DesktopClassicCourseGenerator {
         minimumFoxes = 10,
         maximumFoxes = 10,
         foxCounts = { _ -> 2..10 },
-        requirements = DesktopCourseRuleCatalog.sprintRequirements,
-        startExclusionMeters = DesktopCourseRuleCatalog.spacingRuleSet(RaceType.SPRINT)?.startMinMeters ?: 100,
-        transmitterSeparationMeters = DesktopCourseRuleCatalog.spacingRuleSet(RaceType.SPRINT)?.pairMinMeters ?: 100,
+        requirements = EventCourseRuleCatalog.sprintRequirements,
+        startExclusionMeters = EventCourseRuleCatalog.spacingRuleSet(RaceType.SPRINT)?.startMinMeters ?: 100,
+        transmitterSeparationMeters = EventCourseRuleCatalog.spacingRuleSet(RaceType.SPRINT)?.pairMinMeters ?: 100,
         useSubsetDynamicProgramming = false,
         recommendCourseSets = true,
         recommendationCategoryFilter = { true }
@@ -837,7 +839,7 @@ object DesktopClassicCourseGenerator {
             return emptyList()
         }
         val climbPercent = climbMeters / horizontalLengthMeters * 100.0
-        if (climbPercent > DesktopCourseRuleCatalog.CLASSIC_CLIMB_LIMIT_PERCENT) {
+        if (climbPercent > EventCourseRuleCatalog.CLIMB_LIMIT_PERCENT) {
             return emptyList()
         }
         return config.requirements.mapNotNull { (category, requirement) ->
@@ -858,7 +860,7 @@ object DesktopClassicCourseGenerator {
             return emptyList()
         }
         val climbPercent = climbMeters / horizontalLengthMeters * 100.0
-        if (climbPercent > DesktopCourseRuleCatalog.CLASSIC_CLIMB_LIMIT_PERCENT) {
+        if (climbPercent > EventCourseRuleCatalog.CLIMB_LIMIT_PERCENT) {
             return emptyList()
         }
         return config.requirements.mapNotNull { (category, requirement) ->

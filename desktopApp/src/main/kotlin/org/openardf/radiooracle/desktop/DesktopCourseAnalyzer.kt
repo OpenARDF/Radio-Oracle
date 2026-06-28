@@ -27,10 +27,13 @@ package org.openardf.radiooracle.desktop
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.CourseRuleRequirement
+import org.openardf.radiooracle.shared.event.CourseSpacingRuleSet
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventCourseRuleCatalog
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
@@ -3409,16 +3412,16 @@ object DesktopCourseAnalyzer {
     }
 
     private fun categoryRequirement(categoryName: String, raceType: RaceType): CourseRuleRequirement? =
-        DesktopCourseRuleCatalog.categoryRequirement(categoryName, raceType)
+        EventCourseRuleCatalog.categoryRequirement(categoryName, raceType)
 
     private fun routeLengthRequirement(categoryName: String, raceType: RaceType): CourseRuleRequirement? =
-        DesktopCourseRuleCatalog.routeLengthRequirement(categoryName, raceType)
+        EventCourseRuleCatalog.routeLengthRequirement(categoryName, raceType)
 
     private fun RaceType.hasCourseAnalyzerClimbLimit(): Boolean =
-        DesktopCourseRuleCatalog.hasClimbLimit(this)
+        EventCourseRuleCatalog.hasClimbLimit(this)
 
     private fun spacingRuleSet(raceType: RaceType, categoryName: String): CourseSpacingRuleSet? =
-        DesktopCourseRuleCatalog.spacingRuleSet(raceType, categoryName)
+        EventCourseRuleCatalog.spacingRuleSet(raceType, categoryName)
 
     private fun CourseSpacingRuleSet.startCheckedPoints(
         foxes: List<ControlAnalysisPoint>,
@@ -3450,7 +3453,7 @@ object DesktopCourseAnalyzer {
         point?.let { LabeledCoursePoint(control.analysisRouteLabel(), it) }
 
     private fun categoryRuleKey(categoryName: String): String? =
-        DesktopCourseRuleCatalog.categoryRuleKey(categoryName)
+        EventCourseRuleCatalog.categoryRuleKey(categoryName)
 
     private fun speedModel(
         raceType: RaceType,

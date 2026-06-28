@@ -30,6 +30,8 @@ import com.felhr.usbserial.UsbSerialInterface
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.Race
+import org.openardf.radiooracle.shared.device.SIReaderState
+import org.openardf.radiooracle.shared.device.SIReaderStatus
 import org.openardf.radiooracle.backend.sportident.SIConstants.GET_SI_CARD8_9_SIAC
 import org.openardf.radiooracle.backend.sportident.SIConstants.GET_SYSTEM_INFO
 import org.openardf.radiooracle.backend.sportident.SIConstants.READ_WRITE_TIMEOUT

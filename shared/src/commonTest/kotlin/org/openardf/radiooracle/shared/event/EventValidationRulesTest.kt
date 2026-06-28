@@ -204,6 +204,74 @@ class EventValidationRulesTest {
     }
 
     @Test
+    fun acceptsSprintCategoryFoxCountsFromCategoryRequirementRange() {
+        val issues = EventValidationRules.validateRaceData(
+            raceData(
+                race = race().copy(raceType = RaceType.SPRINT),
+                categories = listOf(
+                    categoryData(
+                        name = "W55",
+                        controlPoints = sprintControlPoints("W55", slowFoxes = 3, fastFoxes = 3)
+                    )
+                ),
+                controls = sprintControls()
+            )
+        )
+
+        assertFalse(
+            issues.any {
+                it is EventValidationIssue.CategoryCourseRequirementIssue &&
+                    it.categoryName == "W55"
+            }
+        )
+    }
+
+    @Test
+    fun reportsSprintCategoryFoxCountsOutsideCategoryRequirementRange() {
+        val w55Issues = EventValidationRules.validateRaceData(
+            raceData(
+                race = race().copy(raceType = RaceType.SPRINT),
+                categories = listOf(
+                    categoryData(
+                        name = "W55",
+                        controlPoints = sprintControlPoints("W55", slowFoxes = 3, fastFoxes = 2)
+                    )
+                ),
+                controls = sprintControls()
+            )
+        )
+        val m21Issues = EventValidationRules.validateRaceData(
+            raceData(
+                race = race().copy(raceType = RaceType.SPRINT),
+                categories = listOf(
+                    categoryData(
+                        name = "M21",
+                        controlPoints = sprintControlPoints("M21", slowFoxes = 3, fastFoxes = 3)
+                    )
+                ),
+                controls = sprintControls()
+            )
+        )
+
+        assertTrue(
+            w55Issues.contains(
+                EventValidationIssue.CategoryCourseRequirementIssue(
+                    categoryName = "W55",
+                    message = "Sprint category must assign 6-8 foxes; found 5."
+                )
+            )
+        )
+        assertTrue(
+            m21Issues.contains(
+                EventValidationIssue.CategoryCourseRequirementIssue(
+                    categoryName = "M21",
+                    message = "Sprint category must assign exactly 10 foxes; found 6."
+                )
+            )
+        )
+    }
+
+    @Test
     fun warnsAboutControlCodesAboveLegacyCompatibilityRange() {
         val issues = EventValidationRules.validateRaceData(
             raceData(
@@ -249,7 +317,8 @@ class EventValidationRulesTest {
         name: String,
         controlPointsString: String = "",
         differentProperties: Boolean = false,
-        raceType: RaceType? = null
+        raceType: RaceType? = null,
+        controlPoints: List<EventControlPoint>? = null
     ): EventCategoryData =
         EventCategoryData(
             category = EventCategory(
@@ -267,7 +336,7 @@ class EventValidationRulesTest {
                 timeLimitSeconds = null,
                 controlPointsString = controlPointsString
             ),
-            controlPoints = if (controlPointsString.isBlank()) classicControlPoints(name) else emptyList(),
+            controlPoints = controlPoints ?: if (controlPointsString.isBlank()) classicControlPoints(name) else emptyList(),
             competitors = emptyList()
         )
 
@@ -287,6 +356,39 @@ class EventValidationRulesTest {
         (1..5).map { number ->
             control("fox-$number", 30 + number, "Fox $number")
         } + control("beacon", 50, "B", ControlPointType.BEACON)
+
+    private fun sprintControls(): List<EventControl> =
+        (1..5).map { number ->
+            control("slow-$number", 30 + number, "$number")
+        } +
+            control("spectator", 46, "S", ControlPointType.SEPARATOR) +
+            (1..5).map { number ->
+                control("fast-$number", 40 + number, "${number}F")
+            } +
+            control("beacon", 50, "B", ControlPointType.BEACON)
+
+    private fun sprintControlPoints(
+        categoryId: String,
+        slowFoxes: Int,
+        fastFoxes: Int
+    ): List<EventControlPoint> {
+        val controls = sprintControls().associateBy { it.id }
+        val controlIds = (1..slowFoxes).map { "slow-$it" } +
+            "spectator" +
+            (1..fastFoxes).map { "fast-$it" } +
+            "beacon"
+        return controlIds.mapIndexed { index, controlId ->
+            val control = requireNotNull(controls[controlId])
+            EventControlPoint(
+                id = "$categoryId-$controlId",
+                categoryId = categoryId,
+                siCode = control.siCode,
+                type = control.type,
+                order = index + 1,
+                controlId = control.id
+            )
+        }
+    }
 
     private fun control(
         id: String,

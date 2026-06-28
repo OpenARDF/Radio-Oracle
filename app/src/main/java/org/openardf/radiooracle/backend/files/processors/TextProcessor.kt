@@ -30,7 +30,6 @@ import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.constants.DataFormat
 import org.openardf.radiooracle.backend.files.constants.DataType
-import org.openardf.radiooracle.backend.files.constants.FileConstants
 import org.openardf.radiooracle.backend.files.wrappers.DataImportWrapper
 import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
@@ -43,6 +42,7 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.ControlPointAlias
 import org.openardf.radiooracle.backend.room.enums.ResultStatus
 import org.openardf.radiooracle.backend.room.enums.SIRecordType
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
+import org.openardf.radiooracle.shared.files.FileConstants
 import kotlinx.coroutines.flow.first
 import java.io.InputStream
 import java.io.OutputStream
