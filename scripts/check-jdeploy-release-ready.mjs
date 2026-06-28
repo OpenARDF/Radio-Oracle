@@ -146,6 +146,9 @@ requireIncludes("trusted npm publish script", trustedPublishScript, "delete publ
 requireIncludes("trusted npm publish script", trustedPublishScript, "NPM_CONFIG_USERCONFIG");
 requireIncludes("trusted npm publish script", trustedPublishScript, "\"--provenance\"");
 requireIncludes("trusted npm publish script", trustedPublishScript, "dist?.attestations?.provenance");
+if (!existsSync("scripts/patch-jdeploy-macos-installer-icons.mjs")) {
+  fail("macOS jDeploy installer icon patcher is missing");
+}
 
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "tags:");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "- \"v*\"");
@@ -154,6 +157,8 @@ requireIncludes("GitHub release workflow", githubReleaseWorkflow, "RADIO_ORACLE_
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "Use GitHub-safe jDeploy package identity");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "const githubPackageName = \"radio-oracle\"");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "deploy_target: github");
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "Patch macOS installer icons");
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "patch-jdeploy-macos-installer-icons.mjs");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "gh release upload");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "radio-oracle-*.tgz");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "gh release edit");
