@@ -94,7 +94,7 @@ enum class DesktopSection(val label: String) {
     CourseAnalysis("Course Analyzer"),
     ElevationCache("Elevation Data"),
     ElevationCacheImport("Import Elevation Data"),
-    Tools("Tools"),
+    Tools("More..."),
     EventValidator("Event Validator"),
     KmlTools("Course Tools"),
     SportIdentTools("SPORTident"),

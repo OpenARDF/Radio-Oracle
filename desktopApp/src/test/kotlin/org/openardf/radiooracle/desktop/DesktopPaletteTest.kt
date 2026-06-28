@@ -49,7 +49,7 @@ class DesktopPaletteTest {
                 "Course Analyzer",
                 "Elevation Data",
                 "Import Elevation Data",
-                "Tools",
+                "More...",
                 "Event Validator",
                 "Course Tools",
                 "SPORTident",

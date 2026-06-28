@@ -136,7 +136,6 @@ dependencies {
     implementation(libs.escpos.printer)
     implementation(libs.moshi.kotlin)
     implementation(libs.okhttp)
-    implementation(libs.markwon.core)
     implementation(libs.expandable.fab)
     implementation(libs.google.code.scanner)
 

@@ -27,8 +27,4 @@
     <string name="key_prints_double_print" translatable="false">double_print</string>
     <string name="key_prints_double_print_delay" translatable="false">double_print_delay</string>
 
-    <!--HELP-->
-    <string name="key_about_app" translatable="false">about_app</string>
-    <string name="key_changelog" translatable="false">changelog</string>
-
 </resources>

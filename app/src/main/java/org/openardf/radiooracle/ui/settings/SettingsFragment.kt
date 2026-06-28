@@ -170,25 +170,5 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 true
             }
 
-//        HELP
-        findPreference<androidx.preference.Preference>(
-            requireContext().getString(
-                R.string.key_about_app
-            )
-        )
-            ?.setOnPreferenceClickListener {
-                findNavController().navigate(SettingsFragmentDirections.openAboutApp())
-                true
-            }
-
-        findPreference<androidx.preference.Preference>(
-            requireContext().getString(
-                R.string.key_changelog
-            )
-        )
-            ?.setOnPreferenceClickListener {
-                findNavController().navigate(SettingsFragmentDirections.openChangeLog())
-                true
-            }
     }
 }

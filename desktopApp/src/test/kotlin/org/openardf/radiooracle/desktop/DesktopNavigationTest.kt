@@ -185,7 +185,7 @@ class DesktopNavigationTest {
     @Test
     fun placesCurrentDesktopSectionsUnderWorkflowGroups() {
         assertEquals(
-            listOf("Event File", "Controls", "Categories", "Competitors", "Start List", "Tools"),
+            listOf("Event File", "Controls", "Categories", "Competitors", "Start List", "More..."),
             DesktopNavigation.rootItems(DesktopWorkflow.Setup).map { it.label }
         )
         assertEquals(
@@ -291,7 +291,7 @@ class DesktopNavigationTest {
     @Test
     fun toolsMenuAndDescendantsUseToolsNavigationColor() {
         val rootState = DesktopNavState()
-        val tools = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Tools" }
+        val tools = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "More..." }
         val toolsState = rootState.enter(tools)
 
         assertTrue(DesktopNavigation.isToolsRootMenuItem(tools))
@@ -381,7 +381,7 @@ class DesktopNavigationTest {
         items.forEach { item ->
             assertEquals("Wrong menu indicator state for ${item.id}", item.action == null, DesktopNavigation.showsMenuIndicator(item))
             assertFalse("Stored labels should not include rendered indicator for ${item.id}", item.label.contains(">"))
-            if (item.children.isNotEmpty() && item.id != "setup.event-file.android") {
+            if (item.children.isNotEmpty() && item.id !in setOf("setup.event-file.android", "setup.tools")) {
                 assertFalse("Submenu labels should not use ellipses for ${item.id}", item.label.contains("..."))
             }
         }
@@ -678,7 +678,7 @@ class DesktopNavigationTest {
         assertTrue(setupItems.first { it.label == "Categories" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Competitors" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Start List" }.requiresEventFile)
-        assertFalse(setupItems.first { it.label == "Tools" }.requiresEventFile)
+        assertFalse(setupItems.first { it.label == "More..." }.requiresEventFile)
     }
 
     @Test
@@ -688,7 +688,7 @@ class DesktopNavigationTest {
         val categories = setupItems.first { it.label == "Categories" }
         val competitors = setupItems.first { it.label == "Competitors" }
         val startList = setupItems.first { it.label == "Start List" }
-        val tools = setupItems.first { it.label == "Tools" }
+        val tools = setupItems.first { it.label == "More..." }
 
         val noEvent = DesktopNavigationReadiness()
         assertFalse(DesktopNavigation.isItemEnabled(controls, noEvent))
@@ -972,7 +972,7 @@ class DesktopNavigationTest {
 
     @Test
     fun setupToolsOwnCourseToolsAndCourseAnalyzer() {
-        val tools = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Tools" }
+        val tools = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "More..." }
         val courseTools = tools.children.first { it.label == "Course Tools" }
         val courseAnalyzer = courseTools.children.first { it.label == "Course Analyzer" }
 
@@ -990,10 +990,10 @@ class DesktopNavigationTest {
             courseTools.children.map { it.label }
         )
         assertEquals(
-            listOf("Event Validator", "About Radio-Oracle...", "Course Tools", "SPORTident"),
+            listOf("Event Validator", "Course Tools", "SPORTident", "About"),
             tools.children.map { it.label }
         )
-        val about = tools.children.first { it.label == "About Radio-Oracle..." }
+        val about = tools.children.first { it.label == "About" }
         assertEquals(DesktopNavAction.ShowAbout, about.action)
         assertEquals(DesktopSection.Tools, about.section)
         assertFalse(about.requiresEventFile)

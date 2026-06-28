@@ -27,7 +27,6 @@ kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
 ksp = "2.2.0-2.0.2"
 skiko = "0.144.6"
-markwon = "4.6.2"
 material = "1.14.0"
 mockito = "5.23.0"
 mockito-kotlin = "6.3.0"
@@ -69,7 +68,6 @@ jserialcomm = { module = "com.fazecast:jSerialComm", version.ref = "jserialcomm"
 kotlin-csv-jvm = { module = "com.github.doyaaaaaken:kotlin-csv-jvm", version.ref = "kotlin-csv" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
-markwon-core = { module = "io.noties.markwon:core", version.ref = "markwon" }
 material = { module = "com.google.android.material:material", version.ref = "material" }
 mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
 mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.ref = "mockito-kotlin" }

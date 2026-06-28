@@ -503,7 +503,7 @@ object DesktopNavigation {
                 ),
                 group(
                     "setup.tools",
-                    "Tools",
+                    "More...",
                     workflow,
                     listOf(
                         item(
@@ -511,14 +511,6 @@ object DesktopNavigation {
                             "Event Validator",
                             workflow,
                             DesktopSection.EventValidator
-                        ),
-                        action(
-                            "setup.tools.about",
-                            "About Radio-Oracle...",
-                            workflow,
-                            DesktopNavAction.ShowAbout,
-                            requiresEventFile = false,
-                            section = DesktopSection.Tools
                         ),
                         group(
                             "setup.tools.course-tools",
@@ -585,6 +577,14 @@ object DesktopNavigation {
                             ),
                             DesktopSection.SportIdentTools,
                             requiresEventFile = false
+                        ),
+                        action(
+                            "setup.tools.about",
+                            "About",
+                            workflow,
+                            DesktopNavAction.ShowAbout,
+                            requiresEventFile = false,
+                            section = DesktopSection.Tools
                         )
                     ),
                     DesktopSection.Tools,
@@ -1227,11 +1227,11 @@ object DesktopNavigation {
         "setup.start-list.export-iof" to
             "Use Export IOF Start List XML to write an IOF-compatible start-list file.",
         "setup.tools" to
-            "Use Tools to open standalone utilities for course files and other future event-support workflows.",
+            "Use More to open standalone utilities, app information, and other event-support workflows.",
         "setup.tools.event-validator" to
             "Use Event Validator to check whether the current Event File is internally consistent before race-day workflows.",
         "setup.tools.about" to
-            "Use About Radio-Oracle to view the app version, build date, platform, project, license, and update information.",
+            "Use About to view the app version, build date, platform, project, license, and update information.",
         "setup.tools.course-tools" to
             "Use Course Tools to analyze or modify course-related files and course data.",
         "setup.tools.sportident" to

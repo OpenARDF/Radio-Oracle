@@ -292,12 +292,6 @@
         <action
             android:id="@+id/configurePrints"
             app:destination="@id/printsFragment" />
-        <action
-            android:id="@+id/openAboutApp"
-            app:destination="@id/aboutAppDialogFragment" />
-        <action
-            android:id="@+id/openChangeLog"
-            app:destination="@id/changelogDialogFragment" />
     </fragment>
     <fragment
         android:id="@+id/printsFragment"
@@ -307,10 +301,6 @@
         android:id="@+id/aboutAppDialogFragment"
         android:name="org.openardf.radiooracle.ui.settings.AboutDialogFragment"
         android:label="AboutAppDialogFragment" />
-    <dialog
-        android:id="@+id/changelogDialogFragment"
-        android:name="org.openardf.radiooracle.ui.settings.ChangelogDialogFragment"
-        android:label="ChangelogDialogFragment" />
     <dialog
         android:id="@+id/InternetImportDialogFragment"
         android:name="org.openardf.radiooracle.ui.races.InternetImportDialogFragment"

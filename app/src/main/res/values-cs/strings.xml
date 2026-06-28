@@ -10,7 +10,6 @@
     <string name="data_import_file_error">Chyba při otevírání souboru</string>
     <string name="race_import_file">Otevřít soubor události</string>
     <string name="race_toolbar_title">Události série</string>
-    <string name="preferences_about_app">O aplikaci</string>
     <string name="race_level_international">Mezinárodní</string>
     <string name="race_level_national">Národní</string>
     <string name="race_level_regional">Krajský</string>
@@ -185,7 +184,6 @@
     <string name="results_export_error">Chyba při exportování dat! %1$s</string>
     <string name="preferences_general">Obecné</string>
     <string name="preferences_prints">Tisk</string>
-    <string name="preferences_help">Nápověda</string>
     <string name="preferences_general_keep_screen_open">Zabránit systému v zamykání obrazovky</string>
     <string name="preferences_general_keep_screen_open_hint">Obrazovka se nevypne automaticky po vypršení časového limitu.</string>
     <string name="preferences_general_show_log">Zobrazit log</string>
@@ -197,7 +195,6 @@
     <string name="preferences_readout_duplicate_replace">Nahradit</string>
     <string name="preferences_readout_duplicate_new">Vytvořit nové vyčítání</string>
     <string name="preferences_files_prefer_app_start_time">Nepřepisovat startovní čas</string>
-    <string name="preferences_changelog">Seznam změn</string>
     <string name="print_automatic_manually">Tisknout manuálně</string>
     <string name="print_automatic_category_matched">Tisknout pokud je přiřazen závodník a kategorie</string>
     <string name="print_automatic_competitor_matched">Tisknout pokud je přiřazen závodník</string>
@@ -301,10 +298,7 @@
     <string name="event_file_send_url_hint">http://192.168.1.10:12345/radio-oracle/file-receive?token=...</string>
     <string name="event_file_send_progress">Odesílání souboru...</string>
     <string name="event_file_send_success">Odesláno do desktopu: %1$s</string>
-    <string name="about_app_version">Verze %1$s</string>
-    <string name="about_app_description">Radio-Oracle je open-source nástroj pro organizaci soutěží v radiovém orientačním běhu.</string>
-    <string name="about_app_credits_title">Autoři a licence</string>
-    <string name="about_app_credits">Udržuje OpenARDF. Odvozeno z projektu Radio-O-Manager s licencí MIT od Pavla Kolského, Vojtěcha Kopala a Jakuba Šroma. Používá open-source knihovny včetně SortableTableView, kotlin-csv, UsbSerial, ESCPOS-ThermalPrinter-Android, Moshi, OkHttp, Markwon, Firebase a AndroidX. Logo je původní grafika Radio-Oracle vygenerovaná pro tento projekt pomocí Codex.</string>
+    <string name="about_app_version">Verze aplikace: %1$s</string>
 
     <plurals name="event_series_member_count">
         <item quantity="one">%d událost</item>
