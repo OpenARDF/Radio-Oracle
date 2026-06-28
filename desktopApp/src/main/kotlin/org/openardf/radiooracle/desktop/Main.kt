@@ -4918,8 +4918,6 @@ fun main(args: Array<String>) = application {
         }
         if (isAboutDialogVisible) {
             AboutRadioOracleDialog(
-                isUpdateCheckingEnabled = isUpdateCheckingEnabled,
-                updateCheckStatus = updateCheckStatus,
                 onCheckForUpdates = ::checkForUpdates,
                 onOpenUpdateLink = ::openExternalUrl,
                 onDismiss = { isAboutDialogVisible = false }
@@ -7745,48 +7743,49 @@ private fun CompetitorCsvImportOptionsDialog(
 
 @Composable
 private fun AboutRadioOracleDialog(
-    isUpdateCheckingEnabled: Boolean,
-    updateCheckStatus: DesktopAppUpdateStatus?,
     onCheckForUpdates: () -> Unit,
     onOpenUpdateLink: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val logoBitmap = rememberRadioOracleLogoBitmap()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("About Radio-Oracle") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("App Version: ${DesktopBuildInfo.displayVersion}")
-                Text("Build Date (UTC): ${DesktopBuildInfo.buildDateUtc}")
-                Text("Platform: Desktop")
-                SelectionContainer {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Project: ${DesktopBuildInfo.projectUrl}")
-                        Text("License: ${DesktopBuildInfo.licenseLabel} (${DesktopBuildInfo.licenseUrl})")
-                    }
-                }
-                Text("Updates: ${updateCheckStatusText(isUpdateCheckingEnabled, updateCheckStatus)}")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        enabled = isUpdateCheckingEnabled,
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Image(
+                    bitmap = logoBitmap,
+                    contentDescription = "Radio-Oracle logo",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .width(72.dp)
+                        .height(72.dp)
+                )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.widthIn(min = 340.dp, max = 520.dp)
+                ) {
+                    AboutRadioOracleInfoRow("App Version", DesktopBuildInfo.displayVersion)
+                    AboutRadioOracleInfoRow("Build Date (UTC)", DesktopBuildInfo.buildDateUtc)
+                    AboutRadioOracleInfoRow("Platform", "Desktop")
+                    AboutRadioOracleInfoRow(
+                        label = "Project",
+                        value = DesktopBuildInfo.projectUrl,
+                        onClick = { onOpenUpdateLink(DesktopBuildInfo.projectUrl) }
+                    )
+                    AboutRadioOracleInfoRow(
+                        label = "License",
+                        value = DesktopBuildInfo.licenseLabel,
+                        onClick = { onOpenUpdateLink(DesktopBuildInfo.licenseUrl) }
+                    )
+                    AboutRadioOracleInfoRow(
+                        label = "Updates",
+                        value = "Check for updates",
                         onClick = onCheckForUpdates
-                    ) {
-                        Text("Check for Updates")
-                    }
-                    if (updateCheckStatus != null) {
-                        Button(onClick = { onOpenUpdateLink(DesktopAppUpdateSupport.updatePageUrl) }) {
-                            Text("Open Update Link")
-                        }
-                    }
-                }
-                if (updateCheckStatus != null) {
-                    SelectionContainer {
-                        Text(
-                            text = DesktopAppUpdateSupport.updatePageUrl,
-                            color = Color.DarkGray,
-                            fontSize = 13.sp
-                        )
-                    }
+                    )
                 }
             }
         },
@@ -7796,6 +7795,39 @@ private fun AboutRadioOracleDialog(
             }
         }
     )
+}
+
+@Composable
+private fun AboutRadioOracleInfoRow(
+    label: String,
+    value: String,
+    onClick: (() -> Unit)? = null
+) {
+    val isLink = onClick != null
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = "$label: ",
+            fontSize = 14.sp,
+            color = DesktopPalette.Black,
+            maxLines = 1
+        )
+        Text(
+            text = value,
+            fontSize = 14.sp,
+            color = when {
+                isLink -> DesktopPalette.PrimaryVariant
+                else -> DesktopPalette.Black
+            },
+            textDecoration = if (isLink) TextDecoration.Underline else null,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = if (isLink) {
+                Modifier.clickable { onClick?.invoke() }
+            } else {
+                Modifier
+            }
+        )
+    }
 }
 
 @Composable
