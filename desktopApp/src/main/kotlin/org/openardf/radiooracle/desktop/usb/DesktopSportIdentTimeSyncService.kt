@@ -38,7 +38,9 @@ data class DesktopSportIdentTimeSyncInspection(
     val stationInfo: SportIdentStationInfo?,
     val statusText: String,
     val canSyncTime: Boolean,
-    val disabledReason: String?
+    val disabledReason: String?,
+    val coupledStationClock: DesktopSportIdentCoupledStationClock?,
+    val coupledStationInspectionError: String?
 ) {
     companion object {
         fun disconnected(): DesktopSportIdentTimeSyncInspection =
@@ -48,17 +50,32 @@ data class DesktopSportIdentTimeSyncInspection(
                 stationInfo = null,
                 statusText = "No SPORTident USB station detected.",
                 canSyncTime = false,
-                disabledReason = "Connect a SPORTident download station before syncing time."
+                disabledReason = "Connect a SPORTident download station before syncing time.",
+                coupledStationClock = null,
+                coupledStationInspectionError = null
             )
     }
 }
+
+data class DesktopSportIdentCoupledStationClock(
+    val stationInfo: SportIdentStationInfo,
+    val stationTime: LocalDateTime,
+    val computerTime: LocalDateTime,
+    val stationMinusComputerMillis: Long
+)
 
 data class DesktopSportIdentTimeSyncResult(
     val stationInfo: SportIdentStationInfo,
     val sourceTime: LocalDateTime,
     val confirmedTime: LocalDateTime?,
     val beforeTime: LocalDateTime?,
-    val toleranceSeconds: Long
+    val toleranceSeconds: Long,
+    val computerTimeAfterSync: LocalDateTime?,
+    val confirmedStationMinusComputerMillis: Long?,
+    val currentTimeOffsetMillis: Long,
+    val attempts: Int,
+    val secondBoundaryWaitMillis: Long?,
+    val secondBoundaryLeadMillis: Long?
 )
 
 internal data class DesktopSportIdentTimeSyncDryRun(
@@ -75,7 +92,9 @@ internal class DesktopSportIdentTimeSyncService(
     private val commandClient: DesktopSportIdentStationCommandClient = DesktopSportIdentStationCommandClient(
         readTimeoutMs = READ_TIMEOUT_MS,
         maxReplyBytes = MAX_REPLY_BYTES
-    )
+    ),
+    private val currentTime: () -> LocalDateTime = { LocalDateTime.now() },
+    private val sleepMillis: (Long) -> Unit = { Thread.sleep(it) }
 ) {
     fun inspectDownloadStation(): DesktopSportIdentTimeSyncInspection {
         val port = portProvider.listPorts().firstOrNull { it.info.matchesSportIdent() }
@@ -86,6 +105,18 @@ internal class DesktopSportIdentTimeSyncService(
             val stationInfo = connection.stationInfo
             val modeLabel = stationInfo.stationModeLabel ?: "unknown"
             val canSyncTime = stationInfo.canRelayTimeSync()
+            val coupledStationClockResult = if (canSyncTime) {
+                readCoupledStationClock(port)
+            } else {
+                null
+            }
+            val coupledStationClock = coupledStationClockResult?.getOrNull()
+            val coupledStationInspectionError = if (canSyncTime && coupledStationClock == null) {
+                coupledStationClockResult?.exceptionOrNull()?.message
+                    ?: "Coupled station time read failed."
+            } else {
+                null
+            }
             DesktopSportIdentTimeSyncInspection(
                 portInfo = port.info,
                 baudRate = connection.baudRate,
@@ -96,7 +127,9 @@ internal class DesktopSportIdentTimeSyncService(
                     null
                 } else {
                     "Configure the attached SPORTident station in SI MASTER mode before syncing time."
-                }
+                },
+                coupledStationClock = coupledStationClock,
+                coupledStationInspectionError = coupledStationInspectionError
             )
         }.getOrElse { error ->
             DesktopSportIdentTimeSyncInspection(
@@ -105,12 +138,14 @@ internal class DesktopSportIdentTimeSyncService(
                 stationInfo = null,
                 statusText = "SI station inspection failed: ${error.message ?: error::class.simpleName}",
                 canSyncTime = false,
-                disabledReason = "Resolve the station connection error before syncing time."
+                disabledReason = "Resolve the station connection error before syncing time.",
+                coupledStationClock = null,
+                coupledStationInspectionError = null
             )
         }
     }
 
-    fun syncTime(sourceTime: LocalDateTime = LocalDateTime.now()): DesktopSportIdentTimeSyncResult {
+    fun syncTime(sourceTime: LocalDateTime? = null): DesktopSportIdentTimeSyncResult {
         return writeTimeWithReadBack(
             sourceTime = sourceTime,
             writeEnabled = true,
@@ -128,9 +163,14 @@ internal class DesktopSportIdentTimeSyncService(
     }
 
     fun writeTimeWithReadBack(
-        sourceTime: LocalDateTime = LocalDateTime.now(),
+        sourceTime: LocalDateTime? = null,
         writeEnabled: Boolean,
-        toleranceSeconds: Long = DEFAULT_TOLERANCE_SECONDS
+        toleranceSeconds: Long = DEFAULT_TOLERANCE_SECONDS,
+        currentTimeOffsetMillis: Long = DEFAULT_CURRENT_TIME_OFFSET_MILLIS,
+        secondBoundaryLeadMillis: Long = DEFAULT_SECOND_BOUNDARY_LEAD_MILLIS,
+        maxAttempts: Int = DEFAULT_WRITE_ATTEMPTS,
+        correctionThresholdMillis: Long = DEFAULT_CORRECTION_THRESHOLD_MILLIS,
+        alignToSecondBoundary: Boolean = DEFAULT_ALIGN_TO_SECOND_BOUNDARY
     ): DesktopSportIdentTimeSyncResult {
         require(writeEnabled) {
             "SPORTident time sync writes require explicit hardware opt-in."
@@ -138,8 +178,62 @@ internal class DesktopSportIdentTimeSyncService(
         require(toleranceSeconds >= 0) {
             "Time sync tolerance must not be negative."
         }
+        require(maxAttempts > 0) {
+            "Time sync attempts must be positive."
+        }
+        require(secondBoundaryLeadMillis in 0..999) {
+            "Time sync second-boundary lead must be between 0ms and 999ms."
+        }
+        require(correctionThresholdMillis >= 0) {
+            "Time sync correction threshold must not be negative."
+        }
 
-        val targetTime = sourceTime.truncatedTo(ChronoUnit.SECONDS)
+        var lastFailure: Throwable? = null
+        var leadForAttempt = secondBoundaryLeadMillis
+        repeat(maxAttempts) { attemptIndex ->
+            var writeCommandStarted = false
+            try {
+                val result = writeTimeWithReadBackOnce(
+                    sourceTime = sourceTime,
+                    toleranceSeconds = toleranceSeconds,
+                    currentTimeOffsetMillis = currentTimeOffsetMillis,
+                    secondBoundaryLeadMillis = leadForAttempt,
+                    alignToSecondBoundary = alignToSecondBoundary,
+                    attemptCount = attemptIndex + 1,
+                    onWriteCommandStarted = { writeCommandStarted = true }
+                )
+                val postSyncDeltaMillis = result.confirmedStationMinusComputerMillis
+                if (
+                    sourceTime == null &&
+                    postSyncDeltaMillis != null &&
+                    abs(postSyncDeltaMillis) > correctionThresholdMillis &&
+                    attemptIndex < maxAttempts - 1
+                ) {
+                    leadForAttempt = (leadForAttempt - postSyncDeltaMillis).coerceIn(0L, 999L)
+                    sleepMillis(RETRY_DELAY_MS)
+                } else {
+                    return result
+                }
+            } catch (error: Throwable) {
+                if (writeCommandStarted || attemptIndex == maxAttempts - 1) {
+                    throw error
+                }
+                lastFailure = error
+                sleepMillis(RETRY_DELAY_MS)
+            }
+        }
+        throw lastFailure ?: IllegalStateException("SPORTident time sync failed.")
+    }
+
+    private fun writeTimeWithReadBackOnce(
+        sourceTime: LocalDateTime?,
+        toleranceSeconds: Long,
+        currentTimeOffsetMillis: Long,
+        secondBoundaryLeadMillis: Long,
+        alignToSecondBoundary: Boolean,
+        attemptCount: Int,
+        onWriteCommandStarted: () -> Unit
+    ): DesktopSportIdentTimeSyncResult {
         val port = portProvider.listPorts().firstOrNull { it.info.matchesSportIdent() }
             ?: error("No SPORTident USB station detected.")
 
@@ -170,6 +264,14 @@ internal class DesktopSportIdentTimeSyncService(
                 step = DesktopSportIdentTimeSyncProtocol.readStationTimeStep("Read station time before write")
             ).data.decodeStationTime("before-write station time").dateTime
 
+            val targetTimeSelection = selectTargetTime(
+                sourceTime = sourceTime,
+                currentTimeOffsetMillis = currentTimeOffsetMillis,
+                secondBoundaryLeadMillis = secondBoundaryLeadMillis,
+                alignToSecondBoundary = alignToSecondBoundary
+            )
+            val targetTime = targetTimeSelection.targetTime
+            onWriteCommandStarted()
             val confirmedTime = requireReply(
                 port = port,
                 step = DesktopSportIdentTimeSyncProtocol.writeStationTimeStep(targetTime)
@@ -187,13 +289,23 @@ internal class DesktopSportIdentTimeSyncService(
                 port = port,
                 step = DesktopSportIdentTimeSyncProtocol.applyStationTimeStep()
             )
+            val computerTimeAfterSync = currentTime().truncatedTo(ChronoUnit.MILLIS)
 
             return DesktopSportIdentTimeSyncResult(
                 stationInfo = stationInfo,
                 sourceTime = targetTime,
                 confirmedTime = confirmedTime,
                 beforeTime = beforeTime,
-                toleranceSeconds = toleranceSeconds
+                toleranceSeconds = toleranceSeconds,
+                computerTimeAfterSync = computerTimeAfterSync,
+                confirmedStationMinusComputerMillis = Duration.between(
+                    computerTimeAfterSync,
+                    confirmedTime
+                ).toMillis(),
+                currentTimeOffsetMillis = if (sourceTime == null) currentTimeOffsetMillis else 0L,
+                attempts = attemptCount,
+                secondBoundaryWaitMillis = targetTimeSelection.secondBoundaryWaitMillis,
+                secondBoundaryLeadMillis = targetTimeSelection.secondBoundaryLeadMillis
             )
         } finally {
             if (port.isOpen) {
@@ -233,6 +345,53 @@ internal class DesktopSportIdentTimeSyncService(
         error("SPORTident station did not respond to the time-sync remote-mode probe.")
     }
 
+    private fun readCoupledStationClock(port: DesktopSerialPort): Result<DesktopSportIdentCoupledStationClock> =
+        runCatching {
+            val baudRate = selectBaudRate(port)
+            configure(port, baudRate)
+            if (!port.open(OPEN_WAIT_TIME_MS)) {
+                error("Failed to open serial port ${port.info.systemPortPath}.")
+            }
+
+            requireReply(
+                port = port,
+                step = DesktopSportIdentTimeSyncProtocol.enterRemoteModeStep()
+            )
+            val systemInfoFrame = requireReply(
+                port = port,
+                step = DesktopSportIdentTimeSyncProtocol.readCompatibleSystemInfoStep(),
+                attempts = READ_ONLY_COMMAND_ATTEMPTS,
+                failureMessage = "Coupled SPORTident station did not answer system-info read. " +
+                    "Confirm the target station is awake and coupled to the download station."
+            )
+            val stationInfo = SportIdentStationInfoParser.fromSystemInfoFrame(systemInfoFrame)
+                ?: error("Coupled SPORTident station returned unreadable system info.")
+            val stationTime = requireReply(
+                port = port,
+                step = DesktopSportIdentTimeSyncProtocol.readStationTimeStep("Read station time for inspection")
+            ).data.decodeStationTime("inspection station time").dateTime
+            val computerTime = currentTime().truncatedTo(ChronoUnit.MILLIS)
+
+            DesktopSportIdentCoupledStationClock(
+                stationInfo = stationInfo,
+                stationTime = stationTime,
+                computerTime = computerTime,
+                stationMinusComputerMillis = Duration.between(computerTime, stationTime).toMillis()
+            )
+        }.also {
+            if (port.isOpen) {
+                runCatching {
+                    val exitStep = DesktopSportIdentTimeSyncProtocol.exitRemoteModeStep()
+                    commandClient.sendCommand(
+                        port = port,
+                        command = exitStep.command,
+                        data = exitStep.payload
+                    )
+                }
+                port.close()
+            }
+        }
+
     private fun configure(port: DesktopSerialPort, baudRate: Int) {
         port.configure(baudRate, READ_TIMEOUT_MS, WRITE_TIMEOUT_MS)
     }
@@ -258,15 +417,91 @@ internal class DesktopSportIdentTimeSyncService(
         DesktopSportIdentStationTimeCodec.decodePayload(this)
             ?: error("SPORTident station returned unreadable $context.")
 
+    private fun selectTargetTime(
+        sourceTime: LocalDateTime?,
+        currentTimeOffsetMillis: Long,
+        secondBoundaryLeadMillis: Long,
+        alignToSecondBoundary: Boolean
+    ): TargetTimeSelection =
+        if (sourceTime != null) {
+            TargetTimeSelection(
+                targetTime = sourceTime.truncatedTo(ChronoUnit.SECONDS),
+                secondBoundaryWaitMillis = null,
+                secondBoundaryLeadMillis = null
+            )
+        } else {
+            val boundaryTime = if (alignToSecondBoundary) {
+                waitForSecondBoundaryLead(secondBoundaryLeadMillis)
+            } else {
+                val now = currentTime().truncatedTo(ChronoUnit.MILLIS)
+                BoundaryTime(
+                    time = now,
+                    waitMillis = 0L,
+                    targetBoundary = now
+                )
+            }
+            TargetTimeSelection(
+                targetTime = boundaryTime.targetBoundary
+                    .plus(Duration.ofMillis(currentTimeOffsetMillis))
+                    .roundToNearestSecond(),
+                secondBoundaryWaitMillis = boundaryTime.waitMillis,
+                secondBoundaryLeadMillis = if (alignToSecondBoundary) secondBoundaryLeadMillis else null
+            )
+        }
+
+    private fun waitForSecondBoundaryLead(leadMillis: Long): BoundaryTime {
+        val beforeWait = currentTime().truncatedTo(ChronoUnit.MILLIS)
+        val millisIntoSecond = beforeWait.nano / 1_000_000L
+        val currentSecond = beforeWait.truncatedTo(ChronoUnit.SECONDS)
+        val targetBoundary = if (millisIntoSecond <= 1_000L - leadMillis) {
+            currentSecond.plusSeconds(1)
+        } else {
+            currentSecond.plusSeconds(2)
+        }
+        val wakeTime = targetBoundary.minus(Duration.ofMillis(leadMillis))
+        val waitMillis = Duration.between(beforeWait, wakeTime).toMillis().coerceAtLeast(0L)
+        if (waitMillis > 0) {
+            sleepMillis(waitMillis)
+        }
+        return BoundaryTime(
+            time = currentTime().truncatedTo(ChronoUnit.MILLIS),
+            waitMillis = waitMillis,
+            targetBoundary = targetBoundary
+        )
+    }
+
+    private fun LocalDateTime.roundToNearestSecond(): LocalDateTime {
+        val truncated = truncatedTo(ChronoUnit.SECONDS)
+        return if (nano >= 500_000_000) truncated.plusSeconds(1) else truncated
+    }
+
     private fun SportIdentStationInfo.canRelayTimeSync(): Boolean =
         stationModeLabel?.startsWith("SI MASTER") == true
 
-    private companion object {
-        const val READ_TIMEOUT_MS = 1200
-        const val WRITE_TIMEOUT_MS = 1200
-        const val OPEN_WAIT_TIME_MS = 200
-        const val MAX_REPLY_BYTES = 256
+    companion object {
         const val DEFAULT_TOLERANCE_SECONDS = 2L
-        const val READ_ONLY_COMMAND_ATTEMPTS = 3
+        const val DEFAULT_CURRENT_TIME_OFFSET_MILLIS = 0L
+        const val DEFAULT_SECOND_BOUNDARY_LEAD_MILLIS = 225L
+        const val DEFAULT_WRITE_ATTEMPTS = 2
+        const val DEFAULT_CORRECTION_THRESHOLD_MILLIS = 100L
+        const val DEFAULT_ALIGN_TO_SECOND_BOUNDARY = true
+        private const val READ_TIMEOUT_MS = 1200
+        private const val WRITE_TIMEOUT_MS = 1200
+        private const val OPEN_WAIT_TIME_MS = 200
+        private const val MAX_REPLY_BYTES = 256
+        private const val READ_ONLY_COMMAND_ATTEMPTS = 3
+        private const val RETRY_DELAY_MS = 150L
     }
 }
+
+private data class TargetTimeSelection(
+    val targetTime: LocalDateTime,
+    val secondBoundaryWaitMillis: Long?,
+    val secondBoundaryLeadMillis: Long?
+)
+
+private data class BoundaryTime(
+    val time: LocalDateTime,
+    val waitMillis: Long,
+    val targetBoundary: LocalDateTime
+)

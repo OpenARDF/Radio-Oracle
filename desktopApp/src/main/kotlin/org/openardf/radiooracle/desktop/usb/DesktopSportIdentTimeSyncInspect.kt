@@ -49,6 +49,14 @@ fun main() {
         println("Station mode: ${station.stationModeLabel ?: "unknown"}")
         println("Extended mode: ${station.extendedMode}")
     }
+    inspection.coupledStationClock?.let { clock ->
+        println("Coupled station serial: ${clock.stationInfo.serialNumber}")
+        println("Coupled station code: ${clock.stationInfo.stationCodeNumber ?: "unknown"}")
+        println("Coupled station time: ${clock.stationTime}")
+        println("Computer time at inspection: ${clock.computerTime}")
+        println("Coupled station minus computer: ${clock.stationMinusComputerMillis}ms")
+    }
+    inspection.coupledStationInspectionError?.let { println("Coupled station inspection: $it") }
     println("Can sync time: ${inspection.canSyncTime}")
     inspection.disabledReason?.let { println("Disabled reason: $it") }
 }

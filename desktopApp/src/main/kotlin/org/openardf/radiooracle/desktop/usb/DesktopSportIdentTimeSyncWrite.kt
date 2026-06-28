@@ -30,12 +30,36 @@ fun main(args: Array<String>) {
     val requestedTime = args.timeArgument()
         ?: System.getenv("RADIO_ORACLE_SI_TIME_SYNC_AT")?.trim()?.takeIf { it.isNotEmpty() }
             ?.let(LocalDateTime::parse)
-        ?: LocalDateTime.now()
     val toleranceSeconds = System.getenv("RADIO_ORACLE_SI_TIME_SYNC_TOLERANCE_SECONDS")
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
         ?.toLong()
         ?: DEFAULT_TOLERANCE_SECONDS
+    val currentTimeOffsetMillis = System.getenv("RADIO_ORACLE_SI_TIME_SYNC_OFFSET_MILLIS")
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.toLong()
+        ?: DesktopSportIdentTimeSyncService.DEFAULT_CURRENT_TIME_OFFSET_MILLIS
+    val secondBoundaryLeadMillis = System.getenv("RADIO_ORACLE_SI_TIME_SYNC_BOUNDARY_LEAD_MILLIS")
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.toLong()
+        ?: DesktopSportIdentTimeSyncService.DEFAULT_SECOND_BOUNDARY_LEAD_MILLIS
+    val maxAttempts = System.getenv("RADIO_ORACLE_SI_TIME_SYNC_ATTEMPTS")
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.toInt()
+        ?: DesktopSportIdentTimeSyncService.DEFAULT_WRITE_ATTEMPTS
+    val correctionThresholdMillis = System.getenv("RADIO_ORACLE_SI_TIME_SYNC_CORRECTION_THRESHOLD_MILLIS")
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.toLong()
+        ?: DesktopSportIdentTimeSyncService.DEFAULT_CORRECTION_THRESHOLD_MILLIS
+    val alignToSecondBoundary = System.getenv("RADIO_ORACLE_SI_TIME_SYNC_ALIGN_SECOND")
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let(::parseEnabledFlag)
+        ?: DesktopSportIdentTimeSyncService.DEFAULT_ALIGN_TO_SECOND_BOUNDARY
     val writeEnabled = System.getenv("RADIO_ORACLE_SI_TIME_SYNC_WRITE") == "YES"
     val requestedPort = System.getenv("RADIO_ORACLE_SI_PORT")?.trim()?.takeIf { it.isNotEmpty() }
 
@@ -53,9 +77,14 @@ fun main(args: Array<String>) {
 
     println("Radio-Oracle desktop SPORTident time sync writer")
     if (!writeEnabled) {
-        val dryRun = service.dryRun(requestedTime)
+        val dryRun = service.dryRun(requestedTime ?: LocalDateTime.now())
         println("DRY RUN: no SPORTident station writes will be sent.")
         println("Target time: ${dryRun.sourceTime}")
+        println("Current-time offset for write mode: ${currentTimeOffsetMillis}ms")
+        println("Second-boundary lead for write mode: ${secondBoundaryLeadMillis}ms")
+        println("Write attempts for write mode: $maxAttempts")
+        println("Correction threshold for write mode: ${correctionThresholdMillis}ms")
+        println("Align current-time writes to second boundary: $alignToSecondBoundary")
         println()
         println("Captured SI Config+ sequence:")
         dryRun.configPlusSequence.printSteps()
@@ -68,18 +97,34 @@ fun main(args: Array<String>) {
     }
 
     println("WRITE ENABLED: SPORTident station writes are active for this run.")
-    println("Target time: $requestedTime")
+    println("Target time: ${requestedTime ?: "next computer second, final write ${secondBoundaryLeadMillis}ms early"}")
     println("Tolerance: ${toleranceSeconds}s")
+    println("Current-time offset: ${currentTimeOffsetMillis}ms")
+    println("Second-boundary lead: ${secondBoundaryLeadMillis}ms")
+    println("Max attempts: $maxAttempts")
+    println("Correction threshold: ${correctionThresholdMillis}ms")
+    println("Align current-time writes to second boundary: $alignToSecondBoundary")
     requestedPort?.let { println("Port: $it") }
     val result = service.writeTimeWithReadBack(
         sourceTime = requestedTime,
         writeEnabled = true,
-        toleranceSeconds = toleranceSeconds
+        toleranceSeconds = toleranceSeconds,
+        currentTimeOffsetMillis = currentTimeOffsetMillis,
+        secondBoundaryLeadMillis = secondBoundaryLeadMillis,
+        maxAttempts = maxAttempts,
+        correctionThresholdMillis = correctionThresholdMillis,
+        alignToSecondBoundary = alignToSecondBoundary
     )
     println("Station serial: ${result.stationInfo.serialNumber}")
     println("Before write: ${result.beforeTime ?: "unknown"}")
     println("Confirmed time: ${result.confirmedTime ?: "unknown"}")
     println("Requested time: ${result.sourceTime}")
+    println("Applied current-time offset: ${result.currentTimeOffsetMillis}ms")
+    println("Second-boundary lead: ${result.secondBoundaryLeadMillis?.let { "${it}ms" } ?: "none"}")
+    println("Second-boundary wait: ${result.secondBoundaryWaitMillis?.let { "${it}ms" } ?: "none"}")
+    println("Attempts: ${result.attempts}")
+    println("Computer time after sync: ${result.computerTimeAfterSync ?: "unknown"}")
+    println("Post-sync station minus computer: ${result.confirmedStationMinusComputerMillis?.let { "${it}ms" } ?: "unknown"}")
     println("Read-back tolerance: ${result.toleranceSeconds}s")
 }
 
@@ -87,6 +132,12 @@ private fun Array<String>.timeArgument(): LocalDateTime? =
     firstOrNull { it.startsWith("--time=") }
         ?.substringAfter("=")
         ?.let(LocalDateTime::parse)
+
+private fun parseEnabledFlag(value: String): Boolean =
+    when (value.uppercase()) {
+        "0", "NO", "N", "FALSE", "OFF" -> false
+        else -> true
+    }
 
 private fun List<DesktopSportIdentTimeSyncCommandStep>.printSteps() {
     forEachIndexed { index, step ->

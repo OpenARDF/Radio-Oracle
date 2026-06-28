@@ -9950,6 +9950,8 @@ private fun SportIdentTimeSyncPanel(
     raceClockTick: Long
 ) {
     var inspectionStatus by remember { mutableStateOf<String?>(null) }
+    var siCodeText by remember { mutableStateOf<String?>(null) }
+    var stationTimeDeltaText by remember { mutableStateOf<String?>(null) }
     var syncStatus by remember { mutableStateOf<String?>(null) }
     var syncStatusColor by remember { mutableStateOf(DesktopPalette.Disconnected) }
     var isInspecting by remember { mutableStateOf(false) }
@@ -9974,6 +9976,14 @@ private fun SportIdentTimeSyncPanel(
                 fontSize = 13.sp
             )
         }
+        siCodeText?.let { codeText ->
+            Text(
+                text = codeText,
+                color = DesktopPalette.PrimaryVariant,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = {
@@ -9986,8 +9996,21 @@ private fun SportIdentTimeSyncPanel(
                             inspection.statusText,
                             inspection.portInfo?.describe()?.let { "Port: $it" },
                             inspection.baudRate?.let { "Baud: $it" },
+                            inspection.coupledStationClock?.let { clock ->
+                                val stationTime = DesktopDateTimeText.displayIsoOrRaw(clock.stationTime.toString())
+                                "Coupled station ${clock.stationInfo.serialNumber}; " +
+                                    "station time $stationTime; " +
+                                    "station is ${formatSportIdentTimeDelta(clock.stationMinusComputerMillis)}."
+                            },
+                            inspection.coupledStationInspectionError?.let { "Coupled station: $it" },
                             inspection.disabledReason
                         ).joinToString(" ")
+                        siCodeText = inspection.coupledStationClock?.stationInfo?.stationCodeNumber
+                            ?.let { "SI Station: $it" }
+                            ?: inspection.stationInfo?.stationCodeNumber?.let { "Reader Station: $it" }
+                        stationTimeDeltaText = inspection.coupledStationClock
+                            ?.stationMinusComputerMillis
+                            ?.let(::formatSportIdentTimeDeltaRow)
                         isInspecting = false
                     }
                 },
@@ -10012,8 +10035,33 @@ private fun SportIdentTimeSyncPanel(
                                 val before = result.beforeTime
                                     ?.let { DesktopDateTimeText.displayIsoOrRaw(it.toString()) }
                                     ?: "unknown"
+                                val delta = result.confirmedStationMinusComputerMillis
+                                    ?.let(::formatSportIdentTimeDelta)
+                                    ?: "unknown relative to the computer"
+                                val offsetText = if (result.currentTimeOffsetMillis == 0L) {
+                                    ""
+                                } else {
+                                    " Applied ${formatSportIdentSignedDuration(result.currentTimeOffsetMillis)} offset."
+                                }
+                                val leadText = result.secondBoundaryLeadMillis
+                                    ?.let { " Started final write ${formatSportIdentDuration(it)} before the target second." }
+                                    ?: ""
+                                val retryText = if (result.attempts > 1) {
+                                    " Succeeded on attempt ${result.attempts}."
+                                } else {
+                                    ""
+                                }
+                                val boundaryText = result.secondBoundaryWaitMillis
+                                    ?.takeIf { it > 0L }
+                                    ?.let { " Waited ${formatSportIdentDuration(it)} for the calibrated pre-boundary write point." }
+                                    ?: ""
+                                siCodeText = result.stationInfo.stationCodeNumber?.let { "SI Station: $it" }
+                                stationTimeDeltaText = result.confirmedStationMinusComputerMillis
+                                    ?.let(::formatSportIdentTimeDeltaRow)
                                 syncStatusColor = DesktopPalette.Connected
-                                "Synced station ${result.stationInfo.serialNumber} to $requested. Previous station time: $before."
+                                "Synced station ${result.stationInfo.serialNumber} to $requested. " +
+                                    "After sync, station is $delta. Previous station time: $before." +
+                                    offsetText + leadText + boundaryText + retryText
                             },
                             onFailure = { error ->
                                 syncStatusColor = DesktopPalette.Error
@@ -10027,6 +10075,14 @@ private fun SportIdentTimeSyncPanel(
             ) {
                 ButtonLabel(if (isSyncing) "Syncing" else "Sync Time")
             }
+        }
+        stationTimeDeltaText?.let { deltaText ->
+            Text(
+                text = deltaText,
+                color = DesktopPalette.PrimaryVariant,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
         syncStatus?.let { status ->
             Text(
@@ -10048,6 +10104,40 @@ private fun SportIdentTimeSyncPanel(
             fontSize = 13.sp
         )
     }
+}
+
+private fun formatSportIdentTimeDelta(deltaMillis: Long): String {
+    if (deltaMillis == 0L) {
+        return "aligned with the computer"
+    }
+    val direction = if (deltaMillis > 0) "ahead of" else "behind"
+    return "${formatSportIdentDuration(abs(deltaMillis))} $direction the computer"
+}
+
+private fun formatSportIdentTimeDeltaRow(deltaMillis: Long): String =
+    if (deltaMillis == 0L) {
+        "Time Error: 0ms"
+    } else {
+        val direction = if (deltaMillis > 0) "ahead" else "behind"
+        "Time Error: ${formatSportIdentDuration(abs(deltaMillis))} $direction"
+    }
+
+private fun formatSportIdentSignedDuration(deltaMillis: Long): String {
+    val sign = if (deltaMillis > 0) "+" else "-"
+    return "$sign${formatSportIdentDuration(abs(deltaMillis))}"
+}
+
+private fun formatSportIdentDuration(totalMillis: Long): String {
+    val hours = totalMillis / 3_600_000
+    val minutes = (totalMillis % 3_600_000) / 60_000
+    val seconds = (totalMillis % 60_000) / 1_000
+    val millis = totalMillis % 1_000
+    return buildList {
+        if (hours > 0) add("${hours}h")
+        if (minutes > 0) add("${minutes}m")
+        if (seconds > 0) add("${seconds}s")
+        if (millis > 0 || isEmpty()) add("${millis}ms")
+    }.joinToString(" ")
 }
 
 /** Shows event readiness, read-only diagnostics, recent imports, and desktop test tools. */

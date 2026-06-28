@@ -579,6 +579,20 @@ Optional environment variables:
 - `RADIO_ORACLE_SI_TIME_SYNC_TOLERANCE_SECONDS=2`: set the allowed difference
   between requested time and the station time echoed by the `F6`
   acknowledgement.
+- `RADIO_ORACLE_SI_TIME_SYNC_BOUNDARY_LEAD_MILLIS=225`: when writing the
+  current computer time, target the next whole second and begin the final write
+  this many milliseconds before that boundary.
+- `RADIO_ORACLE_SI_TIME_SYNC_OFFSET_MILLIS=0`: optional experimental whole-second
+  target adjustment. Fixed `RADIO_ORACLE_SI_TIME_SYNC_AT` writes are exact and
+  do not use this offset.
+- `RADIO_ORACLE_SI_TIME_SYNC_ATTEMPTS=2`: retry the full transaction this many
+  times when the coupled station fails before `F6` is sent, or when a measured
+  post-sync lead-time correction is needed.
+- `RADIO_ORACLE_SI_TIME_SYNC_CORRECTION_THRESHOLD_MILLIS=100`: after a
+  successful current-time sync, run one correction transaction when the measured
+  station-minus-computer delta exceeds this threshold and an attempt remains.
+- `RADIO_ORACLE_SI_TIME_SYNC_ALIGN_SECOND=NO`: disable the default wait for
+  the calibrated pre-boundary write point before selecting the target time.
 
 Do not run the write-enabled command on event-critical hardware until the
 non-critical validation matrix below has passed.
@@ -597,6 +611,47 @@ be awake. Manually waking the target station by inserting an SI card, then
 coupling it to the SI-Master/download station, allowed the write path to
 complete. When the coupled target was asleep, the command stopped before `F6`
 with no time write sent. A software-only wake mechanism is not yet known.
+
+Two related station-power behaviors remain deliberately unimplemented until
+they can be proven from protocol evidence:
+
+- Wake a sleeping coupled station before sync. The reader/Master path probably
+  needs to mimic the station-awakening side effect of inserting an SI card, but
+  the required command sequence is not yet known. Capture SI Config+ or another
+  proven SPORTident tool waking a coupled sleeping station before adding this.
+- Put the coupled station back to sleep after sync. This should become an
+  optional Time Sync setting exposed as a checkbox that defaults on, with label
+  text equivalent to `Put station to sleep after sync`. Capture a known-good
+  sleep/standby command sequence before sending any sleep command from
+  Radio-Oracle.
+
+The `Inspect Station` action is read-only. It keeps the attached USB
+SI-Master/download-station diagnostics, and when an awake coupled station
+answers remote-mode reads it also reports the coupled station serial number, SI
+code number, decoded station time, computer timestamp, and station-minus-computer
+delta in milliseconds. The displayed delta uses a millisecond computer
+timestamp, but the capture-proven station-time payload currently decodes only to
+whole seconds; the payload tick byte is preserved by the codec but is not yet
+interpreted as a subsecond time source. After `Sync Time`, the UI and hidden CLI
+also report the confirmed station-minus-computer delta in milliseconds.
+
+For current-time syncs, Radio-Oracle now calculates the target station time as
+late as possible, immediately before `F6`. Because the capture-proven
+station-time payload only stores whole seconds, it targets the next
+computer-clock one-second boundary and begins the final write slightly before
+that boundary. The current default lead is `225ms`, based on observed results
+where a boundary-started write left the station consistently behind the
+computer. This lead and boundary wait are not applied when a fixed target time
+is supplied for capture comparison or validation.
+
+To improve reliability, Radio-Oracle retries the full sync transaction once
+when the failure occurs before the `F6` write command is sent, such as a missed
+remote-mode system-info reply. After `F6` has been sent, it does not blindly
+retry a failed transaction, because the coupled station may already have
+accepted the time write. If a current-time sync succeeds but the measured
+station-minus-computer delta is still outside the correction threshold,
+Radio-Oracle can use the remaining attempt to subtract that measured delta from
+the boundary lead and write again.
 
 The captured Config+ remote-mode sequence is:
 
