@@ -7756,12 +7756,16 @@ private fun AboutRadioOracleDialog(
         title = { Text("About Radio-Oracle") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Radio-Oracle Desktop")
-                Text("Version ${DesktopBuildInfo.displayVersion}")
-                Text("Desktop event administration beta for radio orienteering events.")
-                Text("Maintained by OpenARDF.")
-                Text("GitHub: https://github.com/OpenARDF/Radio-Oracle")
-                Text(updateCheckStatusText(isUpdateCheckingEnabled, updateCheckStatus))
+                Text("App Version: ${DesktopBuildInfo.displayVersion}")
+                Text("Build Date (UTC): ${DesktopBuildInfo.buildDateUtc}")
+                Text("Platform: Desktop")
+                SelectionContainer {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Project: ${DesktopBuildInfo.projectUrl}")
+                        Text("License: ${DesktopBuildInfo.licenseLabel} (${DesktopBuildInfo.licenseUrl})")
+                    }
+                }
+                Text("Updates: ${updateCheckStatusText(isUpdateCheckingEnabled, updateCheckStatus)}")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         enabled = isUpdateCheckingEnabled,

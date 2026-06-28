@@ -30,6 +30,7 @@ plugins {
 
 import java.util.jar.JarFile
 import java.util.Locale
+import java.time.Instant
 
 kotlin {
     jvmToolchain(17)
@@ -143,6 +144,7 @@ tasks.register("generateDesktopBuildInfo") {
     outputs.upToDateWhen { false }
 
     doLast {
+        def buildDateUtc = Instant.now().toString()
         def suffixFile = desktopBuildSuffixFile.asFile
         def storedBaseVersion = ""
         def currentSuffix = ""
@@ -204,6 +206,10 @@ object DesktopBuildInfo {
     const val baseVersion: String = "${baseVersion}"
     const val buildSuffix: String = "${buildSuffix}"
     const val displayVersion: String = "${displayVersion}"
+    const val buildDateUtc: String = "${buildDateUtc}"
+    const val projectUrl: String = "https://github.com/OpenARDF/Radio-Oracle"
+    const val licenseLabel: String = "MIT License"
+    const val licenseUrl: String = "https://opensource.org/license/mit"
     const val windowTitle: String = "Radio-Oracle Desktop ${displayVersion}"
 }
 """

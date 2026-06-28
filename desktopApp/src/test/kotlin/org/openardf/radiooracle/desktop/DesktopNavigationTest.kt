@@ -990,9 +990,13 @@ class DesktopNavigationTest {
             courseTools.children.map { it.label }
         )
         assertEquals(
-            listOf("Event Validator", "Course Tools", "SPORTident"),
+            listOf("Event Validator", "About Radio-Oracle...", "Course Tools", "SPORTident"),
             tools.children.map { it.label }
         )
+        val about = tools.children.first { it.label == "About Radio-Oracle..." }
+        assertEquals(DesktopNavAction.ShowAbout, about.action)
+        assertEquals(DesktopSection.Tools, about.section)
+        assertFalse(about.requiresEventFile)
         assertEquals(DesktopSection.CourseAnalysis, courseAnalyzer.section)
         assertTrue(courseAnalyzer.requiresEventFile)
         assertEquals(

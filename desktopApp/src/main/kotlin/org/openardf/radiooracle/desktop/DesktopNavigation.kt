@@ -512,6 +512,14 @@ object DesktopNavigation {
                             workflow,
                             DesktopSection.EventValidator
                         ),
+                        action(
+                            "setup.tools.about",
+                            "About Radio-Oracle...",
+                            workflow,
+                            DesktopNavAction.ShowAbout,
+                            requiresEventFile = false,
+                            section = DesktopSection.Tools
+                        ),
                         group(
                             "setup.tools.course-tools",
                             "Course Tools",
@@ -1222,6 +1230,8 @@ object DesktopNavigation {
             "Use Tools to open standalone utilities for course files and other future event-support workflows.",
         "setup.tools.event-validator" to
             "Use Event Validator to check whether the current Event File is internally consistent before race-day workflows.",
+        "setup.tools.about" to
+            "Use About Radio-Oracle to view the app version, build date, platform, project, license, and update information.",
         "setup.tools.course-tools" to
             "Use Course Tools to analyze or modify course-related files and course data.",
         "setup.tools.sportident" to
