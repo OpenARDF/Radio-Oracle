@@ -63,8 +63,36 @@ data class EventSeriesCompetitorMatchReport(
     val issues: List<EventSeriesValidationIssue>
 )
 
+data class EventSeriesCompetitorIdentity(
+    val key: String,
+    val label: String
+)
+
 /** Shared event-series rules that do not depend on desktop filesystem APIs. */
 object EventSeriesSupport {
+    fun competitorIdentities(competitor: EventCompetitor): List<EventSeriesCompetitorIdentity> =
+        buildList {
+            competitor.seriesSiKey()?.let { add(EventSeriesCompetitorIdentity("si:$it", "SI $it")) }
+            competitor.seriesBibKey()?.let { add(EventSeriesCompetitorIdentity("bib:${it.uppercase()}", "Bib $it")) }
+            competitor.seriesCallSignKey()?.let { add(EventSeriesCompetitorIdentity("call:$it", "Call $it")) }
+        }
+
+    fun primaryCompetitorIdentity(competitor: EventCompetitor): EventSeriesCompetitorIdentity? =
+        competitorIdentities(competitor).firstOrNull()
+
+    fun competitorIdentityLabelComparator(): Comparator<String> =
+        compareBy(
+            {
+                when {
+                    it.startsWith("SI ") -> 0
+                    it.startsWith("Bib ") -> 1
+                    it.startsWith("Call ") -> 2
+                    else -> 3
+                }
+            },
+            { it }
+        )
+
     fun validateLinkedEvents(
         seriesFile: EventSeriesFile,
         linkedEvents: List<EventSeriesLinkedEvent>

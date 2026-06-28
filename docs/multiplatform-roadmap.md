@@ -181,6 +181,17 @@ Goal: move event-domain behavior behind platform-neutral models and services.
 - Move category validation, competitor validation, alias/control-point
   management, readout/result recalculation, result grouping, and place assignment
   into shared services.
+- Keep competitor identity semantics shared. SI number, bib number, call sign,
+  full-name formatting, and cross-event competitor matching keys must not drift
+  between Android, desktop, and Event Series tools.
+- Move Android competitor table ordering helpers toward shared comparators where
+  they encode durable field/null ordering rather than Android-only table
+  behavior.
+- Continue extracting result recalculation glue from Android `ResultsProcessor`
+  into shared services where platform-neutral. Course evaluation and place
+  assignment are already shared; remaining shared candidates include timing
+  issue application, no-category clearing, time-limit handling, and manual
+  status preservation.
 - Gradually remove remaining Android compatibility alias facades by replacing
   callers with direct shared imports in small, compile-proven stages. Start with
   file import/export aliases such as `DataFormat` and `DataType`, then low-use
@@ -200,6 +211,9 @@ each platform.
 
 - Move CSV parsing/writing policy, Radio-Oracle JSON shaping, final/live
   result JSON shaping, and IOF XML policy into shared code where platform-neutral.
+- Audit Android legacy file processors such as `TextProcessor`, `IofXmlProcessor`,
+  and `XmlHelper` against the shared `TextResultExports`, `HtmlResultExports`,
+  and `IofXmlExports` paths so result/category export semantics do not diverge.
 - Define shared import/export APIs that accept text/bytes plus shared event data
   and return data or structured validation errors.
 - Keep Android streams, content URIs, localized resources, and platform UI in the
@@ -314,6 +328,10 @@ Goal: add platform-specific capabilities after the event-admin beta is stable.
   duplicating their core event data, records manifest-owned membership and event
   order, and can carry operator-approved competitor matching overrides across
   days.
+- Move desktop-only Event Series reporting and optimization helpers into shared
+  code as they stabilize, especially competitor identity coverage summaries,
+  cross-event start-slot fairness summaries, and start-fairness optimization
+  scoring.
 - Extend the Event Series manifest over time with scoring/eligibility rules
   once championship standings move from roadmap item to implementation work.
 - Keep current event flows as the default single-event behavior so the existing

@@ -540,8 +540,8 @@ object DesktopEventSeriesActions {
             linkedEvent.projectFile.raceData.competitorData
                 .map { it.competitorCategory.competitor }
                 .forEach { competitor ->
-                    val identityKeys = competitor.identityCoverageKeys()
-                    if (identityKeys.isEmpty()) {
+                    val identities = EventSeriesSupport.competitorIdentities(competitor)
+                    if (identities.isEmpty()) {
                         return@forEach
                     }
                     val occurrenceNode = identityOccurrenceNode(linkedEvent.event.seriesEventId, competitor.id)
@@ -551,9 +551,9 @@ object DesktopEventSeriesActions {
                         eventName = linkedEvent.event.displayName,
                         competitorName = competitor.fullName()
                     )
-                    identityKeys.forEach { (key, label) ->
-                        val identityNode = identityNode(key)
-                        identityLabels[identityNode] = label
+                    identities.forEach { identity ->
+                        val identityNode = identityNode(identity.key)
+                        identityLabels[identityNode] = identity.label
                         unionFind.union(occurrenceNode, identityNode)
                     }
                 }
@@ -586,7 +586,9 @@ object DesktopEventSeriesActions {
                     .keys
                     .mapNotNull { eventNamesById[it] }
                 DesktopEventSeriesCompetitorIdentityCoverageSummary(
-                    identityLabel = componentIdentityLabels.sortedWith(identityCoverageLabelComparator()).firstOrNull()
+                    identityLabel = componentIdentityLabels
+                        .sortedWith(EventSeriesSupport.competitorIdentityLabelComparator())
+                        .firstOrNull()
                         ?: "Manual override",
                     competitorName = mostCommonCompetitorName(componentOccurrences),
                     presentEventCount = presentEventIds.size,
@@ -843,9 +845,9 @@ object DesktopEventSeriesActions {
                     { it.startNumber },
                     { it.fullName() }
                 )
-            )
+        )
         return competitorsWithStarts.mapIndexed { index, competitor ->
-            val identity = startFairnessIdentity(competitor)
+            val identity = EventSeriesSupport.primaryCompetitorIdentity(competitor)
             DesktopEventSeriesStartFairnessStart(
                 identityKey = identity?.key,
                 identityLabel = identity?.label ?: "Unidentified",
@@ -862,15 +864,6 @@ object DesktopEventSeriesActions {
         }
         return (((slotIndex * 3) / slotCount) + 1).coerceIn(1, 3)
     }
-
-    private fun startFairnessIdentity(competitor: EventCompetitor): DesktopEventSeriesStartFairnessIdentity? =
-        competitor.siNumber?.takeIf { it > 0 }?.let {
-            DesktopEventSeriesStartFairnessIdentity(key = "si:$it", label = "SI $it")
-        } ?: competitor.bibNumber.trim().takeIf { it.isNotEmpty() }?.let {
-            DesktopEventSeriesStartFairnessIdentity(key = "bib:${it.uppercase()}", label = "Bib $it")
-        } ?: competitor.callSign.trim().takeIf { it.isNotEmpty() }?.let {
-            DesktopEventSeriesStartFairnessIdentity(key = "call:${it.uppercase()}", label = "Call ${it.uppercase()}")
-        }
 
     private fun startFairnessCompetitorHistory(
         history: List<DesktopEventSeriesStartFairnessStart>
@@ -1265,31 +1258,11 @@ private class StringUnionFind {
         parent.keys
 }
 
-private fun EventCompetitor.identityCoverageKeys(): List<Pair<String, String>> =
-    buildList {
-        siNumber?.takeIf { it > 0 }?.let { add("si:$it" to "SI $it") }
-        bibNumber.trim().takeIf { it.isNotEmpty() }?.let { add("bib:${it.uppercase()}" to "Bib $it") }
-        callSign.trim().uppercase().takeIf { it.isNotEmpty() }?.let { add("call:$it" to "Call $it") }
-    }
-
 private fun identityOccurrenceNode(seriesEventId: String, competitorId: String): String =
     "occurrence:$seriesEventId:$competitorId"
 
 private fun identityNode(identityKey: String): String =
     "identity:$identityKey"
-
-private fun identityCoverageLabelComparator(): Comparator<String> =
-    compareBy<String>(
-        {
-            when {
-                it.startsWith("SI ") -> 0
-                it.startsWith("Bib ") -> 1
-                it.startsWith("Call ") -> 2
-                else -> 3
-            }
-        },
-        { it }
-    )
 
 private fun mostCommonCompetitorName(occurrences: List<DesktopEventSeriesCompetitorIdentityOccurrence>): String =
     occurrences
@@ -1364,11 +1337,6 @@ private data class DesktopEventSeriesStartFairnessStart(
     val competitorName: String,
     val eventSequenceIndex: Int,
     val startThird: Int
-)
-
-private data class DesktopEventSeriesStartFairnessIdentity(
-    val key: String,
-    val label: String
 )
 
 data class DesktopEventSeriesStartFairnessCompetitorHistory(

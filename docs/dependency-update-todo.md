@@ -32,9 +32,9 @@ Android while giving future desktop work a cleaner shared-code base.
 - Gate or remove production `HttpLoggingInterceptor.Level.BODY` logging so live
   result publishing does not expose sensitive payloads or depend on verbose
   logging behavior after OkHttp updates.
-- Review the unused `app/libs/android-tableview-kotlin-0.1.0-alpha` tree.
-  Delete it if it is historical only, or document it clearly if it is retained
-  as source fallback for the SortableTableView dependency.
+- Done: removed the unused `app/libs/android-tableview-kotlin-0.1.0-alpha`
+  source tree. The Android app uses the published SortableTableView dependency
+  instead of that historical vendored copy.
 - Keep shared-module dependencies minimal so the desktop target remains easy to
   build and library updates do not drag Android-only APIs into shared code.
 

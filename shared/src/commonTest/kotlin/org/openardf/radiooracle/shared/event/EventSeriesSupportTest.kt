@@ -34,6 +34,38 @@ import kotlin.test.assertTrue
 
 class EventSeriesSupportTest {
     @Test
+    fun exposesSharedCompetitorIdentityKeysInSeriesPriorityOrder() {
+        val competitor = competitorData(
+            id = "competitor-1",
+            startNumber = 1,
+            siNumber = 123456,
+            bibNumber = "b-7",
+            callSign = "k0abc"
+        ).competitorCategory.competitor
+
+        val identities = EventSeriesSupport.competitorIdentities(competitor)
+
+        assertEquals(
+            listOf(
+                EventSeriesCompetitorIdentity("si:123456", "SI 123456"),
+                EventSeriesCompetitorIdentity("bib:B-7", "Bib b-7"),
+                EventSeriesCompetitorIdentity("call:K0ABC", "Call K0ABC")
+            ),
+            identities
+        )
+        assertEquals(identities.first(), EventSeriesSupport.primaryCompetitorIdentity(competitor))
+    }
+
+    @Test
+    fun sortsCompetitorIdentityLabelsBySeriesIdentityPriority() {
+        val labels = listOf("Manual override", "Call K0ABC", "Bib 12", "SI 123456")
+
+        val sorted = labels.sortedWith(EventSeriesSupport.competitorIdentityLabelComparator())
+
+        assertEquals(listOf("SI 123456", "Bib 12", "Call K0ABC", "Manual override"), sorted)
+    }
+
+    @Test
     fun validatesMissingAndMismatchedBacklinks() {
         val series = seriesFile(events = listOf(seriesEvent("day-1", 0), seriesEvent("day-2", 1)))
         val linkedEvents = listOf(
