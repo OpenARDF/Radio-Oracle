@@ -25,10 +25,13 @@
 package org.openardf.radiooracle.desktop
 
 import java.util.prefs.Preferences
+import org.openardf.radiooracle.desktop.usb.DesktopSportIdentPortDiscoveryMode
+import org.openardf.radiooracle.desktop.usb.DesktopSportIdentPortDiscoverySettings
 
-interface DesktopAppSettingsStore {
+interface DesktopAppSettingsStore : DesktopSportIdentPortDiscoverySettings {
     fun isUpdateCheckingEnabled(): Boolean
     fun setUpdateCheckingEnabled(enabled: Boolean)
+    fun setSportIdentPortDiscoveryMode(mode: DesktopSportIdentPortDiscoveryMode)
     fun cloudflarePagesPublishSettings(): DesktopCloudflarePagesPublishSettings
     fun setCloudflarePagesPublishSettings(settings: DesktopCloudflarePagesPublishSettings)
     fun windowBounds(): DesktopWindowBounds?
@@ -92,6 +95,8 @@ data class DesktopCloudflarePagesPublishSettings(
 
 object DesktopAppSettingsPreferences : DesktopAppSettingsStore {
     private const val CHECK_FOR_UPDATES_KEY = "checkForRadioOracleUpdates"
+    private const val SPORT_IDENT_PORT_DISCOVERY_MODE_KEY = "sportIdentPortDiscoveryMode"
+    private const val SPORT_IDENT_REMEMBERED_FTDI_PORT_PATH_KEY = "sportIdentRememberedFtdiPortPath"
     private const val CLOUDFLARE_PROJECT_NAME_KEY = "cloudflarePagesProjectName"
     private const val CLOUDFLARE_BRANCH_KEY = "cloudflarePagesBranch"
     private const val CLOUDFLARE_ACCOUNT_ID_KEY = "cloudflarePagesAccountId"
@@ -109,6 +114,28 @@ object DesktopAppSettingsPreferences : DesktopAppSettingsStore {
 
     override fun setUpdateCheckingEnabled(enabled: Boolean) {
         preferences.putBoolean(CHECK_FOR_UPDATES_KEY, enabled)
+    }
+
+    override fun sportIdentPortDiscoveryMode(): DesktopSportIdentPortDiscoveryMode =
+        runCatching {
+            DesktopSportIdentPortDiscoveryMode.valueOf(
+                preferences.get(
+                    SPORT_IDENT_PORT_DISCOVERY_MODE_KEY,
+                    DesktopSportIdentPortDiscoveryMode.SPORTIDENT_USB_ONLY.name
+                )
+            )
+        }.getOrDefault(DesktopSportIdentPortDiscoveryMode.SPORTIDENT_USB_ONLY)
+
+    override fun setSportIdentPortDiscoveryMode(mode: DesktopSportIdentPortDiscoveryMode) {
+        preferences.put(SPORT_IDENT_PORT_DISCOVERY_MODE_KEY, mode.name)
+    }
+
+    override fun rememberedSportIdentFtdiPortPath(): String? =
+        preferences.get(SPORT_IDENT_REMEMBERED_FTDI_PORT_PATH_KEY, "")
+            .takeIf { it.isNotBlank() }
+
+    override fun rememberSportIdentFtdiPortPath(portPath: String) {
+        preferences.put(SPORT_IDENT_REMEMBERED_FTDI_PORT_PATH_KEY, portPath)
     }
 
     override fun cloudflarePagesPublishSettings(): DesktopCloudflarePagesPublishSettings =

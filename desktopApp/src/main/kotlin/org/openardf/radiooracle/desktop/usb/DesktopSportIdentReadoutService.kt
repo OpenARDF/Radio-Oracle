@@ -27,6 +27,7 @@ package org.openardf.radiooracle.desktop.usb
 /** Desktop SPORTident readout boundary shared by UI actions and diagnostics. */
 class DesktopSportIdentReadoutService(
     private val portProvider: DesktopSerialPortProvider = JSerialCommDesktopSerialPortProvider,
+    private val portSelector: DesktopSportIdentPortSelector = DesktopSportIdentPortSelector(portProvider),
     private val connectStation: (DesktopSerialPort) -> DesktopSportIdentStationConnection = {
         DesktopSportIdentStationProbe().connectKeepingPortOpen(it)
     },
@@ -82,7 +83,7 @@ class DesktopSportIdentReadoutService(
     }
 
     private fun firstSportIdentPort(): DesktopSerialPort =
-        portProvider.listPorts().firstOrNull { it.info.matchesSportIdent() }
+        portSelector.selectPort()
             ?: error("No SPORTident USB station found.")
 
     private fun <T> withOpenDownloadStation(port: DesktopSerialPort, action: () -> T): T {

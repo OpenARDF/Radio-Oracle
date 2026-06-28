@@ -143,10 +143,11 @@ import org.openardf.radiooracle.desktop.printing.DesktopPrinterDiagnostics
 import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinter
 import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinterSelector
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardBlockDownload
+import org.openardf.radiooracle.desktop.usb.DesktopSportIdentPortDiscoveryMode
+import org.openardf.radiooracle.desktop.usb.DesktopSportIdentPortSelector
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentReadoutService
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentTimeSyncService
-import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
@@ -466,6 +467,9 @@ fun main(args: Array<String>) = application {
         var isAboutDialogVisible by remember { mutableStateOf(false) }
         var isUpdateCheckingEnabled by remember {
             mutableStateOf(DesktopAppSettingsPreferences.isUpdateCheckingEnabled())
+        }
+        var sportIdentPortDiscoveryMode by remember {
+            mutableStateOf(DesktopAppSettingsPreferences.sportIdentPortDiscoveryMode())
         }
         var cloudflarePagesPublishSettings by remember {
             mutableStateOf(DesktopAppSettingsPreferences.cloudflarePagesPublishSettings())
@@ -1462,7 +1466,7 @@ fun main(args: Array<String>) = application {
                 val result = runCatching {
                     withContext(Dispatchers.IO) {
                         siPortMutex.withLock {
-                            DesktopSportIdentReadoutService().downloadUntilTimeout(
+                            desktopSportIdentReadoutService().downloadUntilTimeout(
                                 maxCards = Int.MAX_VALUE,
                                 onDownload = { download ->
                                     appCoroutineScope.launch {
@@ -5376,6 +5380,7 @@ fun main(args: Array<String>) = application {
             publishedPublicResultSiteUrl = publishedPublicResultSiteUrl,
             printerDiagnostics = printerDiagnostics,
             isUpdateCheckingEnabled = isUpdateCheckingEnabled,
+            sportIdentPortDiscoveryMode = sportIdentPortDiscoveryMode,
             cloudflarePagesPublishSettings = cloudflarePagesPublishSettings,
             raceClockTick = raceClockTick,
             isNavActionEnabled = ::isNavActionEnabled,
@@ -5390,6 +5395,12 @@ fun main(args: Array<String>) = application {
             onInsertTestSportIdentDownloads = ::insertTestSportIdentDownloads,
             onRestoreRecentImportCheckpoint = ::restoreRecentImportCheckpoint,
             onRecalculateResults = ::recalculateResults,
+            onSetSportIdentPortDiscoveryMode = { mode ->
+                sportIdentPortDiscoveryMode = mode
+                DesktopAppSettingsPreferences.setSportIdentPortDiscoveryMode(mode)
+                siReaderState = DesktopSiReaderUiState.disconnected()
+                lastLoggedSiReaderStatus = null
+            },
             onNavAction = ::handleNavAction,
             isProtectedCourseOrderUnlocked = protectedCoursePassword != null,
             protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
@@ -8289,6 +8300,8 @@ private fun RadioOManagerDesktopApp(
     publishedPublicResultSiteUrl: String? = null,
     printerDiagnostics: DesktopPrinterDiagnostics = DesktopPrinterDiagnostics.from(emptyList()),
     isUpdateCheckingEnabled: Boolean = true,
+    sportIdentPortDiscoveryMode: DesktopSportIdentPortDiscoveryMode =
+        DesktopSportIdentPortDiscoveryMode.SPORTIDENT_USB_ONLY,
     cloudflarePagesPublishSettings: DesktopCloudflarePagesPublishSettings = DesktopCloudflarePagesPublishSettings(),
     raceClockTick: Long = 0L,
     onRenameRace: (String) -> Unit = {},
@@ -8357,6 +8370,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateProtectedControlLocation: (String, String, String) -> String = { _, _, _ -> "" },
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean = { _, _, _ -> false },
     onSetUpdateCheckingEnabled: (Boolean) -> Unit = {},
+    onSetSportIdentPortDiscoveryMode: (DesktopSportIdentPortDiscoveryMode) -> Unit = {},
     onSetCloudflarePagesPublishSettings: (DesktopCloudflarePagesPublishSettings) -> Boolean = { false },
     onLockProtectedCourseOrder: () -> Unit = {},
     isNavActionEnabled: (DesktopNavAction) -> Boolean = { false },
@@ -8617,6 +8631,7 @@ private fun RadioOManagerDesktopApp(
                                     publishedPublicResultSiteUrl = publishedPublicResultSiteUrl,
                                     printerDiagnostics = printerDiagnostics,
                                     isUpdateCheckingEnabled = isUpdateCheckingEnabled,
+                                    sportIdentPortDiscoveryMode = sportIdentPortDiscoveryMode,
                                     cloudflarePagesPublishSettings = cloudflarePagesPublishSettings,
                                     raceClockTick = raceClockTick,
                                     onSendRobisLiveResults = onSendRobisLiveResults,
@@ -8651,6 +8666,7 @@ private fun RadioOManagerDesktopApp(
                                     onUpdateProtectedControlLocation = onUpdateProtectedControlLocation,
                                     onUpdateProtectedCoursePassword = onUpdateProtectedCoursePassword,
                                     onSetUpdateCheckingEnabled = onSetUpdateCheckingEnabled,
+                                    onSetSportIdentPortDiscoveryMode = onSetSportIdentPortDiscoveryMode,
                                     onSetCloudflarePagesPublishSettings = onSetCloudflarePagesPublishSettings,
                                     isNavActionEnabled = isNavActionEnabled,
                                     onOptimizeSeriesStartFairness = onOptimizeSeriesStartFairness,
@@ -9638,6 +9654,7 @@ private fun SectionWorkspace(
     publishedPublicResultSiteUrl: String?,
     printerDiagnostics: DesktopPrinterDiagnostics,
     isUpdateCheckingEnabled: Boolean,
+    sportIdentPortDiscoveryMode: DesktopSportIdentPortDiscoveryMode,
     cloudflarePagesPublishSettings: DesktopCloudflarePagesPublishSettings,
     raceClockTick: Long,
     onSendRobisLiveResults: () -> Unit,
@@ -9671,6 +9688,7 @@ private fun SectionWorkspace(
     onUpdateProtectedControlLocation: (String, String, String) -> String,
     onUpdateProtectedCoursePassword: (String, String, String) -> Boolean,
     onSetUpdateCheckingEnabled: (Boolean) -> Unit,
+    onSetSportIdentPortDiscoveryMode: (DesktopSportIdentPortDiscoveryMode) -> Unit,
     onSetCloudflarePagesPublishSettings: (DesktopCloudflarePagesPublishSettings) -> Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
     onOptimizeSeriesStartFairness: () -> Unit,
@@ -9820,7 +9838,9 @@ private fun SectionWorkspace(
             SportIdentTimeSyncPanel(
                 siReaderState = siReaderState,
                 isStationBusy = isDownloadingSiReadout || isContinuousSiReadoutActive || isReadingCompetitorSiCard,
-                raceClockTick = raceClockTick
+                raceClockTick = raceClockTick,
+                portDiscoveryMode = sportIdentPortDiscoveryMode,
+                onSetPortDiscoveryMode = onSetSportIdentPortDiscoveryMode
             )
         }
         if (section == DesktopSection.EventValidator) {
@@ -10027,7 +10047,9 @@ private fun SportIdentToolsPanel() {
 private fun SportIdentTimeSyncPanel(
     siReaderState: DesktopSiReaderUiState,
     isStationBusy: Boolean,
-    raceClockTick: Long
+    raceClockTick: Long,
+    portDiscoveryMode: DesktopSportIdentPortDiscoveryMode,
+    onSetPortDiscoveryMode: (DesktopSportIdentPortDiscoveryMode) -> Unit
 ) {
     var inspectionStatus by remember { mutableStateOf<String?>(null) }
     var siCodeText by remember { mutableStateOf<String?>(null) }
@@ -10049,6 +10071,25 @@ private fun SportIdentTimeSyncPanel(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DetailRow("Computer time", localTimeText)
         DetailRow("SI station", siReaderState.statusText)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = portDiscoveryMode == DesktopSportIdentPortDiscoveryMode.PROBE_FTDI_ADAPTERS,
+                onCheckedChange = { enabled ->
+                    onSetPortDiscoveryMode(
+                        if (enabled) {
+                            DesktopSportIdentPortDiscoveryMode.PROBE_FTDI_ADAPTERS
+                        } else {
+                            DesktopSportIdentPortDiscoveryMode.SPORTIDENT_USB_ONLY
+                        }
+                    )
+                }
+            )
+            Text(
+                text = "Probe FTDI/RS232 adapters for SPORTident stations",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        }
         inspectionStatus?.let { status ->
             Text(
                 text = status,
@@ -10070,7 +10111,7 @@ private fun SportIdentTimeSyncPanel(
                     isInspecting = true
                     scope.launch {
                         val inspection = withContext(Dispatchers.IO) {
-                            DesktopSportIdentTimeSyncService().inspectDownloadStation()
+                            desktopSportIdentTimeSyncService().inspectDownloadStation()
                         }
                         inspectionStatus = listOfNotNull(
                             inspection.statusText,
@@ -10106,7 +10147,7 @@ private fun SportIdentTimeSyncPanel(
                     scope.launch {
                         val outcome = runCatching {
                             withContext(Dispatchers.IO) {
-                                DesktopSportIdentTimeSyncService().syncTime()
+                                desktopSportIdentTimeSyncService().syncTime()
                             }
                         }
                         syncStatus = outcome.fold(
@@ -18299,8 +18340,7 @@ private fun Modifier.commitOnEnter(onCommit: () -> Unit): Modifier =
     }
 
 private fun detectDesktopSiReaderState(): DesktopSiReaderUiState {
-    val provider = JSerialCommDesktopSerialPortProvider
-    val port = provider.listPorts().firstOrNull { it.info.matchesSportIdent() }
+    val port = desktopSportIdentPortSelector().selectPort()
         ?: return DesktopSiReaderUiState.disconnected()
 
     return runCatching {
@@ -18358,8 +18398,17 @@ internal fun practiceRaceOpsSiReadoutContextKey(
 }
 
 private fun downloadDesktopSportIdentCardReadout(): DesktopSportIdentCardBlockDownload {
-    return DesktopSportIdentReadoutService().downloadOne()
+    return desktopSportIdentReadoutService().downloadOne()
 }
+
+private fun desktopSportIdentPortSelector(): DesktopSportIdentPortSelector =
+    DesktopSportIdentPortSelector(discoverySettings = DesktopAppSettingsPreferences)
+
+private fun desktopSportIdentReadoutService(): DesktopSportIdentReadoutService =
+    DesktopSportIdentReadoutService(portSelector = desktopSportIdentPortSelector())
+
+private fun desktopSportIdentTimeSyncService(): DesktopSportIdentTimeSyncService =
+    DesktopSportIdentTimeSyncService(portSelector = desktopSportIdentPortSelector())
 
 private fun beepDesktopReadoutAlert() {
     runCatching {

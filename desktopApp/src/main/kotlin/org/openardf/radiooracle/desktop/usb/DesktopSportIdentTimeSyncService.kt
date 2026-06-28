@@ -86,6 +86,7 @@ internal data class DesktopSportIdentTimeSyncDryRun(
 
 internal class DesktopSportIdentTimeSyncService(
     private val portProvider: DesktopSerialPortProvider = JSerialCommDesktopSerialPortProvider,
+    private val portSelector: DesktopSportIdentPortSelector = DesktopSportIdentPortSelector(portProvider),
     private val connectStation: (DesktopSerialPort) -> DesktopSportIdentStationConnection = {
         DesktopSportIdentStationProbe().connect(it)
     },
@@ -97,7 +98,7 @@ internal class DesktopSportIdentTimeSyncService(
     private val sleepMillis: (Long) -> Unit = { Thread.sleep(it) }
 ) {
     fun inspectDownloadStation(): DesktopSportIdentTimeSyncInspection {
-        val port = portProvider.listPorts().firstOrNull { it.info.matchesSportIdent() }
+        val port = portSelector.selectPort()
             ?: return DesktopSportIdentTimeSyncInspection.disconnected()
 
         return runCatching {
@@ -234,7 +235,7 @@ internal class DesktopSportIdentTimeSyncService(
         attemptCount: Int,
         onWriteCommandStarted: () -> Unit
     ): DesktopSportIdentTimeSyncResult {
-        val port = portProvider.listPorts().firstOrNull { it.info.matchesSportIdent() }
+        val port = portSelector.selectPort()
             ?: error("No SPORTident USB station detected.")
 
         try {

@@ -425,6 +425,16 @@ Current local evidence on this Mac: `npm run desktop:usb-diagnostic --
 the platform-detection showstopper for desktop SI work; the remaining spike is
 serial-protocol access and card-readout parity with the Android `SIPort` path.
 
+By default, the desktop app only auto-detects the SPORTident CP2102 USB bridge
+identity above. The Time Sync tool also has a persisted
+`Probe FTDI/RS232 adapters for SPORTident stations` setting for older BSM7-RS232
+stations connected through FTDI USB-to-RS232 adapters. When that setting is
+enabled, Radio-Oracle first tries any remembered successful FTDI station port,
+then the SPORTident CP2102 bridge, then the other host-visible FTDI serial
+ports. A successful FTDI station probe stores that serial node for priority on
+future scans. Keep the setting off unless FTDI/RS232 station support is needed,
+because a non-responsive FTDI serial node can add probe timeout delay.
+
 ### Desktop Automation Hooks
 
 Desktop beta builds include a non-UI automation CLI for repeatable checks and
