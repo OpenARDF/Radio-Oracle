@@ -1859,6 +1859,15 @@ object EventProjectEditor {
                     ) {
                         "StartList row ${index + 1}: SI number must be unique."
                     }
+                    val bibNumber = matchedEntry.entry.bibNumber?.trim().orEmpty()
+                    require(
+                        bibNumber.isBlank() || competitorData.noneIndexed { otherIndex, data ->
+                            otherIndex != competitorPosition &&
+                                data.competitorCategory.competitor.bibNumber == bibNumber
+                        }
+                    ) {
+                        "StartList row ${index + 1}: Bib number must be unique."
+                    }
 
                     competitorData = competitorData.mapIndexed { dataIndex, data ->
                         if (dataIndex == competitorPosition) {
@@ -1868,7 +1877,8 @@ object EventProjectEditor {
                                 competitorCategory = competitorCategory.copy(
                                     competitor = competitor.copy(
                                         siNumber = controlCard ?: competitor.siNumber,
-                                        drawnStartTimeSeconds = relativeStartSeconds
+                                        drawnStartTimeSeconds = relativeStartSeconds,
+                                        bibNumber = bibNumber.ifBlank { competitor.bibNumber }
                                     )
                                 )
                             )

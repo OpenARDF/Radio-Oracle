@@ -1744,8 +1744,44 @@ class EventProjectEditorTest {
         val changed = outcome.projectFile.raceData.competitorData[1].competitorCategory.competitor
         assertEquals(null, kept.drawnStartTimeSeconds)
         assertEquals(2222, changed.siNumber)
+        assertEquals("1002", changed.bibNumber)
         assertEquals(7 * 60L, changed.drawnStartTimeSeconds)
         assertEquals(1, changed.startNumber)
+    }
+
+    @Test
+    fun rejectsIofStartListWithDuplicateBibNumber() {
+        val category = category("cat-1", "M21")
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21")),
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", startNumber = 1, siNumber = 1111, bibNumber = "1002", category = category),
+                competitorData("comp-2", "Bob", "Racer", startNumber = 2, siNumber = null, category = category)
+            )
+        )
+        val preview = IofXmlImports.startList(
+            """
+            <StartList iofVersion="3.0">
+              <Event>
+                <Name>Original Race</Name>
+                <StartTime><Date>2026-05-31</Date><Time>10:00:00</Time></StartTime>
+              </Event>
+              <ClassStart>
+                <Class><Name>M21</Name></Class>
+                <PersonStart>
+                  <Person><Id>comp-2</Id><Name><Family>Racer</Family><Given>Bob</Given></Name></Person>
+                  <Start><BibNumber>1002</BibNumber><StartTime>2026-05-31T10:07:00</StartTime><ControlCard>2222</ControlCard></Start>
+                </PersonStart>
+              </ClassStart>
+            </StartList>
+            """.trimIndent()
+        ).parsedData
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.importIofStartList(original, preview)
+        }
+
+        assertEquals("StartList row 1: Bib number must be unique.", error.message)
     }
 
     @Test
