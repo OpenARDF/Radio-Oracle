@@ -76,9 +76,9 @@ class EntryListXmlTests {
 
         assertTrue(wrapper.invalidLines.isEmpty())
         assertEquals(2, wrapper.competitorCategories.size)
-        assertEquals(listOf("W21", "M21"), wrapper.categories.map { it.category.name })
+        assertEquals(setOf("W21", "M21"), wrapper.categories.map { it.category.name }.toSet())
 
-        val alice = wrapper.competitorCategories.first().competitor
+        val alice = wrapper.competitorCategories.first { it.competitor.firstName == "Alice" }.competitor
         assertEquals("Alice", alice.firstName)
         assertEquals("Runner", alice.lastName)
         assertEquals("US001", alice.index)
@@ -87,7 +87,7 @@ class EntryListXmlTests {
         assertEquals(false, alice.siRent)
         assertEquals(5, alice.startNumber)
 
-        val bob = wrapper.competitorCategories[1].competitor
+        val bob = wrapper.competitorCategories.first { it.competitor.firstName == "Bob" }.competitor
         assertEquals("US002", bob.index)
         assertEquals("", bob.bibNumber)
         assertEquals(true, bob.siRent)

@@ -23,9 +23,6 @@
 package org.openardf.radiooracle.shared.files
 
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -409,32 +406,7 @@ class IofXmlImportsTest {
     }
 
     private fun localIofXsd(): String =
-        Files.readAllBytes(iofSchemaPath()).decodeToString()
-
-    private fun iofSchemaPath(): Path {
-        val configuredPath = sequenceOf(
-            System.getProperty(IOF_SCHEMA_PROPERTY),
-            System.getenv(IOF_SCHEMA_ENV)
-        )
-            .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
-            .firstOrNull()
-            ?.let(Paths::get)
-        val workingDirectory = Paths.get(System.getProperty("user.dir"))
-        val candidates = if (configuredPath != null) {
-            listOf(configuredPath)
-        } else {
-            listOf(
-                workingDirectory.resolve("../IOF-XML-datastandard-v3/IOF.xsd"),
-                workingDirectory.resolve("../../IOF-XML-datastandard-v3/IOF.xsd")
-            )
-        }
-        return candidates.firstOrNull { Files.isRegularFile(it) }
-            ?: throw AssertionError(
-                "IOF XML 3.0 schema is required for this test. " +
-                    "Set -PiofSchemaPath=/path/to/IOF.xsd or IOF_SCHEMA_PATH=/path/to/IOF.xsd. " +
-                    "Checked: ${candidates.joinToString { it.toAbsolutePath().normalize().toString() }}"
-            )
-    }
+        IofXmlSchemaResource.loadBundledSchema()
 
     private fun race(): EventRace =
         EventRace(
@@ -450,7 +422,5 @@ class IofXmlImportsTest {
 
     private companion object {
         const val IOF_EXAMPLES_PATH = "/Users/charlesscharlau/Documents/GitHub/IOF-XML-datastandard-v3/examples"
-        const val IOF_SCHEMA_PROPERTY = "iof.schema.path"
-        const val IOF_SCHEMA_ENV = "IOF_SCHEMA_PATH"
     }
 }

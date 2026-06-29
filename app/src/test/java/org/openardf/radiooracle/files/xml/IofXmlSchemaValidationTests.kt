@@ -49,6 +49,7 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
 import org.openardf.radiooracle.backend.room.enums.ControlPointType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.files.IofXmlSchemaResource
 import org.openardf.radiooracle.backend.sportident.SITime
 import org.robolectric.RobolectricTestRunner
 import org.xml.sax.SAXException
@@ -310,24 +311,15 @@ class IofXmlSchemaValidationTests {
     }
 
     private fun schema(): Schema {
-        val schemaFile = iofSchemaPath().toFile()
-        return SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI)
-            .newSchema(schemaFile)
-    }
-
-    private fun iofSchemaPath(): Path {
-        val configuredPath = configuredIofSchemaPath()
-        val candidates = if (configuredPath != null) {
-            listOf(configuredPath)
+        val factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI)
+        val configuredFile = configuredIofSchemaPath()
+            ?.takeIf { Files.isRegularFile(it) }
+            ?.toFile()
+        return if (configuredFile != null) {
+            factory.newSchema(configuredFile)
         } else {
-            defaultIofSchemaPathCandidates()
+            factory.newSchema(StreamSource(StringReader(IofXmlSchemaResource.loadBundledSchema())))
         }
-        return candidates.firstOrNull { Files.isRegularFile(it) }
-            ?: throw AssertionError(
-                "IOF XML 3.0 schema is required for this test. " +
-                    "Set -PiofSchemaPath=/path/to/IOF.xsd or IOF_SCHEMA_PATH=/path/to/IOF.xsd. " +
-                    "Checked: ${candidates.joinToString { it.toAbsolutePath().normalize().toString() }}"
-            )
     }
 
     private fun configuredIofSchemaPath(): Path? =
@@ -338,14 +330,6 @@ class IofXmlSchemaValidationTests {
             .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
             .firstOrNull()
             ?.let(Paths::get)
-
-    private fun defaultIofSchemaPathCandidates(): List<Path> {
-        val workingDirectory = Paths.get(System.getProperty("user.dir"))
-        return listOf(
-            workingDirectory.resolve("../IOF-XML-datastandard-v3/IOF.xsd"),
-            workingDirectory.resolve("../../IOF-XML-datastandard-v3/IOF.xsd")
-        )
-    }
 
     private fun dataProcessor(): DataProcessor {
         val dataProcessor = mock(DataProcessor::class.java)
