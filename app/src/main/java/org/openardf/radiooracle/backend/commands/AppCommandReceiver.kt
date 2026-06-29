@@ -357,7 +357,8 @@ class AppCommandReceiver : BroadcastReceiver() {
                 siNumber = null,
                 siRent = false,
                 startNumber = 1,
-                drawnRelativeStartTime = null
+                drawnRelativeStartTime = null,
+                bibNumber = "1001"
             ),
             Competitor(
                 id = UUID.randomUUID(),
@@ -372,7 +373,8 @@ class AppCommandReceiver : BroadcastReceiver() {
                 siNumber = null,
                 siRent = false,
                 startNumber = 2,
-                drawnRelativeStartTime = null
+                drawnRelativeStartTime = null,
+                bibNumber = "1002"
             )
         )
         return RaceData(
@@ -464,7 +466,8 @@ class AppCommandReceiver : BroadcastReceiver() {
             siNumber = 123456789,
             siRent = false,
             startNumber = 3,
-            drawnRelativeStartTime = null
+            drawnRelativeStartTime = null,
+            bibNumber = "1003"
         )
 
     private fun Context.commandFile(path: String): File =

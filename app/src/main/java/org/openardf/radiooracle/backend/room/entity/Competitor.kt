@@ -73,6 +73,7 @@ data class Competitor(
     @ColumnInfo(name = "si_rent") var siRent: Boolean = false,
     @ColumnInfo(name = "start_number") var startNumber: Int,
     @ColumnInfo(name = "drawn_start_time") var drawnRelativeStartTime: Duration? = null,
+    @ColumnInfo(name = "bib_number", defaultValue = "''") var bibNumber: String = "",
 ) : Serializable {
     /** Returns the display name in the shared LASTNAME Firstname format. */
     fun getFullName(): String {

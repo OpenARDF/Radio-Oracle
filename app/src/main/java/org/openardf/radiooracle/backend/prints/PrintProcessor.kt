@@ -192,7 +192,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
         val category = resultData.competitorCategory?.category?.name ?: "?"
         val punches = getPunchesFormatted(resultData.punches, race.raceType)
         val siNumber = "SI: ${resultData.result.siNumber ?: "?"}"
-        val bibNumber = competitor?.index?.takeIf { it.isNotBlank() }
+        val bibNumber = competitor?.bibNumber?.takeIf { it.isNotBlank() }
 
         val score = "[R]Score: ${resultData.result.points}"
         val status =

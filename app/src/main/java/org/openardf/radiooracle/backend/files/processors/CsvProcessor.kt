@@ -295,7 +295,8 @@ object CsvProcessor : FormatProcessor {
                     row.siNumber,
                     row.siRent,
                     startNumber,
-                    drawnRelativeStartTime
+                    drawnRelativeStartTime,
+                    row.bibNumber
                 )
                 competitors.add(CompetitorCategory(competitor, category?.category))
             } catch (e: Exception) {

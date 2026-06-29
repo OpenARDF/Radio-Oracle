@@ -203,3 +203,10 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_event_series_member_local_race_id` ON `event_series_member` (`local_race_id`)")
     }
 }
+
+// Migration from version 8 -> 9: store bib numbers separately from person/registration IDs.
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `competitor` ADD COLUMN `bib_number` TEXT NOT NULL DEFAULT ''")
+    }
+}
