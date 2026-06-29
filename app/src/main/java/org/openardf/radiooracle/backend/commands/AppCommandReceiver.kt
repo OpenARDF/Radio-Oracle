@@ -139,6 +139,53 @@ class AppCommandReceiver : BroadcastReceiver() {
                 require(file.isFile) { "IOF smoke fixture not found: ${file.absolutePath}" }
             }
 
+        val iofSchema = intent.getStringExtra(EXTRA_IOF_SCHEMA_FILE)
+            ?.takeIf(String::isNotBlank)
+            ?.let(::fixtureFile)
+            ?.readText()
+
+        suspend fun importIofXml(
+            fileName: String,
+            dataType: DataType,
+            importRace: Race
+        ) = if (iofSchema != null) {
+            IofXmlProcessor.importDataValidated(
+                fixtureFile(fileName).inputStream(),
+                dataType,
+                importRace,
+                dataProcessor,
+                iofSchema
+            )
+        } else {
+            IofXmlProcessor.importData(
+                fixtureFile(fileName).inputStream(),
+                dataType,
+                importRace,
+                dataProcessor
+            )
+        }
+
+        suspend fun importIofXmlFile(
+            file: File,
+            dataType: DataType,
+            importRace: Race
+        ) = if (iofSchema != null) {
+            IofXmlProcessor.importDataValidated(
+                file.inputStream(),
+                dataType,
+                importRace,
+                dataProcessor,
+                iofSchema
+            )
+        } else {
+            IofXmlProcessor.importData(
+                file.inputStream(),
+                dataType,
+                importRace,
+                dataProcessor
+            )
+        }
+
         fun appendImportWarnings(label: String, warnings: List<String>) {
             warnings.forEach { warning ->
                 summary += "$label warning=$warning"
@@ -149,12 +196,12 @@ class AppCommandReceiver : BroadcastReceiver() {
             dataProcessor.saveRaceData(raceData)
             dataProcessor.setCurrentRace(race.id)
             summary += "event id=${race.id} name=${race.name}"
+            summary += "schemaValidation=${if (iofSchema != null) "enabled" else "not-configured"}"
 
-            val courseImport = IofXmlProcessor.importData(
-                fixtureFile("course.xml").inputStream(),
+            val courseImport = importIofXml(
+                "course.xml",
                 DataType.CATEGORIES,
-                race,
-                dataProcessor
+                race
             )
             DataImportValidator.validateDataImport(courseImport, race.id, DataType.CATEGORIES, dataProcessor, context)
             dataProcessor.saveDataImportWrapper(courseImport)
@@ -165,11 +212,10 @@ class AppCommandReceiver : BroadcastReceiver() {
             dataProcessor.createOrUpdateCompetitor(iofSmokeResultCompetitor(race.id, resultCategory.id))
             summary += "courseData resultCompetitorCategory=${resultCategory.name}"
 
-            val startImport = IofXmlProcessor.importData(
-                fixtureFile("start.xml").inputStream(),
+            val startImport = importIofXml(
+                "start.xml",
                 DataType.COMPETITOR_STARTS,
-                race,
-                dataProcessor
+                race
             )
             require(startImport.invalidLines.isEmpty()) {
                 startImport.invalidLines.joinToString(prefix = "StartList import failed: ") { "${it.first}:${it.second}" }
@@ -179,11 +225,18 @@ class AppCommandReceiver : BroadcastReceiver() {
             summary += "startList updatedCompetitors=${startImport.competitorCategories.size}"
             appendImportWarnings("startList", startImport.iofWarnings)
 
-            val resultImport = IofXmlProcessor.importData(
-                fixtureFile("results.xml").inputStream(),
+            if (iofSchema != null) {
+                val legacyStartNumberFailure = runCatching {
+                    importIofXml("legacy-start-number.xml", DataType.COMPETITOR_STARTS, race)
+                }.exceptionOrNull()
+                    ?: error("Schema validation accepted legacy StartNumber IOF XML.")
+                summary += "negativeLegacyStartNumber=rejected:${legacyStartNumberFailure.message}"
+            }
+
+            val resultImport = importIofXml(
+                "results.xml",
                 DataType.RESULTS_LIVE,
-                race,
-                dataProcessor
+                race
             )
             require(resultImport.invalidLines.isEmpty()) {
                 resultImport.invalidLines.joinToString(prefix = "ResultList import failed: ") { "${it.first}:${it.second}" }
@@ -216,11 +269,10 @@ class AppCommandReceiver : BroadcastReceiver() {
             dataProcessor.saveRaceData(roundTripRaceData)
             summary += "roundTrip event id=${roundTripRace.id} name=${roundTripRace.name}"
 
-            val exportedStartImport = IofXmlProcessor.importData(
-                startListOutput.inputStream(),
+            val exportedStartImport = importIofXmlFile(
+                startListOutput,
                 DataType.COMPETITOR_STARTS,
-                roundTripRace,
-                dataProcessor
+                roundTripRace
             )
             require(exportedStartImport.invalidLines.isEmpty()) {
                 exportedStartImport.invalidLines.joinToString(prefix = "Exported StartList re-import failed: ") { "${it.first}:${it.second}" }
@@ -230,11 +282,10 @@ class AppCommandReceiver : BroadcastReceiver() {
             summary += "roundTrip startListReimportedCompetitors=${exportedStartImport.competitorCategories.size}"
             appendImportWarnings("roundTripStartList", exportedStartImport.iofWarnings)
 
-            val exportedResultImport = IofXmlProcessor.importData(
-                resultListOutput.inputStream(),
+            val exportedResultImport = importIofXmlFile(
+                resultListOutput,
                 DataType.RESULTS_LIVE,
-                roundTripRace,
-                dataProcessor
+                roundTripRace
             )
             require(exportedResultImport.invalidLines.isEmpty()) {
                 exportedResultImport.invalidLines.joinToString(prefix = "Exported ResultList re-import failed: ") { "${it.first}:${it.second}" }
@@ -726,6 +777,7 @@ class AppCommandReceiver : BroadcastReceiver() {
         const val EXTRA_DESKTOP_RECEIVE_URL = "desktop_receive_url"
         const val EXTRA_FIXTURE_DIR = "fixture_dir"
         const val EXTRA_OUTPUT_DIR = "output_dir"
+        const val EXTRA_IOF_SCHEMA_FILE = "iof_schema_file"
         const val EXTRA_KEEP_EVENT = "keep_event"
     }
 }

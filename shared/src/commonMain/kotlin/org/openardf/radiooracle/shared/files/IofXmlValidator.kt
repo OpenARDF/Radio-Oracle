@@ -70,6 +70,16 @@ object IofXmlValidator {
                     )
                 )
             )
+        } catch (exception: IllegalArgumentException) {
+            IofXmlValidationResult(
+                valid = false,
+                errors = listOf(
+                    IofXmlValidationError(
+                        message = "W3C XML Schema validation is not available in this runtime: " +
+                            (exception.message ?: exception::class.simpleName.orEmpty())
+                    )
+                )
+            )
         } catch (exception: Exception) {
             IofXmlValidationResult(
                 valid = false,

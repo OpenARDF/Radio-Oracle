@@ -242,4 +242,125 @@ class StartListXmlTests {
         assertTrue(wrapper.invalidLines.isEmpty())
         assertEquals(Duration.ofMinutes(12), wrapper.competitorCategories.single().competitor.drawnRelativeStartTime)
     }
+
+    @Test
+    fun testValidatedImportRejectsLegacyStartNumberShape() = runTest {
+        val context = RuntimeEnvironment.getApplication()
+        val race = Race(
+            UUID.fromString("00000000-0000-0000-0000-000000000021"),
+            "Test Race",
+            "",
+            LocalDateTime.of(2023, 6, 15, 9, 30, 0),
+            org.openardf.radiooracle.backend.room.enums.RaceType.CLASSIC,
+            org.openardf.radiooracle.backend.room.enums.RaceLevel.PRACTICE,
+            org.openardf.radiooracle.backend.room.enums.RaceBand.M80,
+            Duration.ZERO
+        )
+        val dataProcessor: DataProcessor = mock()
+        `when`(dataProcessor.getContext()).thenReturn(context)
+
+        val xml = """
+            <StartList xmlns="http://www.orienteering.org/datastandard/3.0" iofVersion="3.0">
+              <Event>
+                <Name>Test Race</Name>
+                <StartTime>
+                  <Date>2023-06-15</Date>
+                  <Time>09:30:00</Time>
+                </StartTime>
+              </Event>
+              <ClassStart>
+                <Class><Name>M21</Name></Class>
+                <PersonStart>
+                  <Person>
+                    <Name><Family>Novak</Family><Given>Jan</Given></Name>
+                  </Person>
+                  <Start>
+                    <StartNumber>1001</StartNumber>
+                    <StartTime>2023-06-15T09:42:00</StartTime>
+                    <ControlCard>111</ControlCard>
+                  </Start>
+                </PersonStart>
+              </ClassStart>
+            </StartList>
+        """.trimIndent()
+
+        val exception = assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                IofXmlProcessor.importDataValidated(
+                    xml.byteInputStream(),
+                    DataType.COMPETITOR_STARTS,
+                    race,
+                    dataProcessor,
+                    startListSchema()
+                )
+            }
+        }
+
+        assertTrue(exception.message!!.startsWith("Invalid IOF XML:"))
+        assertTrue(exception.message!!.contains("StartNumber"))
+    }
+
+    private fun startListSchema(): String = """
+        <xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                    xmlns="http://www.orienteering.org/datastandard/3.0"
+                    targetNamespace="http://www.orienteering.org/datastandard/3.0"
+                    elementFormDefault="qualified">
+          <xsd:element name="StartList">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="Event" type="EventType"/>
+                <xsd:element name="ClassStart" type="ClassStartType" minOccurs="0" maxOccurs="unbounded"/>
+              </xsd:sequence>
+              <xsd:attribute name="iofVersion" type="xsd:string" use="required"/>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:complexType name="EventType">
+            <xsd:sequence>
+              <xsd:element name="Name" type="xsd:string"/>
+              <xsd:element name="StartTime" type="EventStartTimeType"/>
+            </xsd:sequence>
+          </xsd:complexType>
+          <xsd:complexType name="EventStartTimeType">
+            <xsd:sequence>
+              <xsd:element name="Date" type="xsd:date"/>
+              <xsd:element name="Time" type="xsd:time"/>
+            </xsd:sequence>
+          </xsd:complexType>
+          <xsd:complexType name="ClassStartType">
+            <xsd:sequence>
+              <xsd:element name="Class" type="ClassType"/>
+              <xsd:element name="PersonStart" type="PersonStartType" minOccurs="0" maxOccurs="unbounded"/>
+            </xsd:sequence>
+          </xsd:complexType>
+          <xsd:complexType name="ClassType">
+            <xsd:sequence>
+              <xsd:element name="Name" type="xsd:string"/>
+            </xsd:sequence>
+          </xsd:complexType>
+          <xsd:complexType name="PersonStartType">
+            <xsd:sequence>
+              <xsd:element name="Person" type="PersonType"/>
+              <xsd:element name="Start" type="StartType"/>
+            </xsd:sequence>
+          </xsd:complexType>
+          <xsd:complexType name="PersonType">
+            <xsd:sequence>
+              <xsd:element name="Name" type="PersonNameType"/>
+            </xsd:sequence>
+          </xsd:complexType>
+          <xsd:complexType name="PersonNameType">
+            <xsd:sequence>
+              <xsd:element name="Family" type="xsd:string"/>
+              <xsd:element name="Given" type="xsd:string"/>
+            </xsd:sequence>
+          </xsd:complexType>
+          <xsd:complexType name="StartType">
+            <xsd:sequence>
+              <xsd:element name="BibNumber" type="xsd:string" minOccurs="0"/>
+              <xsd:element name="StartTime" type="xsd:dateTime"/>
+              <xsd:element name="ControlCard" type="xsd:integer" minOccurs="0"/>
+            </xsd:sequence>
+          </xsd:complexType>
+        </xsd:schema>
+    """.trimIndent()
 }

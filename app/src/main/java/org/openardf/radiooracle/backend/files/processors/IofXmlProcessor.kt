@@ -67,6 +67,37 @@ object IofXmlProcessor : FormatProcessor {
         dataType: DataType,
         race: Race,
         dataProcessor: DataProcessor
+    ): DataImportWrapper =
+        importDataInternal(
+            inStream = inStream,
+            dataType = dataType,
+            race = race,
+            dataProcessor = dataProcessor,
+            iofSchema = null
+        )
+
+    /** Imports IOF XML after validating the input against the supplied IOF 3.0 schema text. */
+    suspend fun importDataValidated(
+        inStream: InputStream,
+        dataType: DataType,
+        race: Race,
+        dataProcessor: DataProcessor,
+        iofSchema: String
+    ): DataImportWrapper =
+        importDataInternal(
+            inStream = inStream,
+            dataType = dataType,
+            race = race,
+            dataProcessor = dataProcessor,
+            iofSchema = iofSchema
+        )
+
+    private suspend fun importDataInternal(
+        inStream: InputStream,
+        dataType: DataType,
+        race: Race,
+        dataProcessor: DataProcessor,
+        iofSchema: String?
     ): DataImportWrapper {
         val context = dataProcessor.getContext()
 
@@ -75,20 +106,23 @@ object IofXmlProcessor : FormatProcessor {
                 DataType.CATEGORIES -> importCategories(
                     inStream,
                     race,
-                    context
+                    context,
+                    iofSchema
                 )
 
                 DataType.COMPETITOR_STARTS -> importStartList(
                     inStream,
                     race,
                     dataProcessor,
-                    context
+                    context,
+                    iofSchema
                 )
 
                 DataType.RESULTS_LIVE -> importResultList(
                     inStream,
                     race,
-                    dataProcessor
+                    dataProcessor,
+                    iofSchema
                 )
 
                 else -> {
@@ -133,11 +167,14 @@ object IofXmlProcessor : FormatProcessor {
     fun importCategories(
         inStream: InputStream,
         race: Race,
-        context: Context
+        context: Context,
+        iofSchema: String? = null
     ): DataImportWrapper {
         val xml = inStream.readBytes().toString(Charsets.UTF_8)
         val sharedRace = race.toEventRace()
-        val result = IofXmlImports.courseData(xml, sharedRace)
+        val result = iofSchema?.let { schema ->
+            IofXmlImports.validatedCourseData(xml, schema, sharedRace)
+        } ?: IofXmlImports.courseData(xml, sharedRace)
         val cats = result.parsedData.categories.map { it.toRoomCategoryDataPreservingControlOrder() }
         return DataImportWrapper(
             competitorCategories = emptyList(),
@@ -152,10 +189,13 @@ object IofXmlProcessor : FormatProcessor {
         inStream: InputStream,
         race: Race,
         dataProcessor: DataProcessor,
-        context: Context
+        context: Context,
+        iofSchema: String?
     ): DataImportWrapper {
         val xml = inStream.readBytes().toString(Charsets.UTF_8)
-        val parsed = IofXmlImports.startList(xml)
+        val parsed = iofSchema?.let { schema ->
+            IofXmlImports.validatedStartList(xml, schema)
+        } ?: IofXmlImports.startList(xml)
         val raceData = dataProcessor.getRaceData(race.id)
         val sharedRaceData = raceData.toEventRaceData()
         val matched = IofXmlImportMatcher.matchStartList(parsed.parsedData, sharedRaceData)
@@ -210,10 +250,13 @@ object IofXmlProcessor : FormatProcessor {
     private suspend fun importResultList(
         inStream: InputStream,
         race: Race,
-        dataProcessor: DataProcessor
+        dataProcessor: DataProcessor,
+        iofSchema: String?
     ): DataImportWrapper {
         val xml = inStream.readBytes().toString(Charsets.UTF_8)
-        val parsed = IofXmlImports.resultList(xml)
+        val parsed = iofSchema?.let { schema ->
+            IofXmlImports.validatedResultList(xml, schema)
+        } ?: IofXmlImports.resultList(xml)
         val raceData = dataProcessor.getRaceData(race.id)
         val outcome = EventProjectEditor.importIofResultList(
             projectFile = EventProjectFile(raceData = raceData.toEventRaceData()),

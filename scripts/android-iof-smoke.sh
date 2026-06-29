@@ -7,6 +7,8 @@ package_name="org.openardf.radiooracle"
 apk_path="$repo_root/app/build/outputs/apk/debug/app-debug.apk"
 schema_path="${2:-${IOF_SCHEMA_PATH:-$repo_root/../IOF-XML-datastandard-v3/IOF.xsd}}"
 official_examples_dir="$repo_root/../IOF-XML-datastandard-v3/examples"
+generated_fixture_dir="$repo_root/build/iof-smoke-fixtures"
+legacy_start_number_fixture="$generated_fixture_dir/legacy-start-number.xml"
 
 if [[ ! -f "$apk_path" ]]; then
 	echo "Debug APK not found: $apk_path" >&2
@@ -77,18 +79,34 @@ for serial in "${devices[@]}"; do
 	stage_file "$serial" "$repo_root/app/src/main/resources/xml/xml_startlist_example.xml" "start.xml" "$app_input_dir" "$download_dir"
 	stage_file "$serial" "$repo_root/app/src/main/resources/xml/xml_results_example.xml" "results.xml" "$app_input_dir" "$download_dir"
 
+	if [[ -f "$schema_path" ]]; then
+		mkdir -p "$generated_fixture_dir"
+		sed 's/<BibNumber>1001<\/BibNumber>/<StartNumber>1001<\/StartNumber>/' \
+			"$repo_root/app/src/main/resources/xml/xml_startlist_example.xml" >"$legacy_start_number_fixture"
+		stage_file "$serial" "$schema_path" "IOF.xsd" "$app_input_dir" "$download_dir"
+		stage_file "$serial" "$legacy_start_number_fixture" "legacy-start-number.xml" "$app_input_dir" "$download_dir"
+	fi
+
 	if [[ -d "$official_examples_dir" ]]; then
 		stage_file "$serial" "$official_examples_dir/CourseData_Individual_Step2.xml" "official-CourseData_Individual_Step2.xml" "$app_input_dir" "$download_dir"
 		stage_file "$serial" "$official_examples_dir/StartList_Individual_Step3.xml" "official-StartList_Individual_Step3.xml" "$app_input_dir" "$download_dir"
 		stage_file "$serial" "$official_examples_dir/ResultList1.xml" "official-ResultList1.xml" "$app_input_dir" "$download_dir"
 	fi
 
-	"$adb_bin" -s "$serial" shell am broadcast \
-		-n "$package_name/.backend.commands.AppCommandReceiver" \
-		-a org.openardf.radiooracle.command.RUN_IOF_XML_SMOKE \
-		--es fixture_dir "$app_input_arg" \
-		--es output_dir "$app_output_arg" \
-		--ez keep_event true >/dev/null
+	broadcast_args=(
+		-n "$package_name/.backend.commands.AppCommandReceiver"
+		-a org.openardf.radiooracle.command.RUN_IOF_XML_SMOKE
+		--es fixture_dir "$app_input_arg"
+		--es output_dir "$app_output_arg"
+		--ez keep_event true
+	)
+	# Android's platform XML stack may not provide W3C XSD validation. Keep this opt-in
+	# until Radio-Oracle ships an Android-compatible schema validator.
+	if [[ -f "$schema_path" && "${ANDROID_IOF_APP_SCHEMA_VALIDATION:-}" == "1" ]]; then
+		broadcast_args+=(--es iof_schema_file IOF.xsd)
+	fi
+
+	"$adb_bin" -s "$serial" shell am broadcast "${broadcast_args[@]}" >/dev/null
 
 	for _ in {1..20}; do
 		if "$adb_bin" -s "$serial" shell run-as "$package_name" test -f "$app_output_dir/smoke-summary.txt"; then
