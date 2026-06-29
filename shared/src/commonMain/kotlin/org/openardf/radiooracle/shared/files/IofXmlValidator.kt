@@ -19,11 +19,16 @@
 
 package org.openardf.radiooracle.shared.files
 
+import java.io.File
 import java.io.StringReader
 import javax.xml.XMLConstants
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.SchemaFactory
+import org.xml.sax.ErrorHandler
+import org.xml.sax.InputSource
+import org.xml.sax.SAXException
 import org.xml.sax.SAXParseException
+import org.xml.sax.XMLReader
 
 /** One schema-validation error reported for IOF XML input. */
 data class IofXmlValidationError(
@@ -53,43 +58,111 @@ data class IofXmlValidationResult(
 
 /** Shared IOF XML schema validator. Callers provide the IOF 3.0 XSD text. */
 object IofXmlValidator {
+    private const val IOF_NAMESPACE = "http://www.orienteering.org/datastandard/3.0"
+
     fun validate(xml: String, xsd: String): IofXmlValidationResult =
         try {
-            val schema = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI)
-                .newSchema(StreamSource(StringReader(xsd)))
+            val schema = w3cSchemaFactory().newSchema(StreamSource(StringReader(xsd)))
             schema.newValidator().validate(StreamSource(StringReader(xml)))
             IofXmlValidationResult(valid = true, errors = emptyList())
         } catch (exception: SAXParseException) {
-            IofXmlValidationResult(
-                valid = false,
-                errors = listOf(
-                    IofXmlValidationError(
-                        message = exception.message ?: "IOF XML schema validation failed.",
-                        lineNumber = exception.lineNumber.takeIf { it > 0 },
-                        columnNumber = exception.columnNumber.takeIf { it > 0 }
-                    )
-                )
-            )
+            validationFailure(exception)
         } catch (exception: IllegalArgumentException) {
-            IofXmlValidationResult(
-                valid = false,
-                errors = listOf(
-                    IofXmlValidationError(
-                        message = "W3C XML Schema validation is not available in this runtime: " +
-                            (exception.message ?: exception::class.simpleName.orEmpty())
-                    )
-                )
-            )
+            bundledXercesSaxValidation(xml, xsd) ?: schemaUnavailableFailure(exception)
+        } catch (exception: LinkageError) {
+            bundledXercesSaxValidation(xml, xsd) ?: schemaUnavailableFailure(exception)
         } catch (exception: Exception) {
-            IofXmlValidationResult(
-                valid = false,
-                errors = listOf(
-                    IofXmlValidationError(
-                        message = exception.message ?: "IOF XML schema validation failed."
-                    )
+            validationFailure(exception)
+        }
+
+    private fun w3cSchemaFactory(): SchemaFactory =
+        try {
+            SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI)
+        } catch (exception: IllegalArgumentException) {
+            bundledXercesSchemaFactory() ?: throw exception
+        }
+
+    private fun bundledXercesSchemaFactory(): SchemaFactory? =
+        runCatching {
+            Class.forName("org.apache.xerces.jaxp.validation.XMLSchemaFactory")
+                .getDeclaredConstructor()
+                .newInstance() as SchemaFactory
+        }.getOrNull()
+
+    private fun bundledXercesSaxValidation(xml: String, xsd: String): IofXmlValidationResult? {
+        val parser = runCatching {
+            Class.forName("org.apache.xerces.parsers.SAXParser")
+                .getDeclaredConstructor()
+                .newInstance() as XMLReader
+        }.getOrNull() ?: return null
+
+        val xsdFile = File.createTempFile("radiooracle-iof-", ".xsd")
+        return try {
+            xsdFile.writeText(xsd)
+            parser.setFeature("http://xml.org/sax/features/validation", true)
+            parser.setFeature("http://apache.org/xml/features/validation/schema", true)
+            parser.setFeature("http://apache.org/xml/features/validation/schema-full-checking", true)
+            parser.setProperty(
+                "http://apache.org/xml/properties/schema/external-schemaLocation",
+                "$IOF_NAMESPACE ${xsdFile.toURI().toASCIIString()}"
+            )
+            parser.errorHandler = object : ErrorHandler {
+                override fun warning(exception: SAXParseException) = Unit
+                override fun error(exception: SAXParseException) {
+                    throw exception
+                }
+
+                override fun fatalError(exception: SAXParseException) {
+                    throw exception
+                }
+            }
+            parser.parse(InputSource(StringReader(xml)))
+            IofXmlValidationResult(valid = true, errors = emptyList())
+        } catch (exception: SAXParseException) {
+            validationFailure(exception)
+        } catch (exception: SAXException) {
+            validationFailure(exception)
+        } catch (exception: Exception) {
+            validationFailure(exception)
+        } catch (exception: LinkageError) {
+            schemaUnavailableFailure(exception)
+        } finally {
+            xsdFile.delete()
+        }
+    }
+
+    private fun validationFailure(exception: SAXParseException): IofXmlValidationResult =
+        IofXmlValidationResult(
+            valid = false,
+            errors = listOf(
+                IofXmlValidationError(
+                    message = exception.message ?: "IOF XML schema validation failed.",
+                    lineNumber = exception.lineNumber.takeIf { it > 0 },
+                    columnNumber = exception.columnNumber.takeIf { it > 0 }
                 )
             )
-        }
+        )
+
+    private fun validationFailure(exception: Exception): IofXmlValidationResult =
+        IofXmlValidationResult(
+            valid = false,
+            errors = listOf(
+                IofXmlValidationError(
+                    message = exception.message ?: "IOF XML schema validation failed."
+                )
+            )
+        )
+
+    private fun schemaUnavailableFailure(exception: Throwable): IofXmlValidationResult =
+        IofXmlValidationResult(
+            valid = false,
+            errors = listOf(
+                IofXmlValidationError(
+                    message = "W3C XML Schema validation is not available in this runtime: " +
+                        (exception.message ?: exception::class.simpleName.orEmpty())
+                )
+            )
+        )
 
     fun requireValid(xml: String, xsd: String) {
         val result = validate(xml, xsd)

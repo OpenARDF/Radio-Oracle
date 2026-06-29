@@ -37,6 +37,7 @@ robolectric = "4.16"
 sortable-table-view = "2.8.1"
 usb-serial = "6.1.0"
 xmlunit = "2.11.0"
+xerces = "2.12.2"
 zip4j = "2.11.5"
 zxing = "3.5.4"
 
@@ -79,6 +80,7 @@ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectr
 sortable-table-view = { module = "com.github.ISchwarz23:SortableTableView", version.ref = "sortable-table-view" }
 usb-serial = { module = "com.github.felHR85:UsbSerial", version.ref = "usb-serial" }
 xmlunit-core = { module = "org.xmlunit:xmlunit-core", version.ref = "xmlunit" }
+xerces-impl = { module = "xerces:xercesImpl", version.ref = "xerces" }
 zip4j = { module = "net.lingala.zip4j:zip4j", version.ref = "zip4j" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 zxing-javase = { module = "com.google.zxing:javase", version.ref = "zxing" }

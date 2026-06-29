@@ -138,6 +138,9 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.expandable.fab)
     implementation(libs.google.code.scanner)
+    implementation(libs.xerces.impl) {
+        exclude group: "xml-apis", module: "xml-apis"
+    }
 
     //Testing libraries
     testImplementation(libs.junit)

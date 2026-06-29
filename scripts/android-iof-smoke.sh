@@ -81,8 +81,13 @@ for serial in "${devices[@]}"; do
 
 	if [[ -f "$schema_path" ]]; then
 		mkdir -p "$generated_fixture_dir"
-		sed 's/<BibNumber>1001<\/BibNumber>/<StartNumber>1001<\/StartNumber>/' \
-			"$repo_root/app/src/main/resources/xml/xml_startlist_example.xml" >"$legacy_start_number_fixture"
+		awk '
+			!inserted && /<StartTime>/ {
+				sub(/<StartTime>/, "<StartNumber>1001</StartNumber>\n                <StartTime>")
+				inserted = 1
+			}
+			{ print }
+		' "$repo_root/app/src/main/resources/xml/xml_startlist_example.xml" >"$legacy_start_number_fixture"
 		stage_file "$serial" "$schema_path" "IOF.xsd" "$app_input_dir" "$download_dir"
 		stage_file "$serial" "$legacy_start_number_fixture" "legacy-start-number.xml" "$app_input_dir" "$download_dir"
 	fi
