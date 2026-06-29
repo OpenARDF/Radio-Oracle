@@ -78,6 +78,17 @@ data class DesktopSportIdentTimeSyncResult(
     val secondBoundaryLeadMillis: Long?
 )
 
+private enum class DesktopSportIdentTimeSyncAccessMode {
+    DIRECT_ATTACHED,
+    RELAY_COUPLED
+}
+
+private data class DesktopSportIdentPreparedTimeSyncPort(
+    val port: DesktopSerialPort,
+    val baudRate: Int,
+    val accessMode: DesktopSportIdentTimeSyncAccessMode
+)
+
 internal data class DesktopSportIdentTimeSyncDryRun(
     val sourceTime: LocalDateTime,
     val configPlusSequence: List<DesktopSportIdentTimeSyncCommandStep>,
@@ -105,16 +116,17 @@ internal class DesktopSportIdentTimeSyncService(
             val connection = connectStation(port)
             val stationInfo = connection.stationInfo
             val modeLabel = stationInfo.stationModeLabel ?: "unknown"
-            val canSyncTime = stationInfo.canRelayTimeSync()
-            val coupledStationClockResult = if (canSyncTime) {
-                readCoupledStationClock(port)
-            } else {
-                null
-            }
+            val accessMode = port.timeSyncAccessMode(stationInfo)
+            val canSyncTime = true
+            val coupledStationClockResult = readStationClock(
+                port = port,
+                baudRate = connection.baudRate,
+                accessMode = accessMode
+            )
             val coupledStationClock = coupledStationClockResult?.getOrNull()
-            val coupledStationInspectionError = if (canSyncTime && coupledStationClock == null) {
+            val coupledStationInspectionError = if (coupledStationClock == null) {
                 coupledStationClockResult?.exceptionOrNull()?.message
-                    ?: "Coupled station time read failed."
+                    ?: "SPORTident station time read failed."
             } else {
                 null
             }
@@ -124,11 +136,7 @@ internal class DesktopSportIdentTimeSyncService(
                 stationInfo = stationInfo,
                 statusText = "SI station ${stationInfo.serialNumber} connected in $modeLabel mode.",
                 canSyncTime = canSyncTime,
-                disabledReason = if (canSyncTime) {
-                    null
-                } else {
-                    "Configure the attached SPORTident station in SI MASTER mode before syncing time."
-                },
+                disabledReason = null,
                 coupledStationClock = coupledStationClock,
                 coupledStationInspectionError = coupledStationInspectionError
             )
@@ -235,27 +243,25 @@ internal class DesktopSportIdentTimeSyncService(
         attemptCount: Int,
         onWriteCommandStarted: () -> Unit
     ): DesktopSportIdentTimeSyncResult {
-        val port = portSelector.selectPort()
-            ?: error("No SPORTident USB station detected.")
+        val preparedPort = prepareTimeSyncPort()
+        val port = preparedPort.port
 
         try {
-            val baudRate = selectBaudRate(port)
-            configure(port, baudRate)
+            configure(port, preparedPort.baudRate)
             if (!port.open(OPEN_WAIT_TIME_MS)) {
                 error("Failed to open serial port ${port.info.systemPortPath}.")
             }
 
             requireReply(
                 port = port,
-                step = DesktopSportIdentTimeSyncProtocol.enterRemoteModeStep()
+                step = preparedPort.accessMode.initialStep()
             )
 
             val systemInfoFrame = requireReply(
                 port = port,
-                step = DesktopSportIdentTimeSyncProtocol.readCompatibleSystemInfoStep(),
+                step = preparedPort.accessMode.systemInfoStep(),
                 attempts = READ_ONLY_COMMAND_ATTEMPTS,
-                failureMessage = "Remote/coupled SPORTident station did not answer system-info read. " +
-                    "Confirm the target station is awake and coupled to the download station."
+                failureMessage = preparedPort.accessMode.systemInfoFailureMessage()
             )
             val stationInfo = SportIdentStationInfoParser.fromSystemInfoFrame(systemInfoFrame)
                 ?: error("SPORTident station returned unreadable system info.")
@@ -310,20 +316,46 @@ internal class DesktopSportIdentTimeSyncService(
             )
         } finally {
             if (port.isOpen) {
-                runCatching {
-                    val exitStep = DesktopSportIdentTimeSyncProtocol.exitRemoteModeStep()
-                    commandClient.sendCommand(
-                        port = port,
-                        command = exitStep.command,
-                        data = exitStep.payload
-                    )
+                if (preparedPort.accessMode == DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED) {
+                    runCatching {
+                        val exitStep = DesktopSportIdentTimeSyncProtocol.exitRemoteModeStep()
+                        commandClient.sendCommand(
+                            port = port,
+                            command = exitStep.command,
+                            data = exitStep.payload
+                        )
+                    }
                 }
                 port.close()
             }
         }
     }
 
-    private fun selectBaudRate(port: DesktopSerialPort): Int {
+    private fun prepareTimeSyncPort(): DesktopSportIdentPreparedTimeSyncPort {
+        val port = portSelector.selectPort()
+            ?: error("No SPORTident USB station detected.")
+        if (!port.info.matchesFtdiAdapter()) {
+            return DesktopSportIdentPreparedTimeSyncPort(
+                port = port,
+                baudRate = selectBaudRate(port, DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED),
+                accessMode = DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED
+            )
+        }
+
+        val connection = runCatching { connectStation(port) }.getOrNull()
+        val accessMode = connection
+            ?.stationInfo
+            ?.let { port.timeSyncAccessMode(it) }
+            ?: port.fallbackTimeSyncAccessMode()
+        val baudRate = connection?.baudRate ?: selectBaudRate(port, accessMode)
+        return DesktopSportIdentPreparedTimeSyncPort(
+            port = port,
+            baudRate = baudRate,
+            accessMode = accessMode
+        )
+    }
+
+    private fun selectBaudRate(port: DesktopSerialPort, accessMode: DesktopSportIdentTimeSyncAccessMode): Int {
         for (baudRate in listOf(SportIdentProtocol.BAUDRATE_HIGH, SportIdentProtocol.BAUDRATE_LOW)) {
             runCatching {
                 configure(port, baudRate)
@@ -332,8 +364,8 @@ internal class DesktopSportIdentTimeSyncService(
                 }
                 commandClient.sendCommand(
                     port = port,
-                    command = DesktopSportIdentTimeSyncProtocol.enterRemoteModeStep().command,
-                    data = DesktopSportIdentTimeSyncProtocol.enterRemoteModeStep().payload
+                    command = accessMode.initialStep().command,
+                    data = accessMode.initialStep().payload
                 )
             }.getOrNull()?.let {
                 port.close()
@@ -343,12 +375,15 @@ internal class DesktopSportIdentTimeSyncService(
                 port.close()
             }
         }
-        error("SPORTident station did not respond to the time-sync remote-mode probe.")
+        error("SPORTident station did not respond to the time-sync probe.")
     }
 
-    private fun readCoupledStationClock(port: DesktopSerialPort): Result<DesktopSportIdentCoupledStationClock> =
+    private fun readStationClock(
+        port: DesktopSerialPort,
+        baudRate: Int,
+        accessMode: DesktopSportIdentTimeSyncAccessMode
+    ): Result<DesktopSportIdentCoupledStationClock> =
         runCatching {
-            val baudRate = selectBaudRate(port)
             configure(port, baudRate)
             if (!port.open(OPEN_WAIT_TIME_MS)) {
                 error("Failed to open serial port ${port.info.systemPortPath}.")
@@ -356,17 +391,16 @@ internal class DesktopSportIdentTimeSyncService(
 
             requireReply(
                 port = port,
-                step = DesktopSportIdentTimeSyncProtocol.enterRemoteModeStep()
+                step = accessMode.initialStep()
             )
             val systemInfoFrame = requireReply(
                 port = port,
-                step = DesktopSportIdentTimeSyncProtocol.readCompatibleSystemInfoStep(),
+                step = accessMode.systemInfoStep(),
                 attempts = READ_ONLY_COMMAND_ATTEMPTS,
-                failureMessage = "Coupled SPORTident station did not answer system-info read. " +
-                    "Confirm the target station is awake and coupled to the download station."
+                failureMessage = accessMode.systemInfoFailureMessage()
             )
             val stationInfo = SportIdentStationInfoParser.fromSystemInfoFrame(systemInfoFrame)
-                ?: error("Coupled SPORTident station returned unreadable system info.")
+                ?: error("SPORTident station returned unreadable system info.")
             val stationTime = requireReply(
                 port = port,
                 step = DesktopSportIdentTimeSyncProtocol.readStationTimeStep("Read station time for inspection")
@@ -381,13 +415,15 @@ internal class DesktopSportIdentTimeSyncService(
             )
         }.also {
             if (port.isOpen) {
-                runCatching {
-                    val exitStep = DesktopSportIdentTimeSyncProtocol.exitRemoteModeStep()
-                    commandClient.sendCommand(
-                        port = port,
-                        command = exitStep.command,
-                        data = exitStep.payload
-                    )
+                if (accessMode == DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED) {
+                    runCatching {
+                        val exitStep = DesktopSportIdentTimeSyncProtocol.exitRemoteModeStep()
+                        commandClient.sendCommand(
+                            port = port,
+                            command = exitStep.command,
+                            data = exitStep.payload
+                        )
+                    }
                 }
                 port.close()
             }
@@ -475,6 +511,49 @@ internal class DesktopSportIdentTimeSyncService(
         val truncated = truncatedTo(ChronoUnit.SECONDS)
         return if (nano >= 500_000_000) truncated.plusSeconds(1) else truncated
     }
+
+    private fun DesktopSerialPort.timeSyncAccessMode(
+        stationInfo: SportIdentStationInfo
+    ): DesktopSportIdentTimeSyncAccessMode =
+        if (info.matchesFtdiAdapter()) {
+            DesktopSportIdentTimeSyncAccessMode.DIRECT_ATTACHED
+        } else if (stationInfo.canRelayTimeSync()) {
+            DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED
+        } else {
+            DesktopSportIdentTimeSyncAccessMode.DIRECT_ATTACHED
+        }
+
+    private fun DesktopSerialPort.fallbackTimeSyncAccessMode(): DesktopSportIdentTimeSyncAccessMode =
+        if (info.matchesFtdiAdapter()) {
+            DesktopSportIdentTimeSyncAccessMode.DIRECT_ATTACHED
+        } else {
+            DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED
+        }
+
+    private fun DesktopSportIdentTimeSyncAccessMode.initialStep(): DesktopSportIdentTimeSyncCommandStep =
+        when (this) {
+            DesktopSportIdentTimeSyncAccessMode.DIRECT_ATTACHED ->
+                DesktopSportIdentTimeSyncProtocol.selectDirectStationStep()
+            DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED ->
+                DesktopSportIdentTimeSyncProtocol.enterRemoteModeStep()
+        }
+
+    private fun DesktopSportIdentTimeSyncAccessMode.systemInfoStep(): DesktopSportIdentTimeSyncCommandStep =
+        when (this) {
+            DesktopSportIdentTimeSyncAccessMode.DIRECT_ATTACHED ->
+                DesktopSportIdentTimeSyncProtocol.readSystemInfoStep()
+            DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED ->
+                DesktopSportIdentTimeSyncProtocol.readCompatibleSystemInfoStep()
+        }
+
+    private fun DesktopSportIdentTimeSyncAccessMode.systemInfoFailureMessage(): String =
+        when (this) {
+            DesktopSportIdentTimeSyncAccessMode.DIRECT_ATTACHED ->
+                "Direct SPORTident station did not answer system-info read. Confirm the station is awake."
+            DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED ->
+                "Remote/coupled SPORTident station did not answer system-info read. " +
+                    "Confirm the target station is awake and coupled to the download station."
+        }
 
     private fun SportIdentStationInfo.canRelayTimeSync(): Boolean =
         stationModeLabel?.startsWith("SI MASTER") == true

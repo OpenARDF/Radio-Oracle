@@ -68,6 +68,13 @@ internal object DesktopSportIdentTimeSyncProtocol {
             payload = byteArrayOf(0x53)
         )
 
+    fun selectDirectStationStep(): DesktopSportIdentTimeSyncCommandStep =
+        DesktopSportIdentTimeSyncCommandStep(
+            label = "Select direct station mode",
+            command = SportIdentProtocol.PROBE_COMMAND,
+            payload = byteArrayOf(0x4D)
+        )
+
     fun readSystemInfoStep(): DesktopSportIdentTimeSyncCommandStep =
         DesktopSportIdentTimeSyncCommandStep(
             label = "Read long system information",

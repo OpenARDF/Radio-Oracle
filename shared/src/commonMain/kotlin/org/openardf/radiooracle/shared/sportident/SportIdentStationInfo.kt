@@ -98,9 +98,7 @@ object SportIdentStationInfoParser {
             .getOrNull(EXTENDED_MODE_DATA_OFFSET)
             ?.let { (it.toUnsignedInt() and EXTENDED_MODE_FLAG) == EXTENDED_MODE_FLAG }
             ?: false
-        val stationCodeNumber = frame.data
-            .getOrNull(STATION_CODE_NUMBER_DATA_OFFSET)
-            ?.toUnsignedInt()
+        val stationCodeNumber = frame.data.stationCodeNumber()
         val stationModeCode = frame.data
             .getOrNull(STATION_MODE_CODE_DATA_OFFSET)
             ?.toUnsignedInt()
@@ -116,9 +114,27 @@ object SportIdentStationInfoParser {
     private const val SERIAL_DATA_OFFSET = 3
     private const val SERIAL_BYTE_COUNT = 4
     private const val STATION_CODE_NUMBER_DATA_OFFSET = 1
+    private const val BSF7_DIRECT_STATION_CODE_NUMBER_DATA_OFFSET = 17
     private const val STATION_MODE_CODE_DATA_OFFSET = 20
     private const val EXTENDED_MODE_DATA_OFFSET = 119
     private const val EXTENDED_MODE_FLAG = 0x01
+
+    private fun ByteArray.stationCodeNumber(): Int? {
+        val primary = getOrNull(STATION_CODE_NUMBER_DATA_OFFSET)?.toUnsignedInt()
+        val bsf7Direct = getOrNull(BSF7_DIRECT_STATION_CODE_NUMBER_DATA_OFFSET)?.toUnsignedInt()
+        return if (
+            primary != null &&
+            bsf7Direct != null &&
+            primary <= MAX_NON_STATION_STATUS_VALUE &&
+            bsf7Direct > MAX_NON_STATION_STATUS_VALUE
+        ) {
+            bsf7Direct
+        } else {
+            primary
+        }
+    }
+
+    private const val MAX_NON_STATION_STATUS_VALUE = 10
 }
 
 private fun Byte.toUnsignedInt(): Int = toInt() and 0xff

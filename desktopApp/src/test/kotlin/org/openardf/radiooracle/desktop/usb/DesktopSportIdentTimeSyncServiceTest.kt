@@ -63,7 +63,7 @@ class DesktopSportIdentTimeSyncServiceTest {
             )
         )
         val service = DesktopSportIdentTimeSyncService(
-            portProvider = FakePortProvider(listOf(port)),
+            portSelector = ftdiPortSelector(port),
             connectStation = {
                 DesktopSportIdentStationConnection(
                     baudRate = SportIdentProtocol.BAUDRATE_HIGH,
@@ -93,18 +93,26 @@ class DesktopSportIdentTimeSyncServiceTest {
     }
 
     @Test
-    fun inspectDoesNotEnableTimeSyncForNonMasterStation() {
-        val port = FakePort()
+    fun inspectReadsDirectStationClockForNonMasterStation() {
+        val stationTime = LocalDateTime.now().plusSeconds(1).withNano(0)
+        val port = FakePort(
+            readChunks = listOf(
+                normalModeReply(),
+                directSystemInfoReply(stationCodeNumber = 32),
+                stationTimeReply(stationTime, tick = 0x04)
+            ),
+            info = ftdiPortInfo()
+        )
         val service = DesktopSportIdentTimeSyncService(
-            portProvider = FakePortProvider(listOf(port)),
+            portSelector = ftdiPortSelector(port),
             connectStation = {
                 DesktopSportIdentStationConnection(
-                    baudRate = SportIdentProtocol.BAUDRATE_HIGH,
+                    baudRate = SportIdentProtocol.BAUDRATE_LOW,
                     probeReply = byteArrayOf(),
                     stationInfo = SportIdentStationInfo(
-                        serialNumber = 554896,
+                        serialNumber = 106128,
                         extendedMode = true,
-                        stationCodeNumber = 1,
+                        stationCodeNumber = 32,
                         stationModeCode = 5
                     )
                 )
@@ -113,13 +121,11 @@ class DesktopSportIdentTimeSyncServiceTest {
 
         val inspection = service.inspectDownloadStation()
 
-        assertEquals("SI station 554896 connected in READOUT mode.", inspection.statusText)
-        assertFalse(inspection.canSyncTime)
-        assertEquals(
-            "Configure the attached SPORTident station in SI MASTER mode before syncing time.",
-            inspection.disabledReason
-        )
-        assertNull(inspection.coupledStationClock)
+        assertEquals("SI station 106128 connected in READOUT mode.", inspection.statusText)
+        assertTrue(inspection.canSyncTime)
+        assertNull(inspection.disabledReason)
+        assertEquals(stationTime, inspection.coupledStationClock?.stationTime)
+        assertEquals(32, inspection.coupledStationClock?.stationInfo?.stationCodeNumber)
         assertNull(inspection.coupledStationInspectionError)
     }
 
@@ -154,7 +160,7 @@ class DesktopSportIdentTimeSyncServiceTest {
         assertTrue(inspection.canSyncTime)
         assertNull(inspection.coupledStationClock)
         assertEquals(
-            "Coupled SPORTident station did not answer system-info read. " +
+            "Remote/coupled SPORTident station did not answer system-info read. " +
                 "Confirm the target station is awake and coupled to the download station.",
             inspection.coupledStationInspectionError
         )
@@ -399,6 +405,68 @@ class DesktopSportIdentTimeSyncServiceTest {
     }
 
     @Test
+    fun writeTimeWithReadBackUsesDirectBsf7SequenceForFtdiStation() {
+        val targetTime = LocalDateTime.parse("2026-06-28T20:32:49")
+        val port = FakePort(
+            readChunks = listOf(
+                normalModeReply(marker = 0x06),
+                directSystemInfoReply(stationCodeNumber = 32),
+                stationTimeReply(targetTime.minusSeconds(1), tick = 0x04, replyMarker = 0x06),
+                stationWriteReply(targetTime, tick = 0x00, replyMarker = 0x06),
+                applyReply()
+            ),
+            info = ftdiPortInfo()
+        )
+        val service = DesktopSportIdentTimeSyncService(
+            portSelector = ftdiPortSelector(port),
+            connectStation = {
+                DesktopSportIdentStationConnection(
+                    baudRate = SportIdentProtocol.BAUDRATE_LOW,
+                    probeReply = byteArrayOf(),
+                    stationInfo = SportIdentStationInfo(
+                        serialNumber = 106128,
+                        extendedMode = true,
+                        stationCodeNumber = 32,
+                        stationModeCode = 8
+                    )
+                )
+            }
+        )
+
+        val result = service.writeTimeWithReadBack(
+            sourceTime = targetTime,
+            writeEnabled = true,
+            toleranceSeconds = 0
+        )
+
+        assertEquals(106128, result.stationInfo.serialNumber)
+        assertEquals(32, result.stationInfo.stationCodeNumber)
+        assertEquals(targetTime, result.confirmedTime)
+        assertEquals(
+            listOf(
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.GET_SYSTEM_INFO,
+                DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
+                DesktopSportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND
+            ),
+            port.writeRequests.map { SportIdentFrameParser.firstFrame(it, requireValidCrc = true)?.command }
+        )
+        assertArrayEquals(
+            byteArrayOf(0x4D),
+            SportIdentFrameParser.firstFrame(port.writeRequests[0], requireValidCrc = true)?.data
+        )
+        assertArrayEquals(
+            byteArrayOf(0x00, 0x80.toByte()),
+            SportIdentFrameParser.firstFrame(port.writeRequests[1], requireValidCrc = true)?.data
+        )
+        assertArrayEquals(
+            DesktopSportIdentStationTimeCodec.encodePayload(targetTime),
+            SportIdentFrameParser.firstFrame(port.writeRequests[3], requireValidCrc = true)?.data
+        )
+    }
+
+    @Test
     fun writeTimeWithReadBackReportsSleepingCoupledStationBeforeWritingTime() {
         val targetTime = LocalDateTime.parse("2026-06-27T03:10:18")
         val port = FakePort(
@@ -506,23 +574,24 @@ class DesktopSportIdentTimeSyncServiceTest {
             ports.first { it.info.systemPortPath == systemPortPath }
     }
 
+    private class FakeDiscoverySettings(
+        private val mode: DesktopSportIdentPortDiscoveryMode
+    ) : DesktopSportIdentPortDiscoverySettings {
+        override fun sportIdentPortDiscoveryMode(): DesktopSportIdentPortDiscoveryMode = mode
+        override fun rememberedSportIdentFtdiPortPath(): String? = null
+        override fun rememberSportIdentFtdiPortPath(portPath: String) = Unit
+    }
+
     private class FakePort(
         readChunks: List<ByteArray> = emptyList(),
-        readChunksByOpen: List<List<ByteArray>>? = null
+        readChunksByOpen: List<List<ByteArray>>? = null,
+        override val info: DesktopSerialPortInfo = sportIdentUsbPortInfo()
     ) : DesktopSerialPort {
         private var pending = ArrayDeque(readChunks)
         private val pendingByOpen = readChunksByOpen
         private var openCount = 0
         val writeRequests = mutableListOf<ByteArray>()
         private var open = false
-
-        override val info = DesktopSerialPortInfo(
-            systemPortPath = "/dev/cu.fake",
-            descriptivePortName = "Fake SPORTident",
-            vendorId = SportIdentUsbDevice.VENDOR_ID,
-            productId = SportIdentUsbDevice.PRODUCT_ID,
-            serialNumber = "fake"
-        )
 
         override val isOpen: Boolean
             get() = open
@@ -554,10 +623,10 @@ class DesktopSportIdentTimeSyncServiceTest {
                 data = byteArrayOf(0x00, 0x0F, 0x53)
             )
 
-        fun normalModeReply(): ByteArray =
+        fun normalModeReply(marker: Byte = 0x0F): ByteArray =
             SportIdentProtocol.buildExtendedMessage(
                 command = SportIdentProtocol.PROBE_COMMAND,
-                data = byteArrayOf(0x00, 0x0F, 0x4D)
+                data = byteArrayOf(0x00, marker, 0x4D)
             )
 
         fun systemInfoReply(): ByteArray {
@@ -574,16 +643,32 @@ class DesktopSportIdentTimeSyncServiceTest {
             )
         }
 
-        fun stationTimeReply(time: LocalDateTime, tick: Int): ByteArray =
+        fun directSystemInfoReply(stationCodeNumber: Int): ByteArray {
+            val data = ByteArray(131)
+            data[1] = 0x06
+            data[3] = 0x00
+            data[4] = 0x01
+            data[5] = 0x9E.toByte()
+            data[6] = 0x90.toByte()
+            data[17] = stationCodeNumber.toByte()
+            data[20] = 0x08
+            data[119] = 0x01
+            return SportIdentProtocol.buildExtendedMessage(
+                command = SportIdentProtocol.GET_SYSTEM_INFO,
+                data = data
+            )
+        }
+
+        fun stationTimeReply(time: LocalDateTime, tick: Int, replyMarker: Byte = 0x01): ByteArray =
             SportIdentProtocol.buildExtendedMessage(
                 command = DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
-                data = byteArrayOf(0x00, 0x01) + stationTimePayload(time, tick)
+                data = byteArrayOf(0x00, replyMarker) + stationTimePayload(time, tick)
             )
 
-        fun stationWriteReply(time: LocalDateTime, tick: Int): ByteArray =
+        fun stationWriteReply(time: LocalDateTime, tick: Int, replyMarker: Byte = 0x01): ByteArray =
             SportIdentProtocol.buildExtendedMessage(
                 command = DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
-                data = byteArrayOf(0x00, 0x01) + stationTimePayload(time, tick)
+                data = byteArrayOf(0x00, replyMarker) + stationTimePayload(time, tick)
             )
 
         fun applyReply(): ByteArray =
@@ -597,5 +682,30 @@ class DesktopSportIdentTimeSyncServiceTest {
 
         private fun stationTimePayload(time: LocalDateTime, tick: Int): ByteArray =
             DesktopSportIdentStationTimeCodec.encodePayload(time).copyOf().also { it[6] = tick.toByte() }
+
+        private fun ftdiPortSelector(port: DesktopSerialPort): DesktopSportIdentPortSelector =
+            DesktopSportIdentPortSelector(
+                portProvider = FakePortProvider(listOf(port)),
+                discoverySettings = FakeDiscoverySettings(DesktopSportIdentPortDiscoveryMode.PROBE_FTDI_ADAPTERS),
+                probeSportIdentStation = { true }
+            )
+
+        private fun sportIdentUsbPortInfo(): DesktopSerialPortInfo =
+            DesktopSerialPortInfo(
+                systemPortPath = "/dev/cu.fake",
+                descriptivePortName = "Fake SPORTident",
+                vendorId = SportIdentUsbDevice.VENDOR_ID,
+                productId = SportIdentUsbDevice.PRODUCT_ID,
+                serialNumber = "fake"
+            )
+
+        private fun ftdiPortInfo(): DesktopSerialPortInfo =
+            DesktopSerialPortInfo(
+                systemPortPath = "/dev/cu.usbserial-110",
+                descriptivePortName = "FTDI USB Serial",
+                vendorId = 0x0403,
+                productId = 0x6001,
+                serialNumber = "ftdi"
+            )
     }
 }

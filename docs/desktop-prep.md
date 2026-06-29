@@ -681,6 +681,28 @@ The captured Config+ remote-mode sequence is:
 All of these are SPORTident extended frames using the existing `0x8005` CRC
 implementation in `SportIdentProtocol.buildExtendedMessage`.
 
+Additional SI Config+ serial-port-monitor captures from June 28, 2026 covered a
+directly attached BSF7-family station on an FTDI/RS232 adapter at 4800 baud.
+Those captures use the same extended frame envelope, `F7` station-time read,
+`F6` station-time write, and `F9` apply command, but they do not enter the
+inductive remote/coupled path with `F0 53`. The direct BSF7 write sequence is:
+
+1. `F0` with payload `4D`: select/probe normal direct-station communication.
+   SI Config+ sent this frame twice before the captured reply, but one
+   request/reply is enough for Radio-Oracle's command-client transaction model.
+2. `83` with payload `00 80`: read long system information from the directly
+   attached station.
+3. `F7` with no payload: read current station time.
+4. `F6` with a seven-byte payload: write station time.
+5. `F9` with payload `01`: apply/commit the write.
+
+Radio-Oracle therefore treats opted-in FTDI/RS232 SPORTident ports as direct
+attached stations for Time Sync. The existing SPORTident USB CP2102 SI-Master
+path continues to use the remote/coupled sequence above. The BSF7 direct long
+system-information reply also places the visible SI station code at data offset
+17 in the captured station-32 frame; offset 1 was `06` and is not the station
+code for that layout.
+
 The station-time payload is not BCD. The observed seven-byte payload is:
 
 ```text

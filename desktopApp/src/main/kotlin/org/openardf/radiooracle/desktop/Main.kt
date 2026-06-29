@@ -10760,11 +10760,11 @@ private fun SportIdentTimeSyncPanel(
                             inspection.baudRate?.let { "Baud: $it" },
                             inspection.coupledStationClock?.let { clock ->
                                 val stationTime = DesktopDateTimeText.displayIsoOrRaw(clock.stationTime.toString())
-                                "Coupled station ${clock.stationInfo.serialNumber}; " +
+                                "Station ${clock.stationInfo.serialNumber}; " +
                                     "station time $stationTime; " +
                                     "station is ${formatSportIdentTimeDelta(clock.stationMinusComputerMillis)}."
                             },
-                            inspection.coupledStationInspectionError?.let { "Coupled station: $it" },
+                            inspection.coupledStationInspectionError?.let { "Station: $it" },
                             inspection.disabledReason
                         ).joinToString(" ")
                         siCodeText = inspection.coupledStationClock?.stationInfo?.stationCodeNumber
@@ -10783,7 +10783,7 @@ private fun SportIdentTimeSyncPanel(
             Button(
                 onClick = {
                     isSyncing = true
-                    syncStatus = "Syncing current computer time to the awake coupled station..."
+                    syncStatus = "Syncing current computer time to the station..."
                     syncStatusColor = DesktopPalette.Disconnected
                     scope.launch {
                         val outcome = runCatching {
