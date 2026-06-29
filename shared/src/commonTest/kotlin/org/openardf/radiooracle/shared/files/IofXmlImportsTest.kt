@@ -103,6 +103,7 @@ class IofXmlImportsTest {
         assertEquals("US001", entry.person.personId)
         assertEquals("Example", entry.person.familyName)
         assertEquals("Ada", entry.person.givenName)
+        assertEquals("21", entry.bibNumber)
         assertEquals(234567, entry.controlCard)
         assertEquals("2026-06-29T09:02:00", entry.startTimeIso)
         assertEquals("2026-06-29T10:17:00", entry.finishTimeIso)
@@ -173,6 +174,7 @@ class IofXmlImportsTest {
         assertEquals("Example event", result.parsedData.eventName)
         assertTrue(result.parsedData.entries.isNotEmpty())
         assertEquals("Men Elite", result.parsedData.entries.first().className)
+        assertEquals("101", result.parsedData.entries.first().bibNumber)
         assertEquals("OK", result.parsedData.entries.first().status)
         assertTrue(result.parsedData.entries.first().splitControls.contains(31))
     }
@@ -297,6 +299,7 @@ class IofXmlImportsTest {
                 </Name>
               </Person>
               <Result>
+                <BibNumber>21</BibNumber>
                 <ControlCard>234567</ControlCard>
                 <StartTime>2026-06-29T09:02:00</StartTime>
                 <FinishTime>2026-06-29T10:17:00</FinishTime>

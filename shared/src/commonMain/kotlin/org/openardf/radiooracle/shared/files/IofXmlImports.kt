@@ -108,6 +108,7 @@ data class IofResultSplitPreview(
 data class IofResultListEntryPreview(
     val className: String,
     val person: IofPersonPreview,
+    val bibNumber: String?,
     val controlCard: Int?,
     val startTimeIso: String?,
     val finishTimeIso: String?,
@@ -357,6 +358,7 @@ object IofXmlImports {
                         messageType = "ResultList",
                         location = "/ResultList/ClassResult[${classIndex + 1}]/PersonResult[${personIndex + 1}]"
                     ),
+                    bibNumber = result?.childText("BibNumber"),
                     controlCard = result?.childText("ControlCard")?.toIntOrNull(),
                     startTimeIso = result?.childText("StartTime"),
                     finishTimeIso = result?.childText("FinishTime"),

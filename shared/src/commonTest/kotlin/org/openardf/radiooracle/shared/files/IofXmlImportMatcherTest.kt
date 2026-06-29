@@ -131,6 +131,7 @@ class IofXmlImportMatcherTest {
                 IofResultListEntryPreview(
                     className = "M21",
                     person = person(personId = null, familyName = "Runner", givenName = "Alice"),
+                    bibNumber = null,
                     controlCard = 111111,
                     startTimeIso = null,
                     finishTimeIso = null,
@@ -146,6 +147,35 @@ class IofXmlImportMatcherTest {
 
         assertEquals("alice", match.competitorId)
         assertEquals(IofXmlCompetitorMatchBasis.CONTROL_CARD, match.basis)
+    }
+
+    @Test
+    fun resultListFallsBackToBibNumber() {
+        val preview = IofResultListPreview(
+            eventName = null,
+            startDate = null,
+            startTime = null,
+            entries = listOf(
+                IofResultListEntryPreview(
+                    className = "M21",
+                    person = person(personId = null, familyName = "Wrong", givenName = "Name"),
+                    bibNumber = "1008",
+                    controlCard = null,
+                    startTimeIso = null,
+                    finishTimeIso = null,
+                    timeSeconds = null,
+                    position = null,
+                    status = "OK",
+                    splitControls = emptyList()
+                )
+            )
+        )
+
+        val match = IofXmlImportMatcher.matchResultList(preview, raceData()).entries.single().match
+
+        assertEquals("bob", match.competitorId)
+        assertEquals(IofXmlCompetitorMatchBasis.BIB_NUMBER, match.basis)
+        assertTrue(match.issues.contains(IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD))
     }
 
     private fun raceData(extraCompetitors: List<EventCompetitor> = emptyList()): EventRaceData {

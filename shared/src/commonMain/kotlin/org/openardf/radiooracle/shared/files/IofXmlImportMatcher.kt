@@ -100,7 +100,7 @@ object IofXmlImportMatcher {
                         className = entry.className,
                         person = entry.person,
                         controlCard = entry.controlCard,
-                        bibNumber = null,
+                        bibNumber = entry.bibNumber,
                         raceData = raceData
                     )
                 )
