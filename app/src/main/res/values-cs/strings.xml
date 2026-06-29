@@ -103,7 +103,7 @@
     <string name="competitor_delete_confirmation">Opravdu chcete smazat tohoto závodníka?\n%1$s</string>
     <string name="competitor_delete_readout_data">Smazat i vyčítání (pokud existuje)</string>
     <string name="competitor_delete_all_confirmation">Opravdu chcete smazat všechny závodníky? Tuto akci NELZE vrátit.</string>
-    <string name="general_index">Index/Volačka</string>
+    <string name="general_index">Person ID</string>
     <string name="general_si_number">Číslo SI</string>
     <string name="general_automatic">Automaticky</string>
     <string name="competitor_rent_chip">Půjčit čip</string>
@@ -285,7 +285,7 @@
     <string name="results_recalculate">Přepočítat všechny výsledky</string>
     <string name="result_service_enable">Zapnout výsledkovou službu</string>
     <string name="result_service_interval">Interval exportu (s)</string>
-    <string name="result_service_invalid_result">Nevalidní výsledek: %1$s, SI: %2$d, Index: %3$s, Důvod: %4$s</string>
+    <string name="result_service_invalid_result">Nevalidní výsledek: %1$s, SI: %2$d, Person ID: %3$s, Důvod: %4$s</string>
     <string name="result_service_unknown_response">Neznámá odpověď</string>
     <string name="result_service_send_again">Odeslat výsledky znovu</string>
     <string name="result_service_api_key_missing">API klíč musí být nastaven.</string>

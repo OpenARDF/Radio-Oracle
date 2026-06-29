@@ -458,7 +458,7 @@ private fun DesktopEventRegCompetitor.toImportRow(): CompetitorCsvImportRow =
             ?: categoryName.trim().uppercase().startsWith("M"),
         birthYear = null,
         club = club,
-        index = "",
+        personId = "",
         startTimeText = startTimeText,
         siRent = false
     )

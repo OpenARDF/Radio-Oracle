@@ -118,7 +118,7 @@ class EventCsvExportsTest {
     fun exportsPortableCompetitorRows() {
         assertEquals(
             """
-            si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent;preferred_start_group;bib_number;call_sign
+            si_number;start_number;first_name;last_name;category;gender;birth_year;club;person_id;start_time;si_rent;preferred_start_group;bib_number;call_sign
             123456;7;Test;Runner;M21;0;1985;OK Test;OK001;10:00;0;;;
             """.trimIndent() + "\n",
             EventCsvExports.competitors(raceData())
@@ -147,7 +147,7 @@ class EventCsvExportsTest {
 
         assertEquals(emptyList(), result.invalidLines)
         val row = result.rows.single()
-        assertEquals("REG001", row.index)
+        assertEquals("REG001", row.personId)
         assertEquals("1007", row.bibNumber)
         assertEquals("RUN", row.callSign)
     }
@@ -229,7 +229,7 @@ class EventCsvExportsTest {
         assertEquals("Runner", row.lastName)
         assertEquals("M21", row.categoryName)
         assertEquals("OK Test", row.club)
-        assertEquals("OK001", row.index)
+        assertEquals("OK001", row.personId)
         assertEquals("", row.bibNumber)
         assertEquals("", row.callSign)
         assertEquals("10:00", row.startTimeText)
@@ -354,7 +354,7 @@ class EventCsvExportsTest {
     fun exportsArdfEventStyleResultRows() {
         assertEquals(
             """
-            Kategorie;Pořadí;Jméno;Index;Čas;TX;Status;Kontroly
+            Kategorie;Pořadí;Jméno;Person ID;Čas;TX;Status;Kontroly
             M21;1;RUNNER Test;OK001;00:10:00;2;OK;31 32
             """.trimIndent() + "\n",
             EventCsvExports.ardfEventResults(raceData())

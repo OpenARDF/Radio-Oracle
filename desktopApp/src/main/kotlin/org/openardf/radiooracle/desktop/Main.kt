@@ -5698,8 +5698,7 @@ fun main(args: Array<String>) = application {
                             competitorId = competitorId,
                             club = club,
                             bibNumber = bibNumber,
-                            callSign = callSign,
-                            legacyIndex = bibNumber
+                            callSign = callSign
                         )
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
@@ -5899,8 +5898,7 @@ fun main(args: Array<String>) = application {
                             competitorId = competitorId,
                             club = club,
                             bibNumber = bibNumber,
-                            callSign = callSign,
-                            legacyIndex = bibNumber
+                            callSign = callSign
                         )
                         val withBirthYear = EventProjectEditor.updateCompetitorBirthYear(
                             withCallSign,

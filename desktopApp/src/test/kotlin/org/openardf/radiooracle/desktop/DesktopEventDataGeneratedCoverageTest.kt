@@ -247,7 +247,7 @@ class DesktopEventDataGeneratedCoverageTest {
         assertFails("duplicate SI numbers should be rejected") {
             EventProjectEditor.importCompetitorRows(
                 withArdf,
-                listOf(parsed.rows.first().copy(startNumber = 201, index = "REG999", bibNumber = "B999", callSign = "ZZZ")),
+                listOf(parsed.rows.first().copy(startNumber = 201, personId = "REG999", bibNumber = "B999", callSign = "ZZZ")),
                 competitorIdFactory = idFactory("dup-comp"),
                 categoryIdFactory = idFactory("dup-cat")
             )

@@ -256,7 +256,7 @@ class DesktopAutomationCliTest {
         Files.writeString(
             csvPath,
             """
-                si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent
+                si_number;start_number;first_name;last_name;category;gender;birth_year;club;person_id;start_time;si_rent
                 2007001;101;Alice;Runner;M50;0;1974;BOK;BOK-101;00:00;0
             """.trimIndent()
         )
@@ -290,7 +290,7 @@ class DesktopAutomationCliTest {
         Files.writeString(
             csvPath,
             """
-                si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent;preferred_start_group;bib_number;call_sign
+                si_number;start_number;first_name;last_name;category;gender;birth_year;club;person_id;start_time;si_rent;preferred_start_group;bib_number;call_sign
                 3333;2;Alice;Runner;M50;0;1974;OPEN;75;;0;;75;
             """.trimIndent()
         )

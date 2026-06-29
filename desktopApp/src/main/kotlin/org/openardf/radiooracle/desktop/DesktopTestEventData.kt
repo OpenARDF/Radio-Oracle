@@ -150,8 +150,7 @@ internal object DesktopTestEventData {
                 competitorId = competitor.id,
                 club = "Test Club",
                 bibNumber = (1000 + competitor.startNumber).toString(),
-                callSign = "T${competitor.startNumber}",
-                legacyIndex = competitor.startNumber.toString()
+                callSign = "T${competitor.startNumber}"
             )
             workingProjectFile = EventProjectEditor.updateCompetitorStartTime(
                 projectFile = workingProjectFile,

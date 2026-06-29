@@ -23,7 +23,7 @@
     <string name="general_gender">Gender</string>
     <string name="general_gender_man">Men</string>
     <string name="general_gender_woman">Women</string>
-    <string name="general_index">Index</string>
+    <string name="general_index">Person ID</string>
     <string name="general_invalid">Invalid</string>
     <string name="general_length">Length</string>
     <string name="general_limit">Limit</string>
@@ -287,7 +287,7 @@
     <string name="result_service_api_key_missing">API key must be set.</string>
     <string name="result_service_status_text">%1$s, sent at %2$s</string>
     <string name="result_service_status_text_counter">, results %1$d/%2$d</string>
-    <string name="result_service_invalid_result">Invalid result: %1$s, SI: %2$d, Index: %3$s, Cause: %4$s</string>
+    <string name="result_service_invalid_result">Invalid result: %1$s, SI: %2$d, Person ID: %3$s, Cause: %4$s</string>
 
     <string name="result_service_validation_error">Validation error</string>
     <string name="result_service_server_error">Internal server error</string>

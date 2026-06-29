@@ -66,7 +66,9 @@ object EventCsvFormat {
         const val IS_MAN = 5
         const val BIRTH_YEAR = 6
         const val CLUB = 7
-        const val INDEX = 8
+        const val PERSON_ID = 8
+        @Deprecated("Use PERSON_ID; this column stores IOF Person/Id, not an index.")
+        const val INDEX = PERSON_ID
         const val START_TIME = 9
         const val SI_RENT = 10
         const val PREFERRED_START_GROUP = 11
@@ -82,21 +84,26 @@ object EventCsvFormat {
             "gender",
             "birth_year",
             "club",
-            "index",
+            "person_id",
             "start_time",
             "si_rent",
             "preferred_start_group",
             "bib_number",
             "call_sign"
         )
+        val LEGACY_INDEX_HEADER = HEADER.toMutableList().also { it[PERSON_ID] = "index" }
         val LEGACY_HEADER = HEADER.take(PREFERRED_START_GROUP + 1)
+        val LEGACY_INDEX_HEADER_WITHOUT_IDENTITY_EXTRAS = LEGACY_INDEX_HEADER.take(PREFERRED_START_GROUP + 1)
         val HEADER_ROW = HEADER.joinToString(DELIMITER.toString())
 
         fun isHeader(fields: List<String>): Boolean =
             fields.map { it.trim().lowercase() }.let { normalized ->
                 normalized == HEADER ||
+                    normalized == LEGACY_INDEX_HEADER ||
                     normalized == HEADER.dropLast(1) ||
+                    normalized == LEGACY_INDEX_HEADER.dropLast(1) ||
                     normalized == LEGACY_HEADER ||
+                    normalized == LEGACY_INDEX_HEADER_WITHOUT_IDENTITY_EXTRAS ||
                     normalized == LEGACY_HEADER.dropLast(1)
             }
     }

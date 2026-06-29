@@ -107,7 +107,7 @@ object HtmlResultExports {
             append("</p>")
         }
         append("<table><thead><tr>")
-        listOf("Place", "Name", "Club", "Index", "Points", "Run time", "Splits").forEach { heading ->
+        listOf("Place", "Name", "Club", "Person ID", "Points", "Run time", "Splits").forEach { heading ->
             append("<th>")
             appendHtml(heading)
             append("</th>")

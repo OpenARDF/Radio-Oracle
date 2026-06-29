@@ -52,13 +52,17 @@ data class CompetitorCsvImportRow(
     val isMan: Boolean,
     val birthYear: Int?,
     val club: String,
-    val index: String,
+    val personId: String,
     val startTimeText: String?,
     val siRent: Boolean,
     val preferredStartGroup: Int? = null,
     val bibNumber: String = "",
     val callSign: String = ""
-)
+) {
+    @Deprecated("Use personId; this is the IOF Person/Id-compatible identity field.")
+    val index: String
+        get() = personId
+}
 
 enum class CompetitorCsvImportProfile {
     CANONICAL,
@@ -281,7 +285,7 @@ object EventCsvImports {
             isMan = fields[EventCsvFormat.Competitor.IS_MAN].trim().toIntOrNull() == 0,
             birthYear = fields.optionalTrimmedInt(EventCsvFormat.Competitor.BIRTH_YEAR),
             club = fields.optionalTrimmed(EventCsvFormat.Competitor.CLUB),
-            index = fields.optionalTrimmed(EventCsvFormat.Competitor.INDEX),
+            personId = fields.optionalTrimmed(EventCsvFormat.Competitor.PERSON_ID),
             bibNumber = fields.optionalTrimmed(EventCsvFormat.Competitor.BIB_NUMBER),
             callSign = fields.optionalTrimmed(EventCsvFormat.Competitor.CALL_SIGN),
             startTimeText = fields.optionalTrimmed(EventCsvFormat.Competitor.START_TIME).takeIf { it.isNotEmpty() },
@@ -317,7 +321,7 @@ object EventCsvImports {
                 ?: categoryName.trim().uppercase().startsWith("M"),
             birthYear = null,
             club = "",
-            index = fields[EventCsvFormat.ArdfEventRegistration.INDEX].trim(),
+            personId = fields[EventCsvFormat.ArdfEventRegistration.INDEX].trim(),
             bibNumber = "",
             callSign = "",
             startTimeText = null,

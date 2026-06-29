@@ -798,12 +798,12 @@ class EventProjectEditorTest {
     }
 
     @Test
-    fun updatesCompetitorClubAndIndex() {
+    fun updatesCompetitorClubAndPersonId() {
         val original = projectFile(
             competitors = listOf(competitorData("comp-1", "Alice", "Runner"))
         )
 
-        val updated = EventProjectEditor.updateCompetitorClubIndex(original, "comp-1", " OK Test ", " A101 ")
+        val updated = EventProjectEditor.updateCompetitorClubPersonId(original, "comp-1", " OK Test ", " A101 ")
 
         val competitor = updated.raceData.competitorData.single().competitorCategory.competitor
         assertEquals("OK Test", competitor.club)
@@ -887,9 +887,9 @@ class EventProjectEditorTest {
     }
 
     @Test
-    fun rejectsUnknownCompetitorClubAndIndexUpdate() {
+    fun rejectsUnknownCompetitorClubAndPersonIdUpdate() {
         assertFailsWith<IllegalArgumentException> {
-            EventProjectEditor.updateCompetitorClubIndex(projectFile(), "missing", "OK Test", "A101")
+            EventProjectEditor.updateCompetitorClubPersonId(projectFile(), "missing", "OK Test", "A101")
         }
     }
 
@@ -1264,7 +1264,7 @@ class EventProjectEditorTest {
     }
 
     @Test
-    fun updatesCompetitorRowsByIndexWhenPolicyAllows() {
+    fun updatesCompetitorRowsByPersonIdWhenPolicyAllows() {
         val category = category("cat-1", "M21")
         val existing = competitorData(
             "comp-1",
@@ -1299,7 +1299,7 @@ class EventProjectEditorTest {
             ),
             competitorIdFactory = { "comp-new" },
             categoryIdFactory = { "cat-2" },
-            duplicatePolicy = CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_INDEX
+            duplicatePolicy = CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_PERSON_ID
         )
 
         val updatedCompetitor = outcome.projectFile.raceData.competitorData.single().competitorCategory.competitor
@@ -3938,7 +3938,7 @@ class EventProjectEditorTest {
             isMan = isMan,
             birthYear = birthYear,
             club = club,
-            index = index,
+            personId = index,
             startTimeText = startTimeText,
             siRent = siRent,
             bibNumber = bibNumber,

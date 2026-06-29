@@ -289,7 +289,7 @@ object CsvProcessor : FormatProcessor {
                     row.firstName,
                     row.lastName,
                     row.club,
-                    row.index,
+                    row.personId,
                     row.isMan,
                     row.birthYear,
                     row.siNumber,

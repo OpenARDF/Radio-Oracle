@@ -177,7 +177,7 @@ object EventCsvExports {
             }
 
     fun ardfEventResults(raceData: EventRaceData): String =
-        "Kategorie;Pořadí;Jméno;Index;Čas;TX;Status;Kontroly\n" +
+        "Kategorie;Pořadí;Jméno;Person ID;Čas;TX;Status;Kontroly\n" +
             raceData.competitorData
                 .sortedWith(
                     compareBy<EventCompetitorData>(

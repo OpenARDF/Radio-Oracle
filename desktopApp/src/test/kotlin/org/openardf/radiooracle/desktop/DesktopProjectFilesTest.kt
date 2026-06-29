@@ -90,7 +90,7 @@ class DesktopProjectFilesTest {
         DesktopProjectFiles.exportArdfEventResultsCsv(path, EventProjectFile(raceData = raceDataWithReadout()))
         val exported = Files.readString(path)
 
-        assertTrue(exported.contains("Kategorie;Pořadí;Jméno;Index;Čas;TX;Status;Kontroly"))
+        assertTrue(exported.contains("Kategorie;Pořadí;Jméno;Person ID;Čas;TX;Status;Kontroly"))
         assertTrue(exported.contains("M21;;RUNNER Alice;IDX;00:20:00;0;OK;"))
     }
 

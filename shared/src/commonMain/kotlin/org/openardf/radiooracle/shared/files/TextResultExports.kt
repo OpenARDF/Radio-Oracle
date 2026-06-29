@@ -56,7 +56,7 @@ object TextResultExports {
             appendLine("Date/time: ${raceData.race.startDateTimeIso}")
             appendLine("Level: ${raceData.race.raceLevel.name}")
             appendLine()
-            appendLine("Place\tName\tIndex\tRun time\tPoints\tControls")
+            appendLine("Place\tName\tPerson ID\tRun time\tPoints\tControls")
             appendLine(RULE)
             appendCategoryRows(raceData, placedByCategory, includeSplits = false, protectedCourseInfoByCategoryId)
             appendLine(RULE)

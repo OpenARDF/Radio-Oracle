@@ -151,7 +151,7 @@ class EventCsvImportsTest {
         assertTrue(row.isMan)
         assertEquals(1980, row.birthYear)
         assertEquals("OK Lokomotiva", row.club)
-        assertEquals("OK001", row.index)
+        assertEquals("OK001", row.personId)
         assertEquals("", row.bibNumber)
         assertEquals("", row.callSign)
         assertEquals("10:00", row.startTimeText)
@@ -162,16 +162,29 @@ class EventCsvImportsTest {
     fun parsesExplicitBibNumberAndCallSignCompetitorColumns() {
         val result = EventCsvImports.parseAndroidCompetitorRows(
             """
-            si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent;preferred_start_group;bib_number;call_sign
+            si_number;start_number;first_name;last_name;category;gender;birth_year;club;person_id;start_time;si_rent;preferred_start_group;bib_number;call_sign
             123456;42;Pavel;Kolsky;M21;0;1980;OK Lokomotiva;REG001;10:00;1;2;B042;KOL
             """.trimIndent()
         )
 
         assertEquals(emptyList(), result.invalidLines)
         val row = result.rows.single()
-        assertEquals("REG001", row.index)
+        assertEquals("REG001", row.personId)
         assertEquals("B042", row.bibNumber)
         assertEquals("KOL", row.callSign)
+    }
+
+    @Test
+    fun acceptsLegacyIndexHeaderAsPersonIdCompetitorColumn() {
+        val result = EventCsvImports.parseAndroidCompetitorRows(
+            """
+            si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent;preferred_start_group;bib_number;call_sign
+            123456;42;Pavel;Kolsky;M21;0;1980;OK Lokomotiva;REG001;10:00;1;2;B042;KOL
+            """.trimIndent()
+        )
+
+        assertEquals(emptyList(), result.invalidLines)
+        assertEquals("REG001", result.rows.single().personId)
     }
 
     @Test
@@ -192,7 +205,7 @@ class EventCsvImportsTest {
         assertEquals(2, result.rows.size)
         assertEquals("Alice", result.rows[0].firstName)
         assertEquals("Runner", result.rows[0].lastName)
-        assertEquals("OK001", result.rows[0].index)
+        assertEquals("OK001", result.rows[0].personId)
         assertEquals(123456, result.rows[0].siNumber)
         assertEquals("W21", result.rows[0].categoryName)
         assertEquals(null, result.rows[0].startNumber)
@@ -249,7 +262,7 @@ class EventCsvImportsTest {
         assertFalse(row.isMan)
         assertEquals(null, row.birthYear)
         assertEquals("", row.club)
-        assertEquals("", row.index)
+        assertEquals("", row.personId)
         assertEquals(null, row.startTimeText)
         assertFalse(row.siRent)
         assertEquals(null, row.preferredStartGroup)

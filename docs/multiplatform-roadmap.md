@@ -124,9 +124,9 @@ Accepted ARDFEvent CSV alignment work:
   and export format.
 - Add an ARDFEvent-compatible registration CSV import profile that accepts the
   semicolon-delimited `Jméno;Příjmení;Registrace;SI;Kategorie` shape used by
-  ARDFEvent, mapping registration to Radio-Oracle's competitor index field.
+  ARDFEvent, mapping registration to Radio-Oracle's competitor Person ID field.
 - Add an explicit import duplicate/update policy for preregistration workflows,
-  including an option to update existing competitors by registration/index
+  including an option to update existing competitors by Person ID
   rather than only rejecting duplicate SI or start numbers.
 - Preserve the current missing-category behavior, but make import preview and
   warnings clear when placeholder categories are created or when competitors are
@@ -135,7 +135,7 @@ Accepted ARDFEvent CSV alignment work:
   ROBIS start-list CSV shape; do not change the canonical Radio-Oracle start
   CSV for this.
 - Add a desktop-only ARDFEvent-style results CSV export with category, place,
-  name, index, time, transmitter count, status, and control-order columns.
+  name, Person ID, time, transmitter count, status, and control-order columns.
 
 For Radio-Oracle, this suggests the next desktop parity work should prioritize
 operator workflow gaps before optional extensibility: start-list management,

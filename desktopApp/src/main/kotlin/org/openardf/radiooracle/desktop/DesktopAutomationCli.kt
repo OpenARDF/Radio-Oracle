@@ -894,7 +894,7 @@ object DesktopAutomationCli {
                 categoryIdFactory = { UUID.randomUUID().toString() },
                 duplicatePolicy = when {
                     profile == CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION ->
-                        CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_INDEX
+                        CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_PERSON_ID
                     updateExisting ->
                         CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY
                     else ->

@@ -58,6 +58,8 @@ import org.openardf.radiooracle.shared.time.DurationFormatter
 
 enum class CompetitorCsvImportDuplicatePolicy {
     REJECT_DUPLICATES,
+    UPDATE_EXISTING_BY_PERSON_ID,
+    @Deprecated("Use UPDATE_EXISTING_BY_PERSON_ID.")
     UPDATE_EXISTING_BY_INDEX,
     SKIP_EXISTING_BY_IMPORT_KEY,
     UPDATE_EXISTING_BY_IMPORT_KEY
@@ -918,12 +920,12 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with one competitor's club and legacy index changed. */
-    fun updateCompetitorClubIndex(
+    /** Returns a copy of the Event File with one competitor's club and IOF Person/Id changed. */
+    fun updateCompetitorClubPersonId(
         projectFile: EventProjectFile,
         competitorId: String,
         club: String,
-        index: String
+        personId: String
     ): EventProjectFile =
         updateCompetitorClubBibCallSign(
             projectFile = projectFile,
@@ -931,8 +933,17 @@ object EventProjectEditor {
             club = club,
             bibNumber = "",
             callSign = "",
-            legacyIndex = index
+            personId = personId
         )
+
+    @Deprecated("Use updateCompetitorClubPersonId.")
+    fun updateCompetitorClubIndex(
+        projectFile: EventProjectFile,
+        competitorId: String,
+        club: String,
+        index: String
+    ): EventProjectFile =
+        updateCompetitorClubPersonId(projectFile, competitorId, club, index)
 
     /** Returns a copy of the Event File with one competitor's team and visible identity fields changed. */
     fun updateCompetitorClubBibCallSign(
@@ -941,7 +952,7 @@ object EventProjectEditor {
         club: String,
         bibNumber: String,
         callSign: String,
-        legacyIndex: String? = null
+        personId: String? = null
     ): EventProjectFile {
         val trimmedBibNumber = bibNumber.trim()
         val trimmedCallSign = callSign.trim()
@@ -971,7 +982,7 @@ object EventProjectEditor {
                     competitorCategory = competitorCategory.copy(
                         competitor = competitor.copy(
                             club = club.trim(),
-                            index = legacyIndex?.trim() ?: competitor.index,
+                            index = personId?.trim() ?: competitor.index,
                             bibNumber = trimmedBibNumber,
                             callSign = trimmedCallSign
                         )
@@ -1577,11 +1588,11 @@ object EventProjectEditor {
                 "SI number must be unique."
             }
             require(
-                row.index.isBlank() || competitors.noneIndexed { index, data ->
-                    index != existingPosition && data.competitorCategory.competitor.index == row.index
+                row.personId.isBlank() || competitors.noneIndexed { index, data ->
+                    index != existingPosition && data.competitorCategory.competitor.index == row.personId
                 }
             ) {
-                "Registration index must be unique."
+                "Person ID must be unique."
             }
             require(
                 row.bibNumber.isBlank() || competitors.noneIndexed { index, data ->
@@ -1607,7 +1618,7 @@ object EventProjectEditor {
                     firstName = row.firstName,
                     lastName = row.lastName,
                     club = row.club,
-                    index = row.index,
+                    index = row.personId,
                     bibNumber = row.bibNumber,
                     callSign = row.callSign,
                     isMan = row.isMan,
@@ -1635,7 +1646,7 @@ object EventProjectEditor {
                 firstName = row.firstName,
                 lastName = row.lastName,
                 club = row.club,
-                index = row.index,
+                index = row.personId,
                 bibNumber = row.bibNumber,
                 callSign = row.callSign,
                 isMan = row.isMan,
@@ -2887,10 +2898,11 @@ object EventProjectEditor {
     ): Int =
         when (duplicatePolicy) {
             CompetitorCsvImportDuplicatePolicy.REJECT_DUPLICATES -> -1
+            CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_PERSON_ID,
             CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_INDEX ->
-                index.takeIf { it.isNotBlank() }?.let { registrationIndex ->
+                personId.takeIf { it.isNotBlank() }?.let { personId ->
                     competitors.indexOfFirst { data ->
-                        data.competitorCategory.competitor.index == registrationIndex
+                        data.competitorCategory.competitor.index == personId
                     }
                 } ?: -1
             CompetitorCsvImportDuplicatePolicy.SKIP_EXISTING_BY_IMPORT_KEY,
@@ -2901,45 +2913,45 @@ object EventProjectEditor {
         }
 
     /*
-     * EventReg registration tables do not always expose a stable registration
-     * index.  When an index is available it remains the strongest identity; for
-     * EventReg website imports without an index, name plus club is the best
+     * EventReg registration tables do not always expose a stable Person ID.
+     * When a Person ID is available it remains the strongest identity; for
+     * EventReg website imports without a Person ID, name plus club is the best
      * repeatable key available for deciding whether a downloaded competitor is
      * already present in the current Event File.
      */
     private fun CompetitorCsvImportRow.importKey(): String =
-        competitorImportKey(index = index, firstName = firstName, lastName = lastName, club = club)
+        competitorImportKey(personId = personId, firstName = firstName, lastName = lastName, club = club)
 
     private fun EventCompetitor.importKey(): String =
-        competitorImportKey(index = index, firstName = firstName, lastName = lastName, club = club)
+        competitorImportKey(personId = index, firstName = firstName, lastName = lastName, club = club)
 
     private fun CompetitorCsvImportRow.existingCompetitorPositionByNameClub(
         competitors: List<EventCompetitorData>
     ): Int {
-        val rowKey = competitorImportKey(index = "", firstName = firstName, lastName = lastName, club = club)
+        val rowKey = competitorImportKey(personId = "", firstName = firstName, lastName = lastName, club = club)
         val matches = competitors.withIndex()
             .filter { (_, data) ->
                 val competitor = data.competitorCategory.competitor
                 competitor.index.isBlank() &&
                     competitorImportKey(
-                        index = "",
+                        personId = "",
                         firstName = competitor.firstName,
                         lastName = competitor.lastName,
                         club = competitor.club
                     ) == rowKey
             }
         /*
-         * EventReg follow-up CSVs can supply registration indexes after an
+         * EventReg follow-up CSVs can supply Person IDs after an
          * Event File was created without them. Only use this fallback when the
          * existing event has one unambiguous same-name/same-club competitor.
          */
         return matches.singleOrNull()?.index ?: -1
     }
 
-    private fun competitorImportKey(index: String, firstName: String, lastName: String, club: String): String {
-        val trimmedIndex = index.trim()
-        if (trimmedIndex.isNotEmpty()) {
-            return "index:${trimmedIndex.lowercase()}"
+    private fun competitorImportKey(personId: String, firstName: String, lastName: String, club: String): String {
+        val trimmedPersonId = personId.trim()
+        if (trimmedPersonId.isNotEmpty()) {
+            return "person-id:${trimmedPersonId.lowercase()}"
         }
         val normalizedName = "${lastName.trim().lowercase()}|${firstName.trim().lowercase()}"
         val normalizedClub = club.trim().lowercase()
