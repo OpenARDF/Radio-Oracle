@@ -38,6 +38,15 @@ class IofXmlValidatorTest {
     }
 
     @Test
+    fun bundledIof30SchemaValidatesStartList() {
+        val xsd = IofXmlSchemaResource.loadBundledSchema()
+
+        val result = IofXmlValidator.validate(validStartListXml(), xsd)
+
+        assertTrue(result.valid, result.firstMessage.orEmpty())
+    }
+
+    @Test
     fun rejectsLegacyStartNumberAgainstIof30Schema() {
         val xsd = localIofXsd()
 

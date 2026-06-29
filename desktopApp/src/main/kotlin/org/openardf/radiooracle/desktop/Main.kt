@@ -198,6 +198,7 @@ import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.files.IofXmlImports
+import org.openardf.radiooracle.shared.files.IofXmlSchemaResource
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
@@ -4029,7 +4030,10 @@ fun main(args: Array<String>) = application {
                 runCatching {
                     val currentProject = projectSession.currentProject
                         ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
-                    val parsed = IofXmlImports.startList(Files.readString(path))
+                    val parsed = IofXmlImports.validatedStartList(
+                        Files.readString(path),
+                        IofXmlSchemaResource.loadBundledSchema()
+                    )
                     val outcome = EventProjectEditor.importIofStartList(currentProject, parsed.parsedData)
                     projectFile = projectSession.updateCurrentProject { outcome.projectFile }
                     syncProjectState()
@@ -4058,7 +4062,10 @@ fun main(args: Array<String>) = application {
                 runCatching {
                     val currentProject = projectSession.currentProject
                         ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
-                    val parsed = IofXmlImports.resultList(Files.readString(path))
+                    val parsed = IofXmlImports.validatedResultList(
+                        Files.readString(path),
+                        IofXmlSchemaResource.loadBundledSchema()
+                    )
                     val outcome = EventProjectEditor.importIofResultList(
                         projectFile = currentProject,
                         preview = parsed.parsedData,

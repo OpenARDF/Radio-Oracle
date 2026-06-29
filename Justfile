@@ -48,6 +48,14 @@ iof-schema-check schema_path="":
         echo "Set IOF_SCHEMA_PATH=/path/to/IOF.xsd or run: just iof-schema-check /path/to/IOF.xsd" >&2; \
         exit 1; \
     fi; \
+    cmp -s "$schema" shared/src/commonMain/resources/iof/IOF.xsd || { \
+        echo "Bundled shared IOF XML schema differs from $schema" >&2; \
+        exit 1; \
+    }; \
+    cmp -s "$schema" app/src/main/assets/iof/IOF.xsd || { \
+        echo "Bundled Android IOF XML schema differs from $schema" >&2; \
+        exit 1; \
+    }; \
     xmllint_bin="${XMLLINT:-}"; \
     if [ -z "$xmllint_bin" ]; then \
         if command -v xmllint >/dev/null 2>&1; then \
@@ -64,7 +72,7 @@ iof-schema-check schema_path="":
     "$xmllint_bin" --noout --nonet --schema "$schema" app/src/main/resources/xml/xml_category_valid_example.xml; \
     "$xmllint_bin" --noout --nonet --schema "$schema" app/src/main/resources/xml/xml_category_invalid_example.xml; \
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh -PiofSchemaPath="$schema" :shared:desktopTest --tests org.openardf.radiooracle.shared.files.IofXmlValidatorTest; \
-    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh -PiofSchemaPath="$schema" :app:testDebugUnitTest --tests org.openardf.radiooracle.files.xml.IofXmlSchemaValidationTests; \
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh -PiofSchemaPath="$schema" :app:testDebugUnitTest --tests org.openardf.radiooracle.files.xml.IofXmlSchemaValidationTests --tests org.openardf.radiooracle.files.xml.StartListXmlTests; \
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh -PiofSchemaPath="$schema" :desktopApp:test --tests org.openardf.radiooracle.desktop.DesktopProjectFilesTest.exportsIofStartListXmlFile --tests org.openardf.radiooracle.desktop.DesktopProjectFilesTest.exportsIofResultListXmlFile
 
 android-series-list serial="":

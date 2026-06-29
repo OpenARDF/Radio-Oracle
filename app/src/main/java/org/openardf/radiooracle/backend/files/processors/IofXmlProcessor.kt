@@ -102,12 +102,15 @@ object IofXmlProcessor : FormatProcessor {
         val context = dataProcessor.getContext()
 
         if (context != null) {
+            val schema = iofSchema ?: context.assets.open(IOF_SCHEMA_ASSET_PATH)
+                .bufferedReader()
+                .use { it.readText() }
             return when (dataType) {
                 DataType.CATEGORIES -> importCategories(
                     inStream,
                     race,
                     context,
-                    iofSchema
+                    schema
                 )
 
                 DataType.COMPETITOR_STARTS -> importStartList(
@@ -115,14 +118,14 @@ object IofXmlProcessor : FormatProcessor {
                     race,
                     dataProcessor,
                     context,
-                    iofSchema
+                    schema
                 )
 
                 DataType.RESULTS_LIVE -> importResultList(
                     inStream,
                     race,
                     dataProcessor,
-                    iofSchema
+                    schema
                 )
 
                 else -> {
@@ -369,4 +372,6 @@ object IofXmlProcessor : FormatProcessor {
             IofXmlCompetitorMatchIssue.UNKNOWN_COMPETITOR -> "Competitor not found in this event."
             IofXmlCompetitorMatchIssue.DUPLICATE_MATCH -> "Multiple competitors match this IOF row."
         }
+
+    private const val IOF_SCHEMA_ASSET_PATH = "iof/IOF.xsd"
 }

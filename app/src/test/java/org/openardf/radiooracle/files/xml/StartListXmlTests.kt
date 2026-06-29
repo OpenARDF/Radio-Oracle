@@ -300,6 +300,62 @@ class StartListXmlTests {
         assertTrue(exception.message!!.contains("StartNumber"))
     }
 
+    @Test
+    fun testDefaultImportRejectsLegacyStartNumberShape() = runTest {
+        val context = RuntimeEnvironment.getApplication()
+        val race = Race(
+            UUID.fromString("00000000-0000-0000-0000-000000000031"),
+            "Test Race",
+            "",
+            LocalDateTime.of(2023, 6, 15, 9, 30, 0),
+            org.openardf.radiooracle.backend.room.enums.RaceType.CLASSIC,
+            org.openardf.radiooracle.backend.room.enums.RaceLevel.PRACTICE,
+            org.openardf.radiooracle.backend.room.enums.RaceBand.M80,
+            Duration.ZERO
+        )
+        val dataProcessor: DataProcessor = mock()
+        `when`(dataProcessor.getContext()).thenReturn(context)
+
+        val xml = """
+            <StartList xmlns="http://www.orienteering.org/datastandard/3.0" iofVersion="3.0">
+              <Event>
+                <Name>Test Race</Name>
+                <StartTime>
+                  <Date>2023-06-15</Date>
+                  <Time>09:30:00</Time>
+                </StartTime>
+              </Event>
+              <ClassStart>
+                <Class><Name>M21</Name></Class>
+                <PersonStart>
+                  <Person>
+                    <Name><Family>Novak</Family><Given>Jan</Given></Name>
+                  </Person>
+                  <Start>
+                    <StartNumber>1001</StartNumber>
+                    <StartTime>2023-06-15T09:42:00</StartTime>
+                    <ControlCard>111</ControlCard>
+                  </Start>
+                </PersonStart>
+              </ClassStart>
+            </StartList>
+        """.trimIndent()
+
+        val exception = assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                IofXmlProcessor.importData(
+                    xml.byteInputStream(),
+                    DataType.COMPETITOR_STARTS,
+                    race,
+                    dataProcessor
+                )
+            }
+        }
+
+        assertTrue(exception.message!!.startsWith("Invalid IOF XML:"))
+        assertTrue(exception.message!!.contains("StartNumber"))
+    }
+
     private fun startListSchema(): String = """
         <xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
                     xmlns="http://www.orienteering.org/datastandard/3.0"

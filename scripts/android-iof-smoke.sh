@@ -105,9 +105,7 @@ for serial in "${devices[@]}"; do
 		--es output_dir "$app_output_arg"
 		--ez keep_event true
 	)
-	# Android's platform XML stack may not provide W3C XSD validation. Keep this opt-in
-	# until Radio-Oracle ships an Android-compatible schema validator.
-	if [[ -f "$schema_path" && "${ANDROID_IOF_APP_SCHEMA_VALIDATION:-}" == "1" ]]; then
+	if [[ -f "$schema_path" ]]; then
 		broadcast_args+=(--es iof_schema_file IOF.xsd)
 	fi
 
