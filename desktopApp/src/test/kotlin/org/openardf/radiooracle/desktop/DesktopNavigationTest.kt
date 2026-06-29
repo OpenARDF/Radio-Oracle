@@ -38,6 +38,7 @@ class DesktopNavigationTest {
         "Load Event File...",
         "Import EventReg Website...",
         "Import IOF EntryList XML...",
+        "Export IOF EntryList XML...",
         "Android...",
         "Settings",
         "Save Event",
@@ -648,6 +649,7 @@ class DesktopNavigationTest {
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.OpenEventFile }.requiresEventFile)
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.ImportEventRegWebsite }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.ImportIofEntryListXml }.requiresEventFile)
+        assertTrue(eventFileActions.first { it.action == DesktopNavAction.ExportIofEntryListXml }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFile }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.CloseEventFile }.requiresEventFile)
         val androidActions = eventFileActions.first { it.label == "Android..." }.children
@@ -904,6 +906,7 @@ class DesktopNavigationTest {
                 "Import Categories CSV...",
                 "Import IOF CourseData XML...",
                 "Export Categories CSV...",
+                "Export IOF CourseData XML...",
                 "Delete All Control Assignments...",
                 "Delete All Categories...",
             ),
@@ -960,6 +963,10 @@ class DesktopNavigationTest {
             categoryItems.first { it.label == "Import IOF CourseData XML..." }.action
         )
         assertEquals(DesktopNavAction.ExportCategoriesCsv, categoryItems.first { it.label == "Export Categories CSV..." }.action)
+        assertEquals(
+            DesktopNavAction.ExportIofCourseDataXml,
+            categoryItems.first { it.label == "Export IOF CourseData XML..." }.action
+        )
         assertEquals(
             DesktopNavAction.DeleteAllCategoryAssignedControls,
             categoryItems.first { it.label == "Delete All Control Assignments..." }.action
@@ -1195,6 +1202,7 @@ class DesktopNavigationTest {
                 "Import Categories CSV...",
                 "Import IOF CourseData XML...",
                 "Export Categories CSV...",
+                "Export IOF CourseData XML...",
                 "Delete All Control Assignments...",
                 "Delete All Categories..."
             ),

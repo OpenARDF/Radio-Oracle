@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.shared.files
 
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
@@ -36,6 +37,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -47,6 +49,77 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class IofXmlExportsTest {
+    @Test
+    fun exportsIofCourseDataUsingCategoryCourses() {
+        val xml = IofXmlExports.courseData(raceDataWithCourseControls(), creator = "Radio-Oracle 1.0")
+
+        assertTrue(xml.startsWith("""<?xml version="1.0" encoding="UTF-8"?>"""))
+        assertTrue(xml.contains("""<CourseData xmlns="http://www.orienteering.org/datastandard/3.0" iofVersion="3.0" creator="Radio-Oracle 1.0">"""))
+        assertTrue(xml.contains("<RaceCourseData>"))
+        assertTrue(xml.contains("<Course>"))
+        assertTrue(xml.contains("<Name>M21</Name>"))
+        assertTrue(xml.contains("<Length>5200</Length>"))
+        assertTrue(xml.contains("<Climb>120</Climb>"))
+        assertTrue(xml.contains("""<CourseControl type="Start">"""))
+        assertTrue(xml.contains("<Control>S</Control>"))
+        assertTrue(xml.contains("""<CourseControl type="Control">"""))
+        assertTrue(xml.contains("<Control>31</Control>"))
+        assertTrue(xml.contains("<Control>32</Control>"))
+        assertTrue(xml.contains("""<CourseControl type="Finish">"""))
+        assertTrue(xml.contains("<Control>F</Control>"))
+    }
+
+    @Test
+    fun exportedCourseDataCanBeImportedBySharedIofImporter() {
+        val raceData = raceDataWithCourseControls()
+        val xml = IofXmlExports.courseData(raceData)
+
+        val imported = IofXmlImports.courseData(xml, raceData.race)
+
+        assertEquals("IOF & Start Race", imported.parsedData.eventName)
+        assertEquals(listOf("M21", "W21"), imported.parsedData.categories.map { it.category.name })
+        assertEquals(listOf(31, 32), imported.parsedData.categories.first().controlPoints.map { it.siCode })
+        assertTrue(imported.unsupportedItems.any { it.reason.contains("Start controls") })
+        assertTrue(imported.unsupportedItems.any { it.reason.contains("Finish controls") })
+    }
+
+    @Test
+    fun exportsIofEntryListUsingCompetitors() {
+        val xml = IofXmlExports.entryList(raceData(includeSecondCategory = true), creator = "Radio-Oracle 1.0")
+
+        assertTrue(xml.startsWith("""<?xml version="1.0" encoding="UTF-8"?>"""))
+        assertTrue(xml.contains("""<EntryList xmlns="http://www.orienteering.org/datastandard/3.0" iofVersion="3.0" creator="Radio-Oracle 1.0">"""))
+        assertTrue(xml.contains("<PersonEntry>"))
+        assertTrue(xml.contains("""<Person sex="M">"""))
+        assertTrue(xml.contains("""<Id type="CZE">OK001</Id>"""))
+        assertTrue(xml.contains("<Family>Runner</Family>"))
+        assertTrue(xml.contains("<Given>Alice</Given>"))
+        assertTrue(xml.contains("<Organisation>"))
+        assertTrue(xml.contains("<Name>OK &amp; Test</Name>"))
+        assertTrue(xml.contains("<ControlCard>123456</ControlCard>"))
+        assertTrue(xml.contains("<Class>"))
+        assertTrue(xml.contains("<Name>M21</Name>"))
+        assertFalse(xml.contains("<BibNumber>"))
+    }
+
+    @Test
+    fun exportedEntryListCanBeImportedBySharedIofImporter() {
+        val xml = IofXmlExports.entryList(raceData(includeSecondCategory = true))
+
+        val imported = IofXmlImports.entryList(xml)
+
+        assertEquals(emptyList(), imported.unsupportedItems)
+        assertEquals("IOF & Start Race", imported.parsedData.eventName)
+        assertEquals("2026-06-01", imported.parsedData.startDate)
+        assertEquals("10:00:00", imported.parsedData.startTime)
+        assertEquals(listOf("M21", "W21"), imported.parsedData.entries.map { it.categoryName })
+        assertEquals(listOf("Runner", "NoTime"), imported.parsedData.entries.map { it.lastName })
+        assertEquals(listOf("Alice", "Bob"), imported.parsedData.entries.map { it.firstName })
+        assertEquals(listOf("OK001", ""), imported.parsedData.entries.map { it.personId })
+        assertEquals(listOf(123456, null), imported.parsedData.entries.map { it.siNumber })
+        assertEquals(listOf("", ""), imported.parsedData.entries.map { it.bibNumber })
+    }
+
     @Test
     fun exportsIofStartListUsingAndroidStructure() {
         val xml = IofXmlExports.startList(raceData(), creator = "Radio-Oracle 1.0")
@@ -290,6 +363,35 @@ class IofXmlExportsTest {
             raceBand = null,
             timeLimitSeconds = null,
             controlPointsString = ""
+        )
+
+    private fun raceDataWithCourseControls(): EventRaceData {
+        val raceData = raceData(includeSecondCategory = true)
+        val categories = raceData.categories.map { categoryData ->
+            categoryData.copy(
+                controlPoints = when (categoryData.category.name) {
+                    "M21" -> listOf(
+                        courseControl(categoryData.category.id, 31, order = 1),
+                        courseControl(categoryData.category.id, 32, order = 2)
+                    )
+                    "W21" -> listOf(
+                        courseControl(categoryData.category.id, 41, order = 1),
+                        courseControl(categoryData.category.id, 42, order = 2)
+                    )
+                    else -> emptyList()
+                }
+            )
+        }
+        return raceData.copy(categories = categories)
+    }
+
+    private fun courseControl(categoryId: String, siCode: Int, order: Int): EventControlPoint =
+        EventControlPoint(
+            id = "control-$categoryId-$siCode",
+            categoryId = categoryId,
+            siCode = siCode,
+            type = ControlPointType.CONTROL,
+            order = order
         )
 
     private fun competitor(

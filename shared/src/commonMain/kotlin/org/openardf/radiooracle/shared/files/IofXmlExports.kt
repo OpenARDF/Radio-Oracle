@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.shared.files
 
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventCategoryData
@@ -38,9 +39,48 @@ import org.openardf.radiooracle.shared.results.IofResultStatus
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-/** Shared IOF XML 3.0 export builders for desktop and non-Android flows. */
+/** Shared IOF XML 3.0 export builders for desktop and Android flows. */
 object IofXmlExports {
     private const val IOF_NAMESPACE = "http://www.orienteering.org/datastandard/3.0"
+
+    fun courseData(raceData: EventRaceData, creator: String = "Radio-Oracle Desktop"): String {
+        val raceStart = parseRaceStart(raceData.race.startDateTimeIso)
+        val controlsById = raceData.controls.associateBy { it.id }
+        return buildString {
+            append("""<?xml version="1.0" encoding="UTF-8"?>""")
+            append('\n')
+            append("""<CourseData xmlns="$IOF_NAMESPACE" iofVersion="3.0" creator="${creator.xmlEscaped()}">""")
+            append('\n')
+            appendEvent(raceData, raceStart)
+            append("  <RaceCourseData>\n")
+            raceData.categories
+                .sortedWith(compareBy({ it.category.order }, { it.category.name }))
+                .forEach { categoryData ->
+                    appendCourse(categoryData, controlsById)
+                }
+            append("  </RaceCourseData>\n")
+            append("</CourseData>\n")
+        }
+    }
+
+    fun entryList(raceData: EventRaceData, creator: String = "Radio-Oracle Desktop"): String {
+        val raceStart = parseRaceStart(raceData.race.startDateTimeIso)
+        val categoriesById = raceData.categories.associateBy { it.category.id }
+        return buildString {
+            append("""<?xml version="1.0" encoding="UTF-8"?>""")
+            append('\n')
+            append("""<EntryList xmlns="$IOF_NAMESPACE" iofVersion="3.0" creator="${creator.xmlEscaped()}">""")
+            append('\n')
+            appendEvent(raceData, raceStart)
+            raceData.competitorData
+                .map { it.competitorCategory.competitor }
+                .sortedWith(compareBy<EventCompetitor>({ categoriesById[it.categoryId]?.category?.order ?: Int.MAX_VALUE }, { it.startNumber ?: Int.MAX_VALUE }, { it.fullName() }))
+                .forEach { competitor ->
+                    appendPersonEntry(competitor, categoriesById[competitor.categoryId])
+                }
+            append("</EntryList>\n")
+        }
+    }
 
     fun startList(
         raceData: EventRaceData,
@@ -91,6 +131,52 @@ object IofXmlExports {
     private fun EventCompetitorData.resultCategoryId(): String? =
         readoutData?.result?.categoryId ?: competitorCategory.category?.id ?: competitorCategory.competitor.categoryId
 
+    private fun StringBuilder.appendCourse(
+        categoryData: EventCategoryData,
+        controlsById: Map<String, org.openardf.radiooracle.shared.event.EventControl>
+    ) {
+        append("    <Course>\n")
+        appendTextElement("Name", categoryData.category.name, indent = "      ")
+        if (categoryData.category.lengthMeters > 0) {
+            appendTextElement("Length", categoryData.category.lengthMeters.toString(), indent = "      ")
+        }
+        if (categoryData.category.climbMeters > 0) {
+            appendTextElement("Climb", categoryData.category.climbMeters.toString(), indent = "      ")
+        }
+        appendCourseControl(code = "S", type = "Start")
+        categoryData.courseControlCodes(controlsById).forEach { controlCode ->
+            appendCourseControl(code = controlCode, type = "Control")
+        }
+        appendCourseControl(code = "F", type = "Finish")
+        append("    </Course>\n")
+    }
+
+    private fun StringBuilder.appendCourseControl(code: String, type: String) {
+        append("""      <CourseControl type="$type">""")
+        append('\n')
+        appendTextElement("Control", code, indent = "        ")
+        append("      </CourseControl>\n")
+    }
+
+    private fun EventCategoryData.courseControlCodes(
+        controlsById: Map<String, org.openardf.radiooracle.shared.event.EventControl>
+    ): List<String> {
+        val points = if (controlPoints.isNotEmpty()) {
+            controlPoints.sortedBy { it.order }.mapNotNull { point ->
+                val control = controlsById[point.controlId]
+                val siCode = control?.siCode ?: point.siCode
+                val type = control?.type ?: point.type
+                siCode.takeIf { type == ControlPointType.CONTROL && it > 0 }?.toString()
+            }
+        } else {
+            publicControlIds.mapNotNull { controlId ->
+                val control = controlsById[controlId] ?: return@mapNotNull null
+                control.siCode.takeIf { control.type == ControlPointType.CONTROL && it > 0 }?.toString()
+            }
+        }
+        return points
+    }
+
     private fun StringBuilder.appendEvent(raceData: EventRaceData, raceStart: LocalDateTime) {
         append("  <Event>\n")
         appendTextElement("Name", raceData.race.name, indent = "    ")
@@ -132,6 +218,20 @@ object IofXmlExports {
                 appendPersonStart(competitor, raceStart)
             }
         append("  </ClassStart>\n")
+    }
+
+    private fun StringBuilder.appendPersonEntry(competitor: EventCompetitor, categoryData: EventCategoryData?) {
+        append("  <PersonEntry>\n")
+        appendPersonAndOrganisation(competitor, indent = "    ", includeSex = true)
+        competitor.siNumber?.let { siNumber ->
+            appendTextElement("ControlCard", siNumber.toString(), indent = "    ")
+        }
+        categoryData?.let { data ->
+            append("    <Class>\n")
+            appendTextElement("Name", data.category.name, indent = "      ")
+            append("    </Class>\n")
+        }
+        append("  </PersonEntry>\n")
     }
 
     private fun StringBuilder.appendPersonStart(competitor: EventCompetitor, raceStart: LocalDateTime) {
@@ -205,9 +305,18 @@ object IofXmlExports {
         append("    </PersonResult>\n")
     }
 
-    private fun StringBuilder.appendPersonAndOrganisation(competitor: EventCompetitor, indent: String) {
+    private fun StringBuilder.appendPersonAndOrganisation(
+        competitor: EventCompetitor,
+        indent: String,
+        includeSex: Boolean = false
+    ) {
         append(indent)
-        append("<Person>\n")
+        if (includeSex) {
+            append("""<Person sex="${if (competitor.isMan) "M" else "F"}">""")
+            append('\n')
+        } else {
+            append("<Person>\n")
+        }
         if (competitor.index.isNotBlank()) {
             append(indent)
             append("""  <Id type="CZE">${competitor.index.xmlEscaped()}</Id>""")

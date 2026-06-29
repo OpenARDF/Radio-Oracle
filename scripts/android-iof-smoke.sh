@@ -62,6 +62,18 @@ stage_file() {
 	"$adb_bin" -s "$serial" push "$src" "$download_dir/$name" >/dev/null
 }
 
+stage_optional_file() {
+	local serial="$1"
+	local src="$2"
+	local name="$3"
+	local app_input_dir="$4"
+	local download_dir="$5"
+
+	if [[ -f "$src" ]]; then
+		stage_file "$serial" "$src" "$name" "$app_input_dir" "$download_dir"
+	fi
+}
+
 for serial in "${devices[@]}"; do
 	echo "== $serial =="
 	"$adb_bin" -s "$serial" install -r "$apk_path" >/dev/null
@@ -93,9 +105,10 @@ for serial in "${devices[@]}"; do
 	fi
 
 	if [[ -d "$official_examples_dir" ]]; then
-		stage_file "$serial" "$official_examples_dir/CourseData_Individual_Step2.xml" "official-CourseData_Individual_Step2.xml" "$app_input_dir" "$download_dir"
-		stage_file "$serial" "$official_examples_dir/StartList_Individual_Step3.xml" "official-StartList_Individual_Step3.xml" "$app_input_dir" "$download_dir"
-		stage_file "$serial" "$official_examples_dir/ResultList1.xml" "official-ResultList1.xml" "$app_input_dir" "$download_dir"
+		stage_optional_file "$serial" "$official_examples_dir/CourseData_Individual_Step2.xml" "official-CourseData_Individual_Step2.xml" "$app_input_dir" "$download_dir"
+		stage_optional_file "$serial" "$official_examples_dir/StartList_Individual_Step3.xml" "official-StartList_Individual_Step3.xml" "$app_input_dir" "$download_dir"
+		stage_optional_file "$serial" "$official_examples_dir/EntryList1.xml" "official-EntryList1.xml" "$app_input_dir" "$download_dir"
+		stage_optional_file "$serial" "$official_examples_dir/ResultList1.xml" "official-ResultList1.xml" "$app_input_dir" "$download_dir"
 	fi
 
 	broadcast_args=(
@@ -121,7 +134,7 @@ for serial in "${devices[@]}"; do
 	host_dir="$repo_root/build/iof-smoke/$serial"
 	rm -rf "$host_dir"
 	mkdir -p "$host_dir/output"
-	for name in smoke-summary.txt exported-start-list.xml exported-result-list.xml; do
+	for name in smoke-summary.txt exported-course-data.xml exported-entry-list.xml exported-start-list.xml exported-result-list.xml; do
 		"$adb_bin" -s "$serial" exec-out run-as "$package_name" cat "$app_output_dir/$name" >"$host_dir/output/$name"
 	done
 
@@ -130,6 +143,8 @@ for serial in "${devices[@]}"; do
 	echo "pulled smoke outputs: $host_dir/output"
 
 	if [[ -n "$xmllint_bin" ]]; then
+		"$xmllint_bin" --noout --schema "$schema_path" "$host_dir/output/exported-course-data.xml"
+		"$xmllint_bin" --noout --schema "$schema_path" "$host_dir/output/exported-entry-list.xml"
 		"$xmllint_bin" --noout --schema "$schema_path" "$host_dir/output/exported-start-list.xml"
 		"$xmllint_bin" --noout --schema "$schema_path" "$host_dir/output/exported-result-list.xml"
 	elif [[ -f "$schema_path" ]]; then
@@ -138,6 +153,8 @@ for serial in "${devices[@]}"; do
 		echo "IOF schema not found at $schema_path; skipped pulled export schema validation." >&2
 	fi
 
+	"$adb_bin" -s "$serial" push "$host_dir/output/exported-course-data.xml" "$download_dir/automated-exported-course-data.xml" >/dev/null
+	"$adb_bin" -s "$serial" push "$host_dir/output/exported-entry-list.xml" "$download_dir/automated-exported-entry-list.xml" >/dev/null
 	"$adb_bin" -s "$serial" push "$host_dir/output/exported-start-list.xml" "$download_dir/automated-exported-start-list.xml" >/dev/null
 	"$adb_bin" -s "$serial" push "$host_dir/output/exported-result-list.xml" "$download_dir/automated-exported-result-list.xml" >/dev/null
 done

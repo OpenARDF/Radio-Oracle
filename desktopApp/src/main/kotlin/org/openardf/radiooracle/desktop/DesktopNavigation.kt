@@ -69,6 +69,7 @@ enum class DesktopNavAction {
     OpenEventFile,
     ImportEventRegWebsite,
     ImportIofEntryListXml,
+    ExportIofEntryListXml,
     ImportEventRegCompetitorsCsv,
     SaveEventFile,
     CloseEventFile,
@@ -91,6 +92,7 @@ enum class DesktopNavAction {
     SendEventFileToAndroid,
     ReceiveFileFromAndroid,
     ExportCategoriesCsv,
+    ExportIofCourseDataXml,
     ExportControlsCsv,
     ExportCourseKmlKmz,
     ExportCourseGpx,
@@ -422,6 +424,12 @@ object DesktopNavigation {
                             "Export Categories CSV...",
                             workflow,
                             DesktopNavAction.ExportCategoriesCsv
+                        ),
+                        action(
+                            "setup.categories.export-iof-course-data",
+                            "Export IOF CourseData XML...",
+                            workflow,
+                            DesktopNavAction.ExportIofCourseDataXml
                         ),
                         action(
                             "setup.categories.delete-all-assigned-controls",
@@ -1213,6 +1221,8 @@ object DesktopNavigation {
             "Use Import Categories CSV to review and apply late category additions or corrections without replacing unrelated event data.",
         "setup.categories.import-iof-course-data" to
             "Use Import IOF CourseData XML to import schema-valid IOF CourseData courses as Radio-Oracle categories and assigned controls.",
+        "setup.categories.export-iof-course-data" to
+            "Use Export IOF CourseData XML to write schema-valid IOF CourseData courses from Radio-Oracle categories and assigned controls.",
         "setup.categories.delete-all-assigned-controls" to
             "Use Delete All Control Assignments to clear every category course, length, climb, and protected course field while keeping category names and competitors.",
         "setup.categories.delete-all-categories" to
@@ -1375,6 +1385,8 @@ object DesktopNavigation {
             "Use Receive File from Android to accept an Event File or supporting file over local Wi-Fi.",
         "setup.event-file.import-iof-entry-list" to
             "Use Import IOF EntryList XML to import schema-valid IOF EntryList registrations into the current Event File.",
+        "setup.event-file.export-iof-entry-list" to
+            "Use Export IOF EntryList XML to write schema-valid IOF EntryList registrations from the current Event File.",
         "setup.event-file.settings" to
             "Use Settings to adjust event-related readout, live result, display, app, and readiness options.",
         "setup.event-file.si-settings" to
@@ -1451,6 +1463,13 @@ object DesktopNavigation {
                 "Import IOF EntryList XML...",
                 workflow,
                 DesktopNavAction.ImportIofEntryListXml,
+                section = DesktopSection.Races
+            ),
+            action(
+                "setup.event-file.export-iof-entry-list",
+                "Export IOF EntryList XML...",
+                workflow,
+                DesktopNavAction.ExportIofEntryListXml,
                 section = DesktopSection.Races
             ),
             group(

@@ -249,6 +249,18 @@ class AppCommandReceiver : BroadcastReceiver() {
             summary += "resultList importedReadouts=${resultImport.readoutData.size}"
             appendImportWarnings("resultList", resultImport.iofWarnings)
 
+            val courseDataOutput = File(outputDir, "exported-course-data.xml")
+            ByteArrayOutputStream().use { output ->
+                IofXmlProcessor.exportCategories(output, race, dataProcessor)
+                courseDataOutput.writeBytes(output.toByteArray())
+            }
+
+            val entryListOutput = File(outputDir, "exported-entry-list.xml")
+            ByteArrayOutputStream().use { output ->
+                IofXmlProcessor.exportEntryList(output, race, dataProcessor)
+                entryListOutput.writeBytes(output.toByteArray())
+            }
+
             val startListOutput = File(outputDir, "exported-start-list.xml")
             ByteArrayOutputStream().use { output ->
                 IofXmlProcessor.exportStartList(output, race, dataProcessor.getCategoryDataForRace(race.id), dataProcessor)
@@ -268,6 +280,43 @@ class AppCommandReceiver : BroadcastReceiver() {
             val roundTripRace = roundTripRaceData.race
             dataProcessor.saveRaceData(roundTripRaceData)
             summary += "roundTrip event id=${roundTripRace.id} name=${roundTripRace.name}"
+
+            val registrationRoundTripRaceData = iofSmokeEmptyRoundTripRaceData(dataProcessor.getRaceData(race.id))
+            val registrationRoundTripRace = registrationRoundTripRaceData.race
+            dataProcessor.saveRaceData(registrationRoundTripRaceData)
+            summary += "registrationRoundTrip event id=${registrationRoundTripRace.id} name=${registrationRoundTripRace.name}"
+
+            val exportedCourseDataImport = importIofXmlFile(
+                courseDataOutput,
+                DataType.CATEGORIES,
+                registrationRoundTripRace
+            )
+            require(exportedCourseDataImport.invalidLines.isEmpty()) {
+                exportedCourseDataImport.invalidLines.joinToString(prefix = "Exported CourseData re-import failed: ") { "${it.first}:${it.second}" }
+            }
+            require(exportedCourseDataImport.categories.isNotEmpty()) {
+                "Exported CourseData re-import produced no categories."
+            }
+            DataImportValidator.validateDataImport(exportedCourseDataImport, registrationRoundTripRace.id, DataType.CATEGORIES, dataProcessor, context)
+            dataProcessor.saveDataImportWrapper(exportedCourseDataImport)
+            summary += "roundTrip courseDataReimportedCategories=${exportedCourseDataImport.categories.size}"
+            appendImportWarnings("roundTripCourseData", exportedCourseDataImport.iofWarnings)
+
+            val exportedEntryListImport = importIofXmlFile(
+                entryListOutput,
+                DataType.COMPETITORS,
+                registrationRoundTripRace
+            )
+            require(exportedEntryListImport.invalidLines.isEmpty()) {
+                exportedEntryListImport.invalidLines.joinToString(prefix = "Exported EntryList re-import failed: ") { "${it.first}:${it.second}" }
+            }
+            require(exportedEntryListImport.competitorCategories.isNotEmpty()) {
+                "Exported EntryList re-import produced no competitors."
+            }
+            DataImportValidator.validateDataImport(exportedEntryListImport, registrationRoundTripRace.id, DataType.COMPETITORS, dataProcessor, context)
+            dataProcessor.saveDataImportWrapper(exportedEntryListImport)
+            summary += "roundTrip entryListReimportedCompetitors=${exportedEntryListImport.competitorCategories.size}"
+            appendImportWarnings("roundTripEntryList", exportedEntryListImport.iofWarnings)
 
             val exportedStartImport = importIofXmlFile(
                 startListOutput,
@@ -301,6 +350,8 @@ class AppCommandReceiver : BroadcastReceiver() {
             summary += "roundTrip resultListReimportedReadouts=${exportedResultImport.readoutData.size}"
             appendImportWarnings("roundTripResultList", exportedResultImport.iofWarnings)
 
+            summary += "exports courseData=${courseDataOutput.absolutePath}"
+            summary += "exports entryList=${entryListOutput.absolutePath}"
             summary += "exports startList=${startListOutput.absolutePath}"
             summary += "exports resultList=${resultListOutput.absolutePath}"
             summary += "manualPickerFiles expectedUnder=/sdcard/Download/RadioOracleIofSmoke"
@@ -451,6 +502,20 @@ class AppCommandReceiver : BroadcastReceiver() {
             unmatchedReadoutData = emptyList()
         )
     }
+
+    private fun iofSmokeEmptyRoundTripRaceData(source: RaceData): RaceData =
+        RaceData(
+            race = source.race.copy(
+                id = UUID.randomUUID(),
+                name = "${source.race.name} Registration Round Trip",
+                importSourceId = null,
+                importFingerprint = null
+            ),
+            categories = emptyList(),
+            aliases = emptyList(),
+            competitorData = emptyList(),
+            unmatchedReadoutData = emptyList()
+        )
 
     private fun iofSmokeResultCompetitor(raceId: UUID, categoryId: UUID): Competitor =
         Competitor(

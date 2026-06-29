@@ -182,6 +182,36 @@ class DesktopProjectFilesTest {
     }
 
     @Test
+    fun exportsIofCourseDataXmlFile() {
+        val directory = Files.createTempDirectory("rom-desktop-iof-course-data")
+        val path = directory.resolve("event.iof.xml")
+
+        DesktopProjectFiles.exportIofCourseDataXml(path, EventProjectFile(raceData = raceDataWithReadout()))
+        val exported = Files.readString(path)
+
+        assertTrue(exported.contains("<CourseData"))
+        assertTrue(exported.contains("<RaceCourseData>"))
+        assertTrue(exported.contains("<Course>"))
+        assertTrue(exported.contains("<Name>M21</Name>"))
+        assertIofSchemaValid(exported)
+    }
+
+    @Test
+    fun exportsIofEntryListXmlFile() {
+        val directory = Files.createTempDirectory("rom-desktop-iof-entry-list")
+        val path = directory.resolve("event.iof.xml")
+
+        DesktopProjectFiles.exportIofEntryListXml(path, EventProjectFile(raceData = raceDataWithReadout()))
+        val exported = Files.readString(path)
+
+        assertTrue(exported.contains("<EntryList"))
+        assertTrue(exported.contains("<PersonEntry>"))
+        assertTrue(exported.contains("<Family>Runner</Family>"))
+        assertTrue(exported.contains("<ControlCard>123456</ControlCard>"))
+        assertIofSchemaValid(exported)
+    }
+
+    @Test
     fun exportsIofResultListXmlFile() {
         val directory = Files.createTempDirectory("rom-desktop-iof-result-list")
         val path = directory.resolve("event.iof.xml")

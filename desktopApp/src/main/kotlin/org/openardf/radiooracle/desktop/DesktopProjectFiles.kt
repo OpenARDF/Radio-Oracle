@@ -119,6 +119,14 @@ object DesktopProjectFiles : ProjectFileStore {
         writeText(path, IofXmlExports.startList(projectFile.raceData, protectedCourseInfoByCategoryId = emptyMap()))
     }
 
+    fun exportIofCourseDataXml(path: Path, projectFile: EventProjectFile) {
+        writeText(path, IofXmlExports.courseData(projectFile.raceData))
+    }
+
+    fun exportIofEntryListXml(path: Path, projectFile: EventProjectFile) {
+        writeText(path, IofXmlExports.entryList(projectFile.raceData))
+    }
+
     fun exportIofResultListXml(path: Path, projectFile: EventProjectFile) {
         writeText(path, IofXmlExports.resultList(projectFile.raceData))
     }

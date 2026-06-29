@@ -155,15 +155,23 @@ object IofXmlProcessor : FormatProcessor {
         race: Race
     ) {
         when (dataType) {
-            DataType.COMPETITORS -> TODO()
-            DataType.RESULTS_LIVE -> exportResults(
+            DataType.CATEGORIES -> exportCategories(outStream, race, dataProcessor)
+            DataType.COMPETITORS -> exportEntryList(outStream, race, dataProcessor)
+            DataType.COMPETITOR_STARTS -> exportStartList(
+                outStream,
+                race,
+                dataProcessor.getCategoryDataForRace(race.id),
+                dataProcessor
+            )
+
+            DataType.RESULTS_FINAL, DataType.RESULTS_LIVE -> exportResults(
                 outStream,
                 race, ResultsProcessor.getResultWrapperFlowByRace(race.id, dataProcessor).first()
                     .filter { it.category != null },
                 dataProcessor
             )
 
-            else -> TODO()
+            DataType.READOUT_DATA -> TODO()
         }
     }
 
@@ -395,12 +403,40 @@ object IofXmlProcessor : FormatProcessor {
         )
     }
 
-    /** Placeholder for future IOF XML category export support. */
-    fun exportCategories(
+    /** Exports IOF XML CourseData for the supplied race. */
+    suspend fun exportCategories(
         outStream: OutputStream,
         race: Race,
         dataProcessor: DataProcessor
     ) {
+        try {
+            outStream.write(
+                IofXmlExports.courseData(
+                    raceData = dataProcessor.getRaceData(race.id).toEventRaceData(),
+                    creator = "Radio-Oracle ${dataProcessor.getAppVersion()}"
+                ).toByteArray(Charsets.UTF_8)
+            )
+        } catch (ex: Exception) {
+            throw RuntimeException("Failed to export IOF XML CourseData: ${ex.message}", ex)
+        }
+    }
+
+    /** Exports IOF XML EntryList for the supplied race. */
+    suspend fun exportEntryList(
+        outStream: OutputStream,
+        race: Race,
+        dataProcessor: DataProcessor
+    ) {
+        try {
+            outStream.write(
+                IofXmlExports.entryList(
+                    raceData = dataProcessor.getRaceData(race.id).toEventRaceData(),
+                    creator = "Radio-Oracle ${dataProcessor.getAppVersion()}"
+                ).toByteArray(Charsets.UTF_8)
+            )
+        } catch (ex: Exception) {
+            throw RuntimeException("Failed to export IOF XML EntryList: ${ex.message}", ex)
+        }
     }
 
     /** Exports an IOF XML start list for the supplied category data. */

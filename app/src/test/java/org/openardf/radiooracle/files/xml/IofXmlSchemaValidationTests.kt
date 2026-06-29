@@ -36,6 +36,7 @@ import org.openardf.radiooracle.backend.results.ResultsProcessor.toResultWrapper
 import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
+import org.openardf.radiooracle.backend.room.entity.ControlPoint
 import org.openardf.radiooracle.backend.room.entity.Punch
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.Result
@@ -43,7 +44,9 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.AliasPunch
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
+import org.openardf.radiooracle.backend.room.enums.ControlPointType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.backend.sportident.SITime
@@ -74,6 +77,16 @@ class IofXmlSchemaValidationTests {
     @Test
     fun androidResultListExportValidatesAgainstIof30Schema() = runTest {
         validateIofXml(resultListXml())
+    }
+
+    @Test
+    fun androidCourseDataExportValidatesAgainstIof30Schema() = runTest {
+        validateIofXml(courseDataXml())
+    }
+
+    @Test
+    fun androidEntryListExportValidatesAgainstIof30Schema() = runTest {
+        validateIofXml(entryListXml())
     }
 
     @Test
@@ -199,6 +212,97 @@ class IofXmlSchemaValidationTests {
         val out = ByteArrayOutputStream()
         IofXmlProcessor.exportResults(out, race, competitorData.toResultWrappers(), dataProcessor())
         return out.toString("UTF-8")
+    }
+
+    private suspend fun courseDataXml(): String {
+        val raceData = exportRaceData()
+        val processor = dataProcessor()
+        `when`(processor.getRaceData(raceData.race.id)).thenReturn(raceData)
+        val out = ByteArrayOutputStream()
+
+        IofXmlProcessor.exportCategories(out, raceData.race, processor)
+
+        return out.toString("UTF-8")
+    }
+
+    private suspend fun entryListXml(): String {
+        val raceData = exportRaceData()
+        val processor = dataProcessor()
+        `when`(processor.getRaceData(raceData.race.id)).thenReturn(raceData)
+        val out = ByteArrayOutputStream()
+
+        IofXmlProcessor.exportEntryList(out, raceData.race, processor)
+
+        return out.toString("UTF-8")
+    }
+
+    private fun exportRaceData(): RaceData {
+        val raceStart = LocalDateTime.of(2026, 6, 29, 9, 0, 0)
+        val race = Race(
+            UUID.fromString("00000000-0000-0000-0000-000000000011"),
+            "Schema Race",
+            "",
+            raceStart,
+            org.openardf.radiooracle.backend.room.enums.RaceType.CLASSIC,
+            org.openardf.radiooracle.backend.room.enums.RaceLevel.PRACTICE,
+            org.openardf.radiooracle.backend.room.enums.RaceBand.M80,
+            Duration.ZERO
+        )
+        val category = Category(
+            UUID.fromString("00000000-0000-0000-0000-000000000012"),
+            race.id,
+            "M21",
+            true,
+            null,
+            5200,
+            120,
+            0,
+            false,
+            null,
+            null,
+            null,
+            ""
+        )
+        val competitor = Competitor(
+            UUID.fromString("00000000-0000-0000-0000-000000000013"),
+            race.id,
+            category.id,
+            "Ada",
+            "Example",
+            "Club",
+            "IDX1",
+            true,
+            1990,
+            123456,
+            false,
+            7,
+            Duration.ofMinutes(2),
+            "1007"
+        )
+        val controls = listOf(
+            ControlPoint(
+                UUID.fromString("00000000-0000-0000-0000-000000000014"),
+                category.id,
+                31,
+                ControlPointType.CONTROL,
+                1
+            ),
+            ControlPoint(
+                UUID.fromString("00000000-0000-0000-0000-000000000015"),
+                category.id,
+                32,
+                ControlPointType.CONTROL,
+                2
+            )
+        )
+        val categoryData = CategoryData(category, controls, listOf(competitor))
+        return RaceData(
+            race = race,
+            categories = listOf(categoryData),
+            aliases = emptyList(),
+            competitorData = listOf(CompetitorData(CompetitorCategory(competitor, category), null)),
+            unmatchedReadoutData = emptyList()
+        )
     }
 
     private fun validateIofXml(xml: String) {

@@ -2181,6 +2181,19 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun exportIofCourseDataXml() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportIofXml("Export IOF CourseData XML")?.let { path ->
+                runCatching {
+                    DesktopProjectFiles.exportIofCourseDataXml(path, currentProject)
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun unlockProtectedCourseOrder(password: String): Boolean {
             val currentProject = projectSession.currentProject ?: return false
             val trimmedPassword = password.trim()
@@ -3577,6 +3590,19 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun exportIofEntryListXml() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportIofXml("Export IOF EntryList XML")?.let { path ->
+                runCatching {
+                    DesktopProjectFiles.exportIofEntryListXml(path, currentProject)
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun exportIofResultListXml() {
             val currentProject = projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportIofXml("Export IOF Result List XML")?.let { path ->
@@ -4935,6 +4961,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.CloseEventFile,
                 DesktopNavAction.ImportEventRegCompetitorsCsv,
                 DesktopNavAction.ImportIofEntryListXml,
+                DesktopNavAction.ExportIofEntryListXml,
                 DesktopNavAction.ImportCategoriesCsv,
                 DesktopNavAction.ImportIofCourseDataXml,
                 DesktopNavAction.ImportCourseKmlKmz,
@@ -4952,6 +4979,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportEventFileCopy,
                 DesktopNavAction.SendEventFileToAndroid,
                 DesktopNavAction.ExportCategoriesCsv,
+                DesktopNavAction.ExportIofCourseDataXml,
                 DesktopNavAction.ExportControlsCsv,
                 DesktopNavAction.ExportCourseKmlKmz,
                 DesktopNavAction.ExportCourseGpx,
@@ -5040,6 +5068,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportEventRegWebsite -> showEventRegImportDialog()
                 DesktopNavAction.ImportEventRegCompetitorsCsv -> showEventRegCompetitorCsvImportDialog()
                 DesktopNavAction.ImportIofEntryListXml -> importIofEntryListXml()
+                DesktopNavAction.ExportIofEntryListXml -> exportIofEntryListXml()
                 DesktopNavAction.SaveEventFile -> saveCurrentProject()
                 DesktopNavAction.CloseEventFile -> requestCloseEventFile()
                 DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
@@ -5064,6 +5093,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportEventFileCopy -> exportEventFileCopy()
                 DesktopNavAction.SendEventFileToAndroid -> sendEventFileToAndroid()
                 DesktopNavAction.ExportCategoriesCsv -> exportCategoriesCsv()
+                DesktopNavAction.ExportIofCourseDataXml -> exportIofCourseDataXml()
                 DesktopNavAction.ExportControlsCsv ->
                     exportCsv("Export Controls CSV", "controls", DesktopProjectFiles::exportControlsCsv)
                 DesktopNavAction.ExportCourseKmlKmz -> chooseExportCourseKmlKmz()
