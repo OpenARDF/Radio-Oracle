@@ -23,6 +23,9 @@
 package org.openardf.radiooracle.shared.files
 
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -49,6 +52,14 @@ class IofXmlImportsTest {
     }
 
     @Test
+    fun validatesCourseDataBeforePreview() {
+        val result = IofXmlImports.validatedCourseData(courseDataXml(), localIofXsd(), race())
+
+        assertEquals("Example event", result.parsedData.eventName)
+        assertEquals(listOf("A"), result.parsedData.categories.map { it.category.name })
+    }
+
+    @Test
     fun parsesStartListPreviewAndReportsUnsupportedTeamStarts() {
         val result = IofXmlImports.startList(startListXml())
         val entry = result.parsedData.entries.single()
@@ -67,6 +78,19 @@ class IofXmlImportsTest {
         assertEquals("2026-06-29T09:12:00", entry.startTimeIso)
         assertEquals(720, entry.relativeStartTimeSeconds)
         assertTrue(result.unsupportedItems.any { it.location == "/StartList/TeamStart[1]" })
+    }
+
+    @Test
+    fun validatedStartListRejectsSchemaInvalidLegacyStartNumber() {
+        val exception = assertFailsWith<IofXmlImportException> {
+            IofXmlImports.validatedStartList(
+                startListXml().replace("<BibNumber>17</BibNumber>", "<StartNumber>17</StartNumber>"),
+                localIofXsd()
+            )
+        }
+
+        assertTrue(exception.message!!.startsWith("Invalid IOF XML:"))
+        assertTrue(exception.message!!.contains("StartNumber"))
     }
 
     @Test
@@ -162,6 +186,15 @@ class IofXmlImportsTest {
         }
 
         assertEquals("Expected IOF CourseData XML but found StartList.", exception.message)
+    }
+
+    @Test
+    fun validatedRootMessageTypePreservesClearVersionFailure() {
+        val exception = assertFailsWith<IofXmlImportException> {
+            IofXmlImports.validatedRootMessageType("<CourseData iofVersion=\"2.0.3\"/>", localIofXsd())
+        }
+
+        assertEquals("Unsupported IOF XML version: 2.0.3. Expected 3.0.", exception.message)
     }
 
     private fun courseDataXml(): String = """
@@ -265,6 +298,34 @@ class IofXmlImportsTest {
         return if (file.isFile) file.readText() else null
     }
 
+    private fun localIofXsd(): String =
+        Files.readString(iofSchemaPath())
+
+    private fun iofSchemaPath(): Path {
+        val configuredPath = sequenceOf(
+            System.getProperty(IOF_SCHEMA_PROPERTY),
+            System.getenv(IOF_SCHEMA_ENV)
+        )
+            .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
+            .firstOrNull()
+            ?.let(Paths::get)
+        val workingDirectory = Paths.get(System.getProperty("user.dir"))
+        val candidates = if (configuredPath != null) {
+            listOf(configuredPath)
+        } else {
+            listOf(
+                workingDirectory.resolve("../IOF-XML-datastandard-v3/IOF.xsd"),
+                workingDirectory.resolve("../../IOF-XML-datastandard-v3/IOF.xsd")
+            )
+        }
+        return candidates.firstOrNull { Files.isRegularFile(it) }
+            ?: throw AssertionError(
+                "IOF XML 3.0 schema is required for this test. " +
+                    "Set -PiofSchemaPath=/path/to/IOF.xsd or IOF_SCHEMA_PATH=/path/to/IOF.xsd. " +
+                    "Checked: ${candidates.joinToString { it.toAbsolutePath().normalize().toString() }}"
+            )
+    }
+
     private fun race(): EventRace =
         EventRace(
             id = "race",
@@ -279,5 +340,7 @@ class IofXmlImportsTest {
 
     private companion object {
         const val IOF_EXAMPLES_PATH = "/Users/charlesscharlau/Documents/GitHub/IOF-XML-datastandard-v3/examples"
+        const val IOF_SCHEMA_PROPERTY = "iof.schema.path"
+        const val IOF_SCHEMA_ENV = "IOF_SCHEMA_PATH"
     }
 }

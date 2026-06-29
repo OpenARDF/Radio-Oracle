@@ -149,6 +149,13 @@ object IofXmlImports {
         return rootName
     }
 
+    /** Returns the IOF root name after enforcing root/version checks and IOF 3.0 schema validity. */
+    fun validatedRootMessageType(xml: String, iofSchema: String): String {
+        val rootName = rootMessageType(xml)
+        IofXmlValidator.requireValid(xml, iofSchema)
+        return rootName
+    }
+
     /** Parses the supported CourseData subset into Radio-Oracle category/course data. */
     fun courseData(
         xml: String,
@@ -189,6 +196,17 @@ object IofXmlImports {
             ),
             unsupportedItems = warnings
         )
+    }
+
+    /** Validates CourseData against the IOF 3.0 schema before building a Radio-Oracle preview. */
+    fun validatedCourseData(
+        xml: String,
+        iofSchema: String,
+        race: EventRace,
+        idFactory: (String) -> String = { seed -> seed.stableIofId() }
+    ): IofCourseDataImportResult {
+        requireValidImportXml(xml, iofSchema, expectedRoot = "CourseData")
+        return courseData(xml, race, idFactory)
     }
 
     /** Parses an IOF StartList into a preview that can be matched and applied by platform UI code. */
@@ -244,6 +262,12 @@ object IofXmlImports {
             ),
             unsupportedItems = warnings
         )
+    }
+
+    /** Validates StartList against the IOF 3.0 schema before building a Radio-Oracle preview. */
+    fun validatedStartList(xml: String, iofSchema: String): IofStartListImportResult {
+        requireValidImportXml(xml, iofSchema, expectedRoot = "StartList")
+        return startList(xml)
     }
 
     /** Parses an IOF ResultList into a preview that can be matched and applied by platform UI code. */
@@ -303,6 +327,18 @@ object IofXmlImports {
             ),
             unsupportedItems = warnings
         )
+    }
+
+    /** Validates ResultList against the IOF 3.0 schema before building a Radio-Oracle preview. */
+    fun validatedResultList(xml: String, iofSchema: String): IofResultListImportResult {
+        requireValidImportXml(xml, iofSchema, expectedRoot = "ResultList")
+        return resultList(xml)
+    }
+
+    private fun requireValidImportXml(xml: String, iofSchema: String, expectedRoot: String) {
+        val root = parseXml(xml)
+        requireRoot(root, expectedRoot)
+        IofXmlValidator.requireValid(xml, iofSchema)
     }
 
     private fun XmlNode.toCategoryData(
