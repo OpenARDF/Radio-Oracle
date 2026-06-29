@@ -808,6 +808,7 @@ class EventProjectEditorTest {
         val competitor = updated.raceData.competitorData.single().competitorCategory.competitor
         assertEquals("OK Test", competitor.club)
         assertEquals("A101", competitor.index)
+        assertEquals("", competitor.bibNumber)
     }
 
     @Test
@@ -1602,7 +1603,7 @@ class EventProjectEditorTest {
     }
 
     @Test
-    fun importsCompetitorStartRowsByStartNumber() {
+    fun doesNotImportCompetitorStartRowsByStartNumberAlone() {
         val original = projectFile(
             competitors = listOf(
                 competitorData("comp-1", "Alice", "Runner", startNumber = 1, siNumber = 1111),
@@ -1619,10 +1620,10 @@ class EventProjectEditorTest {
         )
 
         val kept = updated.raceData.competitorData[0].competitorCategory.competitor
-        val changed = updated.raceData.competitorData[1].competitorCategory.competitor
+        val alsoKept = updated.raceData.competitorData[1].competitorCategory.competitor
         assertEquals(null, kept.drawnStartTimeSeconds)
-        assertEquals(2222, changed.siNumber)
-        assertEquals(10 * 60L + 15, changed.drawnStartTimeSeconds)
+        assertEquals(null, alsoKept.siNumber)
+        assertEquals(null, alsoKept.drawnStartTimeSeconds)
     }
 
     @Test
@@ -1642,6 +1643,60 @@ class EventProjectEditorTest {
                     startTimeText = "10:15",
                     siNumber = 2222,
                     bibNumber = "REG002"
+                )
+            )
+        )
+
+        val kept = updated.raceData.competitorData[0].competitorCategory.competitor
+        val changed = updated.raceData.competitorData[1].competitorCategory.competitor
+        assertEquals(null, kept.drawnStartTimeSeconds)
+        assertEquals(10 * 60L + 15, changed.drawnStartTimeSeconds)
+    }
+
+    @Test
+    fun importsCompetitorStartRowsByUniqueBibNumberWhenStartNumberChanged() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", startNumber = 1, siNumber = null, bibNumber = "1001"),
+                competitorData("comp-2", "Bob", "Racer", startNumber = 2, siNumber = null, bibNumber = "1002")
+            )
+        )
+
+        val updated = EventProjectEditor.importCompetitorStartRows(
+            original,
+            listOf(
+                CompetitorStartCsvImportRow(
+                    startNumber = 99,
+                    startTimeText = "10:15",
+                    siNumber = null,
+                    bibNumber = "1002"
+                )
+            )
+        )
+
+        val kept = updated.raceData.competitorData[0].competitorCategory.competitor
+        val changed = updated.raceData.competitorData[1].competitorCategory.competitor
+        assertEquals(null, kept.drawnStartTimeSeconds)
+        assertEquals(10 * 60L + 15, changed.drawnStartTimeSeconds)
+    }
+
+    @Test
+    fun importsCompetitorStartRowsByUniqueCallSignWhenStartNumberChanged() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", startNumber = 1, siNumber = null, callSign = "K0AAA"),
+                competitorData("comp-2", "Bob", "Racer", startNumber = 2, siNumber = null, callSign = "K0BBB")
+            )
+        )
+
+        val updated = EventProjectEditor.importCompetitorStartRows(
+            original,
+            listOf(
+                CompetitorStartCsvImportRow(
+                    startNumber = 99,
+                    startTimeText = "10:15",
+                    siNumber = null,
+                    callSign = "k0bbb"
                 )
             )
         )
@@ -1673,7 +1728,7 @@ class EventProjectEditorTest {
                 <Class><Name>M21</Name></Class>
                 <PersonStart>
                   <Person><Id>comp-2</Id><Name><Family>Racer</Family><Given>Bob</Given></Name></Person>
-                  <Start><BibNumber>2</BibNumber><StartTime>2026-05-31T10:07:00</StartTime><ControlCard>2222</ControlCard></Start>
+                  <Start><BibNumber>1002</BibNumber><StartTime>2026-05-31T10:07:00</StartTime><ControlCard>2222</ControlCard></Start>
                 </PersonStart>
               </ClassStart>
             </StartList>
@@ -3766,7 +3821,9 @@ class EventProjectEditorTest {
         category: EventCategory? = null,
         club: String = "",
         readoutData: EventReadoutData? = null,
-        preferredStartGroup: Int? = null
+        preferredStartGroup: Int? = null,
+        bibNumber: String = "",
+        callSign: String = ""
     ): EventCompetitorData =
         EventCompetitorData(
             competitorCategory = EventCompetitorCategory(
@@ -3784,7 +3841,9 @@ class EventProjectEditorTest {
                     siRent = false,
                     startNumber = startNumber,
                     drawnStartTimeSeconds = null,
-                    preferredStartGroup = preferredStartGroup
+                    preferredStartGroup = preferredStartGroup,
+                    bibNumber = bibNumber,
+                    callSign = callSign
                 ),
                 category = category
             ),
@@ -3867,7 +3926,7 @@ class EventProjectEditorTest {
         index: String = "T001",
         startTimeText: String? = null,
         siRent: Boolean = false,
-        bibNumber: String = index,
+        bibNumber: String = "",
         callSign: String = ""
     ): CompetitorCsvImportRow =
         CompetitorCsvImportRow(

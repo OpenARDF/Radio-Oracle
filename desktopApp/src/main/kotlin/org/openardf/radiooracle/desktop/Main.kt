@@ -330,7 +330,7 @@ private val CompetitorTableColumnHints = mapOf(
     "First" to "Competitor first or given name.",
     "Last" to "Competitor last or family name.",
     "Club" to "Club, society, school, or team used for reports and start-list fairness checks.",
-    "Bib no." to "Persistent bib number worn by the competitor across one or more events in a competition.",
+    "Bib no." to "Numeric code assigned by organizers to uniquely identify each competitor when bib numbers are used.",
     "Call sign" to "Optional radio call sign or on-air identifier for this competitor.",
     "Birth" to "Optional birth year.",
     "Category" to "Competition category assigned to this competitor.",

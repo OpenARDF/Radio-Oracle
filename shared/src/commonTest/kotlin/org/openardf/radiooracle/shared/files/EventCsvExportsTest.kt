@@ -119,7 +119,7 @@ class EventCsvExportsTest {
         assertEquals(
             """
             si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent;preferred_start_group;bib_number;call_sign
-            123456;7;Test;Runner;M21;0;1985;OK Test;OK001;10:00;0;;OK001;
+            123456;7;Test;Runner;M21;0;1985;OK Test;OK001;10:00;0;;;
             """.trimIndent() + "\n",
             EventCsvExports.competitors(raceData())
         )
@@ -135,7 +135,7 @@ class EventCsvExportsTest {
                     competitorCategory = competitorData.competitorCategory.copy(
                         competitor = competitor.copy(
                             index = "REG001",
-                            bibNumber = "B007",
+                            bibNumber = "1007",
                             callSign = "RUN"
                         )
                     )
@@ -148,7 +148,7 @@ class EventCsvExportsTest {
         assertEquals(emptyList(), result.invalidLines)
         val row = result.rows.single()
         assertEquals("REG001", row.index)
-        assertEquals("B007", row.bibNumber)
+        assertEquals("1007", row.bibNumber)
         assertEquals("RUN", row.callSign)
     }
 
@@ -230,7 +230,7 @@ class EventCsvExportsTest {
         assertEquals("M21", row.categoryName)
         assertEquals("OK Test", row.club)
         assertEquals("OK001", row.index)
-        assertEquals("OK001", row.bibNumber)
+        assertEquals("", row.bibNumber)
         assertEquals("", row.callSign)
         assertEquals("10:00", row.startTimeText)
     }
@@ -249,7 +249,30 @@ class EventCsvExportsTest {
 
         assertEquals(emptyList(), result.invalidLines)
         assertEquals(
-            listOf(CompetitorStartCsvImportRow(startNumber = 7, startTimeText = "10:00", siNumber = 123456, bibNumber = "OK001")),
+            listOf(CompetitorStartCsvImportRow(startNumber = 7, startTimeText = "10:00", siNumber = 123456)),
+            result.rows
+        )
+    }
+
+    @Test
+    fun exportedCompetitorStartRowsPreserveBibNumberSeparatelyFromIndex() {
+        val baseRaceData = raceData()
+        val raceData = baseRaceData.copy(
+            competitorData = baseRaceData.competitorData.map { competitorData ->
+                val competitor = competitorData.competitorCategory.competitor
+                competitorData.copy(
+                    competitorCategory = competitorData.competitorCategory.copy(
+                        competitor = competitor.copy(index = "REG001", bibNumber = "1007")
+                    )
+                )
+            }
+        )
+
+        val result = EventCsvImports.parseAndroidCompetitorStartRows(EventCsvExports.competitorStarts(raceData))
+
+        assertEquals(emptyList(), result.invalidLines)
+        assertEquals(
+            listOf(CompetitorStartCsvImportRow(startNumber = 7, startTimeText = "10:00", siNumber = 123456, bibNumber = "1007")),
             result.rows
         )
     }

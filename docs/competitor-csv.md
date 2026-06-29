@@ -11,7 +11,7 @@ si_number;start_number;first_name;last_name;category;gender;birth_year;club;inde
 Columns:
 
 - `si_number`: Optional SportIdent card number.
-- `start_number`: Optional start number. If omitted on import, Radio-Oracle assigns the next available start number.
+- `start_number`: Optional start-list ordering number assigned by Radio-Oracle for race operations. If omitted on import, Radio-Oracle assigns the next available start number. Start numbers are not persistent competitor identifiers and must not be exported or matched as bib numbers.
 - `first_name`: Required competitor first name.
 - `last_name`: Required competitor last name.
 - `category`: Optional category name. If omitted, the competitor is imported without an assigned category.
@@ -22,7 +22,7 @@ Columns:
 - `start_time`: Optional start time relative to the race start, formatted as `HH:MM` or `MM:SS` according to the app's duration parser.
 - `si_rent`: `1` when the SI card is rented, otherwise `0`.
 - `preferred_start_group`: Optional start third assignment for championship-style draws. Use `1`, `2`, or `3`; leave blank for no assignment.
-- `bib_number`: Optional visible bib number. If omitted, Radio-Oracle falls back to `index`.
+- `bib_number`: Optional visible bib number. Bib Number is a numeric code assigned, often arbitrarily, by event organizers to each individual competitor. Bib numbers uniquely identify competitors and are never shared among competitors. All competitors must be assigned a bib number if bib numbers are used at all. If omitted, Radio-Oracle leaves the bib number blank; it does not fall back to `index` or `start_number`.
 - `call_sign`: Optional call sign. Duplicate checks are case-insensitive.
 
 Example:
@@ -87,10 +87,11 @@ start_number;start_time;si_number
 The exported field order is:
 
 ```text
-start_number;last_name;first_name;category;reserved;start_time;index;reserved;club;si_number
+start_number;last_name;first_name;category;reserved;start_time;index;bib_number;club;si_number
 ```
 
 Radio-Oracle matches prior starts to current competitors by `si_number` when
-available. If `si_number` is blank, `start_number` is used as a fallback.
-Because start numbers may change between days, SI numbers give the most reliable
-multi-day fairness history.
+available, then by `bib_number` when it is present and unique. If both are
+blank, `start_number` is used only as an operational fallback for the imported
+start-list row. Because start numbers may change between days, SI numbers and
+true bib numbers give the most reliable multi-day fairness history.

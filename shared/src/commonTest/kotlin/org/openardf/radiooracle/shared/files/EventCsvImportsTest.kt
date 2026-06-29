@@ -152,7 +152,7 @@ class EventCsvImportsTest {
         assertEquals(1980, row.birthYear)
         assertEquals("OK Lokomotiva", row.club)
         assertEquals("OK001", row.index)
-        assertEquals("OK001", row.bibNumber)
+        assertEquals("", row.bibNumber)
         assertEquals("", row.callSign)
         assertEquals("10:00", row.startTimeText)
         assertTrue(row.siRent)
@@ -197,6 +197,7 @@ class EventCsvImportsTest {
         assertEquals("W21", result.rows[0].categoryName)
         assertEquals(null, result.rows[0].startNumber)
         assertFalse(result.rows[0].isMan)
+        assertEquals("", result.rows[0].bibNumber)
         assertTrue(result.rows[1].isMan)
         assertEquals("", result.rows[0].club)
         assertEquals(null, result.rows[1].siNumber)
@@ -307,7 +308,7 @@ class EventCsvImportsTest {
     @Test
     fun parsesExportedCompetitorStartRows() {
         val result = EventCsvImports.parseAndroidCompetitorStartRows(
-            "42;\"Kol;sky\";\"Pa\"\"vel\";\"M;21\";;10:10;OK001;;\"OK; East\";123456"
+            "42;\"Kol;sky\";\"Pa\"\"vel\";\"M;21\";;10:10;OK001;1007;\"OK; East\";123456"
         )
 
         assertEquals(emptyList(), result.invalidLines)
@@ -317,7 +318,7 @@ class EventCsvImportsTest {
                     startNumber = 42,
                     startTimeText = "10:10",
                     siNumber = 123456,
-                    bibNumber = "OK001"
+                    bibNumber = "1007"
                 )
             ),
             result.rows

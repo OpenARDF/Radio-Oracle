@@ -68,7 +68,7 @@ class IofXmlExportsTest {
         assertTrue(xml.contains("<Given>Alice</Given>"))
         assertTrue(xml.contains("<Organisation>"))
         assertTrue(xml.contains("<Name>OK &amp; Test</Name>"))
-        assertTrue(xml.contains("<BibNumber>OK001</BibNumber>"))
+        assertTrue(xml.contains("<BibNumber>1007</BibNumber>"))
         assertTrue(xml.contains("<StartTime>2026-06-01T10:10:00</StartTime>"))
         assertTrue(xml.contains("<ControlCard>123456</ControlCard>"))
     }
@@ -82,6 +82,24 @@ class IofXmlExportsTest {
         assertTrue(xml.contains("<Family>NoTime</Family>"))
         assertTrue(xml.contains("<StartTime>2026-06-01T10:00:00</StartTime>"))
         assertFalse(xml.contains("<ControlCard></ControlCard>"))
+    }
+
+    @Test
+    fun omitsNonNumericBibNumbersFromIofStartList() {
+        val baseRaceData = raceData()
+        val raceData = baseRaceData.copy(
+            competitorData = baseRaceData.competitorData.map { competitorData ->
+                competitorData.copy(
+                    competitorCategory = competitorData.competitorCategory.copy(
+                        competitor = competitorData.competitorCategory.competitor.copy(bibNumber = "B007")
+                    )
+                )
+            }
+        )
+
+        val xml = IofXmlExports.startList(raceData)
+
+        assertFalse(xml.contains("<BibNumber>"))
     }
 
     @Test
@@ -153,7 +171,7 @@ class IofXmlExportsTest {
         assertEquals(listOf("Runner", "NoTime"), imported.parsedData.entries.map { it.person.familyName })
         assertEquals(listOf("Alice", "Bob"), imported.parsedData.entries.map { it.person.givenName })
         assertEquals(listOf("OK001", null), imported.parsedData.entries.map { it.person.personId })
-        assertEquals(listOf("OK001", null), imported.parsedData.entries.map { it.bibNumber })
+        assertEquals(listOf("1007", "1008"), imported.parsedData.entries.map { it.bibNumber })
         assertEquals(listOf(123456, null), imported.parsedData.entries.map { it.controlCard })
         assertEquals(listOf(600L, 0L), imported.parsedData.entries.map { it.relativeStartTimeSeconds })
     }
@@ -214,6 +232,7 @@ class IofXmlExportsTest {
                     index = "OK001",
                     siNumber = 123456,
                     startNumber = 7,
+                    bibNumber = "1007",
                     drawnStartTimeSeconds = 600
                 )
             )
@@ -229,6 +248,7 @@ class IofXmlExportsTest {
                         index = "",
                         siNumber = null,
                         startNumber = 8,
+                        bibNumber = "1008",
                         drawnStartTimeSeconds = null
                     )
                 )
@@ -282,6 +302,7 @@ class IofXmlExportsTest {
         index: String,
         siNumber: Int?,
         startNumber: Int,
+        bibNumber: String = "",
         drawnStartTimeSeconds: Long?
     ): EventCompetitor =
         EventCompetitor(
@@ -297,6 +318,7 @@ class IofXmlExportsTest {
             siNumber = siNumber,
             siRent = false,
             startNumber = startNumber,
+            bibNumber = bibNumber,
             drawnStartTimeSeconds = drawnStartTimeSeconds
         )
 

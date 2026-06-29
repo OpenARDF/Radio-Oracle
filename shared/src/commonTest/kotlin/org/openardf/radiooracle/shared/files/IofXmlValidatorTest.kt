@@ -42,7 +42,7 @@ class IofXmlValidatorTest {
         val xsd = localIofXsd()
 
         val result = IofXmlValidator.validate(
-            validStartListXml().replace("<BibNumber>1</BibNumber>", "<StartNumber>1</StartNumber>"),
+            validStartListXml().replace("<BibNumber>1001</BibNumber>", "<StartNumber>1</StartNumber>"),
             xsd
         )
 
@@ -107,7 +107,7 @@ class IofXmlValidatorTest {
                 </Name>
               </Person>
               <Start>
-                <BibNumber>1</BibNumber>
+                <BibNumber>1001</BibNumber>
                 <StartTime>2026-06-29T09:00:00</StartTime>
               </Start>
             </PersonStart>

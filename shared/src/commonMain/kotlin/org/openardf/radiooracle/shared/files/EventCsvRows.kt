@@ -85,7 +85,7 @@ object EventCsvRows {
             "",
             startTimeText,
             competitor.index,
-            "",
+            competitor.bibNumber,
             competitor.club,
             competitor.siNumber
         )

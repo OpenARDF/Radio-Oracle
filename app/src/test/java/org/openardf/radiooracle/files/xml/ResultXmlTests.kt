@@ -183,7 +183,6 @@ class ResultXmlTests {
                     <Name><Family>Novak</Family><Given>Jan</Given></Name>
                   </Person>
                   <Result>
-                    <BibNumber>1</BibNumber>
                     <StartTime>2025-01-01T10:00:00</StartTime>
                     <FinishTime>2025-01-01T10:12:00</FinishTime>
                     <Time>720</Time>

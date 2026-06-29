@@ -223,7 +223,7 @@ class StartListXmlTests {
                     <Name><Family>Novak</Family><Given>Jan</Given></Name>
                   </Person>
                   <Start>
-                    <BibNumber>1</BibNumber>
+                    <BibNumber>1001</BibNumber>
                     <StartTime>2023-06-15T09:42:00</StartTime>
                     <ControlCard>111</ControlCard>
                   </Start>

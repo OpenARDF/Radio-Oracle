@@ -149,7 +149,7 @@ internal object DesktopTestEventData {
                 projectFile = workingProjectFile,
                 competitorId = competitor.id,
                 club = "Test Club",
-                bibNumber = competitor.startNumber.toString(),
+                bibNumber = (1000 + competitor.startNumber).toString(),
                 callSign = "T${competitor.startNumber}",
                 legacyIndex = competitor.startNumber.toString()
             )

@@ -213,7 +213,7 @@ data class EventCompetitor(
     val startNumber: Int? = null,
     val drawnStartTimeSeconds: Long?,
     val preferredStartGroup: Int? = null,
-    val bibNumber: String = index,
+    val bibNumber: String = "",
     val callSign: String = ""
 ) {
     init {

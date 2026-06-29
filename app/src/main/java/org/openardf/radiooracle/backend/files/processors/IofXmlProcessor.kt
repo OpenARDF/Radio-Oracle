@@ -290,7 +290,7 @@ object IofXmlProcessor : FormatProcessor {
                 }
             },
             unmatchedReadoutData = emptyList()
-        ).toEventRaceData().withAndroidStartNumbersAsIofBibNumbers()
+        ).toEventRaceData()
 
     private fun raceDataForResults(race: Race, results: List<ResultWrapper>) =
         org.openardf.radiooracle.shared.event.EventRaceData(
@@ -317,21 +317,6 @@ object IofXmlProcessor : FormatProcessor {
                 }
             },
             unmatchedReadoutData = emptyList()
-        )
-
-    private fun org.openardf.radiooracle.shared.event.EventRaceData.withAndroidStartNumbersAsIofBibNumbers() =
-        copy(
-            competitorData = competitorData.map { data ->
-                val competitor = data.competitorCategory.competitor
-                data.copy(
-                    competitorCategory = data.competitorCategory.copy(
-                        competitor = competitor.copy(
-                            bibNumber = competitor.startNumber?.takeIf { it > 0 }?.toString()
-                                ?: competitor.bibNumber
-                        )
-                    )
-                )
-            }
         )
 
     private fun IofXmlCompetitorMatchIssue.androidMessage(): String =

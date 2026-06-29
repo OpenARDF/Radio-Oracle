@@ -61,7 +61,7 @@ class IofXmlImportMatcherTest {
             startTime = null,
             entries = listOf(
                 startEntry(personId = null, controlCard = 222222, bibNumber = null, familyName = "Wrong", givenName = "Name"),
-                startEntry(personId = null, controlCard = null, bibNumber = "8", familyName = "Wrong", givenName = "Name"),
+                startEntry(personId = null, controlCard = null, bibNumber = "1008", familyName = "Wrong", givenName = "Name"),
                 startEntry(className = "W21", personId = null, controlCard = null, bibNumber = null, familyName = "Name", givenName = "Cara")
             )
         )
@@ -76,6 +76,24 @@ class IofXmlImportMatcherTest {
         assertEquals(IofXmlCompetitorMatchBasis.NAME, matches[2].basis)
         assertTrue(matches[1].issues.contains(IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD))
         assertTrue(matches[2].issues.contains(IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD))
+    }
+
+    @Test
+    fun startListDoesNotTreatStartNumberAsBibNumber() {
+        val preview = IofStartListPreview(
+            eventName = null,
+            startDate = null,
+            startTime = null,
+            entries = listOf(
+                startEntry(personId = null, controlCard = null, bibNumber = "8", familyName = "Wrong", givenName = "Name")
+            )
+        )
+
+        val match = IofXmlImportMatcher.matchStartList(preview, raceData()).entries.single().match
+
+        assertEquals(null, match.competitorId)
+        assertEquals(null, match.basis)
+        assertTrue(match.issues.contains(IofXmlCompetitorMatchIssue.UNKNOWN_COMPETITOR))
     }
 
     @Test
@@ -208,7 +226,7 @@ class IofXmlImportMatcherTest {
             siRent = false,
             startNumber = startNumber,
             drawnStartTimeSeconds = null,
-            bibNumber = index
+            bibNumber = (1000 + startNumber).toString()
         )
 
     private fun startEntry(

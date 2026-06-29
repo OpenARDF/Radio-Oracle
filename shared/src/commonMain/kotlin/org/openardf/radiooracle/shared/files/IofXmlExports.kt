@@ -138,7 +138,7 @@ object IofXmlExports {
         append("    <PersonStart>\n")
         appendPersonAndOrganisation(competitor, indent = "      ")
         append("      <Start>\n")
-        competitor.bibNumber.takeIf { it.isNotBlank() }?.let { bibNumber ->
+        competitor.bibNumber.takeIf { it.isIofBibNumber() }?.let { bibNumber ->
             appendTextElement("BibNumber", bibNumber, indent = "        ")
         }
         appendTextElement(
@@ -257,6 +257,9 @@ object IofXmlExports {
             .plusSeconds(normalized)
             .format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
     }
+
+    private fun String.isIofBibNumber(): Boolean =
+        isNotBlank() && all { it.isDigit() }
 
     private fun String.xmlEscaped(): String =
         buildString {

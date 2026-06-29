@@ -127,8 +127,7 @@ fun Competitor.toEventCompetitor(): EventCompetitor =
         siNumber = siNumber,
         siRent = siRent,
         startNumber = startNumber.takeIf { it > 0 },
-        drawnStartTimeSeconds = drawnRelativeStartTime?.seconds,
-        bibNumber = index
+        drawnStartTimeSeconds = drawnRelativeStartTime?.seconds
     )
 
 /** Converts the Android Room punch entity into the portable shared event model. */

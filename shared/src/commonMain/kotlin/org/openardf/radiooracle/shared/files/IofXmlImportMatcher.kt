@@ -153,8 +153,7 @@ object IofXmlImportMatcher {
             basis = IofXmlCompetitorMatchBasis.BIB_NUMBER,
             valuePresent = !bibNumber.isNullOrBlank()
         ) { data ->
-            val competitor = data.competitorCategory.competitor
-            competitor.bibNumber == bibNumber || competitor.startNumber?.toString() == bibNumber
+            data.competitorCategory.competitor.bibNumber == bibNumber
         } ?: firstUniqueMatch(
             candidates = categoryCompetitors,
             basis = IofXmlCompetitorMatchBasis.NAME,

@@ -30,7 +30,6 @@
                 <Name>Club A</Name>
             </Organisation>
             <Start>
-                <BibNumber>1</BibNumber>
                 <StartTime>2023-06-15T09:30:00</StartTime>
                 <ControlCard>111</ControlCard>
             </Start>
@@ -47,7 +46,6 @@
                 <Name>Club B</Name>
             </Organisation>
             <Start>
-                <BibNumber>2</BibNumber>
                 <StartTime>2023-06-15T09:31:00</StartTime>
                 <ControlCard>222</ControlCard>
             </Start>

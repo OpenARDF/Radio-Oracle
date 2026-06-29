@@ -56,7 +56,7 @@ data class CompetitorCsvImportRow(
     val startTimeText: String?,
     val siRent: Boolean,
     val preferredStartGroup: Int? = null,
-    val bibNumber: String = index,
+    val bibNumber: String = "",
     val callSign: String = ""
 )
 
@@ -282,8 +282,7 @@ object EventCsvImports {
             birthYear = fields.optionalTrimmedInt(EventCsvFormat.Competitor.BIRTH_YEAR),
             club = fields.optionalTrimmed(EventCsvFormat.Competitor.CLUB),
             index = fields.optionalTrimmed(EventCsvFormat.Competitor.INDEX),
-            bibNumber = fields.optionalTrimmed(EventCsvFormat.Competitor.BIB_NUMBER)
-                .ifBlank { fields.optionalTrimmed(EventCsvFormat.Competitor.INDEX) },
+            bibNumber = fields.optionalTrimmed(EventCsvFormat.Competitor.BIB_NUMBER),
             callSign = fields.optionalTrimmed(EventCsvFormat.Competitor.CALL_SIGN),
             startTimeText = fields.optionalTrimmed(EventCsvFormat.Competitor.START_TIME).takeIf { it.isNotEmpty() },
             siRent = fields.optionalTrimmedInt(EventCsvFormat.Competitor.SI_RENT) == 1,
@@ -319,7 +318,7 @@ object EventCsvImports {
             birthYear = null,
             club = "",
             index = fields[EventCsvFormat.ArdfEventRegistration.INDEX].trim(),
-            bibNumber = fields[EventCsvFormat.ArdfEventRegistration.INDEX].trim(),
+            bibNumber = "",
             callSign = "",
             startTimeText = null,
             siRent = false
@@ -345,7 +344,7 @@ object EventCsvImports {
         } else {
             EventCsvFormat.CompetitorStart.SI_NUMBER
         }
-        val bibNumber = if (exportedShape) fields[EventCsvFormat.CompetitorStart.EXPORTED_INDEX].trim() else ""
+        val bibNumber = if (exportedShape) fields[EventCsvFormat.CompetitorStart.EXPORTED_BIB_NUMBER].trim() else ""
         val startNumber = fields[EventCsvFormat.CompetitorStart.START_NUMBER].trim().toInt()
         val siNumber = fields[siNumberColumn].trim().takeIf { it.isNotEmpty() }?.toInt()
         require(siNumber == null || SportIdentCodes.isSINumberValid(siNumber)) {

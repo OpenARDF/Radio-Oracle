@@ -929,7 +929,7 @@ object EventProjectEditor {
             projectFile = projectFile,
             competitorId = competitorId,
             club = club,
-            bibNumber = index,
+            bibNumber = "",
             callSign = "",
             legacyIndex = index
         )
@@ -1737,7 +1737,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Applies parsed start rows to existing competitors, preferring SI identity over legacy start-number matching. */
+    /** Applies parsed start rows to existing competitors by stable identity fields only. */
     fun importCompetitorStartRows(
         projectFile: EventProjectFile,
         rows: List<CompetitorStartCsvImportRow>
@@ -1748,11 +1748,12 @@ object EventProjectEditor {
             val competitorPosition = row.siNumber?.let { siNumber ->
                 competitorData.indexOfFirst { it.competitorCategory.competitor.siNumber == siNumber }
             }?.takeIf { it >= 0 }
-                ?: competitorData
-                    .withIndex()
-                    .filter { (_, data) -> data.competitorCategory.competitor.startNumber == row.startNumber }
-                    .singleOrNull()
-                    ?.index
+                ?: row.bibNumber.trim().takeIf { it.isNotEmpty() }?.let { bibNumber ->
+                    competitorData.uniqueCompetitorIndex { it.bibNumber.trim() == bibNumber }
+                }
+                ?: row.callSign.trim().takeIf { it.isNotEmpty() }?.uppercase()?.let { callSign ->
+                    competitorData.uniqueCompetitorIndex { it.callSign.trim().uppercase() == callSign }
+                }
             if (competitorPosition != null) {
                 val siNumber = row.siNumber
                 require(
@@ -1786,6 +1787,14 @@ object EventProjectEditor {
             raceData = projectFile.raceData.copy(competitorData = competitorData)
         ))
     }
+
+    private inline fun List<EventCompetitorData>.uniqueCompetitorIndex(
+        predicate: (EventCompetitor) -> Boolean
+    ): Int? =
+        withIndex()
+            .filter { (_, data) -> predicate(data.competitorCategory.competitor) }
+            .singleOrNull()
+            ?.index
 
     /** Applies a parsed IOF StartList to existing competitors after shared match validation. */
     fun importIofStartList(
