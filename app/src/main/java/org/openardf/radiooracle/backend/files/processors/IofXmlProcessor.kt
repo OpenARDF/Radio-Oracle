@@ -32,6 +32,7 @@ import org.openardf.radiooracle.backend.files.constants.DataFormat
 import org.openardf.radiooracle.backend.files.constants.DataType
 import org.openardf.radiooracle.backend.files.wrappers.DataImportWrapper
 import org.openardf.radiooracle.backend.room.entity.Category
+import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.results.ResultsProcessor
@@ -48,6 +49,8 @@ import org.openardf.radiooracle.backend.wrappers.ResultWrapper
 import kotlinx.coroutines.flow.first
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.StandardCategoryRules
+import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.IofXmlCompetitorMatchIssue
 import org.openardf.radiooracle.shared.files.IofXmlImportMatcher
 import org.openardf.radiooracle.shared.files.IofXmlImports
@@ -128,6 +131,13 @@ object IofXmlProcessor : FormatProcessor {
                     schema
                 )
 
+                DataType.COMPETITORS -> importEntryList(
+                    inStream,
+                    race,
+                    dataProcessor,
+                    schema
+                )
+
                 else -> {
                     TODO()
                 }
@@ -162,8 +172,16 @@ object IofXmlProcessor : FormatProcessor {
         race: Race,
         categories: HashSet<CategoryData>
     ): DataImportWrapper {
-        // Competitor import is not implemented yet; return an empty wrapper for callers that probe it.
-        return DataImportWrapper(emptyList(), emptyList(), arrayListOf())
+        val xml = inStream.readBytes().toString(Charsets.UTF_8)
+        val parsed = IofXmlImports.entryList(xml)
+        return entryRowsToImportWrapper(
+            rows = parsed.parsedData.entries,
+            race = race,
+            categories = categories,
+            nextCategoryOrder = (categories.maxOfOrNull { it.category.order } ?: -1) + 1,
+            nextStartNumber = 1,
+            iofWarnings = parsed.unsupportedItems.map { "${it.location}: ${it.reason}" }
+        )
     }
 
     /** Imports IOF XML course/category data into category aggregates. */
@@ -184,6 +202,107 @@ object IofXmlProcessor : FormatProcessor {
             categories = cats,
             invalidLines = arrayListOf(),
             iofWarnings = result.unsupportedItems.map { "${it.location}: ${it.reason}" }
+        )
+    }
+
+    /** Imports an IOF EntryList into Android competitor aggregates. */
+    private suspend fun importEntryList(
+        inStream: InputStream,
+        race: Race,
+        dataProcessor: DataProcessor,
+        iofSchema: String?
+    ): DataImportWrapper {
+        val xml = inStream.readBytes().toString(Charsets.UTF_8)
+        val parsed = iofSchema?.let { schema ->
+            IofXmlImports.validatedEntryList(xml, schema)
+        } ?: IofXmlImports.entryList(xml)
+        return entryRowsToImportWrapper(
+            rows = parsed.parsedData.entries,
+            race = race,
+            categories = dataProcessor.getCategoryDataForRace(race.id).toHashSet(),
+            nextCategoryOrder = dataProcessor.getHighestCategoryOrder(race.id) + 1,
+            nextStartNumber = dataProcessor.getHighestStartNumberByRace(race.id) + 1,
+            iofWarnings = parsed.unsupportedItems.map { "${it.location}: ${it.reason}" }
+        )
+    }
+
+    private fun entryRowsToImportWrapper(
+        rows: List<CompetitorCsvImportRow>,
+        race: Race,
+        categories: HashSet<CategoryData>,
+        nextCategoryOrder: Int,
+        nextStartNumber: Int,
+        iofWarnings: List<String>
+    ): DataImportWrapper {
+        val competitors = ArrayList<CompetitorCategory>()
+        val invalidLines = arrayListOf<Pair<Int, String>>()
+        var currCategoryOrder = nextCategoryOrder
+        var currStartNumber = nextStartNumber
+
+        for ((index, row) in rows.withIndex()) {
+            try {
+                val category = findOrCreateEntryListCategory(row, race, categories, currCategoryOrder)
+                if (category != null && categories.none { it.category.id == category.category.id }) {
+                    currCategoryOrder++
+                    categories.add(category)
+                }
+
+                val competitor = Competitor(
+                    UUID.randomUUID(),
+                    race.id,
+                    category?.category?.id,
+                    row.firstName,
+                    row.lastName,
+                    row.club,
+                    row.personId,
+                    row.isMan,
+                    row.birthYear,
+                    row.siNumber,
+                    row.siRent,
+                    currStartNumber++,
+                    null,
+                    row.bibNumber
+                )
+                competitors += CompetitorCategory(competitor, category?.category)
+            } catch (ex: Exception) {
+                invalidLines += (index + 1) to (ex.message ?: "Invalid IOF EntryList row.")
+            }
+        }
+
+        return DataImportWrapper(
+            competitorCategories = competitors,
+            categories = categories.toList(),
+            invalidLines = invalidLines,
+            iofWarnings = iofWarnings
+        )
+    }
+
+    private fun findOrCreateEntryListCategory(
+        row: CompetitorCsvImportRow,
+        race: Race,
+        categories: HashSet<CategoryData>,
+        order: Int
+    ): CategoryData? {
+        if (row.categoryName.isBlank()) return null
+        categories.find { it.category.name == row.categoryName }?.let { return it }
+        return CategoryData(
+            Category(
+                UUID.randomUUID(),
+                race.id,
+                row.categoryName,
+                StandardCategoryRules.inferIsManFromName(row.categoryName) ?: row.isMan,
+                null,
+                0,
+                0,
+                order,
+                false,
+                null,
+                null,
+                null,
+                ""
+            ),
+            emptyList(),
+            emptyList()
         )
     }
 

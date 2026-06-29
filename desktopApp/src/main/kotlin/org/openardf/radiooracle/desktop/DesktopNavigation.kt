@@ -68,6 +68,7 @@ enum class DesktopNavAction {
     NewEventFile,
     OpenEventFile,
     ImportEventRegWebsite,
+    ImportIofEntryListXml,
     ImportEventRegCompetitorsCsv,
     SaveEventFile,
     CloseEventFile,
@@ -1372,6 +1373,8 @@ object DesktopNavigation {
             "Use Send Event to Android to share the saved Event File over local Wi-Fi.",
         "setup.event-file.receive-android" to
             "Use Receive File from Android to accept an Event File or supporting file over local Wi-Fi.",
+        "setup.event-file.import-iof-entry-list" to
+            "Use Import IOF EntryList XML to import schema-valid IOF EntryList registrations into the current Event File.",
         "setup.event-file.settings" to
             "Use Settings to adjust event-related readout, live result, display, app, and readiness options.",
         "setup.event-file.si-settings" to
@@ -1441,6 +1444,13 @@ object DesktopNavigation {
                 workflow,
                 DesktopNavAction.ImportEventRegWebsite,
                 requiresEventFile = false,
+                section = DesktopSection.Races
+            ),
+            action(
+                "setup.event-file.import-iof-entry-list",
+                "Import IOF EntryList XML...",
+                workflow,
+                DesktopNavAction.ImportIofEntryListXml,
                 section = DesktopSection.Races
             ),
             group(

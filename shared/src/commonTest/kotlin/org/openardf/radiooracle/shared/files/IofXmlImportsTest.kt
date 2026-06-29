@@ -116,6 +116,31 @@ class IofXmlImportsTest {
     }
 
     @Test
+    fun parsesEntryListPreviewAndReportsUnsupportedValidContent() {
+        val result = IofXmlImports.entryList(entryListXml())
+        val first = result.parsedData.entries.first()
+
+        assertEquals("Entry event", result.parsedData.eventName)
+        assertEquals("2026-06-29", result.parsedData.startDate)
+        assertEquals("09:00:00", result.parsedData.startTime)
+        assertEquals(2, result.parsedData.entries.size)
+        assertEquals("Alice", first.firstName)
+        assertEquals("Runner", first.lastName)
+        assertEquals("W21", first.categoryName)
+        assertEquals(false, first.isMan)
+        assertEquals("OK Test", first.club)
+        assertEquals("US001", first.personId)
+        assertEquals(1990, first.birthYear)
+        assertEquals(123456, first.siNumber)
+        assertEquals(false, first.siRent)
+        assertEquals(null, first.startNumber)
+        assertEquals(true, result.parsedData.entries[1].siRent)
+        assertTrue(result.unsupportedItems.any { it.location == "/EntryList/TeamEntry[1]" })
+        assertTrue(result.unsupportedItems.any { it.reason.contains("Multiple requested classes") })
+        assertTrue(result.unsupportedItems.any { it.reason.contains("Multi-race EntryList race-number") })
+    }
+
+    @Test
     fun parsesIofRepositoryCourseDataExample() {
         val xml = iofExample("CourseData_Individual_Step2.xml") ?: return
 
@@ -177,6 +202,22 @@ class IofXmlImportsTest {
         assertEquals("101", result.parsedData.entries.first().bibNumber)
         assertEquals("OK", result.parsedData.entries.first().status)
         assertTrue(result.parsedData.entries.first().splitControls.contains(31))
+    }
+
+    @Test
+    fun parsesIofRepositoryEntryListExample() {
+        val xml = iofExample("EntryList1.xml") ?: return
+
+        val result = IofXmlImports.entryList(xml)
+
+        assertEquals("Example event", result.parsedData.eventName)
+        assertEquals(3, result.parsedData.entries.size)
+        assertEquals("George", result.parsedData.entries.first().firstName)
+        assertEquals("Wood", result.parsedData.entries.first().lastName)
+        assertEquals("Men Elite", result.parsedData.entries.first().categoryName)
+        assertEquals(794021, result.parsedData.entries.first().siNumber)
+        assertEquals("OC Back and Forth", result.parsedData.entries.first().club)
+        assertEquals(true, result.parsedData.entries[1].siRent)
     }
 
     @Test
@@ -319,6 +360,47 @@ class IofXmlImportsTest {
           </ClassResult>
           <TeamResult/>
         </ResultList>
+    """.trimIndent()
+
+    private fun entryListXml(): String = """
+        <EntryList xmlns="http://www.orienteering.org/datastandard/3.0" iofVersion="3.0">
+          <Event>
+            <Name>Entry event</Name>
+            <StartTime>
+              <Date>2026-06-29</Date>
+              <Time>09:00:00</Time>
+            </StartTime>
+          </Event>
+          <TeamEntry>
+            <Name>Relay Team</Name>
+            <Class><Name>Relay</Name></Class>
+          </TeamEntry>
+          <PersonEntry>
+            <Person sex="F">
+              <Id type="USA">US001</Id>
+              <Name>
+                <Family>Runner</Family>
+                <Given>Alice</Given>
+              </Name>
+              <BirthDate>1990-04-02</BirthDate>
+            </Person>
+            <Organisation><Name>OK Test</Name></Organisation>
+            <ControlCard>123456</ControlCard>
+            <Class><Name>W21</Name></Class>
+            <Class><Name>W35</Name></Class>
+            <RaceNumber>1</RaceNumber>
+          </PersonEntry>
+          <PersonEntry>
+            <Person>
+              <Id>US002</Id>
+              <Name>
+                <Family>Rental</Family>
+                <Given>Bob</Given>
+              </Name>
+            </Person>
+            <Class><Name>M21</Name></Class>
+          </PersonEntry>
+        </EntryList>
     """.trimIndent()
 
     private fun iofExample(fileName: String): String? {

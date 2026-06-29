@@ -32,6 +32,7 @@ import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventRace
+import org.openardf.radiooracle.shared.event.StandardCategoryRules
 
 private const val IOF_VERSION = "3.0"
 
@@ -128,6 +129,16 @@ data class IofResultListPreview(
 )
 
 typealias IofResultListImportResult = IofXmlImportResult<IofResultListPreview>
+
+/** Shared preview payload for IOF EntryList imports. */
+data class IofEntryListPreview(
+    val eventName: String?,
+    val startDate: String?,
+    val startTime: String?,
+    val entries: List<CompetitorCsvImportRow>
+)
+
+typealias IofEntryListImportResult = IofXmlImportResult<IofEntryListPreview>
 
 /** Thrown when IOF XML cannot be accepted as IOF 3.0 input. */
 class IofXmlImportException(message: String) : IllegalArgumentException(message)
@@ -388,6 +399,44 @@ object IofXmlImports {
         return resultList(xml)
     }
 
+    /** Parses an IOF EntryList into competitor registration rows. */
+    fun entryList(xml: String): IofEntryListImportResult {
+        val root = parseXml(xml)
+        requireRoot(root, "EntryList")
+        val warnings = mutableListOf<IofXmlUnsupportedItem>()
+        val event = root.child("Event")
+        val eventStart = event?.child("StartTime")
+
+        root.children("TeamEntry").forEachIndexed { index, _ ->
+            warnings += IofXmlUnsupportedItem(
+                messageType = "EntryList",
+                location = "/EntryList/TeamEntry[${index + 1}]",
+                reason = "Team and relay entries are valid IOF data but are not imported as Radio-Oracle individual competitors yet.",
+                severity = IofXmlImportSeverity.UNSUPPORTED
+            )
+        }
+
+        val entries = root.children("PersonEntry").mapIndexed { index, personEntry ->
+            personEntry.toCompetitorImportRow(index, warnings)
+        }
+
+        return IofXmlImportResult(
+            parsedData = IofEntryListPreview(
+                eventName = event?.childText("Name"),
+                startDate = eventStart?.childText("Date"),
+                startTime = eventStart?.childText("Time"),
+                entries = entries
+            ),
+            unsupportedItems = warnings
+        )
+    }
+
+    /** Validates EntryList against the IOF 3.0 schema before building a Radio-Oracle preview. */
+    fun validatedEntryList(xml: String, iofSchema: String): IofEntryListImportResult {
+        requireValidImportXml(xml, iofSchema, expectedRoot = "EntryList")
+        return entryList(xml)
+    }
+
     private fun requireValidImportXml(xml: String, iofSchema: String, expectedRoot: String) {
         val root = parseXml(xml)
         requireRoot(root, expectedRoot)
@@ -477,6 +526,86 @@ object IofXmlImports {
             controlPoints = controlPoints,
             competitors = emptyList()
         )
+    }
+
+    private fun XmlNode.toCompetitorImportRow(
+        index: Int,
+        warnings: MutableList<IofXmlUnsupportedItem>
+    ): CompetitorCsvImportRow {
+        val person = child("Person")
+            ?: throw IofXmlImportException("EntryList person missing at /EntryList/PersonEntry[${index + 1}].")
+        val name = person.child("Name")
+        val classElements = children("Class")
+        val className = classElements.firstOrNull()?.childText("Name").orEmpty()
+        if (classElements.size > 1) {
+            warnings += IofXmlUnsupportedItem(
+                messageType = "EntryList",
+                location = "/EntryList/PersonEntry[${index + 1}]/Class",
+                reason = "Multiple requested classes are valid IOF data but Radio-Oracle imports only the first class for a competitor."
+            )
+        }
+        val controlCards = children("ControlCard")
+        if (controlCards.size > 1) {
+            warnings += IofXmlUnsupportedItem(
+                messageType = "EntryList",
+                location = "/EntryList/PersonEntry[${index + 1}]/ControlCard",
+                reason = "Multiple control cards are valid IOF data but Radio-Oracle imports only the first card number."
+            )
+        }
+        val controlCardText = controlCards.firstOrNull()?.text?.trim()
+        val siNumber = controlCardText?.toIntOrNull()
+        if (!controlCardText.isNullOrBlank() && siNumber == null) {
+            warnings += IofXmlUnsupportedItem(
+                messageType = "EntryList",
+                location = "/EntryList/PersonEntry[${index + 1}]/ControlCard",
+                reason = "Radio-Oracle competitor imports require numeric control-card numbers."
+            )
+        }
+        warnUnsupportedEntryChildren(index, warnings)
+        val sex = person.attribute("sex")
+        val isMan = when (sex) {
+            "M" -> true
+            "F" -> false
+            else -> StandardCategoryRules.inferIsManFromName(className) ?: true
+        }
+        return CompetitorCsvImportRow(
+            siNumber = siNumber,
+            startNumber = null,
+            firstName = name?.childText("Given").orEmpty(),
+            lastName = name?.childText("Family").orEmpty(),
+            categoryName = className,
+            isMan = isMan,
+            birthYear = person.childText("BirthDate")?.take(4)?.toIntOrNull(),
+            club = child("Organisation")?.childText("Name").orEmpty(),
+            personId = person.child("Id")?.text?.trim().orEmpty(),
+            startTimeText = null,
+            siRent = controlCards.isEmpty(),
+            preferredStartGroup = null,
+            bibNumber = "",
+            callSign = ""
+        )
+    }
+
+    private fun XmlNode.warnUnsupportedEntryChildren(
+        index: Int,
+        warnings: MutableList<IofXmlUnsupportedItem>
+    ) {
+        val unsupportedChildren = listOf(
+            "RaceNumber" to "Multi-race EntryList race-number selections are not represented in Radio-Oracle competitor imports.",
+            "AssignedFee" to "Entry fees and payment status are valid IOF data but are not represented in Radio-Oracle competitors.",
+            "ServiceRequest" to "Entry service requests are valid IOF data but are not represented in Radio-Oracle competitors.",
+            "StartTimeAllocationRequest" to "Start-time allocation preferences are valid IOF data but are not imported into Radio-Oracle start draw settings.",
+            "Score" to "Entry ranking scores are valid IOF data but are not represented in Radio-Oracle competitors."
+        )
+        unsupportedChildren.forEach { (childName, reason) ->
+            if (children(childName).isNotEmpty()) {
+                warnings += IofXmlUnsupportedItem(
+                    messageType = "EntryList",
+                    location = "/EntryList/PersonEntry[${index + 1}]/$childName",
+                    reason = reason
+                )
+            }
+        }
     }
 
     private fun XmlNode.warnUnsupportedCoursePresentationData(

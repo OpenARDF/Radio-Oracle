@@ -195,9 +195,11 @@ import org.openardf.radiooracle.shared.event.defaultTimeLimitMinutes
 import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
+import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.files.IofCourseDataPreview
+import org.openardf.radiooracle.shared.files.IofEntryListPreview
 import org.openardf.radiooracle.shared.files.IofResultListPreview
 import org.openardf.radiooracle.shared.files.IofStartListPreview
 import org.openardf.radiooracle.shared.files.IofXmlImports
@@ -524,6 +526,7 @@ fun main(args: Array<String>) = application {
         var pendingCourseKmlKmzCategoryMapping by remember { mutableStateOf<PendingCourseKmlKmzCategoryMapping?>(null) }
         var pendingCategoriesCsvImportReview by remember { mutableStateOf<PendingCategoriesCsvImportReview?>(null) }
         var pendingIofCourseDataImportReview by remember { mutableStateOf<PendingIofCourseDataImportReview?>(null) }
+        var pendingIofEntryListImportReview by remember { mutableStateOf<PendingIofEntryListImportReview?>(null) }
         var pendingIofStartListImportReview by remember { mutableStateOf<PendingIofStartListImportReview?>(null) }
         var pendingIofResultListImportReview by remember { mutableStateOf<PendingIofResultListImportReview?>(null) }
         var pendingControlsCsvImportReview by remember { mutableStateOf<PendingControlsCsvImportReview?>(null) }
@@ -3864,6 +3867,89 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun importIofEntryListXml() {
+            DesktopFileDialogs.chooseImportIofXml("Import IOF EntryList XML")?.let { path ->
+                runCatching {
+                    val currentProject = projectSession.currentProject
+                        ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
+                    val parsed = IofXmlImports.validatedEntryList(
+                        Files.readString(path),
+                        IofXmlSchemaResource.loadBundledSchema()
+                    )
+                    val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
+                        projectFile = currentProject,
+                        rows = parsed.parsedData.entries,
+                        competitorIdFactory = { UUID.randomUUID().toString() },
+                        categoryIdFactory = { UUID.randomUUID().toString() },
+                        duplicatePolicy = CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY,
+                        createMissingCategories = true
+                    )
+                    val warningLines = iofWarningLines(parsed.unsupportedItems, outcome.warnings)
+                    pendingIofEntryListImportReview = PendingIofEntryListImportReview(
+                        path = path,
+                        entryList = parsed.parsedData,
+                        missingCategoryNames = missingCompetitorCategoryNames(parsed.parsedData.entries, currentProject),
+                        importedCount = outcome.importedCount,
+                        updatedCount = outcome.updatedCount,
+                        skippedCount = outcome.skippedCount,
+                        warningLines = warningLines
+                    )
+                    projectStatusText = "Review IOF EntryList import before applying it."
+                }.onFailure { error ->
+                    projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
+        fun applyIofEntryListImport(review: PendingIofEntryListImportReview) {
+            runCatching {
+                checkpointBeforeImport("IOF EntryList import ${review.path.fileName}")
+                var importedRows = 0
+                var updatedRows = 0
+                var skippedRows = 0
+                var importWarnings = emptyList<String>()
+                projectFile = projectSession.updateCurrentProject { currentProject ->
+                    val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
+                        projectFile = currentProject,
+                        rows = review.entryList.entries,
+                        competitorIdFactory = { UUID.randomUUID().toString() },
+                        categoryIdFactory = { UUID.randomUUID().toString() },
+                        duplicatePolicy = CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY,
+                        createMissingCategories = true
+                    )
+                    importedRows = outcome.importedCount
+                    updatedRows = outcome.updatedCount
+                    skippedRows = outcome.skippedCount
+                    importWarnings = outcome.warnings
+                    outcome.projectFile
+                }
+                syncProjectState()
+                pendingIofEntryListImportReview = null
+                val warningLines = review.warningLines + importWarnings
+                    .map { warning -> "Import warning: $warning" }
+                    .filterNot { it in review.warningLines }
+                recentImportReport = DesktopImportReport(
+                    title = "IOF EntryList XML: ${review.path.fileName}",
+                    lines = withRollbackBackupLine(listOf(
+                        "$importedRows competitors added.",
+                        "$updatedRows competitors updated.",
+                        "$skippedRows competitors skipped."
+                    ) + warningLines)
+                )
+                projectStatusText = buildString {
+                    append("Imported IOF EntryList ${review.path.fileName}: ")
+                    append("added $importedRows, updated $updatedRows, skipped $skippedRows.")
+                    if (warningLines.isNotEmpty()) {
+                        append(" ${warningLines.size} warning")
+                        append(if (warningLines.size == 1) "" else "s")
+                        append(".")
+                    }
+                }
+            }.onFailure { error ->
+                projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
         fun importCategoriesCsv() {
             DesktopFileDialogs.chooseImportCsv("Import Categories CSV")?.let { path ->
                 runCatching {
@@ -4848,6 +4934,7 @@ fun main(args: Array<String>) = application {
                     }
                 DesktopNavAction.CloseEventFile,
                 DesktopNavAction.ImportEventRegCompetitorsCsv,
+                DesktopNavAction.ImportIofEntryListXml,
                 DesktopNavAction.ImportCategoriesCsv,
                 DesktopNavAction.ImportIofCourseDataXml,
                 DesktopNavAction.ImportCourseKmlKmz,
@@ -4952,6 +5039,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ReceiveFileFromAndroid -> receiveFileFromAndroid()
                 DesktopNavAction.ImportEventRegWebsite -> showEventRegImportDialog()
                 DesktopNavAction.ImportEventRegCompetitorsCsv -> showEventRegCompetitorCsvImportDialog()
+                DesktopNavAction.ImportIofEntryListXml -> importIofEntryListXml()
                 DesktopNavAction.SaveEventFile -> saveCurrentProject()
                 DesktopNavAction.CloseEventFile -> requestCloseEventFile()
                 DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
@@ -5504,6 +5592,16 @@ fun main(args: Array<String>) = application {
                 onCancel = {
                     pendingIofCourseDataImportReview = null
                     projectStatusText = "IOF CourseData import canceled. No changes applied."
+                }
+            )
+        }
+        pendingIofEntryListImportReview?.let { review ->
+            IofEntryListImportReviewDialog(
+                review = review,
+                onImport = { applyIofEntryListImport(review) },
+                onCancel = {
+                    pendingIofEntryListImportReview = null
+                    projectStatusText = "IOF EntryList import canceled. No changes applied."
                 }
             )
         }
@@ -7088,6 +7186,65 @@ private fun CategoriesCsvImportReviewDialog(
 }
 
 @Composable
+private fun IofEntryListImportReviewDialog(
+    review: PendingIofEntryListImportReview,
+    onImport: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Review IOF EntryList import") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 380.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("File: ${review.path.fileName}")
+                review.entryList.eventName?.takeIf { it.isNotBlank() }?.let { eventName ->
+                    Text("Event: $eventName")
+                }
+                Text("Entry rows in file: ${review.entryList.entries.size}")
+                Text("Competitors to add: ${review.importedCount}")
+                Text("Competitors to update: ${review.updatedCount}")
+                if (review.skippedCount > 0) {
+                    Text(
+                        text = "Competitors to skip: ${review.skippedCount}",
+                        color = DesktopPalette.Warning
+                    )
+                }
+                if (review.missingCategoryNames.isNotEmpty()) {
+                    Text("Categories to create: ${review.missingCategoryNames.joinToString()}")
+                }
+                review.warningLines.forEach { warning ->
+                    Text(
+                        text = warning,
+                        color = DesktopPalette.Warning,
+                        fontSize = 12.sp
+                    )
+                }
+                Text(
+                    "This import adds or updates competitors from IOF EntryList PersonEntry rows using Person/Id as Person ID. IOF EntryList RaceNumber is multi-race participation data, not a bib number.",
+                    fontSize = 12.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onImport) {
+                ButtonLabel("Import EntryList")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                ButtonLabel("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
 private fun IofStartListImportReviewDialog(
     review: PendingIofStartListImportReview,
     onImport: () -> Unit,
@@ -8531,6 +8688,16 @@ private data class PendingIofCourseDataImportReview(
     val path: Path,
     val courseData: IofCourseDataPreview,
     val preview: DesktopCategoryCsvImportPreview,
+    val warningLines: List<String>
+)
+
+private data class PendingIofEntryListImportReview(
+    val path: Path,
+    val entryList: IofEntryListPreview,
+    val missingCategoryNames: List<String>,
+    val importedCount: Int,
+    val updatedCount: Int,
+    val skippedCount: Int,
     val warningLines: List<String>
 )
 
@@ -18719,8 +18886,12 @@ private fun importStatusText(action: String, importedRows: Int, invalidRows: Int
 
 private fun missingCompetitorCategoryNames(path: Path, projectFile: EventProjectFile): List<String> {
     val result = EventCsvImports.parseAndroidCompetitorRows(Files.readString(path))
+    return missingCompetitorCategoryNames(result.rows, projectFile)
+}
+
+private fun missingCompetitorCategoryNames(rows: List<CompetitorCsvImportRow>, projectFile: EventProjectFile): List<String> {
     val existingCategoryNames = projectFile.raceData.categories.mapTo(mutableSetOf()) { it.category.name }
-    return result.rows
+    return rows
         .map { row -> row.categoryName.trim() }
         .filter { it.isNotEmpty() }
         .distinct()

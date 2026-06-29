@@ -583,7 +583,7 @@
     <string-array name="competitor_data_formats">
         <item>@string/data_format_csv</item>
         <item>@string/data_format_json</item>
-        <!--        <item>@string/data_format_xml</item>-->
+        <item>@string/data_format_xml</item>
     </string-array>
 
     <string-array name="competitor_start_data_formats">

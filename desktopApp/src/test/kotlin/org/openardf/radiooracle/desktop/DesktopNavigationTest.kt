@@ -37,6 +37,7 @@ class DesktopNavigationTest {
         "New Event File",
         "Load Event File...",
         "Import EventReg Website...",
+        "Import IOF EntryList XML...",
         "Android...",
         "Settings",
         "Save Event",
@@ -646,6 +647,7 @@ class DesktopNavigationTest {
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.NewEventFile }.requiresEventFile)
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.OpenEventFile }.requiresEventFile)
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.ImportEventRegWebsite }.requiresEventFile)
+        assertTrue(eventFileActions.first { it.action == DesktopNavAction.ImportIofEntryListXml }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFile }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.CloseEventFile }.requiresEventFile)
         val androidActions = eventFileActions.first { it.label == "Android..." }.children
