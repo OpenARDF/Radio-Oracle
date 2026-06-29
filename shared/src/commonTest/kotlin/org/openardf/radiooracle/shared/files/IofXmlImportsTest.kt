@@ -409,7 +409,7 @@ class IofXmlImportsTest {
     }
 
     private fun localIofXsd(): String =
-        Files.readString(iofSchemaPath())
+        Files.readAllBytes(iofSchemaPath()).decodeToString()
 
     private fun iofSchemaPath(): Path {
         val configuredPath = sequenceOf(

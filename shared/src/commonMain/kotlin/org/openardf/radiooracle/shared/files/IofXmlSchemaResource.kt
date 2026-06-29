@@ -24,12 +24,35 @@
 
 package org.openardf.radiooracle.shared.files
 
+import java.io.File
+
 /** Loads the packaged IOF XML 3.0 schema used for production import validation. */
 object IofXmlSchemaResource {
     private const val RESOURCE_PATH = "iof/IOF.xsd"
 
-    fun loadBundledSchema(): String =
-        requireNotNull(IofXmlSchemaResource::class.java.classLoader?.getResourceAsStream(RESOURCE_PATH)) {
-            "Bundled IOF XML 3.0 schema resource not found: $RESOURCE_PATH"
-        }.bufferedReader().use { it.readText() }
+    fun loadBundledSchema(): String {
+        val classLoaders = listOfNotNull(
+            Thread.currentThread().contextClassLoader,
+            IofXmlSchemaResource::class.java.classLoader,
+            ClassLoader.getSystemClassLoader()
+        ).distinct()
+        classLoaders.forEach { classLoader ->
+            classLoader.getResourceAsStream(RESOURCE_PATH)
+                ?.bufferedReader()
+                ?.use { return it.readText() }
+        }
+        schemaFileCandidates().firstOrNull(File::isFile)?.let { return it.readText() }
+        throw IllegalArgumentException("Bundled IOF XML 3.0 schema resource not found: $RESOURCE_PATH")
+    }
+
+    private fun schemaFileCandidates(): List<File> {
+        val workingDirectory = File(System.getProperty("user.dir") ?: ".")
+        return listOf(
+            File(workingDirectory, "shared/src/commonMain/resources/$RESOURCE_PATH"),
+            File(workingDirectory, "../shared/src/commonMain/resources/$RESOURCE_PATH"),
+            File(workingDirectory, "src/commonMain/resources/$RESOURCE_PATH"),
+            File(workingDirectory, "app/src/main/assets/$RESOURCE_PATH"),
+            File(workingDirectory, "../app/src/main/assets/$RESOURCE_PATH")
+        )
+    }
 }

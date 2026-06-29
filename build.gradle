@@ -38,7 +38,7 @@ plugins {
     alias(libs.plugins.crashlytics) apply false
 }
 
-ext.radioOracleVersion = "1.0.22"
+ext.radioOracleVersion = "1.0.23"
 
 subprojects {
     tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {

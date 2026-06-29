@@ -187,11 +187,11 @@ class ResultXmlTests {
                     <FinishTime>2025-01-01T10:12:00</FinishTime>
                     <Time>720</Time>
                     <Status>OK</Status>
-                    <ControlCard>111</ControlCard>
                     <SplitTime>
                       <ControlCode>31</ControlCode>
                       <Time>300</Time>
                     </SplitTime>
+                    <ControlCard>111</ControlCard>
                   </Result>
                 </PersonResult>
               </ClassResult>
