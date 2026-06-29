@@ -197,6 +197,7 @@ import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvImports
+import org.openardf.radiooracle.shared.files.IofCourseDataPreview
 import org.openardf.radiooracle.shared.files.IofXmlImports
 import org.openardf.radiooracle.shared.files.IofXmlSchemaResource
 import org.openardf.radiooracle.shared.files.IofXmlUnsupportedItem
@@ -520,6 +521,7 @@ fun main(args: Array<String>) = application {
         var pendingCourseKmlKmzImportWarning by remember { mutableStateOf<PendingCourseKmlKmzImportWarning?>(null) }
         var pendingCourseKmlKmzCategoryMapping by remember { mutableStateOf<PendingCourseKmlKmzCategoryMapping?>(null) }
         var pendingCategoriesCsvImportReview by remember { mutableStateOf<PendingCategoriesCsvImportReview?>(null) }
+        var pendingIofCourseDataImportReview by remember { mutableStateOf<PendingIofCourseDataImportReview?>(null) }
         var pendingControlsCsvImportReview by remember { mutableStateOf<PendingControlsCsvImportReview?>(null) }
         var courseKmlKmzElevationProgress by remember { mutableStateOf<CourseKmlKmzElevationProgressUiState?>(null) }
         var courseKmlKmzElevationJob by remember { mutableStateOf<Job?>(null) }
@@ -4087,34 +4089,55 @@ fun main(args: Array<String>) = application {
                         IofXmlSchemaResource.loadBundledSchema(),
                         currentProject.raceData.race
                     )
-                    checkpointBeforeImport("IOF CourseData import ${path.fileName}")
-                    val outcome = EventProjectEditor.importIofCourseData(currentProject, parsed.parsedData)
-                    projectFile = projectSession.updateCurrentProject { outcome.projectFile }
-                    syncProjectState()
                     val warningLines = iofWarningLines(parsed.unsupportedItems)
-                    recentImportReport = DesktopImportReport(
-                        title = "IOF CourseData XML: ${path.fileName}",
-                        lines = withRollbackBackupLine(listOf(
-                            "${outcome.importedCount} categories added.",
-                            "${outcome.updatedCount} categories updated by name."
-                        ) + warningLines)
+                    pendingIofCourseDataImportReview = PendingIofCourseDataImportReview(
+                        path = path,
+                        courseData = parsed.parsedData,
+                        preview = DesktopImportPreviews.categoryDataPreview(
+                            projectFile = currentProject,
+                            sourceName = path.fileName.toString(),
+                            categories = parsed.parsedData.categories
+                        ),
+                        warningLines = warningLines
                     )
-                    projectStatusText = buildString {
-                        append("Imported ${outcome.importedCount} IOF CourseData categor")
-                        append(if (outcome.importedCount == 1) "y" else "ies")
-                        append(" from ${path.fileName}.")
-                        if (outcome.updatedCount > 0) {
-                            append(" Updated ${outcome.updatedCount}.")
-                        }
-                        if (parsed.unsupportedItems.isNotEmpty()) {
-                            append(" ${parsed.unsupportedItems.size} warning")
-                            append(if (parsed.unsupportedItems.size == 1) "" else "s")
-                            append(".")
-                        }
-                    }
+                    projectStatusText = "Review IOF CourseData import before applying it."
                 }.onFailure { error ->
                     projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
                 }
+            }
+        }
+
+        fun applyIofCourseDataImport(review: PendingIofCourseDataImportReview) {
+            runCatching {
+                val currentProject = projectSession.currentProject
+                    ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
+                checkpointBeforeImport("IOF CourseData import ${review.path.fileName}")
+                val outcome = EventProjectEditor.importIofCourseData(currentProject, review.courseData)
+                projectFile = projectSession.updateCurrentProject { outcome.projectFile }
+                syncProjectState()
+                pendingIofCourseDataImportReview = null
+                recentImportReport = DesktopImportReport(
+                    title = "IOF CourseData XML: ${review.path.fileName}",
+                    lines = withRollbackBackupLine(listOf(
+                        "${outcome.importedCount} categories added.",
+                        "${outcome.updatedCount} categories updated by name."
+                    ) + review.warningLines)
+                )
+                projectStatusText = buildString {
+                    append("Imported ${outcome.importedCount} IOF CourseData categor")
+                    append(if (outcome.importedCount == 1) "y" else "ies")
+                    append(" from ${review.path.fileName}.")
+                    if (outcome.updatedCount > 0) {
+                        append(" Updated ${outcome.updatedCount}.")
+                    }
+                    if (review.warningLines.isNotEmpty()) {
+                        append(" ${review.warningLines.size} warning")
+                        append(if (review.warningLines.size == 1) "" else "s")
+                        append(".")
+                    }
+                }
+            }.onFailure { error ->
+                projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
             }
         }
 
@@ -5424,6 +5447,16 @@ fun main(args: Array<String>) = application {
                 onCancel = {
                     pendingCategoriesCsvImportReview = null
                     projectStatusText = "Categories CSV import canceled. No changes applied."
+                }
+            )
+        }
+        pendingIofCourseDataImportReview?.let { review ->
+            IofCourseDataImportReviewDialog(
+                review = review,
+                onImport = { applyIofCourseDataImport(review) },
+                onCancel = {
+                    pendingIofCourseDataImportReview = null
+                    projectStatusText = "IOF CourseData import canceled. No changes applied."
                 }
             )
         }
@@ -6988,6 +7021,72 @@ private fun CategoriesCsvImportReviewDialog(
 }
 
 @Composable
+private fun IofCourseDataImportReviewDialog(
+    review: PendingIofCourseDataImportReview,
+    onImport: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val preview = review.preview
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Review IOF CourseData import") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 380.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("File: ${review.path.fileName}")
+                preview.eventTypeWarnings.forEach { warning ->
+                    Text(
+                        text = warning,
+                        color = DesktopPalette.Error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text("Categories to add: ${preview.addedCount}")
+                Text("Categories to update: ${preview.updatedCount}")
+                if (preview.affectedCompetitorCount > 0) {
+                    Text("Updated categories currently include ${preview.affectedCompetitorCount} competitor${if (preview.affectedCompetitorCount == 1) "" else "s"}.")
+                }
+                if (preview.categoriesWithAssignedControlsReplacedCount > 0) {
+                    Text(
+                        text = "Assigned controls will be replaced for ${preview.categoriesWithAssignedControlsReplacedCount} existing categor${if (preview.categoriesWithAssignedControlsReplacedCount == 1) "y" else "ies"}.",
+                        color = DesktopPalette.Warning
+                    )
+                }
+                if (preview.categoriesWithProtectedCoursePreservedCount > 0) {
+                    Text("Protected controls/route course data will be preserved for ${preview.categoriesWithProtectedCoursePreservedCount} updated categor${if (preview.categoriesWithProtectedCoursePreservedCount == 1) "y" else "ies"}.")
+                }
+                review.warningLines.forEach { warning ->
+                    Text(
+                        text = warning,
+                        color = DesktopPalette.Warning,
+                        fontSize = 12.sp
+                    )
+                }
+                Text(
+                    "This import updates existing categories by name and appends new names. It does not delete categories missing from the IOF CourseData XML.",
+                    fontSize = 12.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onImport) {
+                ButtonLabel("Import CourseData")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                ButtonLabel("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
 private fun ControlsCsvImportReviewDialog(
     review: PendingControlsCsvImportReview,
     onImport: (syncMissingControls: Boolean) -> Unit,
@@ -8249,6 +8348,13 @@ private data class PendingCategoriesCsvImportReview(
     val rows: List<CategoryCsvImportRow>,
     val invalidLineCount: Int,
     val preview: DesktopCategoryCsvImportPreview
+)
+
+private data class PendingIofCourseDataImportReview(
+    val path: Path,
+    val courseData: IofCourseDataPreview,
+    val preview: DesktopCategoryCsvImportPreview,
+    val warningLines: List<String>
 )
 
 private data class PendingControlsCsvImportReview(

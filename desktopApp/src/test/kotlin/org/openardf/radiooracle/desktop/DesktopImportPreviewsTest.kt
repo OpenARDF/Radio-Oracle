@@ -86,6 +86,61 @@ class DesktopImportPreviewsTest {
     }
 
     @Test
+    fun previewsIofCourseDataCategoryUpdates() {
+        val raceId = "race"
+        val preview = DesktopImportPreviews.categoryDataPreview(
+            projectFile = projectFile(includeCompetitor = true, encryptedCourseInfo = "encrypted-course"),
+            sourceName = "CourseData.xml",
+            categories = listOf(
+                EventCategoryData(
+                    category = EventCategory(
+                        id = "iof-m21",
+                        raceId = raceId,
+                        name = "M21",
+                        isMan = true,
+                        maxAge = null,
+                        lengthMeters = 4_500,
+                        climbMeters = 120,
+                        order = 0,
+                        differentProperties = false,
+                        raceType = null,
+                        raceBand = null,
+                        timeLimitSeconds = null,
+                        controlPointsString = ""
+                    ),
+                    controlPoints = listOf(EventControlPoint("m21-31", "iof-m21", 31, ControlPointType.CONTROL, 1)),
+                    competitors = emptyList()
+                ),
+                EventCategoryData(
+                    category = EventCategory(
+                        id = "iof-w21",
+                        raceId = raceId,
+                        name = "W21",
+                        isMan = false,
+                        maxAge = null,
+                        lengthMeters = 3_900,
+                        climbMeters = 80,
+                        order = 1,
+                        differentProperties = false,
+                        raceType = null,
+                        raceBand = null,
+                        timeLimitSeconds = null,
+                        controlPointsString = ""
+                    ),
+                    controlPoints = listOf(EventControlPoint("w21-32", "iof-w21", 32, ControlPointType.CONTROL, 1)),
+                    competitors = emptyList()
+                )
+            )
+        )
+
+        assertEquals(1, preview.addedCount)
+        assertEquals(1, preview.updatedCount)
+        assertEquals(1, preview.affectedCompetitorCount)
+        assertEquals(1, preview.categoriesWithAssignedControlsReplacedCount)
+        assertEquals(1, preview.categoriesWithProtectedCoursePreservedCount)
+    }
+
+    @Test
     fun previewsControlsCsvChangesAndAffectedCourses() {
         val preview = DesktopImportPreviews.controlsCsvPreview(
             projectFile = projectFile(),
