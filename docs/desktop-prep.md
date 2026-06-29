@@ -314,6 +314,12 @@ alignment before any intentional publish. It also runs the Gradle jDeploy
 bundle verification, which fails if any required Windows, Linux, or macOS Skiko
 runtime jar is missing from the staged classpath.
 
+`npm run jdeploy:pack-preview` and `npm run jdeploy:release-preflight` both
+generate and inspect desktop jDeploy metadata. Run them serially. The npm
+scripts use `scripts/jdeploy-exclusive.mjs` to serialize accidental concurrent
+local runs, but release operators should still avoid starting those commands in
+parallel.
+
 Full release builds must use an unsuffixed desktop display version that matches
 the npm/jDeploy package version. Set `RADIO_ORACLE_RELEASE_BUILD=1`, or pass
 `-PradioOracle.releaseBuild=true` to Gradle, when preparing a publishable
