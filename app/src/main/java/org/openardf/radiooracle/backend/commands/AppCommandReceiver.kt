@@ -37,12 +37,29 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.DesktopFileTransferUploader
+import org.openardf.radiooracle.backend.files.DataImportValidator
+import org.openardf.radiooracle.backend.files.constants.DataType
+import org.openardf.radiooracle.backend.files.processors.IofXmlProcessor
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.ARDFRepository
+import org.openardf.radiooracle.backend.room.entity.Category
+import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.Race
+import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
+import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
+import org.openardf.radiooracle.backend.room.enums.RaceBand
+import org.openardf.radiooracle.backend.room.enums.RaceLevel
+import org.openardf.radiooracle.backend.room.enums.RaceType
+import org.openardf.radiooracle.backend.results.ResultsProcessor
 import org.openardf.radiooracle.shared.event.EventSeriesPackageFingerprints
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.time.Duration
+import java.time.LocalDateTime
 import java.util.UUID
 import java.util.zip.ZipInputStream
 
@@ -84,6 +101,7 @@ class AppCommandReceiver : BroadcastReceiver() {
             ACTION_SEND_EVENT_OR_SERIES_TO_DESKTOP -> sendEventOrSeriesToDesktop(dataProcessor, intent)
             ACTION_SEND_SERIES_TO_DESKTOP -> sendSeriesToDesktop(dataProcessor, intent)
             ACTION_LOG_SERIES_PACKAGE_FINGERPRINT -> logSeriesPackageFingerprint(dataProcessor, intent)
+            ACTION_RUN_IOF_XML_SMOKE -> runIofXmlSmoke(context, dataProcessor, intent)
             ACTION_PRINT_STATUS -> printStatus(context)
             ACTION_PRINT_FINISH_TICKET -> printFinishTicket(dataProcessor, intent)
             ACTION_PRINT_LATEST_FINISH_TICKET -> printLatestFinishTicket(dataProcessor, intent)
@@ -100,6 +118,207 @@ class AppCommandReceiver : BroadcastReceiver() {
         DataProcessor.initialize(context)
         return DataProcessor.get()
     }
+
+    private suspend fun runIofXmlSmoke(context: Context, dataProcessor: DataProcessor, intent: Intent) {
+        val externalRoot = context.getExternalFilesDir(null) ?: context.filesDir
+        val fixtureDir = context.commandFile(
+            intent.getStringExtra(EXTRA_FIXTURE_DIR)
+                ?: File(externalRoot, "iof-smoke/input").absolutePath
+        )
+        val outputDir = context.commandFile(
+            intent.getStringExtra(EXTRA_OUTPUT_DIR)
+                ?: File(externalRoot, "iof-smoke/output").absolutePath
+        ).also { it.mkdirs() }
+        val keepEvent = intent.getBooleanExtra(EXTRA_KEEP_EVENT, true)
+        val summary = mutableListOf<String>()
+        val raceData = iofSmokeRaceData()
+        val race = raceData.race
+
+        fun fixtureFile(name: String): File =
+            File(fixtureDir, name).also { file ->
+                require(file.isFile) { "IOF smoke fixture not found: ${file.absolutePath}" }
+            }
+
+        fun appendImportWarnings(label: String, warnings: List<String>) {
+            warnings.forEach { warning ->
+                summary += "$label warning=$warning"
+            }
+        }
+
+        try {
+            dataProcessor.saveRaceData(raceData)
+            dataProcessor.setCurrentRace(race.id)
+            summary += "event id=${race.id} name=${race.name}"
+
+            val courseImport = IofXmlProcessor.importData(
+                fixtureFile("course.xml").inputStream(),
+                DataType.CATEGORIES,
+                race,
+                dataProcessor
+            )
+            DataImportValidator.validateDataImport(courseImport, race.id, DataType.CATEGORIES, dataProcessor, context)
+            dataProcessor.saveDataImportWrapper(courseImport)
+            summary += "courseData importedCategories=${courseImport.categories.size}"
+            appendImportWarnings("courseData", courseImport.iofWarnings)
+            val resultCategory = dataProcessor.getCategoryByName("A", race.id)
+                ?: error("IOF smoke CourseData did not import category A.")
+            dataProcessor.createOrUpdateCompetitor(iofSmokeResultCompetitor(race.id, resultCategory.id))
+            summary += "courseData resultCompetitorCategory=${resultCategory.name}"
+
+            val startImport = IofXmlProcessor.importData(
+                fixtureFile("start.xml").inputStream(),
+                DataType.COMPETITOR_STARTS,
+                race,
+                dataProcessor
+            )
+            require(startImport.invalidLines.isEmpty()) {
+                startImport.invalidLines.joinToString(prefix = "StartList import failed: ") { "${it.first}:${it.second}" }
+            }
+            DataImportValidator.validateDataImport(startImport, race.id, DataType.COMPETITOR_STARTS, dataProcessor, context)
+            startImport.competitorCategories.forEach { dataProcessor.createOrUpdateCompetitor(it.competitor) }
+            summary += "startList updatedCompetitors=${startImport.competitorCategories.size}"
+            appendImportWarnings("startList", startImport.iofWarnings)
+
+            val resultImport = IofXmlProcessor.importData(
+                fixtureFile("results.xml").inputStream(),
+                DataType.RESULTS_LIVE,
+                race,
+                dataProcessor
+            )
+            require(resultImport.invalidLines.isEmpty()) {
+                resultImport.invalidLines.joinToString(prefix = "ResultList import failed: ") { "${it.first}:${it.second}" }
+            }
+            DataImportValidator.validateDataImport(resultImport, race.id, DataType.RESULTS_LIVE, dataProcessor, context)
+            resultImport.readoutData.forEach { readout ->
+                dataProcessor.saveResultPunches(readout.result, readout.punches.map { it.punch })
+            }
+            dataProcessor.updateResultsByRace(race.id)
+            summary += "resultList importedReadouts=${resultImport.readoutData.size}"
+            appendImportWarnings("resultList", resultImport.iofWarnings)
+
+            val startListOutput = File(outputDir, "exported-start-list.xml")
+            ByteArrayOutputStream().use { output ->
+                IofXmlProcessor.exportStartList(output, race, dataProcessor.getCategoryDataForRace(race.id), dataProcessor)
+                startListOutput.writeBytes(output.toByteArray())
+            }
+
+            val resultListOutput = File(outputDir, "exported-result-list.xml")
+            val resultWrappers = ResultsProcessor.getResultWrapperFlowByRace(race.id, dataProcessor)
+                .first()
+                .filter { it.category != null }
+            ByteArrayOutputStream().use { output ->
+                IofXmlProcessor.exportResults(output, race, resultWrappers, dataProcessor)
+                resultListOutput.writeBytes(output.toByteArray())
+            }
+
+            summary += "exports startList=${startListOutput.absolutePath}"
+            summary += "exports resultList=${resultListOutput.absolutePath}"
+            summary += "manualPickerFiles expectedUnder=/sdcard/Download/RadioOracleIofSmoke"
+            summary += "status=ok"
+        } finally {
+            if (!keepEvent) {
+                dataProcessor.deleteRace(race.id)
+                summary += "event deleted=${race.id}"
+            }
+            val summaryFile = File(outputDir, "smoke-summary.txt")
+            summaryFile.writeText(summary.joinToString(separator = "\n", postfix = "\n"))
+            summary.forEach { line ->
+                DebugLog.info(TAG, "IOF smoke $line")
+                Log.i(TAG, "IOF smoke $line")
+            }
+        }
+    }
+
+    private fun iofSmokeRaceData(): RaceData {
+        val raceId = UUID.randomUUID()
+        val m21CategoryId = UUID.randomUUID()
+        val race = Race(
+            id = raceId,
+            name = "IOF XML Smoke ${System.currentTimeMillis()}",
+            apiKey = "",
+            startDateTime = LocalDateTime.of(2023, 6, 15, 9, 30),
+            raceType = RaceType.CLASSIC,
+            raceLevel = RaceLevel.PRACTICE,
+            raceBand = RaceBand.M80,
+            timeLimit = Duration.ZERO
+        )
+        val m21 = Category(
+            id = m21CategoryId,
+            raceId = raceId,
+            name = "M21",
+            isMan = true,
+            maxAge = null,
+            length = 5_200,
+            climb = 120,
+            order = 1,
+            controlPointsString = ""
+        )
+        val competitors = listOf(
+            Competitor(
+                id = UUID.randomUUID(),
+                raceId = raceId,
+                categoryId = m21CategoryId,
+                firstName = "Jan",
+                lastName = "Novak",
+                club = "Club A",
+                index = "IDX1",
+                isMan = true,
+                birthYear = 1990,
+                siNumber = null,
+                siRent = false,
+                startNumber = 1,
+                drawnRelativeStartTime = null
+            ),
+            Competitor(
+                id = UUID.randomUUID(),
+                raceId = raceId,
+                categoryId = m21CategoryId,
+                firstName = "Petr",
+                lastName = "Svoboda",
+                club = "Club B",
+                index = "IDX2",
+                isMan = true,
+                birthYear = 1992,
+                siNumber = null,
+                siRent = false,
+                startNumber = 2,
+                drawnRelativeStartTime = null
+            )
+        )
+        return RaceData(
+            race = race,
+            categories = listOf(
+                CategoryData(m21, emptyList(), competitors.filter { it.categoryId == m21CategoryId })
+            ),
+            aliases = emptyList(),
+            competitorData = competitors.map { competitor ->
+                CompetitorData(CompetitorCategory(competitor, m21), readoutData = null)
+            },
+            unmatchedReadoutData = emptyList()
+        )
+    }
+
+    private fun iofSmokeResultCompetitor(raceId: UUID, categoryId: UUID): Competitor =
+        Competitor(
+            id = UUID.randomUUID(),
+            raceId = raceId,
+            categoryId = categoryId,
+            firstName = "Test",
+            lastName = "Tester",
+            club = "AC-Test",
+            index = "ACT0001",
+            isMan = true,
+            birthYear = 2000,
+            siNumber = 123456789,
+            siRent = false,
+            startNumber = 3,
+            drawnRelativeStartTime = null
+        )
+
+    private fun Context.commandFile(path: String): File =
+        File(path).let { file ->
+            if (file.isAbsolute) file else File(filesDir, path)
+        }
 
     private suspend fun listEvents(dataProcessor: DataProcessor) {
         val races = dataProcessor.getRaces().first().sortedBy { it.startDateTime }
@@ -394,6 +613,7 @@ class AppCommandReceiver : BroadcastReceiver() {
         const val ACTION_SEND_SERIES_TO_DESKTOP = "org.openardf.radiooracle.command.SEND_SERIES_TO_DESKTOP"
         const val ACTION_LOG_SERIES_PACKAGE_FINGERPRINT =
             "org.openardf.radiooracle.command.LOG_SERIES_PACKAGE_FINGERPRINT"
+        const val ACTION_RUN_IOF_XML_SMOKE = "org.openardf.radiooracle.command.RUN_IOF_XML_SMOKE"
         const val ACTION_PRINT_STATUS = "org.openardf.radiooracle.command.PRINT_STATUS"
         const val ACTION_PRINT_FINISH_TICKET = "org.openardf.radiooracle.command.PRINT_FINISH_TICKET"
         const val ACTION_PRINT_LATEST_FINISH_TICKET = "org.openardf.radiooracle.command.PRINT_LATEST_FINISH_TICKET"
@@ -403,5 +623,8 @@ class AppCommandReceiver : BroadcastReceiver() {
         const val EXTRA_SERIES_NAME = "series_name"
         const val EXTRA_RESULT_ID = "result_id"
         const val EXTRA_DESKTOP_RECEIVE_URL = "desktop_receive_url"
+        const val EXTRA_FIXTURE_DIR = "fixture_dir"
+        const val EXTRA_OUTPUT_DIR = "output_dir"
+        const val EXTRA_KEEP_EVENT = "keep_event"
     }
 }

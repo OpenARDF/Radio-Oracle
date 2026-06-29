@@ -26,19 +26,36 @@ package org.openardf.radiooracle.files.xml
 
 import android.content.Context
 import junit.framework.TestCase.assertEquals
+import org.openardf.radiooracle.backend.DataProcessor
+import org.openardf.radiooracle.backend.files.DataImportValidator
+import org.openardf.radiooracle.backend.files.constants.DataType
 import org.openardf.radiooracle.backend.files.processors.IofXmlProcessor
+import org.openardf.radiooracle.backend.room.ARDFRepository
 import org.openardf.radiooracle.backend.room.entity.Race
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertThrows
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import org.mockito.kotlin.any
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 
 @RunWith(RobolectricTestRunner::class)
 class CategoryXmlTests {
+
+    @Before
+    fun setUp() {
+        DataProcessor.resetForTests()
+    }
+
+    @After
+    fun tearDown() {
+        DataProcessor.resetForTests()
+    }
 
     @Test
     fun testCategoryValidImport() = runTest {
@@ -81,6 +98,28 @@ class CategoryXmlTests {
         assertEquals(33, cpB[5].siCode)
         assertEquals(31, cpB[6].siCode)
         assertEquals(100, cpB[7].siCode)
+    }
+
+    @Test
+    fun testCategoryValidImportPersistsControls() = runTest {
+        val context = RuntimeEnvironment.getApplication()
+        ARDFRepository.initialize(context)
+        DataProcessor.initialize(context)
+        val dataProcessor = DataProcessor.get()
+        val race = Race().also { race ->
+            race.name = "IOF CourseData Persistence"
+        }
+        dataProcessor.createRace(race)
+        val stream =
+            this::class.java.classLoader?.getResourceAsStream("xml/xml_category_valid_example.xml")!!
+
+        val wrapper = IofXmlProcessor.importCategories(stream, race, context)
+        DataImportValidator.validateDataImport(wrapper, race.id, DataType.CATEGORIES, dataProcessor, context)
+        dataProcessor.saveDataImportWrapper(wrapper)
+
+        val categoryData = dataProcessor.getCategoryDataForRace(race.id)
+        assertEquals(2, categoryData.size)
+        assertEquals(listOf(31, 32, 33, 31, 34, 35, 31, 100), categoryData.first { it.category.name == "A" }.controlPoints.map { it.siCode })
     }
 
     @Test

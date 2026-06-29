@@ -34,6 +34,10 @@ android-test filter="":
 
 android-check: android-compile android-test
 
+android-iof-smoke serial="" schema_path="":
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:assembleDebug
+    ./scripts/android-iof-smoke.sh {{quote(serial)}} {{quote(schema_path)}}
+
 iof-schema-check schema_path="":
     @schema={{quote(schema_path)}}; \
     if [ -z "$schema" ]; then \
