@@ -464,10 +464,22 @@ object DesktopNavigation {
                             DesktopNavAction.ImportEventRegCompetitorsCsv
                         ),
                         action(
+                            "setup.competitors.import-iof-entry-list",
+                            "Import IOF EntryList XML...",
+                            workflow,
+                            DesktopNavAction.ImportIofEntryListXml
+                        ),
+                        action(
                             "setup.competitors.export",
                             "Export Competitors CSV...",
                             workflow,
                             DesktopNavAction.ExportCompetitorsCsv
+                        ),
+                        action(
+                            "setup.competitors.export-iof-entry-list",
+                            "Export IOF EntryList XML...",
+                            workflow,
+                            DesktopNavAction.ExportIofEntryListXml
                         ),
                         action(
                             "setup.competitors.delete-all",
@@ -1235,8 +1247,12 @@ object DesktopNavigation {
             "Use Import Competitors CSV to append or update competitor lists while preserving existing event setup data.",
         "setup.competitors.import-eventreg" to
             "Use Import EventReg Website to bring competitor data from EventReg exports into the current Event File.",
+        "setup.competitors.import-iof-entry-list" to
+            "Use Import IOF EntryList XML to import schema-valid IOF EntryList registrations as competitors.",
         "setup.competitors.export" to
             "Use Export Competitors CSV to write the current competitor list for review, backup, or external editing.",
+        "setup.competitors.export-iof-entry-list" to
+            "Use Export IOF EntryList XML to write schema-valid IOF EntryList registrations from current competitors.",
         "setup.competitors.delete-all" to
             "Use Delete All Competitors to remove every competitor while preserving downloaded readouts as unmatched records for review.",
         "setup.start-list" to
@@ -1383,10 +1399,6 @@ object DesktopNavigation {
             "Use Send Event to Android to share the saved Event File over local Wi-Fi.",
         "setup.event-file.receive-android" to
             "Use Receive File from Android to accept an Event File or supporting file over local Wi-Fi.",
-        "setup.event-file.import-iof-entry-list" to
-            "Use Import IOF EntryList XML to import schema-valid IOF EntryList registrations into the current Event File.",
-        "setup.event-file.export-iof-entry-list" to
-            "Use Export IOF EntryList XML to write schema-valid IOF EntryList registrations from the current Event File.",
         "setup.event-file.settings" to
             "Use Settings to adjust event-related readout, live result, display, app, and readiness options.",
         "setup.event-file.si-settings" to
@@ -1456,20 +1468,6 @@ object DesktopNavigation {
                 workflow,
                 DesktopNavAction.ImportEventRegWebsite,
                 requiresEventFile = false,
-                section = DesktopSection.Races
-            ),
-            action(
-                "setup.event-file.import-iof-entry-list",
-                "Import IOF EntryList XML...",
-                workflow,
-                DesktopNavAction.ImportIofEntryListXml,
-                section = DesktopSection.Races
-            ),
-            action(
-                "setup.event-file.export-iof-entry-list",
-                "Export IOF EntryList XML...",
-                workflow,
-                DesktopNavAction.ExportIofEntryListXml,
                 section = DesktopSection.Races
             ),
             group(
