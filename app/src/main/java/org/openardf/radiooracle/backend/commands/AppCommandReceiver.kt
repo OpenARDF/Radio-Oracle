@@ -211,6 +211,45 @@ class AppCommandReceiver : BroadcastReceiver() {
                 resultListOutput.writeBytes(output.toByteArray())
             }
 
+            val roundTripRaceData = iofSmokeRoundTripRaceData(dataProcessor.getRaceData(race.id))
+            val roundTripRace = roundTripRaceData.race
+            dataProcessor.saveRaceData(roundTripRaceData)
+            summary += "roundTrip event id=${roundTripRace.id} name=${roundTripRace.name}"
+
+            val exportedStartImport = IofXmlProcessor.importData(
+                startListOutput.inputStream(),
+                DataType.COMPETITOR_STARTS,
+                roundTripRace,
+                dataProcessor
+            )
+            require(exportedStartImport.invalidLines.isEmpty()) {
+                exportedStartImport.invalidLines.joinToString(prefix = "Exported StartList re-import failed: ") { "${it.first}:${it.second}" }
+            }
+            DataImportValidator.validateDataImport(exportedStartImport, roundTripRace.id, DataType.COMPETITOR_STARTS, dataProcessor, context)
+            exportedStartImport.competitorCategories.forEach { dataProcessor.createOrUpdateCompetitor(it.competitor) }
+            summary += "roundTrip startListReimportedCompetitors=${exportedStartImport.competitorCategories.size}"
+            appendImportWarnings("roundTripStartList", exportedStartImport.iofWarnings)
+
+            val exportedResultImport = IofXmlProcessor.importData(
+                resultListOutput.inputStream(),
+                DataType.RESULTS_LIVE,
+                roundTripRace,
+                dataProcessor
+            )
+            require(exportedResultImport.invalidLines.isEmpty()) {
+                exportedResultImport.invalidLines.joinToString(prefix = "Exported ResultList re-import failed: ") { "${it.first}:${it.second}" }
+            }
+            require(exportedResultImport.readoutData.isNotEmpty()) {
+                "Exported ResultList re-import produced no readouts."
+            }
+            DataImportValidator.validateDataImport(exportedResultImport, roundTripRace.id, DataType.RESULTS_LIVE, dataProcessor, context)
+            exportedResultImport.readoutData.forEach { readout ->
+                dataProcessor.saveResultPunches(readout.result, readout.punches.map { it.punch })
+            }
+            dataProcessor.updateResultsByRace(roundTripRace.id)
+            summary += "roundTrip resultListReimportedReadouts=${exportedResultImport.readoutData.size}"
+            appendImportWarnings("roundTripResultList", exportedResultImport.iofWarnings)
+
             summary += "exports startList=${startListOutput.absolutePath}"
             summary += "exports resultList=${resultListOutput.absolutePath}"
             summary += "manualPickerFiles expectedUnder=/sdcard/Download/RadioOracleIofSmoke"
@@ -294,6 +333,68 @@ class AppCommandReceiver : BroadcastReceiver() {
             competitorData = competitors.map { competitor ->
                 CompetitorData(CompetitorCategory(competitor, m21), readoutData = null)
             },
+            unmatchedReadoutData = emptyList()
+        )
+    }
+
+    private fun iofSmokeRoundTripRaceData(source: RaceData): RaceData {
+        val raceId = UUID.randomUUID()
+        val categoryIdBySourceId = source.categories.associate { it.category.id to UUID.randomUUID() }
+        val sourceCompetitors = source.competitorData
+            .map { it.competitorCategory.competitor }
+            .distinctBy { it.id }
+        val competitorIdBySourceId = sourceCompetitors.associate { it.id to UUID.randomUUID() }
+        val clonedCompetitorsBySourceId = sourceCompetitors.associate { competitor ->
+            val cloned = competitor.copy(
+                id = competitorIdBySourceId.getValue(competitor.id),
+                raceId = raceId,
+                categoryId = competitor.categoryId?.let(categoryIdBySourceId::get)
+            )
+            competitor.id to cloned
+        }
+        val clonedCategoriesBySourceId = source.categories.associate { categoryData ->
+            val clonedCategoryId = categoryIdBySourceId.getValue(categoryData.category.id)
+            val clonedCompetitors = categoryData.competitors.mapNotNull { competitor ->
+                clonedCompetitorsBySourceId[competitor.id]
+            }
+            categoryData.category.id to CategoryData(
+                category = categoryData.category.copy(
+                    id = clonedCategoryId,
+                    raceId = raceId
+                ),
+                controlPoints = categoryData.controlPoints.map { controlPoint ->
+                    controlPoint.copy(
+                        id = UUID.randomUUID(),
+                        categoryId = clonedCategoryId
+                    )
+                },
+                competitors = clonedCompetitors
+            )
+        }
+        val clonedCompetitorData = source.competitorData.mapNotNull { competitorData ->
+            val sourceCompetitor = competitorData.competitorCategory.competitor
+            val clonedCompetitor = clonedCompetitorsBySourceId[sourceCompetitor.id] ?: return@mapNotNull null
+            val clonedCategory = sourceCompetitor.categoryId
+                ?.let(clonedCategoriesBySourceId::get)
+                ?.category
+            CompetitorData(
+                competitorCategory = CompetitorCategory(
+                    competitor = clonedCompetitor,
+                    category = clonedCategory
+                ),
+                readoutData = null
+            )
+        }
+        return RaceData(
+            race = source.race.copy(
+                id = raceId,
+                name = "${source.race.name} Round Trip",
+                importSourceId = null,
+                importFingerprint = null
+            ),
+            categories = clonedCategoriesBySourceId.values.toList(),
+            aliases = emptyList(),
+            competitorData = clonedCompetitorData,
             unmatchedReadoutData = emptyList()
         )
     }

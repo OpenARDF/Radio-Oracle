@@ -198,6 +198,9 @@ object IofXmlExports {
                 appendTextElement("Time", cumulativeSplitSeconds.toString(), indent = "          ")
                 append("        </SplitTime>\n")
             }
+        (readoutData?.result?.siNumber?.takeIf { it > 0 } ?: competitorData.competitorCategory.competitor.siNumber)?.let { siNumber ->
+            appendTextElement("ControlCard", siNumber.toString(), indent = "        ")
+        }
         append("      </Result>\n")
         append("    </PersonResult>\n")
     }

@@ -44,6 +44,7 @@
                     <ControlCode>34</ControlCode>
                     <Time>4222</Time>
                 </SplitTime>
+                <ControlCard>123456789</ControlCard>
             </Result>
         </PersonResult>
     </ClassResult>

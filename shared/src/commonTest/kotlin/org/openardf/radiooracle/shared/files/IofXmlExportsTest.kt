@@ -139,6 +139,52 @@ class IofXmlExportsTest {
         assertFalse(xml.contains("<Position>"))
     }
 
+    @Test
+    fun exportedStartListCanBeImportedBySharedIofImporter() {
+        val xml = IofXmlExports.startList(raceData(includeSecondCategory = true))
+
+        val imported = IofXmlImports.startList(xml)
+
+        assertEquals(emptyList(), imported.unsupportedItems)
+        assertEquals("IOF & Start Race", imported.parsedData.eventName)
+        assertEquals("2026-06-01", imported.parsedData.startDate)
+        assertEquals("10:00:00", imported.parsedData.startTime)
+        assertEquals(listOf("M21", "W21"), imported.parsedData.entries.map { it.className })
+        assertEquals(listOf("Runner", "NoTime"), imported.parsedData.entries.map { it.person.familyName })
+        assertEquals(listOf("Alice", "Bob"), imported.parsedData.entries.map { it.person.givenName })
+        assertEquals(listOf("OK001", null), imported.parsedData.entries.map { it.person.personId })
+        assertEquals(listOf("OK001", null), imported.parsedData.entries.map { it.bibNumber })
+        assertEquals(listOf(123456, null), imported.parsedData.entries.map { it.controlCard })
+        assertEquals(listOf(600L, 0L), imported.parsedData.entries.map { it.relativeStartTimeSeconds })
+    }
+
+    @Test
+    fun exportedResultListCanBeImportedBySharedIofImporter() {
+        val xml = IofXmlExports.resultList(raceData(includeSecondCategory = true, includeReadout = true))
+
+        val imported = IofXmlImports.resultList(xml)
+        val finished = imported.parsedData.entries.first { it.person.familyName == "Runner" }
+        val active = imported.parsedData.entries.first { it.person.familyName == "NoTime" }
+
+        assertEquals(emptyList(), imported.unsupportedItems)
+        assertEquals("IOF & Start Race", imported.parsedData.eventName)
+        assertEquals("2026-06-01", imported.parsedData.startDate)
+        assertEquals("10:00:00", imported.parsedData.startTime)
+        assertEquals("M21", finished.className)
+        assertEquals("OK001", finished.person.personId)
+        assertEquals(123456, finished.controlCard)
+        assertEquals("2026-06-01T10:00:00", finished.startTimeIso)
+        assertEquals("2026-06-01T10:45:00", finished.finishTimeIso)
+        assertEquals(2700, finished.timeSeconds)
+        assertEquals(1, finished.position)
+        assertEquals("OK", finished.status)
+        assertEquals(listOf(31, 32), finished.splitControls)
+        assertEquals(listOf(600L, 1500L), finished.splitTimes.map { it.timeSeconds })
+        assertEquals("W21", active.className)
+        assertEquals("Active", active.status)
+        assertEquals(null, active.controlCard)
+    }
+
     private fun raceData(
         includeSecondCategory: Boolean = false,
         includeReadout: Boolean = false,
