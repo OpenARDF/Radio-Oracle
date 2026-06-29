@@ -167,16 +167,50 @@ object IofXmlImports {
         val warnings = mutableListOf<IofXmlUnsupportedItem>()
         val event = root.child("Event")
         val startTime = event?.child("StartTime")
-        val raceCourseData = root.child("RaceCourseData")
+        val raceCourseDataElements = root.children("RaceCourseData")
+        val raceCourseData = raceCourseDataElements.firstOrNull()
             ?: throw IofXmlImportException("CourseData does not contain RaceCourseData.")
 
-        raceCourseData.children("ClassCourseAssignment").forEachIndexed { index, _ ->
+        if (raceCourseDataElements.size > 1) {
             warnings += IofXmlUnsupportedItem(
                 messageType = "CourseData",
-                location = "/CourseData/RaceCourseData/ClassCourseAssignment[${index + 1}]",
-                reason = "Class-course assignments are not applied yet; courses are imported as editable Radio-Oracle categories."
+                location = "/CourseData/RaceCourseData[2]",
+                reason = "Multiple race course-data blocks are valid IOF data but only the first race is imported by Radio-Oracle.",
+                severity = IofXmlImportSeverity.UNSUPPORTED
             )
         }
+        raceCourseData.warnUnsupportedChildren(
+            childName = "Map",
+            location = "/CourseData/RaceCourseData/Map",
+            reason = "Race maps are valid IOF data but are not imported into Radio-Oracle courses.",
+            warnings = warnings
+        )
+        raceCourseData.warnUnsupportedChildren(
+            childName = "Control",
+            location = "/CourseData/RaceCourseData/Control",
+            reason = "Race-level control definitions, positions, and map coordinates are valid IOF data but are not imported yet; courses are built from CourseControl codes.",
+            warnings = warnings
+        )
+        raceCourseData.warnUnsupportedChildren(
+            childName = "ClassCourseAssignment",
+            location = "/CourseData/RaceCourseData/ClassCourseAssignment",
+            reason = "Class-course assignments are not applied yet; courses are imported as editable Radio-Oracle categories.",
+            warnings = warnings
+        )
+        raceCourseData.warnUnsupportedChildren(
+            childName = "PersonCourseAssignment",
+            location = "/CourseData/RaceCourseData/PersonCourseAssignment",
+            reason = "Person-course assignments are valid IOF data but are not applied by Radio-Oracle CourseData imports yet.",
+            warnings = warnings,
+            severity = IofXmlImportSeverity.UNSUPPORTED
+        )
+        raceCourseData.warnUnsupportedChildren(
+            childName = "TeamCourseAssignment",
+            location = "/CourseData/RaceCourseData/TeamCourseAssignment",
+            reason = "Team and relay course assignments are valid IOF data but are not applied by Radio-Oracle CourseData imports yet.",
+            warnings = warnings,
+            severity = IofXmlImportSeverity.UNSUPPORTED
+        )
 
         val categories = raceCourseData.children("Course").mapIndexed { index, course ->
             course.toCategoryData(
@@ -207,6 +241,23 @@ object IofXmlImports {
     ): IofCourseDataImportResult {
         requireValidImportXml(xml, iofSchema, expectedRoot = "CourseData")
         return courseData(xml, race, idFactory)
+    }
+
+    private fun XmlNode.warnUnsupportedChildren(
+        childName: String,
+        location: String,
+        reason: String,
+        warnings: MutableList<IofXmlUnsupportedItem>,
+        severity: IofXmlImportSeverity = IofXmlImportSeverity.WARNING
+    ) {
+        val count = children(childName).size
+        if (count == 0) return
+        warnings += IofXmlUnsupportedItem(
+            messageType = "CourseData",
+            location = location,
+            reason = "$reason ($count element${if (count == 1) "" else "s"} present.)",
+            severity = severity
+        )
     }
 
     /** Parses an IOF StartList into a preview that can be matched and applied by platform UI code. */
@@ -363,6 +414,7 @@ object IofXmlImports {
                 reason = "Map positions are valid IOF data but are not represented in Radio-Oracle category imports."
             )
         }
+        warnUnsupportedCoursePresentationData(index, warnings)
         val categoryId = idFactory("iof-course-category-$index-$courseName")
         val controlPoints = mutableListOf<EventControlPoint>()
         children("CourseControl").forEachIndexed { controlIndex, courseControl ->
@@ -422,6 +474,20 @@ object IofXmlImports {
             ),
             controlPoints = controlPoints,
             competitors = emptyList()
+        )
+    }
+
+    private fun XmlNode.warnUnsupportedCoursePresentationData(
+        index: Int,
+        warnings: MutableList<IofXmlUnsupportedItem>
+    ) {
+        val unsupportedNames = listOf("LegLength", "MapText", "MapTextPosition")
+        val presentNames = unsupportedNames.filter { descendants(it).isNotEmpty() }
+        if (presentNames.isEmpty()) return
+        warnings += IofXmlUnsupportedItem(
+            messageType = "CourseData",
+            location = "/CourseData/RaceCourseData/Course[${index + 1}]/CourseControl",
+            reason = "Course leg lengths and map presentation data are valid IOF data but are not represented in Radio-Oracle category imports: ${presentNames.joinToString()}."
         )
     }
 

@@ -124,6 +124,31 @@ class IofXmlImportsTest {
         assertEquals(listOf("A", "B"), result.parsedData.categories.map { it.category.name })
         assertEquals(listOf(31, 32, 33), result.parsedData.categories.first().controlPoints.take(3).map { it.siCode })
         assertTrue(result.unsupportedItems.any { it.reason.contains("Course family") })
+        assertTrue(result.unsupportedItems.any { it.reason.contains("Race-level control definitions") })
+        assertTrue(result.unsupportedItems.any { it.reason.contains("Class-course assignments") })
+        assertTrue(result.unsupportedItems.any { it.reason.contains("Course leg lengths") })
+    }
+
+    @Test
+    fun parsesIofRepositoryPersonCourseAssignmentExample() {
+        val xml = iofExample("CourseData_Individual_Step4.xml") ?: return
+
+        val result = IofXmlImports.courseData(xml, race())
+
+        assertEquals(listOf("A", "B"), result.parsedData.categories.map { it.category.name })
+        assertTrue(result.unsupportedItems.any { it.reason.contains("Person-course assignments") })
+        assertTrue(result.unsupportedItems.any { it.severity == IofXmlImportSeverity.UNSUPPORTED })
+    }
+
+    @Test
+    fun parsesIofRepositoryRelayCourseAssignmentExample() {
+        val xml = iofExample("CourseData_Relay_Step4.xml") ?: return
+
+        val result = IofXmlImports.courseData(xml, race())
+
+        assertTrue(result.parsedData.categories.map { it.category.name }.contains("A"))
+        assertTrue(result.unsupportedItems.any { it.reason.contains("Team and relay course assignments") })
+        assertTrue(result.unsupportedItems.any { it.severity == IofXmlImportSeverity.UNSUPPORTED })
     }
 
     @Test
