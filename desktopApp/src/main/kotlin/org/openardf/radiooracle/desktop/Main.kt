@@ -198,6 +198,7 @@ import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.files.IofCourseDataPreview
+import org.openardf.radiooracle.shared.files.IofResultListPreview
 import org.openardf.radiooracle.shared.files.IofStartListPreview
 import org.openardf.radiooracle.shared.files.IofXmlImports
 import org.openardf.radiooracle.shared.files.IofXmlSchemaResource
@@ -524,6 +525,7 @@ fun main(args: Array<String>) = application {
         var pendingCategoriesCsvImportReview by remember { mutableStateOf<PendingCategoriesCsvImportReview?>(null) }
         var pendingIofCourseDataImportReview by remember { mutableStateOf<PendingIofCourseDataImportReview?>(null) }
         var pendingIofStartListImportReview by remember { mutableStateOf<PendingIofStartListImportReview?>(null) }
+        var pendingIofResultListImportReview by remember { mutableStateOf<PendingIofResultListImportReview?>(null) }
         var pendingControlsCsvImportReview by remember { mutableStateOf<PendingControlsCsvImportReview?>(null) }
         var courseKmlKmzElevationProgress by remember { mutableStateOf<CourseKmlKmzElevationProgressUiState?>(null) }
         var courseKmlKmzElevationJob by remember { mutableStateOf<Job?>(null) }
@@ -4177,34 +4179,58 @@ fun main(args: Array<String>) = application {
                         resultIdFactory = { "iof-result-${UUID.randomUUID()}" },
                         punchIdFactory = { resultId, index, type -> "$resultId-punch-$index-${type.name}" }
                     )
-                    checkpointBeforeImport("IOF ResultList import ${path.fileName}")
-                    projectFile = projectSession.updateCurrentProject { outcome.projectFile }
-                    syncProjectState()
                     val warningLines = iofWarningLines(parsed.unsupportedItems, outcome.warnings)
-                    recentImportReport = DesktopImportReport(
-                        title = "IOF ResultList XML: ${path.fileName}",
-                        lines = withRollbackBackupLine(listOf(
-                            "${outcome.importedCount} readouts imported.",
-                            "${outcome.skippedCount} result rows skipped."
-                        ) + warningLines)
+                    pendingIofResultListImportReview = PendingIofResultListImportReview(
+                        path = path,
+                        resultList = parsed.parsedData,
+                        importedCount = outcome.importedCount,
+                        skippedCount = outcome.skippedCount,
+                        warningLines = warningLines
                     )
-                    val warningCount = parsed.unsupportedItems.size + outcome.warnings.size
-                    projectStatusText = buildString {
-                        append("Imported ${outcome.importedCount} IOF ResultList row")
-                        append(if (outcome.importedCount == 1) "" else "s")
-                        append(" from ${path.fileName}.")
-                        if (outcome.skippedCount > 0) {
-                            append(" Skipped ${outcome.skippedCount}.")
-                        }
-                        if (warningCount > 0) {
-                            append(" $warningCount warning")
-                            append(if (warningCount == 1) "" else "s")
-                            append(".")
-                        }
-                    }
+                    projectStatusText = "Review IOF ResultList import before applying it."
                 }.onFailure { error ->
                     projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
                 }
+            }
+        }
+
+        fun applyIofResultListImport(review: PendingIofResultListImportReview) {
+            runCatching {
+                val currentProject = projectSession.currentProject
+                    ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
+                val outcome = EventProjectEditor.importIofResultList(
+                    projectFile = currentProject,
+                    preview = review.resultList,
+                    resultIdFactory = { "iof-result-${UUID.randomUUID()}" },
+                    punchIdFactory = { resultId, index, type -> "$resultId-punch-$index-${type.name}" }
+                )
+                checkpointBeforeImport("IOF ResultList import ${review.path.fileName}")
+                projectFile = projectSession.updateCurrentProject { outcome.projectFile }
+                syncProjectState()
+                pendingIofResultListImportReview = null
+                val warningLines = review.warningLines
+                recentImportReport = DesktopImportReport(
+                    title = "IOF ResultList XML: ${review.path.fileName}",
+                    lines = withRollbackBackupLine(listOf(
+                        "${outcome.importedCount} readouts imported.",
+                        "${outcome.skippedCount} result rows skipped."
+                    ) + warningLines)
+                )
+                projectStatusText = buildString {
+                    append("Imported ${outcome.importedCount} IOF ResultList row")
+                    append(if (outcome.importedCount == 1) "" else "s")
+                    append(" from ${review.path.fileName}.")
+                    if (outcome.skippedCount > 0) {
+                        append(" Skipped ${outcome.skippedCount}.")
+                    }
+                    if (warningLines.isNotEmpty()) {
+                        append(" ${warningLines.size} warning")
+                        append(if (warningLines.size == 1) "" else "s")
+                        append(".")
+                    }
+                }
+            }.onFailure { error ->
+                projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
             }
         }
 
@@ -5488,6 +5514,16 @@ fun main(args: Array<String>) = application {
                 onCancel = {
                     pendingIofStartListImportReview = null
                     projectStatusText = "IOF StartList import canceled. No changes applied."
+                }
+            )
+        }
+        pendingIofResultListImportReview?.let { review ->
+            IofResultListImportReviewDialog(
+                review = review,
+                onImport = { applyIofResultListImport(review) },
+                onCancel = {
+                    pendingIofResultListImportReview = null
+                    projectStatusText = "IOF ResultList import canceled. No changes applied."
                 }
             )
         }
@@ -7107,6 +7143,61 @@ private fun IofStartListImportReviewDialog(
 }
 
 @Composable
+private fun IofResultListImportReviewDialog(
+    review: PendingIofResultListImportReview,
+    onImport: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Review IOF ResultList import") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 380.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("File: ${review.path.fileName}")
+                review.resultList.eventName?.takeIf { it.isNotBlank() }?.let { eventName ->
+                    Text("Event: $eventName")
+                }
+                Text("Result rows in file: ${review.resultList.entries.size}")
+                Text("Readouts to import: ${review.importedCount}")
+                if (review.skippedCount > 0) {
+                    Text(
+                        text = "Result rows to skip: ${review.skippedCount}",
+                        color = DesktopPalette.Warning
+                    )
+                }
+                review.warningLines.forEach { warning ->
+                    Text(
+                        text = warning,
+                        color = DesktopPalette.Warning,
+                        fontSize = 12.sp
+                    )
+                }
+                Text(
+                    "This import adds matched IOF ResultList readouts where competitor mapping is reliable. It does not create competitors.",
+                    fontSize = 12.sp,
+                    color = Color.DarkGray
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onImport) {
+                ButtonLabel("Import ResultList")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                ButtonLabel("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
 private fun IofCourseDataImportReviewDialog(
     review: PendingIofCourseDataImportReview,
     onImport: () -> Unit,
@@ -8447,6 +8538,14 @@ private data class PendingIofStartListImportReview(
     val path: Path,
     val startList: IofStartListPreview,
     val updatedCount: Int,
+    val skippedCount: Int,
+    val warningLines: List<String>
+)
+
+private data class PendingIofResultListImportReview(
+    val path: Path,
+    val resultList: IofResultListPreview,
+    val importedCount: Int,
     val skippedCount: Int,
     val warningLines: List<String>
 )
