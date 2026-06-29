@@ -147,7 +147,7 @@ class ResultsExportDialogFragment : DialogFragment() {
 
             DataFormat.IOF_XML -> {
                 intent.type = "text/xml"
-                intent.putExtra(Intent.EXTRA_TITLE, "results.xml")
+                intent.putExtra(Intent.EXTRA_TITLE, "results.iof.xml")
             }
 
             DataFormat.HTML -> {

@@ -35,6 +35,7 @@ import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorStartCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
+import org.openardf.radiooracle.shared.files.IofXmlImports
 import org.openardf.radiooracle.shared.sportident.SportIdentCardHolder
 import org.openardf.radiooracle.shared.sportident.SportIdentCardPunch
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadout
@@ -1649,6 +1650,196 @@ class EventProjectEditorTest {
         val changed = updated.raceData.competitorData[1].competitorCategory.competitor
         assertEquals(null, kept.drawnStartTimeSeconds)
         assertEquals(10 * 60L + 15, changed.drawnStartTimeSeconds)
+    }
+
+    @Test
+    fun importsIofStartListUsingSharedMatcher() {
+        val category = category("cat-1", "M21")
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21")),
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", startNumber = 1, siNumber = 1111, category = category),
+                competitorData("comp-2", "Bob", "Racer", startNumber = 2, siNumber = null, category = category)
+            )
+        )
+        val preview = IofXmlImports.startList(
+            """
+            <StartList iofVersion="3.0">
+              <Event>
+                <Name>Original Race</Name>
+                <StartTime><Date>2026-05-31</Date><Time>10:00:00</Time></StartTime>
+              </Event>
+              <ClassStart>
+                <Class><Name>M21</Name></Class>
+                <PersonStart>
+                  <Person><Id>comp-2</Id><Name><Family>Racer</Family><Given>Bob</Given></Name></Person>
+                  <Start><BibNumber>2</BibNumber><StartTime>2026-05-31T10:07:00</StartTime><ControlCard>2222</ControlCard></Start>
+                </PersonStart>
+              </ClassStart>
+            </StartList>
+            """.trimIndent()
+        ).parsedData
+
+        val outcome = EventProjectEditor.importIofStartList(original, preview)
+
+        assertEquals(1, outcome.updatedCount)
+        assertEquals(0, outcome.skippedCount)
+        assertEquals(emptyList(), outcome.warnings)
+        val kept = outcome.projectFile.raceData.competitorData[0].competitorCategory.competitor
+        val changed = outcome.projectFile.raceData.competitorData[1].competitorCategory.competitor
+        assertEquals(null, kept.drawnStartTimeSeconds)
+        assertEquals(2222, changed.siNumber)
+        assertEquals(7 * 60L, changed.drawnStartTimeSeconds)
+        assertEquals(1, changed.startNumber)
+    }
+
+    @Test
+    fun rejectsIofStartListWhenNameFallbackIsAmbiguous() {
+        val category = category("cat-1", "M21")
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21")),
+            competitors = listOf(
+                competitorData("comp-1", "Alex", "Runner", startNumber = 1, category = category),
+                competitorData("comp-2", "Alex", "Runner", startNumber = 2, category = category)
+            )
+        )
+        val preview = IofXmlImports.startList(
+            """
+            <StartList iofVersion="3.0">
+              <Event>
+                <StartTime><Date>2026-05-31</Date><Time>10:00:00</Time></StartTime>
+              </Event>
+              <ClassStart>
+                <Class><Name>M21</Name></Class>
+                <PersonStart>
+                  <Person><Name><Family>Runner</Family><Given>Alex</Given></Name></Person>
+                  <Start><StartTime>2026-05-31T10:03:00</StartTime></Start>
+                </PersonStart>
+              </ClassStart>
+            </StartList>
+            """.trimIndent()
+        ).parsedData
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.importIofStartList(original, preview)
+        }
+
+        assertTrue(error.message?.contains("Competitor match is not unique.") == true)
+    }
+
+    @Test
+    fun importsIofResultListAsMatchedReadoutWithSplitTimes() {
+        val category = category("cat-1", "M21")
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21", controlSiCodes = listOf(31, 32))),
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", siNumber = 123456, category = category)
+            )
+        )
+        val preview = IofXmlImports.resultList(
+            """
+            <ResultList iofVersion="3.0">
+              <Event>
+                <Name>Original Race</Name>
+                <StartTime><Date>2026-05-31</Date><Time>10:00:00</Time></StartTime>
+              </Event>
+              <ClassResult>
+                <Class><Name>M21</Name></Class>
+                <PersonResult>
+                  <Person><Id>comp-1</Id><Name><Family>Runner</Family><Given>Alice</Given></Name></Person>
+                  <Result>
+                    <ControlCard>123456</ControlCard>
+                    <StartTime>2026-05-31T10:02:00</StartTime>
+                    <FinishTime>2026-05-31T10:12:00</FinishTime>
+                    <Time>600</Time>
+                    <Position>1</Position>
+                    <Status>OK</Status>
+                    <SplitTime><ControlCode>31</ControlCode><Time>120</Time></SplitTime>
+                    <SplitTime><ControlCode>32</ControlCode><Time>420</Time></SplitTime>
+                  </Result>
+                </PersonResult>
+              </ClassResult>
+            </ResultList>
+            """.trimIndent()
+        ).parsedData
+
+        val outcome = EventProjectEditor.importIofResultList(
+            projectFile = original,
+            preview = preview,
+            resultIdFactory = { "iof-result-$it" },
+            punchIdFactory = { resultId, index, type -> "$resultId-punch-$index-${type.name}" }
+        )
+
+        assertEquals(1, outcome.importedCount)
+        assertEquals(0, outcome.skippedCount)
+        assertEquals(emptyList(), outcome.warnings)
+        val readout = outcome.projectFile.raceData.competitorData.single().readoutData!!
+        assertEquals("iof-result-0", readout.result.id)
+        assertEquals("comp-1", readout.result.competitorId)
+        assertEquals(123456, readout.result.siNumber)
+        assertEquals(36_120, readout.result.startTimeSeconds)
+        assertEquals(36_720, readout.result.finishTimeSeconds)
+        assertEquals(600, readout.result.runTimeSeconds)
+        assertEquals(ResultStatus.OK, readout.result.resultStatus)
+        assertEquals(false, readout.result.automaticStatus)
+        assertEquals(true, readout.result.modified)
+        assertEquals(1, readout.result.place)
+        assertEquals(
+            listOf(SIRecordType.START, SIRecordType.CONTROL, SIRecordType.CONTROL, SIRecordType.FINISH),
+            readout.punches.map { it.punch.punchType }
+        )
+        assertEquals(listOf(0, 31, 32, 0), readout.punches.map { it.punch.siCode })
+        assertEquals(listOf(36_120L, 36_240L, 36_540L, 36_720L), readout.punches.map { it.punch.siTimeSeconds })
+        assertEquals(listOf(0L, 120L, 300L, 180L), readout.punches.map { it.punch.splitSeconds })
+    }
+
+    @Test
+    fun skipsIofResultListWhenCompetitorAlreadyHasReadout() {
+        val category = category("cat-1", "M21")
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21", controlSiCodes = listOf(31))),
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    siNumber = 123456,
+                    category = category,
+                    readoutData = readout("existing", "comp-1", 123456)
+                )
+            )
+        )
+        val preview = IofXmlImports.resultList(
+            """
+            <ResultList iofVersion="3.0">
+              <ClassResult>
+                <Class><Name>M21</Name></Class>
+                <PersonResult>
+                  <Person><Id>comp-1</Id><Name><Family>Runner</Family><Given>Alice</Given></Name></Person>
+                  <Result>
+                    <ControlCard>123456</ControlCard>
+                    <StartTime>2026-05-31T10:02:00</StartTime>
+                    <FinishTime>2026-05-31T10:12:00</FinishTime>
+                    <Time>600</Time>
+                    <Status>OK</Status>
+                  </Result>
+                </PersonResult>
+              </ClassResult>
+            </ResultList>
+            """.trimIndent()
+        ).parsedData
+
+        val outcome = EventProjectEditor.importIofResultList(
+            projectFile = original,
+            preview = preview,
+            resultIdFactory = { "iof-result-$it" },
+            punchIdFactory = { resultId, index, type -> "$resultId-punch-$index-${type.name}" }
+        )
+
+        assertEquals(0, outcome.importedCount)
+        assertEquals(1, outcome.skippedCount)
+        assertTrue(outcome.warnings.single().contains("already has a readout"))
+        assertEquals("existing", outcome.projectFile.raceData.competitorData.single().readoutData?.result?.id)
     }
 
     @Test

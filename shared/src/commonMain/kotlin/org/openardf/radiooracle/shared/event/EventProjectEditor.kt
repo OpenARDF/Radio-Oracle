@@ -38,10 +38,17 @@ import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorStartCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
+import org.openardf.radiooracle.shared.files.IofResultListEntryPreview
+import org.openardf.radiooracle.shared.files.IofResultListPreview
+import org.openardf.radiooracle.shared.files.IofResultSplitPreview
+import org.openardf.radiooracle.shared.files.IofStartListPreview
+import org.openardf.radiooracle.shared.files.IofXmlCompetitorMatchIssue
+import org.openardf.radiooracle.shared.files.IofXmlImportMatcher
 import org.openardf.radiooracle.shared.results.CourseEvaluator
 import org.openardf.radiooracle.shared.results.EvaluationControlPoint
 import org.openardf.radiooracle.shared.results.EvaluationPunch
 import org.openardf.radiooracle.shared.results.EventResultPlacement
+import org.openardf.radiooracle.shared.results.IofResultStatus
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadout
 import org.openardf.radiooracle.shared.sportident.SportIdentCodes
 import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
@@ -77,6 +84,21 @@ data class ResultRecalculationOutcome(
     val recalculatedCount: Int,
     val changedCount: Int,
     val skippedStatusOnlyCount: Int
+)
+
+data class IofStartListImportOutcome(
+    val projectFile: EventProjectFile,
+    val updatedCount: Int,
+    val skippedCount: Int,
+    val warnings: List<String>
+)
+
+data class IofResultListImportOutcome(
+    val projectFile: EventProjectFile,
+    val importedCount: Int,
+    val skippedCount: Int,
+    val warnings: List<String>,
+    val importedReadouts: List<EventReadoutData> = emptyList()
 )
 
 /** Shared Event File editing helpers used by desktop and future non-Android flows. */
@@ -1765,6 +1787,172 @@ object EventProjectEditor {
         ))
     }
 
+    /** Applies a parsed IOF StartList to existing competitors after shared match validation. */
+    fun importIofStartList(
+        projectFile: EventProjectFile,
+        preview: IofStartListPreview
+    ): IofStartListImportOutcome {
+        val matched = IofXmlImportMatcher.matchStartList(preview, projectFile.raceData)
+        val fatalMessages = matched.entries.flatMapIndexed { index, matchedEntry ->
+            val fatalIssues = matchedEntry.match.issues.filterNot {
+                it == IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD
+            }
+            fatalIssues.map { issue -> "StartList row ${index + 1}: ${issue.importMessage()}" }
+        }
+        require(fatalMessages.isEmpty()) {
+            "IOF StartList cannot be imported:\n${fatalMessages.joinToString("\n")}"
+        }
+
+        var updatedCount = 0
+        var skippedCount = 0
+        val warnings = mutableListOf<String>()
+        var competitorData = projectFile.raceData.competitorData
+
+        matched.entries.forEachIndexed { index, matchedEntry ->
+            if (matchedEntry.match.issues.contains(IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD)) {
+                warnings += "StartList row ${index + 1}: ${IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD.importMessage()}"
+            }
+            val competitorId = matchedEntry.match.competitorId
+            val relativeStartSeconds = matchedEntry.entry.relativeStartTimeSeconds
+            when {
+                competitorId == null -> {
+                    skippedCount += 1
+                    warnings += "StartList row ${index + 1}: ${IofXmlCompetitorMatchIssue.UNKNOWN_COMPETITOR.importMessage()}"
+                }
+                relativeStartSeconds == null -> {
+                    skippedCount += 1
+                    warnings += "StartList row ${index + 1}: Start time missing or invalid."
+                }
+                else -> {
+                    val competitorPosition = competitorData.indexOfFirst {
+                        it.competitorCategory.competitor.id == competitorId
+                    }
+                    require(competitorPosition >= 0) {
+                        "StartList row ${index + 1}: ${IofXmlCompetitorMatchIssue.UNKNOWN_COMPETITOR.importMessage()}"
+                    }
+                    val controlCard = matchedEntry.entry.controlCard
+                    require(
+                        controlCard == null || competitorData.noneIndexed { otherIndex, data ->
+                            otherIndex != competitorPosition &&
+                                data.competitorCategory.competitor.siNumber == controlCard
+                        }
+                    ) {
+                        "StartList row ${index + 1}: SI number must be unique."
+                    }
+
+                    competitorData = competitorData.mapIndexed { dataIndex, data ->
+                        if (dataIndex == competitorPosition) {
+                            val competitorCategory = data.competitorCategory
+                            val competitor = competitorCategory.competitor
+                            data.copy(
+                                competitorCategory = competitorCategory.copy(
+                                    competitor = competitor.copy(
+                                        siNumber = controlCard ?: competitor.siNumber,
+                                        drawnStartTimeSeconds = relativeStartSeconds
+                                    )
+                                )
+                            )
+                        } else {
+                            data
+                        }
+                    }
+                    updatedCount += 1
+                }
+            }
+        }
+
+        return IofStartListImportOutcome(
+            projectFile = EventStartNumbers.assignFromDrawnStartTimes(
+                projectFile.copy(raceData = projectFile.raceData.copy(competitorData = competitorData))
+            ),
+            updatedCount = updatedCount,
+            skippedCount = skippedCount,
+            warnings = warnings
+        )
+    }
+
+    /** Applies completed IOF ResultList person results as manual readouts for matched competitors. */
+    fun importIofResultList(
+        projectFile: EventProjectFile,
+        preview: IofResultListPreview,
+        resultIdFactory: (Int) -> String,
+        punchIdFactory: (resultId: String, punchIndex: Int, punchType: SIRecordType) -> String
+    ): IofResultListImportOutcome {
+        val matched = IofXmlImportMatcher.matchResultList(preview, projectFile.raceData)
+        val fatalMessages = matched.entries.flatMapIndexed { index, matchedEntry ->
+            val fatalIssues = matchedEntry.match.issues.filterNot {
+                it == IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD
+            }
+            fatalIssues.map { issue -> "ResultList row ${index + 1}: ${issue.importMessage()}" }
+        }
+        require(fatalMessages.isEmpty()) {
+            "IOF ResultList cannot be imported:\n${fatalMessages.joinToString("\n")}"
+        }
+
+        var workingProjectFile = projectFile
+        var importedCount = 0
+        var skippedCount = 0
+        val importedReadouts = mutableListOf<EventReadoutData>()
+        val warnings = mutableListOf<String>()
+
+        matched.entries.forEachIndexed { index, matchedEntry ->
+            val rowLabel = "ResultList row ${index + 1}"
+            if (matchedEntry.match.issues.contains(IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD)) {
+                warnings += "$rowLabel: ${IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD.importMessage()}"
+            }
+            val resultStatus = IofResultStatus.toResultStatus(matchedEntry.entry.status)
+            val competitorId = matchedEntry.match.competitorId
+            val competitorIndex = competitorId?.let { id ->
+                workingProjectFile.raceData.competitorData.indexOfFirst {
+                    it.competitorCategory.competitor.id == id
+                }
+            } ?: -1
+            when {
+                resultStatus == null -> {
+                    skippedCount += 1
+                    warnings += "$rowLabel: IOF status ${matchedEntry.entry.status} is not imported as a finished Radio-Oracle readout."
+                }
+                competitorIndex < 0 -> {
+                    skippedCount += 1
+                    warnings += "$rowLabel: ${IofXmlCompetitorMatchIssue.UNKNOWN_COMPETITOR.importMessage()}"
+                }
+                workingProjectFile.raceData.competitorData[competitorIndex].readoutData != null -> {
+                    skippedCount += 1
+                    warnings += "$rowLabel: Competitor already has a readout; IOF result was not imported."
+                }
+                else -> {
+                    val resultId = resultIdFactory(index)
+                    require(resultId.isNotBlank()) {
+                        "$rowLabel: Readout ID cannot be blank."
+                    }
+                    require(!workingProjectFile.raceData.containsReadout(resultId)) {
+                        "$rowLabel: Readout ID already exists: $resultId"
+                    }
+                    workingProjectFile = workingProjectFile.withIofResultReadout(
+                        competitorIndex = competitorIndex,
+                        entryIndex = index,
+                        resultId = resultId,
+                        resultStatus = resultStatus,
+                        entry = matchedEntry.entry,
+                        punchIdFactory = punchIdFactory
+                    )
+                    workingProjectFile.raceData.competitorData[competitorIndex].readoutData?.let { readoutData ->
+                        importedReadouts += readoutData
+                    }
+                    importedCount += 1
+                }
+            }
+        }
+
+        return IofResultListImportOutcome(
+            projectFile = workingProjectFile,
+            importedCount = importedCount,
+            skippedCount = skippedCount,
+            warnings = warnings,
+            importedReadouts = importedReadouts
+        )
+    }
+
     /**
      * Returns a copy of the Event File with one competitor removed.
      *
@@ -2676,6 +2864,14 @@ object EventProjectEditor {
     private inline fun <T> Iterable<T>.noneIndexed(predicate: (index: Int, T) -> Boolean): Boolean =
         withIndex().none { (index, value) -> predicate(index, value) }
 
+    private fun IofXmlCompetitorMatchIssue.importMessage(): String =
+        when (this) {
+            IofXmlCompetitorMatchIssue.UNKNOWN_CLASS -> "Class was not found in this Event File."
+            IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD -> "ControlCard is missing; SI number was not updated."
+            IofXmlCompetitorMatchIssue.UNKNOWN_COMPETITOR -> "Competitor was not found in this Event File."
+            IofXmlCompetitorMatchIssue.DUPLICATE_MATCH -> "Competitor match is not unique."
+        }
+
     private fun CompetitorCsvImportRow.existingCompetitorPosition(
         competitors: List<EventCompetitorData>,
         duplicatePolicy: CompetitorCsvImportDuplicatePolicy
@@ -2914,6 +3110,80 @@ object EventProjectEditor {
             )
         )
 
+    private fun EventProjectFile.withIofResultReadout(
+        competitorIndex: Int,
+        entryIndex: Int,
+        resultId: String,
+        resultStatus: ResultStatus,
+        entry: IofResultListEntryPreview,
+        punchIdFactory: (resultId: String, punchIndex: Int, punchType: SIRecordType) -> String
+    ): EventProjectFile {
+        val competitorData = raceData.competitorData[competitorIndex]
+        val competitor = competitorData.competitorCategory.competitor
+        val categoryData = competitor.categoryId?.let { categoryId ->
+            raceData.categories.firstOrNull { it.category.id == categoryId }
+        }
+        val controlCodes = entry.splitTimes.map { it.controlCode }
+        val evaluation = categoryData?.let { data ->
+            CourseEvaluator.evaluate(
+                raceType = data.category.effectiveRaceType(raceData.race),
+                punches = controlCodes.map { EvaluationPunch(it, SIRecordType.CONTROL) },
+                controlPoints = raceData.evaluationControlPoints(data)
+            )
+        }
+        val effectiveStatus = if (resultStatus == ResultStatus.OK && evaluation != null) {
+            evaluation.resultStatus
+        } else {
+            resultStatus
+        }
+        val startSeconds = iofDateTimeSecondsOfDay(entry.startTimeIso)
+        val finishSeconds = iofDateTimeSecondsOfDay(entry.finishTimeIso)
+        val runTimeSeconds = entry.timeSeconds ?: if (startSeconds != null && finishSeconds != null) {
+            finishSeconds - startSeconds
+        } else {
+            0
+        }
+        val siNumber = entry.controlCard ?: competitor.siNumber
+        val punches = buildIofResultPunches(
+            raceId = raceData.race.id,
+            resultId = resultId,
+            siNumber = siNumber,
+            startSeconds = startSeconds,
+            finishSeconds = finishSeconds,
+            splitTimes = entry.splitTimes,
+            controlStatuses = evaluation?.punchStatuses,
+            punchIdFactory = { punchIndex, punchType -> punchIdFactory(resultId, punchIndex, punchType) }
+        )
+        val readoutData = EventReadoutData(
+            result = EventResult(
+                id = resultId,
+                raceId = raceData.race.id,
+                competitorId = competitor.id,
+                siNumber = siNumber,
+                cardType = 0,
+                checkTimeSeconds = null,
+                startTimeSeconds = startSeconds,
+                finishTimeSeconds = finishSeconds,
+                readoutDateTimeIso = entry.finishTimeIso ?: entry.startTimeIso ?: raceData.race.startDateTimeIso,
+                automaticStatus = false,
+                resultStatus = effectiveStatus,
+                points = evaluation?.points ?: 0,
+                runTimeSeconds = runTimeSeconds.coerceAtLeast(0),
+                modified = true,
+                sent = false,
+                categoryId = competitor.categoryId
+            ),
+            punches = punches
+        )
+        return copy(
+            raceData = raceData.copy(
+                competitorData = raceData.competitorData.mapIndexed { index, data ->
+                    if (index == competitorIndex) data.copy(readoutData = readoutData) else data
+                }
+            )
+        ).withResultPlaces()
+    }
+
     private fun parseOptionalSiNumber(siNumber: String, fallbackSiNumber: Int?): Int? {
         val trimmedSiNumber = siNumber.trim()
         val siNumberValue = if (trimmedSiNumber.isEmpty()) {
@@ -2941,6 +3211,26 @@ object EventProjectEditor {
         return seconds
     }
 
+    private fun iofDateTimeSecondsOfDay(value: String?): Long? {
+        val timeText = value
+            ?.substringAfter('T', missingDelimiterValue = "")
+            ?.takeIf { it.isNotBlank() }
+            ?.takeWhile { it.isDigit() || it == ':' }
+            ?: return null
+        val parts = timeText.split(":")
+        if (parts.size < 2) {
+            return null
+        }
+        val hours = parts[0].toLongOrNull() ?: return null
+        val minutes = parts[1].toLongOrNull() ?: return null
+        val seconds = parts.getOrNull(2)?.toLongOrNull() ?: 0L
+        return if (hours in 0..23 && minutes in 0..59 && seconds in 0..59) {
+            hours * 3_600 + minutes * 60 + seconds
+        } else {
+            null
+        }
+    }
+
     private fun parseControlCodes(controlCodes: String): List<Int> =
         controlCodes
             .trim()
@@ -2955,6 +3245,62 @@ object EventProjectEditor {
                 code
             }
             ?: emptyList()
+
+    private fun buildIofResultPunches(
+        raceId: String,
+        resultId: String,
+        siNumber: Int?,
+        startSeconds: Long?,
+        finishSeconds: Long?,
+        splitTimes: List<IofResultSplitPreview>,
+        controlStatuses: List<PunchStatus>?,
+        punchIdFactory: (Int, SIRecordType) -> String
+    ): List<EventAliasPunch> {
+        val punches = mutableListOf<EventAliasPunch>()
+        startSeconds?.let {
+            punches += manualPunch(
+                id = punchIdFactory(punches.size, SIRecordType.START),
+                raceId = raceId,
+                resultId = resultId,
+                siNumber = siNumber,
+                siCode = 0,
+                siTimeSeconds = it,
+                punchType = SIRecordType.START,
+                order = punches.size,
+                punchStatus = PunchStatus.VALID
+            )
+        }
+        splitTimes.forEachIndexed { index, split ->
+            val controlSeconds = split.timeSeconds?.let { splitSeconds ->
+                if (startSeconds != null) (startSeconds + splitSeconds) % SportIdentCodes.SECONDS_DAY else splitSeconds
+            } ?: startSeconds ?: 0L
+            punches += manualPunch(
+                id = punchIdFactory(punches.size, SIRecordType.CONTROL),
+                raceId = raceId,
+                resultId = resultId,
+                siNumber = siNumber,
+                siCode = split.controlCode,
+                siTimeSeconds = controlSeconds,
+                punchType = SIRecordType.CONTROL,
+                order = punches.size,
+                punchStatus = controlStatuses?.getOrNull(index) ?: PunchStatus.UNKNOWN
+            )
+        }
+        finishSeconds?.let {
+            punches += manualPunch(
+                id = punchIdFactory(punches.size, SIRecordType.FINISH),
+                raceId = raceId,
+                resultId = resultId,
+                siNumber = siNumber,
+                siCode = 0,
+                siTimeSeconds = it,
+                punchType = SIRecordType.FINISH,
+                order = punches.size,
+                punchStatus = PunchStatus.VALID
+            )
+        }
+        return punches.withSplitSeconds()
+    }
 
     private fun parseControlPunchEntries(
         controlPunchesText: String,
@@ -3157,6 +3503,19 @@ object EventProjectEditor {
             ),
             alias = null
         )
+
+    private fun List<EventAliasPunch>.withSplitSeconds(): List<EventAliasPunch> =
+        mapIndexed { index, aliasPunch ->
+            if (index == 0) {
+                aliasPunch
+            } else {
+                aliasPunch.copy(
+                    punch = aliasPunch.punch.copy(
+                        splitSeconds = aliasPunch.punch.siTimeSeconds - this[index - 1].punch.siTimeSeconds
+                    )
+                )
+            }
+        }
 
     private fun buildDownloadedPunches(
         raceId: String,

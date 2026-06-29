@@ -395,6 +395,9 @@ object DesktopFileDialogs {
     fun chooseImportCsvFiles(title: String): List<Path> =
         chooseFiles(title, DesktopProjectFilePaths.CSV_EXTENSION)
 
+    fun chooseImportIofXml(title: String): Path? =
+        chooseFile(title, FileDialog.LOAD, DesktopProjectFilePaths.IOF_XML_EXTENSION)
+
     fun chooseImportKmlKmz(): Path? {
         val dialog = FileDialog(null as Frame?, "Import Controls KML/KMZ", FileDialog.LOAD)
         dialog.filenameFilter = FilenameFilter { _, name ->

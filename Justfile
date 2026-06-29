@@ -34,6 +34,35 @@ android-test filter="":
 
 android-check: android-compile android-test
 
+iof-schema-check schema_path="":
+    @schema={{quote(schema_path)}}; \
+    if [ -z "$schema" ]; then \
+        schema="${IOF_SCHEMA_PATH:-{{justfile_directory()}}/../IOF-XML-datastandard-v3/IOF.xsd}"; \
+    fi; \
+    if [ ! -f "$schema" ]; then \
+        echo "IOF XML 3.0 schema not found: $schema" >&2; \
+        echo "Set IOF_SCHEMA_PATH=/path/to/IOF.xsd or run: just iof-schema-check /path/to/IOF.xsd" >&2; \
+        exit 1; \
+    fi; \
+    xmllint_bin="${XMLLINT:-}"; \
+    if [ -z "$xmllint_bin" ]; then \
+        if command -v xmllint >/dev/null 2>&1; then \
+            xmllint_bin="$(command -v xmllint)"; \
+        elif [ -x /opt/local/bin/xmllint ]; then \
+            xmllint_bin="/opt/local/bin/xmllint"; \
+        else \
+            echo "xmllint is required for IOF schema validation. Install libxml2 or set XMLLINT=/path/to/xmllint." >&2; \
+            exit 1; \
+        fi; \
+    fi; \
+    "$xmllint_bin" --noout --nonet --schema "$schema" app/src/main/resources/xml/xml_startlist_example.xml; \
+    "$xmllint_bin" --noout --nonet --schema "$schema" app/src/main/resources/xml/xml_results_example.xml; \
+    "$xmllint_bin" --noout --nonet --schema "$schema" app/src/main/resources/xml/xml_category_valid_example.xml; \
+    "$xmllint_bin" --noout --nonet --schema "$schema" app/src/main/resources/xml/xml_category_invalid_example.xml; \
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh -PiofSchemaPath="$schema" :shared:desktopTest --tests org.openardf.radiooracle.shared.files.IofXmlValidatorTest; \
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh -PiofSchemaPath="$schema" :app:testDebugUnitTest --tests org.openardf.radiooracle.files.xml.IofXmlSchemaValidationTests; \
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh -PiofSchemaPath="$schema" :desktopApp:test --tests org.openardf.radiooracle.desktop.DesktopProjectFilesTest.exportsIofStartListXmlFile --tests org.openardf.radiooracle.desktop.DesktopProjectFilesTest.exportsIofResultListXmlFile
+
 android-series-list serial="":
     @ADB="${ANDROID_ADB:-adb}"; \
     if [ -n {{quote(serial)}} ]; then \

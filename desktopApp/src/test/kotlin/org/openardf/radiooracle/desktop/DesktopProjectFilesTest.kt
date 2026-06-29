@@ -45,7 +45,10 @@ import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
+import org.openardf.radiooracle.shared.files.IofXmlValidator
 import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 
 class DesktopProjectFilesTest {
     @Test
@@ -175,6 +178,7 @@ class DesktopProjectFilesTest {
         assertTrue(exported.contains("<Family>Runner</Family>"))
         assertTrue(exported.contains("<StartTime>2026-05-31T10:00:00</StartTime>"))
         assertTrue(exported.contains("<ControlCard>123456</ControlCard>"))
+        assertIofSchemaValid(exported)
     }
 
     @Test
@@ -191,6 +195,7 @@ class DesktopProjectFilesTest {
         assertTrue(exported.contains("<StartTime>2026-05-31T10:00:00</StartTime>"))
         assertTrue(exported.contains("<FinishTime>2026-05-31T10:20:00</FinishTime>"))
         assertTrue(exported.contains("<Status>OK</Status>"))
+        assertIofSchemaValid(exported)
     }
 
     @Test
@@ -396,5 +401,48 @@ class DesktopProjectFilesTest {
                 )
             )
         )
+    }
+
+    private fun assertIofSchemaValid(xml: String) {
+        val schemaPath = iofSchemaPath()
+        val validation = IofXmlValidator.validate(xml, Files.readString(schemaPath))
+        assertTrue(validation.errors.joinToString { it.message }, validation.valid)
+    }
+
+    private fun iofSchemaPath(): Path {
+        val configuredPath = configuredIofSchemaPath()
+        val candidates = if (configuredPath != null) {
+            listOf(configuredPath)
+        } else {
+            defaultIofSchemaPathCandidates()
+        }
+        return candidates.firstOrNull { Files.isRegularFile(it) }
+            ?: throw AssertionError(
+                "IOF XML 3.0 schema is required for this test. " +
+                    "Set -PiofSchemaPath=/path/to/IOF.xsd or IOF_SCHEMA_PATH=/path/to/IOF.xsd. " +
+                    "Checked: ${candidates.joinToString { it.toAbsolutePath().normalize().toString() }}"
+            )
+    }
+
+    private fun configuredIofSchemaPath(): Path? =
+        sequenceOf(
+            System.getProperty(IOF_SCHEMA_PROPERTY),
+            System.getenv(IOF_SCHEMA_ENV)
+        )
+            .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
+            .firstOrNull()
+            ?.let(Paths::get)
+
+    private fun defaultIofSchemaPathCandidates(): List<Path> {
+        val workingDirectory = Paths.get(System.getProperty("user.dir"))
+        return listOf(
+            workingDirectory.resolve("../IOF-XML-datastandard-v3/IOF.xsd"),
+            workingDirectory.resolve("../../IOF-XML-datastandard-v3/IOF.xsd")
+        )
+    }
+
+    private companion object {
+        const val IOF_SCHEMA_PROPERTY = "iof.schema.path"
+        const val IOF_SCHEMA_ENV = "IOF_SCHEMA_PATH"
     }
 }

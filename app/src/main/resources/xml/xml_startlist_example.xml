@@ -30,9 +30,9 @@
                 <Name>Club A</Name>
             </Organisation>
             <Start>
+                <BibNumber>1</BibNumber>
                 <StartTime>2023-06-15T09:30:00</StartTime>
                 <ControlCard>111</ControlCard>
-                <StartNumber>1</StartNumber>
             </Start>
         </PersonStart>
         <PersonStart>
@@ -47,9 +47,9 @@
                 <Name>Club B</Name>
             </Organisation>
             <Start>
+                <BibNumber>2</BibNumber>
                 <StartTime>2023-06-15T09:31:00</StartTime>
                 <ControlCard>222</ControlCard>
-                <StartNumber>2</StartNumber>
             </Start>
         </PersonStart>
     </ClassStart>

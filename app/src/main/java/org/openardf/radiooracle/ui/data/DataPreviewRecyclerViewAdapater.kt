@@ -63,6 +63,13 @@ class DataPreviewRecyclerViewAdapater(
                     5
                 }
 
+            DataType.RESULTS_LIVE ->
+                if (value.readoutData.size < 5) {
+                    value.readoutData.size
+                } else {
+                    5
+                }
+
             else -> 0
         }
     }
@@ -99,6 +106,14 @@ class DataPreviewRecyclerViewAdapater(
                 holder.columnTwo.text = item.competitor.getFullName()
                 holder.columnThree.text = item.competitor.siNumber?.toString() ?: "-"
                 holder.columnFour.text = item.category?.name ?: "-"
+            }
+
+            DataType.RESULTS_LIVE -> {
+                val item = value.readoutData[position].result
+                holder.columnOne.text = item.siNumber?.toString() ?: "-"
+                holder.columnTwo.text = item.competitorId?.toString() ?: "-"
+                holder.columnThree.text = TimeProcessor.durationToFormattedString(item.runTime, true)
+                holder.columnFour.text = item.resultStatus.toString()
             }
 
             else -> {}

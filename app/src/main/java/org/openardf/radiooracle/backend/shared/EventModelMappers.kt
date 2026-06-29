@@ -127,7 +127,8 @@ fun Competitor.toEventCompetitor(): EventCompetitor =
         siNumber = siNumber,
         siRent = siRent,
         startNumber = startNumber.takeIf { it > 0 },
-        drawnStartTimeSeconds = drawnRelativeStartTime?.seconds
+        drawnStartTimeSeconds = drawnRelativeStartTime?.seconds,
+        bibNumber = index
     )
 
 /** Converts the Android Room punch entity into the portable shared event model. */
@@ -378,6 +379,28 @@ private fun EventReadoutData.toRoomReadoutData(idMapper: RoomIdMapper): ReadoutD
 /** Converts the portable shared category aggregate back into an Android aggregate. */
 fun EventCategoryData.toRoomCategoryData(): CategoryData =
     toRoomCategoryData(RoomIdMapper(), emptyMap(), null)
+
+/** Converts an imported IOF course into Android data without applying ARDF control-order rules. */
+fun EventCategoryData.toRoomCategoryDataPreservingControlOrder(): CategoryData {
+    val idMapper = RoomIdMapper()
+    val controlPoints = controlPoints
+        .sortedBy { it.order }
+        .mapIndexed { index, controlPoint ->
+            controlPoint.toRoomControlPoint(idMapper, emptyMap()).also { roomControlPoint ->
+                roomControlPoint.order = index + 1
+            }
+        }
+    val category = category.toRoomCategory(idMapper).also { roomCategory ->
+        roomCategory.controlPointsString = ControlPointRules.formatControlPoints(
+            controlPoints.map { ControlPointDefinition(it.siCode, it.type, it.order) }
+        )
+    }
+    return CategoryData(
+        category = category,
+        controlPoints = controlPoints,
+        competitors = competitors.map { it.toRoomCompetitor(idMapper) }
+    )
+}
 
 private fun EventCategoryData.toRoomCategoryData(
     idMapper: RoomIdMapper,

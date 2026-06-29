@@ -42,4 +42,20 @@ object IofResultStatus {
             ResultStatus.ERROR -> "Cancelled"
         }
     }
+
+    /** Returns the shared status for an IOF result status, or null for in-progress statuses. */
+    fun toResultStatus(iofStatus: String): ResultStatus? {
+        return when (iofStatus.trim()) {
+            "OK" -> ResultStatus.OK
+            "MissingPunch" -> ResultStatus.MISPUNCHED
+            "Disqualified" -> ResultStatus.DISQUALIFIED
+            "DidNotStart", "DidNotEnter" -> ResultStatus.DID_NOT_START
+            "DidNotFinish" -> ResultStatus.DID_NOT_FINISH
+            "OverTime" -> ResultStatus.OVER_TIME_LIMIT
+            "NotCompeting", "Moved", "MovedUp" -> ResultStatus.UNOFFICIAL
+            "Cancelled", "SportWithdr" -> ResultStatus.ERROR
+            "Active", "Inactive" -> null
+            else -> null
+        }
+    }
 }

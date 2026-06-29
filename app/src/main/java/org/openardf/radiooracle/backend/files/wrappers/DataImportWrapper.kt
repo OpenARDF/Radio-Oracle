@@ -27,18 +27,22 @@ package org.openardf.radiooracle.backend.files.wrappers
 import org.openardf.radiooracle.backend.files.constants.DataType
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
+import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
 
 /** Result of an import pass, including accepted rows and row-level validation failures. */
 data class DataImportWrapper(
     var competitorCategories: List<CompetitorCategory>,
     var categories: List<CategoryData>,
-    var invalidLines: ArrayList<Pair<Int, String>> // Row index plus validation failure reason.
+    var invalidLines: ArrayList<Pair<Int, String>>, // Row index plus validation failure reason.
+    var readoutData: List<ReadoutData> = emptyList(),
+    var iofWarnings: List<String> = emptyList()
 ) {
     /** Returns the number of accepted rows relevant to the requested import data type. */
     fun getCount(dataType: DataType): Int {
         return when (dataType) {
             DataType.CATEGORIES -> categories.size
-            DataType.COMPETITORS -> competitorCategories.size
+            DataType.COMPETITORS, DataType.COMPETITOR_STARTS -> competitorCategories.size
+            DataType.RESULTS_LIVE -> readoutData.size
             else -> 0
         }
     }

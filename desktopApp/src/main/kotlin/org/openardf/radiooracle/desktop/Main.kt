@@ -197,6 +197,7 @@ import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvImports
+import org.openardf.radiooracle.shared.files.IofXmlImports
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
@@ -4023,6 +4024,69 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun importIofStartListXml() {
+            DesktopFileDialogs.chooseImportIofXml("Import IOF Start List XML")?.let { path ->
+                runCatching {
+                    val currentProject = projectSession.currentProject
+                        ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
+                    val parsed = IofXmlImports.startList(Files.readString(path))
+                    val outcome = EventProjectEditor.importIofStartList(currentProject, parsed.parsedData)
+                    projectFile = projectSession.updateCurrentProject { outcome.projectFile }
+                    syncProjectState()
+                    val warningCount = parsed.unsupportedItems.size + outcome.warnings.size
+                    projectStatusText = buildString {
+                        append("Imported ${outcome.updatedCount} IOF StartList row")
+                        append(if (outcome.updatedCount == 1) "" else "s")
+                        append(" from ${path.fileName}.")
+                        if (outcome.skippedCount > 0) {
+                            append(" Skipped ${outcome.skippedCount}.")
+                        }
+                        if (warningCount > 0) {
+                            append(" $warningCount warning")
+                            append(if (warningCount == 1) "" else "s")
+                            append(".")
+                        }
+                    }
+                }.onFailure { error ->
+                    projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
+        fun importIofResultListXml() {
+            DesktopFileDialogs.chooseImportIofXml("Import IOF Result List XML")?.let { path ->
+                runCatching {
+                    val currentProject = projectSession.currentProject
+                        ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
+                    val parsed = IofXmlImports.resultList(Files.readString(path))
+                    val outcome = EventProjectEditor.importIofResultList(
+                        projectFile = currentProject,
+                        preview = parsed.parsedData,
+                        resultIdFactory = { "iof-result-${UUID.randomUUID()}" },
+                        punchIdFactory = { resultId, index, type -> "$resultId-punch-$index-${type.name}" }
+                    )
+                    projectFile = projectSession.updateCurrentProject { outcome.projectFile }
+                    syncProjectState()
+                    val warningCount = parsed.unsupportedItems.size + outcome.warnings.size
+                    projectStatusText = buildString {
+                        append("Imported ${outcome.importedCount} IOF ResultList row")
+                        append(if (outcome.importedCount == 1) "" else "s")
+                        append(" from ${path.fileName}.")
+                        if (outcome.skippedCount > 0) {
+                            append(" Skipped ${outcome.skippedCount}.")
+                        }
+                        if (warningCount > 0) {
+                            append(" $warningCount warning")
+                            append(if (warningCount == 1) "" else "s")
+                            append(".")
+                        }
+                    }
+                }.onFailure { error ->
+                    projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun closeApplication() {
             DesktopAppSettingsPreferences.setWindowBounds(
                 DesktopWindowBounds(
@@ -4645,6 +4709,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportControlsCsv,
                 DesktopNavAction.ImportCompetitorsCsv,
                 DesktopNavAction.ImportStartsCsv,
+                DesktopNavAction.ImportIofStartListXml,
                 DesktopNavAction.DeleteAllControls,
                 DesktopNavAction.DeleteAllCategoryAssignedControls,
                 DesktopNavAction.DeleteAllCategories,
@@ -4671,6 +4736,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportAndroidRaceBackupJson,
                 DesktopNavAction.ExportLiveResultsJson,
                 DesktopNavAction.ExportFinalResultsJson,
+                DesktopNavAction.ImportIofResultListXml,
                 DesktopNavAction.ExportIofStartListXml,
                 DesktopNavAction.ExportIofResultListXml,
                 DesktopNavAction.CreateEventSeriesWithCurrentEvent,
@@ -4757,6 +4823,7 @@ fun main(args: Array<String>) = application {
                     isDeleteAllCompetitorsDialogVisible = true
                 DesktopNavAction.ImportCompetitorsCsv -> importCompetitorsCsv()
                 DesktopNavAction.ImportStartsCsv -> importCompetitorStartsCsv()
+                DesktopNavAction.ImportIofStartListXml -> importIofStartListXml()
                 DesktopNavAction.ExportEventFileCopy -> exportEventFileCopy()
                 DesktopNavAction.SendEventFileToAndroid -> sendEventFileToAndroid()
                 DesktopNavAction.ExportCategoriesCsv -> exportCategoriesCsv()
@@ -4799,6 +4866,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportAndroidRaceBackupJson -> exportAndroidRaceBackupJson()
                 DesktopNavAction.ExportLiveResultsJson -> exportLiveResultsJson()
                 DesktopNavAction.ExportFinalResultsJson -> exportFinalResultsJson()
+                DesktopNavAction.ImportIofResultListXml -> importIofResultListXml()
                 DesktopNavAction.ExportIofStartListXml -> exportIofStartListXml()
                 DesktopNavAction.ExportIofResultListXml -> exportIofResultListXml()
                 DesktopNavAction.DownloadSiCard -> downloadSportIdentReadout()

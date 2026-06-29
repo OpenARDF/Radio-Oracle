@@ -449,7 +449,7 @@ class DesktopNavigationTest {
         assertEquals(DesktopSection.StartList, state.selectedSection)
         assertEquals("Setup > Start List", DesktopNavigation.breadcrumb(state))
         assertEquals(
-            listOf("Import Starts CSV...", "Exports"),
+            listOf("Import Starts CSV...", "Import IOF Start List XML...", "Exports"),
             DesktopNavigation.currentItems(state).map { it.label }
         )
     }
@@ -1221,6 +1221,7 @@ class DesktopNavigationTest {
         assertEquals("Results/File Export > Exports > JSON/XML", DesktopNavigation.breadcrumb(backState))
         assertEquals(
             listOf(
+                "Import IOF Result List XML...",
                 "Export Live Results JSON...",
                 "Export Final Results JSON...",
                 "Export IOF Result List XML...",

@@ -120,12 +120,16 @@ class DataImportDialogFragment : DialogFragment() {
                 when (type) {
                     DataType.CATEGORIES -> R.array.category_data_formats
                     DataType.COMPETITORS -> R.array.competitor_data_formats
-                    DataType.COMPETITOR_STARTS -> R.array.competitor_data_formats
+                    DataType.COMPETITOR_STARTS -> R.array.competitor_start_data_formats
+                    DataType.RESULTS_LIVE -> R.array.result_import_data_formats
                     else -> {
                         R.array.category_data_formats
                     }      //Failsafe - should not happen
                 }
             dataFormatPicker.setSimpleItems(items)
+            resources.getStringArray(items).firstOrNull()?.let { firstFormat ->
+                dataFormatPicker.setText(firstFormat, false)
+            }
         }
 
         dataFormatPicker.setText(getString(R.string.data_format_csv), false)
@@ -195,7 +199,8 @@ class DataImportDialogFragment : DialogFragment() {
             dataPreviewRecyclerView.adapter =
                 DataPreviewRecyclerViewAdapater(data!!, currType)
 
-            //Inform about invalid lines
+            // Inform about invalid lines and schema-valid IOF content that was not imported.
+            val warnings = data!!.iofWarnings
             if (data!!.invalidLines.isNotEmpty()) {
                 var errorText = ""
                 for (err in data!!.invalidLines) {
@@ -205,7 +210,12 @@ class DataImportDialogFragment : DialogFragment() {
                         err.second
                     )
                 }
+                if (warnings.isNotEmpty()) {
+                    errorText += warnings.joinToString(separator = "\n", postfix = "\n")
+                }
                 errorView.text = errorText
+            } else if (warnings.isNotEmpty()) {
+                errorView.text = warnings.joinToString(separator = "\n")
             } else {
                 errorView.text = ""
             }
@@ -242,6 +252,20 @@ class DataImportDialogFragment : DialogFragment() {
                     //Save competitor starts - TODO: ADD duplicates check
                     for (compData in data!!.competitorCategories) {
                         selectedRaceViewModel.createOrUpdateCompetitor(compData.competitor)
+                    }
+                }
+
+                DataType.RESULTS_LIVE -> {
+                    runBlocking {
+                        for (readoutData in data!!.readoutData) {
+                            dataProcessor.saveResultPunches(
+                                readoutData.result,
+                                readoutData.punches.map { it.punch }
+                            )
+                        }
+                    }
+                    selectedRaceViewModel.getCurrentRace()?.let { race ->
+                        selectedRaceViewModel.updateResultsByRace(race.id)
                     }
                 }
 

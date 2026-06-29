@@ -25,19 +25,37 @@
 package org.openardf.radiooracle.backend.files.processors
 
 import android.content.Context
+import androidx.preference.PreferenceManager
+import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.constants.DataFormat
 import org.openardf.radiooracle.backend.files.constants.DataType
 import org.openardf.radiooracle.backend.files.wrappers.DataImportWrapper
-import org.openardf.radiooracle.backend.files.xml.XmlHelper
+import org.openardf.radiooracle.backend.room.entity.Category
+import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
+import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.results.ResultsProcessor
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
+import org.openardf.radiooracle.backend.shared.toEventCategoryData
+import org.openardf.radiooracle.backend.shared.toEventCompetitorData
+import org.openardf.radiooracle.backend.shared.toEventRace
+import org.openardf.radiooracle.backend.shared.toEventRaceData
+import org.openardf.radiooracle.backend.shared.toRoomReadoutData
+import org.openardf.radiooracle.backend.shared.toRoomCategoryDataPreservingControlOrder
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
 import kotlinx.coroutines.flow.first
+import org.openardf.radiooracle.shared.event.EventProjectEditor
+import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.files.IofXmlCompetitorMatchIssue
+import org.openardf.radiooracle.shared.files.IofXmlImportMatcher
+import org.openardf.radiooracle.shared.files.IofXmlImports
+import org.openardf.radiooracle.shared.files.IofXmlExports
 import java.io.InputStream
 import java.io.OutputStream
-import java.io.OutputStreamWriter
+import java.time.Duration
+import java.util.UUID
 import kotlin.collections.emptyList
 
 /** Import/export processor for IOF XML interoperability. */
@@ -58,6 +76,19 @@ object IofXmlProcessor : FormatProcessor {
                     inStream,
                     race,
                     context
+                )
+
+                DataType.COMPETITOR_STARTS -> importStartList(
+                    inStream,
+                    race,
+                    dataProcessor,
+                    context
+                )
+
+                DataType.RESULTS_LIVE -> importResultList(
+                    inStream,
+                    race,
+                    dataProcessor
                 )
 
                 else -> {
@@ -104,9 +135,99 @@ object IofXmlProcessor : FormatProcessor {
         race: Race,
         context: Context
     ): DataImportWrapper {
+        val xml = inStream.readBytes().toString(Charsets.UTF_8)
+        val sharedRace = race.toEventRace()
+        val result = IofXmlImports.courseData(xml, sharedRace)
+        val cats = result.parsedData.categories.map { it.toRoomCategoryDataPreservingControlOrder() }
+        return DataImportWrapper(
+            competitorCategories = emptyList(),
+            categories = cats,
+            invalidLines = arrayListOf(),
+            iofWarnings = result.unsupportedItems.map { "${it.location}: ${it.reason}" }
+        )
+    }
 
-        val cats = XmlHelper.parseCategories(inStream, race, context)
-        return DataImportWrapper(emptyList(), cats, arrayListOf())
+    /** Imports an IOF StartList by matching rows to existing competitors and previewing start updates. */
+    private suspend fun importStartList(
+        inStream: InputStream,
+        race: Race,
+        dataProcessor: DataProcessor,
+        context: Context
+    ): DataImportWrapper {
+        val xml = inStream.readBytes().toString(Charsets.UTF_8)
+        val parsed = IofXmlImports.startList(xml)
+        val raceData = dataProcessor.getRaceData(race.id)
+        val sharedRaceData = raceData.toEventRaceData()
+        val matched = IofXmlImportMatcher.matchStartList(parsed.parsedData, sharedRaceData)
+        val competitorsById = raceData.competitorData
+            .associateBy { it.competitorCategory.competitor.id.toString() }
+        val invalidLines = arrayListOf<Pair<Int, String>>()
+        val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
+        val preferAppStartTime =
+            sharedPreferences.getBoolean(
+                context.getString(R.string.key_files_prefer_app_start_time),
+                false
+            )
+
+        matched.entries.forEachIndexed { index, matchedEntry ->
+            val fatalIssues = matchedEntry.match.issues.filterNot {
+                it == IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD
+            }
+            val relativeStartSeconds = matchedEntry.entry.relativeStartTimeSeconds
+            val competitorData = matchedEntry.match.competitorId?.let(competitorsById::get)
+            when {
+                fatalIssues.isNotEmpty() -> invalidLines += (index + 1) to fatalIssues.joinToString { it.androidMessage() }
+                relativeStartSeconds == null -> invalidLines += (index + 1) to "Start time missing or invalid."
+                competitorData == null -> invalidLines += (index + 1) to IofXmlCompetitorMatchIssue.UNKNOWN_COMPETITOR.androidMessage()
+                !preferAppStartTime -> {
+                    competitorData.competitorCategory.competitor.drawnRelativeStartTime =
+                        Duration.ofSeconds(relativeStartSeconds)
+                    matchedEntry.entry.controlCard?.let { controlCard ->
+                        competitorData.competitorCategory.competitor.siNumber = controlCard
+                    }
+                }
+            }
+        }
+
+        val warnings = parsed.unsupportedItems.map { "${it.location}: ${it.reason}" } +
+            matched.entries.flatMapIndexed { index, matchedEntry ->
+                if (matchedEntry.match.issues.contains(IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD)) {
+                    listOf("StartList row ${index + 1}: ${IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD.androidMessage()}")
+                } else {
+                    emptyList()
+                }
+            }
+
+        return DataImportWrapper(
+            competitorCategories = raceData.competitorData.map { it.competitorCategory },
+            categories = emptyList(),
+            invalidLines = invalidLines,
+            iofWarnings = warnings
+        )
+    }
+
+    /** Imports an IOF ResultList by matching person results to existing competitors. */
+    private suspend fun importResultList(
+        inStream: InputStream,
+        race: Race,
+        dataProcessor: DataProcessor
+    ): DataImportWrapper {
+        val xml = inStream.readBytes().toString(Charsets.UTF_8)
+        val parsed = IofXmlImports.resultList(xml)
+        val raceData = dataProcessor.getRaceData(race.id)
+        val outcome = EventProjectEditor.importIofResultList(
+            projectFile = EventProjectFile(raceData = raceData.toEventRaceData()),
+            preview = parsed.parsedData,
+            resultIdFactory = { "iof-result-${UUID.randomUUID()}" },
+            punchIdFactory = { resultId, index, type -> "$resultId-punch-$index-${type.name}" }
+        )
+        return DataImportWrapper(
+            competitorCategories = emptyList(),
+            categories = emptyList(),
+            invalidLines = arrayListOf(),
+            readoutData = outcome.importedReadouts.map { it.toRoomReadoutData() },
+            iofWarnings = parsed.unsupportedItems.map { "${it.location}: ${it.reason}" } + outcome.warnings
+        )
     }
 
     /** Placeholder for future IOF XML category export support. */
@@ -124,19 +245,13 @@ object IofXmlProcessor : FormatProcessor {
         data: List<CategoryData>,
         dataProcessor: DataProcessor
     ) {
-        var writer: OutputStreamWriter? = null
         try {
-            val (serializer, w) = XmlHelper.createSerializer(outStream)
-            writer = w
-
-            XmlHelper.writeRootTag(serializer, race, "StartList", dataProcessor)
-
-            for (res in data) {
-                XmlHelper.writeCategoryStartList(serializer, res, race.startDateTime)
-            }
-
-            serializer.endTag(null, "StartList")
-            XmlHelper.finishSerializer(serializer, writer)
+            outStream.write(
+                IofXmlExports.startList(
+                    raceData = raceDataForStartList(race, data),
+                    creator = "Radio-Oracle ${dataProcessor.getAppVersion()}"
+                ).toByteArray(Charsets.UTF_8)
+            )
         } catch (ex: Exception) {
             throw RuntimeException("Failed to export IOF XML startlist: ${ex.message}", ex)
         }
@@ -149,21 +264,81 @@ object IofXmlProcessor : FormatProcessor {
         results: List<ResultWrapper>,
         dataProcessor: DataProcessor
     ) {
-        var writer: OutputStreamWriter? = null
         try {
-            val (serializer, w) = XmlHelper.createSerializer(outStream)
-            writer = w
-
-            XmlHelper.writeRootTag(serializer, race, "ResultList", dataProcessor)
-
-            for (res in results) {
-                XmlHelper.writeCategoryResult(serializer, res, race.startDateTime)
-            }
-
-            serializer.endTag(null, "ResultList")
-            XmlHelper.finishSerializer(serializer, writer)
+            outStream.write(
+                IofXmlExports.resultList(
+                    raceData = raceDataForResults(race, results),
+                    creator = "Radio-Oracle ${dataProcessor.getAppVersion()}"
+                ).toByteArray(Charsets.UTF_8)
+            )
         } catch (ex: Exception) {
             throw RuntimeException("Failed to export IOF XML: ${ex.message}", ex)
         }
     }
+
+    private fun raceDataForStartList(race: Race, categories: List<CategoryData>) =
+        RaceData(
+            race = race,
+            categories = categories,
+            aliases = emptyList(),
+            competitorData = categories.flatMap { categoryData ->
+                categoryData.competitors.map { competitor ->
+                    CompetitorData(
+                        competitorCategory = CompetitorCategory(competitor, categoryData.category),
+                        readoutData = null
+                    )
+                }
+            },
+            unmatchedReadoutData = emptyList()
+        ).toEventRaceData().withAndroidStartNumbersAsIofBibNumbers()
+
+    private fun raceDataForResults(race: Race, results: List<ResultWrapper>) =
+        org.openardf.radiooracle.shared.event.EventRaceData(
+            race = race.toEventRace(),
+            categories = results.mapNotNull { wrapper ->
+                wrapper.category?.let { category ->
+                    CategoryData(
+                        category = category,
+                        controlPoints = emptyList(),
+                        competitors = wrapper.competitorData.map { it.competitorCategory.competitor }
+                    ).toEventCategoryData()
+                }
+            },
+            aliases = emptyList(),
+            competitorData = results.flatMap { wrapper ->
+                wrapper.competitorData.map { competitorData ->
+                    val category = competitorData.competitorCategory.category ?: wrapper.category
+                    competitorData.copy(
+                        competitorCategory = CompetitorCategory(
+                            competitor = competitorData.competitorCategory.competitor,
+                            category = category ?: Category("")
+                        )
+                    ).toEventCompetitorData()
+                }
+            },
+            unmatchedReadoutData = emptyList()
+        )
+
+    private fun org.openardf.radiooracle.shared.event.EventRaceData.withAndroidStartNumbersAsIofBibNumbers() =
+        copy(
+            competitorData = competitorData.map { data ->
+                val competitor = data.competitorCategory.competitor
+                data.copy(
+                    competitorCategory = data.competitorCategory.copy(
+                        competitor = competitor.copy(
+                            bibNumber = competitor.startNumber?.takeIf { it > 0 }?.toString()
+                                ?: competitor.bibNumber
+                        )
+                    )
+                )
+            }
+        )
+
+    private fun IofXmlCompetitorMatchIssue.androidMessage(): String =
+        when (this) {
+            IofXmlCompetitorMatchIssue.UNKNOWN_CLASS -> "Class not found in this event."
+            IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD -> "Control card missing; matched by another identifier."
+            IofXmlCompetitorMatchIssue.UNKNOWN_COMPETITOR -> "Competitor not found in this event."
+            IofXmlCompetitorMatchIssue.DUPLICATE_MATCH -> "Multiple competitors match this IOF row."
+        }
 }

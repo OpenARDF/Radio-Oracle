@@ -497,7 +497,7 @@
     <string name="data_format_txt" translatable="false">TXT</string>
     <string name="data_format_csv" translatable="false">CSV</string>
     <string name="data_format_json" translatable="false">JSON</string>
-    <string name="data_format_xml" translatable="false">XML</string>
+    <string name="data_format_xml" translatable="false">IOF XML</string>
     <string name="data_format_html" translatable="false">HTML</string>
 
     <!-- Punch status -->
@@ -588,6 +588,16 @@
         <!--        <item>@string/data_format_xml</item>-->
     </string-array>
 
+    <string-array name="competitor_start_data_formats">
+        <item>@string/data_format_csv</item>
+        <item>@string/data_format_json</item>
+        <item>@string/data_format_xml</item>
+    </string-array>
+
+    <string-array name="result_import_data_formats">
+        <item>@string/data_format_xml</item>
+    </string-array>
+
     <string-array name="results_data_formats">
         <item>@string/data_format_txt</item>
         <item>@string/data_format_html</item>
@@ -613,6 +623,7 @@
         <item>@string/data_type_categories</item>
         <item>@string/data_type_competitors</item>
         <item>@string/data_type_competitor_starts</item>
+        <item>@string/data_type_results</item>
     </string-array>
 
     <string-array name="internet_import_types">

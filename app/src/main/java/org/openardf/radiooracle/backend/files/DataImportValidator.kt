@@ -99,6 +99,12 @@ object DataImportValidator {
                 // TODO: Implement once import settings define how strict start-time updates should be.
             }
 
+            DataType.RESULTS_LIVE -> {
+                data.readoutData.forEach { readoutData ->
+                    validateRaceDataReadoutData(readoutData, raceId, context)
+                }
+            }
+
             else -> {
                 throw IllegalArgumentException(context.getString(R.string.data_import_format_not_supported))
             }

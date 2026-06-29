@@ -39,3 +39,14 @@ plugins {
 }
 
 ext.radioOracleVersion = "1.0.22"
+
+subprojects {
+    tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
+        def iofSchemaPath = providers.gradleProperty("iofSchemaPath")
+                .orElse(providers.environmentVariable("IOF_SCHEMA_PATH"))
+                .orNull
+        if (iofSchemaPath != null && !iofSchemaPath.trim().isEmpty()) {
+            systemProperty("iof.schema.path", iofSchemaPath)
+        }
+    }
+}

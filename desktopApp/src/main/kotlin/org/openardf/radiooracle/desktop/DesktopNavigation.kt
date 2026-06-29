@@ -79,6 +79,7 @@ enum class DesktopNavAction {
     ImportControlsCsv,
     ImportCompetitorsCsv,
     ImportStartsCsv,
+    ImportIofStartListXml,
     ImportDemFile,
     DeleteAllControls,
     DeleteAllCategoryAssignedControls,
@@ -110,6 +111,7 @@ enum class DesktopNavAction {
     ExportAndroidRaceBackupJson,
     ExportLiveResultsJson,
     ExportFinalResultsJson,
+    ImportIofResultListXml,
     ExportIofStartListXml,
     ExportIofResultListXml,
     CreateEventSeriesWithCurrentEvent,
@@ -466,6 +468,12 @@ object DesktopNavigation {
                     workflow,
                     listOf(
                         action("setup.start-list.import", "Import Starts CSV...", workflow, DesktopNavAction.ImportStartsCsv),
+                        action(
+                            "setup.start-list.import-iof",
+                            "Import IOF Start List XML...",
+                            workflow,
+                            DesktopNavAction.ImportIofStartListXml
+                        ),
                         group(
                             "setup.start-list.exports",
                             "Exports",
@@ -797,6 +805,7 @@ object DesktopNavigation {
                             "JSON/XML",
                             workflow,
                             listOf(
+                                action("results.import-iof", "Import IOF Result List XML...", workflow, DesktopNavAction.ImportIofResultListXml),
                                 action("results.export-live-json", "Export Live Results JSON...", workflow, DesktopNavAction.ExportLiveResultsJson),
                                 action("results.export-final-json", "Export Final Results JSON...", workflow, DesktopNavAction.ExportFinalResultsJson),
                                 action("results.export-iof", "Export IOF Result List XML...", workflow, DesktopNavAction.ExportIofResultListXml),
@@ -1214,8 +1223,10 @@ object DesktopNavigation {
             "Use Start List to import, draw, balance, review, and export competitor start times once categories and assignments are ready.",
         "setup.start-list.import" to
             "Use Import Starts CSV to apply externally prepared start times to the competitors in this Event File.",
+        "setup.start-list.import-iof" to
+            "Use Import IOF Start List XML to apply a standards-compliant IOF XML start-list file to the competitors in this Event File.",
         "setup.start-list.exports" to
-            "Use Exports to write start lists in formats useful for starts, category checks, ROBIS, and IOF-compatible workflows.",
+            "Use Exports to write start lists in formats useful for starts, category checks, ROBIS, and IOF XML workflows.",
         "setup.start-list.export-csv" to
             "Use Export Starts CSV to write the complete start list as a general-purpose CSV file.",
         "setup.start-list.export-category" to
@@ -1225,7 +1236,7 @@ object DesktopNavigation {
         "setup.start-list.export-robis" to
             "Use Export ROBIS Start List CSV to generate a start-list file for ROBIS workflows.",
         "setup.start-list.export-iof" to
-            "Use Export IOF Start List XML to write an IOF-compatible start-list file.",
+            "Use Export IOF Start List XML to write an IOF XML start-list file.",
         "setup.tools" to
             "Use More to open standalone utilities, app information, and other event-support workflows.",
         "setup.tools.event-validator" to
@@ -1313,13 +1324,15 @@ object DesktopNavigation {
         "results.export-readouts" to
             "Use Export Readouts CSV to write downloaded and unmatched readout records for review or backup.",
         "results.exports-json-xml" to
-            "Use JSON/XML to export live/final result payloads and standards-oriented result files.",
+            "Use JSON/XML to import or export live/final result payloads and standards-oriented result files.",
+        "results.import-iof" to
+            "Use Import IOF Result List XML to add completed, matched IOF XML person results as Radio-Oracle readouts.",
         "results.export-live-json" to
             "Use Export Live Results JSON to write the current live-results payload.",
         "results.export-final-json" to
             "Use Export Final Results JSON to write a final-results JSON payload.",
         "results.export-iof" to
-            "Use Export IOF Result List XML to write an IOF-compatible result-list file.",
+            "Use Export IOF Result List XML to write an IOF XML result-list file.",
         "results.export-ardf-json" to
             "Use Export ARDF JSON to write ARDF-oriented event and result data.",
         "results.export-copy" to

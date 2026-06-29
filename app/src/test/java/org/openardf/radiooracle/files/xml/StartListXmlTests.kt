@@ -26,20 +26,26 @@ package org.openardf.radiooracle.files.xml
 
 import org.openardf.radiooracle.backend.DataProcessor
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import java.io.ByteArrayOutputStream
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
 
+import org.openardf.radiooracle.backend.files.constants.DataType
 import org.openardf.radiooracle.backend.files.processors.IofXmlProcessor
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
+import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
+import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.room.enums.ResultStatus
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
@@ -140,5 +146,100 @@ class StartListXmlTests {
             .build()
 
         assertEquals("XMLs are different: $diff", false, diff.hasDifferences())
+    }
+
+    @Test
+    fun testImportStartListUpdatesMatchedCompetitorStartTime() = runTest {
+        val context = RuntimeEnvironment.getApplication()
+        val race = Race(
+            UUID.fromString("00000000-0000-0000-0000-000000000001"),
+            "Test Race",
+            "",
+            LocalDateTime.of(2023, 6, 15, 9, 30, 0),
+            org.openardf.radiooracle.backend.room.enums.RaceType.CLASSIC,
+            org.openardf.radiooracle.backend.room.enums.RaceLevel.PRACTICE,
+            org.openardf.radiooracle.backend.room.enums.RaceBand.M80,
+            Duration.ZERO
+        )
+        val category = Category(
+            UUID.fromString("00000000-0000-0000-0000-000000000002"),
+            race.id,
+            "M21",
+            true,
+            null,
+            5200,
+            120,
+            0,
+            false,
+            null,
+            null,
+            null,
+            ""
+        )
+        val competitor = Competitor(
+            UUID.fromString("00000000-0000-0000-0000-000000000003"),
+            race.id,
+            category.id,
+            "Jan",
+            "Novak",
+            "Club A",
+            "IDX1",
+            true,
+            1990,
+            111,
+            false,
+            1,
+            null
+        )
+        val competitorData = CompetitorData(
+            CompetitorCategory(competitor, category),
+            readoutData = null
+        )
+        val raceData = RaceData(
+            race = race,
+            categories = listOf(CategoryData(category, emptyList(), listOf(competitor))),
+            aliases = emptyList(),
+            competitorData = listOf(competitorData),
+            unmatchedReadoutData = emptyList()
+        )
+        val dataProcessor: DataProcessor = mock()
+        `when`(dataProcessor.getContext()).thenReturn(context)
+        `when`(dataProcessor.getRaceData(race.id)).thenReturn(raceData)
+
+        val xml = """
+            <StartList xmlns="http://www.orienteering.org/datastandard/3.0" iofVersion="3.0">
+              <Event>
+                <Name>Test Race</Name>
+                <StartTime>
+                  <Date>2023-06-15</Date>
+                  <Time>09:30:00</Time>
+                </StartTime>
+              </Event>
+              <ClassStart>
+                <Class><Name>M21</Name></Class>
+                <PersonStart>
+                  <Person>
+                    <Id type="CZE">IDX1</Id>
+                    <Name><Family>Novak</Family><Given>Jan</Given></Name>
+                  </Person>
+                  <Start>
+                    <BibNumber>1</BibNumber>
+                    <StartTime>2023-06-15T09:42:00</StartTime>
+                    <ControlCard>111</ControlCard>
+                  </Start>
+                </PersonStart>
+              </ClassStart>
+            </StartList>
+        """.trimIndent()
+
+        val wrapper = IofXmlProcessor.importData(
+            xml.byteInputStream(),
+            DataType.COMPETITOR_STARTS,
+            race,
+            dataProcessor
+        )
+
+        assertTrue(wrapper.invalidLines.isEmpty())
+        assertEquals(Duration.ofMinutes(12), wrapper.competitorCategories.single().competitor.drawnRelativeStartTime)
     }
 }

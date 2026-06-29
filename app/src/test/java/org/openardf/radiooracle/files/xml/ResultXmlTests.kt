@@ -25,19 +25,24 @@
 package org.openardf.radiooracle.files.xml
 
 import org.openardf.radiooracle.backend.DataProcessor
+import org.openardf.radiooracle.backend.files.constants.DataType
 import org.openardf.radiooracle.backend.files.processors.IofXmlProcessor
 import org.openardf.radiooracle.backend.results.ResultsProcessor
 import org.openardf.radiooracle.backend.results.ResultsProcessor.toResultWrappers
 import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
+import org.openardf.radiooracle.backend.room.entity.ControlPoint
 import org.openardf.radiooracle.backend.room.entity.Punch
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.Result
 import org.openardf.radiooracle.backend.room.entity.embeddeds.AliasPunch
+import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
+import org.openardf.radiooracle.backend.room.enums.ControlPointType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.backend.sportident.SITime
@@ -48,10 +53,12 @@ import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import java.io.ByteArrayOutputStream
 import java.time.Duration
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.util.UUID
 import org.xmlunit.builder.DiffBuilder
 import org.xmlunit.diff.DefaultNodeMatcher
 import org.xmlunit.diff.ElementSelectors
@@ -119,5 +126,96 @@ class ResultXmlTests {
             .build()
 
         assertEquals("XMLs are different: $diff", false, diff.hasDifferences())
+    }
+
+    @Test
+    fun testResultImportCreatesMatchedReadout() = runTest {
+        val race = Race()
+        race.id = UUID.fromString("00000000-0000-0000-0000-000000000001")
+        race.name = "Test Race"
+        race.startDateTime = LocalDateTime.of(2025, 1, 1, 10, 0, 0)
+
+        val category = Category("M21")
+        category.id = UUID.fromString("00000000-0000-0000-0000-000000000002")
+        category.raceId = race.id
+        val controlPoint = ControlPoint(
+            UUID.fromString("00000000-0000-0000-0000-000000000004"),
+            category.id,
+            31,
+            ControlPointType.CONTROL,
+            1
+        )
+
+        val competitor = Competitor()
+        competitor.id = UUID.fromString("00000000-0000-0000-0000-000000000003")
+        competitor.raceId = race.id
+        competitor.categoryId = category.id
+        competitor.firstName = "Jan"
+        competitor.lastName = "Novak"
+        competitor.index = "IDX1"
+        competitor.siNumber = 111
+
+        val raceData = RaceData(
+            race = race,
+            categories = listOf(CategoryData(category, listOf(controlPoint), listOf(competitor))),
+            aliases = emptyList(),
+            competitorData = listOf(CompetitorData(CompetitorCategory(competitor, category), null)),
+            unmatchedReadoutData = emptyList()
+        )
+        val dataProcessor = mock(DataProcessor::class.java)
+        `when`(dataProcessor.getContext()).thenReturn(RuntimeEnvironment.getApplication())
+        `when`(dataProcessor.getRaceData(race.id)).thenReturn(raceData)
+
+        val xml = """
+            <ResultList xmlns="http://www.orienteering.org/datastandard/3.0" iofVersion="3.0">
+              <Event>
+                <Name>Test Race</Name>
+                <StartTime>
+                  <Date>2025-01-01</Date>
+                  <Time>10:00:00</Time>
+                </StartTime>
+              </Event>
+              <ClassResult>
+                <Class><Name>M21</Name></Class>
+                <PersonResult>
+                  <Person>
+                    <Id type="CZE">IDX1</Id>
+                    <Name><Family>Novak</Family><Given>Jan</Given></Name>
+                  </Person>
+                  <Result>
+                    <BibNumber>1</BibNumber>
+                    <StartTime>2025-01-01T10:00:00</StartTime>
+                    <FinishTime>2025-01-01T10:12:00</FinishTime>
+                    <Time>720</Time>
+                    <Status>OK</Status>
+                    <ControlCard>111</ControlCard>
+                    <SplitTime>
+                      <ControlCode>31</ControlCode>
+                      <Time>300</Time>
+                    </SplitTime>
+                  </Result>
+                </PersonResult>
+              </ClassResult>
+            </ResultList>
+        """.trimIndent()
+
+        val wrapper = IofXmlProcessor.importData(
+            xml.byteInputStream(),
+            DataType.RESULTS_LIVE,
+            race,
+            dataProcessor
+        )
+
+        assertEquals(1, wrapper.readoutData.size)
+        val readout = wrapper.readoutData.single()
+        assertEquals(competitor.id, readout.result.competitorId)
+        assertEquals(111, readout.result.siNumber)
+        assertEquals(ResultStatus.OK, readout.result.resultStatus)
+        assertEquals(Duration.ofSeconds(720), readout.result.runTime)
+        assertEquals(3, readout.punches.size)
+        assertEquals(SIRecordType.START, readout.punches[0].punch.punchType)
+        assertEquals(31, readout.punches[1].punch.siCode)
+        assertEquals(Duration.ofSeconds(300), readout.punches[1].punch.split)
+        assertEquals(SIRecordType.FINISH, readout.punches[2].punch.punchType)
     }
 }
