@@ -24,7 +24,6 @@
 
 package org.openardf.radiooracle.files.xml
 
-import android.content.Context
 import junit.framework.TestCase.assertEquals
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.DataImportValidator
@@ -38,9 +37,6 @@ import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito.mock
-import org.mockito.Mockito.`when`
-import org.mockito.kotlin.any
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 
@@ -61,7 +57,7 @@ class CategoryXmlTests {
     fun testCategoryValidImport() = runTest {
 
         val race = Race()
-        val context = mock(Context::class.java)
+        val context = RuntimeEnvironment.getApplication()
 
         val stream =
             this::class.java.classLoader?.getResourceAsStream("xml/xml_category_valid_example.xml")!!
@@ -126,15 +122,17 @@ class CategoryXmlTests {
     fun testCategoryNameMissing() = runTest {
 
         val race = Race()
-        val context = mock(Context::class.java)
-
-        `when`(context.getString(any())).thenReturn($$"Category name missing at line: %1$d")
+        val context = RuntimeEnvironment.getApplication()
 
         val stream =
             this::class.java.classLoader?.getResourceAsStream("xml/xml_category_invalid_example.xml")!!
 
-        assertThrows(IllegalArgumentException::class.java) {
+        val exception = assertThrows(IllegalArgumentException::class.java) {
             IofXmlProcessor.importCategories(stream, race, context)
         }
+        assertEquals(
+            "CourseData course name missing at /CourseData/RaceCourseData/Course[1].",
+            exception.message
+        )
     }
 }
