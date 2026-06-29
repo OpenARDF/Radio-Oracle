@@ -38,6 +38,7 @@ import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorStartCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
+import org.openardf.radiooracle.shared.files.IofCourseDataPreview
 import org.openardf.radiooracle.shared.files.IofResultListEntryPreview
 import org.openardf.radiooracle.shared.files.IofResultListPreview
 import org.openardf.radiooracle.shared.files.IofResultSplitPreview
@@ -79,6 +80,12 @@ data class CategoryCsvImportOutcome(
     val importedCount: Int,
     val updatedCount: Int,
     val warnings: List<String> = emptyList()
+)
+
+data class IofCourseDataImportOutcome(
+    val projectFile: EventProjectFile,
+    val importedCount: Int,
+    val updatedCount: Int
 )
 
 data class ResultRecalculationOutcome(
@@ -1494,6 +1501,76 @@ object EventProjectEditor {
         }
 
         return CategoryCsvImportOutcome(
+            projectFile = projectFile.copy(
+                raceData = projectFile.raceData.copy(
+                    categories = categories,
+                    controls = EventControlCatalog.mergeControls(projectFile.raceData.controls, importedControls)
+                )
+            ),
+            importedCount = importedCount,
+            updatedCount = updatedCount
+        )
+    }
+
+    fun importIofCourseData(
+        projectFile: EventProjectFile,
+        preview: IofCourseDataPreview
+    ): IofCourseDataImportOutcome {
+        val duplicateImportNames = preview.categories
+            .groupBy { it.category.name }
+            .filterValues { it.size > 1 }
+            .keys
+        require(duplicateImportNames.isEmpty()) {
+            "Duplicate category names in IOF CourseData import: ${duplicateImportNames.joinToString()}."
+        }
+
+        var nextCategoryOrder = (projectFile.raceData.categories.maxOfOrNull { it.category.order } ?: -1) + 1
+        val categories = projectFile.raceData.categories.toMutableList()
+        val importedControls = mutableListOf<EventControl>()
+        var importedCount = 0
+        var updatedCount = 0
+
+        preview.categories.forEach { imported ->
+            val existingIndex = categories.indexOfFirst { it.category.name == imported.category.name }
+            val existingCategoryData = existingIndex.takeIf { it >= 0 }?.let(categories::get)
+            val categoryId = existingCategoryData?.category?.id ?: imported.category.id
+            val categoryOrder = existingCategoryData?.category?.order ?: nextCategoryOrder++
+            val controlPoints = imported.controlPoints.mapIndexed { index, controlPoint ->
+                val definition = ControlPointDefinition(controlPoint.siCode, controlPoint.type, controlPoint.order)
+                val control = EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, definition)
+                importedControls += control
+                controlPoint.copy(
+                    categoryId = categoryId,
+                    controlId = control.id,
+                    order = index + 1
+                )
+            }
+            val definitions = controlPoints.map { ControlPointDefinition(it.siCode, it.type, it.order) }
+            val updatedCategoryData = EventCategoryData(
+                category = imported.category.copy(
+                    id = categoryId,
+                    raceId = projectFile.raceData.race.id,
+                    order = categoryOrder,
+                    isMan = StandardCategoryRules.inferIsManFromName(imported.category.name) ?: imported.category.isMan,
+                    encryptedIdealOrder = existingCategoryData?.category?.encryptedIdealOrder,
+                    encryptedCourseInfo = existingCategoryData?.category?.encryptedCourseInfo,
+                    controlPointsString = ControlPointRules.formatControlPoints(definitions)
+                ),
+                controlPoints = controlPoints,
+                competitors = existingCategoryData?.competitors ?: emptyList(),
+                publicControlIds = controlPoints.map { it.controlId }
+            )
+
+            if (existingIndex >= 0) {
+                categories[existingIndex] = updatedCategoryData
+                updatedCount++
+            } else {
+                categories += updatedCategoryData
+                importedCount++
+            }
+        }
+
+        return IofCourseDataImportOutcome(
             projectFile = projectFile.copy(
                 raceData = projectFile.raceData.copy(
                     categories = categories,

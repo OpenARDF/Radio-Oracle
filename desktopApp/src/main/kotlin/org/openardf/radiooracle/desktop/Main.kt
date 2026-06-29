@@ -4057,6 +4057,39 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun importIofCourseDataXml() {
+            DesktopFileDialogs.chooseImportIofXml("Import IOF CourseData XML")?.let { path ->
+                runCatching {
+                    val currentProject = projectSession.currentProject
+                        ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
+                    val parsed = IofXmlImports.validatedCourseData(
+                        Files.readString(path),
+                        IofXmlSchemaResource.loadBundledSchema(),
+                        currentProject.raceData.race
+                    )
+                    checkpointBeforeImport("IOF CourseData import ${path.fileName}")
+                    val outcome = EventProjectEditor.importIofCourseData(currentProject, parsed.parsedData)
+                    projectFile = projectSession.updateCurrentProject { outcome.projectFile }
+                    syncProjectState()
+                    projectStatusText = buildString {
+                        append("Imported ${outcome.importedCount} IOF CourseData categor")
+                        append(if (outcome.importedCount == 1) "y" else "ies")
+                        append(" from ${path.fileName}.")
+                        if (outcome.updatedCount > 0) {
+                            append(" Updated ${outcome.updatedCount}.")
+                        }
+                        if (parsed.unsupportedItems.isNotEmpty()) {
+                            append(" ${parsed.unsupportedItems.size} warning")
+                            append(if (parsed.unsupportedItems.size == 1) "" else "s")
+                            append(".")
+                        }
+                    }
+                }.onFailure { error ->
+                    projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun importIofResultListXml() {
             DesktopFileDialogs.chooseImportIofXml("Import IOF Result List XML")?.let { path ->
                 runCatching {
@@ -4709,6 +4742,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.CloseEventFile,
                 DesktopNavAction.ImportEventRegCompetitorsCsv,
                 DesktopNavAction.ImportCategoriesCsv,
+                DesktopNavAction.ImportIofCourseDataXml,
                 DesktopNavAction.ImportCourseKmlKmz,
                 DesktopNavAction.ImportCourseGpx,
                 DesktopNavAction.ImportControlsKmlKmz,
@@ -4814,6 +4848,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.SaveEventFile -> saveCurrentProject()
                 DesktopNavAction.CloseEventFile -> requestCloseEventFile()
                 DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
+                DesktopNavAction.ImportIofCourseDataXml -> importIofCourseDataXml()
                 DesktopNavAction.ImportControlsCsv -> importControlsCsv()
                 DesktopNavAction.ImportCourseKmlKmz -> chooseImportCourseKmlKmz()
                 DesktopNavAction.ImportCourseGpx -> chooseImportCourseGpx()

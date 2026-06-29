@@ -1127,6 +1127,71 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun importsIofCourseDataAsCategoryDefinitions() {
+        val existingCategory = category("cat-1", "M21", order = 7)
+        val existingCompetitor = competitorData("comp-1", "Alice", "Runner", category = existingCategory)
+            .competitorCategory
+            .competitor
+        val original = projectFile(
+            categories = listOf(
+                categoryData(
+                    "cat-1",
+                    "M21",
+                    order = 7,
+                    controlSiCodes = listOf(31),
+                    competitors = listOf(existingCompetitor),
+                    encryptedIdealOrder = "encrypted-order",
+                    encryptedCourseInfo = "encrypted-course"
+                )
+            )
+        )
+        val preview = IofXmlImports.courseData(
+            """
+            <CourseData iofVersion="3.0">
+              <RaceCourseData>
+                <Course>
+                  <Name>M21</Name>
+                  <Length>4500</Length>
+                  <Climb>120</Climb>
+                  <CourseControl type="Control"><Control>32</Control></CourseControl>
+                  <CourseControl type="Control"><Control>33</Control></CourseControl>
+                </Course>
+                <Course>
+                  <Name>W21</Name>
+                  <Length>3900</Length>
+                  <CourseControl type="Control"><Control>34</Control></CourseControl>
+                </Course>
+              </RaceCourseData>
+            </CourseData>
+            """.trimIndent(),
+            original.raceData.race
+        ).parsedData
+
+        val outcome = EventProjectEditor.importIofCourseData(original, preview)
+
+        assertEquals(1, outcome.importedCount)
+        assertEquals(1, outcome.updatedCount)
+        val updatedExisting = outcome.projectFile.raceData.categories.single { it.category.name == "M21" }
+        val added = outcome.projectFile.raceData.categories.single { it.category.name == "W21" }
+        assertEquals("cat-1", updatedExisting.category.id)
+        assertEquals(7, updatedExisting.category.order)
+        assertEquals(4500, updatedExisting.category.lengthMeters)
+        assertEquals(120, updatedExisting.category.climbMeters)
+        assertEquals("32 33", updatedExisting.category.controlPointsString)
+        assertEquals(listOf(32, 33), updatedExisting.controlPoints.map { it.siCode })
+        assertEquals(listOf(existingCompetitor), updatedExisting.competitors)
+        assertEquals("encrypted-order", updatedExisting.category.encryptedIdealOrder)
+        assertEquals("encrypted-course", updatedExisting.category.encryptedCourseInfo)
+        assertEquals("W21", added.category.name)
+        assertEquals(false, added.category.isMan)
+        assertEquals(8, added.category.order)
+        assertEquals(listOf(34), added.controlPoints.map { it.siCode })
+        assertEquals(added.controlPoints.map { it.controlId }, added.publicControlIds)
+        assertTrue(added.controlPoints.all { it.controlId.isNotBlank() })
+        assertEquals(listOf(32, 33, 34), outcome.projectFile.raceData.controls.map { it.siCode })
+    }
+
+    @Test
     fun rejectsDuplicateCategoryNamesInSameImport() {
         val original = projectFile(
             categories = listOf(categoryData("cat-1", "M21"))

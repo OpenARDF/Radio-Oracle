@@ -72,6 +72,7 @@ enum class DesktopNavAction {
     SaveEventFile,
     CloseEventFile,
     ImportCategoriesCsv,
+    ImportIofCourseDataXml,
     ImportCourseKmlKmz,
     ImportCourseGpx,
     ImportControlsKmlKmz,
@@ -408,6 +409,12 @@ object DesktopNavigation {
                             "Import Categories CSV...",
                             workflow,
                             DesktopNavAction.ImportCategoriesCsv
+                        ),
+                        action(
+                            "setup.categories.import-iof-course-data",
+                            "Import IOF CourseData XML...",
+                            workflow,
+                            DesktopNavAction.ImportIofCourseDataXml
                         ),
                         action(
                             "setup.categories.export",
@@ -1203,6 +1210,8 @@ object DesktopNavigation {
             "Use Course Order to unlock and review protected ideal routes and course-location data that may affect scoring and analysis.",
         "setup.categories.import" to
             "Use Import Categories CSV to review and apply late category additions or corrections without replacing unrelated event data.",
+        "setup.categories.import-iof-course-data" to
+            "Use Import IOF CourseData XML to import schema-valid IOF CourseData courses as Radio-Oracle categories and assigned controls.",
         "setup.categories.delete-all-assigned-controls" to
             "Use Delete All Control Assignments to clear every category course, length, climb, and protected course field while keeping category names and competitors.",
         "setup.categories.delete-all-categories" to

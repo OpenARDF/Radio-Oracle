@@ -900,6 +900,7 @@ class DesktopNavigationTest {
             listOf(
                 "Course Order",
                 "Import Categories CSV...",
+                "Import IOF CourseData XML...",
                 "Export Categories CSV...",
                 "Delete All Control Assignments...",
                 "Delete All Categories...",
@@ -952,6 +953,10 @@ class DesktopNavigationTest {
             competitorItems.map { it.label }
         )
         assertEquals(DesktopNavAction.ImportCategoriesCsv, categoryItems.first { it.label == "Import Categories CSV..." }.action)
+        assertEquals(
+            DesktopNavAction.ImportIofCourseDataXml,
+            categoryItems.first { it.label == "Import IOF CourseData XML..." }.action
+        )
         assertEquals(DesktopNavAction.ExportCategoriesCsv, categoryItems.first { it.label == "Export Categories CSV..." }.action)
         assertEquals(
             DesktopNavAction.DeleteAllCategoryAssignedControls,
@@ -1186,6 +1191,7 @@ class DesktopNavigationTest {
             listOf(
                 "Course Order",
                 "Import Categories CSV...",
+                "Import IOF CourseData XML...",
                 "Export Categories CSV...",
                 "Delete All Control Assignments...",
                 "Delete All Categories..."
