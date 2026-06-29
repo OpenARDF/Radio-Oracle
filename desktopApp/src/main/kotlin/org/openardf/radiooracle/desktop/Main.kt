@@ -16254,7 +16254,7 @@ private fun CourseAnalysisProvidedRouteWaitAnalysis(
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "This subsection estimates Classic fox arrival phases on the imported route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. It uses the same elite baseline speed and effective-length movement estimates as the route analysis. Because map passability and accumulated fatigue are not fully modeled, barriers, slow terrain, fatigue, and competitor profile can shift real arrival times and change wait-time outcomes.",
+            text = "This subsection estimates Classic fox arrival phases on the imported route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. If the fox is already transmitting at arrival, timing assumes the competitor runs straight to it and punches without extra delay. It uses the same elite baseline speed and effective-length movement estimates as the route analysis. Because map passability and accumulated fatigue are not fully modeled, barriers, slow terrain, fatigue, and competitor profile can shift real arrival times and change wait-time outcomes.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )

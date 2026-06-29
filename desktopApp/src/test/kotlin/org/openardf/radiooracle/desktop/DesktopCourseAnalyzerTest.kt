@@ -269,6 +269,66 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun activeClassicFoxArrivalDoesNotAddFindPunchAllowanceToIdealTime() {
+        val route = listOf(
+            ProtectedCourseRoutePoint(39.0, -95.0, 100.0),
+            ProtectedCourseRoutePoint(39.0, -94.9999, 100.0),
+            ProtectedCourseRoutePoint(39.0, -94.99, 100.0),
+            ProtectedCourseRoutePoint(39.0, -94.98, 100.0),
+            ProtectedCourseRoutePoint(39.0, -94.97, 100.0)
+        )
+        val protectedInfo = protectedInfo(foxCount = 2).copy(
+            route = route,
+            sampledPointCount = route.size,
+            controlPoints = protectedInfo(foxCount = 2).controlPoints.map { control ->
+                when (control.controlId) {
+                    "control-1" -> control.copy(longitude = -94.9999, elevationMeters = 100.0)
+                    "control-2" -> control.copy(longitude = -94.99, elevationMeters = 100.0)
+                    "control-beacon" -> control.copy(longitude = -94.98, elevationMeters = 100.0)
+                    else -> control
+                }
+            },
+            courseObjects = protectedInfo(foxCount = 2).courseObjects.map { courseObject ->
+                when (courseObject.id) {
+                    "control-1" -> courseObject.copy(longitude = -94.9999, elevationMeters = 100.0)
+                    "control-2" -> courseObject.copy(longitude = -94.99, elevationMeters = 100.0)
+                    "control-beacon" -> courseObject.copy(longitude = -94.98, elevationMeters = 100.0)
+                    "finish" -> courseObject.copy(longitude = -94.97, elevationMeters = 100.0)
+                    else -> courseObject.copy(elevationMeters = 100.0)
+                }
+            }
+        )
+
+        val importedSummary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 2),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "31 32 Beacon"
+        )
+
+        val importedArrival = importedSummary.waitRows.single { it.controlLabel == "31" }
+        val importedLeg = importedSummary.providedLegRows.single { it.toLabel == "31" }
+        assertEquals(0, importedArrival.waitSeconds)
+        assertEquals(0, importedLeg.waitSeconds)
+        assertEquals(0, importedLeg.findPunchSeconds)
+        assertEquals(importedArrival.arrivalSeconds, importedLeg.cumulativeSeconds)
+
+        val calculatedSummary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 2),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "32 31 Beacon"
+        )
+
+        val calculatedActiveLeg = calculatedSummary.calculatedLegRows.first { it.waitSeconds == 0 }
+        assertEquals(0, calculatedActiveLeg.findPunchSeconds)
+        assertEquals(
+            calculatedSummary.calculatedRouteSection?.waitRows?.first { it.waitSeconds == 0 }?.arrivalSeconds,
+            calculatedActiveLeg.cumulativeSeconds
+        )
+    }
+
+    @Test
     fun importedSpeedSpecifiersOverrideTheFollowingLegTiming() {
         val baseInfo = protectedInfo(foxCount = 3)
         val protectedInfo = baseInfo.copy(

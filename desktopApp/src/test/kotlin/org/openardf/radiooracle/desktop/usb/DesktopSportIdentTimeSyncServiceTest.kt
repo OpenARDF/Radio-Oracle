@@ -677,8 +677,16 @@ class DesktopSportIdentTimeSyncServiceTest {
                 data = byteArrayOf(0x00, 0x01, 0x01)
             )
 
-        fun fastCommandClient(): DesktopSportIdentStationCommandClient =
-            DesktopSportIdentStationCommandClient(readTimeoutMs = 1)
+        fun fastCommandClient(): DesktopSportIdentStationCommandClient {
+            var now = 0L
+            return DesktopSportIdentStationCommandClient(
+                readTimeoutMs = 10,
+                nowMillis = {
+                    now += 1
+                    now
+                }
+            )
+        }
 
         private fun stationTimePayload(time: LocalDateTime, tick: Int): ByteArray =
             DesktopSportIdentStationTimeCodec.encodePayload(time).copyOf().also { it[6] = tick.toByte() }

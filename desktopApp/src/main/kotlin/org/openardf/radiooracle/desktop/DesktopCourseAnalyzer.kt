@@ -294,7 +294,8 @@ enum class DesktopCourseMetricStatus {
  * data is available, otherwise horizontal distance. Classic-style wait-time checks replay the timed
  * route to identify whether a different fox numbering can reduce waiting. A Classic fox stop is
  * modeled as arrival near the fox, wait until transmission if needed, then a fixed 30-second
- * find-and-punch allowance before departure to the next leg.
+ * find-and-punch allowance only when waiting was required. If the fox is already transmitting,
+ * the competitor is assumed to run straight to it and punch without extra delay.
  *
  * Elevation Cache resolution is local sample-grid spacing, not a guarantee of source DEM
  * resolution. USGS 3DEP is a multi-resolution source; a dense cache may still sample coarser
@@ -337,7 +338,7 @@ object DesktopCourseAnalyzer {
     private const val SPEED_MODEL_NOTE =
         "Estimated times use an elite-competitor baseline pace by race format, then apply a category age/gender multiplier and the event-wide Course Analyzer speed factor. Imported KML/KMZ SS=#.## speed specifiers on route objects replace the event-wide factor for the following leg only. When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not part of ideal-route selection; it can affect ideal time, but this estimate does not apply a separate accumulated-fatigue adjustment."
     private const val CLASSIC_WAIT_TIMING_NOTE =
-        "For Classic-style fox controls, timing assumes the competitor waits if the fox is off the air, then spends 30 seconds finding and punching before departing for the next leg; that delay affects later arrival phases."
+        "For Classic-style fox controls, timing assumes the competitor waits if the fox is off the air, then spends 30 seconds finding and punching before departing for the next leg; if the fox is already transmitting at arrival, timing assumes the competitor runs straight to it and punches without extra delay. Any service delay affects later arrival phases."
     private val CATEGORY_SPEED_FACTOR_TABLE = DesktopCourseSpeedFactors.provisionalCategoryTable
     /**
      * Mirrors the analyzer's Section 1/Section 2 prerequisites without running the route search.
@@ -1328,7 +1329,7 @@ object DesktopCourseAnalyzer {
 
     private fun providedSectionExplanation(analysis: RouteAnalysis, includeWaitAnalysis: Boolean): String {
         val splitText = if (includeWaitAnalysis) {
-            "Estimated splits combine movement time with any Classic fox wait and find/punch time."
+            "Estimated splits combine movement time with any Classic fox wait and any post-wait find/punch time."
         } else {
             "Estimated splits use movement time only for this competition format."
         }
@@ -2306,7 +2307,7 @@ object DesktopCourseAnalyzer {
                 controlServiceTiming(control, arrivalSeconds, raceType, slotOverrides[control.id])
             } ?: ControlServiceTiming.None
             // Service time is part of the course clock. If a Classic fox is off the air, waiting
-            // and the find/punch allowance delay all later legs and may change later waits.
+            // and any post-wait find/punch allowance delay all later legs and may change later waits.
             if (arrivalSeconds != null && to.control != null) {
                 arrivalSecondsByControlId[to.control.id] = arrivalSeconds.roundToInt()
             }
@@ -3150,12 +3151,14 @@ object DesktopCourseAnalyzer {
         val slotLabel = slotOverride?.slotLabel ?: classicSlotLabel(control)
         val roundedArrival = arrivalSeconds.roundToInt()
         val waitSeconds = waitSecondsForClassicSlot(slotIndex, roundedArrival)
+        val findPunchSeconds = if (waitSeconds > 0) CLASSIC_CONTROL_FIND_PUNCH_SECONDS else 0
         // The competitor can reach the vicinity before a fox transmits, but the next leg starts
-        // only after the fox is on the air and the fixed Classic find/punch allowance is complete.
+        // only after the fox is on the air and any post-wait Classic find/punch allowance is complete.
+        // If the fox is already transmitting, assume the competitor runs straight to it and punches.
         return ControlServiceTiming(
             waitSeconds = waitSeconds,
-            findPunchSeconds = CLASSIC_CONTROL_FIND_PUNCH_SECONDS,
-            totalSeconds = waitSeconds + CLASSIC_CONTROL_FIND_PUNCH_SECONDS.toDouble(),
+            findPunchSeconds = findPunchSeconds,
+            totalSeconds = waitSeconds + findPunchSeconds.toDouble(),
             waitRow = DesktopCourseWaitRow(
                 controlId = control.id,
                 controlLabel = labelOverride ?: control.publicDisplayLabel(),

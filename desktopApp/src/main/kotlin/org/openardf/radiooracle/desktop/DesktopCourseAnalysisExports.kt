@@ -123,7 +123,7 @@ object DesktopCourseAnalysisExports {
                 appendLine()
                 appendLine("Imported-route wait-time analysis")
                 appendWrapped(
-                    "This subsection estimates Classic fox arrival phases on the imported route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure."
+                    "This subsection estimates Classic fox arrival phases on the imported route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. If the fox is already transmitting at arrival, timing assumes the competitor runs straight to it and punches without extra delay."
                 )
                 appendWaitRows("Current wait times", section.waitRows)
                 section.waitRenumbering?.let { appendWaitRenumbering(it) }
