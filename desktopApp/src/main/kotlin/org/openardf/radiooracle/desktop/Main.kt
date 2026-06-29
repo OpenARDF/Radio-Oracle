@@ -199,6 +199,7 @@ import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.files.IofXmlImports
 import org.openardf.radiooracle.shared.files.IofXmlSchemaResource
+import org.openardf.radiooracle.shared.files.IofXmlUnsupportedItem
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
@@ -845,6 +846,16 @@ fun main(args: Array<String>) = application {
             val backupPath = recentImportCheckpoint?.backupPath ?: return lines
             return lines + "Rollback backup file: $backupPath"
         }
+
+        fun iofWarningLines(
+            unsupportedItems: List<IofXmlUnsupportedItem>,
+            outcomeWarnings: List<String> = emptyList()
+        ): List<String> =
+            unsupportedItems.map { item ->
+                "Unsupported valid IOF content at ${item.location}: ${item.reason}"
+            } + outcomeWarnings.map { warning ->
+                "Import warning: $warning"
+            }
 
         fun restoreRecentImportCheckpoint() {
             val checkpoint = recentImportCheckpoint ?: return
@@ -4034,9 +4045,18 @@ fun main(args: Array<String>) = application {
                         Files.readString(path),
                         IofXmlSchemaResource.loadBundledSchema()
                     )
+                    checkpointBeforeImport("IOF StartList import ${path.fileName}")
                     val outcome = EventProjectEditor.importIofStartList(currentProject, parsed.parsedData)
                     projectFile = projectSession.updateCurrentProject { outcome.projectFile }
                     syncProjectState()
+                    val warningLines = iofWarningLines(parsed.unsupportedItems, outcome.warnings)
+                    recentImportReport = DesktopImportReport(
+                        title = "IOF StartList XML: ${path.fileName}",
+                        lines = withRollbackBackupLine(listOf(
+                            "${outcome.updatedCount} competitors updated.",
+                            "${outcome.skippedCount} start rows skipped."
+                        ) + warningLines)
+                    )
                     val warningCount = parsed.unsupportedItems.size + outcome.warnings.size
                     projectStatusText = buildString {
                         append("Imported ${outcome.updatedCount} IOF StartList row")
@@ -4071,6 +4091,14 @@ fun main(args: Array<String>) = application {
                     val outcome = EventProjectEditor.importIofCourseData(currentProject, parsed.parsedData)
                     projectFile = projectSession.updateCurrentProject { outcome.projectFile }
                     syncProjectState()
+                    val warningLines = iofWarningLines(parsed.unsupportedItems)
+                    recentImportReport = DesktopImportReport(
+                        title = "IOF CourseData XML: ${path.fileName}",
+                        lines = withRollbackBackupLine(listOf(
+                            "${outcome.importedCount} categories added.",
+                            "${outcome.updatedCount} categories updated by name."
+                        ) + warningLines)
+                    )
                     projectStatusText = buildString {
                         append("Imported ${outcome.importedCount} IOF CourseData categor")
                         append(if (outcome.importedCount == 1) "y" else "ies")
@@ -4105,8 +4133,17 @@ fun main(args: Array<String>) = application {
                         resultIdFactory = { "iof-result-${UUID.randomUUID()}" },
                         punchIdFactory = { resultId, index, type -> "$resultId-punch-$index-${type.name}" }
                     )
+                    checkpointBeforeImport("IOF ResultList import ${path.fileName}")
                     projectFile = projectSession.updateCurrentProject { outcome.projectFile }
                     syncProjectState()
+                    val warningLines = iofWarningLines(parsed.unsupportedItems, outcome.warnings)
+                    recentImportReport = DesktopImportReport(
+                        title = "IOF ResultList XML: ${path.fileName}",
+                        lines = withRollbackBackupLine(listOf(
+                            "${outcome.importedCount} readouts imported.",
+                            "${outcome.skippedCount} result rows skipped."
+                        ) + warningLines)
+                    )
                     val warningCount = parsed.unsupportedItems.size + outcome.warnings.size
                     projectStatusText = buildString {
                         append("Imported ${outcome.importedCount} IOF ResultList row")
