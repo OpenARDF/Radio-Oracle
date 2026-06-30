@@ -1374,13 +1374,17 @@ object DesktopClassicCourseGenerator {
         "${index.toString().padStart(3, '0')} ${row.foxCount}-fox ${kilometers(row.effectiveLengthMeters)} ${row.orderLabels.joinToString(" -> ")} ${row.routeGeneratorParentheticalText()}"
 
     private fun kmlRouteDescription(row: ClassicCourseGeneratorRow): String =
-        buildList {
-            add("Matching Categories: ${row.routeGeneratorCategoryText()}")
-            row.routeGeneratorClimbLimitWarningText()?.let(::add)
-            add("Horizontal Length: ${kilometers(row.horizontalLengthMeters)}")
-            add("Climb: ${row.climbMeters?.roundToInt()?.let { "$it m" } ?: "Unknown"}")
-            add("Effective Length: ${kilometers(row.effectiveLengthMeters)}")
-        }.joinToString("\n")
+        DesktopRouteExportDescriptions.kmlText(
+            DesktopRouteExportDescription(
+                categoryLabel = "Matching Categories",
+                categoryText = row.routeGeneratorCategoryText(),
+                warningLines = listOfNotNull(row.routeGeneratorClimbLimitWarningText()),
+                horizontalLengthMeters = row.horizontalLengthMeters,
+                climbMeters = row.climbMeters,
+                climbPercent = row.climbPercent,
+                effectiveLengthMeters = row.effectiveLengthMeters
+            )
+        )
 
     private fun ClassicCoursePoint.kmlObjectKey(): String =
         "${label.trim().lowercase(Locale.US)}|${point.latitude}|${point.longitude}|${point.elevationMeters}"

@@ -239,7 +239,7 @@ class DesktopClassicCourseGeneratorTest {
                 .orEmpty()
             assertTrue(description.contains("Matching Categories: "))
             assertTrue(description.contains(Regex("""Horizontal Length: \d+\.\d{2} km""")))
-            assertTrue(description.contains(Regex("""Climb: \d+ m""")))
+            assertTrue(description.contains(Regex("""Climb: \d+m \(\d+\.\d%\)""")))
             assertTrue(description.contains(Regex("""Effective Length: \d+\.\d{2} km""")))
         }
         assertEquals(1, kmlText.countOccurrences("<name>Start</name>"))

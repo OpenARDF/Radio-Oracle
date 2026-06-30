@@ -281,6 +281,7 @@ object DesktopCourseAnalysisExports {
             appendLine("      <Placemark>")
             appendLine("        <name>${DesktopExportPrimitives.xmlText(routeName)}</name>")
             appendLine("        <styleUrl>#$routeStyleId</styleUrl>")
+            appendLine("        <description>${DesktopExportPrimitives.xmlText(kmlRouteDescription(folder))}</description>")
             appendLine("        <LineString>")
             appendLine("          <tessellate>1</tessellate>")
             appendLine("          <coordinates>")
@@ -325,6 +326,27 @@ object DesktopCourseAnalysisExports {
             .takeIf { it.size >= 2 }
             ?.map { it.point }
             ?: folder.routePoints
+
+    private fun kmlRouteDescription(folder: DesktopCourseKmlExportFolder): String =
+        DesktopRouteExportDescriptions.kmlText(
+            DesktopRouteExportDescription(
+                routeName = folder.routeName,
+                categoryLabel = "Categories",
+                categoryText = folder.categoryNames.takeIf { it.isNotEmpty() }?.joinToString(", "),
+                warningLines = folder.warningLines,
+                horizontalLengthMeters = folder.routeLengthMeters?.toDouble(),
+                climbMeters = folder.climbMeters?.toDouble(),
+                climbPercent = climbPercent(folder.routeLengthMeters, folder.climbMeters),
+                effectiveLengthMeters = folder.effectiveLengthMeters?.toDouble()
+            )
+        )
+
+    private fun climbPercent(routeLengthMeters: Int?, climbMeters: Int?): Double? =
+        if (routeLengthMeters != null && routeLengthMeters > 0 && climbMeters != null) {
+            climbMeters.toDouble() / routeLengthMeters.toDouble() * 100.0
+        } else {
+            null
+        }
 
     private fun kmlPathForPdf(path: Path, result: DesktopCourseAnalysisSummary): Path =
         path.resolveSibling("${courseAnalysisFileStem(result)}.kml")

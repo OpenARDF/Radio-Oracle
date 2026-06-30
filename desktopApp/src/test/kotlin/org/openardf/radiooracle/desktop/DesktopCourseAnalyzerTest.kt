@@ -1027,6 +1027,17 @@ class DesktopCourseAnalyzerTest {
             List(summary.kmlFolders.size) { expectedFileStem },
             kmlLineStringPlacemarkNames(kmlText)
         )
+        kmlLineStringPlacemarks(kmlText).forEach { placemark ->
+            val description = Regex("""<description>([\s\S]*?)</description>""")
+                .find(placemark)
+                ?.groupValues
+                ?.get(1)
+                .orEmpty()
+            assertTrue(description.contains("Categories: M21, M50"))
+            assertTrue(description.contains(Regex("""Horizontal Length: \d+\.\d{2} km""")))
+            assertTrue(description.contains(Regex("""Climb: \d+m \(\d+\.\d%\)""")))
+            assertTrue(description.contains(Regex("""Effective Length: \d+\.\d{2} km""")))
+        }
         val lineStringCoordinateLines = kmlLineStringCoordinateLines(kmlText)
         assertEquals("Expected one route LineString per exported course route", summary.kmlFolders.size, lineStringCoordinateLines.size)
         assertTrue(lineStringCoordinateLines.all { it.size > 2 })
@@ -2040,16 +2051,20 @@ class DesktopCourseAnalyzerTest {
             .toList()
 
     private fun kmlLineStringPlacemarkNames(kmlText: String): List<String> =
-        Regex("<Placemark>[\\s\\S]*?</Placemark>")
-            .findAll(kmlText)
-            .map { it.value }
-            .filter { it.contains("<LineString>") }
+        kmlLineStringPlacemarks(kmlText)
             .mapNotNull { placemark ->
                 Regex("<name>([\\s\\S]*?)</name>")
                     .find(placemark)
                     ?.groupValues
                     ?.get(1)
             }
+            .toList()
+
+    private fun kmlLineStringPlacemarks(kmlText: String): List<String> =
+        Regex("<Placemark>[\\s\\S]*?</Placemark>")
+            .findAll(kmlText)
+            .map { it.value }
+            .filter { it.contains("<LineString>") }
             .toList()
 
     private fun String.placemarkNamed(name: String): String {

@@ -177,6 +177,11 @@ data class DesktopCourseRouteMapPoint(
 data class DesktopCourseKmlExportFolder(
     val title: String,
     val routeName: String,
+    val categoryNames: List<String>,
+    val warningLines: List<String>,
+    val routeLengthMeters: Int?,
+    val climbMeters: Int?,
+    val effectiveLengthMeters: Int?,
     val routePoints: List<CourseGeoPoint>,
     val routeStops: List<DesktopCourseKmlRouteStop>,
     val courseObjects: List<DesktopCourseKmlExportPoint>
@@ -907,6 +912,11 @@ object DesktopCourseAnalyzer {
                     DesktopCourseKmlExportFolder(
                         title = "Saved foxes and route",
                         routeName = "Saved route",
+                        categoryNames = sameCourseCategoryNames,
+                        warningLines = providedSection.routeWarningLines(),
+                        routeLengthMeters = providedSection.routeLengthMeters,
+                        climbMeters = providedSection.climbMeters,
+                        effectiveLengthMeters = providedSection.effectiveLengthMeters,
                         routePoints = route,
                         routeStops = providedKmlRouteStops(
                             route = route,
@@ -929,6 +939,11 @@ object DesktopCourseAnalyzer {
                         DesktopCourseKmlExportFolder(
                             title = "Calculated foxes and route",
                             routeName = "Calculated route",
+                            categoryNames = sameCourseCategoryNames,
+                            warningLines = calculatedSection.routeWarningLines(),
+                            routeLengthMeters = calculatedSection.routeLengthMeters,
+                            climbMeters = calculatedSection.climbMeters,
+                            effectiveLengthMeters = calculatedSection.effectiveLengthMeters,
                             routePoints = sampledCalculatedRouteStopPoints(
                                 start = start,
                                 stops = labeledCalculatedRouteStops,
@@ -2956,6 +2971,11 @@ object DesktopCourseAnalyzer {
                 }
         )
     }
+
+    private fun DesktopCourseAnalysisSection.routeWarningLines(): List<String> =
+        ruleChecks
+            .filter { it.status == DesktopCourseMetricStatus.Warning }
+            .map { "Warning: ${it.label}: ${it.value}" }
 
     private fun climbMetersOrNull(route: List<CourseGeoPoint>): Double? =
         DesktopCourseRouteMetricsCalculator.climbMetersOrNull(route)
