@@ -1,55 +1,72 @@
 # Radio-Oracle Multiplatform Roadmap
 
-This roadmap tracks the move from an Android-only app toward a shared Kotlin
-foundation with a desktop beta. The first desktop target is an event-admin MVP,
-not full Android parity.
+Status reviewed: 2026-06-30.
 
-## Current foundation
+Radio-Oracle is no longer an Android-only app with a hypothetical desktop beta.
+It is a shared Kotlin project with Android race-day workflows, a desktop Event
+File workflow, desktop packaging through jDeploy, and growing shared event,
+import/export, Course Analyzer, Event Series, and validation services. This
+roadmap now tracks the work that remains after the initial multiplatform
+foundation and desktop event-admin milestones.
 
-The `codex/multiplatform-foundation` branch introduces a `:shared` Kotlin
-Multiplatform module with Android and desktop JVM targets. Shared code currently
-covers portable domain enums, SportIdent code and time helpers, duration
-formatting, file definitions, alias validation, control-point parsing, import
-validation, result ranking, course evaluation, IOF result-status mapping,
-platform-neutral event models, event validation, result placement, Event File
-envelope metadata, CSV row formatting, control/punch display formatting,
-template rendering, standard-category row parsing and presets, network endpoint
-definitions, and result-send filtering.
+## Current State
 
-Android remains the production app. The Android Room database, UI, USB
-SportIdent readout, printing, live result sending, Android resources, and
-platform permissions still live in the Android app. Android now has tested
-mappers between Room aggregates and shared event models, but Room remains the
-Android persistence layer.
+The `:shared` Kotlin Multiplatform module is the core portability boundary. It
+contains platform-neutral event models, domain enums, SPORTident code and time
+helpers, duration and control/punch formatting, file definitions, alias and
+control parsing, import validation, result ranking, course evaluation, event
+validation, result placement, Event File envelope metadata, CSV row formatting,
+template rendering, standard-category parsing and presets, network endpoint
+definitions, result-send filtering, Event Series support, and many import/export
+helpers.
 
-## Required gates
+Android remains the mature race-day platform for USB SPORTident readout,
+Bluetooth printing, Android-specific UI, Android Room persistence, Android
+resources, and platform permissions. Android has tested mappers between Room
+aggregates and shared event models, but Room remains the Android persistence
+layer.
 
-Run this gate before committing roadmap/foundation changes:
+Desktop is now an active event-admin and analysis platform. The desktop app uses
+file-backed `.rom.json` Event Files, exposes setup/race/results workflows, reads
+SPORTident cards from attached READOUT/SI MASTER stations, supports desktop
+system printing for finish-ticket text, sends ROBIS live results, provides local
+and public result-site workflows, packages through jDeploy, and includes Course
+Analyzer, Event Validator, Event Series, and testing tools.
+
+## Validation Gates
+
+Prefer the repo wrappers for routine local validation:
 
 ```shell
-./gradlew :shared:check testDebugUnitTest :shared:desktopSmokeRun :desktopApp:test
+just test
+just desktop-check
+just desktop-package
 git diff --check
 ```
 
-`desktopSmokeRun` is a shared-module desktop JVM smoke entrypoint. It proves the
-desktop target can execute shared business logic. The `:desktopApp:test` task
-checks the first launchable desktop UI module without opening a window.
-
-When validating local desktop packaging work, use a registered JDK 17 and run:
+Use focused recipes when the change affects those surfaces:
 
 ```shell
-./gradlew :desktopApp:checkRuntime :desktopApp:createDistributable
+just android-test
+just android-compile
+just jdeploy-preflight
+just jdeploy-smoke
 ```
 
-On macOS, Temurin 17 is the recommended registered JDK. The current
-`createDistributable` output is an app image under
-`desktopApp/build/compose/binaries/main/app/`.
+The lower-level Gradle tasks still matter when diagnosing failures or validating
+a specific layer:
 
-Known Room/KSP warnings about missing indexes and `@Transaction` annotations
-currently predate this roadmap work. Do not treat those warnings as Stage 1
-blockers unless a change in this branch introduces new failures.
+```shell
+./gradlew :shared:check testDebugUnitTest :shared:desktopSmokeRun :desktopApp:test
+./gradlew :desktopApp:checkRuntime :desktopApp:createDistributable :desktopApp:verifyDesktopDistributable
+./gradlew :desktopApp:prepareDesktopJdeployBundle :desktopApp:verifyDesktopJdeployBundle
+```
 
-## Standards compatibility
+For full jDeploy releases, use the release process documented in
+[`desktop-prep.md`](desktop-prep.md). The public user-facing install path is the
+jDeploy GitHub release page linked from the README.
+
+## Standards Compatibility
 
 Radio-Oracle must not intentionally drift farther from
 [`radio-o-standards`](https://github.com/AROB-CR/radio-o-standards) without a
@@ -59,372 +76,245 @@ changing ARDF JSON, ARDF XML, IOF mapping, import/export semantics, or
 standards-facing event data shapes. The same policy is a required pre-deployment
 inspection gate for every Android and desktop release candidate.
 
-## Desktop beta goal
+## Completed Milestones
 
-The first desktop release should be a beta event-admin app. It should support:
+These items were roadmap goals earlier, but are now implemented enough that they
+should be treated as current project foundation rather than future work.
 
-- creating, opening, editing, saving, and exporting event data;
-- managing races, categories, control points, aliases, competitors, readouts,
-  and results;
-- downloading SI5/SI6/SI8/SI9/SIAC cards from an attached SPORTident station
-  that is already configured in READOUT/SI MASTER mode, first as a one-card
-  action and then through the experimental continuous-readout loop;
-- previewing finish-ticket text, printing the previewed ticket through desktop
-  system printing, and sending unsent matched ROBIS live results through the
-  shared result payload path;
-- importing and exporting the supported event/result formats once the shared
-  import/export layer is ready.
+### Shared Foundation
 
-The desktop beta should explicitly exclude:
+- Shared event models and tested Android mapper paths exist.
+- Core event validation, result placement, ranking, course evaluation, category
+  and control assignment policies, competitor identity fields, and many display
+  helpers are shared.
+- CSV, TXT, HTML, IOF XML, ARDF JSON-facing policy, ROBIS request metadata, and
+  selected import/export paths have shared implementations and tests.
+- The desktop smoke target and desktop app test suite are part of the normal
+  verification surface.
 
-- hardened Android-style SportIdent race-day reader replacement;
-- desktop Bluetooth printer transport;
-- additional live-result providers beyond the first ROBIS path;
-- SPORTident station write/reprogramming actions;
-- unverified OCheckList/new-card imports;
-- LAN-exposed local web displays;
-- replacing Android for normal race-day readout operations.
+### Desktop Event-Admin App
 
-## ARDFEvent reference benchmark
+- Desktop can create, open, edit, save, and export Event Files.
+- Desktop setup workflows cover event settings, categories, controls,
+  competitors, start lists, readouts, results, imports, exports, and live result
+  settings.
+- Desktop can read SPORTident card downloads from attached READOUT/SI MASTER
+  stations, including continuous readout behavior, while Android remains the more
+  mature race-day reader.
+- Desktop finish-ticket text uses the shared ticket renderer and can be sent to
+  desktop system printing.
+- Desktop ROBIS live-result sending exists, including background sending
+  settings.
 
-ARDFEvent is a useful desktop reference because it is a verified race-day
-desktop application for the same problem space. It should inform the long-term
-desktop feature set, but it should not pull Radio-Oracle away from the current
-shared Kotlin architecture or Android-compatible data model.
+### Packaging And Deployment
 
-Relevant ARDFEvent feature areas to keep in view:
+- jDeploy is the selected public install path.
+- GitHub-release jDeploy publication and npm/Trusted Publishing workflows exist.
+- Package-preflight, local-smoke, release-preflight, and registry-smoke scripts
+  are documented in `desktop-prep.md`.
+- Android, desktop, and npm/jDeploy version alignment is part of the release
+  process.
 
-- persistent race selection backed by one local SQLite database per event;
-- dense desktop navigation with task-specific pages for event info, controls,
-  categories, import, competitors, SI readout, start lists, results, runners in
-  forest, and advanced repair tools;
-- control presets, mandatory/spectator control flags, coordinates, and
-  category course assignment;
-- competitor autocomplete/import from registration data, club lookup, start
-  numbers, start times, and manual DNS/DSQ flags;
-- start-list drawing that separates categories and clubs, plus start-list
-  exports by category, by minute, ROBIS CSV/JSON, and IOF XML;
-- continuous SI readout with duplicate-card overwrite handling, unmatched-card
-  assignment, readout status window, error sound, and immediate result refresh;
-- ESC/POS ticket printing for competitor tickets and string tickets, including
-  printer setup, test printing, optional QR/link, and double-print support;
-- result calculation from stored punches with DNS, DSQ, DNF, MP, OVT, and
-  running/unknown states, with places sorted by transmitter count and time;
-- in-forest tracking from start times and readout state, including last-limit
-  visibility for operators;
-- result exports to HTML, HTML with splits, CSV, IOF XML, and ARDF JSON;
-- a local finish-line web server exposing live category/result JSON plus public
-  and organizer static views;
-- OCheckList import and a signed plugin system with startup, readout, and menu
-  hooks.
+### ARDFEvent Compatibility Work
 
-Accepted ARDFEvent CSV alignment work:
+- The canonical Radio-Oracle competitor CSV remains the primary round-trip CSV
+  format.
+- ARDFEvent-compatible registration CSV import is supported as an alternate
+  profile.
+- Desktop ROBIS start-list CSV export is available without changing the
+  canonical Radio-Oracle start-list CSV.
+- Desktop ARDFEvent-style results CSV export is available.
+- Result exports also include TXT, HTML, IOF XML, and related shared export
+  paths.
 
-- Keep Radio-Oracle's canonical competitor CSV as the primary round-trip import
-  and export format.
-- Add an ARDFEvent-compatible registration CSV import profile that accepts the
-  semicolon-delimited `Jméno;Příjmení;Registrace;SI;Kategorie` shape used by
-  ARDFEvent, mapping registration to Radio-Oracle's competitor Person ID field.
-- Add an explicit import duplicate/update policy for preregistration workflows,
-  including an option to update existing competitors by Person ID
-  rather than only rejecting duplicate SI or start numbers.
-- Preserve the current missing-category behavior, but make import preview and
-  warnings clear when placeholder categories are created or when competitors are
-  imported without a category.
-- Add a desktop-only ROBIS CSV start-list export option based on ARDFEvent's
-  ROBIS start-list CSV shape; do not change the canonical Radio-Oracle start
-  CSV for this.
-- Add a desktop-only ARDFEvent-style results CSV export with category, place,
-  name, Person ID, time, transmitter count, status, and control-order columns.
+### Course Analyzer
 
-For Radio-Oracle, this suggests the next desktop parity work should prioritize
-operator workflow gaps before optional extensibility: start-list management,
-in-forest tracking, full ticket printer transport, duplicate/unmatched readout
-handling polish, richer status/error surfaces, and export coverage. A plugin
-system should remain long-term unless a concrete integration cannot be handled
-through shared services or ordinary platform UI.
+- Course Analyzer evaluates saved and imported route data, calculates ideal
+  route candidates, handles effective length when elevation data is available,
+  applies USA rules checks, reports wait-time renumbering, exports PDF/KML, and
+  documents current limitations.
+- Classic route search is exhaustive within the current control-count limits.
+  Sprint loops are optimized separately with bounded permutations. Larger
+  Foxoring routes use a documented non-exhaustive hybrid heuristic.
+- KML/KMZ and GPX course import paths support protected control locations, route
+  geometry, route assumptions, circular LineString filtering, and per-leg
+  `SS=#.##` speed factors.
 
-ARDFEvent's desktop printer setup supports serial, native USB, and dummy
-ESC/POS transports; it does not provide a Bluetooth printer transport. For
-Radio-Oracle, Android Bluetooth ESC/POS printing should still be validated and
-hardened before beta using the available Bluetooth printer hardware. Desktop
-Bluetooth printer support should remain post-beta unless a reliable desktop
-Bluetooth transport is selected separately.
+### Event Series And Start Fairness
 
-The concrete desktop boundary, storage approach, UI direction, and packaging
-default are tracked in [`desktop-prep.md`](desktop-prep.md).
+- Event Series manifests group existing Event Files without duplicating core
+  event data.
+- Desktop Event Series workflows support validation, clean export, competitor
+  matching reports, start-fairness summaries, and start-fairness optimization.
+- Android can store, list, import, export, and transfer Event Series packages.
+- The shared balanced-thirds start-list engine is used by series-aware start
+  balancing tools.
 
-## Stages
+## Active Boundaries
 
-### 1. Foundation stabilization
+These are deliberate limits in the current app, not necessarily defects.
 
-Goal: make the existing shared-module foundation easy to review, test, and hand
-off.
+- Android remains the primary race-day platform for mature USB readout and
+  Bluetooth ESC/POS printing.
+- Desktop SPORTident support is useful, but additional station diagnostics,
+  multi-station coordination, and configuration writes require more hardware
+  validation.
+- Desktop Bluetooth printer transport remains a separate future adapter. Desktop
+  printing currently uses system printing.
+- Local results web server exposure should stay loopback/local unless LAN
+  exposure is explicitly hardened and selected.
+- OCheckList/new-card import remains future work until sample files or schema
+  details are available.
+- Shared SQL remains deferred; desktop Event Files are still the right storage
+  model for the current desktop app.
+- Course Analyzer still lacks map passability knowledge. It does not know
+  out-of-bounds areas, dense vegetation, lakes, uncrossable creeks/rivers,
+  cliffs, fences, walls, or other barriers unless those effects are approximated
+  by imported route geometry or speed factors.
 
-- Keep the branch focused on shared extraction and documentation.
-- Preserve Android behavior while shared code grows behind tested adapters.
-- Document the shared module purpose, desktop smoke task, test gates, and desktop
-  limitations.
-- Merge only after the required gates pass.
+## Medium-Term Roadmap
 
-Milestone: the branch is clean, pushed, documented, and another engineer can run
-the shared/Android verification commands without extra context.
+### Shared Event Services
 
-### 2. Shared event model and services
-
-Goal: move event-domain behavior behind platform-neutral models and services.
-
-- Add shared models for race, category, competitor, alias, control point, result,
-  punch, and aggregate race data.
-- Keep Android Room entities as platform persistence objects and map them to/from
-  shared models.
-- Move category validation, competitor validation, alias/control-point
-  management, readout/result recalculation, result grouping, and place assignment
-  into shared services.
+- Continue extracting platform-neutral result recalculation glue from Android
+  `ResultsProcessor` into shared services where it can be tested once and reused
+  by Android, desktop, and Event Series tools.
 - Keep competitor identity semantics shared. SI number, bib number, call sign,
-  full-name formatting, and cross-event competitor matching keys must not drift
-  between Android, desktop, and Event Series tools.
-- Move Android competitor table ordering helpers toward shared comparators where
-  they encode durable field/null ordering rather than Android-only table
-  behavior.
-- Continue extracting result recalculation glue from Android `ResultsProcessor`
-  into shared services where platform-neutral. Course evaluation and place
-  assignment are already shared; remaining shared candidates include timing
-  issue application, no-category clearing, time-limit handling, and manual
-  status preservation.
-- Gradually remove remaining Android compatibility alias facades by replacing
-  callers with direct shared imports in small, compile-proven stages. Start with
-  file import/export aliases such as `DataFormat` and `DataType`, then low-use
-  Room enum aliases such as `StandardCategoryType`, `ProviderType`, and
-  `ResultServiceStatus`, and leave heavily used Room enum aliases for later
-  focused slices.
-- Use test-driven slices: write shared common tests first, then delegate Android
-  code.
+  Person ID, full-name formatting, and cross-event matching keys must not drift
+  between Android, desktop, and series workflows.
+- Move durable Android table ordering helpers toward shared comparators when the
+  ordering reflects domain policy rather than Android-only UI behavior.
+- Gradually remove remaining Android compatibility alias facades in small,
+  compile-proven stages.
+- Continue auditing Android legacy import/export processors against shared
+  `TextResultExports`, `HtmlResultExports`, `IofXmlExports`, and CSV paths so
+  desktop and Android semantics do not diverge.
 
-Milestone: Android still uses Room, but the core event workflows are expressed
-and tested in shared code.
+### Event Validation And Error Recovery
 
-### 3. Shared import/export layer
+- Keep expanding Event Validator coverage for setup consistency, import mistakes,
+  category/control mismatches, unused controls, missing SI numbers, duplicate
+  labels/codes, suspicious category assignments, and late-workflow edits.
+- Use validator logic from Series validation so each member Event File can be
+  checked independently before cross-event checks run.
+- Prefer source-of-truth repairs over display-only fixes: Setup > Controls owns
+  SI-code-to-public-label mapping, Setup > Categories owns assigned controls,
+  and downloaded SI readouts remain definitive evidence of visited station
+  codes.
 
-Goal: make file formats portable while leaving file pickers and permissions on
-each platform.
+### SPORTident And Hardware
 
-- Move CSV parsing/writing policy, Radio-Oracle JSON shaping, final/live
-  result JSON shaping, and IOF XML policy into shared code where platform-neutral.
-- Audit Android legacy file processors such as `TextProcessor`, `IofXmlProcessor`,
-  and `XmlHelper` against the shared `TextResultExports`, `HtmlResultExports`,
-  and `IofXmlExports` paths so result/category export semantics do not diverge.
-- Define shared import/export APIs that accept text/bytes plus shared event data
-  and return data or structured validation errors.
-- Keep Android streams, content URIs, localized resources, and platform UI in the
-  Android app.
-- Add golden-file tests for CSV, JSON, and XML.
-
-Milestone: Android import/export behavior remains compatible, and desktop can
-reuse the same format code.
-
-### 4. Desktop event-admin MVP
-
-Goal: build the first user-visible desktop app around shared services.
-
-- Add a thin desktop app module or desktop source set, following the shared JVM
-  smoke pattern already in place.
-- Use file-backed Event File storage for beta, such as a `.rom.json` Event File.
-- Build desktop workflows for race selection, category/control-point/alias
-  editing, competitor editing, readout/result entry, result recalculation, and
-  import/export.
-
-Milestone: a desktop user can create/import an event, edit event data, manually
-enter readout-equivalent punch data, recalculate results, save/reopen, and export
-results.
-
-### 5. Desktop beta packaging
-
-Goal: produce installable desktop beta artifacts.
-
-- Add version/build metadata for desktop artifacts.
-- Keep Android, npm/jDeploy, and native desktop package versions aligned from
-  `1.0.0` onward. Future releases increment only the third, rightmost field.
-- Use jDeploy as the default packaging path unless a focused packaging spike
-  finds a concrete blocker; keep Conveyor as a comparison option and `jpackage`
-  as a low-level fallback.
-- Before treating USB SportIdent download as safely post-beta, run a focused
-  desktop USB feasibility spike with the actual SPORTident USB download box.
-  The spike only needs to prove that a packaged desktop app can discover the
-  device, open the serial port, exchange a small SI protocol probe, and close
-  cleanly on macOS at minimum.
-- Add packaging environment checks and package tasks for macOS, Windows, and
-  Linux.
-- Document beta limitations clearly.
-- Verify packaged apps launch and complete the event-admin smoke scenario.
-
-Milestone: beta desktop packages are produced and validated on target desktop
-operating systems, with no known desktop USB showstopper left uninvestigated.
-
-### 6. Post-beta platform features
-
-Goal: add platform-specific capabilities after the event-admin beta is stable.
-
-- Harden the first desktop continuous SportIdent readout loop into a race-day
-  reader workflow behind a platform device interface.
-- Reuse the shared finish-ticket renderer when adding desktop printer transport
-  so Android and desktop ticket text stay aligned.
-- Add a read-only Station Maintenance surface for attached SportIdent stations.
+- Harden the desktop continuous SPORTident readout loop into a race-day reader
+  workflow behind a platform device interface.
+- Add a read-only Station Maintenance surface for attached SPORTident stations.
   It should show station serial number, reported function/mode, code number,
-  firmware/config metadata when available, protocol flags, and explicit
-  warnings when a download box is not in READOUT/SI MASTER mode.
+  firmware/config metadata when available, protocol flags, and explicit warnings
+  when a download box is not in READOUT/SI MASTER mode.
 - Add Station Maintenance diagnostics for attached download stations, including
-  a response-timing test and a settings comparison test across known-good and
-  suspect units. If a station is in the correct READOUT/SI MASTER mode but is
-  still sluggish or has unexplained configuration/status differences, recommend
-  resetting it to factory defaults and then reapplying the desired event
-  settings before using it for race-day downloads. These diagnostics must be
-  advisory: log and report timing/configuration concerns, but continue to allow
-  downloads whenever the station can still read cards. Only hard-block downloads
-  when the station cannot be opened, cannot answer the protocol, or reports a
-  clearly non-download mode.
-- Extend Station Maintenance to read coupled non-reader stations through the
-  USB master/download station when the remote/coupled-station protocol is
-  verified. This should be read-only first and should report basic station
-  information such as serial number, mode/code, clock/status fields, operating
-  time, battery-level or battery-status fields, and backup-memory/status flags
-  where the protocol exposes them.
-- Treat station writes as a later, guarded maintenance phase. A "set attached
+  response-timing tests and settings comparison tests across known-good and
+  suspect units. Diagnostics should warn and log when possible, but only
+  hard-block downloads when the station cannot be opened, cannot answer the
+  protocol, or reports a clearly non-download mode.
+- Extend Station Maintenance to read coupled non-reader stations through a USB
+  master/download station after the remote/coupled-station protocol is verified.
+- Treat station writes as a later guarded maintenance phase. A "set attached
   download box to READOUT" action may be added only after the SPORTident
   configuration write transaction is verified against real hardware and has
-  immediate read-back validation. The UI must warn that applying station
-  settings can overwrite station configuration and may clear backup data, and
-  it must refuse to report success unless the station re-reads as READOUT.
-- Add explicit multi-download-station support after beta. The desktop beta may
-  read multiple cards from one attached SPORTident download station, but
-  post-beta desktop should detect multiple connected stations, show their
-  serial numbers/modes/ports, let the user choose or assign active stations,
-  and prevent independent polls/readout loops from fighting over the same
-  serial device.
-- Add a batch readout time-correction tool for common station clock mistakes,
-  such as one or more controls being exactly one hour early or late because of a
-  time-zone or daylight-saving change. The tool should let an operator preview
-  and select affected punches by control/station, time range, event, or series
-  event; apply a signed time offset to those stored control punches; preserve an
-  auditable before/after trail; and then recompute result status, score, splits,
-  places, export data, and sent/unsent state through shared result recalculation
-  code. It should be conservative by default: never shift start/finish times or
-  unrelated controls without explicit selection, and require a confirmation that
-  reports how many competitors/readouts will change.
-- Add desktop printing behind a platform print interface.
-- Validate and harden Android Bluetooth ESC/POS printing before beta against the
-  target Bluetooth printer hardware.
-- Remove the legacy `Short` race type from Android race/category pickers after
-  Android has a visible, tested way to set a Classic-style event's start
-  interval to two minutes. Keep import/read compatibility for old files that
-  still contain `RaceType.SHORT`, but avoid presenting it as a normal event
-  format once the interval setting covers the practical use case.
-- Add non-ROBis live result providers after their network/result-service logic
-  is isolated from Android WorkManager.
-- Add a post-beta Competition View that treats a championship as a higher-level
-  aggregate of multiple events.
-- Build on the initial Event Series foundation: a lightweight
-  `series.radio-oracle.json` manifest groups existing Event Files without
-  duplicating their core event data, records manifest-owned membership and event
-  order, and can carry operator-approved competitor matching overrides across
-  days.
+  immediate read-back validation.
+- Add explicit multi-download-station support so desktop can detect multiple
+  connected stations, show their serial numbers/modes/ports, let the user choose
+  or assign active stations, and prevent independent readout loops from fighting
+  over the same serial device.
+- Add a batch readout time-correction tool for common station clock mistakes.
+  It should preview affected punches, apply signed offsets only to explicitly
+  selected control punches, preserve an auditable before/after trail, and then
+  recompute status, score, splits, places, exports, and sent/unsent state.
+
+### Printing And Live Results
+
+- Keep Android Bluetooth ESC/POS printing validated against target hardware.
+- Add desktop printer transport abstractions only when system printing is not
+  sufficient for a needed race-day workflow.
+- Add non-ROBIS live-result providers after their network/result-service logic is
+  isolated from Android WorkManager and represented through shared provider
+  interfaces.
+- Harden LAN/public result display choices so operators can distinguish local
+  preview, loopback server, LAN exposure, generated public site, and Cloudflare
+  publication.
+
+### Competition And Series
+
+- Keep current single-event workflows as the default. Series and championship
+  tools should remain opt-in and additive.
 - Move desktop-only Event Series reporting and optimization helpers into shared
-  code as they stabilize, especially competitor identity coverage summaries,
-  cross-event start-slot fairness summaries, and start-fairness optimization
-  scoring.
-- Extend the Event Series manifest over time with scoring/eligibility rules
-  once championship standings move from roadmap item to implementation work.
-- Keep current event flows as the default single-event behavior so the existing
-  menu structure and menu complexity do not grow by default.
-- Continue the opt-in competition context started by the contextual Series
-  workflow so cross-event tools remain additive to the current event workflow.
-- Reuse the shared balanced-thirds start-list engine through Event Series tools
-  rather than exposing a separate file-import balancing workflow.
-- Add explicit cross-event competitor identity and reconciliation support so the
-  app can confidently match the same person across days even when SI numbers,
-  start numbers, categories, or registration details are incomplete or change.
-- Add cross-event start-slot fairness diagnostics and balancing suggestions to avoid
-  repeated starts in the same 1/3rd segment across all days in a multi-day
-  championship.
+  code as they stabilize.
+- Extend Event Series with scoring and eligibility rules for championship
+  standings.
+- Add explicit cross-event competitor identity and reconciliation support for
+  cases where SI numbers, start numbers, categories, or registration details are
+  incomplete or change across days.
 - Add competition scoring calculations for overall standings, with configurable
-  championship point/placement rules, category scope, eligibility, absent-result
-  handling, and tie-break behavior.
-- Add exports for championship outputs (overall standings, per-event contributions,
-  and start-slot fairness traces) as derived outputs over linked event data plus
-  lightweight competition metadata, not as a duplicate copy of per-event storage.
-- Add simple acceptance criteria that the competition view remains additive: all
-  existing event-scoped operations keep behavior unchanged when no competition
-  context is selected.
-- Add map-informed Course Analyzer speed modeling after the app can ingest or
-  reference course-relevant map data. The current analyzer should treat category
-  age/gender speed factors as a named provisional input table, not as a final
-  source of truth, so future timing calculations can combine category factors
-  with per-leg course-condition factors such as vegetation, runnability,
-  elevation gain/loss, barriers, water, out-of-bounds constraints, and other
-  map-derived impediments. Preserve the current event-wide speed factor as the
-  operator's coarse adjustment for unusual conditions, but make the long-term
-  model capable of explaining each leg's adjusted speed assumptions in the
-  analyzer report.
-- Extract a shared course-route optimization core after current analyzer and
+  point/placement rules, category scope, absent-result handling, eligibility, and
+  tie-break behavior.
+- Add championship exports for overall standings, per-event contributions, and
+  start-slot fairness traces as derived outputs over linked Event Files plus
+  lightweight series metadata.
+- Add a Competition View only after the underlying series metadata,
+  reconciliation, scoring, and export behavior is stable.
+
+### Course Analyzer And Route Intelligence
+
+- Add map-informed Course Analyzer modeling after the app can ingest or
+  reference course-relevant map data. Future timing should combine category
+  factors, event-wide speed factor, per-leg `SS=#.##` factors, elevation,
+  vegetation, runnability, barriers, water, out-of-bounds constraints, and other
+  map-derived impediments.
+- Preserve the current category speed-factor table as a provisional input, not a
+  final source of truth.
+- Extract a shared course-route optimization core after the current analyzer and
   generator route choices have characterization tests. The first shared layer
-  should be the pure route-ordering and shortest-effective-path logic used by
-  Course Analyzer and the course generators; analyzer-specific imported-route
-  comparison, wait timing, renumbering, and category/report context should stay
-  layered on top rather than being pulled into the common optimizer.
+  should be pure route-ordering and shortest-effective-path logic; analyzer
+  report context, imported-route comparison, wait timing, and fox renumbering
+  should remain layered on top.
+- Continue improving analyzer import UX so saved, imported, calculated, and
+  unsaved analyzer data are always clearly distinguished.
 
-Milestone: each platform feature lands behind shared tests plus platform smoke
-tests without regressing Android.
+### Event Editing Model
 
-## Shared SQL decision
+- Add autosave plus transaction/undo as a medium-term workflow improvement.
+- Ordinary single-step edits should eventually autosave immediately and create a
+  one-step undo checkpoint.
+- Multi-step tools and bulk actions, including Course Analyzer, course imports,
+  test-data insertion, calculated-route saves, and fox renumbering, should run
+  inside explicit Event File transactions: stage all intermediate changes, then
+  either discard the whole transaction on exit or commit and autosave it as one
+  atomic change.
+- Undo after a committed transaction should revert the whole transaction, not its
+  internal substeps.
 
-Shared SQL is not on the critical path for the first desktop beta.
+### Storage
 
-Use file-backed Event File storage for the desktop beta while shared domain models,
-services, and import/export APIs stabilize. After the beta, run a bounded shared
-SQL spike with Room KMP as the baseline candidate. SQLDelight remains the
+Shared SQL is not on the critical path. Keep file-backed Event File storage for
+desktop while shared domain models, services, and import/export APIs stabilize.
+After the desktop file workflow and shared services are stable, run a bounded
+shared SQL spike with Room KMP as the baseline candidate. SQLDelight remains the
 fallback/comparison option if Room KMP limitations are unacceptable.
 
 Reasons:
 
-- The current Android app already has a Room schema, DAOs, relations, migrations,
-  flows, and transactions.
-- Moving persistence into shared SQL now would be a storage migration, not a
-  small adapter change.
-- The desktop beta primarily needs reliable event files and shared business
-  logic.
-- Deferring shared SQL reduces risk and gets a useful desktop package in users'
-  hands sooner.
+- Android already has a mature Room schema, DAOs, relations, migrations, flows,
+  and transactions.
+- Moving persistence into shared SQL is a storage migration, not a small adapter
+  change.
+- Desktop Event Files remain useful for transfer, review, testing, and series
+  packaging even if shared SQL is added later.
 
-## Desktop beta decisions
+## Acceptance Criteria For Future Work
 
-The desktop beta should continue to advance conservative event-admin and
-loopback-display slices while these boundaries remain in force:
-
-- macOS hardware validation and Windows packaged-app smoke validation are beta
-  release blockers; Linux packaging is best-effort for this beta.
-- Local web display stays bound to loopback until LAN exposure is hardened and
-  explicitly selected.
-- Android Bluetooth printer transport is pre-beta hardware validation work for
-  the Android app.
-- Desktop printer transport starts with system printing. The current known
-  target is the WiFi Epson printer visible as `EPSON ET-2720 Series`; Bluetooth
-  printer support remains a post-beta separate adapter because ARDFEvent does
-  not provide a desktop Bluetooth printer precedent. The desktop readout ticket
-  preview can submit the shared ticket text through the selected system printer.
-- OCheckList/new-card import waits for a verified sample file or schema.
-- Shared SQL waits until after the file-backed desktop beta.
-- SPORTident station writes wait for verified write/read-back transactions on
-  real hardware.
-
-## Acceptance criteria for Stage 1
-
-- `docs/multiplatform-roadmap.md` exists and describes the staged roadmap.
-- README links to this roadmap.
-- The branch passes:
-
-```shell
-./gradlew :shared:check testDebugUnitTest :shared:desktopSmokeRun :desktopApp:test
-git diff --check
-```
-
-- The branch is committed and pushed to `origin/codex/multiplatform-foundation`.
+- Feature work lands behind shared tests when the behavior is platform-neutral.
+- Platform-specific behavior lands behind platform smoke tests or documented
+  manual hardware validation when automation is not practical.
+- Android behavior does not regress when shared code grows.
+- Desktop Event File compatibility is preserved across release versions.
+- Release candidates pass the relevant `just` wrappers, standards inspection,
+  packaging checks, and jDeploy release gates for the surfaces they affect.

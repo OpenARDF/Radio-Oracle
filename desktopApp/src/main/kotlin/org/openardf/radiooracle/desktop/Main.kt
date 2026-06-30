@@ -2383,6 +2383,33 @@ fun main(args: Array<String>) = application {
             hasUnsavedChanges = projectSession.hasUnsavedChanges
         }
 
+        fun discardCurrentEventChangesFromDisk(): Boolean {
+            val path = projectSession.currentPath ?: run {
+                projectStatusText = "Cannot dump changes because this Event File has not been saved to disk yet."
+                return false
+            }
+            return runCatching {
+                projectSession.open(path)
+                newEventDraftProject = null
+                hasUnsavedEventDefinitionChanges = false
+                isEventDefinitionSaveDialogVisible = false
+                syncProjectState()
+                protectedCoursePassword?.let { password ->
+                    projectSession.currentProject?.let { reloadedProject ->
+                        syncProtectedCourseState(reloadedProject, password)
+                    }
+                } ?: run {
+                    protectedIdealOrderByCategoryId = emptyMap()
+                    protectedCourseInfoByCategoryId = emptyMap()
+                }
+                projectStatusText = "Unsaved Event File changes dumped. Reloaded ${path.fileName} from disk."
+                DesktopDebugLog.info("EventFile", "Dumped unsaved changes and reloaded ${path.fileName}")
+            }.onFailure { error ->
+                projectStatusText = "Dump changes failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("EventFile", "Dump changes failed: ${error.message ?: error::class.simpleName}")
+            }.isSuccess
+        }
+
         fun useCalculatedCourseAnalysisRoute(application: DesktopCourseCalculatedRouteApplication): String {
             val password = protectedCoursePassword ?: run {
                 projectStatusText = "Unlock course order before applying calculated route."
@@ -2780,7 +2807,7 @@ fun main(args: Array<String>) = application {
                             suppressNextCourseElevationCancelStatus = false
                             projectStatusText
                         } else {
-                            "Course elevation retrieval canceled. Imported route data kept without fetched elevations."
+                            "Course elevation retrieval canceled. Imported route data remains active in memory without fetched elevations."
                         }
                     } else {
                         "Course elevation retrieval failed: ${error.message ?: error::class.simpleName}"
@@ -3331,8 +3358,13 @@ fun main(args: Array<String>) = application {
                     } else if (summary.isDuplicateOnly && !summary.hasDuplicateMissingElevations) {
                         pendingCourseKmlKmzImportReview = null
                         pendingCourseKmlKmzCategoryMapping = null
-                        projectStatusText =
+                        val duplicateMessage =
                             "Duplicate controls/route $formatLabel request: identical file already imported and all elevations are available."
+                        pendingCourseKmlKmzImportWarning = PendingCourseKmlKmzImportWarning(
+                            title = "Identical controls/route import",
+                            message = duplicateMessage
+                        )
+                        projectStatusText = duplicateMessage
                     } else {
                         pendingCourseKmlKmzCategoryMapping = null
                         pendingCourseKmlKmzImportReview = PendingCourseKmlKmzImportReview(
@@ -6489,6 +6521,7 @@ fun main(args: Array<String>) = application {
             hasDefaultUnsavedNewEventFileDraft = isDefaultUnsavedNewEventFileDraft(),
             hasEditedUnsavedNewEventFileDraft = hasEditedUnsavedNewEventFileDraft(),
             onSaveEventFileForNavigation = { saveCurrentProject() },
+            onDiscardEventFileChangesForNavigation = { discardCurrentEventChangesFromDisk() },
             onDiscardUnsavedNewEventFile = {
                 closeProject(discardUnsavedChanges = true)
                 newEventDraftProject = null
@@ -6995,7 +7028,7 @@ private fun CourseKmlKmzImportReviewDialog(
                                 text = if (createMissingCategories) {
                                     "Created categories will be saved without competitors. Created controls will be added to Setup > Controls so route analysis and category assignments can use them."
                                 } else {
-                                    "Route-bearing imports cannot be kept while listed categories or controls are missing. Create them, or cancel and add them manually before importing again."
+                                    "Route-bearing imports cannot be made active while listed categories or controls are missing. Create them, or cancel and add them manually before importing again."
                                 },
                                 fontSize = 12.sp,
                                 color = if (blocksKeepForMissingItems) DesktopPalette.Error else Color.DarkGray,
@@ -7085,7 +7118,7 @@ private fun CourseKmlKmzImportReviewDialog(
                                     if (selectedSummary.isDuplicateOnly) {
                                         "Download missing elevations for the stored route"
                                     } else {
-                                        "Download missing elevations for the imported route after keeping it"
+                                        "Download missing elevations for the imported route after making it active"
                                     }
                                 )
                             }
@@ -7099,20 +7132,20 @@ private fun CourseKmlKmzImportReviewDialog(
                                 selectedSummary.assignedCategoryControlCount == 0 &&
                                 selectedSummary.changedControlLocationCount == 0
                             ) {
-                                "Keep imported data to use these $formatLabel names as matches to existing Event File labels. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Cancel leaves the Event File unchanged."
+                                "Analyze Imported Data will use these $formatLabel names as matches to existing Event File labels in the active Event File model. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Save Event is still required to write changes to disk. Cancel leaves the Event File unchanged."
                             } else if (
                                 selectedSummary.importedCategoryCount == 0 &&
                                 (selectedSummary.changedControlLocationCount > 0 || selectedSummary.controlIdentityUpdateCount > 0)
                             ) {
-                                "Keep imported data to update control identities or locations. Affected stored route geometry is invalidated when locations change so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
+                                "Analyze Imported Data will update control identities or locations in the active Event File model. Affected stored route geometry is invalidated when locations change so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Save Event is still required to write changes to disk. Cancel leaves the Event File unchanged."
                             } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.controlSiConflictCount > 0) {
                                 "Choose whether to retain current Event File SI numbers or overwrite them from imported SI= lines. Cancel leaves the Event File unchanged."
                             } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.assignedCategoryControlCount > 0) {
-                                "Keep imported data to review matched $formatLabel control points. Category assigned controls are changed only when the assignment checkbox is selected. Cancel leaves the Event File unchanged."
+                                "Analyze Imported Data will make the matched $formatLabel control points active in memory for Course Analyzer. Category assigned controls are changed only when the assignment checkbox is selected. Save Event is still required to write changes to disk. Cancel leaves the Event File unchanged."
                             } else if (selectedSummary.hasLabelConversions) {
-                                "Keep imported data to use these $formatLabel names as matches to existing Event File labels, update route facts, ideal order, and any changed control locations. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged."
+                                "Analyze Imported Data will use these $formatLabel names as matches to existing Event File labels, then update route facts, ideal order, and any changed control locations in the active Event File model. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Save Event is still required to write changes to disk. Cancel leaves the Event File unchanged."
                             } else {
-                                "Keep imported data to update route facts, ideal order, and any changed control locations. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is kept. Cancel leaves the Event File unchanged."
+                                "Analyze Imported Data will update route facts, ideal order, and any changed control locations in the active Event File model. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import becomes active. Save Event is still required to write changes to disk. Cancel leaves the Event File unchanged."
                             },
                             fontSize = 13.sp,
                             color = Color.DarkGray
@@ -7142,7 +7175,7 @@ private fun CourseKmlKmzImportReviewDialog(
                             if (selectedSummary.isDuplicateOnly) {
                                 "Continue"
                             } else {
-                                "Keep Imported Data"
+                                "Analyze Imported Data"
                             }
                         )
                     }
@@ -7839,6 +7872,104 @@ private fun UnsavedSubmenuChangesDialog(
 }
 
 @Composable
+private fun CourseAnalysisEntryDirtyEventDialog(
+    canDumpChanges: Boolean,
+    onCancel: () -> Unit,
+    onSaveAndContinue: () -> Unit,
+    onDumpAndContinue: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Save Event before Course Analyzer") },
+        text = {
+            Text(
+                "The Event File has unsaved changes. Course Analyzer needs a clean starting point so imported, calculated, or renumbered course data can be clearly saved or discarded."
+            )
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DisabledReasonTooltip("Save the current in-memory Event File changes to disk, then enter Course Analyzer.") {
+                    Button(
+                        onClick = onSaveAndContinue,
+                        colors = saveEventButtonColors()
+                    ) {
+                        Text("Save and Continue")
+                    }
+                }
+                DisabledReasonTooltip(
+                    if (canDumpChanges) {
+                        "Discard all current in-memory Event File changes by reloading the Event File from disk, then enter Course Analyzer."
+                    } else {
+                        "This Event File has not been saved to disk yet, so there is no saved file to reload."
+                    }
+                ) {
+                    Button(
+                        onClick = onDumpAndContinue,
+                        enabled = canDumpChanges
+                    ) {
+                        Text("Dump Changes and Continue")
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            DisabledReasonTooltip("Do not enter Course Analyzer. Return to Setup > More... > Course Tools with the current Event File changes still in memory.") {
+                Button(onClick = onCancel) {
+                    Text("Cancel")
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun UnsavedCourseAnalysisDataDialog(
+    canDiscardToDisk: Boolean,
+    onDontSave: () -> Unit,
+    onReturnToAnalyzer: () -> Unit,
+    onSaveAndExit: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onReturnToAnalyzer,
+        title = { Text("Unsaved Analyzer Data") },
+        text = { Text("Course changes will be lost when you exit the analyzer.") },
+        confirmButton = {
+            DisabledReasonTooltip("Save the active Event File model to disk, then exit Course Analyzer.") {
+                Button(
+                    onClick = onSaveAndExit,
+                    colors = saveEventButtonColors()
+                ) {
+                    Text("Save and Exit")
+                }
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DisabledReasonTooltip(
+                    if (canDiscardToDisk) {
+                        "Discard imported, calculated, renumbered, or other analyzer changes by reloading the Event File from disk, then exit Course Analyzer."
+                    } else {
+                        "This Event File has not been saved to disk yet, so there is no saved file to reload."
+                    }
+                ) {
+                    Button(
+                        onClick = onDontSave,
+                        enabled = canDiscardToDisk
+                    ) {
+                        Text("Don't Save")
+                    }
+                }
+                DisabledReasonTooltip("Cancel this exit action and return to Course Analyzer without saving or discarding changes.") {
+                    Button(onClick = onReturnToAnalyzer) {
+                        Text("Return to Analyzer")
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
 private fun AssignedControlsWarningDialog(
     warning: EventAssignedControlWarning,
     canRestore: Boolean,
@@ -8505,6 +8636,14 @@ private sealed interface DesktopPendingNavigation {
     data class Item(val itemId: String, val bypassedDisabled: Boolean = false) : DesktopPendingNavigation
 }
 
+private fun courseToolsMenuNavState(): DesktopNavState =
+    DesktopNavState(
+        workflow = DesktopWorkflow.Setup,
+        submenuStack = listOf("setup.tools", "setup.tools.course-tools"),
+        selectedSection = DesktopSection.Tools,
+        selectedItemId = "setup.tools.course-tools"
+    )
+
 private data class BypassedDisabledNavigation(
     val workflow: DesktopWorkflow?,
     val itemId: String?
@@ -9050,6 +9189,7 @@ private fun RadioOManagerDesktopApp(
     hasDefaultUnsavedNewEventFileDraft: Boolean = false,
     hasEditedUnsavedNewEventFileDraft: Boolean = false,
     onSaveEventFileForNavigation: () -> Boolean = { false },
+    onDiscardEventFileChangesForNavigation: () -> Boolean = { false },
     onDiscardUnsavedNewEventFile: () -> Unit = {}
 ) {
     MaterialTheme(
@@ -9067,6 +9207,8 @@ private fun RadioOManagerDesktopApp(
         var isSplashVisible by remember { mutableStateOf(true) }
         var pendingNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
         var pendingDirtySubmenuNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
+        var pendingCourseAnalysisEntryNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
+        var pendingCourseAnalysisExitNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
         var bypassedDisabledNavigation by remember { mutableStateOf<BypassedDisabledNavigation?>(null) }
         var courseAnalysisResult by remember(projectFile?.raceData?.race?.id, protectedCourseInfoByCategoryId) {
             mutableStateOf<DesktopCourseAnalysisSummary?>(null)
@@ -9157,6 +9299,20 @@ private fun RadioOManagerDesktopApp(
                 )
             ) {
                 pendingNavigation = intent
+            } else if (
+                !shouldBypassGuard &&
+                navState.selectedSection != DesktopSection.CourseAnalysis &&
+                nextState.selectedSection == DesktopSection.CourseAnalysis &&
+                hasUnsavedChanges
+            ) {
+                pendingCourseAnalysisEntryNavigation = intent
+            } else if (
+                !shouldBypassGuard &&
+                navState.selectedSection == DesktopSection.CourseAnalysis &&
+                nextState.selectedSection != DesktopSection.CourseAnalysis &&
+                hasUnsavedChanges
+            ) {
+                pendingCourseAnalysisExitNavigation = intent
             } else if (
                 !shouldBypassGuard &&
                 !hasDefaultUnsavedNewEventFileDraft &&
@@ -9419,6 +9575,50 @@ private fun RadioOManagerDesktopApp(
                     applyNavigation(navigation)
                 },
                 onCancel = { pendingNavigation = null }
+            )
+        }
+        pendingCourseAnalysisEntryNavigation?.let { navigation ->
+            CourseAnalysisEntryDirtyEventDialog(
+                canDumpChanges = eventFilePath != null,
+                onCancel = {
+                    pendingCourseAnalysisEntryNavigation = null
+                    navState = courseToolsMenuNavState()
+                    bypassedDisabledNavigation = null
+                },
+                onSaveAndContinue = {
+                    if (onSaveEventFileForNavigation()) {
+                        pendingCourseAnalysisEntryNavigation = null
+                        applyNavigation(navigation)
+                    }
+                },
+                onDumpAndContinue = {
+                    if (onDiscardEventFileChangesForNavigation()) {
+                        pendingCourseAnalysisEntryNavigation = null
+                        courseAnalysisResult = null
+                        courseAnalysisApplyStatusText = null
+                        applyNavigation(navigation)
+                    }
+                }
+            )
+        }
+        pendingCourseAnalysisExitNavigation?.let { navigation ->
+            UnsavedCourseAnalysisDataDialog(
+                canDiscardToDisk = eventFilePath != null,
+                onDontSave = {
+                    if (onDiscardEventFileChangesForNavigation()) {
+                        pendingCourseAnalysisExitNavigation = null
+                        courseAnalysisResult = null
+                        courseAnalysisApplyStatusText = null
+                        applyNavigation(navigation)
+                    }
+                },
+                onReturnToAnalyzer = { pendingCourseAnalysisExitNavigation = null },
+                onSaveAndExit = {
+                    if (onSaveEventFileForNavigation()) {
+                        pendingCourseAnalysisExitNavigation = null
+                        applyNavigation(navigation)
+                    }
+                }
             )
         }
         pendingDirtySubmenuNavigation?.let { navigation ->

@@ -1287,9 +1287,11 @@ class DesktopCourseAnalyzerTest {
             renumbering.assignments.map { it.suggestedSlotLabel },
             summary.profileComparison.first { it.title == "Calculated route (calculated fox numbering)" }.markers.map { it.label }
         )
+        val routeMap = requireNotNull(section.routeMap)
+        assertEquals(calculatedOrder, routeMap.routeLabels)
         assertEquals(
             calculatedOrder,
-            requireNotNull(section.routeMap).routeLabels
+            routeMap.routePointIndexes.map { routeMap.points[it].label }
         )
     }
 
@@ -1382,6 +1384,13 @@ class DesktopCourseAnalyzerTest {
             protectedIdealOrderText = DesktopProtectedCourseOrder.decrypt(requireNotNull(updatedCategory.encryptedIdealOrder), "test-password")
         )
         assertTrue(updatedSummary.missingElements.none { it.contains("Saved route order") })
+        val updatedRouteMap = requireNotNull(updatedSummary.providedRouteSection?.routeMap)
+        val updatedRouteOrder = requireNotNull(updatedSummary.providedRouteSection).routeOrder
+        assertEquals(updatedRouteOrder, updatedRouteMap.routeLabels)
+        assertEquals(
+            updatedRouteOrder,
+            updatedRouteMap.routePointIndexes.map { updatedRouteMap.points[it].label }
+        )
     }
 
     @Test

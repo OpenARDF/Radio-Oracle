@@ -2975,7 +2975,12 @@ object DesktopCourseAnalyzer {
     ): DesktopCourseRouteMap? {
         fun labelFor(controlPoint: ControlAnalysisPoint): String =
             labelOverrides[controlPoint.control.id] ?: controlPoint.control.analysisRouteLabel()
-        val controlsToDisplay = (controls + routeControls).distinctBy { it.control.id }
+        // Route controls may carry analyzer-saved labels that intentionally differ from the
+        // Setup > Controls public labels. Put them first so the map point labels match the route
+        // line labels and the drawn path does not drop renumbered controls.
+        val routeControlIds = routeControls.map { it.control.id }.toSet()
+        val controlsToDisplay = (routeControls + controls.filterNot { it.control.id in routeControlIds })
+            .distinctBy { it.control.id }
         val labeledPoints = buildList {
             start?.let { add(RouteMapSourcePoint("S", it, DesktopCourseRouteMapPointType.Start)) }
             controlsToDisplay.forEach { controlPoint ->
