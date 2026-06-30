@@ -168,6 +168,10 @@ class DesktopCourseAnalyzerTest {
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("does not guarantee 3 m source terrain data"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("does not currently know map passability"))
         assertTrue(summary.providedRouteSection?.explanation.orEmpty().contains("category age/gender multiplier"))
+        assertFalse(
+            "Collapsed calculated sections still have a saved-route length available for export names.",
+            DesktopCourseAnalysisExports.defaultPdfFileName(summary).contains("unknown length")
+        )
         assertEquals("M21", summary.speedModel.categoryModelLabel)
         assertEquals(1.0, summary.speedModel.categorySpeedMultiplier, 0.001)
         assertEquals(1.0, summary.speedModel.compensationFactor, 0.001)

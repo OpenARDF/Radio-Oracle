@@ -356,6 +356,8 @@ object DesktopCourseAnalysisExports {
     private fun calculatedIdealRouteLengthMeters(result: DesktopCourseAnalysisSummary): Int? =
         result.calculatedRouteSection?.effectiveLengthMeters
             ?: result.calculatedRouteSection?.routeLengthMeters
+            ?: result.effectiveLengthMeters
+            ?: result.routeLengthMeters
 
     private fun fileNamePart(text: String): String =
         text
