@@ -43,13 +43,15 @@ fun main() {
     println("Status: ${inspection.statusText}")
     inspection.portInfo?.let { println("Port: ${it.describe()}") }
     inspection.baudRate?.let { println("Baud: $it") }
-    inspection.stationInfo?.let { station ->
-        println("Station serial: ${station.serialNumber}")
-        println("Station code: ${station.stationCodeNumber ?: "unknown"}")
-        println("Station mode: ${station.stationModeLabel ?: "unknown"}")
-        println("Extended mode: ${station.extendedMode}")
-        printStationDiagnostics(station)
-    }
+    inspection.stationInfo
+        ?.takeUnless { inspection.requiresCoupledStation && inspection.coupledStationClock == null }
+        ?.let { station ->
+            println("Station serial: ${station.serialNumber}")
+            println("Station code: ${station.stationCodeNumber ?: "unknown"}")
+            println("Station mode: ${station.stationModeLabel ?: "unknown"}")
+            println("Extended mode: ${station.extendedMode}")
+            printStationDiagnostics(station)
+        }
     inspection.coupledStationClock?.let { clock ->
         println("Coupled station serial: ${clock.stationInfo.serialNumber}")
         println("Coupled station code: ${clock.stationInfo.stationCodeNumber ?: "unknown"}")

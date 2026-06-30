@@ -631,31 +631,73 @@ with the `0xFF` wake byte, including Time Sync commands. If that alone does not
 wake a sleeping coupled station, the missing behavior is likely timing or an
 additional command sequence that still needs capture evidence.
 
-One related station-power behavior remains deliberately unimplemented until it
-can be proven from protocol evidence:
+Radio-Oracle sends the known SPORTident `0xFF` wake signal before station
+interactions. Extended sync commands already include the wake byte, and
+`Inspect Station` also sends a standalone wake pulse before it reads the remote
+or directly attached station settings. If that still does not wake a sleeping
+coupled station, the missing behavior is likely timing or an additional command
+sequence that still needs capture evidence from SI Config+ or another proven
+SPORTident tool waking a sleeping station.
 
-- Wake a sleeping coupled station before sync. The reader/Master path probably
-  needs to mimic the station-awakening side effect of inserting an SI card, but
-  the required command sequence is not yet known. Capture SI Config+ or another
-  proven SPORTident tool waking a coupled sleeping station before adding this.
+For coupled stations, `Sync Time` now treats the successful baud-detection
+remote-mode probe as a wake-prime step. After the probe answers `F0 53`,
+Radio-Oracle sends `F0 4D`, closes the port, waits about 250 ms, and only then
+opens the actual write transaction. This mirrors the more reliable Inspect
+Station wake behavior without sending a clock write until the target station has
+answered the normal read-only preflight.
 
 The Time Sync tool exposes `Put station to sleep after sync` as a checkbox that
 defaults on. This post-sync power-state write is sent only after the clock write
 has succeeded and any retry/correction pass has completed. Direct FTDI/RS232
-stations use extended `F8`; coupled remote stations use the Config+-style
-remote-off byte sequence identified below. A failed sleep/off write is reported
-to the user but does not convert a completed clock synchronization into a failed
-clock synchronization.
+stations use extended `F8`; coupled remote stations enter remote mode with
+`F0 53` and then use the same extended `F8` command through the attached
+download station. Direct-station sleep is sent in the same open serial
+transaction as the final successful sync. Coupled-station sleep is sent after
+the sync transaction exits remote mode and closes, then Radio-Oracle opens a
+fresh remote-mode transaction for `F8`; field testing showed the coupled
+station did not accept same-session `F8` immediately after the time apply. If
+the separate coupled-station sleep command is sent but not confirmed,
+Radio-Oracle waits briefly and retries the full remote-mode sleep transaction
+once. A failed sleep/off write is reported to the user but does not convert a
+completed clock synchronization into a failed clock synchronization. After
+every coupled-station sleep transaction, Radio-Oracle also sends `F0 4D` before
+closing the port so the attached SI-Master/download station returns to
+normal/direct mode for status polling and later inspections.
 
-The `Inspect Station` action is read-only. It keeps the attached USB
-SI-Master/download-station diagnostics, and when an awake coupled station
-answers remote-mode reads it also reports the coupled station serial number, SI
-code number, decoded station time, computer timestamp, and station-minus-computer
-delta in milliseconds. The displayed delta uses a millisecond computer
-timestamp. The station-time payload tick byte is interpreted as 1/256 second
-when station readback provides it, so inspection and post-sync lead/lag
-reporting can use subsecond station time. After `Sync Time`, the UI and hidden
-CLI also report the confirmed station-minus-computer delta in milliseconds.
+The tool also has a standalone `Sleep` button next to `Sync Time`. It uses the
+same power-state write implementation and retry behavior as the sleep-after-sync
+checkbox, but it does not perform any time read or time write first. This is
+intended for cases where the operator inspects a station, decides no sync is
+needed, and still wants to put the coupled or directly attached station back to
+sleep.
+
+The Time Sync panel shares the same SI serial-port mutex used by the status
+poller and SI-card readout tools. Inspect and Sync therefore block background
+station polling while they are talking to the station, instead of letting the
+status strip interleave probe commands with wake, sync, or sleep commands.
+
+The `Inspect Station` action is configuration-read-only. It sends a standalone
+`0xFF` wake pulse, keeps the attached USB SI-Master/download-station
+diagnostics, and when a coupled station answers remote-mode reads it also
+reports the coupled station serial number, SI code number, decoded station time,
+computer timestamp, and station-minus-computer delta in milliseconds. It does
+not send the optional direct or remote station-sleep command after inspection.
+For coupled stations, Inspect now primes the reader with a normal framed
+remote-mode transaction (`F0 53`, then `F0 4D` cleanup), waits about 250 ms, and
+then performs the remote read. It retries that full prime/read interaction over
+a bounded wake window with short 250 ms gaps between attempts. Field testing
+showed a sleeping station can take several
+seconds to answer after post-sync sleep, and the first interaction may wake the
+remote station but return only reader diagnostics while a later interaction
+returns the remote station details. If no coupled station answers after that
+retry window, Inspect reports `No coupled station found` instead of showing the
+download station's own SI code and diagnostics. Direct FTDI/BSF7 inspection
+still reports the attached station. The displayed delta uses a millisecond
+computer timestamp. The station-time payload tick byte is
+interpreted as 1/256 second when station readback provides it, so inspection and
+post-sync lead/lag reporting can use subsecond station time. After `Sync Time`,
+the UI and hidden CLI also report the confirmed station-minus-computer delta in
+milliseconds.
 
 For current-time syncs, Radio-Oracle now calculates the target station time as
 late as possible, immediately before `F6`. Because the capture-proven
@@ -720,10 +762,12 @@ model id/name, build date, battery date, memory size, voltage, active time, and
 protocol-byte diagnostics from long system-info replies when those fields are
 present.
 
-The same reference identifies two station-off mechanisms now used by the
-optional post-sync sleep checkbox: extended `F8` for the station currently being
-addressed, and a special remote-off byte sequence used by SI Config+ for
-coupled stations:
+The same reference identifies extended `F8` as the station-off command for the
+station currently being addressed. In remote mode, Radio-Oracle now sends this
+normal framed `F8` command through the attached download station. A special raw
+remote-off byte sequence was also captured and noted, but field testing showed
+that using it as the post-sync sleep action did not turn off the coupled
+station:
 
 ```text
 FF 40 0F 80 B2 B6 50 C0

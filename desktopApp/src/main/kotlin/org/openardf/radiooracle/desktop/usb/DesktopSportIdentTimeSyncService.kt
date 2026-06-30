@@ -40,6 +40,7 @@ data class DesktopSportIdentTimeSyncInspection(
     val canSyncTime: Boolean,
     val disabledReason: String?,
     val coupledStationClock: DesktopSportIdentCoupledStationClock?,
+    val requiresCoupledStation: Boolean,
     val coupledStationInspectionError: String?
 ) {
     companion object {
@@ -52,6 +53,7 @@ data class DesktopSportIdentTimeSyncInspection(
                 canSyncTime = false,
                 disabledReason = "Connect a SPORTident download station before syncing time.",
                 coupledStationClock = null,
+                requiresCoupledStation = false,
                 coupledStationInspectionError = null
             )
     }
@@ -124,15 +126,19 @@ internal class DesktopSportIdentTimeSyncService(
             val modeLabel = stationInfo.stationModeLabel ?: "unknown"
             val accessMode = port.timeSyncAccessMode(stationInfo)
             val canSyncTime = true
-            val coupledStationClockResult = readStationClock(
+            val coupledStationClockResult = readStationClockForInspection(
                 port = port,
                 baudRate = connection.baudRate,
                 accessMode = accessMode
             )
             val coupledStationClock = coupledStationClockResult?.getOrNull()
             val coupledStationInspectionError = if (coupledStationClock == null) {
-                coupledStationClockResult?.exceptionOrNull()?.message
-                    ?: "SPORTident station time read failed."
+                if (accessMode == DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED) {
+                    "No coupled station found."
+                } else {
+                    coupledStationClockResult?.exceptionOrNull()?.message
+                        ?: "SPORTident station time read failed."
+                }
             } else {
                 null
             }
@@ -144,6 +150,7 @@ internal class DesktopSportIdentTimeSyncService(
                 canSyncTime = canSyncTime,
                 disabledReason = null,
                 coupledStationClock = coupledStationClock,
+                requiresCoupledStation = accessMode == DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED,
                 coupledStationInspectionError = coupledStationInspectionError
             )
         }.getOrElse { error ->
@@ -155,6 +162,7 @@ internal class DesktopSportIdentTimeSyncService(
                 canSyncTime = false,
                 disabledReason = "Resolve the station connection error before syncing time.",
                 coupledStationClock = null,
+                requiresCoupledStation = false,
                 coupledStationInspectionError = null
             )
         }
@@ -171,6 +179,9 @@ internal class DesktopSportIdentTimeSyncService(
             putStationToSleepAfterSync = putStationToSleepAfterSync
         )
     }
+
+    fun sleepStation(): DesktopSportIdentStationPowerStateWriteResult =
+        attemptStationPowerOffInSeparateTransaction()
 
     fun dryRun(sourceTime: LocalDateTime = LocalDateTime.now()): DesktopSportIdentTimeSyncDryRun {
         val normalizedTime = sourceTime.truncatedTo(ChronoUnit.SECONDS)
@@ -220,6 +231,9 @@ internal class DesktopSportIdentTimeSyncService(
                     secondBoundaryLeadMillis = leadForAttempt,
                     alignToSecondBoundary = alignToSecondBoundary,
                     attemptCount = attemptIndex + 1,
+                    putStationToSleepAfterSync = putStationToSleepAfterSync,
+                    correctionThresholdMillis = correctionThresholdMillis,
+                    canUseCorrectionAttempt = attemptIndex < maxAttempts - 1,
                     onWriteCommandStarted = { writeCommandStarted = true }
                 )
                 val postSyncDeltaMillis = result.confirmedStationMinusComputerMillis
@@ -232,7 +246,7 @@ internal class DesktopSportIdentTimeSyncService(
                     leadForAttempt = (leadForAttempt - postSyncDeltaMillis).coerceIn(0L, 999L)
                     sleepMillis(RETRY_DELAY_MS)
                 } else {
-                    return result.withOptionalStationPowerOff(putStationToSleepAfterSync)
+                    return result.withOptionalSeparateStationPowerOff(putStationToSleepAfterSync)
                 }
             } catch (error: Throwable) {
                 if (writeCommandStarted || attemptIndex == maxAttempts - 1) {
@@ -252,6 +266,9 @@ internal class DesktopSportIdentTimeSyncService(
         secondBoundaryLeadMillis: Long,
         alignToSecondBoundary: Boolean,
         attemptCount: Int,
+        putStationToSleepAfterSync: Boolean,
+        correctionThresholdMillis: Long,
+        canUseCorrectionAttempt: Boolean,
         onWriteCommandStarted: () -> Unit
     ): DesktopSportIdentTimeSyncResult {
         val preparedPort = prepareTimeSyncPort()
@@ -310,7 +327,7 @@ internal class DesktopSportIdentTimeSyncService(
             )
             val computerTimeAfterSync = currentTime().truncatedTo(ChronoUnit.MILLIS)
 
-            return DesktopSportIdentTimeSyncResult(
+            val result = DesktopSportIdentTimeSyncResult(
                 stationInfo = stationInfo,
                 sourceTime = targetTime,
                 confirmedTime = confirmedTime,
@@ -327,6 +344,20 @@ internal class DesktopSportIdentTimeSyncService(
                 secondBoundaryLeadMillis = targetTimeSelection.secondBoundaryLeadMillis,
                 stationPowerStateWrite = null
             )
+            val shouldDeferPowerOffForCorrection =
+                sourceTime == null &&
+                    result.confirmedStationMinusComputerMillis != null &&
+                    abs(result.confirmedStationMinusComputerMillis) > correctionThresholdMillis &&
+                    canUseCorrectionAttempt
+            return if (
+                putStationToSleepAfterSync &&
+                !shouldDeferPowerOffForCorrection &&
+                preparedPort.accessMode == DesktopSportIdentTimeSyncAccessMode.DIRECT_ATTACHED
+            ) {
+                result.copy(stationPowerStateWrite = attemptStationPowerOff(port, preparedPort.accessMode))
+            } else {
+                result
+            }
         } finally {
             if (port.isOpen) {
                 if (preparedPort.accessMode == DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED) {
@@ -375,11 +406,21 @@ internal class DesktopSportIdentTimeSyncService(
                 if (!port.open(OPEN_WAIT_TIME_MS)) {
                     error("Failed to open serial port ${port.info.systemPortPath}.")
                 }
-                commandClient.sendCommand(
+                val reply = commandClient.sendCommand(
                     port = port,
                     command = accessMode.initialStep().command,
                     data = accessMode.initialStep().payload
                 )
+                if (reply != null && accessMode == DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED) {
+                    val exitStep = DesktopSportIdentTimeSyncProtocol.exitRemoteModeStep()
+                    commandClient.sendCommand(
+                        port = port,
+                        command = exitStep.command,
+                        data = exitStep.payload
+                    )
+                    sleepMillis(INSPECTION_PRIME_SETTLE_DELAY_MS)
+                }
+                reply
             }.getOrNull()?.let {
                 port.close()
                 return baudRate
@@ -391,16 +432,38 @@ internal class DesktopSportIdentTimeSyncService(
         error("SPORTident station did not respond to the time-sync probe.")
     }
 
-    private fun DesktopSportIdentTimeSyncResult.withOptionalStationPowerOff(
+    private fun DesktopSportIdentTimeSyncResult.withOptionalSeparateStationPowerOff(
         putStationToSleepAfterSync: Boolean
-    ): DesktopSportIdentTimeSyncResult =
-        if (putStationToSleepAfterSync) {
-            copy(stationPowerStateWrite = attemptStationPowerOff())
-        } else {
-            this
+    ): DesktopSportIdentTimeSyncResult {
+        if (!putStationToSleepAfterSync || stationPowerStateWrite != null) {
+            return this
         }
+        return copy(stationPowerStateWrite = attemptStationPowerOffInSeparateTransaction())
+    }
 
-    private fun attemptStationPowerOff(): DesktopSportIdentStationPowerStateWriteResult {
+    private fun attemptStationPowerOffInSeparateTransaction(): DesktopSportIdentStationPowerStateWriteResult {
+        var lastResult: DesktopSportIdentStationPowerStateWriteResult? = null
+        repeat(SEPARATE_POWER_OFF_ATTEMPTS) { attemptIndex ->
+            val result = attemptStationPowerOffInSingleSeparateTransaction()
+            if (result.confirmed == true) {
+                return if (attemptIndex == 0) {
+                    result
+                } else {
+                    result.copy(message = "${result.message} Succeeded on attempt ${attemptIndex + 1}.")
+                }
+            }
+            lastResult = result
+            if (attemptIndex < SEPARATE_POWER_OFF_ATTEMPTS - 1) {
+                sleepMillis(SEPARATE_POWER_OFF_RETRY_DELAY_MS)
+            }
+        }
+        return lastResult ?: DesktopSportIdentStationPowerStateWriteResult(
+            confirmed = false,
+            message = "Station sleep command was not attempted."
+        )
+    }
+
+    private fun attemptStationPowerOffInSingleSeparateTransaction(): DesktopSportIdentStationPowerStateWriteResult {
         val preparedPort = runCatching { prepareTimeSyncPort() }.getOrElse { error ->
             return DesktopSportIdentStationPowerStateWriteResult(
                 confirmed = false,
@@ -417,12 +480,7 @@ internal class DesktopSportIdentTimeSyncService(
                 port = port,
                 step = preparedPort.accessMode.initialStep()
             )
-            when (preparedPort.accessMode) {
-                DesktopSportIdentTimeSyncAccessMode.DIRECT_ATTACHED ->
-                    sendDirectStationPowerOff(port)
-                DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED ->
-                    sendRemoteStationPowerOff(port)
-            }
+            attemptStationPowerOff(port, preparedPort.accessMode)
         } catch (error: Throwable) {
             DesktopSportIdentStationPowerStateWriteResult(
                 confirmed = false,
@@ -430,8 +488,37 @@ internal class DesktopSportIdentTimeSyncService(
             )
         } finally {
             if (port.isOpen) {
+                if (preparedPort.accessMode == DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED) {
+                    runCatching {
+                        val exitStep = DesktopSportIdentTimeSyncProtocol.exitRemoteModeStep()
+                        commandClient.sendCommand(
+                            port = port,
+                            command = exitStep.command,
+                            data = exitStep.payload
+                        )
+                    }
+                }
                 port.close()
             }
+        }
+    }
+
+    private fun attemptStationPowerOff(
+        port: DesktopSerialPort,
+        accessMode: DesktopSportIdentTimeSyncAccessMode
+    ): DesktopSportIdentStationPowerStateWriteResult {
+        return runCatching {
+            when (accessMode) {
+                DesktopSportIdentTimeSyncAccessMode.DIRECT_ATTACHED ->
+                    sendDirectStationPowerOff(port)
+                DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED ->
+                    sendRemoteStationPowerOff(port)
+            }
+        }.getOrElse { error ->
+            DesktopSportIdentStationPowerStateWriteResult(
+                confirmed = false,
+                message = "Station sleep command failed: ${error.message ?: error::class.simpleName}."
+            )
         }
     }
 
@@ -455,16 +542,20 @@ internal class DesktopSportIdentTimeSyncService(
     }
 
     private fun sendRemoteStationPowerOff(port: DesktopSerialPort): DesktopSportIdentStationPowerStateWriteResult {
-        val request = DesktopSportIdentTimeSyncProtocol.REMOTE_POWER_OFF_BYTES
-        return if (port.write(request) == request.size) {
+        val reply = commandClient.sendCommand(
+            port = port,
+            command = DesktopSportIdentTimeSyncProtocol.powerOffStep().command,
+            data = DesktopSportIdentTimeSyncProtocol.powerOffStep().payload
+        )
+        return if (reply != null) {
             DesktopSportIdentStationPowerStateWriteResult(
-                confirmed = null,
-                message = "Remote station sleep command sent."
+                confirmed = true,
+                message = "Remote station sleep command confirmed."
             )
         } else {
             DesktopSportIdentStationPowerStateWriteResult(
                 confirmed = false,
-                message = "Remote station sleep command write was incomplete."
+                message = "Remote station sleep command was sent but not confirmed."
             )
         }
     }
@@ -480,6 +571,7 @@ internal class DesktopSportIdentTimeSyncService(
                 error("Failed to open serial port ${port.info.systemPortPath}.")
             }
 
+            sendWakePulse(port)
             requireReply(
                 port = port,
                 step = accessMode.initialStep()
@@ -520,8 +612,71 @@ internal class DesktopSportIdentTimeSyncService(
             }
         }
 
+    private fun readStationClockForInspection(
+        port: DesktopSerialPort,
+        baudRate: Int,
+        accessMode: DesktopSportIdentTimeSyncAccessMode
+    ): Result<DesktopSportIdentCoupledStationClock> {
+        val attempts = if (accessMode == DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED) {
+            INSPECTION_CLOCK_READ_ATTEMPTS
+        } else {
+            1
+        }
+        var lastResult: Result<DesktopSportIdentCoupledStationClock>? = null
+        repeat(attempts) { attemptIndex ->
+            if (accessMode == DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED) {
+                primeCoupledStation(port, baudRate)
+            }
+            val result = readStationClock(
+                port = port,
+                baudRate = baudRate,
+                accessMode = accessMode
+            )
+            if (result.isSuccess) {
+                return result
+            }
+            lastResult = result
+            if (attemptIndex < attempts - 1) {
+                sleepMillis(INSPECTION_WAKE_SETTLE_DELAY_MS)
+            }
+        }
+        return lastResult ?: Result.failure(IllegalStateException("SPORTident station time read was not attempted."))
+    }
+
+    private fun primeCoupledStation(port: DesktopSerialPort, baudRate: Int) {
+        runCatching {
+            configure(port, baudRate)
+            if (!port.open(OPEN_WAIT_TIME_MS)) {
+                error("Failed to open serial port ${port.info.systemPortPath}.")
+            }
+            val enterStep = DesktopSportIdentTimeSyncProtocol.enterRemoteModeStep()
+            commandClient.sendCommand(
+                port = port,
+                command = enterStep.command,
+                data = enterStep.payload
+            )
+        }.also {
+            if (port.isOpen) {
+                runCatching {
+                    val exitStep = DesktopSportIdentTimeSyncProtocol.exitRemoteModeStep()
+                    commandClient.sendCommand(
+                        port = port,
+                        command = exitStep.command,
+                        data = exitStep.payload
+                    )
+                }
+                port.close()
+            }
+        }
+        sleepMillis(INSPECTION_PRIME_SETTLE_DELAY_MS)
+    }
+
     private fun configure(port: DesktopSerialPort, baudRate: Int) {
         port.configure(baudRate, READ_TIMEOUT_MS, WRITE_TIMEOUT_MS)
+    }
+
+    private fun sendWakePulse(port: DesktopSerialPort) {
+        port.write(byteArrayOf(SportIdentProtocol.WAKEUP))
     }
 
     private fun requireReply(
@@ -661,6 +816,11 @@ internal class DesktopSportIdentTimeSyncService(
         private const val OPEN_WAIT_TIME_MS = 200
         private const val MAX_REPLY_BYTES = 256
         private const val READ_ONLY_COMMAND_ATTEMPTS = 3
+        private const val INSPECTION_CLOCK_READ_ATTEMPTS = 4
+        private const val INSPECTION_WAKE_SETTLE_DELAY_MS = 250L
+        private const val INSPECTION_PRIME_SETTLE_DELAY_MS = 250L
+        private const val SEPARATE_POWER_OFF_ATTEMPTS = 2
+        private const val SEPARATE_POWER_OFF_RETRY_DELAY_MS = 150L
         private const val RETRY_DELAY_MS = 150L
     }
 }

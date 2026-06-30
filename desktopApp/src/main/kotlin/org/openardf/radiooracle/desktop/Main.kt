@@ -5743,6 +5743,7 @@ fun main(args: Array<String>) = application {
             projectStatusText = projectStatusText,
             hasUnsavedChanges = hasUnsavedChanges,
             siReaderState = siReaderState,
+            siPortMutex = siPortMutex,
             isDownloadingSiReadout = isDownloadingSiReadout,
             isContinuousSiReadoutActive = isContinuousSiReadoutActive,
             isReadingCompetitorSiCard = isReadingCompetitorSiCard,
@@ -8929,6 +8930,7 @@ private fun RadioOManagerDesktopApp(
     projectStatusText: String = "No Event File open.",
     hasUnsavedChanges: Boolean = false,
     siReaderState: DesktopSiReaderUiState = DesktopSiReaderUiState.disconnected(),
+    siPortMutex: Mutex = Mutex(),
     isDownloadingSiReadout: Boolean = false,
     isContinuousSiReadoutActive: Boolean = false,
     isReadingCompetitorSiCard: Boolean = false,
@@ -9223,6 +9225,7 @@ private fun RadioOManagerDesktopApp(
                 eventSeriesValidationState = eventSeriesValidationState,
                 projectStatusText = projectStatusText,
                                     siReaderState = siReaderState,
+                                    siPortMutex = siPortMutex,
                                     onRenameRace = onRenameRace,
                                     onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
                                     onUpdateRaceSettings = onUpdateRaceSettings,
@@ -10246,6 +10249,7 @@ private fun SectionWorkspace(
     eventSeriesValidationState: EventSeriesValidationUiState?,
     projectStatusText: String,
     siReaderState: DesktopSiReaderUiState,
+    siPortMutex: Mutex,
     onRenameRace: (String) -> Unit,
     onUpdateRaceStartDateTime: (String) -> Unit,
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
@@ -10480,6 +10484,7 @@ private fun SectionWorkspace(
             SportIdentTimeSyncPanel(
                 siReaderState = siReaderState,
                 isStationBusy = isDownloadingSiReadout || isContinuousSiReadoutActive || isReadingCompetitorSiCard,
+                siPortMutex = siPortMutex,
                 raceClockTick = raceClockTick,
                 portDiscoveryMode = sportIdentPortDiscoveryMode,
                 onSetPortDiscoveryMode = onSetSportIdentPortDiscoveryMode
@@ -10689,6 +10694,7 @@ private fun SportIdentToolsPanel() {
 private fun SportIdentTimeSyncPanel(
     siReaderState: DesktopSiReaderUiState,
     isStationBusy: Boolean,
+    siPortMutex: Mutex,
     raceClockTick: Long,
     portDiscoveryMode: DesktopSportIdentPortDiscoveryMode,
     onSetPortDiscoveryMode: (DesktopSportIdentPortDiscoveryMode) -> Unit
@@ -10700,15 +10706,22 @@ private fun SportIdentTimeSyncPanel(
     var syncStatusColor by remember { mutableStateOf(DesktopPalette.Disconnected) }
     var isInspecting by remember { mutableStateOf(false) }
     var isSyncing by remember { mutableStateOf(false) }
+    var isSleeping by remember { mutableStateOf(false) }
     var putStationToSleepAfterSync by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
     val localTimeText = remember(raceClockTick) {
         DesktopDateTimeText.displayIsoOrRaw(LocalDateTime.now().withNano(0).toString())
     }
-    val canInspect = !isStationBusy && !isInspecting
+    val canInspect = !isStationBusy && !isInspecting && !isSyncing && !isSleeping
     val canSync = !isStationBusy &&
         !isInspecting &&
         !isSyncing &&
+        !isSleeping &&
+        siReaderState.severity == DesktopSiReaderSeverity.CONNECTED
+    val canSleep = !isStationBusy &&
+        !isInspecting &&
+        !isSyncing &&
+        !isSleeping &&
         siReaderState.severity == DesktopSiReaderSeverity.CONNECTED
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -10765,14 +10778,18 @@ private fun SportIdentTimeSyncPanel(
                     isInspecting = true
                     scope.launch {
                         val inspection = withContext(Dispatchers.IO) {
-                            desktopSportIdentTimeSyncService().inspectDownloadStation()
+                            siPortMutex.withLock {
+                                desktopSportIdentTimeSyncService().inspectDownloadStation()
+                            }
                         }
                         inspectionStatus = listOfNotNull(
                             inspection.statusText,
                             inspection.portInfo?.describe()?.let { "Port: $it" },
                             inspection.baudRate?.let { "Baud: $it" },
                             inspection.coupledStationClock?.stationInfo?.let(::formatSportIdentStationDiagnostics)
-                                ?: inspection.stationInfo?.let(::formatSportIdentStationDiagnostics),
+                                ?: inspection.stationInfo
+                                    ?.takeUnless { inspection.requiresCoupledStation }
+                                    ?.let(::formatSportIdentStationDiagnostics),
                             inspection.coupledStationClock?.let { clock ->
                                 val stationTime = DesktopDateTimeText.displayIsoOrRaw(clock.stationTime.toString())
                                 "Station ${clock.stationInfo.serialNumber}; " +
@@ -10784,7 +10801,10 @@ private fun SportIdentTimeSyncPanel(
                         ).joinToString(" ")
                         siCodeText = inspection.coupledStationClock?.stationInfo?.stationCodeNumber
                             ?.let { "SI Station: $it" }
-                            ?: inspection.stationInfo?.stationCodeNumber?.let { "Reader Station: $it" }
+                            ?: inspection.stationInfo
+                                ?.takeUnless { inspection.requiresCoupledStation }
+                                ?.stationCodeNumber
+                                ?.let { "Reader Station: $it" }
                         stationTimeDeltaText = inspection.coupledStationClock
                             ?.stationMinusComputerMillis
                             ?.let(::formatSportIdentTimeDeltaRow)
@@ -10803,9 +10823,11 @@ private fun SportIdentTimeSyncPanel(
                     scope.launch {
                         val outcome = runCatching {
                             withContext(Dispatchers.IO) {
-                                desktopSportIdentTimeSyncService().syncTime(
-                                    putStationToSleepAfterSync = putStationToSleepAfterSync
-                                )
+                                siPortMutex.withLock {
+                                    desktopSportIdentTimeSyncService().syncTime(
+                                        putStationToSleepAfterSync = putStationToSleepAfterSync
+                                    )
+                                }
                             }
                         }
                         syncStatus = outcome.fold(
@@ -10857,6 +10879,40 @@ private fun SportIdentTimeSyncPanel(
             ) {
                 ButtonLabel(if (isSyncing) "Syncing" else "Sync Time")
             }
+            Button(
+                onClick = {
+                    isSleeping = true
+                    syncStatus = "Sending station sleep command..."
+                    syncStatusColor = DesktopPalette.Disconnected
+                    scope.launch {
+                        val outcome = runCatching {
+                            withContext(Dispatchers.IO) {
+                                siPortMutex.withLock {
+                                    desktopSportIdentTimeSyncService().sleepStation()
+                                }
+                            }
+                        }
+                        syncStatus = outcome.fold(
+                            onSuccess = { result ->
+                                syncStatusColor = if (result.confirmed == true) {
+                                    DesktopPalette.Connected
+                                } else {
+                                    DesktopPalette.Error
+                                }
+                                result.message
+                            },
+                            onFailure = { error ->
+                                syncStatusColor = DesktopPalette.Error
+                                "Station sleep command failed: ${error.message ?: error::class.simpleName}."
+                            }
+                        )
+                        isSleeping = false
+                    }
+                },
+                enabled = canSleep
+            ) {
+                ButtonLabel(if (isSleeping) "Sleeping" else "Sleep")
+            }
         }
         stationTimeDeltaText?.let { deltaText ->
             Text(
@@ -10878,7 +10934,7 @@ private fun SportIdentTimeSyncPanel(
             siReaderState.severity == DesktopSiReaderSeverity.DISCONNECTED -> "Connect a SPORTident download station."
             siReaderState.severity == DesktopSiReaderSeverity.ERROR -> "Resolve the station connection error before syncing time."
             siReaderState.severity == DesktopSiReaderSeverity.WARNING -> "Inspect the attached SPORTident station before syncing time."
-            else -> "Wake the target station with an SI card, keep it coupled to the download station, then sync."
+            else -> "Keep the target station connected, either coupled to the download station or attached directly, then sync."
         }
         Text(
             text = statusText,
