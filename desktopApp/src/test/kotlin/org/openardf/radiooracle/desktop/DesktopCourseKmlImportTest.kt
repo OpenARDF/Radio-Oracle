@@ -28,7 +28,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -40,9 +39,13 @@ import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import java.nio.file.Files
+import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.runBlocking
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 class DesktopCourseKmlImportTest {
     @Test
@@ -261,26 +264,34 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
-    fun courseAnalyzerImportRejectsControlsOnlyKmlWhenRouteIsRequired() {
+    fun courseAnalyzerImportSynthesizesM21RouteWhenNoLineStringExists() {
         val controlsOnlyPath = Files.createTempFile("radio-oracle-controls", ".kml")
-        Files.writeString(controlsOnlyPath, controlsOnlyKml(longitude31 = -95.0000, longitude32 = -94.9980))
+        Files.writeString(controlsOnlyPath, controlsOnlyAnalyzerKml())
         val project = EventProjectEditor.addCategory(
             classicPresetProject(),
             categoryId = "cat-m21",
             name = "M21"
         )
 
-        try {
-            DesktopCourseKmlImporter.importProtectedCourseInfo(
-                path = controlsOnlyPath,
-                projectFile = project,
-                password = "course-key"
-            )
-            fail("Expected controls-only KML to be rejected when route geometry is required.")
-        } catch (error: DesktopCourseKmlMissingRouteException) {
-            assertTrue(error.message.orEmpty().contains("LineString or GPX route/track"))
-            assertTrue(error.message.orEmpty().contains("Setup > Controls > Import/Export"))
-        }
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = controlsOnlyPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals(1, summary.routeCount)
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals(3, summary.matchedControlPointCount)
+        assertEquals(1, summary.matchedBeaconCount)
+        assertEquals("31 32 M", protectedCourseInfo.idealOrder)
+        assertEquals(listOf("Start", "31", "32", "M", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
+        assertEquals(listOf("31", "32", "M"), protectedCourseInfo.controlPoints.map { it.label })
+        assertEquals("31 32 99B", summary.categoryAssignmentUpdates.single().controlPointsText)
     }
 
     @Test
@@ -1975,6 +1986,18 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun parserIgnoresLikelyCircularKmlLineStrings() {
+        val kmlPath = Files.createTempFile("radio-oracle-course-circular-linestring", ".kml").also {
+            Files.writeString(it, sampleKmlWithOnlyCircularLineString())
+        }
+
+        val parsed = DesktopCourseFileReader.read(kmlPath)
+
+        assertEquals(listOf("Start", "31", "32", "M", "Finish"), parsed.controls.map { it.name })
+        assertTrue(parsed.routes.isEmpty())
+    }
+
+    @Test
     fun rejectsInvalidPerLegSpeedSpecifiersExceptOnFinish() {
         val finishIgnoredPath = Files.createTempFile("radio-oracle-finish-speed", ".kml").also {
             Files.writeString(
@@ -2034,7 +2057,7 @@ class DesktopCourseKmlImportTest {
             <rtept lat="39.0000" lon="-94.9980" />
           </rte>
         </gpx>
-        """.trimIndent()
+        """.trimIndent().trimStart()
 
     private fun sampleKmlWithRouteName(routeName: String): String =
         """
@@ -2061,7 +2084,7 @@ class DesktopCourseKmlImportTest {
             </Placemark>
           </Document>
         </kml>
-        """.trimIndent()
+        """.trimIndent().trimStart()
 
     private fun sampleKmlWithImportSpeedSpecifiers(): String =
         """
@@ -2101,7 +2124,7 @@ class DesktopCourseKmlImportTest {
             </Placemark>
           </Document>
         </kml>
-        """.trimIndent()
+        """.trimIndent().trimStart()
 
     private fun sampleTwoMeterPracticeKml(): String =
         """
@@ -2163,7 +2186,7 @@ class DesktopCourseKmlImportTest {
             </Placemark>
           </Document>
         </kml>
-        """.trimIndent()
+        """.trimIndent().trimStart()
 
     private fun sampleKmlWithSpeedSpecifiers(
         startDescription: String = "SS=0.75",
@@ -3167,6 +3190,64 @@ class DesktopCourseKmlImportTest {
           </Document>
         </kml>
         """.trimIndent()
+
+    private fun sampleKmlWithOnlyCircularLineString(): String =
+        """
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            ${coursePointPlacemark("Start", -95.0000, 39.0000)}
+            ${coursePointPlacemark("31", -94.9990, 39.0000)}
+            ${coursePointPlacemark("32", -94.9980, 39.0000)}
+            ${coursePointPlacemark("M", -94.9970, 39.0000)}
+            ${coursePointPlacemark("Finish", -94.9960, 39.0000)}
+            <Placemark>
+              <name>Decorative control circle</name>
+              <LineString>
+                <coordinates>
+                  ${circularLineStringCoordinates()}
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent().trimStart()
+
+    private fun controlsOnlyAnalyzerKml(): String =
+        """
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            ${coursePointPlacemark("Start", -95.0000, 39.0000)}
+            ${coursePointPlacemark("31", -94.9990, 39.0000)}
+            ${coursePointPlacemark("32", -94.9980, 39.0000)}
+            ${coursePointPlacemark("M", -94.9970, 39.0000)}
+            ${coursePointPlacemark("Finish", -94.9960, 39.0000)}
+          </Document>
+        </kml>
+        """.trimIndent().trimStart()
+
+    private fun coursePointPlacemark(name: String, longitude: Double, latitude: Double): String =
+        """
+        <Placemark>
+          <name>$name</name>
+          <Point><coordinates>$longitude,$latitude,0</coordinates></Point>
+        </Placemark>
+        """.trimIndent()
+
+    private fun circularLineStringCoordinates(): String {
+        val centerLongitude = -94.9990
+        val centerLatitude = 39.0000
+        val radiusDegrees = 0.0004
+        val points = (0 until 24).map { index ->
+            val angle = 2.0 * PI * index / 24.0
+            CourseGeoPoint(
+                latitude = centerLatitude + radiusDegrees * sin(angle),
+                longitude = centerLongitude + radiusDegrees * cos(angle)
+            )
+        }
+        return (points + points.first()).joinToString("\n") { point ->
+            "%.7f,%.7f,0".format(Locale.US, point.longitude, point.latitude)
+        }
+    }
 
     private fun controlsOnlyKml(longitude31: Double, longitude32: Double): String =
         """

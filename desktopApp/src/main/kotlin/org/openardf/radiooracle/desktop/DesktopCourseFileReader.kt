@@ -39,6 +39,9 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 object DesktopCourseFileReader {
+    private const val CIRCULAR_LINESTRING_MIN_POINT_COUNT = 20
+    private const val CIRCULAR_LINESTRING_CLOSE_METERS = 20.0
+
     fun read(path: Path): DesktopCourseKmlData {
         val fileName = path.fileName.toString()
         return when {
@@ -83,7 +86,7 @@ object DesktopCourseFileReader {
                 .firstDescendantText("LineString", "coordinates")
                 ?.let(::parseCoordinates)
                 .orEmpty()
-            if (lineCoordinates.size >= 2) {
+            if (lineCoordinates.size >= 2 && !lineCoordinates.isLikelyCircularLineString()) {
                 routes += CourseRoute(
                     name = name,
                     points = lineCoordinates,
@@ -176,6 +179,18 @@ object DesktopCourseFileReader {
                     CourseGeoPoint(latitude = latitude, longitude = longitude, elevationMeters = elevation)
                 }
             }
+
+    private fun List<CourseGeoPoint>.isLikelyCircularLineString(): Boolean {
+        if (size <= CIRCULAR_LINESTRING_MIN_POINT_COUNT) {
+            return false
+        }
+        val closeDistanceMeters = first().distanceMetersTo(last())
+        if (closeDistanceMeters > CIRCULAR_LINESTRING_CLOSE_METERS) {
+            return false
+        }
+        val routeLengthMeters = zipWithNext().sumOf { (start, end) -> start.distanceMetersTo(end) }
+        return routeLengthMeters > CIRCULAR_LINESTRING_CLOSE_METERS * 4
+    }
 
     private fun secureDocumentBuilderFactory(): DocumentBuilderFactory =
         DocumentBuilderFactory.newInstance().also { factory ->

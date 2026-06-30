@@ -189,6 +189,7 @@ object DesktopCourseKmlImporter {
         "M21", "M35", "M40", "M45", "M50", "M55", "M60", "M65", "M70", "M75", "M80", "M85", "M90",
         "W21", "W35", "W40", "W45", "W50", "W55", "W60", "W65", "W70", "W75", "W80", "W85", "W90"
     )
+    private const val SYNTHESIZED_ANALYZER_ROUTE_CATEGORY = "M21"
     private val json = Json { ignoreUnknownKeys = true }
 
     fun importProtectedCourseInfo(
@@ -204,7 +205,12 @@ object DesktopCourseKmlImporter {
         siImportPolicy: DesktopCourseKmlSiImportPolicy = DesktopCourseKmlSiImportPolicy.PreserveExisting
     ): Pair<EventProjectFile, DesktopCourseKmlImportSummary> {
         val sourceSha256 = fileSha256(path)
-        val courseData = parse(path)
+        val parsedCourseData = parse(path)
+        val courseData = if (requireRoutes && parsedCourseData.routes.isEmpty()) {
+            parsedCourseData.withSynthesizedAnalyzerRoute()
+        } else {
+            parsedCourseData
+        }
         DesktopDebugLog.info(
             "CourseKml",
             "Import parsed ${path.fileName}: hash=${sourceSha256.shortHash()} pointControls=${courseData.controls.size} routes=${courseData.routes.size}"
@@ -599,6 +605,51 @@ object DesktopCourseKmlImporter {
         )
         return updatedProject to summary
     }
+
+    private fun DesktopCourseKmlData.withSynthesizedAnalyzerRoute(): DesktopCourseKmlData {
+        val start = controls.firstOrNull { it.isCourseStartPoint() }
+        val finish = controls.firstOrNull { it.isCourseFinishPoint() }
+        val foxes = controls
+            .filter { it.inferredRouteControlType() == ControlPointType.CONTROL }
+            .sortedWith(synthesizedRouteControlComparator())
+        val beacons = controls
+            .filter { it.inferredRouteControlType() == ControlPointType.BEACON }
+            .sortedWith(synthesizedRouteControlComparator())
+        if (start == null || finish == null || foxes.isEmpty() || beacons.isEmpty()) {
+            throw DesktopCourseKmlMissingRouteException(
+                "Course Analyzer imports without route LineStrings require named Start, fox/control, Beacon, and Finish point placemarks."
+            )
+        }
+
+        // When a map file supplies only course points, build the neutral M21 route the analyzer
+        // needs before analysis begins: Start, all foxes in normal control order, beacon(s), Finish.
+        return copy(
+            routes = listOf(
+                CourseRoute(
+                    name = SYNTHESIZED_ANALYZER_ROUTE_CATEGORY,
+                    points = listOf(start.point) + foxes.map { it.point } + beacons.map { it.point } + finish.point
+                )
+            )
+        )
+    }
+
+    private fun CourseControlPoint.inferredRouteControlType(): ControlPointType? {
+        if (isCourseStartPoint() || isCourseFinishPoint()) {
+            return null
+        }
+        return ControlRoleLabelRules.inferredRole(name) ?: ControlPointType.CONTROL
+    }
+
+    private fun synthesizedRouteControlComparator(): Comparator<CourseControlPoint> =
+        compareBy<CourseControlPoint> { control ->
+            control.name.controlKeywordNumber() ?: control.name.singleEmbeddedNumber() ?: Int.MAX_VALUE
+        }
+            .thenBy { control ->
+                control.inferredRouteControlType()?.let { type ->
+                    inferredControlSiCode(control.name, type, control.siCodeHint)
+                } ?: Int.MAX_VALUE
+            }
+            .thenBy { it.name.normalizedCourseName() }
 
     private fun missingRouteCategoryNames(
         routes: List<CourseRoute>,
