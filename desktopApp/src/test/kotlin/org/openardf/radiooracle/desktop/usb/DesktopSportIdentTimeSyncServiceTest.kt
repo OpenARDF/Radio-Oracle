@@ -331,13 +331,12 @@ class DesktopSportIdentTimeSyncServiceTest {
     }
 
     @Test
-    fun syncTimeLeadsNextSecondBoundaryWhenNoFixedSourceTimeIsProvided() {
-        val targetTime = LocalDateTime.parse("2026-06-27T10:00:01")
+    fun syncTimeUsesCurrentComputerTimeWithFractionalTickByDefault() {
+        val targetTime = LocalDateTime.parse("2026-06-27T10:00:00.775")
         val currentTimes = ArrayDeque(
             listOf(
-                LocalDateTime.parse("2026-06-27T10:00:00.250"),
                 LocalDateTime.parse("2026-06-27T10:00:00.775"),
-                LocalDateTime.parse("2026-06-27T10:00:01.020")
+                LocalDateTime.parse("2026-06-27T10:00:00.775")
             )
         )
         val port = FakePort(
@@ -347,9 +346,9 @@ class DesktopSportIdentTimeSyncServiceTest {
                 remoteModeReply(),
                 systemInfoReply(),
                 stationTimeReply(targetTime.minusMinutes(1), tick = 0x01),
-                stationWriteReply(targetTime, tick = 0x05),
+                stationWriteReply(targetTime, tick = 0xC6),
                 applyReply(),
-                stationTimeReply(targetTime, tick = 0x05),
+                stationTimeReply(targetTime, tick = 0xC6),
                 normalModeReply()
             )
         )
@@ -363,9 +362,9 @@ class DesktopSportIdentTimeSyncServiceTest {
 
         assertEquals(targetTime, result.sourceTime)
         assertEquals(DesktopSportIdentTimeSyncService.DEFAULT_CURRENT_TIME_OFFSET_MILLIS, result.currentTimeOffsetMillis)
-        assertEquals(DesktopSportIdentTimeSyncService.DEFAULT_SECOND_BOUNDARY_LEAD_MILLIS, result.secondBoundaryLeadMillis)
+        assertNull(result.secondBoundaryLeadMillis)
         assertEquals(1, result.attempts)
-        assertEquals(525L, result.secondBoundaryWaitMillis)
+        assertEquals(0L, result.secondBoundaryWaitMillis)
         assertArrayEquals(
             DesktopSportIdentStationTimeCodec.encodePayload(targetTime),
             port.firstWrittenFrame(DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND).data
@@ -373,7 +372,7 @@ class DesktopSportIdentTimeSyncServiceTest {
     }
 
     @Test
-    fun syncTimeUsesMeasuredDeltaToCorrectSecondCurrentTimeAttempt() {
+    fun syncTimeCanStillUseMeasuredDeltaToCorrectSecondBoundaryAttemptWhenEnabled() {
         val targetTime1 = LocalDateTime.parse("2026-06-27T10:00:01")
         val targetTime2 = LocalDateTime.parse("2026-06-27T10:00:03")
         val currentTimes = ArrayDeque(
@@ -422,7 +421,8 @@ class DesktopSportIdentTimeSyncServiceTest {
             toleranceSeconds = 0,
             secondBoundaryLeadMillis = 100,
             maxAttempts = 2,
-            correctionThresholdMillis = 100
+            correctionThresholdMillis = 100,
+            alignToSecondBoundary = true
         )
 
         assertEquals(2, result.attempts)
@@ -438,6 +438,74 @@ class DesktopSportIdentTimeSyncServiceTest {
         assertEquals(2, stationWriteRequests.size)
         assertArrayEquals(DesktopSportIdentStationTimeCodec.encodePayload(targetTime1), stationWriteRequests[0])
         assertArrayEquals(DesktopSportIdentStationTimeCodec.encodePayload(targetTime2), stationWriteRequests[1])
+    }
+
+    @Test
+    fun syncTimeFallsBackToSeparateStationReadEstimateWhenPostApplyReadFails() {
+        val targetTime = LocalDateTime.parse("2026-06-27T10:00:01")
+        val fallbackEstimateTime = LocalDateTime.parse("2026-06-27T10:00:01.100")
+        val currentTimes = ArrayDeque(
+            listOf(
+                LocalDateTime.parse("2026-06-27T10:00:00.250"),
+                LocalDateTime.parse("2026-06-27T10:00:00.900"),
+                LocalDateTime.parse("2026-06-27T10:00:01.900"),
+                fallbackEstimateTime
+            )
+        )
+        val port = FakePort(
+            readChunksByOpen = listOf(
+                listOf(
+                    normalModeReply(marker = 0x06),
+                    directSystemInfoReply(stationCodeNumber = 32),
+                    stationTimeReply(targetTime.minusMinutes(1), tick = 0x01, replyMarker = 0x06),
+                    stationWriteReply(targetTime, tick = 0x00, replyMarker = 0x06),
+                    applyReply()
+                ),
+                listOf(
+                    normalModeReply(marker = 0x06),
+                    directSystemInfoReply(stationCodeNumber = 32),
+                    stationTimeReply(targetTime, tick = 0x00, replyMarker = 0x06)
+                )
+            ),
+            info = ftdiPortInfo()
+        )
+        val service = DesktopSportIdentTimeSyncService(
+            portSelector = ftdiPortSelector(port),
+            connectStation = {
+                DesktopSportIdentStationConnection(
+                    baudRate = SportIdentProtocol.BAUDRATE_LOW,
+                    probeReply = byteArrayOf(),
+                    stationInfo = SportIdentStationInfo(
+                        serialNumber = 106128,
+                        extendedMode = true,
+                        stationCodeNumber = 32,
+                        stationModeCode = 8
+                    )
+                )
+            },
+            currentTime = { currentTimes.removeFirstOrNull() ?: fallbackEstimateTime },
+            sleepMillis = {}
+        )
+
+        val result = service.writeTimeWithReadBack(
+            sourceTime = null,
+            writeEnabled = true,
+            toleranceSeconds = 0,
+            secondBoundaryLeadMillis = 100,
+            maxAttempts = 1,
+            correctionThresholdMillis = 100,
+            alignToSecondBoundary = true
+        )
+
+        assertEquals(1, result.attempts)
+        assertEquals(targetTime, result.sourceTime)
+        val writtenCommands = port.writeRequests.map {
+            SportIdentFrameParser.firstFrame(it, requireValidCrc = true)?.command
+        }
+        assertEquals(-100L, result.confirmedStationMinusComputerMillis)
+        assertEquals(1, writtenCommands.count { it == DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND })
+        assertEquals(1, writtenCommands.count { it == DesktopSportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND })
+        assertEquals(3, writtenCommands.count { it == DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND })
     }
 
     @Test
@@ -472,8 +540,9 @@ class DesktopSportIdentTimeSyncServiceTest {
             DesktopSportIdentCaptureAnalyzer.hexToBytes("FF 02 F0 01 4D 6D 0A 03"),
             dryRun.configPlusSequence[5].frameBytes
         )
-        assertEquals(6, dryRun.validatedWriteSequence.size)
-        assertEquals(SportIdentProtocol.PROBE_COMMAND, dryRun.validatedWriteSequence[5].command)
+        assertEquals(7, dryRun.validatedWriteSequence.size)
+        assertEquals(DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND, dryRun.validatedWriteSequence[5].command)
+        assertEquals(SportIdentProtocol.PROBE_COMMAND, dryRun.validatedWriteSequence[6].command)
     }
 
     @Test

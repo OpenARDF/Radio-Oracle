@@ -577,9 +577,9 @@ npm run desktop:usb-time-sync-write -- --args=--time=2026-06-27T03:10:18
 
 Dry-run mode prints both the exact captured SI Config+ sequence and the
 Radio-Oracle hardware-validation sequence. The validation sequence decodes the
-`F6` acknowledgement as the confirmed station-time echo, then sends `F9` to
-apply/commit the write and exits remote/config mode. It does not open a serial
-port or write station data.
+`F6` acknowledgement as the requested station-time echo, sends `F9` to
+apply/commit the write, then attempts a post-apply `F7` read before exiting
+remote/config mode. It does not open a serial port or write station data.
 
 Actual station writes require explicit opt-in:
 
@@ -595,20 +595,24 @@ Optional environment variables:
 - `RADIO_ORACLE_SI_TIME_SYNC_TOLERANCE_SECONDS=2`: set the allowed difference
   between requested time and the station time echoed by the `F6`
   acknowledgement.
-- `RADIO_ORACLE_SI_TIME_SYNC_BOUNDARY_LEAD_MILLIS=225`: when writing the
-  current computer time, target the next whole second and begin the final write
-  this many milliseconds before that boundary.
-- `RADIO_ORACLE_SI_TIME_SYNC_OFFSET_MILLIS=0`: optional experimental whole-second
+- `RADIO_ORACLE_SI_TIME_SYNC_BOUNDARY_LEAD_MILLIS=225`: when the optional
+  second-boundary alignment mode is enabled, target the next whole second and
+  begin the final write this many milliseconds before that boundary.
+- `RADIO_ORACLE_SI_TIME_SYNC_OFFSET_MILLIS=0`: optional experimental current-time
   target adjustment. Fixed `RADIO_ORACLE_SI_TIME_SYNC_AT` writes are exact and
   do not use this offset.
 - `RADIO_ORACLE_SI_TIME_SYNC_ATTEMPTS=2`: retry the full transaction this many
   times when the coupled station fails before `F6` is sent, or when a measured
   post-sync lead-time correction is needed.
 - `RADIO_ORACLE_SI_TIME_SYNC_CORRECTION_THRESHOLD_MILLIS=100`: after a
-  successful current-time sync, run one correction transaction when the measured
-  station-minus-computer delta exceeds this threshold and an attempt remains.
-- `RADIO_ORACLE_SI_TIME_SYNC_ALIGN_SECOND=NO`: disable the default wait for
-  the calibrated pre-boundary write point before selecting the target time.
+  successful current-time sync, run one correction transaction when the
+  post-apply `F7` station-minus-computer delta exceeds this threshold and an
+  attempt remains. If the post-apply `F7` read is unavailable, no correction is
+  attempted from the `F6` echo alone.
+- `RADIO_ORACLE_SI_TIME_SYNC_ALIGN_SECOND=YES`: enable the older calibrated
+  pre-boundary whole-second write mode for comparison. By default,
+  Radio-Oracle now writes the current computer time directly, including the
+  SPORTident 1/256-second tick byte.
 
 Do not run the write-enabled command on event-critical hardware until the
 non-critical validation matrix below has passed.
@@ -696,26 +700,38 @@ still reports the attached station. The displayed delta uses a millisecond
 computer timestamp. The station-time payload tick byte is
 interpreted as 1/256 second when station readback provides it, so inspection and
 post-sync lead/lag reporting can use subsecond station time. After `Sync Time`,
-the UI and hidden CLI also report the confirmed station-minus-computer delta in
-milliseconds.
+the UI and hidden CLI report the station-minus-computer delta only when an
+actual `F7` station-time read succeeds. The first estimate is attempted
+immediately after `F9` while the sync transaction is still open. If that
+post-apply read misses, Radio-Oracle opens a separate Inspect-style transaction
+and tries one more `F7` read before reporting the lead/lag as unknown. This
+matches the local `sportident-python` support scripts' practical measurement
+model: sample the computer clock immediately before requesting `F7`, decode the
+station's returned tick-aware time, and report station minus computer. Earlier
+versions inferred that delta from the `F6` write acknowledgement and could
+therefore report a small lead/lag even when the visible applied station clock
+appeared roughly one second different.
 
-For current-time syncs, Radio-Oracle now calculates the target station time as
-late as possible, immediately before `F6`. Because the capture-proven
-station-time payload only stores whole seconds, it targets the next
-computer-clock one-second boundary and begins the final write slightly before
-that boundary. The current default lead is `225ms`, based on observed results
-where a boundary-started write left the station consistently behind the
-computer. This lead and boundary wait are not applied when a fixed target time
-is supplied for capture comparison or validation.
+For current-time syncs, Radio-Oracle now follows the same time-payload model as
+the local `sportident-python` support code: it calculates the target station
+time as late as possible, immediately before `F6`, and writes the current
+computer time directly with the SPORTident tick byte set to the nearest
+1/256-second fraction. Earlier builds wrote only whole-second targets with tick
+`00` and used a calibrated pre-boundary delay. That older mode remains available
+with `RADIO_ORACLE_SI_TIME_SYNC_ALIGN_SECOND=YES` for comparison, but it is no
+longer the default.
 
 To improve reliability, Radio-Oracle retries the full sync transaction once
 when the failure occurs before the `F6` write command is sent, such as a missed
 remote-mode system-info reply. After `F6` has been sent, it does not blindly
 retry a failed transaction, because the coupled station may already have
-accepted the time write. If a current-time sync succeeds but the measured
-station-minus-computer delta is still outside the correction threshold,
-Radio-Oracle can use the remaining attempt to subtract that measured delta from
-the boundary lead and write again.
+accepted the time write. If a current-time sync succeeds and a post-apply `F7`
+read shows the measured station-minus-computer delta is still outside the
+correction threshold, Radio-Oracle can use the remaining attempt to subtract
+that measured delta from the boundary lead and write again. A missing post-apply
+`F7` read now triggers one separate `F7` readback transaction for the displayed
+lead/lag estimate. Correction still only uses a measured `F7` delta, never the
+`F6` acknowledgement echo.
 
 The captured Config+ remote-mode sequence is:
 
@@ -728,6 +744,14 @@ The captured Config+ remote-mode sequence is:
 
 All of these are SPORTident extended frames using the existing `0x8005` CRC
 implementation in `SportIdentProtocol.buildExtendedMessage`.
+
+Radio-Oracle's validation/write path adds one best-effort `F7` station-time
+read after `F9` when possible. That post-apply read is not required to consider
+the write acknowledged, but it is required before Radio-Oracle reports a
+post-sync station-minus-computer delta or performs a lead-time correction. If
+that in-transaction read fails, the service attempts one separate `F7` readback
+transaction and uses the same computer-before-`F7` timestamping model as the
+Python scripts before falling back to an unknown delta.
 
 Additional SI Config+ serial-port-monitor captures from June 28, 2026 covered a
 directly attached BSF7-family station on an FTDI/RS232 adapter at 4800 baud.
@@ -743,6 +767,12 @@ inductive remote/coupled path with `F0 53`. The direct BSF7 write sequence is:
 3. `F7` with no payload: read current station time.
 4. `F6` with a seven-byte payload: write station time.
 5. `F9` with payload `01`: apply/commit the write.
+
+As with the coupled path, Radio-Oracle may send a best-effort post-apply `F7`
+after `F9` so the reported lead/lag is based on a real station-time read rather
+than the `F6` acknowledgement echo. If the immediate read misses, it may reopen
+the direct FTDI station path and perform the same one-shot `F7` fallback used
+for coupled stations.
 
 Radio-Oracle therefore treats opted-in FTDI/RS232 SPORTident ports as direct
 attached stations for Time Sync. The existing SPORTident USB CP2102 SI-Master
@@ -788,7 +818,9 @@ The fields are:
 - `SECONDS_HI SECONDS_LO`: big-endian seconds within the current 12-hour
   half-day.
 - `TICK`: subsecond/tick byte. Config+ writes `00`; station replies may return a
-  non-zero tick. Treat it as fractional seconds in 1/256-second units.
+  non-zero tick. Treat it as fractional seconds in 1/256-second units. Current
+  Radio-Oracle sync writes also use this tick byte, matching the Python support
+  library's `datetime.microsecond / 1_000_000 * 256` approach with rounding.
 
 The SI day-of-week mapping follows the existing card-punch parser convention:
 Sunday is `0`, Monday is `1`, through Saturday as `6`. `halfDayFlag` is `0` for
@@ -831,11 +863,15 @@ non-critical hardware with the hardware-gated command:
 For each run, require the command to read the station time before writing, write
 `F6`, decode the `F6` acknowledgement with `DesktopSportIdentStationTimeCodec`,
 fail before `F9` if the echoed station time is outside the configured tolerance,
-then apply the write with `F9`. The first successful spare-station run wrote
-requested time `2026-06-27T17:52:02`, decoded `F6` confirmation
-`2026-06-27T17:52:02`, then applied the write. The station beeped during the
-earlier attempt that reached `F6`/`F9`; an extra post-apply `F7` read failed on
-that hardware and should not be treated as part of the validation sequence.
+then apply the write with `F9`. Current builds then attempt a best-effort
+post-apply `F7` read to measure the applied station clock. If that post-apply
+read is unavailable, the write can still be successful, and Radio-Oracle opens
+one separate readback transaction to estimate the post-sync lead/lag from `F7`.
+If that fallback also fails, the post-sync lead/lag is reported as unknown and
+correction is not run from the `F6` echo alone. The first successful
+spare-station run wrote requested time
+`2026-06-27T17:52:02`, decoded `F6` confirmation `2026-06-27T17:52:02`, then
+applied the write.
 
 Manual-wake spare-station validation on coupled target station `575853` passed
 these fixed-time cases with a three-second tolerance:

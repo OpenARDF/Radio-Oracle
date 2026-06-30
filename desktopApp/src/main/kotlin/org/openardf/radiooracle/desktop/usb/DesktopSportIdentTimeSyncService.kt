@@ -86,6 +86,11 @@ data class DesktopSportIdentStationPowerStateWriteResult(
     val message: String
 )
 
+private data class DesktopSportIdentPostSyncTimeEstimate(
+    val computerTime: LocalDateTime,
+    val stationMinusComputerMillis: Long
+)
+
 private enum class DesktopSportIdentTimeSyncAccessMode {
     DIRECT_ATTACHED,
     RELAY_COUPLED
@@ -184,7 +189,7 @@ internal class DesktopSportIdentTimeSyncService(
         attemptStationPowerOffInSeparateTransaction()
 
     fun dryRun(sourceTime: LocalDateTime = LocalDateTime.now()): DesktopSportIdentTimeSyncDryRun {
-        val normalizedTime = sourceTime.truncatedTo(ChronoUnit.SECONDS)
+        val normalizedTime = sourceTime.truncatedTo(ChronoUnit.MILLIS)
         return DesktopSportIdentTimeSyncDryRun(
             sourceTime = normalizedTime,
             configPlusSequence = DesktopSportIdentTimeSyncProtocol.configPlusWriteSequence(normalizedTime),
@@ -224,7 +229,7 @@ internal class DesktopSportIdentTimeSyncService(
         repeat(maxAttempts) { attemptIndex ->
             var writeCommandStarted = false
             try {
-                val result = writeTimeWithReadBackOnce(
+                val initialResult = writeTimeWithReadBackOnce(
                     sourceTime = sourceTime,
                     toleranceSeconds = toleranceSeconds,
                     currentTimeOffsetMillis = currentTimeOffsetMillis,
@@ -236,6 +241,7 @@ internal class DesktopSportIdentTimeSyncService(
                     canUseCorrectionAttempt = attemptIndex < maxAttempts - 1,
                     onWriteCommandStarted = { writeCommandStarted = true }
                 )
+                val result = initialResult.withFallbackPostSyncEstimate()
                 val postSyncDeltaMillis = result.confirmedStationMinusComputerMillis
                 if (
                     sourceTime == null &&
@@ -325,8 +331,9 @@ internal class DesktopSportIdentTimeSyncService(
                 port = port,
                 step = DesktopSportIdentTimeSyncProtocol.applyStationTimeStep()
             )
-            val postApplyStationTime = readPostApplyStationTime(port)
-            val computerTimeAfterSync = currentTime().truncatedTo(ChronoUnit.MILLIS)
+            val postApplyEstimate = readPostApplyStationTimeEstimate(port)
+            val computerTimeAfterSync = postApplyEstimate?.computerTime
+                ?: currentTime().truncatedTo(ChronoUnit.MILLIS)
 
             val result = DesktopSportIdentTimeSyncResult(
                 stationInfo = stationInfo,
@@ -335,9 +342,7 @@ internal class DesktopSportIdentTimeSyncService(
                 beforeTime = beforeTime,
                 toleranceSeconds = toleranceSeconds,
                 computerTimeAfterSync = computerTimeAfterSync,
-                confirmedStationMinusComputerMillis = postApplyStationTime?.let {
-                    Duration.between(computerTimeAfterSync, it.preciseDateTime).toMillis()
-                },
+                confirmedStationMinusComputerMillis = postApplyEstimate?.stationMinusComputerMillis,
                 currentTimeOffsetMillis = if (sourceTime == null) currentTimeOffsetMillis else 0L,
                 attempts = attemptCount,
                 secondBoundaryWaitMillis = targetTimeSelection.secondBoundaryWaitMillis,
@@ -439,6 +444,31 @@ internal class DesktopSportIdentTimeSyncService(
             return this
         }
         return copy(stationPowerStateWrite = attemptStationPowerOffInSeparateTransaction())
+    }
+
+    private fun DesktopSportIdentTimeSyncResult.withFallbackPostSyncEstimate(): DesktopSportIdentTimeSyncResult {
+        if (confirmedStationMinusComputerMillis != null) {
+            return this
+        }
+        val estimate = estimatePostSyncTimeInSeparateTransaction() ?: return this
+        return copy(
+            computerTimeAfterSync = estimate.computerTime,
+            confirmedStationMinusComputerMillis = estimate.stationMinusComputerMillis
+        )
+    }
+
+    private fun estimatePostSyncTimeInSeparateTransaction(): DesktopSportIdentPostSyncTimeEstimate? {
+        val preparedPort = runCatching { prepareTimeSyncPort() }.getOrNull() ?: return null
+        return readStationClockForInspection(
+            port = preparedPort.port,
+            baudRate = preparedPort.baudRate,
+            accessMode = preparedPort.accessMode
+        ).getOrNull()?.let { clock ->
+            DesktopSportIdentPostSyncTimeEstimate(
+                computerTime = clock.computerTime,
+                stationMinusComputerMillis = clock.stationMinusComputerMillis
+            )
+        }
     }
 
     private fun attemptStationPowerOffInSeparateTransaction(): DesktopSportIdentStationPowerStateWriteResult {
@@ -584,11 +614,11 @@ internal class DesktopSportIdentTimeSyncService(
             )
             val stationInfo = SportIdentStationInfoParser.fromSystemInfoFrame(systemInfoFrame)
                 ?: error("SPORTident station returned unreadable system info.")
+            val computerTime = currentTime().truncatedTo(ChronoUnit.MILLIS)
             val stationTime = requireReply(
                 port = port,
                 step = DesktopSportIdentTimeSyncProtocol.readStationTimeStep("Read station time for inspection")
             ).data.decodeStationTime("inspection station time")
-            val computerTime = currentTime().truncatedTo(ChronoUnit.MILLIS)
 
             DesktopSportIdentCoupledStationClock(
                 stationInfo = stationInfo,
@@ -612,12 +642,21 @@ internal class DesktopSportIdentTimeSyncService(
             }
         }
 
-    private fun readPostApplyStationTime(port: DesktopSerialPort): DesktopSportIdentStationTime? =
+    private fun readPostApplyStationTimeEstimate(port: DesktopSerialPort): DesktopSportIdentPostSyncTimeEstimate? =
         runCatching {
+            val computerTime = currentTime().truncatedTo(ChronoUnit.MILLIS)
             commandClient.sendCommand(
                 port = port,
                 command = DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND
-            )?.data?.decodeStationTime("post-apply station time")
+            )?.data?.decodeStationTime("post-apply station time")?.let { stationTime ->
+                DesktopSportIdentPostSyncTimeEstimate(
+                    computerTime = computerTime,
+                    stationMinusComputerMillis = Duration.between(
+                        computerTime,
+                        stationTime.preciseDateTime
+                    ).toMillis()
+                )
+            }
         }.getOrNull()
 
     private fun readStationClockForInspection(
@@ -716,28 +755,28 @@ internal class DesktopSportIdentTimeSyncService(
     ): TargetTimeSelection =
         if (sourceTime != null) {
             TargetTimeSelection(
-                targetTime = sourceTime.truncatedTo(ChronoUnit.SECONDS),
+                targetTime = sourceTime.truncatedTo(ChronoUnit.MILLIS),
                 secondBoundaryWaitMillis = null,
                 secondBoundaryLeadMillis = null
             )
         } else {
-            val boundaryTime = if (alignToSecondBoundary) {
-                waitForSecondBoundaryLead(secondBoundaryLeadMillis)
+            if (alignToSecondBoundary) {
+                val boundaryTime = waitForSecondBoundaryLead(secondBoundaryLeadMillis)
+                TargetTimeSelection(
+                    targetTime = boundaryTime.targetBoundary
+                        .plus(Duration.ofMillis(currentTimeOffsetMillis))
+                        .roundToNearestSecond(),
+                    secondBoundaryWaitMillis = boundaryTime.waitMillis,
+                    secondBoundaryLeadMillis = secondBoundaryLeadMillis
+                )
             } else {
                 val now = currentTime().truncatedTo(ChronoUnit.MILLIS)
-                BoundaryTime(
-                    time = now,
-                    waitMillis = 0L,
-                    targetBoundary = now
+                TargetTimeSelection(
+                    targetTime = now.plus(Duration.ofMillis(currentTimeOffsetMillis)),
+                    secondBoundaryWaitMillis = 0L,
+                    secondBoundaryLeadMillis = null
                 )
             }
-            TargetTimeSelection(
-                targetTime = boundaryTime.targetBoundary
-                    .plus(Duration.ofMillis(currentTimeOffsetMillis))
-                    .roundToNearestSecond(),
-                secondBoundaryWaitMillis = boundaryTime.waitMillis,
-                secondBoundaryLeadMillis = if (alignToSecondBoundary) secondBoundaryLeadMillis else null
-            )
         }
 
     private fun waitForSecondBoundaryLead(leadMillis: Long): BoundaryTime {
@@ -818,7 +857,7 @@ internal class DesktopSportIdentTimeSyncService(
         const val DEFAULT_SECOND_BOUNDARY_LEAD_MILLIS = 225L
         const val DEFAULT_WRITE_ATTEMPTS = 2
         const val DEFAULT_CORRECTION_THRESHOLD_MILLIS = 100L
-        const val DEFAULT_ALIGN_TO_SECOND_BOUNDARY = true
+        const val DEFAULT_ALIGN_TO_SECOND_BOUNDARY = false
         private const val READ_TIMEOUT_MS = 1200
         private const val WRITE_TIMEOUT_MS = 1200
         private const val OPEN_WAIT_TIME_MS = 200

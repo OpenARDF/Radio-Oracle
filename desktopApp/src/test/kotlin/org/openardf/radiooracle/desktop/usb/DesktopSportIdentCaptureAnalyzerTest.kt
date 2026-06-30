@@ -119,4 +119,22 @@ class DesktopSportIdentCaptureAnalyzerTest {
         val decodedReplyTime = DesktopSportIdentStationTimeCodec.decodePayload(amReplyFrame.data)
         assertEquals(LocalDateTime.parse("2026-06-27T03:10:18.019531250"), decodedReplyTime?.preciseDateTime)
     }
+
+    @Test
+    fun encodesStationTimeFractionalTickLikePythonSupportLibrary() {
+        val payload = DesktopSportIdentStationTimeCodec.encodePayload(
+            LocalDateTime.parse("2026-06-27T10:00:00.775")
+        )
+
+        assertArrayEquals(byteArrayOf(0x1A, 0x06, 0x1B, 0x0C, 0x8C.toByte(), 0xA0.toByte(), 0xC6.toByte()), payload)
+    }
+
+    @Test
+    fun encodeStationTimeRollsOverWhenFractionRoundsToFullTickSecond() {
+        val payload = DesktopSportIdentStationTimeCodec.encodePayload(
+            LocalDateTime.parse("2026-06-27T10:00:00.999")
+        )
+
+        assertArrayEquals(byteArrayOf(0x1A, 0x06, 0x1B, 0x0C, 0x8C.toByte(), 0xA1.toByte(), 0x00), payload)
+    }
 }

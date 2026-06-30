@@ -44,21 +44,22 @@ internal object DesktopSportIdentStationTimeCodec {
     private const val MAX_HALF_DAY_SECONDS = 12 * 60 * 60
 
     fun encodePayload(sourceTime: LocalDateTime): ByteArray {
-        require(sourceTime.year in 2000..2099) {
+        val normalizedTime = sourceTime.withRoundedSportIdentTick()
+        require(normalizedTime.year in 2000..2099) {
             "SPORTident station time payloads store a two-digit year."
         }
-        val siDayOfWeek = sourceTime.dayOfWeek.toSportIdentDayIndex()
-        val halfDaySeconds = sourceTime.toSecondOfDay() % MAX_HALF_DAY_SECONDS
-        val dayHalfByte = (siDayOfWeek shl 1) or if (sourceTime.hour >= 12) 1 else 0
+        val siDayOfWeek = normalizedTime.dayOfWeek.toSportIdentDayIndex()
+        val halfDaySeconds = normalizedTime.toSecondOfDay() % MAX_HALF_DAY_SECONDS
+        val dayHalfByte = (siDayOfWeek shl 1) or if (normalizedTime.hour >= 12) 1 else 0
 
         return byteArrayOf(
-            (sourceTime.year - 2000).toByte(),
-            sourceTime.monthValue.toByte(),
-            sourceTime.dayOfMonth.toByte(),
+            (normalizedTime.year - 2000).toByte(),
+            normalizedTime.monthValue.toByte(),
+            normalizedTime.dayOfMonth.toByte(),
             dayHalfByte.toByte(),
             ((halfDaySeconds and 0xff00) shr 8).toByte(),
             (halfDaySeconds and 0xff).toByte(),
-            0x00
+            normalizedTime.sportIdentTick().toByte()
         )
     }
 
@@ -98,6 +99,16 @@ internal object DesktopSportIdentStationTimeCodec {
 
     private fun LocalDateTime.toSecondOfDay(): Int =
         hour * 3600 + minute * 60 + second
+
+    private fun LocalDateTime.withRoundedSportIdentTick(): LocalDateTime =
+        if (sportIdentTick() == 256) {
+            plusSeconds(1).withNano(0)
+        } else {
+            this
+        }
+
+    private fun LocalDateTime.sportIdentTick(): Int =
+        ((nano * 256L + 500_000_000L) / 1_000_000_000L).toInt()
 
     private fun DayOfWeek.toSportIdentDayIndex(): Int =
         when (this) {

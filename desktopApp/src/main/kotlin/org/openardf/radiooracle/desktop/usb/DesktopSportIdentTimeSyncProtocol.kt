@@ -69,6 +69,7 @@ internal object DesktopSportIdentTimeSyncProtocol {
             readStationTimeStep("Read station time before write"),
             writeStationTimeStep(sourceTime),
             applyStationTimeStep(),
+            readStationTimeStep("Read station time after apply"),
             exitRemoteModeStep()
         )
 
