@@ -130,8 +130,11 @@ class DesktopFoxoringCourseGeneratorTest {
         assertEquals(result.recommendedCourseSets.size, Regex("""<name>Recommended Set #\d+</name>""").findAll(kmlText).count())
         assertTrue(kmlText.contains("<name>Recommended Set #1</name>"))
         assertTrue(kmlText.contains("<name>Recommended Set #1 Course #1:"))
+        val exportedCandidateRows = result.rows
+            .filter { it.hasCategoryMatch || it.foxCount == result.foxes.size }
+            .distinct()
         assertEquals(
-            result.rows.count { it.hasCategoryMatch } + result.recommendedCourseSets.sumOf { it.rows.size },
+            exportedCandidateRows.size + result.recommendedCourseSets.sumOf { it.rows.size },
             kmlText.countOccurrences("<LineString>")
         )
         assertEquals(1, kmlText.countOccurrences("<name>Start</name>"))

@@ -1270,8 +1270,8 @@ object DesktopClassicCourseGenerator {
     }
 
     private fun kmlText(result: ClassicCourseGeneratorResult): String {
-        val greenRows = result.rows.filter { it.hasCategoryMatch }
-        val greenRowIndexes = greenRows.withIndex().associate { it.value to it.index }
+        val candidateRows = kmlCandidateRows(result)
+        val candidateRowIndexes = candidateRows.withIndex().associate { it.value to it.index }
         val courseObjects = (listOf(result.start) + result.foxes + result.additionalCourseObjects + listOfNotNull(result.beacon) + result.finish)
             .distinctBy { it.kmlObjectKey() }
         return buildString {
@@ -1280,7 +1280,7 @@ object DesktopClassicCourseGenerator {
             appendLine("  <Document>")
             appendLine("    <name>${DesktopExportPrimitives.xmlText(result.sourcePath.fileName.toString())} ${DesktopExportPrimitives.xmlText(result.generatorTitle)}</name>")
             append(DesktopCourseKmlStyle.pointStyleDefinitions(includeWaypoint = false))
-            greenRows.indices.forEach { index ->
+            candidateRows.indices.forEach { index ->
                 appendCandidateRouteStyle(index)
             }
             appendLine("    <Folder>")
@@ -1300,7 +1300,7 @@ object DesktopClassicCourseGenerator {
             appendLine("    </Folder>")
             appendLine("    <Folder>")
             appendLine("      <name>Category-matching course candidates</name>")
-            greenRows.forEachIndexed { index, row ->
+            candidateRows.forEachIndexed { index, row ->
                 appendCourseRoutePlacemark(
                     row = row,
                     name = kmlRouteName(index + 1, row),
@@ -1316,7 +1316,7 @@ object DesktopClassicCourseGenerator {
                     appendCourseRoutePlacemark(
                         row = row,
                         name = "Recommended Set #${set.index} Course #${rowIndex + 1}: ${row.orderLabels.joinToString(" -> ")}",
-                        styleIndex = greenRowIndexes[row] ?: 0,
+                        styleIndex = candidateRowIndexes[row] ?: 0,
                         indent = "      "
                     )
                 }
@@ -1326,6 +1326,11 @@ object DesktopClassicCourseGenerator {
             appendLine("</kml>")
         }
     }
+
+    private fun kmlCandidateRows(result: ClassicCourseGeneratorResult): List<ClassicCourseGeneratorRow> =
+        result.rows
+            .filter { row -> row.hasCategoryMatch || row.foxCount == result.foxes.size }
+            .distinct()
 
     private fun StringBuilder.appendCourseRoutePlacemark(
         row: ClassicCourseGeneratorRow,

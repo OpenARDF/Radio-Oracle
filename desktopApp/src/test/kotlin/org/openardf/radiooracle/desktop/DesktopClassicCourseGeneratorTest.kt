@@ -136,6 +136,26 @@ class DesktopClassicCourseGeneratorTest {
     }
 
     @Test
+    fun exportsAllFoxCourseKmlEvenWhenItHasNoCategoryMatch() {
+        val path = Files.createTempFile("classic-course-points-too-long", ".kml")
+        Files.writeString(path, overLengthM21CoursePointsKml())
+
+        val result = DesktopClassicCourseGenerator.generate(path, elevationLookup = { null })
+        val allFoxRow = result.groups.single { it.foxCount == result.foxes.size }.rows.single()
+        val pdfPath = Files.createTempFile("classic-course-generator-too-long", ".pdf")
+        val exports = DesktopClassicCourseGenerator.exportPdfAndKml(pdfPath, result)
+
+        assertTrue(allFoxRow.matchingCategories.isEmpty())
+        val kmlText = Files.readString(exports.kmlPath)
+        assertTrue(kmlText.contains("<name>Category-matching course candidates</name>"))
+        assertTrue(kmlText.routePlacemarkBlocks().any { placemark ->
+            placemark.lineStringCoordinateLines().size == allFoxRow.coursePoints.size &&
+                placemark.contains("No category match") &&
+                allFoxRow.orderLabels.joinToString(" -&gt; ") in placemark
+        })
+    }
+
+    @Test
     fun reportsClassicCourseRequirementWarningsWithoutFilteringResults() {
         val path = Files.createTempFile("classic-course-points-rule-warnings", ".kml")
         Files.writeString(path, coursePointsKmlWithRuleViolations())
@@ -335,6 +355,22 @@ class DesktopClassicCourseGeneratorTest {
                 ${pointPlacemark("FOX5", -94.950, 39.000, 500.0)}
                 ${pointPlacemark("Beacon", -94.940, 39.000, 500.0)}
                 ${pointPlacemark("Finish", -94.930, 39.000, 500.0)}
+              </Document>
+            </kml>
+        """.trimIndent()
+
+    private fun overLengthM21CoursePointsKml(): String =
+        """
+            <kml xmlns="http://www.opengis.net/kml/2.2">
+              <Document>
+                ${pointPlacemark("Start", -95.000, 39.000, 100.0)}
+                ${pointPlacemark("FOX1", -94.900, 39.000, 100.0)}
+                ${pointPlacemark("FOX2", -94.800, 39.000, 100.0)}
+                ${pointPlacemark("FOX3", -94.700, 39.000, 100.0)}
+                ${pointPlacemark("FOX4", -94.600, 39.000, 100.0)}
+                ${pointPlacemark("FOX5", -94.500, 39.000, 100.0)}
+                ${pointPlacemark("Beacon", -94.400, 39.000, 100.0)}
+                ${pointPlacemark("Finish", -94.300, 39.000, 100.0)}
               </Document>
             </kml>
         """.trimIndent()
