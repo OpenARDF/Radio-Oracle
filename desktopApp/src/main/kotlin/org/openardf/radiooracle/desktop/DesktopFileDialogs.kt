@@ -48,6 +48,7 @@ object DesktopProjectFilePaths {
     const val FINAL_RESULTS_JSON_EXTENSION = ".final-results.json"
     const val LIVE_RESULTS_JSON_EXTENSION = ".live-results.json"
     const val IOF_XML_EXTENSION = ".iof.xml"
+    const val XML_EXTENSION = ".xml"
     const val CSV_EXTENSION = ".csv"
     const val HTML_EXTENSION = ".html"
     const val PDF_EXTENSION = ".pdf"
@@ -396,7 +397,7 @@ object DesktopFileDialogs {
         chooseFiles(title, DesktopProjectFilePaths.CSV_EXTENSION)
 
     fun chooseImportIofXml(title: String): Path? =
-        chooseFile(title, FileDialog.LOAD, DesktopProjectFilePaths.IOF_XML_EXTENSION)
+        chooseFile(title, FileDialog.LOAD, DesktopProjectFilePaths.XML_EXTENSION)
 
     fun chooseImportKmlKmz(): Path? {
         val dialog = FileDialog(null as Frame?, "Import Controls KML/KMZ", FileDialog.LOAD)
