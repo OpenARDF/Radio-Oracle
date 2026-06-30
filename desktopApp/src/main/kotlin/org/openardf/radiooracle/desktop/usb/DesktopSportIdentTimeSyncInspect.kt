@@ -48,10 +48,12 @@ fun main() {
         println("Station code: ${station.stationCodeNumber ?: "unknown"}")
         println("Station mode: ${station.stationModeLabel ?: "unknown"}")
         println("Extended mode: ${station.extendedMode}")
+        printStationDiagnostics(station)
     }
     inspection.coupledStationClock?.let { clock ->
         println("Coupled station serial: ${clock.stationInfo.serialNumber}")
         println("Coupled station code: ${clock.stationInfo.stationCodeNumber ?: "unknown"}")
+        printStationDiagnostics(clock.stationInfo)
         println("Coupled station time: ${clock.stationTime}")
         println("Computer time at inspection: ${clock.computerTime}")
         println("Coupled station minus computer: ${clock.stationMinusComputerMillis}ms")
@@ -59,4 +61,16 @@ fun main() {
     inspection.coupledStationInspectionError?.let { println("Coupled station inspection: $it") }
     println("Can sync time: ${inspection.canSyncTime}")
     inspection.disabledReason?.let { println("Disabled reason: $it") }
+}
+
+private fun printStationDiagnostics(station: org.openardf.radiooracle.shared.sportident.SportIdentStationInfo) {
+    station.modelName?.let { println("Station model: $it") }
+    station.modelId?.let { println("Station model ID: 0x${it.toString(16).uppercase().padStart(4, '0')}") }
+    station.firmwareVersion?.let { println("Station firmware: $it") }
+    station.buildDate?.let { println("Station build date: $it") }
+    station.batteryDate?.let { println("Station battery date: $it") }
+    station.batteryVoltage?.let { println("Station battery voltage: ${"%.2f".format(it)}V") }
+    station.memorySizeKb?.let { println("Station memory: ${it}KB") }
+    station.activeTimeMinutes?.let { println("Station active time: ${it} minutes") }
+    station.protocolByte?.let { println("Station protocol byte: 0x${it.toString(16).uppercase().padStart(2, '0')}") }
 }

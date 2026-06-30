@@ -39,7 +39,18 @@ internal data class DesktopSportIdentTimeSyncCommandStep(
 internal object DesktopSportIdentTimeSyncProtocol {
     val SET_STATION_TIME_COMMAND: Byte = 0xF6.toByte()
     val GET_STATION_TIME_COMMAND: Byte = 0xF7.toByte()
+    val POWER_OFF_COMMAND: Byte = 0xF8.toByte()
     val APPLY_STATION_TIME_COMMAND: Byte = 0xF9.toByte()
+    val REMOTE_POWER_OFF_BYTES: ByteArray = byteArrayOf(
+        0xFF.toByte(),
+        0x40,
+        0x0F,
+        0x80.toByte(),
+        0xB2.toByte(),
+        0xB6.toByte(),
+        0x50,
+        0xC0.toByte()
+    )
 
     fun configPlusWriteSequence(sourceTime: LocalDateTime): List<DesktopSportIdentTimeSyncCommandStep> =
         listOf(
@@ -108,6 +119,13 @@ internal object DesktopSportIdentTimeSyncProtocol {
             label = "Apply station time write",
             command = APPLY_STATION_TIME_COMMAND,
             payload = byteArrayOf(0x01)
+        )
+
+    fun powerOffStep(): DesktopSportIdentTimeSyncCommandStep =
+        DesktopSportIdentTimeSyncCommandStep(
+            label = "Put station to sleep",
+            command = POWER_OFF_COMMAND,
+            payload = byteArrayOf()
         )
 
     fun exitRemoteModeStep(): DesktopSportIdentTimeSyncCommandStep =

@@ -213,6 +213,7 @@ import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.printing.FinishTicketRenderer
 import org.openardf.radiooracle.shared.results.EventResultSending
+import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
 import org.openardf.radiooracle.shared.time.DurationFormatter
 import org.jetbrains.skia.Image as SkiaImage
 import java.awt.Desktop
@@ -10699,6 +10700,7 @@ private fun SportIdentTimeSyncPanel(
     var syncStatusColor by remember { mutableStateOf(DesktopPalette.Disconnected) }
     var isInspecting by remember { mutableStateOf(false) }
     var isSyncing by remember { mutableStateOf(false) }
+    var putStationToSleepAfterSync by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
     val localTimeText = remember(raceClockTick) {
         DesktopDateTimeText.displayIsoOrRaw(LocalDateTime.now().withNano(0).toString())
@@ -10731,6 +10733,17 @@ private fun SportIdentTimeSyncPanel(
                 fontSize = 13.sp
             )
         }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = putStationToSleepAfterSync,
+                onCheckedChange = { putStationToSleepAfterSync = it }
+            )
+            Text(
+                text = "Put station to sleep after sync",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        }
         inspectionStatus?.let { status ->
             Text(
                 text = status,
@@ -10758,6 +10771,8 @@ private fun SportIdentTimeSyncPanel(
                             inspection.statusText,
                             inspection.portInfo?.describe()?.let { "Port: $it" },
                             inspection.baudRate?.let { "Baud: $it" },
+                            inspection.coupledStationClock?.stationInfo?.let(::formatSportIdentStationDiagnostics)
+                                ?: inspection.stationInfo?.let(::formatSportIdentStationDiagnostics),
                             inspection.coupledStationClock?.let { clock ->
                                 val stationTime = DesktopDateTimeText.displayIsoOrRaw(clock.stationTime.toString())
                                 "Station ${clock.stationInfo.serialNumber}; " +
@@ -10788,7 +10803,9 @@ private fun SportIdentTimeSyncPanel(
                     scope.launch {
                         val outcome = runCatching {
                             withContext(Dispatchers.IO) {
-                                desktopSportIdentTimeSyncService().syncTime()
+                                desktopSportIdentTimeSyncService().syncTime(
+                                    putStationToSleepAfterSync = putStationToSleepAfterSync
+                                )
                             }
                         }
                         syncStatus = outcome.fold(
@@ -10817,13 +10834,16 @@ private fun SportIdentTimeSyncPanel(
                                     ?.takeIf { it > 0L }
                                     ?.let { " Waited ${formatSportIdentDuration(it)} for the calibrated pre-boundary write point." }
                                     ?: ""
+                                val powerStateText = result.stationPowerStateWrite
+                                    ?.let { " ${it.message}" }
+                                    ?: ""
                                 siCodeText = result.stationInfo.stationCodeNumber?.let { "SI Station: $it" }
                                 stationTimeDeltaText = result.confirmedStationMinusComputerMillis
                                     ?.let(::formatSportIdentTimeDeltaRow)
                                 syncStatusColor = DesktopPalette.Connected
                                 "Synced station ${result.stationInfo.serialNumber} to $requested. " +
                                     "After sync, station is $delta. Previous station time: $before." +
-                                    offsetText + leadText + boundaryText + retryText
+                                    offsetText + leadText + boundaryText + retryText + powerStateText
                             },
                             onFailure = { error ->
                                 syncStatusColor = DesktopPalette.Error
@@ -10883,6 +10903,20 @@ private fun formatSportIdentTimeDeltaRow(deltaMillis: Long): String =
         val direction = if (deltaMillis > 0) "ahead" else "behind"
         "Time Error: ${formatSportIdentDuration(abs(deltaMillis))} $direction"
     }
+
+private fun formatSportIdentStationDiagnostics(stationInfo: SportIdentStationInfo): String? {
+    val details = buildList {
+        stationInfo.modelName?.let { add("model $it") }
+        stationInfo.modelId?.let { add("modelId 0x${it.toString(16).uppercase().padStart(4, '0')}") }
+        stationInfo.firmwareVersion?.let { add("firmware $it") }
+        stationInfo.batteryVoltage?.let { add("battery ${"%.2f".format(it)}V") }
+        stationInfo.batteryDate?.let { add("battery date $it") }
+        stationInfo.memorySizeKb?.let { add("memory ${it}KB") }
+        stationInfo.activeTimeMinutes?.let { add("active ${it / 60}h ${it % 60}m") }
+        stationInfo.protocolByte?.let { add("protocol 0x${it.toString(16).uppercase().padStart(2, '0')}") }
+    }
+    return details.takeIf { it.isNotEmpty() }?.joinToString(prefix = "Diagnostics: ", postfix = ". ")
+}
 
 private fun formatSportIdentSignedDuration(deltaMillis: Long): String {
     val sign = if (deltaMillis > 0) "+" else "-"

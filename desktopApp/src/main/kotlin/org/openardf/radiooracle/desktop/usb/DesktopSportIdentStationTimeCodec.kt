@@ -34,6 +34,8 @@ internal data class DesktopSportIdentStationTime(
     val tick: Int
 ) {
     val halfDayLabel: String = if (dateTime.hour >= 12) "PM" else "AM"
+    val tickNanos: Long = (tick * 1_000_000_000L + 128L) / 256L
+    val preciseDateTime: LocalDateTime = dateTime.plusNanos(tickNanos)
 }
 
 internal object DesktopSportIdentStationTimeCodec {

@@ -75,7 +75,13 @@ data class DesktopSportIdentTimeSyncResult(
     val currentTimeOffsetMillis: Long,
     val attempts: Int,
     val secondBoundaryWaitMillis: Long?,
-    val secondBoundaryLeadMillis: Long?
+    val secondBoundaryLeadMillis: Long?,
+    val stationPowerStateWrite: DesktopSportIdentStationPowerStateWriteResult?
+)
+
+data class DesktopSportIdentStationPowerStateWriteResult(
+    val confirmed: Boolean?,
+    val message: String
 )
 
 private enum class DesktopSportIdentTimeSyncAccessMode {
@@ -154,11 +160,15 @@ internal class DesktopSportIdentTimeSyncService(
         }
     }
 
-    fun syncTime(sourceTime: LocalDateTime? = null): DesktopSportIdentTimeSyncResult {
+    fun syncTime(
+        sourceTime: LocalDateTime? = null,
+        putStationToSleepAfterSync: Boolean = false
+    ): DesktopSportIdentTimeSyncResult {
         return writeTimeWithReadBack(
             sourceTime = sourceTime,
             writeEnabled = true,
-            toleranceSeconds = DEFAULT_TOLERANCE_SECONDS
+            toleranceSeconds = DEFAULT_TOLERANCE_SECONDS,
+            putStationToSleepAfterSync = putStationToSleepAfterSync
         )
     }
 
@@ -179,7 +189,8 @@ internal class DesktopSportIdentTimeSyncService(
         secondBoundaryLeadMillis: Long = DEFAULT_SECOND_BOUNDARY_LEAD_MILLIS,
         maxAttempts: Int = DEFAULT_WRITE_ATTEMPTS,
         correctionThresholdMillis: Long = DEFAULT_CORRECTION_THRESHOLD_MILLIS,
-        alignToSecondBoundary: Boolean = DEFAULT_ALIGN_TO_SECOND_BOUNDARY
+        alignToSecondBoundary: Boolean = DEFAULT_ALIGN_TO_SECOND_BOUNDARY,
+        putStationToSleepAfterSync: Boolean = false
     ): DesktopSportIdentTimeSyncResult {
         require(writeEnabled) {
             "SPORTident time sync writes require explicit hardware opt-in."
@@ -221,7 +232,7 @@ internal class DesktopSportIdentTimeSyncService(
                     leadForAttempt = (leadForAttempt - postSyncDeltaMillis).coerceIn(0L, 999L)
                     sleepMillis(RETRY_DELAY_MS)
                 } else {
-                    return result
+                    return result.withOptionalStationPowerOff(putStationToSleepAfterSync)
                 }
             } catch (error: Throwable) {
                 if (writeCommandStarted || attemptIndex == maxAttempts - 1) {
@@ -279,10 +290,11 @@ internal class DesktopSportIdentTimeSyncService(
             )
             val targetTime = targetTimeSelection.targetTime
             onWriteCommandStarted()
-            val confirmedTime = requireReply(
+            val confirmedStationTime = requireReply(
                 port = port,
                 step = DesktopSportIdentTimeSyncProtocol.writeStationTimeStep(targetTime)
-            ).data.decodeStationTime("write acknowledgement station time").dateTime
+            ).data.decodeStationTime("write acknowledgement station time")
+            val confirmedTime = confirmedStationTime.dateTime
 
             val deltaSeconds = abs(Duration.between(targetTime, confirmedTime).seconds)
             if (deltaSeconds > toleranceSeconds) {
@@ -307,12 +319,13 @@ internal class DesktopSportIdentTimeSyncService(
                 computerTimeAfterSync = computerTimeAfterSync,
                 confirmedStationMinusComputerMillis = Duration.between(
                     computerTimeAfterSync,
-                    confirmedTime
+                    confirmedStationTime.preciseDateTime
                 ).toMillis(),
                 currentTimeOffsetMillis = if (sourceTime == null) currentTimeOffsetMillis else 0L,
                 attempts = attemptCount,
                 secondBoundaryWaitMillis = targetTimeSelection.secondBoundaryWaitMillis,
-                secondBoundaryLeadMillis = targetTimeSelection.secondBoundaryLeadMillis
+                secondBoundaryLeadMillis = targetTimeSelection.secondBoundaryLeadMillis,
+                stationPowerStateWrite = null
             )
         } finally {
             if (port.isOpen) {
@@ -378,6 +391,84 @@ internal class DesktopSportIdentTimeSyncService(
         error("SPORTident station did not respond to the time-sync probe.")
     }
 
+    private fun DesktopSportIdentTimeSyncResult.withOptionalStationPowerOff(
+        putStationToSleepAfterSync: Boolean
+    ): DesktopSportIdentTimeSyncResult =
+        if (putStationToSleepAfterSync) {
+            copy(stationPowerStateWrite = attemptStationPowerOff())
+        } else {
+            this
+        }
+
+    private fun attemptStationPowerOff(): DesktopSportIdentStationPowerStateWriteResult {
+        val preparedPort = runCatching { prepareTimeSyncPort() }.getOrElse { error ->
+            return DesktopSportIdentStationPowerStateWriteResult(
+                confirmed = false,
+                message = "Station sleep command was not sent: ${error.message ?: error::class.simpleName}."
+            )
+        }
+        val port = preparedPort.port
+        return try {
+            configure(port, preparedPort.baudRate)
+            if (!port.open(OPEN_WAIT_TIME_MS)) {
+                error("Failed to open serial port ${port.info.systemPortPath}.")
+            }
+            requireReply(
+                port = port,
+                step = preparedPort.accessMode.initialStep()
+            )
+            when (preparedPort.accessMode) {
+                DesktopSportIdentTimeSyncAccessMode.DIRECT_ATTACHED ->
+                    sendDirectStationPowerOff(port)
+                DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED ->
+                    sendRemoteStationPowerOff(port)
+            }
+        } catch (error: Throwable) {
+            DesktopSportIdentStationPowerStateWriteResult(
+                confirmed = false,
+                message = "Station sleep command failed: ${error.message ?: error::class.simpleName}."
+            )
+        } finally {
+            if (port.isOpen) {
+                port.close()
+            }
+        }
+    }
+
+    private fun sendDirectStationPowerOff(port: DesktopSerialPort): DesktopSportIdentStationPowerStateWriteResult {
+        val reply = commandClient.sendCommand(
+            port = port,
+            command = DesktopSportIdentTimeSyncProtocol.powerOffStep().command,
+            data = DesktopSportIdentTimeSyncProtocol.powerOffStep().payload
+        )
+        return if (reply != null) {
+            DesktopSportIdentStationPowerStateWriteResult(
+                confirmed = true,
+                message = "Station sleep command confirmed."
+            )
+        } else {
+            DesktopSportIdentStationPowerStateWriteResult(
+                confirmed = false,
+                message = "Station sleep command was sent but not confirmed."
+            )
+        }
+    }
+
+    private fun sendRemoteStationPowerOff(port: DesktopSerialPort): DesktopSportIdentStationPowerStateWriteResult {
+        val request = DesktopSportIdentTimeSyncProtocol.REMOTE_POWER_OFF_BYTES
+        return if (port.write(request) == request.size) {
+            DesktopSportIdentStationPowerStateWriteResult(
+                confirmed = null,
+                message = "Remote station sleep command sent."
+            )
+        } else {
+            DesktopSportIdentStationPowerStateWriteResult(
+                confirmed = false,
+                message = "Remote station sleep command write was incomplete."
+            )
+        }
+    }
+
     private fun readStationClock(
         port: DesktopSerialPort,
         baudRate: Int,
@@ -404,14 +495,14 @@ internal class DesktopSportIdentTimeSyncService(
             val stationTime = requireReply(
                 port = port,
                 step = DesktopSportIdentTimeSyncProtocol.readStationTimeStep("Read station time for inspection")
-            ).data.decodeStationTime("inspection station time").dateTime
+            ).data.decodeStationTime("inspection station time")
             val computerTime = currentTime().truncatedTo(ChronoUnit.MILLIS)
 
             DesktopSportIdentCoupledStationClock(
                 stationInfo = stationInfo,
-                stationTime = stationTime,
+                stationTime = stationTime.preciseDateTime,
                 computerTime = computerTime,
-                stationMinusComputerMillis = Duration.between(computerTime, stationTime).toMillis()
+                stationMinusComputerMillis = Duration.between(computerTime, stationTime.preciseDateTime).toMillis()
             )
         }.also {
             if (port.isOpen) {

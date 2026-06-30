@@ -127,6 +127,47 @@ class SportIdentStationInfoParserTest {
         assertEquals(true, info.isDownloadCapableMode)
     }
 
+    @Test
+    fun parsesExtendedSystemInfoDiagnostics() {
+        val frame = assertNotNull(
+            SportIdentFrameParser.firstFrame(
+                SportIdentProtocol.buildExtendedMessage(
+                    command = SportIdentProtocol.GET_SYSTEM_INFO,
+                    data = systemInfoData(
+                        serialNumber = 106128,
+                        extendedMode = true,
+                        stationCodeNumber = 32,
+                        stationModeCode = 8,
+                        size = 131
+                    ).also { data ->
+                        data.writeAscii(offset = 3 + 0x05, text = "656")
+                        data.writeBytes(offset = 3 + 0x08, 0x08, 0x06, 0x10)
+                        data.writeBytes(offset = 3 + 0x0B, 0x91, 0x97)
+                        data[3 + 0x0D] = 0x80.toByte()
+                        data.writeBytes(offset = 3 + 0x15, 0x17, 0x03, 0x1F)
+                        data.writeBytes(offset = 3 + 0x50, 0x7F, 0xF8)
+                        data[3 + 0x74] = 0x01
+                        data.writeBytes(offset = 3 + 0x7E, 0x01, 0x2C)
+                    }
+                ),
+                commandFilter = SportIdentProtocol.GET_SYSTEM_INFO
+            )
+        )
+
+        val info = assertNotNull(SportIdentStationInfoParser.fromSystemInfoFrame(frame))
+
+        assertEquals(106128, info.serialNumber)
+        assertEquals("656", info.firmwareVersion)
+        assertEquals(0x9197, info.modelId)
+        assertEquals("BSM7-RS232/USB", info.modelName)
+        assertEquals("2008-06-16", info.buildDate)
+        assertEquals("2023-03-31", info.batteryDate)
+        assertEquals(128, info.memorySizeKb)
+        assertEquals(2.499, info.batteryVoltage!!, 0.001)
+        assertEquals(0x01, info.protocolByte)
+        assertEquals(300, info.activeTimeMinutes)
+    }
+
     private fun systemInfoData(
         serialNumber: Int,
         extendedMode: Boolean,
@@ -149,4 +190,14 @@ class SportIdentStationInfoParserTest {
                 data[119] = 0x01
             }
         }
+
+    private fun ByteArray.writeAscii(offset: Int, text: String) {
+        text.encodeToByteArray().copyInto(this, destinationOffset = offset)
+    }
+
+    private fun ByteArray.writeBytes(offset: Int, vararg values: Int) {
+        values.forEachIndexed { index, value ->
+            this[offset + index] = (value and 0xff).toByte()
+        }
+    }
 }

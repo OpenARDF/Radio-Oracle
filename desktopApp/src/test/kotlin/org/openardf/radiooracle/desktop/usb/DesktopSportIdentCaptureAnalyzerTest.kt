@@ -116,5 +116,7 @@ class DesktopSportIdentCaptureAnalyzerTest {
             DesktopSportIdentCaptureAnalyzer.describeFrame(1, amReplyFrame)
                 .contains("stationTime=2026-06-27T03:10:18 siDay=6 half=AM halfDaySeconds=11418 tick=0x05")
         )
+        val decodedReplyTime = DesktopSportIdentStationTimeCodec.decodePayload(amReplyFrame.data)
+        assertEquals(LocalDateTime.parse("2026-06-27T03:10:18.019531250"), decodedReplyTime?.preciseDateTime)
     }
 }

@@ -58,7 +58,7 @@ class DesktopSportIdentTimeSyncServiceTest {
                 remoteModeReply(),
                 remoteModeReply(),
                 systemInfoReply(),
-                stationTimeReply(stationTime, tick = 0x02),
+                stationTimeReply(stationTime, tick = 0x00),
                 normalModeReply()
             )
         )
@@ -99,7 +99,7 @@ class DesktopSportIdentTimeSyncServiceTest {
             readChunks = listOf(
                 normalModeReply(),
                 directSystemInfoReply(stationCodeNumber = 32),
-                stationTimeReply(stationTime, tick = 0x04)
+                stationTimeReply(stationTime, tick = 0x00)
             ),
             info = ftdiPortInfo()
         )
@@ -272,7 +272,7 @@ class DesktopSportIdentTimeSyncServiceTest {
                     remoteModeReply(),
                     systemInfoReply(),
                     stationTimeReply(targetTime1, tick = 0x01),
-                    stationWriteReply(targetTime2, tick = 0x05),
+                    stationWriteReply(targetTime2, tick = 0x00),
                     applyReply(),
                     normalModeReply()
                 )
@@ -294,10 +294,10 @@ class DesktopSportIdentTimeSyncServiceTest {
         )
 
         assertEquals(2, result.attempts)
-        assertEquals(999L, result.secondBoundaryLeadMillis)
+        assertEquals(980L, result.secondBoundaryLeadMillis)
         assertEquals(targetTime2, result.sourceTime)
         assertEquals(-100L, result.confirmedStationMinusComputerMillis)
-        assertEquals(1L, result.secondBoundaryWaitMillis)
+        assertEquals(20L, result.secondBoundaryWaitMillis)
         val stationWriteRequests = port.writeRequests.mapNotNull {
             SportIdentFrameParser.firstFrame(it, requireValidCrc = true)
                 ?.takeIf { frame -> frame.command == DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND }
@@ -464,6 +464,96 @@ class DesktopSportIdentTimeSyncServiceTest {
             DesktopSportIdentStationTimeCodec.encodePayload(targetTime),
             SportIdentFrameParser.firstFrame(port.writeRequests[3], requireValidCrc = true)?.data
         )
+        assertTrue(port.writeRequests.all { it.firstOrNull() == SportIdentProtocol.WAKEUP })
+        assertNull(result.stationPowerStateWrite)
+    }
+
+    @Test
+    fun writeTimeWithReadBackCanPutDirectFtdiStationToSleepAfterSync() {
+        val targetTime = LocalDateTime.parse("2026-06-28T20:32:49")
+        val port = FakePort(
+            readChunks = listOf(
+                normalModeReply(marker = 0x06),
+                directSystemInfoReply(stationCodeNumber = 32),
+                stationTimeReply(targetTime.minusSeconds(1), tick = 0x04, replyMarker = 0x06),
+                stationWriteReply(targetTime, tick = 0x00, replyMarker = 0x06),
+                applyReply(),
+                normalModeReply(marker = 0x06),
+                powerOffReply()
+            ),
+            info = ftdiPortInfo()
+        )
+        val service = DesktopSportIdentTimeSyncService(
+            portSelector = ftdiPortSelector(port),
+            connectStation = {
+                DesktopSportIdentStationConnection(
+                    baudRate = SportIdentProtocol.BAUDRATE_LOW,
+                    probeReply = byteArrayOf(),
+                    stationInfo = SportIdentStationInfo(
+                        serialNumber = 106128,
+                        extendedMode = true,
+                        stationCodeNumber = 32,
+                        stationModeCode = 8
+                    )
+                )
+            }
+        )
+
+        val result = service.writeTimeWithReadBack(
+            sourceTime = targetTime,
+            writeEnabled = true,
+            toleranceSeconds = 0,
+            putStationToSleepAfterSync = true
+        )
+
+        assertEquals(true, result.stationPowerStateWrite?.confirmed)
+        assertEquals("Station sleep command confirmed.", result.stationPowerStateWrite?.message)
+        assertEquals(
+            listOf(
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.GET_SYSTEM_INFO,
+                DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
+                DesktopSportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND,
+                SportIdentProtocol.PROBE_COMMAND,
+                DesktopSportIdentTimeSyncProtocol.POWER_OFF_COMMAND
+            ),
+            port.writeRequests.map { SportIdentFrameParser.firstFrame(it, requireValidCrc = true)?.command }
+        )
+        assertTrue(port.writeRequests.all { it.firstOrNull() == SportIdentProtocol.WAKEUP })
+    }
+
+    @Test
+    fun writeTimeWithReadBackCanSendRemoteStationSleepCommandAfterSync() {
+        val targetTime = LocalDateTime.parse("2026-06-27T03:10:18")
+        val port = FakePort(
+            readChunksByOpen = listOf(
+                listOf(remoteModeReply()),
+                listOf(
+                    remoteModeReply(),
+                    systemInfoReply(),
+                    stationTimeReply(targetTime.minusMinutes(1), tick = 0x00),
+                    stationWriteReply(targetTime, tick = 0x00),
+                    applyReply(),
+                    normalModeReply()
+                ),
+                listOf(remoteModeReply()),
+                listOf(remoteModeReply())
+            )
+        )
+        val service = DesktopSportIdentTimeSyncService(portProvider = FakePortProvider(listOf(port)))
+
+        val result = service.writeTimeWithReadBack(
+            sourceTime = targetTime,
+            writeEnabled = true,
+            toleranceSeconds = 0,
+            putStationToSleepAfterSync = true
+        )
+
+        assertNull(result.stationPowerStateWrite?.confirmed)
+        assertEquals("Remote station sleep command sent.", result.stationPowerStateWrite?.message)
+        assertArrayEquals(DesktopSportIdentTimeSyncProtocol.REMOTE_POWER_OFF_BYTES, port.writeRequests.last())
+        assertTrue(port.writeRequests.all { it.firstOrNull() == SportIdentProtocol.WAKEUP })
     }
 
     @Test
@@ -675,6 +765,12 @@ class DesktopSportIdentTimeSyncServiceTest {
             SportIdentProtocol.buildExtendedMessage(
                 command = DesktopSportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND,
                 data = byteArrayOf(0x00, 0x01, 0x01)
+            )
+
+        fun powerOffReply(): ByteArray =
+            SportIdentProtocol.buildExtendedMessage(
+                command = DesktopSportIdentTimeSyncProtocol.POWER_OFF_COMMAND,
+                data = byteArrayOf()
             )
 
         fun fastCommandClient(): DesktopSportIdentStationCommandClient {

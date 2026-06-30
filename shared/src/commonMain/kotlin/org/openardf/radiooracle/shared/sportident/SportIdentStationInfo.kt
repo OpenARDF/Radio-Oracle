@@ -28,7 +28,16 @@ data class SportIdentStationInfo(
     val serialNumber: Int,
     val extendedMode: Boolean,
     val stationCodeNumber: Int? = null,
-    val stationModeCode: Int? = null
+    val stationModeCode: Int? = null,
+    val firmwareVersion: String? = null,
+    val modelId: Int? = null,
+    val modelName: String? = null,
+    val buildDate: String? = null,
+    val batteryDate: String? = null,
+    val memorySizeKb: Int? = null,
+    val batteryVoltage: Double? = null,
+    val activeTimeMinutes: Int? = null,
+    val protocolByte: Int? = null
 ) {
     val stationModeLabel: String?
         get() = stationModeCode?.let(SportIdentStationMode::labelForModeCode)
@@ -102,12 +111,24 @@ object SportIdentStationInfoParser {
         val stationModeCode = frame.data
             .getOrNull(STATION_MODE_CODE_DATA_OFFSET)
             ?.toUnsignedInt()
+        val modelId = frame.data.readSystemInfoUInt16(SYS_VAL_MODEL_ID_OFFSET)
 
         return SportIdentStationInfo(
             serialNumber = serialNumber,
             extendedMode = extendedMode,
             stationCodeNumber = stationCodeNumber,
-            stationModeCode = stationModeCode
+            stationModeCode = stationModeCode,
+            firmwareVersion = frame.data.readSystemInfoAscii(SYS_VAL_FIRMWARE_OFFSET, 3),
+            modelId = modelId,
+            modelName = modelId?.let(SportIdentStationModel::labelForModelId),
+            buildDate = frame.data.readSystemInfoDate(SYS_VAL_BUILD_DATE_OFFSET),
+            batteryDate = frame.data.readSystemInfoDate(SYS_VAL_BATTERY_DATE_OFFSET),
+            memorySizeKb = frame.data.readSystemInfoUInt8(SYS_VAL_MEMORY_SIZE_OFFSET),
+            batteryVoltage = frame.data.readSystemInfoUInt16(SYS_VAL_BATTERY_VOLTAGE_OFFSET)
+                ?.let { it * 5.0 / 65_536.0 },
+            activeTimeMinutes = frame.data.readSystemInfoUInt16(SYS_VAL_ACTIVE_TIME_OFFSET)
+                ?.takeIf { it in 0..MAX_ACTIVE_TIME_MINUTES },
+            protocolByte = frame.data.readSystemInfoUInt8(SYS_VAL_PROTOCOL_OFFSET)
         )
     }
 
@@ -118,6 +139,16 @@ object SportIdentStationInfoParser {
     private const val STATION_MODE_CODE_DATA_OFFSET = 20
     private const val EXTENDED_MODE_DATA_OFFSET = 119
     private const val EXTENDED_MODE_FLAG = 0x01
+    private const val SYS_VAL_DATA_OFFSET = 3
+    private const val SYS_VAL_FIRMWARE_OFFSET = 0x05
+    private const val SYS_VAL_BUILD_DATE_OFFSET = 0x08
+    private const val SYS_VAL_MODEL_ID_OFFSET = 0x0B
+    private const val SYS_VAL_MEMORY_SIZE_OFFSET = 0x0D
+    private const val SYS_VAL_BATTERY_DATE_OFFSET = 0x15
+    private const val SYS_VAL_BATTERY_VOLTAGE_OFFSET = 0x50
+    private const val SYS_VAL_PROTOCOL_OFFSET = 0x74
+    private const val SYS_VAL_ACTIVE_TIME_OFFSET = 0x7E
+    private const val MAX_ACTIVE_TIME_MINUTES = 5_759
 
     private fun ByteArray.stationCodeNumber(): Int? {
         val primary = getOrNull(STATION_CODE_NUMBER_DATA_OFFSET)?.toUnsignedInt()
@@ -135,6 +166,49 @@ object SportIdentStationInfoParser {
     }
 
     private const val MAX_NON_STATION_STATUS_VALUE = 10
+
+    private fun ByteArray.readSystemInfoUInt8(offset: Int): Int? =
+        getOrNull(SYS_VAL_DATA_OFFSET + offset)?.toUnsignedInt()
+
+    private fun ByteArray.readSystemInfoUInt16(offset: Int): Int? {
+        val high = getOrNull(SYS_VAL_DATA_OFFSET + offset)?.toUnsignedInt() ?: return null
+        val low = getOrNull(SYS_VAL_DATA_OFFSET + offset + 1)?.toUnsignedInt() ?: return null
+        return (high shl 8) or low
+    }
+
+    private fun ByteArray.readSystemInfoAscii(offset: Int, length: Int): String? {
+        if (size < SYS_VAL_DATA_OFFSET + offset + length) return null
+        val chars = copyOfRange(SYS_VAL_DATA_OFFSET + offset, SYS_VAL_DATA_OFFSET + offset + length)
+        if (chars.any { it.toUnsignedInt() !in PRINTABLE_ASCII_RANGE }) return null
+        return chars.decodeToString()
+    }
+
+    private fun ByteArray.readSystemInfoDate(offset: Int): String? {
+        val year = readSystemInfoUInt8(offset) ?: return null
+        val month = readSystemInfoUInt8(offset + 1) ?: return null
+        val day = readSystemInfoUInt8(offset + 2) ?: return null
+        if (month !in 1..12 || day !in 1..31) return null
+        return "20${year.toString().padStart(2, '0')}-${month.toString().padStart(2, '0')}-${
+            day.toString().padStart(2, '0')
+        }"
+    }
+
+    private val PRINTABLE_ASCII_RANGE = 0x20..0x7E
+}
+
+object SportIdentStationModel {
+    fun labelForModelId(modelId: Int): String =
+        when (modelId) {
+            0x8117, 0x8118, 0x8197 -> "BSF7"
+            0x8198 -> "BSF8"
+            0x8187 -> "BS7-SI-Master"
+            0x8188 -> "BS8-SI-Master"
+            0x9197 -> "BSM7-RS232/USB"
+            0x9198 -> "BSM8-USB/SRR"
+            0x9D9A -> "BS11-BL"
+            0xCD9B -> "BS11-BS"
+            else -> "0x${modelId.toString(16).uppercase().padStart(4, '0')}"
+        }
 }
 
 private fun Byte.toUnsignedInt(): Int = toInt() and 0xff

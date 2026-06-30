@@ -626,30 +626,36 @@ As of the first successful spare-station test, the coupled target must already
 be awake. Manually waking the target station by inserting an SI card, then
 coupling it to the SI-Master/download station, allowed the write path to
 complete. When the coupled target was asleep, the command stopped before `F6`
-with no time write sent. A software-only wake mechanism is not yet known.
+with no time write sent. Radio-Oracle prefixes every SPORTident extended command
+with the `0xFF` wake byte, including Time Sync commands. If that alone does not
+wake a sleeping coupled station, the missing behavior is likely timing or an
+additional command sequence that still needs capture evidence.
 
-Two related station-power behaviors remain deliberately unimplemented until
-they can be proven from protocol evidence:
+One related station-power behavior remains deliberately unimplemented until it
+can be proven from protocol evidence:
 
 - Wake a sleeping coupled station before sync. The reader/Master path probably
   needs to mimic the station-awakening side effect of inserting an SI card, but
   the required command sequence is not yet known. Capture SI Config+ or another
   proven SPORTident tool waking a coupled sleeping station before adding this.
-- Put the coupled station back to sleep after sync. This should become an
-  optional Time Sync setting exposed as a checkbox that defaults on, with label
-  text equivalent to `Put station to sleep after sync`. Capture a known-good
-  sleep/standby command sequence before sending any sleep command from
-  Radio-Oracle.
+
+The Time Sync tool exposes `Put station to sleep after sync` as a checkbox that
+defaults on. This post-sync power-state write is sent only after the clock write
+has succeeded and any retry/correction pass has completed. Direct FTDI/RS232
+stations use extended `F8`; coupled remote stations use the Config+-style
+remote-off byte sequence identified below. A failed sleep/off write is reported
+to the user but does not convert a completed clock synchronization into a failed
+clock synchronization.
 
 The `Inspect Station` action is read-only. It keeps the attached USB
 SI-Master/download-station diagnostics, and when an awake coupled station
 answers remote-mode reads it also reports the coupled station serial number, SI
 code number, decoded station time, computer timestamp, and station-minus-computer
 delta in milliseconds. The displayed delta uses a millisecond computer
-timestamp, but the capture-proven station-time payload currently decodes only to
-whole seconds; the payload tick byte is preserved by the codec but is not yet
-interpreted as a subsecond time source. After `Sync Time`, the UI and hidden CLI
-also report the confirmed station-minus-computer delta in milliseconds.
+timestamp. The station-time payload tick byte is interpreted as 1/256 second
+when station readback provides it, so inspection and post-sync lead/lag
+reporting can use subsecond station time. After `Sync Time`, the UI and hidden
+CLI also report the confirmed station-minus-computer delta in milliseconds.
 
 For current-time syncs, Radio-Oracle now calculates the target station time as
 late as possible, immediately before `F6`. Because the capture-proven
@@ -703,6 +709,26 @@ system-information reply also places the visible SI station code at data offset
 17 in the captured station-32 frame; offset 1 was `06` and is not the station
 code for that layout.
 
+The local GPL-3.0 `sportident-python` repository was used as a protocol
+reference, not as source to copy. It confirms the extended-command meanings
+already seen in captures (`F0 4D` direct/master, `F0 53` indirect/remote,
+`F6` set time, `F7` get time, `F8` off, `F9` beep/apply in the observed time
+write flow, `FE` baud select), the `0xFF` wake byte convention, and SYS_VAL
+offsets for read-only station diagnostics. Radio-Oracle already prefixes
+extended commands with `0xFF`; Inspect Station now parses optional firmware,
+model id/name, build date, battery date, memory size, voltage, active time, and
+protocol-byte diagnostics from long system-info replies when those fields are
+present.
+
+The same reference identifies two station-off mechanisms now used by the
+optional post-sync sleep checkbox: extended `F8` for the station currently being
+addressed, and a special remote-off byte sequence used by SI Config+ for
+coupled stations:
+
+```text
+FF 40 0F 80 B2 B6 50 C0
+```
+
 The station-time payload is not BCD. The observed seven-byte payload is:
 
 ```text
@@ -718,7 +744,7 @@ The fields are:
 - `SECONDS_HI SECONDS_LO`: big-endian seconds within the current 12-hour
   half-day.
 - `TICK`: subsecond/tick byte. Config+ writes `00`; station replies may return a
-  non-zero tick.
+  non-zero tick. Treat it as fractional seconds in 1/256-second units.
 
 The SI day-of-week mapping follows the existing card-punch parser convention:
 Sunday is `0`, Monday is `1`, through Saturday as `6`. `halfDayFlag` is `0` for
