@@ -81,7 +81,30 @@ data class ClassicCourseGeneratorRow(
     val matchingCategories: List<String>
 ) {
     val hasCategoryMatch: Boolean = matchingCategories.isNotEmpty()
+    val climbPercent: Double? = climbMeters
+        ?.takeIf { horizontalLengthMeters > 0.0 }
+        ?.let { it / horizontalLengthMeters * 100.0 }
 }
+
+internal fun ClassicCourseGeneratorRow.routeGeneratorParentheticalText(): String =
+    buildList {
+        add(routeGeneratorCategoryText())
+        routeGeneratorClimbLimitWarningText()?.let(::add)
+    }.joinToString(" ") { "($it)" }
+
+internal fun ClassicCourseGeneratorRow.routeGeneratorCategoryText(): String =
+    matchingCategories.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: "No category match"
+
+internal fun ClassicCourseGeneratorRow.routeGeneratorClimbLimitWarningText(): String? {
+    val percent = climbPercent ?: return null
+    return if (percent > EventCourseRuleCatalog.CLIMB_LIMIT_PERCENT) {
+        "Warning: Climb ${oneDecimal(percent)}% / ${oneDecimal(EventCourseRuleCatalog.CLIMB_LIMIT_PERCENT)}"
+    } else {
+        null
+    }
+}
+
+private fun oneDecimal(value: Double): String = String.format(Locale.US, "%.1f", value)
 
 data class ClassicCourseGeneratorRecommendedSet(
     val index: Int,
@@ -344,7 +367,7 @@ object DesktopClassicCourseGenerator {
             appendLine(group.title)
                 appendLine("IDEAL EL : Course Order")
                 group.rows.forEach { row ->
-                    appendLine("${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})")
+                    appendLine("${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} ${row.routeGeneratorParentheticalText()}")
                 }
                 appendLine()
             }
@@ -562,7 +585,6 @@ object DesktopClassicCourseGenerator {
             orderLabels = sprintOrderLabels(classified, orderedSlowFoxes, orderedFastFoxes),
             matchingCategories = matchingSprintCategories(
                 foxCount = foxCount,
-                horizontalLengthMeters = metrics.horizontalLengthMeters,
                 climbMeters = metrics.climbMeters,
                 config = config
             )
@@ -652,7 +674,6 @@ object DesktopClassicCourseGenerator {
                 val matchingCategories = matchingClassicCategories(
                     foxCount = foxCount,
                     effectiveLengthMeters = metrics.comparisonLengthMeters,
-                    horizontalLengthMeters = metrics.horizontalLengthMeters,
                     climbMeters = metrics.climbMeters,
                     config = config
                 )
@@ -802,7 +823,6 @@ object DesktopClassicCourseGenerator {
             matchingCategories = matchingClassicCategories(
                 foxCount = foxCount,
                 effectiveLengthMeters = metrics.comparisonLengthMeters,
-                horizontalLengthMeters = metrics.horizontalLengthMeters,
                 climbMeters = metrics.climbMeters,
                 config = config
             )
@@ -831,17 +851,14 @@ object DesktopClassicCourseGenerator {
     private fun matchingClassicCategories(
         foxCount: Int,
         effectiveLengthMeters: Double,
-        horizontalLengthMeters: Double,
         climbMeters: Double?,
         config: CourseGeneratorConfig
     ): List<String> {
-        if (climbMeters == null || horizontalLengthMeters <= 0.0) {
+        if (climbMeters == null) {
             return emptyList()
         }
-        val climbPercent = climbMeters / horizontalLengthMeters * 100.0
-        if (climbPercent > EventCourseRuleCatalog.CLIMB_LIMIT_PERCENT) {
-            return emptyList()
-        }
+        // Category names come from the per-category fox-count/length table. Climb
+        // compliance is a separate course rule and must not mask a category match.
         return config.requirements.mapNotNull { (category, requirement) ->
             category.takeIf {
                 foxCount in requirement.minControls..requirement.maxControls &&
@@ -852,15 +869,10 @@ object DesktopClassicCourseGenerator {
 
     private fun matchingSprintCategories(
         foxCount: Int,
-        horizontalLengthMeters: Double,
         climbMeters: Double?,
         config: CourseGeneratorConfig
     ): List<String> {
-        if (climbMeters == null || horizontalLengthMeters <= 0.0) {
-            return emptyList()
-        }
-        val climbPercent = climbMeters / horizontalLengthMeters * 100.0
-        if (climbPercent > EventCourseRuleCatalog.CLIMB_LIMIT_PERCENT) {
+        if (climbMeters == null) {
             return emptyList()
         }
         return config.requirements.mapNotNull { (category, requirement) ->
@@ -914,9 +926,6 @@ object DesktopClassicCourseGenerator {
             10 -> "TEN-FOX COURSES"
             else -> "$foxCount-FOX COURSES"
         }
-
-    private fun categoryText(row: ClassicCourseGeneratorRow): String =
-        row.matchingCategories.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: "No category match"
 
     private fun String.isFoxoringRecommendedSetCategory(): Boolean {
         val match = Regex("""^([MW])(\d+)$""").matchEntire(this) ?: return true
@@ -1209,7 +1218,7 @@ object DesktopClassicCourseGenerator {
         result.recommendedCourseSets.forEach { set ->
             appendLine("Set #${set.index}")
             set.rows.forEach { row ->
-                appendLine("${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})")
+                appendLine("${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} ${row.routeGeneratorParentheticalText()}")
             }
         }
         appendLine()
@@ -1362,15 +1371,16 @@ object DesktopClassicCourseGenerator {
         }
 
     private fun kmlRouteName(index: Int, row: ClassicCourseGeneratorRow): String =
-        "${index.toString().padStart(3, '0')} ${row.foxCount}-fox ${kilometers(row.effectiveLengthMeters)} ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})"
+        "${index.toString().padStart(3, '0')} ${row.foxCount}-fox ${kilometers(row.effectiveLengthMeters)} ${row.orderLabels.joinToString(" -> ")} ${row.routeGeneratorParentheticalText()}"
 
     private fun kmlRouteDescription(row: ClassicCourseGeneratorRow): String =
-        listOf(
-            "Matching Categories: ${row.matchingCategories.joinToString(", ")}",
-            "Horizontal Length: ${kilometers(row.horizontalLengthMeters)}",
-            "Climb: ${row.climbMeters?.roundToInt()?.let { "$it m" } ?: "Unknown"}",
-            "Effective Length: ${kilometers(row.effectiveLengthMeters)}"
-        ).joinToString("\n")
+        buildList {
+            add("Matching Categories: ${row.routeGeneratorCategoryText()}")
+            row.routeGeneratorClimbLimitWarningText()?.let(::add)
+            add("Horizontal Length: ${kilometers(row.horizontalLengthMeters)}")
+            add("Climb: ${row.climbMeters?.roundToInt()?.let { "$it m" } ?: "Unknown"}")
+            add("Effective Length: ${kilometers(row.effectiveLengthMeters)}")
+        }.joinToString("\n")
 
     private fun ClassicCoursePoint.kmlObjectKey(): String =
         "${label.trim().lowercase(Locale.US)}|${point.latitude}|${point.longitude}|${point.elevationMeters}"
@@ -1397,7 +1407,7 @@ object DesktopClassicCourseGenerator {
                     set.rows.forEach { row ->
                         add(
                             PdfLine(
-                                "${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})",
+                                "${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} ${row.routeGeneratorParentheticalText()}",
                                 PdfColor.MatchGreen,
                                 10
                             )
@@ -1413,7 +1423,7 @@ object DesktopClassicCourseGenerator {
                 group.rows.forEach { row ->
                     add(
                         PdfLine(
-                            "${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} (${categoryText(row)})",
+                            "${kilometers(row.effectiveLengthMeters)} : ${row.orderLabels.joinToString(" -> ")} ${row.routeGeneratorParentheticalText()}",
                             if (row.hasCategoryMatch) PdfColor.MatchGreen else PdfColor.NoMatchGray,
                             10
                         )

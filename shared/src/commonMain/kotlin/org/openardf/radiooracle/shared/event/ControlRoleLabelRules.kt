@@ -66,7 +66,7 @@ object ControlRoleLabelRules {
     private fun String?.normalizedRoleLabel(): String =
         orEmpty().trim().uppercase().replace(Regex("\\s+"), " ")
 
-    private val FOX_NUMBER_LABEL_REGEX = Regex("(?:FOX )?\\d+")
+    private val FOX_NUMBER_LABEL_REGEX = Regex("(?:FOX ?)?\\d+")
     private val SPRINT_FAST_FOX_LABEL_REGEX = Regex("(?:\\d+F|F\\d+)")
     private val SPECTATOR_LABELS = setOf("S", "SP", "SPEC", "SPECTATOR", "SEP", "SEPARATOR")
     private val BEACON_LABELS = setOf("B", "BB", "M", "MO", "BEACON", "FINISH BEACON")

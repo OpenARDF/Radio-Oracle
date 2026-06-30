@@ -38,6 +38,7 @@ import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinter
 import org.openardf.radiooracle.desktop.usb.DesktopSerialPortProvider
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
 import org.openardf.radiooracle.desktop.usb.JSerialCommDesktopSerialPortProvider
+import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.CompetitorCsvImportDuplicatePolicy
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorData
@@ -203,6 +204,7 @@ object DesktopAutomationCli {
             "event-series-optimize-start-fairness" -> eventSeriesOptimizeStartFairness(commandArgs, out, err)
             "event-series-start-fairness-verify" -> eventSeriesStartFairnessVerify(commandArgs, out, err)
             "event-start-list-verify" -> eventStartListVerify(commandArgs, out, err)
+            "route-generator" -> routeGenerator(commandArgs, out, err)
             "readiness-summary" -> readinessSummary(commandArgs, out, err)
             "recalculate-results" -> recalculateResults(commandArgs, out, err)
             "export-public-results-site" -> exportPublicResultsSite(commandArgs, out, err)
@@ -218,6 +220,81 @@ object DesktopAutomationCli {
                 err.println(helpText())
                 64
             }
+        }
+    }
+
+    private fun routeGenerator(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        val pathText = positionalArgs(args, optionsWithValues = setOf("--type", "--export", "--row-limit")).firstOrNull()
+        if (pathText.isNullOrBlank()) {
+            err.println("route-generator requires a KML/KMZ course-points path.")
+            return 64
+        }
+        val exportPath = optionValue(args, "--export")?.let(Path::of)
+        val rowLimit = optionValue(args, "--row-limit")?.toIntOrNull()?.coerceAtLeast(0) ?: 50
+        val requestedRaceType = optionValue(args, "--type")?.let { text ->
+            routeGeneratorRaceType(text) ?: run {
+                err.println("route-generator --type must be classic, foxoring, or sprint.")
+                return 64
+            }
+        }
+        return runCatching {
+            DesktopDebugLog.initialize()
+            val path = Path.of(pathText)
+            val courseData = DesktopCourseFileReader.read(path)
+            val detectedRaceType = DesktopCourseFormatDetector.detectedGeneratorRaceType(
+                sourceName = path.fileName.toString(),
+                courseData = courseData
+            )
+            val raceType = requestedRaceType ?: detectedRaceType ?: run {
+                val inferredTypes = DesktopCourseFormatDetector.inferredRaceTypes(
+                    path.fileName.toString(),
+                    courseData
+                ).distinct().filter { it in DesktopCourseFormatDetector.supportedGeneratorRaceTypes }
+                val inferredText = inferredTypes
+                    .takeIf { it.isNotEmpty() }
+                    ?.joinToString(", ") { DesktopCourseFormatDetector.run { it.displayName() } }
+                    ?: "none"
+                throw IllegalArgumentException("Route type is ambiguous; specify --type classic, foxoring, or sprint. Inferred: $inferredText.")
+            }
+            DesktopCourseFormatDetector.requireGeneratorFormat(raceType, path.fileName.toString(), courseData)
+            val result = when (raceType) {
+                RaceType.FOXORING -> DesktopFoxoringCourseGenerator.generate(path, courseData)
+                RaceType.SPRINT -> DesktopSprintCourseGenerator.generate(path, courseData)
+                else -> DesktopClassicCourseGenerator.generate(path, courseData)
+            }
+            val exports = exportPath?.let { exportRouteGeneratorResult(raceType, it, result) }
+            DesktopDebugLog.info(
+                "RouteGenerator",
+                "Automation generated ${result.generatorTitle} for ${path.fileName}: rows=${result.rows.size} matches=${result.rows.count { it.hasCategoryMatch }}"
+            )
+            out.println(
+                jsonObject(
+                    "command" to "route-generator",
+                    "path" to path.toAbsolutePath().normalize().toString(),
+                    "requestedType" to requestedRaceType?.let { DesktopCourseFormatDetector.run { it.displayName() } },
+                    "detectedType" to detectedRaceType?.let { DesktopCourseFormatDetector.run { it.displayName() } },
+                    "generatedType" to DesktopCourseFormatDetector.run { raceType.displayName() },
+                    "generatorTitle" to result.generatorTitle,
+                    "formatLabel" to result.formatLabel,
+                    "pointSummary" to result.pointSummary,
+                    "foxCount" to result.foxes.size,
+                    "rowCount" to result.rows.size,
+                    "matchedRowCount" to result.rows.count { it.hasCategoryMatch },
+                    "requirementWarnings" to result.requirementWarnings.map { warning ->
+                        mapOf("label" to warning.label, "message" to warning.message)
+                    },
+                    "rows" to result.rows.take(rowLimit).mapIndexed { index, row ->
+                        routeGeneratorRowJson(index + 1, row)
+                    },
+                    "rowLimit" to rowLimit,
+                    "exportedPdf" to exports?.pdfPath?.toAbsolutePath()?.normalize()?.toString(),
+                    "exportedKml" to exports?.kmlPath?.toAbsolutePath()?.normalize()?.toString()
+                )
+            )
+            0
+        }.getOrElse { error ->
+            err.println("Route Generator failed: ${error.message ?: error::class.simpleName}")
+            65
         }
     }
 
@@ -1934,6 +2011,58 @@ object DesktopAutomationCli {
             .filter { (_, value) -> value == name }
             .mapNotNull { (index, _) -> args.getOrNull(index + 1) }
 
+    private fun positionalArgs(args: List<String>, optionsWithValues: Set<String>): List<String> {
+        val values = mutableListOf<String>()
+        var index = 0
+        while (index < args.size) {
+            val value = args[index]
+            if (value in optionsWithValues) {
+                index += 2
+            } else {
+                if (!value.startsWith("--")) {
+                    values += value
+                }
+                index += 1
+            }
+        }
+        return values
+    }
+
+    private fun routeGeneratorRaceType(text: String): RaceType? =
+        when (text.trim().lowercase()) {
+            "classic", "classic-80m", "classic-2m", "80m", "2m" -> RaceType.CLASSIC
+            "foxoring", "fox-o", "foxo" -> RaceType.FOXORING
+            "sprint" -> RaceType.SPRINT
+            else -> null
+        }
+
+    private fun exportRouteGeneratorResult(
+        raceType: RaceType,
+        path: Path,
+        result: ClassicCourseGeneratorResult
+    ): ClassicCourseGeneratorExportPaths =
+        when (raceType) {
+            RaceType.FOXORING -> DesktopFoxoringCourseGenerator.exportPdfAndKml(path, result)
+            RaceType.SPRINT -> DesktopSprintCourseGenerator.exportPdfAndKml(path, result)
+            else -> DesktopClassicCourseGenerator.exportPdfAndKml(path, result)
+        }
+
+    private fun routeGeneratorRowJson(index: Int, row: ClassicCourseGeneratorRow): Map<String, Any?> =
+        mapOf(
+            "index" to index,
+            "foxCount" to row.foxCount,
+            "effectiveLengthMeters" to row.effectiveLengthMeters.roundForJson(),
+            "horizontalLengthMeters" to row.horizontalLengthMeters.roundForJson(),
+            "climbMeters" to row.climbMeters?.roundForJson(),
+            "climbPercent" to row.climbPercent?.roundForJson(),
+            "matchingCategories" to row.matchingCategories,
+            "climbWarning" to row.routeGeneratorClimbLimitWarningText(),
+            "order" to row.orderLabels
+        )
+
+    private fun Double.roundForJson(): Double =
+        kotlin.math.round(this * 100.0) / 100.0
+
     private fun zipTextEntries(path: Path): Map<String, String> =
         ZipInputStream(Files.newInputStream(path).buffered()).use { zip ->
             buildMap {
@@ -1984,6 +2113,8 @@ object DesktopAutomationCli {
                                           Exhaustively verify small series start-third combinations and compare optimizer reach.
           event-start-list-verify <event-path> [--max-competitors <n>] [--sample-limit <n>] [--generator-samples <n>]
                                           Exhaustively count event start orders that score 100/100.
+          route-generator <kml-or-kmz-path> [--type classic|foxoring|sprint] [--row-limit <n>] [--export <pdf-path>]
+                                          Generate Route Generator rows as JSON; optionally export PDF/KML.
           readiness-summary [--require-ready] <event-path>
                                           Print validation and readiness issues as JSON.
           recalculate-results [--write] <event-path>

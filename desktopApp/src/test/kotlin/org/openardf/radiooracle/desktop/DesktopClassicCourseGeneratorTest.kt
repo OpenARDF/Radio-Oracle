@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.EventCourseRuleCatalog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -110,6 +111,28 @@ class DesktopClassicCourseGeneratorTest {
         assertTrue(result.rows.all { it.climbMeters != null })
         assertTrue(result.rows.any { requireNotNull(it.climbMeters) > 0.0 })
         assertTrue(result.rows.all { it.effectiveLengthMeters >= it.horizontalLengthMeters + 10.0 * requireNotNull(it.climbMeters) })
+    }
+
+    @Test
+    fun categoryMatchingUsesControlCountAndEffectiveLengthEvenWhenClimbLimitIsExceeded() {
+        val path = Files.createTempFile("classic-course-points-high-climb", ".kml")
+        Files.writeString(path, highClimbM21CoursePointsKml())
+
+        val result = DesktopClassicCourseGenerator.generate(path, elevationLookup = { null })
+        val fiveFoxRow = result.groups.single { it.foxCount == 5 }.rows.single()
+        val climbPercent = requireNotNull(fiveFoxRow.climbMeters) / fiveFoxRow.horizontalLengthMeters * 100.0
+        val warningText = fiveFoxRow.routeGeneratorClimbLimitWarningText()
+            ?: error("Expected high-climb route warning.")
+        val pdfPath = Files.createTempFile("classic-course-generator-high-climb", ".pdf")
+        val exports = DesktopClassicCourseGenerator.exportPdfAndKml(pdfPath, result)
+
+        assertTrue(climbPercent > EventCourseRuleCatalog.CLIMB_LIMIT_PERCENT)
+        assertTrue(fiveFoxRow.effectiveLengthMeters.roundToInt() in 9_000..12_000)
+        assertTrue("M21" in fiveFoxRow.matchingCategories)
+        assertTrue(Regex("""Warning: Climb \d+\.\d% / 6\.0""").matches(warningText))
+        assertTrue(DesktopClassicCourseGenerator.reportText(result).contains("($warningText)"))
+        assertTrue(Files.readString(exports.kmlPath).contains(warningText))
+        assertTrue(String(Files.readAllBytes(exports.pdfPath)).contains(warningText))
     }
 
     @Test
@@ -296,6 +319,22 @@ class DesktopClassicCourseGeneratorTest {
                 ${pointPlacemark("FOX5", -94.9500, 39.0000, 110.0)}
                 ${pointPlacemark("Beacon", -94.9400, 39.0000, 110.0)}
                 ${pointPlacemark("Finish", -94.9300, 39.0000, 110.0)}
+              </Document>
+            </kml>
+        """.trimIndent()
+
+    private fun highClimbM21CoursePointsKml(): String =
+        """
+            <kml xmlns="http://www.opengis.net/kml/2.2">
+              <Document>
+                ${pointPlacemark("Start", -95.000, 39.000, 100.0)}
+                ${pointPlacemark("FOX1", -94.990, 39.000, 200.0)}
+                ${pointPlacemark("FOX2", -94.980, 39.000, 300.0)}
+                ${pointPlacemark("FOX3", -94.970, 39.000, 400.0)}
+                ${pointPlacemark("FOX4", -94.960, 39.000, 500.0)}
+                ${pointPlacemark("FOX5", -94.950, 39.000, 500.0)}
+                ${pointPlacemark("Beacon", -94.940, 39.000, 500.0)}
+                ${pointPlacemark("Finish", -94.930, 39.000, 500.0)}
               </Document>
             </kml>
         """.trimIndent()

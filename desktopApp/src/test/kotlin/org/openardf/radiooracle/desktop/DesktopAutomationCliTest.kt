@@ -70,6 +70,26 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun routeGeneratorCommandGeneratesRowsAndExportsFiles() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-route-generator")
+        val path = directory.resolve("Automation Course Points.kml")
+        val pdfPath = directory.resolve("Automation Route Generator.pdf")
+        Files.writeString(path, highClimbClassicKml())
+
+        val result = runAutomation("route-generator", path.toString(), "--export", pdfPath.toString())
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"command\":\"route-generator\""))
+        assertTrue(result.stdout.contains("\"generatedType\":\"Classic\""))
+        assertTrue(result.stdout.contains("\"generatorTitle\":\"Classic Route Generator\""))
+        assertTrue(result.stdout.contains("\"rowCount\":16"))
+        assertTrue(result.stdout.contains("\"M21\""))
+        assertTrue(result.stdout.contains("\"climbWarning\":\"Warning: Climb"))
+        assertTrue(Files.exists(pdfPath))
+        assertTrue(Files.exists(directory.resolve("Automation Route Generator.kml")))
+    }
+
+    @Test
     fun openEventFileCommandReadsAndSummarizesEventFile() {
         val directory = Files.createTempDirectory("radio-oracle-automation")
         val path = directory.resolve("Automation Event.json")
@@ -1240,6 +1260,22 @@ class DesktopAutomationCliTest {
             ),
             readoutData = null
         )
+
+    private fun highClimbClassicKml(): String =
+        """
+            <kml xmlns="http://www.opengis.net/kml/2.2">
+              <Document>
+                <Placemark><name>Start</name><Point><coordinates>-95.000,39.000,100.0</coordinates></Point></Placemark>
+                <Placemark><name>FOX1</name><Point><coordinates>-94.990,39.000,200.0</coordinates></Point></Placemark>
+                <Placemark><name>FOX2</name><Point><coordinates>-94.980,39.000,300.0</coordinates></Point></Placemark>
+                <Placemark><name>FOX3</name><Point><coordinates>-94.970,39.000,400.0</coordinates></Point></Placemark>
+                <Placemark><name>FOX4</name><Point><coordinates>-94.960,39.000,500.0</coordinates></Point></Placemark>
+                <Placemark><name>FOX5</name><Point><coordinates>-94.950,39.000,500.0</coordinates></Point></Placemark>
+                <Placemark><name>Beacon</name><Point><coordinates>-94.940,39.000,500.0</coordinates></Point></Placemark>
+                <Placemark><name>Finish</name><Point><coordinates>-94.930,39.000,500.0</coordinates></Point></Placemark>
+              </Document>
+            </kml>
+        """.trimIndent()
 }
 
 private data class AutomationResult(

@@ -35,8 +35,8 @@ class DesktopCourseFormatDetectorTest {
         assertEquals(
             RaceType.FOXORING,
             DesktopCourseFormatDetector.detectedGeneratorRaceType(
-                "foxoring-course.kml",
-                courseData("Start", "1", "2", "3", "4", "5", "B", "Finish")
+                "course-points.kml",
+                courseData("Start", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "B", "Finish")
             )
         )
         assertEquals(
@@ -44,6 +44,23 @@ class DesktopCourseFormatDetectorTest {
             DesktopCourseFormatDetector.detectedGeneratorRaceType(
                 "course-points.kml",
                 courseData("Start", "1", "2", "3", "4", "5", "Spectator", "1F", "2F", "3F", "4F", "5F", "B", "Finish")
+            )
+        )
+        assertEquals(
+            RaceType.CLASSIC,
+            DesktopCourseFormatDetector.detectedGeneratorRaceType(
+                "course-points.kml",
+                courseData("Start", "Fox 1", "Fox 2", "Fox 3", "Fox 4", "Fox 5", "B", "Finish")
+            )
+        )
+        assertEquals(
+            RaceType.SPRINT,
+            DesktopCourseFormatDetector.detectedGeneratorRaceType(
+                "course-points.kml",
+                routeData(
+                    controls = listOf("Start", "1", "2", "3", "4", "5", "1F", "2F", "3F", "4F", "5F", "B", "Finish"),
+                    route = listOf("Start", "1", "2", "B", "1F", "2F", "B", "Finish")
+                )
             )
         )
     }
@@ -74,4 +91,23 @@ class DesktopCourseFormatDetectorTest {
             },
             routes = emptyList()
         )
+
+    private fun routeData(controls: List<String>, route: List<String>): DesktopCourseKmlData {
+        val controlPoints = controls.mapIndexed { index, name ->
+            CourseControlPoint(
+                name = name,
+                point = CourseGeoPoint(latitude = 45.0 + index * 0.001, longitude = -122.0)
+            )
+        }
+        val pointsByName = controlPoints.associateBy { it.name }
+        return DesktopCourseKmlData(
+            controls = controlPoints,
+            routes = listOf(
+                CourseRoute(
+                    name = "M21",
+                    points = route.map { name -> requireNotNull(pointsByName[name]) { "Missing $name" }.point }
+                )
+            )
+        )
+    }
 }

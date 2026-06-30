@@ -15357,9 +15357,8 @@ private fun ClassicCourseGeneratorResultView(result: ClassicCourseGeneratorResul
                         fontWeight = FontWeight.Bold
                     )
                     set.rows.forEach { row ->
-                        val categoryText = row.matchingCategories.joinToString(", ")
                         Text(
-                            text = "  ${kilometersText(row.effectiveLengthMeters.roundToInt())} : ${row.orderLabels.joinToString(" -> ")} ($categoryText)",
+                            text = "  ${kilometersText(row.effectiveLengthMeters.roundToInt())} : ${row.orderLabels.joinToString(" -> ")} ${row.routeGeneratorParentheticalText()}",
                             color = Color(0xFF0B5D1E),
                             fontSize = 13.sp
                         )
@@ -15380,10 +15379,8 @@ private fun ClassicCourseGeneratorResultView(result: ClassicCourseGeneratorResul
                     fontWeight = FontWeight.Bold
                 )
                 group.rows.forEach { row ->
-                    val categoryText = row.matchingCategories.takeIf { it.isNotEmpty() }?.joinToString(", ")
-                        ?: "No category match"
                     Text(
-                        text = "${kilometersText(row.effectiveLengthMeters.roundToInt())} : ${row.orderLabels.joinToString(" -> ")} ($categoryText)",
+                        text = "${kilometersText(row.effectiveLengthMeters.roundToInt())} : ${row.orderLabels.joinToString(" -> ")} ${row.routeGeneratorParentheticalText()}",
                         color = if (row.hasCategoryMatch) Color(0xFF0B5D1E) else Color(0xFF777777),
                         fontSize = 13.sp
                     )
