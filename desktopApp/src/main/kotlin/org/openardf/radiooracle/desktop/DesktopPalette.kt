@@ -102,7 +102,7 @@ enum class DesktopSection(val label: String) {
     KmlMoveCourse("Move Course"),
     KmlCreateCourse("Create Course"),
     KmlRouteGenerator("Route Generator"),
-    ControlsImportExport("Import/Export"),
+    ControlsImportExport("Control Files"),
     ControlsRouteKmlImport("Import Controls KML/KMZ"),
     Readouts("Readouts"),
     SiReadoutSettings("SI Readout Settings"),

@@ -891,7 +891,8 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "Elevation Data",
-                "Import/Export",
+                "Import",
+                "Export",
                 "Delete All Controls..."
             ),
             controlItems.map { it.label }
@@ -909,11 +910,11 @@ class DesktopNavigationTest {
         assertEquals(DesktopNavAction.DeleteAllControls, controlItems.last { it.label == "Delete All Controls..." }.action)
         assertEquals(
             DesktopNavAction.ImportControlsKmlKmz,
-            controlItems.first { it.label == "Import/Export" }.children.first { it.label == "Import Controls KML/KMZ..." }.action
+            controlItems.first { it.label == "Import" }.children.first { it.label == "Import Controls KML/KMZ..." }.action
         )
         assertEquals(
             DesktopNavAction.ImportControlsGpx,
-            controlItems.first { it.label == "Import/Export" }.children.first { it.label == "Import Controls GPX..." }.action
+            controlItems.first { it.label == "Import" }.children.first { it.label == "Import Controls GPX..." }.action
         )
         assertEquals(DesktopSection.ElevationCache, controlItems.first { it.label == "Elevation Data" }.section)
         assertEquals(
@@ -928,20 +929,26 @@ class DesktopNavigationTest {
             DesktopNavAction.ImportDemFile,
             controlItems.first { it.label == "Elevation Data" }.children.first { it.label == "Import DEM File..." }.action
         )
-        assertEquals(DesktopSection.ControlsImportExport, controlItems.first { it.label == "Import/Export" }.section)
+        assertEquals(DesktopSection.ControlsImportExport, controlItems.first { it.label == "Import" }.section)
+        assertEquals(DesktopSection.ControlsImportExport, controlItems.first { it.label == "Export" }.section)
         assertEquals(
             listOf(
                 "Import Controls CSV...",
-                "Export Controls CSV...",
                 "Import Controls KML/KMZ...",
-                "Export Controls KML/KMZ...",
                 "Import Controls GPX...",
-                "Export Controls GPX...",
                 "Import IOF CourseData XML...",
+            ),
+            controlItems.first { it.label == "Import" }.children.map { it.label }
+        )
+        assertEquals(
+            listOf(
+                "Export Controls CSV...",
+                "Export Controls KML/KMZ...",
+                "Export Controls GPX...",
                 "Export IOF CourseData XML...",
                 "Export Course Overlays..."
             ),
-            controlItems.first { it.label == "Import/Export" }.children.map { it.label }
+            controlItems.first { it.label == "Export" }.children.map { it.label }
         )
         assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Course Order" }.section)
         assertEquals(
@@ -958,12 +965,12 @@ class DesktopNavigationTest {
         assertEquals(DesktopNavAction.ImportCategoriesCsv, categoryItems.first { it.label == "Import Categories CSV..." }.action)
         assertEquals(
             DesktopNavAction.ImportIofCourseDataXml,
-            controlItems.first { it.label == "Import/Export" }.children.first { it.label == "Import IOF CourseData XML..." }.action
+            controlItems.first { it.label == "Import" }.children.first { it.label == "Import IOF CourseData XML..." }.action
         )
         assertEquals(DesktopNavAction.ExportCategoriesCsv, categoryItems.first { it.label == "Export Categories CSV..." }.action)
         assertEquals(
             DesktopNavAction.ExportIofCourseDataXml,
-            controlItems.first { it.label == "Import/Export" }.children.first { it.label == "Export IOF CourseData XML..." }.action
+            controlItems.first { it.label == "Export" }.children.first { it.label == "Export IOF CourseData XML..." }.action
         )
         assertEquals(
             DesktopNavAction.DeleteAllCategoryAssignedControls,
