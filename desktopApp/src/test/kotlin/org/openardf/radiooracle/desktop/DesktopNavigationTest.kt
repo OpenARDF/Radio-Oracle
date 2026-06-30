@@ -900,9 +900,7 @@ class DesktopNavigationTest {
             listOf(
                 "Course Order",
                 "Import Categories CSV...",
-                "Import IOF CourseData XML...",
                 "Export Categories CSV...",
-                "Export IOF CourseData XML...",
                 "Delete All Control Assignments...",
                 "Delete All Categories...",
             ),
@@ -939,6 +937,8 @@ class DesktopNavigationTest {
                 "Export Controls KML/KMZ...",
                 "Import Controls GPX...",
                 "Export Controls GPX...",
+                "Import IOF CourseData XML...",
+                "Export IOF CourseData XML...",
                 "Export Course Overlays..."
             ),
             controlItems.first { it.label == "Import/Export" }.children.map { it.label }
@@ -958,12 +958,12 @@ class DesktopNavigationTest {
         assertEquals(DesktopNavAction.ImportCategoriesCsv, categoryItems.first { it.label == "Import Categories CSV..." }.action)
         assertEquals(
             DesktopNavAction.ImportIofCourseDataXml,
-            categoryItems.first { it.label == "Import IOF CourseData XML..." }.action
+            controlItems.first { it.label == "Import/Export" }.children.first { it.label == "Import IOF CourseData XML..." }.action
         )
         assertEquals(DesktopNavAction.ExportCategoriesCsv, categoryItems.first { it.label == "Export Categories CSV..." }.action)
         assertEquals(
             DesktopNavAction.ExportIofCourseDataXml,
-            categoryItems.first { it.label == "Export IOF CourseData XML..." }.action
+            controlItems.first { it.label == "Import/Export" }.children.first { it.label == "Export IOF CourseData XML..." }.action
         )
         assertEquals(
             DesktopNavAction.DeleteAllCategoryAssignedControls,
@@ -1200,9 +1200,7 @@ class DesktopNavigationTest {
             listOf(
                 "Course Order",
                 "Import Categories CSV...",
-                "Import IOF CourseData XML...",
                 "Export Categories CSV...",
-                "Export IOF CourseData XML...",
                 "Delete All Control Assignments...",
                 "Delete All Categories..."
             ),

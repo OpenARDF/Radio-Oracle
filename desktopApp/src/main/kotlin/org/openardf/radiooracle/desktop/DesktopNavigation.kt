@@ -379,6 +379,18 @@ object DesktopNavigation {
                                     DesktopNavAction.ExportCourseGpx
                                 ),
                                 action(
+                                    "setup.controls.import-iof-course-data",
+                                    "Import IOF CourseData XML...",
+                                    workflow,
+                                    DesktopNavAction.ImportIofCourseDataXml
+                                ),
+                                action(
+                                    "setup.controls.export-iof-course-data",
+                                    "Export IOF CourseData XML...",
+                                    workflow,
+                                    DesktopNavAction.ExportIofCourseDataXml
+                                ),
+                                action(
                                     "setup.controls.export-course-overlays",
                                     "Export Course Overlays...",
                                     workflow,
@@ -414,22 +426,10 @@ object DesktopNavigation {
                             DesktopNavAction.ImportCategoriesCsv
                         ),
                         action(
-                            "setup.categories.import-iof-course-data",
-                            "Import IOF CourseData XML...",
-                            workflow,
-                            DesktopNavAction.ImportIofCourseDataXml
-                        ),
-                        action(
                             "setup.categories.export",
                             "Export Categories CSV...",
                             workflow,
                             DesktopNavAction.ExportCategoriesCsv
-                        ),
-                        action(
-                            "setup.categories.export-iof-course-data",
-                            "Export IOF CourseData XML...",
-                            workflow,
-                            DesktopNavAction.ExportIofCourseDataXml
                         ),
                         action(
                             "setup.categories.delete-all-assigned-controls",
@@ -1221,6 +1221,10 @@ object DesktopNavigation {
             "Use Export Controls KML/KMZ to write protected control and route geometry inside a password-locked ZIP file.",
         "setup.controls.export-gpx" to
             "Use Export Controls GPX to write protected control and route geometry as standard GPX inside a password-locked ZIP file.",
+        "setup.controls.import-iof-course-data" to
+            "Use Import IOF CourseData XML to import schema-valid IOF CourseData controls, courses, and course assignments.",
+        "setup.controls.export-iof-course-data" to
+            "Use Export IOF CourseData XML to write schema-valid IOF CourseData from Radio-Oracle controls, courses, and course assignments.",
         "setup.controls.export-course-overlays" to
             "Use Export Course Overlays to write separate OpenOrienteering Mapper competitor, master, and custodian overlay files from protected course locations.",
         "setup.controls.delete-all" to
@@ -1231,10 +1235,6 @@ object DesktopNavigation {
             "Use Course Order to unlock and review protected ideal routes and course-location data that may affect scoring and analysis.",
         "setup.categories.import" to
             "Use Import Categories CSV to review and apply late category additions or corrections without replacing unrelated event data.",
-        "setup.categories.import-iof-course-data" to
-            "Use Import IOF CourseData XML to import schema-valid IOF CourseData courses as Radio-Oracle categories and assigned controls.",
-        "setup.categories.export-iof-course-data" to
-            "Use Export IOF CourseData XML to write schema-valid IOF CourseData courses from Radio-Oracle categories and assigned controls.",
         "setup.categories.delete-all-assigned-controls" to
             "Use Delete All Control Assignments to clear every category course, length, climb, and protected course field while keeping category names and competitors.",
         "setup.categories.delete-all-categories" to
