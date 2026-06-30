@@ -67,9 +67,9 @@ object DesktopCourseAnalysisExports {
             appendLine("Category: ${result.categoryName}")
             appendLine("Rules applied: ${result.rulesDocumentLabel}")
             appendLine()
-            val importedSummaryGroup = result.summaryGroups.firstOrNull { it.title == "Imported" }
+            val importedSummaryGroup = result.summaryGroups.firstOrNull { it.title == "Saved" }
             val calculatedSummaryGroup = result.summaryGroups.firstOrNull { it.title == "Calculated" }
-            val importedMetricGroup = result.goodnessMetrics.groups.firstOrNull { it.title == "Imported" }
+            val importedMetricGroup = result.goodnessMetrics.groups.firstOrNull { it.title == "Saved" }
             val calculatedMetricGroup = result.goodnessMetrics.groups.firstOrNull { it.title == "Calculated" }
             result.providedRouteSection?.let { section ->
                 appendSection(
@@ -121,9 +121,9 @@ object DesktopCourseAnalysisExports {
             appendLegRows(section.legRows)
             if (section.includeWaitAnalysis && includeRenumbering) {
                 appendLine()
-                appendLine("Imported-route wait-time analysis")
+                appendLine("Saved-route wait-time analysis")
                 appendWrapped(
-                    "This subsection estimates Classic fox arrival phases on the imported route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. If the fox is already transmitting at arrival, timing assumes the competitor runs straight to it and punches without extra delay."
+                    "This subsection estimates Classic fox arrival phases on the saved route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. If the fox is already transmitting at arrival, timing assumes the competitor runs straight to it and punches without extra delay."
                 )
                 appendWaitRows("Current wait times", section.waitRows)
                 section.waitRenumbering?.let { appendWaitRenumbering(it) }
@@ -257,7 +257,7 @@ object DesktopCourseAnalysisExports {
             appendLine("    <Style id=\"calculatedRouteStyle\"><LineStyle><color>ff00a676</color><width>4</width></LineStyle></Style>")
             append(DesktopCourseKmlStyle.pointStyleDefinitions(includeWaypoint = true))
             result.kmlFolders.forEach { folder ->
-                val routeStyleId = if (folder.title.startsWith("Imported")) {
+                val routeStyleId = if (folder.title.startsWith("Saved")) {
                     "storedRouteStyle"
                 } else {
                     "calculatedRouteStyle"
@@ -524,13 +524,13 @@ object DesktopCourseAnalysisExports {
 
     private val PdfSubheadingLabels = setOf(
         "USA rules checks",
-        "Imported-route wait-time analysis",
+        "Saved-route wait-time analysis",
         "Current wait times",
         "Optimized wait times",
         "Wait-time renumbering check",
         "Renumbered wait times",
         "Section summary",
-        "Imported checks and metrics",
+        "Saved checks and metrics",
         "Calculated checks and metrics",
         "Course Recommendation",
         "Speed model factors",
@@ -541,7 +541,7 @@ object DesktopCourseAnalysisExports {
     )
 
     private val CourseAnalysisSectionDuplicateSummaryLabels = setOf(
-        "Imported route",
+        "Saved route",
         "Calculated route",
         "Ideal route",
         "Result",

@@ -308,6 +308,7 @@ class DesktopSportIdentTimeSyncServiceTest {
                 stationTimeReply(targetTime.minusMinutes(1), tick = 0x01),
                 stationWriteReply(targetTime, tick = 0x05),
                 applyReply(),
+                stationTimeReply(targetTime, tick = 0x05),
                 normalModeReply()
             )
         )
@@ -348,6 +349,7 @@ class DesktopSportIdentTimeSyncServiceTest {
                 stationTimeReply(targetTime.minusMinutes(1), tick = 0x01),
                 stationWriteReply(targetTime, tick = 0x05),
                 applyReply(),
+                stationTimeReply(targetTime, tick = 0x05),
                 normalModeReply()
             )
         )
@@ -393,6 +395,7 @@ class DesktopSportIdentTimeSyncServiceTest {
                     stationTimeReply(targetTime1.minusMinutes(1), tick = 0x01),
                     stationWriteReply(targetTime1, tick = 0x05),
                     applyReply(),
+                    stationTimeReply(targetTime1, tick = 0x00),
                     normalModeReply()
                 ),
                 listOf(remoteModeReply(), normalModeReply()),
@@ -402,6 +405,7 @@ class DesktopSportIdentTimeSyncServiceTest {
                     stationTimeReply(targetTime1, tick = 0x01),
                     stationWriteReply(targetTime2, tick = 0x00),
                     applyReply(),
+                    stationTimeReply(targetTime2, tick = 0x00),
                     normalModeReply()
                 )
             )
@@ -422,10 +426,10 @@ class DesktopSportIdentTimeSyncServiceTest {
         )
 
         assertEquals(2, result.attempts)
-        assertEquals(980L, result.secondBoundaryLeadMillis)
+        assertEquals(999L, result.secondBoundaryLeadMillis)
         assertEquals(targetTime2, result.sourceTime)
         assertEquals(-100L, result.confirmedStationMinusComputerMillis)
-        assertEquals(20L, result.secondBoundaryWaitMillis)
+        assertEquals(1L, result.secondBoundaryWaitMillis)
         val stationWriteRequests = port.writeRequests.mapNotNull {
             SportIdentFrameParser.firstFrame(it, requireValidCrc = true)
                 ?.takeIf { frame -> frame.command == DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND }
@@ -498,6 +502,7 @@ class DesktopSportIdentTimeSyncServiceTest {
                 stationTimeReply(targetTime.minusMinutes(1), tick = 0x01),
                 stationWriteReply(targetTime, tick = 0x05),
                 applyReply(),
+                stationTimeReply(targetTime, tick = 0x05),
                 normalModeReply()
             )
         )
@@ -524,6 +529,7 @@ class DesktopSportIdentTimeSyncServiceTest {
                 DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
                 DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
                 DesktopSportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND,
+                DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
                 SportIdentProtocol.PROBE_COMMAND
             ),
             port.writeRequests.map { SportIdentFrameParser.firstFrame(it, requireValidCrc = true)?.command }
@@ -543,7 +549,8 @@ class DesktopSportIdentTimeSyncServiceTest {
                 directSystemInfoReply(stationCodeNumber = 32),
                 stationTimeReply(targetTime.minusSeconds(1), tick = 0x04, replyMarker = 0x06),
                 stationWriteReply(targetTime, tick = 0x00, replyMarker = 0x06),
-                applyReply()
+                applyReply(),
+                stationTimeReply(targetTime, tick = 0x00, replyMarker = 0x06)
             ),
             info = ftdiPortInfo()
         )
@@ -578,7 +585,8 @@ class DesktopSportIdentTimeSyncServiceTest {
                 SportIdentProtocol.GET_SYSTEM_INFO,
                 DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
                 DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
-                DesktopSportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND
+                DesktopSportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND,
+                DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND
             ),
             port.writeRequests.map { SportIdentFrameParser.firstFrame(it, requireValidCrc = true)?.command }
         )
@@ -608,6 +616,7 @@ class DesktopSportIdentTimeSyncServiceTest {
                 stationTimeReply(targetTime.minusSeconds(1), tick = 0x04, replyMarker = 0x06),
                 stationWriteReply(targetTime, tick = 0x00, replyMarker = 0x06),
                 applyReply(),
+                stationTimeReply(targetTime, tick = 0x00, replyMarker = 0x06),
                 powerOffReply()
             ),
             info = ftdiPortInfo()
@@ -644,6 +653,7 @@ class DesktopSportIdentTimeSyncServiceTest {
                 DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
                 DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
                 DesktopSportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND,
+                DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
                 DesktopSportIdentTimeSyncProtocol.POWER_OFF_COMMAND
             ),
             port.writeRequests.map { SportIdentFrameParser.firstFrame(it, requireValidCrc = true)?.command }
@@ -702,6 +712,7 @@ class DesktopSportIdentTimeSyncServiceTest {
                     stationTimeReply(targetTime.minusMinutes(1), tick = 0x00),
                     stationWriteReply(targetTime, tick = 0x00),
                     applyReply(),
+                    stationTimeReply(targetTime, tick = 0x00),
                     normalModeReply()
                 ),
                 listOf(remoteModeReply(), normalModeReply()),
@@ -732,6 +743,7 @@ class DesktopSportIdentTimeSyncServiceTest {
                 DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
                 DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
                 DesktopSportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND,
+                DesktopSportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
                 SportIdentProtocol.PROBE_COMMAND,
                 SportIdentProtocol.PROBE_COMMAND,
                 SportIdentProtocol.PROBE_COMMAND,
@@ -793,6 +805,7 @@ class DesktopSportIdentTimeSyncServiceTest {
                     stationTimeReply(targetTime.minusMinutes(1), tick = 0x00),
                     stationWriteReply(targetTime, tick = 0x00),
                     applyReply(),
+                    stationTimeReply(targetTime, tick = 0x00),
                     normalModeReply()
                 ),
                 listOf(remoteModeReply(), normalModeReply()),

@@ -2403,22 +2403,22 @@ fun main(args: Array<String>) = application {
                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId + (application.categoryId to application.idealOrderText)
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId + (application.categoryId to updatedCourseInfo)
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
-                projectStatusText = "Applied calculated route and fox numbering. Unsaved changes."
+                projectStatusText = "Saved calculated route and fox numbering to the Event File. Save Event to write changes to disk."
                 projectStatusText
             }.getOrElse { error ->
-                projectStatusText = "Apply calculated route failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Save calculated route failed: ${error.message ?: error::class.simpleName}"
                 projectStatusText
             }
         }
 
         fun applyCourseAnalysisFoxRenumberingOnly(renumbering: DesktopCourseWaitRenumbering): String {
             val password = protectedCoursePassword ?: run {
-                projectStatusText = "Unlock course order before applying fox renumbering."
+                projectStatusText = "Unlock course order before saving fox renumbering."
                 return projectStatusText
             }
             return runCatching {
                 val currentProject = projectFile
-                    ?: throw IllegalStateException("Load an Event File before applying fox renumbering.")
+                    ?: throw IllegalStateException("Load an Event File before saving fox renumbering.")
                 val result = DesktopCourseAnalysisApplier.applyFoxRenumberingOnly(
                     projectFile = currentProject,
                     renumbering = renumbering,
@@ -2427,10 +2427,10 @@ fun main(args: Array<String>) = application {
                 projectFile = projectSession.updateCurrentProject { result.projectFile }
                 syncProtectedCourseState(result.projectFile, password)
                 projectStatusText =
-                    "Applied fox renumbering to ${result.changedControlCount} controls across ${result.affectedCategoryCount} categories. Unsaved changes."
+                    "Saved fox renumbering to ${result.changedControlCount} controls across ${result.affectedCategoryCount} categories. Save Event to write changes to disk."
                 projectStatusText
             }.getOrElse { error ->
-                projectStatusText = "Apply fox renumbering failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Save fox renumbering failed: ${error.message ?: error::class.simpleName}"
                 projectStatusText
             }
         }
@@ -8789,6 +8789,23 @@ private data class CourseAnalysisMissingDataPrompt(
     val summary: DesktopCourseAnalysisSummary
 )
 
+private enum class CourseAnalysisSaveAction(
+    val buttonLabel: String,
+    val title: String,
+    val message: String
+) {
+    CalculatedRoute(
+        buttonLabel = "Save Calculated Route",
+        title = "Save calculated route?",
+        message = "This will replace the saved route and saved fox numbering for the selected category with the calculated route data. Any improved calculated fox numbering will also be saved to affected course data. The Event File will have unsaved changes until you click Save Event."
+    ),
+    FoxRenumberingOnly(
+        buttonLabel = "Save Fox Renumbering Only",
+        title = "Save fox renumbering?",
+        message = "This will keep the saved route geometry, ignore calculated-route changes, and replace saved fox numbering with the Section 1 wait-time recommendation. The Event File will have unsaved changes until you click Save Event."
+    )
+}
+
 internal data class RetainedCourseAnalysisCourseInfo(
     val encryptedCourseInfo: String,
     val courseInfo: ProtectedCourseInfo
@@ -9075,6 +9092,7 @@ private fun RadioOManagerDesktopApp(
             isSiReaderConnected = siReaderState.severity == DesktopSiReaderSeverity.CONNECTED,
             siReaderStatusText = siReaderState.statusText
         )
+        var pendingCourseAnalysisSaveAction by remember { mutableStateOf<CourseAnalysisSaveAction?>(null) }
 
         LaunchedEffect(
             practiceSiReadoutContextKey,
@@ -9164,6 +9182,49 @@ private fun RadioOManagerDesktopApp(
         if (isSplashVisible) {
             RadioOracleSplashScreen(onDismiss = { isSplashVisible = false })
         } else {
+            fun saveCourseAnalysisAction(action: CourseAnalysisSaveAction) {
+                when (action) {
+                    CourseAnalysisSaveAction.CalculatedRoute -> {
+                        val application = courseAnalysisResult?.calculatedRouteApplication ?: return
+                        courseAnalysisApplyStatusText = onUseCalculatedCourseAnalysisRoute(application)
+                        courseAnalysisResult = null
+                    }
+                    CourseAnalysisSaveAction.FoxRenumberingOnly -> {
+                        val renumbering = courseAnalysisResult?.waitRenumbering?.takeIf { it.improvesWait }
+                            ?: return
+                        courseAnalysisApplyStatusText = onApplyCourseAnalysisFoxRenumberingOnly(renumbering)
+                        courseAnalysisResult = null
+                    }
+                }
+            }
+            pendingCourseAnalysisSaveAction?.let { action ->
+                AlertDialog(
+                    onDismissRequest = { pendingCourseAnalysisSaveAction = null },
+                    title = { Text(action.title) },
+                    text = {
+                        Text(
+                            text = action.message,
+                            color = DesktopPalette.Black,
+                            fontSize = 14.sp
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                pendingCourseAnalysisSaveAction = null
+                                saveCourseAnalysisAction(action)
+                            }
+                        ) {
+                            ButtonLabel(action.buttonLabel)
+                        }
+                    },
+                    dismissButton = {
+                        Button(onClick = { pendingCourseAnalysisSaveAction = null }) {
+                            ButtonLabel("Cancel")
+                        }
+                    }
+                )
+            }
             Surface(modifier = Modifier.fillMaxSize(), color = DesktopPalette.White) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     AppTopBar(
@@ -9183,15 +9244,10 @@ private fun RadioOManagerDesktopApp(
                             },
                             isCourseAnalysisBusy = false,
                             onApplyCalculatedRoute = {
-                                val application = courseAnalysisResult?.calculatedRouteApplication ?: return@NavigationRail
-                                courseAnalysisApplyStatusText = onUseCalculatedCourseAnalysisRoute(application)
-                                courseAnalysisResult = null
+                                pendingCourseAnalysisSaveAction = CourseAnalysisSaveAction.CalculatedRoute
                             },
                             onApplyFoxRenumberingOnly = {
-                                val renumbering = courseAnalysisResult?.waitRenumbering?.takeIf { it.improvesWait }
-                                    ?: return@NavigationRail
-                                courseAnalysisApplyStatusText = onApplyCourseAnalysisFoxRenumberingOnly(renumbering)
-                                courseAnalysisResult = null
+                                pendingCourseAnalysisSaveAction = CourseAnalysisSaveAction.FoxRenumberingOnly
                             },
                             onBack = { requestNavigation(DesktopPendingNavigation.Back) },
                             onSaveEvent = { onNavAction(DesktopNavAction.SaveEventFile) },
@@ -10034,7 +10090,7 @@ private fun CourseAnalysisNavigationActions(
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
-                text = "Apply Calculated Route",
+                text = "Save Calculated Route",
                 fontSize = 13.sp,
                 lineHeight = 15.sp,
                 maxLines = 2,
@@ -10055,7 +10111,7 @@ private fun CourseAnalysisNavigationActions(
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
-                text = "Apply Fox Renumbering Only",
+                text = "Save Fox Renumbering Only",
                 fontSize = 13.sp,
                 lineHeight = 15.sp,
                 maxLines = 2,
@@ -15685,21 +15741,21 @@ private fun CourseAnalyzerGuidance() {
         modifier = Modifier.fillMaxWidth()
     ) {
         Text(
-            text = "Import course KML/KMZ or GPX data with at least one route path before running analysis.",
+            text = "Import course KML/KMZ or GPX data before running analysis.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
         Text(
-            text = "KML/KMZ course files must contain named control Point placemarks and at least one LineString route. GPX course files must contain named control waypoints and at least one route or track named by Event File category, such as M21. Control-only files belong under Setup > Controls > Import/Export.",
+            text = "KML/KMZ course files must contain named control Point placemarks. Route LineStrings are used when present; if a Course Analyzer KML/KMZ import has no course route LineString, Radio-Oracle creates an initial M21 route from Start through the foxes and beacon to Finish before analysis. GPX course files must contain named control waypoints and at least one route or track named by Event File category, such as M21.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             KmlImportInstruction("Optional KML/KMZ SS=#.## values in Start, fox, beacon, spectator, or LineString descriptions replace the event speed factor for the following leg; Finish SS values are ignored.")
-            KmlImportInstruction("Choose a category, then Analyze to compare the imported route with the calculated route candidate.")
+            KmlImportInstruction("Choose a category, then Analyze to compare the saved route with the calculated route candidate.")
             KmlImportInstruction("Export Analysis writes the displayed analysis plus route/control data for external review.")
-            KmlImportInstruction("Apply Calculated Route replaces imported route and numbering data when the calculated route is available.")
-            KmlImportInstruction("Apply Fox Renumbering Only applies the Section 1 wait-time renumbering when an improvement is available.")
+            KmlImportInstruction("Save Calculated Route replaces saved route and numbering data when the calculated route is available.")
+            KmlImportInstruction("Save Fox Renumbering Only applies the Section 1 wait-time renumbering to the saved route when an improvement is available.")
         }
         Text(
             text = "Use the left-column menu buttons Import Course KML/KMZ... and Import Course GPX... to import route-bearing course data for a category before running analysis.",
@@ -16017,7 +16073,7 @@ private fun CourseAnalysisPanel(
         applyStatusText?.let { statusText ->
             Text(
                 text = statusText,
-                color = if (statusText.startsWith("Apply") && statusText.contains("failed")) {
+                color = if (statusText.startsWith("Save") && statusText.contains("failed")) {
                     DesktopPalette.Error
                 } else {
                     DesktopPalette.Disconnected
@@ -16084,7 +16140,7 @@ private fun CourseAnalysisPanel(
                             )
                         }
                         Text(
-                            text = "The imported route already has elevation data. Downloading uses internet elevation data to fill the local calculated-route cache before comparison.",
+                            text = "The saved route already has elevation data. Downloading uses internet elevation data to fill the local calculated-route cache before comparison.",
                             color = DesktopPalette.Disconnected,
                             fontSize = 12.sp
                         )
@@ -16155,8 +16211,8 @@ private fun CourseAnalysisPanel(
 
 private fun calculatedRouteApplyDisabledReason(analysisResult: DesktopCourseAnalysisSummary?): String? =
     when {
-        analysisResult == null -> "Run analysis before applying a calculated route."
-        analysisResult.calculatedRouteApplication == null -> "No different calculated route is available to apply."
+        analysisResult == null -> "Run analysis before saving a calculated route."
+        analysisResult.calculatedRouteApplication == null -> "No different calculated route is available to save."
         else -> null
     }
 
@@ -16175,7 +16231,7 @@ private fun String.isCourseAnalysisElevationOnlyWarning(): Boolean =
 
 private fun foxRenumberingApplyDisabledReason(analysisResult: DesktopCourseAnalysisSummary?): String? =
     when {
-        analysisResult == null -> "Run analysis before applying fox renumbering."
+        analysisResult == null -> "Run analysis before saving fox renumbering."
         analysisResult.waitRenumbering?.improvesWait != true -> "No improved Section 1 fox renumbering is available."
         else -> null
     }
@@ -16238,9 +16294,9 @@ private fun CourseAnalysisResultView(result: DesktopCourseAnalysisSummary?) {
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
-            val importedSummaryGroup = result.summaryGroups.firstOrNull { it.title == "Imported" }
+            val importedSummaryGroup = result.summaryGroups.firstOrNull { it.title == "Saved" }
             val calculatedSummaryGroup = result.summaryGroups.firstOrNull { it.title == "Calculated" }
-            val importedMetricGroup = result.goodnessMetrics.groups.firstOrNull { it.title == "Imported" }
+            val importedMetricGroup = result.goodnessMetrics.groups.firstOrNull { it.title == "Saved" }
             val calculatedMetricGroup = result.goodnessMetrics.groups.firstOrNull { it.title == "Calculated" }
             result.providedRouteSection?.let { section ->
                 CourseAnalysisSectionView(
@@ -16338,13 +16394,13 @@ private fun CourseAnalysisProvidedRouteWaitAnalysis(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            text = "Imported-route wait-time analysis",
+            text = "Saved-route wait-time analysis",
             color = DesktopPalette.Black,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "This subsection estimates Classic fox arrival phases on the imported route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. If the fox is already transmitting at arrival, timing assumes the competitor runs straight to it and punches without extra delay. It uses the same elite baseline speed and effective-length movement estimates as the route analysis. Because map passability and accumulated fatigue are not fully modeled, barriers, slow terrain, fatigue, and competitor profile can shift real arrival times and change wait-time outcomes.",
+            text = "This subsection estimates Classic fox arrival phases on the saved route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. If the fox is already transmitting at arrival, timing assumes the competitor runs straight to it and punches without extra delay. It uses the same elite baseline speed and effective-length movement estimates as the route analysis. Because map passability and accumulated fatigue are not fully modeled, barriers, slow terrain, fatigue, and competitor profile can shift real arrival times and change wait-time outcomes.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -16414,7 +16470,7 @@ private fun CourseAnalysisSectionSummaryRows(group: DesktopCourseAnalysisSummary
 }
 
 private val courseAnalysisSectionDuplicateSummaryLabels = setOf(
-    "Imported route",
+    "Saved route",
     "Calculated route",
     "Ideal route",
     "Result",
@@ -16453,11 +16509,11 @@ private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         CourseAnalysisRow("Routes compared", result.calculatedRouteCount.toString())
         if (result.idealOrderMatches == true) {
-            CourseAnalysisRow("Imported route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
-            CourseAnalysisRow("Order comparison", "Imported and calculated routes match")
+            CourseAnalysisRow("Saved route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
+            CourseAnalysisRow("Order comparison", "Saved and calculated routes match")
         } else {
             CourseAnalysisRow("Calculated ideal route (calculated fox numbering)", result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
-            CourseAnalysisRow("Imported route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
+            CourseAnalysisRow("Saved route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
             CourseAnalysisRow(
                 "Order comparison",
                 when (result.idealOrderMatches) {
@@ -16839,7 +16895,7 @@ private fun CourseAnalysisWaitRenumbering(renumbering: DesktopCourseWaitRenumber
         )
         Text(
             text = if (renumbering.improvesWait) {
-                "Renumbering the fox transmit slots is likely to reduce wait time by ${secondsText(renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)} on this imported route."
+                "Renumbering the fox transmit slots is likely to reduce wait time by ${secondsText(renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)} on this saved route."
             } else {
                 "Current fox numbering is already best for ideal-route wait time."
             },

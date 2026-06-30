@@ -287,7 +287,7 @@ enum class DesktopCourseMetricStatus {
 /**
  * Builds the desktop Course Analyzer report from stored course geometry and category controls.
  *
- * The analyzer intentionally separates the imported route from the ideal route determined from
+ * The analyzer intentionally separates the saved route from the ideal route determined from
  * the course points. The ideal route is the route from start to finish through the required
  * controls that has the shortest effective length; it is not chosen by preference. Both imported
  * and calculated routes use the same measurement policy: effective length when complete elevation
@@ -551,7 +551,7 @@ object DesktopCourseAnalyzer {
                     val ids = resolveProtectedIdealOrderControlIds(idealOrder, assignedControls, protectedCourseInfo)
                     ids.mapNotNull { id -> assignedControls.firstOrNull { it.id == id } }
                 }.getOrElse { error ->
-                    missing += "Imported route order could not be resolved: ${error.message ?: error::class.simpleName}."
+                    missing += "Saved route order could not be resolved: ${error.message ?: error::class.simpleName}."
                     emptyList()
                 }
             }
@@ -718,7 +718,7 @@ object DesktopCourseAnalyzer {
         )
         val providedRuleChecks = providedRouteAnalysis?.let { analysis ->
             routeRuleChecks(
-                routeLabel = "Imported route",
+                routeLabel = "Saved route",
                 raceType = raceType,
                 categoryName = category.name,
                 foxCount = foxes.size,
@@ -747,7 +747,7 @@ object DesktopCourseAnalyzer {
                 DesktopCourseAnalysisSection(
                     title = "Section 2: Calculated ideal route",
                     explanation = calculatedRouteMatchesStoredExplanation(includeWaitAnalysis),
-                    routeOrder = listOf("Calculated ideal route matches imported route"),
+                    routeOrder = listOf("Calculated ideal route matches saved route"),
                     routeOrderLabel = "Result",
                     summaryOnly = true,
                     comparisonLengthMeters = null,
@@ -778,7 +778,7 @@ object DesktopCourseAnalyzer {
                         includeWaitAnalysis = includeWaitAnalysis
                     ),
                     routeOrder = calculatedRouteStopLabels(calculatedRouteStops, includeFinish = true),
-                    routeOrderLabel = "Route order (imported fox numbering)",
+                    routeOrderLabel = "Route order (saved fox numbering)",
                     secondaryRouteOrder = calculatedRouteStopLabels(labeledCalculatedRouteStops, includeFinish = true),
                     secondaryRouteOrderLabel = "Route order (calculated fox numbering)",
                     comparisonLengthMeters = calculatedRouteAnalysis?.comparisonLengthMeters?.roundToInt(),
@@ -820,7 +820,7 @@ object DesktopCourseAnalyzer {
         }
         val providedSection = providedRouteAnalysis?.let { analysis ->
             DesktopCourseAnalysisSection(
-                title = "Section 1: Imported route analysis",
+                title = "Section 1: Saved route analysis",
                 explanation = providedSectionExplanation(analysis, includeWaitAnalysis),
                 routeOrder = eventControlRouteLabels(providedControls, includeFinish = true),
                 comparisonLengthMeters = analysis.comparisonLengthMeters.roundToInt(),
@@ -838,7 +838,7 @@ object DesktopCourseAnalyzer {
                 ruleChecks = providedRuleChecks,
                 elevationProfile = analysis.elevationProfile,
                 routeMap = routeMap(
-                    title = "Imported route",
+                    title = "Saved route",
                     start = start,
                     finish = finish,
                     controls = displayControlsWithPoints,
@@ -875,7 +875,7 @@ object DesktopCourseAnalyzer {
             providedSection?.let {
                 add(
                     DesktopCourseElevationProfileSummary(
-                        title = "Imported route",
+                        title = "Saved route",
                         profile = it.elevationProfile,
                         markers = providedElevationMarkers(route, providedControls, controlsWithPoints)
                     )
@@ -905,8 +905,8 @@ object DesktopCourseAnalyzer {
             if (providedSection != null) {
                 add(
                     DesktopCourseKmlExportFolder(
-                        title = "Imported foxes and route",
-                        routeName = "Imported route",
+                        title = "Saved foxes and route",
+                        routeName = "Saved route",
                         routePoints = route,
                         routeStops = providedKmlRouteStops(
                             route = route,
@@ -1133,6 +1133,17 @@ object DesktopCourseAnalyzer {
                     ?: projectControls.firstOrNull { it.matchesProtectedControl(protectedControl) }
                     ?: protectedControl.toEventControl(projectFile.raceData.race.id)
             }
+            .zip(courseInfo.controlPoints)
+            .map { (control, protectedControl) ->
+                if (courseInfo.usesAnalyzerSavedNumbering()) {
+                    // Course Analyzer renumbering is intentionally stored in protected course data,
+                    // not in Setup > Controls. Use the protected label for analyzer route labels and
+                    // wait-slot calculations while preserving the control ID/SI-code source of truth.
+                    control.copy(label = protectedControl.label, publicLabel = protectedControl.label)
+                } else {
+                    control
+                }
+            }
             .filter {
                 it.type == ControlPointType.CONTROL ||
                     it.type == ControlPointType.SEPARATOR ||
@@ -1157,6 +1168,14 @@ object DesktopCourseAnalyzer {
         controls: List<EventControl>,
         courseInfo: ProtectedCourseInfo?
     ): List<String> {
+        if (courseInfo.usesAnalyzerSavedNumbering()) {
+            val analyzerLabelControls = protectedCourseInfoAliasControls(controls, courseInfo)
+            if (analyzerLabelControls.isNotEmpty()) {
+                runCatching {
+                    return ProtectedIdealOrderRules.resolveControlIds(idealOrderText, analyzerLabelControls)
+                }
+            }
+        }
         return runCatching {
             ProtectedIdealOrderRules.resolveControlIds(idealOrderText, controls)
         }.getOrElse { originalError ->
@@ -1237,6 +1256,9 @@ object DesktopCourseAnalyzer {
             publicLabel = label
         )
 
+    private fun ProtectedCourseInfo?.usesAnalyzerSavedNumbering(): Boolean =
+        this?.sourceName?.startsWith("Course Analyzer", ignoreCase = true) == true
+
     private fun canAttemptCalculatedRoute(
         raceType: RaceType,
         start: CourseGeoPoint?,
@@ -1255,7 +1277,7 @@ object DesktopCourseAnalyzer {
     }
 
     /**
-     * Section 1 analyzes the imported route. The imported route geometry is used for
+     * Section 1 analyzes the saved route. The saved route geometry is used for
      * actual length, climb, profile, and split estimates; if every route sample has elevation, the
      * comparison metric becomes effective length, defined by the referenced course-design guide as
      * horizontal length plus ten times total climb. If elevations are incomplete, the analyzer still
@@ -1335,7 +1357,7 @@ object DesktopCourseAnalyzer {
         }
         val waitTimingNote = if (includeWaitAnalysis) "$CLASSIC_WAIT_TIMING_NOTE " else ""
         val mapKnowledgeNote = mapKnowledgeLimitationNote(includeWaitAnalysis)
-        return "This section analyzes the route supplied by the imported controls/routes file for the category. Leg lengths are taken from the imported route geometry, and $splitText " +
+        return "This section analyzes the route currently saved for the category in the Event File. Leg lengths are taken from the saved route geometry, and $splitText " +
             "The primary comparison value is ${analysis.measurementLabel.lowercase()}; " +
             if (analysis.effectiveLengthMeters != null) {
                 "the Elevation Cache data is complete, so effective length is calculated as horizontal length plus ten times total climb. $SPEED_MODEL_NOTE $waitTimingNote$ELEVATION_CACHE_RESOLUTION_NOTE $mapKnowledgeNote"
@@ -1353,7 +1375,7 @@ object DesktopCourseAnalyzer {
         } else {
             "leg, elevation-profile, or map analysis"
         }
-        return "The analyzer determined the ideal route from the start, finish, controls, beacon, and spectator if assigned. The calculated ideal route matches the imported route, so no separate calculated-route $omittedDetails is repeated in this section. Section 3 still summarizes the route comparison."
+        return "The analyzer determined the ideal route from the start, finish, controls, beacon, and spectator if assigned. The calculated ideal route matches the saved route, so no separate calculated-route $omittedDetails is repeated in this section. Section 3 still summarizes the route comparison."
     }
 
     private fun calculatedSectionExplanation(
@@ -1389,11 +1411,11 @@ object DesktopCourseAnalyzer {
         }
         val routeDefinitionText = when {
             routeCalculationNote == null ->
-                "The route with the shortest $measurement is by definition the ideal route for the course; an imported route that is longer is not ideal."
+                "The route with the shortest $measurement is by definition the ideal route for the course; a saved route that is longer is not ideal."
             isNonExhaustiveSearch ->
                 "Because this search is non-exhaustive, the calculated route is advisory rather than a definitive ideal route."
             else ->
-                "Within the stated format-specific route model, the route with the shortest $measurement is the ideal route; an imported route that is longer is not ideal."
+                "Within the stated format-specific route model, the route with the shortest $measurement is the ideal route; a saved route that is longer is not ideal."
         }
         return "$opening $routeDefinitionText$routeCalculationText $elevationText $SPEED_MODEL_NOTE$waitTimingText ${mapKnowledgeLimitationNote(includeWaitAnalysis)}$assignmentText"
     }
@@ -1410,7 +1432,7 @@ object DesktopCourseAnalyzer {
             providedByControl[calculated.controlLabel]?.suggestedSlotLabel != calculated.suggestedSlotLabel
         }
         return if (differences.isEmpty()) {
-            "The optimized fox assignments match the imported-route assignment check."
+            "The optimized fox assignments match the saved-route assignment check."
         } else {
             "Compared with Section 1, the calculated route changes optimized assignments for " +
                 differences.joinToString { "${it.controlLabel} -> ${it.suggestedSlotLabel}" } + "."
@@ -1435,7 +1457,7 @@ object DesktopCourseAnalyzer {
             ?.let { renumbering ->
                 val improvementSeconds = (renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)
                     .coerceAtLeast(0)
-                " Section 1 identifies a fox-renumbering option that may reduce imported-route wait time by ${compactDurationText(improvementSeconds)}; see Section 1 for the assignment details."
+                " Section 1 identifies a fox-renumbering option that may reduce saved-route wait time by ${compactDurationText(improvementSeconds)}; see Section 1 for the assignment details."
             }
             .orEmpty()
         } else {
@@ -1447,9 +1469,9 @@ object DesktopCourseAnalyzer {
             } else {
                 "estimated time, elevation profiles, and 2D point depictions"
             }
-            "This summary compares the imported route with the independently calculated candidate, including checks against the cited USA rules document, their primary distance metric, route order, $comparisonDetails."
+            "This summary compares the saved route with the independently calculated candidate, including checks against the cited USA rules document, their primary distance metric, route order, $comparisonDetails."
         } else {
-            "This summary reports checks against the cited USA rules document and the independently calculated route candidate because no imported route was available for Section 1."
+            "This summary reports checks against the cited USA rules document and the independently calculated route candidate because no saved route was available for Section 1."
         }
         return baseText + speedText + waitImprovementText
     }
@@ -1465,19 +1487,19 @@ object DesktopCourseAnalyzer {
     ): List<DesktopCourseAnalysisSummaryGroup> =
         listOf(
             DesktopCourseAnalysisSummaryGroup(
-                title = "Imported",
+                title = "Saved",
                 rows = buildList {
                     if (providedSection == null) {
-                        add(DesktopCourseAnalysisSummaryRow("Imported route", "Unavailable"))
+                        add(DesktopCourseAnalysisSummaryRow("Saved route", "Unavailable"))
                     } else {
-                        add(DesktopCourseAnalysisSummaryRow("Imported route", providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }))
+                        add(DesktopCourseAnalysisSummaryRow("Saved route", providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }))
                         add(DesktopCourseAnalysisSummaryRow("Horizontal length", summaryLengthText(providedSection.routeLengthMeters)))
                         add(DesktopCourseAnalysisSummaryRow("Climb", summaryClimbText(providedSection.climbMeters)))
                         add(DesktopCourseAnalysisSummaryRow("Effective length", summaryLengthText(providedSection.effectiveLengthMeters)))
                         add(DesktopCourseAnalysisSummaryRow("Estimated ideal time", summaryDurationText(providedSection.estimatedIdealSeconds)))
                         val currentWaitSeconds = providedSection.waitRows.sumOf { it.waitSeconds }
                         if (providedSection.waitRows.isNotEmpty()) {
-                            add(DesktopCourseAnalysisSummaryRow("Imported numbering wait", summaryDurationText(currentWaitSeconds)))
+                            add(DesktopCourseAnalysisSummaryRow("Saved numbering wait", summaryDurationText(currentWaitSeconds)))
                         }
                         waitRenumbering?.takeIf { it.improvesWait }?.let { renumbering ->
                             add(DesktopCourseAnalysisSummaryRow("Best renumbered wait", summaryDurationText(renumbering.bestTotalWaitSeconds)))
@@ -1505,8 +1527,8 @@ object DesktopCourseAnalyzer {
                             DesktopCourseAnalysisSummaryRow(
                                 "Order comparison",
                                 when (idealOrderMatches) {
-                                    true -> "Imported and calculated routes match"
-                                    false -> "Calculated route differs from imported route"
+                                    true -> "Saved and calculated routes match"
+                                    false -> "Calculated route differs from saved route"
                                     null -> "Unknown"
                                 }
                             )
@@ -1555,9 +1577,9 @@ object DesktopCourseAnalyzer {
                 }
                 val percentText = percentLonger?.let { " ($it%)" }.orEmpty()
                 val routeOrderText = calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }
-                "The imported route is ${summaryLengthText(shorterByMeters)}$percentText longer than the ideal route. The calculated ideal route effective length (${summaryLengthText(calculatedLength)}) should therefore be used as the course's effective length for $categoryName, and the ideal route order is $routeOrderText with calculated fox numbering as shown in the 2D route depiction graphic below."
+                "The saved route is ${summaryLengthText(shorterByMeters)}$percentText longer than the ideal route. The calculated ideal route effective length (${summaryLengthText(calculatedLength)}) should therefore be used as the course's effective length for $categoryName, and the ideal route order is $routeOrderText with calculated fox numbering as shown in the 2D route depiction graphic below."
             } else {
-                "The calculated solution differs from the imported route under the current model, so applying it will replace the imported route and numbering with the calculated candidate."
+                "The calculated solution differs from the saved route under the current model, so saving it will replace the saved route and numbering with the calculated candidate."
             }
             val caveats = recommendationCaveats(
                 calculatedRouteApplication = calculatedRouteApplication,
@@ -1568,8 +1590,8 @@ object DesktopCourseAnalyzer {
                 waitRenumbering = waitRenumbering
             )
             return DesktopCourseRecommendation(
-                actionLabel = "Apply Calculated Route",
-                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply Calculated Route. $reason$caveats"
+                actionLabel = "Save Calculated Route",
+                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Save Calculated Route. $reason$caveats"
             )
         }
         val renumbering = waitRenumbering?.takeIf { it.improvesWait }
@@ -1585,8 +1607,8 @@ object DesktopCourseAnalyzer {
                 waitRenumbering = waitRenumbering
             )
             return DesktopCourseRecommendation(
-                actionLabel = "Apply Fox Renumbering Only",
-                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply Fox Renumbering Only. The calculated route matches the imported route, but renumbering the foxes reduces modeled wait time by ${compactDurationText(improvementSeconds)}.$caveats"
+                actionLabel = "Save Fox Renumbering Only",
+                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Save Fox Renumbering Only. The calculated route matches the saved route, but renumbering the foxes reduces modeled wait time by ${compactDurationText(improvementSeconds)}.$caveats"
             )
         }
         val caveats = recommendationCaveats(
@@ -1598,8 +1620,8 @@ object DesktopCourseAnalyzer {
             waitRenumbering = waitRenumbering
         )
         return DesktopCourseRecommendation(
-            actionLabel = "Use the imported data as is",
-            paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Use the imported data as is. The current analysis did not identify a calculated route or fox-renumbering change that should be applied.$caveats"
+            actionLabel = "Use the saved data as is",
+            paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Use the saved data as is. The current analysis did not identify a calculated route or fox-renumbering change that should be saved.$caveats"
         )
     }
 
@@ -1695,10 +1717,10 @@ object DesktopCourseAnalyzer {
         val appliesClimbLimit = raceType.hasCourseAnalyzerClimbLimit()
         val importedMetrics = providedSection?.let { section ->
             routeGoodnessMetrics(
-                title = "Imported",
+                title = "Saved",
                 section = section,
                 shortestRouteMetric = shortestRouteMetric(
-                    label = "Imported route is shortest possible route",
+                    label = "Saved route is shortest possible route",
                     routeLabel = "imported",
                     routeComparisonLengthMeters = section.comparisonLengthMeters,
                     shortestComparisonLengthMeters = comparisonSection?.comparisonLengthMeters
@@ -1729,7 +1751,7 @@ object DesktopCourseAnalyzer {
         return DesktopCourseGoodnessMetrics(
             sharedMetrics = sharedMetrics,
             groups = listOf(
-                DesktopCourseGoodnessMetricGroup("Imported", importedMetrics),
+                DesktopCourseGoodnessMetricGroup("Saved", importedMetrics),
                 DesktopCourseGoodnessMetricGroup("Calculated", calculatedMetrics)
             ).filter { it.metrics.isNotEmpty() }
         )
@@ -1852,7 +1874,7 @@ object DesktopCourseAnalyzer {
         }
 
     private fun DesktopCourseGoodnessMetric.isSharedGoodnessMetric(): Boolean =
-        label.startsWith("Calculated route agrees with imported route order") ||
+        label.startsWith("Calculated route agrees with saved route order") ||
             label.startsWith("Classic ") ||
             label.startsWith("Youth Classic ") ||
             label.startsWith("Sprint ") ||
@@ -3516,7 +3538,7 @@ object DesktopCourseAnalyzer {
         return buildList {
             add(
                 DesktopCourseGoodnessMetric(
-                    "Calculated route agrees with imported route order",
+                    "Calculated route agrees with saved route order",
                     idealOrderMatches?.let { if (it) "Yes" else "No" } ?: "Unknown",
                     when (idealOrderMatches) {
                         true -> DesktopCourseMetricStatus.Good
@@ -3527,7 +3549,7 @@ object DesktopCourseAnalyzer {
             )
             add(
                 shortestRouteMetric(
-                    label = "Imported route is shortest possible route",
+                    label = "Saved route is shortest possible route",
                     routeLabel = "imported",
                     routeComparisonLengthMeters = importedComparisonLengthMeters,
                     shortestComparisonLengthMeters = calculatedComparisonLengthMeters
@@ -3642,7 +3664,7 @@ object DesktopCourseAnalyzer {
                         .coerceAtLeast(0)
                     add(
                         DesktopCourseGoodnessMetric(
-                            "Imported route finish time with renumbering",
+                            "Saved route finish time with renumbering",
                             "${compactDurationText(renumberedIdealSeconds)} / ${compactDurationText(targetSeconds)}",
                             if (abs(renumberedIdealSeconds - targetSeconds) <= targetSeconds * 0.15) {
                                 DesktopCourseMetricStatus.Good

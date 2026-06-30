@@ -795,7 +795,7 @@ class DesktopCourseKmlImportTest {
             protectedIdealOrderText = protectedCourseInfo.idealOrder
         )
         val importedRouteStops = analysis.kmlFolders
-            .single { it.title == "Imported foxes and route" }
+            .single { it.title == "Saved foxes and route" }
             .routeStops
         val importedRouteMap = requireNotNull(analysis.providedRouteSection?.routeMap)
         val spectatorStop = importedRouteStops.single { it.label == "S" && kotlin.math.abs(it.point.longitude - -94.9960) < 0.000001 }
@@ -809,7 +809,7 @@ class DesktopCourseKmlImportTest {
         assertTrue(importedRouteMap.routePointIndexes.first() != importedRouteMap.routePointIndexes[2])
         assertEquals(DesktopCourseRouteMapPointType.Start, startMapPoint.type)
         assertEquals(DesktopCourseRouteMapPointType.Spectator, spectatorMapPoint.type)
-        assertEquals(listOf("Calculated ideal route matches imported route"), requireNotNull(analysis.calculatedRouteSection).routeOrder)
+        assertEquals(listOf("Calculated ideal route matches saved route"), requireNotNull(analysis.calculatedRouteSection).routeOrder)
     }
 
     @Test

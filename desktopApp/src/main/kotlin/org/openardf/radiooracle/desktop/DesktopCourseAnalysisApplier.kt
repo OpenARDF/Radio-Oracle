@@ -50,6 +50,7 @@ object DesktopCourseAnalysisApplier {
             assignment.controlId to assignment.calculatedLabel
         }
         val updatedControls = projectFile.raceData.controls.withoutPublicCoordinates()
+        val updatedControlsById = updatedControls.associateBy { it.id }
         val updatedCourseInfo = courseInfo.copy(
             idealOrder = application.idealOrderText,
             lengthMeters = application.routeLengthMeters,
@@ -82,7 +83,45 @@ object DesktopCourseAnalysisApplier {
                     )
                 )
             } else {
-                categoryData
+                val updatedOtherIdealOrder = categoryData.category.encryptedIdealOrder
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { encryptedValue ->
+                        val idealOrderText = DesktopProtectedCourseOrder.decrypt(encryptedValue, trimmedPassword)
+                        val resolvedControlIds = runCatching {
+                            ProtectedIdealOrderRules.resolveControlIds(idealOrderText, projectFile.raceData.controls)
+                        }.getOrElse { error ->
+                            throw IllegalArgumentException(
+                                "Stored ideal order could not be updated for ${categoryData.category.name}: ${error.message ?: error::class.simpleName}"
+                            )
+                        }
+                        resolvedControlIds.joinToString(" ") { controlId ->
+                            labelByControlId[controlId]
+                                ?.let(::quoteIdealOrderToken)
+                                ?: updatedControlsById[controlId]
+                                    ?.idealOrderToken(updatedControls)
+                                ?: throw IllegalArgumentException("Stored ideal order control could not be preserved: $controlId")
+                        }
+                    }
+                val updatedOtherCourseInfo = categoryData.category.encryptedCourseInfo
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { encryptedValue ->
+                        DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, trimmedPassword)
+                            .withUpdatedProtectedLabels(labelByControlId, markAnalyzerSavedNumbering = true)
+                    }
+                if (updatedOtherIdealOrder == null && updatedOtherCourseInfo == null) {
+                    categoryData
+                } else {
+                    categoryData.copy(
+                        category = categoryData.category.copy(
+                            encryptedIdealOrder = updatedOtherIdealOrder
+                                ?.let { DesktopProtectedCourseOrder.encrypt(it, trimmedPassword) }
+                                ?: categoryData.category.encryptedIdealOrder,
+                            encryptedCourseInfo = updatedOtherCourseInfo
+                                ?.let { DesktopProtectedCourseOrder.encryptCourseInfo(it, trimmedPassword) }
+                                ?: categoryData.category.encryptedCourseInfo
+                        )
+                    )
+                }
             }
         }
         return projectFile.copy(
@@ -130,10 +169,13 @@ object DesktopCourseAnalysisApplier {
                 }
                 val updatedIdealOrderText = resolvedControlIds
                     .map { controlId ->
-                        updatedControlsById[controlId]
+                        labelByControlId[controlId]
+                            ?.let(::quoteIdealOrderToken)
+                            ?: updatedControlsById[controlId]
+                                ?.idealOrderToken(updatedControls)
                             ?: throw IllegalArgumentException("Stored ideal order control could not be preserved: $controlId")
                     }
-                    .joinToString(" ") { it.idealOrderToken(updatedControls) }
+                    .joinToString(" ")
                 encryptedIdealOrderByCategoryId[categoryData.category.id] =
                     DesktopProtectedCourseOrder.encrypt(updatedIdealOrderText, trimmedPassword)
             }
@@ -144,14 +186,7 @@ object DesktopCourseAnalysisApplier {
                     courseInfo.controlPoints.any { it.controlId in labelByControlId.keys } ||
                         courseInfo.courseObjects.any { it.id in labelByControlId.keys }
                 if (referencesChangedControl) {
-                    val updatedInfo = courseInfo.copy(
-                        controlPoints = courseInfo.controlPoints.map { controlPoint ->
-                            labelByControlId[controlPoint.controlId]?.let { controlPoint.copy(label = it) } ?: controlPoint
-                        },
-                        courseObjects = courseInfo.courseObjects.map { courseObject ->
-                            labelByControlId[courseObject.id]?.let { courseObject.copy(label = it) } ?: courseObject
-                        }
-                    )
+                    val updatedInfo = courseInfo.withUpdatedProtectedLabels(labelByControlId, markAnalyzerSavedNumbering = true)
                     updatedInfoByCategoryId[categoryData.category.id] = updatedInfo
                     encryptedInfoByCategoryId[categoryData.category.id] =
                         DesktopProtectedCourseOrder.encryptCourseInfo(updatedInfo, trimmedPassword)
@@ -192,6 +227,24 @@ object DesktopCourseAnalysisApplier {
         )
     }
 }
+
+private fun ProtectedCourseInfo.withUpdatedProtectedLabels(
+    labelByControlId: Map<String, String>,
+    markAnalyzerSavedNumbering: Boolean
+): ProtectedCourseInfo =
+    copy(
+        sourceName = if (markAnalyzerSavedNumbering && !sourceName.startsWith("Course Analyzer", ignoreCase = true)) {
+            "Course Analyzer fox renumbering"
+        } else {
+            sourceName
+        },
+        controlPoints = controlPoints.map { controlPoint ->
+            labelByControlId[controlPoint.controlId]?.let { controlPoint.copy(label = it) } ?: controlPoint
+        },
+        courseObjects = courseObjects.map { courseObject ->
+            labelByControlId[courseObject.id]?.let { courseObject.copy(label = it) } ?: courseObject
+        }
+    )
 
 private fun List<EventControl>.withoutPublicCoordinates(): List<EventControl> =
     map { control ->
