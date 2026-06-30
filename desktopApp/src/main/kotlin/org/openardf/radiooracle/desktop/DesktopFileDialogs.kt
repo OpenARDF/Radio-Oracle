@@ -400,9 +400,7 @@ object DesktopFileDialogs {
 
     fun chooseImportKmlKmz(): Path? {
         val dialog = FileDialog(null as Frame?, "Import Controls KML/KMZ", FileDialog.LOAD)
-        dialog.filenameFilter = FilenameFilter { _, name ->
-            name.endsWith(".kml", ignoreCase = true) || name.endsWith(".kmz", ignoreCase = true)
-        }
+        dialog.filenameFilter = extensionFilenameFilter(".kml", ".kmz")
         dialog.file = "*.kml;*.kmz"
         dialog.isVisible = true
 
@@ -413,9 +411,7 @@ object DesktopFileDialogs {
 
     fun chooseKmlToolsFile(): Path? {
         val dialog = FileDialog(null as Frame?, "Choose KML/KMZ File", FileDialog.LOAD)
-        dialog.filenameFilter = FilenameFilter { _, name ->
-            name.endsWith(".kml", ignoreCase = true) || name.endsWith(".kmz", ignoreCase = true)
-        }
+        dialog.filenameFilter = extensionFilenameFilter(".kml", ".kmz")
         dialog.file = "*.kml;*.kmz"
         dialog.isVisible = true
 
@@ -426,9 +422,7 @@ object DesktopFileDialogs {
 
     fun chooseImportGpx(): Path? {
         val dialog = FileDialog(null as Frame?, "Import Controls GPX", FileDialog.LOAD)
-        dialog.filenameFilter = FilenameFilter { _, name ->
-            name.endsWith(".gpx", ignoreCase = true)
-        }
+        dialog.filenameFilter = extensionFilenameFilter(".gpx")
         dialog.file = "*.gpx"
         dialog.isVisible = true
 
@@ -555,13 +549,7 @@ object DesktopFileDialogs {
 
     fun chooseElevationRaster(): List<Path> {
         val dialog = FileDialog(null as Frame?, "Select Elevation Source", FileDialog.LOAD)
-        dialog.filenameFilter = FilenameFilter { _, name ->
-            name.endsWith(".tif", ignoreCase = true) ||
-                name.endsWith(".tiff", ignoreCase = true) ||
-                name.endsWith(".zip", ignoreCase = true) ||
-                name.endsWith(".las", ignoreCase = true) ||
-                name.endsWith(".laz", ignoreCase = true)
-        }
+        dialog.filenameFilter = extensionFilenameFilter(".tif", ".tiff", ".zip", ".las", ".laz")
         dialog.file = "*.tif;*.tiff;*.zip;*.las;*.laz"
         dialog.isMultipleMode = true
         dialog.isVisible = true
@@ -577,9 +565,7 @@ object DesktopFileDialogs {
 
     fun chooseImportDemFiles(): List<Path> {
         val dialog = FileDialog(null as Frame?, "Import DEM File", FileDialog.LOAD)
-        dialog.filenameFilter = FilenameFilter { _, name ->
-            name.endsWith(".json", ignoreCase = true) || name.endsWith(".zip", ignoreCase = true)
-        }
+        dialog.filenameFilter = extensionFilenameFilter(".json", ".zip")
         dialog.file = "*.json;*.zip"
         dialog.isMultipleMode = true
         dialog.isVisible = true
@@ -589,7 +575,7 @@ object DesktopFileDialogs {
 
     private fun chooseFile(title: String, mode: Int, extension: String, defaultFileName: String? = null): Path? {
         val dialog = FileDialog(null as Frame?, title, mode)
-        dialog.filenameFilter = FilenameFilter { _, name -> name.endsWith(extension, ignoreCase = true) }
+        dialog.filenameFilter = extensionFilenameFilter(extension)
         dialog.file = defaultFileName ?: "*$extension"
         dialog.isVisible = true
 
@@ -611,7 +597,7 @@ object DesktopFileDialogs {
 
     private fun chooseFiles(title: String, extension: String): List<Path> {
         val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD)
-        dialog.filenameFilter = FilenameFilter { _, name -> name.endsWith(extension) }
+        dialog.filenameFilter = extensionFilenameFilter(extension)
         dialog.file = "*$extension"
         dialog.isMultipleMode = true
         dialog.isVisible = true
@@ -677,7 +663,7 @@ object DesktopFileDialogs {
     private fun chooseEventFile(title: String, mode: Int, defaultFileName: String? = null): Path? {
         val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
         val dialog = FileDialog(null as Frame?, title, mode)
-        dialog.filenameFilter = FilenameFilter { _, name -> DesktopProjectFilePaths.isOpenableEventFileName(name) }
+        dialog.filenameFilter = navigableFilenameFilter { name -> DesktopProjectFilePaths.isOpenableEventFileName(name) }
         dialog.directory = directory.toString()
         dialog.file = defaultFileName ?: listOf(
             "*${DesktopProjectFilePaths.PROJECT_EXTENSION}",
@@ -707,7 +693,7 @@ object DesktopFileDialogs {
     private fun chooseSeriesManifest(title: String): Path? {
         val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
         val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD)
-        dialog.filenameFilter = FilenameFilter { _, name -> DesktopProjectFilePaths.isEventSeriesManifestName(name) }
+        dialog.filenameFilter = navigableFilenameFilter { name -> DesktopProjectFilePaths.isEventSeriesManifestName(name) }
         dialog.directory = directory.toString()
         dialog.file = listOf("*$EVENT_SERIES_NAMED_FILE_SUFFIX", EVENT_SERIES_FILE_NAME).joinToString(";")
         dialog.isVisible = true
@@ -716,4 +702,16 @@ object DesktopFileDialogs {
         val file = dialog.file ?: return null
         return Path.of(selectedDirectory, file).also(DesktopEventFileLocations::rememberEventFileDirectory)
     }
+
+    private fun extensionFilenameFilter(vararg extensions: String): FilenameFilter =
+        navigableFilenameFilter { name ->
+            extensions.any { extension -> name.endsWith(extension, ignoreCase = true) }
+        }
+
+    private fun navigableFilenameFilter(fileNameIsAccepted: (String) -> Boolean): FilenameFilter =
+        FilenameFilter { directory, name ->
+            // macOS FileDialog may apply FilenameFilter to folders as well as files. Always allow
+            // directories through so users can navigate to Downloads, Desktop, external drives, etc.
+            File(directory, name).isDirectory || fileNameIsAccepted(name)
+        }
 }
