@@ -653,7 +653,7 @@ class AppCommandReceiver : BroadcastReceiver() {
             source = "series:$seriesId"
             bytes = dataProcessor.exportEventSeriesPackageBytes(seriesId)
         } else if (eventId != null) {
-            source = "event:$eventId"
+            source = "race:$eventId"
             bytes = dataProcessor.exportEventSeriesPackageBytesForRace(eventId)
                 ?: return eventWithoutSeries(eventId)
         } else {
@@ -759,8 +759,8 @@ class AppCommandReceiver : BroadcastReceiver() {
         }
 
     private fun missingEventId() {
-        DebugLog.warn(TAG, "Command missing or invalid $EXTRA_EVENT_ID")
-        Log.w(TAG, "missing or invalid $EXTRA_EVENT_ID")
+        DebugLog.warn(TAG, "Command missing or invalid race id")
+        Log.w(TAG, "missing or invalid race id")
     }
 
     private fun missingSeriesId() {
@@ -769,8 +769,8 @@ class AppCommandReceiver : BroadcastReceiver() {
     }
 
     private fun missingSeriesOrEventId() {
-        DebugLog.warn(TAG, "Command missing $EXTRA_SERIES_ID or valid $EXTRA_EVENT_ID")
-        Log.w(TAG, "missing $EXTRA_SERIES_ID or valid $EXTRA_EVENT_ID")
+        DebugLog.warn(TAG, "Command missing series id or valid race id")
+        Log.w(TAG, "missing series id or valid race id")
     }
 
     private fun missingSeriesName() {
@@ -779,13 +779,13 @@ class AppCommandReceiver : BroadcastReceiver() {
     }
 
     private fun missingEventIds() {
-        DebugLog.warn(TAG, "Command missing or invalid $EXTRA_EVENT_IDS")
-        Log.w(TAG, "missing or invalid $EXTRA_EVENT_IDS")
+        DebugLog.warn(TAG, "Command missing or invalid race ids")
+        Log.w(TAG, "missing or invalid race ids")
     }
 
     private fun eventWithoutSeries(eventId: UUID) {
-        DebugLog.warn(TAG, "Command fingerprint ignored because event is not in a series event=$eventId")
-        Log.w(TAG, "event is not in a series id=$eventId")
+        DebugLog.warn(TAG, "Command fingerprint ignored because race is not in a series raceId=$eventId")
+        Log.w(TAG, "race is not in a series id=$eventId")
     }
 
     private fun missingResultId() {

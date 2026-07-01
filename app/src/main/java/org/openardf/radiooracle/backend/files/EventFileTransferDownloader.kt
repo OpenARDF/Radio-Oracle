@@ -96,9 +96,9 @@ class EventFileTransferDownloader(
             val bytes = it.body.bytes()
             val fileName = contentDispositionFileName(it.header("Content-Disposition"))
                 ?: if (EventFileTransferPayloads.isSeriesPackage(fileName = null, contentType = it.header("Content-Type"))) {
-                    "event-series.zip"
+                    "race-series.zip"
                 } else {
-                    "event.rom.json"
+                    "race.rom.json"
                 }
             DebugLog.info("EventFileTransfer", "Downloaded Race File bytes=${bytes.size} from ${safeUrlDescription(url)}")
             return EventFileTransferDownload(
@@ -133,7 +133,7 @@ private fun safeDownloadFileName(fileName: String): String =
         .substringAfterLast('\\')
         .replace(Regex("[\\p{Cntrl}:*?\"<>|]"), "_")
         .trim()
-        .ifBlank { "event.rom.json" }
+        .ifBlank { "race.rom.json" }
 
 object EventFileTransferUrlValidator {
     @Throws(EventFileTransferException::class)

@@ -141,7 +141,7 @@
     <string name="event_file_receive_message">Scan the desktop QR code, or enter the transfer URL. Use trusted Wi-Fi or a phone hotspot.</string>
     <string name="event_file_receive_scan_qr">Scan QR</string>
     <string name="event_file_receive_enter_url">Enter URL</string>
-    <string name="event_file_receive_url_hint">http://192.168.1.10:12345/radio-oracle/event-file?token=...</string>
+    <string name="event_file_receive_url_hint">http://192.168.1.10:12345/...</string>
     <string name="event_file_receive_progress">Receiving Race File...</string>
     <string name="event_file_receive_success">Imported race: %1$s</string>
     <string name="event_file_send_title">Send to Desktop</string>

@@ -8,8 +8,8 @@
     <string name="global_settings">Globální nastavení</string>
     <string name="data_import_preview_info">Počet záznamů: %1$d</string>
     <string name="data_import_file_error">Chyba při otevírání souboru</string>
-    <string name="race_import_file">Otevřít soubor události</string>
-    <string name="race_toolbar_title">Události série</string>
+    <string name="race_import_file">Otevřít soubor závodu</string>
+    <string name="race_toolbar_title">Závody série</string>
     <string name="race_level_international">Mezinárodní</string>
     <string name="race_level_national">Národní</string>
     <string name="race_level_regional">Krajský</string>
@@ -19,16 +19,16 @@
     <string name="general_date">Datum</string>
     <string name="race_level">Úroveň</string>
     <string name="race_type">Typ</string>
-    <string name="race_export">Exportovat událost</string>
-    <string name="race_delete">Odstranit událost</string>
-    <string name="race_edit">Upravit událost</string>
-    <string name="race_import">Importovat událost</string>
+    <string name="race_export">Exportovat závod</string>
+    <string name="race_delete">Odstranit závod</string>
+    <string name="race_edit">Upravit závod</string>
+    <string name="race_import">Importovat závod</string>
     <string name="general_cancel">Zrušit</string>
     <string name="race_api_key">API klíč</string>
     <string name="race_limit_hint">Limit (min)</string>
     <string name="race_start_time_hint">Startovní čas (hh:mm)</string>
     <string name="race_relative_start_time_hint">Relativní startovní čas (mm:ss)</string>
-    <string name="race_create">Vytvořit událost</string>
+    <string name="race_create">Vytvořit závod</string>
     <string name="general_display">Zobraz</string>
     <string name="general_preview">Náhled</string>
     <string name="general_duplicate">Duplikát</string>
@@ -37,7 +37,7 @@
     <string name="general_start">Start</string>
     <string name="general_start_time">Čas startu</string>
     <string name="general_band">Pásmo</string>
-    <string name="race_end">Ukončit událost</string>
+    <string name="race_end">Ukončit závod</string>
     <string name="race_end_confirmation">Opravdu chcete ukončit závod?</string>
     <string name="race_type_classic">Klasická trať</string>
     <string name="race_type_short">Krátká trať</string>
@@ -50,7 +50,7 @@
     <string name="race_level_practice">Trénink</string>
     <string name="race_level_other">Ostatní</string>
     <string name="general_invalid">Neplatný</string>
-    <string name="race_delete_confirmation">Opravdu chcete smazat událost?</string>
+    <string name="race_delete_confirmation">Opravdu chcete smazat závod?</string>
     <string name="category_same_type">Stejný typ jako závod</string>
     <string name="general_category">Kategorie</string>
     <string name="general_max_age">Maximalní věk</string>
@@ -272,12 +272,12 @@
     <string name="race_receive_desktop">Přijmout z desktopu</string>
     <string name="race_send_desktop">Odeslat do desktopu</string>
     <string name="race_send_file_desktop">Odeslat vybraný soubor do desktopu</string>
-    <string name="event_series_send_desktop">Odeslat sérii do desktopu</string>
-    <string name="event_series_toolbar_title">Série</string>
-    <string name="event_series_empty">V tomto zařízení nejsou uložené žádné série.</string>
-    <string name="race_export_success">Událost úspěšně exportována</string>
-    <string name="race_import_success">Událost úspěšně importována</string>
-    <string name="race_import_failure">Chyba při importu události</string>
+    <string name="event_series_send_desktop">Odeslat sérii závodů do desktopu</string>
+    <string name="event_series_toolbar_title">Série závodů</string>
+    <string name="event_series_empty">V tomto zařízení nejsou uložené žádné série závodů.</string>
+    <string name="race_export_success">Závod úspěšně exportován</string>
+    <string name="race_import_success">Závod úspěšně importován</string>
+    <string name="race_import_failure">Chyba při importu závodu</string>
     <string name="results_generated_with">Výsledky vygenerovány v %1$s pomocí</string>
     <string name="results_splits">Výsledky s mezičasy</string>
     <string name="results_recalculate">Přepočítat všechny výsledky</string>
@@ -299,8 +299,8 @@
     <string name="about_app_version">Verze aplikace: %1$s</string>
 
     <plurals name="event_series_member_count">
-        <item quantity="one">%d událost</item>
-        <item quantity="few">%d události</item>
-        <item quantity="other">%d událostí</item>
+        <item quantity="one">%d závod</item>
+        <item quantity="few">%d závody</item>
+        <item quantity="other">%d závodů</item>
     </plurals>
 </resources>

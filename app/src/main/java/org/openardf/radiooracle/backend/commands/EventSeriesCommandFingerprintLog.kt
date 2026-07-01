@@ -47,7 +47,7 @@ object EventSeriesCommandFingerprintLog {
         event: EventSeriesPackageEventFingerprint
     ): String =
         "series-package-member source=$source series=$seriesId position=$position " +
-            "event=${event.seriesEventId} order=${event.order} path=${event.eventFilePath} " +
+            "seriesRace=${event.seriesEventId} order=${event.order} raceFilePath=${event.eventFilePath} " +
             "display=${event.displayName} start=${event.startDateTimeIso} format=${event.formatLabel} " +
             "race=${event.raceName} raceStart=${event.raceStartDateTimeIso} " +
             "type=${event.raceType} level=${event.raceLevel} band=${event.raceBand} " +

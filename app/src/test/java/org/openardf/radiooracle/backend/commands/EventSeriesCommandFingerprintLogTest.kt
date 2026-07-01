@@ -63,8 +63,8 @@ class EventSeriesCommandFingerprintLogTest {
         assertEquals(
             listOf(
                 "series-package source=series:series-1 id=series-1 name=Championship members=1 bytes=1234",
-                "series-package-member source=series:series-1 series=series-1 position=1 event=day-1 order=0 " +
-                    "path=events/day-1.rom.json display=Day 1 start=2026-06-20T09:00 format=Classic " +
+                "series-package-member source=series:series-1 series=series-1 position=1 seriesRace=day-1 order=0 " +
+                    "raceFilePath=events/day-1.rom.json display=Day 1 start=2026-06-20T09:00 format=Classic " +
                     "race=Day 1 raceStart=2026-06-20T09:00 type=CLASSIC level=PRACTICE band=M80 " +
                     "timeLimit=7200 link=series-1/day-1"
             ),

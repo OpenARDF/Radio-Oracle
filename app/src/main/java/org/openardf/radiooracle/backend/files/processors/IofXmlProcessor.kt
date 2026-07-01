@@ -522,9 +522,9 @@ object IofXmlProcessor : FormatProcessor {
 
     private fun IofXmlCompetitorMatchIssue.androidMessage(): String =
         when (this) {
-            IofXmlCompetitorMatchIssue.UNKNOWN_CLASS -> "Class not found in this event."
+            IofXmlCompetitorMatchIssue.UNKNOWN_CLASS -> "Class not found in this race."
             IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD -> "Control card missing; matched by another identifier."
-            IofXmlCompetitorMatchIssue.UNKNOWN_COMPETITOR -> "Competitor not found in this event."
+            IofXmlCompetitorMatchIssue.UNKNOWN_COMPETITOR -> "Competitor not found in this race."
             IofXmlCompetitorMatchIssue.DUPLICATE_MATCH -> "Multiple competitors match this IOF row."
         }
 
