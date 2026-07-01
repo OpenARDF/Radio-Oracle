@@ -174,8 +174,19 @@ object ProtectedIdealOrderRules {
     private fun String.expandedIdealOrderTokens(): List<String> {
         val normalized = normalizedIdealOrderToken() ?: return emptyList()
         val digits = normalized.filter(Char::isDigit).takeIf { it.isNotBlank() }
+        val foxNumber = ControlRoleLabelRules.foxNumber(normalized)
         return buildList {
             add(normalized)
+            foxNumber?.let { number ->
+                add(number.toString())
+                addAll(ControlRoleLabelRules.foxAliasTokens(number))
+                when (number) {
+                    in 1..5 -> {
+                        add((30 + number).toString())
+                        add((40 + number).toString())
+                    }
+                }
+            }
             digits?.toIntOrNull()?.let { number ->
                 add(number.toString())
                 when (number) {

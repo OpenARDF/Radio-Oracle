@@ -1707,6 +1707,44 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun resolvesProtectedCoordinatesByMorseFoxAliasesWhenStoredControlIdsDiffer() {
+        val projectFile = projectFile(
+            foxCount = 3,
+            publicLabels = listOf("MOE", "moi", "Mos"),
+            siCodes = listOf(101, 102, 103)
+        )
+        val protectedInfo = protectedInfo(foxCount = 3).copy(
+            controlPoints = protectedInfo(foxCount = 3).controlPoints.map { control ->
+                if (control.type == ControlPointType.BEACON) {
+                    control.copy(controlId = "stale-beacon", label = "M")
+                } else {
+                    control.copy(controlId = "stale-${control.label}", label = "Fox${control.label}")
+                }
+            },
+            courseObjects = protectedInfo(foxCount = 3).courseObjects.map { courseObject ->
+                when (courseObject.type) {
+                    ProtectedCourseObjectType.CONTROL -> courseObject.copy(
+                        id = "stale-object-${courseObject.label}",
+                        label = "Fox${courseObject.label}"
+                    )
+                    ProtectedCourseObjectType.BEACON -> courseObject.copy(id = "stale-beacon", label = "M")
+                    else -> courseObject
+                }
+            }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = "MOE moi Mos Beacon"
+        )
+
+        assertTrue(summary.missingElements.none { it.contains("Location latitude/longitude is missing") })
+        assertEquals(listOf("MOE", "moi", "Mos"), summary.waitRows.map { it.controlLabel })
+    }
+
+    @Test
     fun resolvesImportedProtectedIdealOrderWhenCategoryHasNoAssignedControls() {
         val projectFile = projectFile(
             foxCount = 3,

@@ -73,6 +73,10 @@ class ProtectedIdealOrderRulesTest {
             ProtectedIdealOrderRules.resolveControlIds("31 32 Beacon", controls)
         )
         assertEquals(
+            listOf("control-fox-1", "control-fox-2", "control-beacon"),
+            ProtectedIdealOrderRules.resolveControlIds("MOE moi Beacon", controls)
+        )
+        assertEquals(
             listOf("control-sprint-1"),
             ProtectedIdealOrderRules.resolveControlIds(
                 "S1",

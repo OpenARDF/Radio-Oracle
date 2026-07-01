@@ -14733,28 +14733,18 @@ private fun String.sprintDisplaySlot(): SprintControlDisplaySlot? {
             SprintControlDisplaySlot(3, 0)
         sprintFastNumber() != null -> SprintControlDisplaySlot(2, sprintFastNumber() ?: 0)
         sprintSlowNumber() != null -> SprintControlDisplaySlot(0, sprintSlowNumber() ?: 0)
-        normalized.contains("FAST") -> SprintControlDisplaySlot(2, normalized.sprintLabelNumber() ?: Int.MAX_VALUE)
+        normalized.contains("FAST") -> SprintControlDisplaySlot(2, Int.MAX_VALUE)
         else -> null
     }
 }
 
 private fun String.sprintSlowNumber(): Int? {
-    val normalized = trim().uppercase()
-    if (normalized.endsWith("F") || normalized.startsWith("F") || normalized.contains("FAST")) {
-        return null
-    }
-    return normalized.sprintLabelNumber()
+    return DesktopCoursePointLabelClassifier.sprintSlowFoxNumber(this)
 }
 
 private fun String.sprintFastNumber(): Int? {
-    val normalized = trim().uppercase()
-    val suffix = normalized.takeIf { it.endsWith("F") }?.dropLast(1)?.toIntOrNull()
-    val prefix = normalized.takeIf { it.startsWith("F") }?.drop(1)?.toIntOrNull()
-    return (suffix ?: prefix ?: normalized.takeIf { it.contains("FAST") }?.sprintLabelNumber())?.takeIf { it in 1..5 }
+    return DesktopCoursePointLabelClassifier.sprintFastFoxNumber(this)
 }
-
-private fun String.sprintLabelNumber(): Int? =
-    Regex("""\b([1-5])\b""").find(this)?.groupValues?.get(1)?.toIntOrNull()
 
 @Composable
 private fun KmlMoveCoursePanel() {

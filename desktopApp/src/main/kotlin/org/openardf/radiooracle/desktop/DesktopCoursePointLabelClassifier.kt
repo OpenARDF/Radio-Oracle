@@ -24,6 +24,8 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
+
 object DesktopCoursePointLabelClassifier {
     fun isCourseEndpointName(name: String): Boolean =
         isCourseStartName(name) || isCourseFinishName(name)
@@ -65,7 +67,7 @@ object DesktopCoursePointLabelClassifier {
         if (normalized.endsWith("F") || normalized.startsWith("F") || normalized.contains("FAST")) {
             return null
         }
-        return normalized.sprintLabelNumber()?.takeIf { it in 1..5 }
+        return ControlRoleLabelRules.foxNumber(name)?.takeIf { it in 1..5 }
     }
 
     fun sprintFastFoxNumber(name: String): Int? {

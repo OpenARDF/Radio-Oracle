@@ -29,6 +29,7 @@ import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.CourseRuleRequirement
 import org.openardf.radiooracle.shared.event.CourseSpacingRuleSet
+import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventControlPoint
@@ -3230,15 +3231,9 @@ object DesktopCourseAnalyzer {
     }
 
     private fun classicSlotIndex(control: EventControl): Int? {
-        val numericLabel = listOf(control.publicLabel, control.label)
-            .firstNotNullOfOrNull { label -> label?.filter(Char::isDigit)?.takeIf { it.isNotBlank() }?.toIntOrNull() }
-        numericLabel?.let { label ->
-            when (label) {
-                in 1..5 -> return label - 1
-                in 31..35 -> return label - 31
-                in 41..45 -> return label - 41
-            }
-        }
+        listOfNotNull(control.publicLabel, control.label)
+            .firstNotNullOfOrNull(::classicSlotIndexForLabel)
+            ?.let { return it }
         return when (control.siCode) {
             in 31..35 -> control.siCode - 31
             in 41..45 -> control.siCode - 41
@@ -3253,7 +3248,9 @@ object DesktopCourseAnalyzer {
     }
 
     private fun classicSlotIndexForLabel(label: String): Int? {
-        val number = label.filter(Char::isDigit).takeIf { it.isNotBlank() }?.toIntOrNull() ?: return null
+        val number = ControlRoleLabelRules.foxNumber(label)
+            ?: label.filter(Char::isDigit).takeIf { it.isNotBlank() }?.toIntOrNull()
+            ?: return null
         return when (number) {
             in 1..5 -> number - 1
             in 31..35 -> number - 31
@@ -3264,7 +3261,11 @@ object DesktopCourseAnalyzer {
 
     private fun EventControl.isSprintFastFox(): Boolean =
         type == ControlPointType.CONTROL &&
-            (siCode in 41..45 || label.trim().uppercase().startsWith("F") || publicLabel.orEmpty().trim().uppercase().startsWith("F"))
+            (
+                siCode in 41..45 ||
+                    DesktopCoursePointLabelClassifier.sprintFastFoxNumber(label) != null ||
+                    DesktopCoursePointLabelClassifier.sprintFastFoxNumber(publicLabel.orEmpty()) != null
+            )
 
     private fun factorial(value: Int): Int =
         if (value <= 1) 1 else (2..value).fold(1) { acc, next -> acc * next }
@@ -3881,8 +3882,19 @@ object DesktopCourseAnalyzer {
     private fun String.expandedProtectedCoordinateTokens(): List<String> {
         val normalized = normalizedProtectedCoordinateToken() ?: return emptyList()
         val digits = normalized.filter(Char::isDigit).takeIf { it.isNotBlank() }
+        val foxNumber = ControlRoleLabelRules.foxNumber(normalized)
         return buildList {
             add(normalized)
+            foxNumber?.let { number ->
+                add(number.toString())
+                addAll(ControlRoleLabelRules.foxAliasTokens(number))
+                when (number) {
+                    in 1..5 -> {
+                        add((30 + number).toString())
+                        add((40 + number).toString())
+                    }
+                }
+            }
             digits?.toIntOrNull()?.let { number ->
                 add(number.toString())
                 when (number) {
