@@ -20,6 +20,25 @@ This applies to changes in:
 - import/export behavior that would make newly produced files harder for other
   standards-aware tools to read.
 
+## IOF XML Extension Rule
+
+Radio-Oracle targets schema-valid IOF XML 3.0 for IOF interchange. Radio
+Orienteering concepts that IOF XML does not define, including transmitter roles,
+finish and spectator beacons, exclusion zones, frequency, modulation, antenna
+polarization, power levels, and transmitter schedules, must use IOF
+`Extensions` with a non-IOF namespace instead of new IOF-core elements.
+
+The planned Radio Orienteering extension namespace is:
+
+```xml
+xmlns:ro="https://openardf.org/xml/radioorienteering/iof-extensions/1.0"
+```
+
+The namespace URI uses an OpenARDF-controlled domain for stable ownership, but
+the path names the sport vocabulary. Do not use IOF-owned namespace names for
+Radio-Oracle or Radio Orienteering extensions unless IOF publishes and owns that
+vocabulary.
+
 ## Required workflow
 
 Before merging a Radio-Oracle change that changes interchange behavior:

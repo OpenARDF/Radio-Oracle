@@ -76,6 +76,55 @@ changing ARDF JSON, ARDF XML, IOF mapping, import/export semantics, or
 standards-facing event data shapes. The same policy is a required pre-deployment
 inspection gate for every Android and desktop release candidate.
 
+### IOF XML 3.0 And Radio Orienteering Extensions
+
+IOF XML 3.0 remains the standards target for orienteering interchange. Keep IOF
+core elements schema-valid and semantically plain: starts, finishes, ordinary
+controls, course sequences, control positions, lengths, climbs, start lists,
+entry lists, and result lists should use the IOF fields defined by the IOF 3.0
+schema.
+
+Radio Orienteering concepts that IOF XML does not natively model must not be
+encoded by inventing IOF-core elements or overloading IOF fields with unrelated
+meaning. This includes finish beacons, spectator beacons, transmitter-specific
+roles, exclusion zones around start/finish/transmitters, power levels, antenna
+polarization, frequencies, modulation types, transmitter schedules, and similar
+radio-specific data.
+
+Use IOF `Extensions` with a Radio Orienteering namespace for those fields. The
+planned namespace is:
+
+```xml
+xmlns:ro="https://openardf.org/xml/radioorienteering/iof-extensions/1.0"
+```
+
+The `openardf.org` domain is used because it is controlled by the project owner,
+while the namespace path names the sport vocabulary rather than the OpenARDF
+application. `radioorienteering.org` is not project-controlled, and informal
+labels such as `radio-o` should be reserved for prose or local shorthand rather
+than the namespace identity. The XML prefix should normally be `ro`; the URI is
+the stable namespace identifier.
+
+Place extensions on the nearest IOF element that owns the concept:
+
+- `Control/Extensions` for transmitter role, finish beacon, spectator beacon,
+  frequency, modulation, polarization, power, schedule, and control-local
+  exclusion zones.
+- `CourseControl/Extensions` for course-specific requirements for a particular
+  appearance of a transmitter/control.
+- `Course/Extensions` for course-wide Radio Orienteering rules.
+- `RaceCourseData/Extensions` or event-level `Extensions` for race-wide radio
+  rules and defaults.
+
+Imports should validate the IOF document first, parse supported IOF core data,
+then parse recognized `ro:*` extension elements. Unrecognized but schema-valid
+IOF content and unrecognized Radio Orienteering extensions should be shown in
+the import preview as unsupported/preserved data rather than silently discarded.
+Exports should always remain valid IOF XML 3.0 documents, with Radio
+Orienteering extension data treated as optional enhancement data rather than the
+primary full-fidelity Radio-Oracle exchange format. Use Event Files for
+lossless Radio-Oracle-to-Radio-Oracle interchange.
+
 ## Completed Milestones
 
 These items were roadmap goals earlier, but are now implemented enough that they
