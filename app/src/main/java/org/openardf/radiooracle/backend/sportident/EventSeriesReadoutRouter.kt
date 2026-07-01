@@ -34,7 +34,7 @@ data class EventSeriesReadoutMemberData(
     val raceData: RaceData
 )
 
-/** Routing outcome for an SI card read while an Event Series is active. */
+/** Routing outcome for an SI card read while a Race Series is active. */
 sealed class EventSeriesReadoutRoute {
     data class Matched(
         val memberData: EventSeriesReadoutMemberData,

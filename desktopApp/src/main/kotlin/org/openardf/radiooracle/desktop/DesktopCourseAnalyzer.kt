@@ -312,7 +312,7 @@ enum class DesktopCourseMetricStatus {
  * so map data can nullify a calculated route and wait-time estimates remain advisory.
  *
  * Estimated times use an elite-competitor baseline pace by race format, category age/gender speed
- * adjustments, and the event-wide compensation factor, then convert each leg to effective length
+ * adjustments, and the race-wide compensation factor, then convert each leg to effective length
  * when elevation is available. Fatigue is not part of ideal-route selection; it can affect ideal
  * time, but the current estimate does not apply a separate accumulated-fatigue adjustment.
  */
@@ -342,7 +342,7 @@ object DesktopCourseAnalyzer {
     private const val MAP_KNOWLEDGE_NO_WAIT_LIMITATION_NOTE =
         "The analyzer does not currently know map passability, so out-of-bounds areas, dense vegetation, water, uncrossable features, and other impediments can make the true on-foot route and timing differ from this estimate."
     private const val SPEED_MODEL_NOTE =
-        "Estimated times use an elite-competitor baseline pace by race format, then apply a category age/gender multiplier and the event-wide Course Analyzer speed factor. Imported KML/KMZ SS=#.## speed specifiers on route objects replace the event-wide factor for the following leg only. When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not part of ideal-route selection; it can affect ideal time, but this estimate does not apply a separate accumulated-fatigue adjustment."
+        "Estimated times use an elite-competitor baseline pace by race format, then apply a category age/gender multiplier and the race-wide Course Analyzer speed factor. Imported KML/KMZ SS=#.## speed specifiers on route objects replace the race-wide factor for the following leg only. When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not part of ideal-route selection; it can affect ideal time, but this estimate does not apply a separate accumulated-fatigue adjustment."
     private const val CLASSIC_WAIT_TIMING_NOTE =
         "For Classic-style fox controls, timing assumes the competitor waits if the fox is off the air, then spends 30 seconds finding and punching before departing for the next leg; if the fox is already transmitting at arrival, timing assumes the competitor runs straight to it and punches without extra delay. Any service delay affects later arrival phases."
     private val CATEGORY_SPEED_FACTOR_TABLE = DesktopCourseSpeedFactors.provisionalCategoryTable
@@ -461,7 +461,7 @@ object DesktopCourseAnalyzer {
         val missing = mutableListOf<String>()
 
         if (protectedCourseInfo == null) {
-            missing += "Route data is locked by the Event Password or has not been imported for ${category.name}."
+            missing += "Route data is locked by the Race Password or has not been imported for ${category.name}."
         }
         val courseObjectPoints = protectedCourseInfo?.effectiveCourseObjectPoints().orEmpty()
         val legSpeedFactors = protectedCourseInfo?.legSpeedFactors() ?: CourseLegSpeedFactors.Empty
@@ -1373,7 +1373,7 @@ object DesktopCourseAnalyzer {
         }
         val waitTimingNote = if (includeWaitAnalysis) "$CLASSIC_WAIT_TIMING_NOTE " else ""
         val mapKnowledgeNote = mapKnowledgeLimitationNote(includeWaitAnalysis)
-        return "This section analyzes the route currently saved for the category in the Event File. Leg lengths are taken from the saved route geometry, and $splitText " +
+        return "This section analyzes the route currently saved for the category in the Race File. Leg lengths are taken from the saved route geometry, and $splitText " +
             "The primary comparison value is ${analysis.measurementLabel.lowercase()}; " +
             if (analysis.effectiveLengthMeters != null) {
                 "the Elevation Cache data is complete, so effective length is calculated as horizontal length plus ten times total climb. $SPEED_MODEL_NOTE $waitTimingNote$ELEVATION_CACHE_RESOLUTION_NOTE $mapKnowledgeNote"
@@ -1466,7 +1466,7 @@ object DesktopCourseAnalyzer {
             " Assumed running speed is ${twoDecimals(speedModel.effectiveSpeedMetersPerSecond)} m/s: " +
                 "${twoDecimals(speedModel.formatSpeedMetersPerSecond)} m/s race-format baseline x " +
                 "${speedModel.categoryModelLabel} category multiplier ${twoDecimals(speedModel.categorySpeedMultiplier)} x " +
-                "event speed factor ${twoDecimals(speedModel.compensationFactor)}. The event speed factor is the default event-wide adjustment for terrain, weather, or other conditions; below 1.00 slows category estimates, and above 1.00 speeds them. Imported KML/KMZ SS=#.## speed specifiers replace the event factor for the following leg only."
+                "race speed factor ${twoDecimals(speedModel.compensationFactor)}. The race speed factor is the default race-wide adjustment for terrain, weather, or other conditions; below 1.00 slows category estimates, and above 1.00 speeds them. Imported KML/KMZ SS=#.## speed specifiers replace the race factor for the following leg only."
         val waitImprovementText = if (includeWaitAnalysis) {
             waitRenumbering
             ?.takeIf { it.improvesWait }
@@ -3170,7 +3170,7 @@ object DesktopCourseAnalyzer {
         }
         // Do not also apply a separate gradient-speed model here. Effective length is the elevation
         // compensation: horizontal distance plus ten times positive climb, divided by format pace.
-        // KML/KMZ SS values replace only the event-wide speed factor on the leg that follows the
+        // KML/KMZ SS values replace only the race-wide speed factor on the leg that follows the
         // annotated route object; they do not add a second elevation-gradient adjustment.
         val movementMeters = horizontal + 10.0 * climb
         return movementMeters / speedModel.speedMetersPerSecond(speedFactorOverride)

@@ -80,6 +80,6 @@ abstract class EventDatabase : RoomDatabase() {
     abstract fun resultDao(): ResultDao
     /** DAO for live-result service settings. */
     abstract fun resultServiceDao(): ResultServiceDao
-    /** DAO for Android-local Event Series membership. */
+    /** DAO for Android-local Race Series membership. */
     abstract fun eventSeriesDao(): EventSeriesDao
 }

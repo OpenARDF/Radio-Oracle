@@ -47,7 +47,7 @@ data class EventSeriesPackageEventFingerprint(
     val seriesLink: EventSeriesLink?
 )
 
-/** Shared semantic comparison hook for Event Series packages from Android or desktop ZIP adapters. */
+/** Shared semantic comparison hook for Race Series packages from Android or desktop ZIP adapters. */
 object EventSeriesPackageFingerprints {
     fun fromTextEntries(entries: Map<String, String>): EventSeriesPackageFingerprint {
         val normalizedEntries = entries.mapKeys { (path, _) ->
@@ -57,7 +57,7 @@ object EventSeriesPackageFingerprints {
             .filter { (path, _) -> isEventSeriesFileName(path.substringAfterLast('/')) }
             .also { manifestEntries ->
                 require(manifestEntries.size == 1) {
-                    "Event Series package must contain exactly one series manifest."
+                    "Race Series package must contain exactly one series manifest."
                 }
             }
             .single()
@@ -70,7 +70,7 @@ object EventSeriesPackageFingerprints {
                 val eventPath = EventSeriesPackageContents.normalizedPackagePath(event.eventFilePath)
                 val projectFile = EventProjectFileJson.decode(
                     requireNotNull(normalizedEntries[eventPath]) {
-                        "Event Series package is missing Event File entry: $eventPath"
+                        "Race Series package is missing Race File entry: $eventPath"
                     }
                 )
                 EventSeriesPackageEventFingerprint(

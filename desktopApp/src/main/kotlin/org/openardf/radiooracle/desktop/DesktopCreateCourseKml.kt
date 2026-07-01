@@ -240,7 +240,7 @@ object DesktopCreateCourseKml {
 
     private fun instructions(eventType: RaceType): String =
         """
-        This KML is a Radio-Oracle starter file for a ${eventType.createCourseTypeLabel()} event. It contains the standard course elements for the selected event type, clustered near the requested location so they do not overlap. Spectator is included for Sprint only.
+        This KML is a Radio-Oracle starter file for a ${eventType.createCourseTypeLabel()} race. It contains the standard course elements for the selected race type, clustered near the requested location so they do not overlap. Spectator is included for Sprint only.
 
         Use Google Earth, OCAD, or another KML editor to move each point to the real course design. Keep the point names recognizable so Radio-Oracle can match them when importing course data.
 

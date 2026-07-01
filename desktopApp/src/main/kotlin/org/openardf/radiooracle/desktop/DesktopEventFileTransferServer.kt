@@ -88,7 +88,7 @@ class DesktopEventFileTransferServer(
         }
 
     val port: Int
-        get() = server?.address?.port ?: error("Event File transfer server is not running.")
+        get() = server?.address?.port ?: error("Race File transfer server is not running.")
 
     @Synchronized
     fun start(address: DesktopEventFileTransferAddress = addresses.first()): DesktopEventFileTransferSession {

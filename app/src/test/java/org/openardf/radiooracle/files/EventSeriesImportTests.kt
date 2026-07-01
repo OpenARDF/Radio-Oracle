@@ -84,7 +84,7 @@ class EventSeriesImportTests {
             )
         }
 
-        assertEquals("Event Series package does not contain a series manifest.", error.message)
+        assertEquals("Race Series package does not contain a series manifest.", error.message)
     }
 
     @Test
@@ -101,7 +101,7 @@ class EventSeriesImportTests {
             )
         }
 
-        assertEquals("Event Series package contains more than one manifest.", error.message)
+        assertEquals("Race Series package contains more than one manifest.", error.message)
     }
 
     @Test
@@ -114,7 +114,7 @@ class EventSeriesImportTests {
             )
         }
 
-        assertEquals("Event Series package contains an unsafe path: ../Championship.series.radio-oracle.json", error.message)
+        assertEquals("Race Series package contains an unsafe path: ../Championship.series.radio-oracle.json", error.message)
     }
 
     @Test
@@ -164,7 +164,7 @@ class EventSeriesImportTests {
             )
         }
 
-        assertEquals("Missing Event File for series event 'Day 2'.", error.message)
+        assertEquals("Missing Race File for series race 'Day 2'.", error.message)
     }
 
     @Test
@@ -187,7 +187,7 @@ class EventSeriesImportTests {
             )
         }
 
-        assertEquals("Event File 'Day 2' links to a different Event Series member.", error.message)
+        assertEquals("Race File 'Day 2' links to a different Race Series member.", error.message)
     }
 
     private fun seriesManifest(): EventSeriesFile =

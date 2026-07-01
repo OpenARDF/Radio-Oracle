@@ -39,7 +39,7 @@ import java.io.InputStream
 import java.security.MessageDigest
 import java.util.zip.ZipInputStream
 
-/** Prepared Android import for a desktop-authored Event Series package. */
+/** Prepared Android import for a desktop-authored Race Series package. */
 data class AndroidEventSeriesImport(
     val series: EventSeries,
     val memberImports: List<AndroidEventSeriesMemberImport>
@@ -48,19 +48,19 @@ data class AndroidEventSeriesImport(
     val races: List<RaceData> get() = memberImports.map { it.raceData }
 }
 
-/** One imported series member Event File plus its Android-local mapping row. */
+/** One imported series member Race File plus its Android-local mapping row. */
 data class AndroidEventSeriesMemberImport(
     val member: EventSeriesMember,
     val raceData: RaceData
 )
 
-/** Event Series package contents extracted from a desktop-created zip file. */
+/** Race Series package contents extracted from a desktop-created zip file. */
 data class AndroidEventSeriesPackage(
     val manifestJson: String,
     val eventFileJsonByPath: Map<String, String>
 )
 
-/** Converts a manifest plus member Event Files into Android-local race imports and series mappings. */
+/** Converts a manifest plus member Race Files into Android-local race imports and series mappings. */
 object EventSeriesImport {
     fun prepareZipPackage(inputStream: InputStream): AndroidEventSeriesImport {
         val eventSeriesPackage = readZipPackage(inputStream)
@@ -82,7 +82,7 @@ object EventSeriesImport {
                         when (packageEntry.kind) {
                             EventSeriesPackageEntryKind.MANIFEST -> {
                                 require(manifestJson == null) {
-                                    "Event Series package contains more than one manifest."
+                                    "Race Series package contains more than one manifest."
                                 }
                                 manifestEntryPath = packageEntry.path
                                 manifestJson = text
@@ -101,7 +101,7 @@ object EventSeriesImport {
         }
 
         val resolvedManifestPath = manifestEntryPath
-            ?: throw IllegalArgumentException("Event Series package does not contain a series manifest.")
+            ?: throw IllegalArgumentException("Race Series package does not contain a series manifest.")
         val manifestFolder = resolvedManifestPath.substringBeforeLast('/', missingDelimiterValue = "")
         val eventFileJsonByPath = jsonEntries.mapKeys { (entryPath, _) ->
             if (manifestFolder.isBlank()) {
@@ -125,7 +125,7 @@ object EventSeriesImport {
             .mapKeys { (path, _) -> EventSeriesPackageContents.normalizedPackagePath(path) }
         val memberImports = seriesFile.sortedEvents().map { event ->
             val eventJson = eventFilesByPath[EventSeriesPackageContents.normalizedPackagePath(event.eventFilePath)]
-                ?: throw IllegalArgumentException("Missing Event File for series event '${event.displayName}'.")
+                ?: throw IllegalArgumentException("Missing Race File for series race '${event.displayName}'.")
             val projectFile = EventProjectFileJson.decode(eventJson)
             validateSeriesLink(projectFile, seriesFile.seriesId, event)
             val raceData = projectFile.raceData
@@ -168,7 +168,7 @@ object EventSeriesImport {
     ) {
         val link = projectFile.seriesLink ?: return
         require(link.seriesId == seriesId && link.seriesEventId == event.seriesEventId) {
-            "Event File '${event.displayName}' links to a different Event Series member."
+            "Race File '${event.displayName}' links to a different Race Series member."
         }
     }
 }

@@ -79,7 +79,7 @@ class EventCompetitorDetailsTest {
 
         assertEquals(
             listOf(
-                "Apparent birth year/category discrepancy: competitor appears to be 16 on the event date, too young for M50."
+                "Apparent birth year/category discrepancy: competitor appears to be 16 on the race date, too young for M50."
             ),
             rows.single().warningReasons
         )

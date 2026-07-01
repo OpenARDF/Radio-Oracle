@@ -26,10 +26,10 @@ package org.openardf.radiooracle.desktop
 
 import java.nio.file.Path
 
-/** Save-time guard for edits that redefine an already loaded Event File. */
+/** Save-time guard for edits that redefine an already loaded Race File. */
 object DesktopEventDefinitionSaveProtection {
     const val statusText =
-        "Event File definition changed; choose Save As New Event File or explicitly overwrite the current file."
+        "Race File definition changed; choose Save As New Race File or explicitly overwrite the current file."
 
     fun shouldPromptBeforeSave(
         currentPath: Path?,

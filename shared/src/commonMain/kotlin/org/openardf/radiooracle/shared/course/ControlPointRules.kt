@@ -95,7 +95,7 @@ object ControlPointRules {
             )
         }
 
-    /** Sort group used by Assigned Controls displays and Event File public-control ordering. */
+    /** Sort group used by Assigned Controls displays and Race File public-control ordering. */
     fun assignedControlSortGroup(siCode: Int, type: ControlPointType, raceType: RaceType): Int =
         when (raceType) {
             RaceType.SPRINT -> when (type) {

@@ -26,7 +26,7 @@ package org.openardf.radiooracle.shared.event
 
 import org.openardf.radiooracle.shared.domain.ControlPointType
 
-/** Shared global-control row prepared for desktop and other event-admin surfaces. */
+/** Shared global-control row prepared for desktop and other race-admin surfaces. */
 data class EventControlDetails(
     val id: String,
     val label: String,

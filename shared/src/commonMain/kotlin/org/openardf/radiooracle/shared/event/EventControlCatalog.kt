@@ -115,7 +115,7 @@ object EventControlCatalog {
     }
 
     /**
-     * Converts pre-scored-control Event Files from the old, unenforced
+     * Converts pre-scored-control Race Files from the old, unenforced
      * "mandatory" checkbox into the new radio-o scoring model.
      *
      * Legacy mandatory=true is preserved as "not scored" because that was the

@@ -6,12 +6,12 @@ packaging is best-effort for this beta.
 
 ## Functional Acceptance
 
-- Create, open, edit, save, close, reopen, and export `.rom.json` Event Files.
+- Create, open, edit, save, close, reopen, and export `.rom.json` Race Files.
 - Manage races, categories, control points, aliases, competitors, readouts,
   start lists, in-forest state, and results from the desktop UI.
 - Import canonical competitor CSV and ARDFEvent registration CSV, including
   category-less competitors and placeholder-category warnings.
-- Export canonical event CSV, ROBIS start-list CSV, ARDFEvent-style results
+- Export canonical race CSV, ROBIS start-list CSV, ARDFEvent-style results
   CSV, ARDF JSON, Android race-backup JSON, live/final result JSON, IOF XML,
   TXT, and HTML outputs.
 - Download multiple SI cards from a READOUT/SI MASTER station. Station
@@ -22,7 +22,7 @@ packaging is best-effort for this beta.
 - Manually send ROBIS live results and verify background sending can be enabled
   and disabled visibly.
 - Serve loopback-only local result/category/start/in-forest pages and JSON
-  endpoints from the open desktop Event File.
+  endpoints from the open desktop Race File.
 
 ## Release Gates
 
@@ -45,11 +45,11 @@ packaging is best-effort for this beta.
 - macOS: packaged app opens, reads the attached SI download box, reports station
   warnings without blocking downloads, and prints a finish ticket through the
   selected system printer.
-- Windows: packaged app opens, loads a sample Event File, exports CSV/JSON/XML
+- Windows: packaged app opens, loads a sample Race File, exports CSV/JSON/XML
   files, and runs the desktop smoke workflow on x64 Intel hardware and, when
   available, ARM64 hardware.
 - Linux: packaged app opens on x64 Intel hardware and, when available, ARM64
-  hardware. Verify at least app launch and sample Event File loading before
+  hardware. Verify at least app launch and sample Race File loading before
   calling Linux support validated.
 - Android regression: run the Android unit gate and smoke import/export/readout
   basics so desktop-shared changes do not regress the production baseline.

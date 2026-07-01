@@ -147,7 +147,7 @@ data class EventStartListQuality(
         /**
          * Evaluates the current start times against the same settings used by
          * the generator. This method deliberately does not re-run or optimize
-         * the draw. It only grades the Event File as saved, which lets manual
+         * the draw. It only grades the Race File as saved, which lets manual
          * edits and imported start lists receive the same color/score treatment.
          */
         fun evaluate(raceData: EventRaceData, settings: StartDrawSettings): EventStartListQuality {

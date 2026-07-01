@@ -78,7 +78,7 @@ object DesktopCourseOverlayExporter {
         require(target.finishExclusionRadiusMeters >= 0) { "Finish exclusion radius cannot be negative." }
         val courseInfos = decryptProtectedCourseInfo(projectFile, password.trim())
         require(courseInfos.isNotEmpty()) {
-            "No protected course locations are stored in this Event File."
+            "No protected course locations are stored in this Race File."
         }
         val baseMap = OomBaseMap.read(target.baseMapPath)
         val overlayData = CourseOverlayData.from(projectFile, courseInfos.values, baseMap)
@@ -138,7 +138,7 @@ object DesktopCourseOverlayExporter {
         projectFile: EventProjectFile,
         password: String
     ): Map<String, ProtectedCourseInfo> {
-        require(password.isNotBlank()) { "Event Password cannot be blank." }
+        require(password.isNotBlank()) { "Race Password cannot be blank." }
         return projectFile.raceData.categories.mapNotNull { categoryData ->
             categoryData.category.encryptedCourseInfo
                 ?.takeIf { it.isNotBlank() }

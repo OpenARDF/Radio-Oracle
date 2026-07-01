@@ -225,7 +225,7 @@ class SelectedRaceViewModel : ViewModel() {
     }
 
     private fun currentRaceIdOrThrow(): UUID =
-        selectedRaceId ?: throw IllegalStateException("No event is selected.")
+        selectedRaceId ?: throw IllegalStateException("No race is selected.")
 
     suspend fun createSeriesFromCurrentRace(seriesName: String): EventSeriesData {
         val seriesData = dataProcessor.createEventSeriesFromRace(currentRaceIdOrThrow(), seriesName)

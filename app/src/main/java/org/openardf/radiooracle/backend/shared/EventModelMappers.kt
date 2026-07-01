@@ -62,7 +62,7 @@ import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
 
-/** Converts the Android Room race entity into the portable shared event model. */
+/** Converts the Android Room race entity into the portable shared race model. */
 fun Race.toEventRace(): EventRace =
     EventRace(
         id = id.toString(),
@@ -75,7 +75,7 @@ fun Race.toEventRace(): EventRace =
         timeLimitSeconds = timeLimit.seconds
     )
 
-/** Converts the Android Room category entity into the portable shared event model. */
+/** Converts the Android Room category entity into the portable shared race model. */
 fun Category.toEventCategory(): EventCategory =
     EventCategory(
         id = id.toString(),
@@ -93,7 +93,7 @@ fun Category.toEventCategory(): EventCategory =
         controlPointsString = controlPointsString
     )
 
-/** Converts the Android Room control-point entity into the portable shared event model. */
+/** Converts the Android Room control-point entity into the portable shared race model. */
 fun ControlPoint.toEventControlPoint(): EventControlPoint =
     EventControlPoint(
         id = id.toString(),
@@ -103,7 +103,7 @@ fun ControlPoint.toEventControlPoint(): EventControlPoint =
         order = order
     )
 
-/** Converts the Android Room alias entity into the portable shared event model. */
+/** Converts the Android Room alias entity into the portable shared race model. */
 fun Alias.toEventAlias(): EventAlias =
     EventAlias(
         id = id.toString(),
@@ -112,7 +112,7 @@ fun Alias.toEventAlias(): EventAlias =
         name = name
     )
 
-/** Converts the Android Room competitor entity into the portable shared event model. */
+/** Converts the Android Room competitor entity into the portable shared race model. */
 fun Competitor.toEventCompetitor(): EventCompetitor =
     EventCompetitor(
         id = id.toString(),
@@ -131,7 +131,7 @@ fun Competitor.toEventCompetitor(): EventCompetitor =
         bibNumber = bibNumber
     )
 
-/** Converts the Android Room punch entity into the portable shared event model. */
+/** Converts the Android Room punch entity into the portable shared race model. */
 fun Punch.toEventPunch(): EventPunch =
     EventPunch(
         id = id.toString(),
@@ -147,7 +147,7 @@ fun Punch.toEventPunch(): EventPunch =
         splitSeconds = split.seconds
     )
 
-/** Converts the Android Room result entity into the portable shared event model. */
+/** Converts the Android Room result entity into the portable shared race model. */
 fun Result.toEventResult(): EventResult =
     EventResult(
         id = id.toString(),
@@ -169,21 +169,21 @@ fun Result.toEventResult(): EventResult =
         place = place
     )
 
-/** Converts an Android alias-punch relation into the portable shared event model. */
+/** Converts an Android alias-punch relation into the portable shared race model. */
 fun AliasPunch.toEventAliasPunch(): EventAliasPunch =
     EventAliasPunch(
         punch = punch.toEventPunch(),
         alias = alias?.toEventAlias()
     )
 
-/** Converts an Android readout aggregate into the portable shared event model. */
+/** Converts an Android readout aggregate into the portable shared race model. */
 fun ReadoutData.toEventReadoutData(): EventReadoutData =
     EventReadoutData(
         result = result.toEventResult(),
         punches = punches.map { it.toEventAliasPunch() }
     )
 
-/** Converts an Android category aggregate into the portable shared event model. */
+/** Converts an Android category aggregate into the portable shared race model. */
 fun CategoryData.toEventCategoryData(): EventCategoryData =
     EventCategoryData(
         category = category.toEventCategory(),
@@ -191,21 +191,21 @@ fun CategoryData.toEventCategoryData(): EventCategoryData =
         competitors = competitors.map { it.toEventCompetitor() }
     )
 
-/** Converts an Android competitor/category relation into the portable shared event model. */
+/** Converts an Android competitor/category relation into the portable shared race model. */
 fun CompetitorCategory.toEventCompetitorCategory(): EventCompetitorCategory =
     EventCompetitorCategory(
         competitor = competitor.toEventCompetitor(),
         category = category?.toEventCategory()
     )
 
-/** Converts an Android competitor aggregate into the portable shared event model. */
+/** Converts an Android competitor aggregate into the portable shared race model. */
 fun CompetitorData.toEventCompetitorData(): EventCompetitorData =
     EventCompetitorData(
         competitorCategory = competitorCategory.toEventCompetitorCategory(),
         readoutData = readoutData?.toEventReadoutData()
     )
 
-/** Converts a complete Android Room race aggregate into the portable shared event model. */
+/** Converts a complete Android Room race aggregate into the portable shared race model. */
 fun RaceData.toEventRaceData(): EventRaceData {
     val raceData = EventRaceData(
         race = race.toEventRace(),

@@ -30,7 +30,7 @@ import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
-/** Shared read-only category row prepared for desktop and other event-admin surfaces. */
+/** Shared read-only category row prepared for desktop and other race-admin surfaces. */
 data class EventCategoryDetails(
     val id: String,
     val name: String,

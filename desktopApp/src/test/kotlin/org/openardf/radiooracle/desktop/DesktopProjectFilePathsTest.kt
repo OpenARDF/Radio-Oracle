@@ -128,7 +128,7 @@ class DesktopProjectFilePathsTest {
             DesktopProjectFilePaths.defaultProjectFileName("Demo/Event")
         )
         assertEquals(
-            "Event File.json",
+            "Race File.json",
             DesktopProjectFilePaths.defaultProjectFileName(" ")
         )
     }
@@ -160,7 +160,7 @@ class DesktopProjectFilePathsTest {
             DesktopProjectFilePaths.defaultAndroidEventJsonFileName("Demo/Event")
         )
         assertEquals(
-            "Event File.ardfjs",
+            "Race File.ardfjs",
             DesktopProjectFilePaths.defaultAndroidEventJsonFileName(" ")
         )
     }
@@ -176,7 +176,7 @@ class DesktopProjectFilePathsTest {
             DesktopProjectFilePaths.defaultCsvFileName("Demo/Event")
         )
         assertEquals(
-            "Event File.csv",
+            "Race File.csv",
             DesktopProjectFilePaths.defaultCsvFileName(" ")
         )
     }

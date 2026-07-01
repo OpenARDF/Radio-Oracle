@@ -40,7 +40,7 @@ object DesktopProtectedControlLocationUpdater {
     ): DesktopProtectedControlLocationUpdateResult {
         val trimmedPassword = password.trim()
         require(trimmedPassword.isNotEmpty()) {
-            "Event Password is required."
+            "Race Password is required."
         }
         val latitude = parseLatitude(latitudeText)
         val longitude = parseLongitude(longitudeText)
@@ -69,7 +69,7 @@ object DesktopProtectedControlLocationUpdater {
     ): DesktopProtectedControlLocationUpdateResult {
         val trimmedPassword = password.trim()
         require(trimmedPassword.isNotEmpty()) {
-            "Event Password is required."
+            "Race Password is required."
         }
         val uniqueUpdates = updates.distinctBy { it.controlId }
         require(uniqueUpdates.isNotEmpty()) {

@@ -85,7 +85,7 @@ class EventSeriesPackageFingerprintsTest {
             )
         }
 
-        assertEquals("Event Series package is missing Event File entry: events/day-1.rom.json", error.message)
+        assertEquals("Race Series package is missing Race File entry: events/day-1.rom.json", error.message)
     }
 
     private fun projectFile(

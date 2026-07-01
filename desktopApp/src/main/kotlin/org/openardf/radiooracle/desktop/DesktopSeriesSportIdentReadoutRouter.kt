@@ -197,7 +197,7 @@ object DesktopSeriesSportIdentReadoutRouter {
             return emptyList()
         }
         val seriesFolder = requireNotNull(manifestPath.parent) {
-            "Event Series manifest must have a parent folder."
+            "Race Series manifest must have a parent folder."
         }
         return seriesFile.sortedEvents().mapNotNull { event ->
             val eventPath = seriesFolder.resolve(event.eventFilePath).normalize()

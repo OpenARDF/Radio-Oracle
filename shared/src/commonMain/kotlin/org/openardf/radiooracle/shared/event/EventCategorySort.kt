@@ -24,7 +24,7 @@
 
 package org.openardf.radiooracle.shared.event
 
-/** Sort helpers for event-administration category lists. */
+/** Sort helpers for race-administration category lists. */
 object EventCategorySort {
     val byDisplayName: Comparator<EventCategoryData> =
         compareBy<EventCategoryData> { categoryNameKey(it.category.name) }

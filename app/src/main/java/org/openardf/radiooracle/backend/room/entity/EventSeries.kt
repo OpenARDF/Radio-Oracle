@@ -28,7 +28,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-/** Android-local record for one imported Event Series. */
+/** Android-local record for one imported Race Series. */
 @Entity(tableName = "event_series")
 data class EventSeries(
     @PrimaryKey

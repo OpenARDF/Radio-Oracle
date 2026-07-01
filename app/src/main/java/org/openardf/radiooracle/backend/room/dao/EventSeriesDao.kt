@@ -34,7 +34,7 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.EventSeriesData
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
-/** Room access methods for Android-local Event Series membership. */
+/** Room access methods for Android-local Race Series membership. */
 @Dao
 interface EventSeriesDao {
     /** Observes all locally imported series. */

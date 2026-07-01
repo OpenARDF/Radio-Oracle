@@ -31,7 +31,7 @@ import org.openardf.radiooracle.shared.domain.RaceType
 /** Creates shared project-file aggregates for new desktop and future non-Android projects. */
 object EventProjectFactory {
     /**
-     * Builds an empty Event File using the same conservative defaults as Android's new race model.
+     * Builds an empty Race File using the same conservative defaults as Android's new race model.
      *
      * The caller supplies IDs and time text so UI layers can choose platform-specific UUID and clock
      * sources while shared code owns the event defaults and aggregate shape.
@@ -46,7 +46,7 @@ object EventProjectFactory {
             "Race ID cannot be blank."
         }
         require(trimmedName.isNotEmpty()) {
-            "Event name cannot be blank."
+            "Race name cannot be blank."
         }
         require(startDateTimeIso.isNotBlank()) {
             "Race start date/time cannot be blank."
@@ -69,8 +69,8 @@ object EventProjectFactory {
                 competitorData = emptyList(),
                 unmatchedReadoutData = emptyList(),
                 /*
-                 * New Event Files should expose missing course setup immediately. Preset controls
-                 * can mask an incomplete Event File as valid-looking data, so organizers add or
+                 * New Race Files should expose missing course setup immediately. Preset controls
+                 * can mask an incomplete Race File as valid-looking data, so organizers add or
                  * import the real controls before setup can be considered complete.
                  */
                 controls = emptyList()

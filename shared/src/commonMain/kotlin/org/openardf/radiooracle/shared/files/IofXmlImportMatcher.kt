@@ -30,7 +30,7 @@ enum class IofXmlCompetitorMatchBasis {
     NAME
 }
 
-/** Non-fatal or fatal issue found while matching parsed IOF rows to an Event File. */
+/** Non-fatal or fatal issue found while matching parsed IOF rows to a Race File. */
 enum class IofXmlCompetitorMatchIssue {
     UNKNOWN_CLASS,
     MISSING_CONTROL_CARD,
@@ -46,25 +46,25 @@ data class IofXmlCompetitorMatch(
     val issues: Set<IofXmlCompetitorMatchIssue>
 )
 
-/** Parsed StartList row plus its best match in the current Event File. */
+/** Parsed StartList row plus its best match in the current Race File. */
 data class IofStartListMatchedEntry(
     val entry: IofStartListEntryPreview,
     val match: IofXmlCompetitorMatch
 )
 
-/** Parsed StartList plus per-row Event File matching information. */
+/** Parsed StartList plus per-row Race File matching information. */
 data class IofStartListMatchPreview(
     val source: IofStartListPreview,
     val entries: List<IofStartListMatchedEntry>
 )
 
-/** Parsed ResultList row plus its best match in the current Event File. */
+/** Parsed ResultList row plus its best match in the current Race File. */
 data class IofResultListMatchedEntry(
     val entry: IofResultListEntryPreview,
     val match: IofXmlCompetitorMatch
 )
 
-/** Parsed ResultList plus per-row Event File matching information. */
+/** Parsed ResultList plus per-row Race File matching information. */
 data class IofResultListMatchPreview(
     val source: IofResultListPreview,
     val entries: List<IofResultListMatchedEntry>

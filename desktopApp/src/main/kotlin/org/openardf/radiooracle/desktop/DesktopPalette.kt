@@ -74,18 +74,18 @@ object DesktopPalette {
  * Navigation destinations mirrored from the Android bottom navigation.
  *
  * The initial desktop app is intentionally a shell, but using the Android
- * vocabulary now keeps later event-admin screens familiar to existing users.
+ * vocabulary now keeps later race-admin screens familiar to existing users.
  */
 enum class DesktopSection(val label: String) {
     WorkflowHome("Radio-Oracle"),
-    EventFile("Event File"),
+    EventFile("Race File"),
     Races("Races"),
     Categories("Categories"),
     ProtectedCourseOrder("Course Order"),
     Competitors("Competitors"),
     StartList("Start List"),
-    Series("Event Series"),
-    SeriesEvents("Series Events"),
+    Series("Race Series"),
+    SeriesEvents("Series Races"),
     SeriesStartFairness("Series Start Fairness"),
     SeriesCompetitorMatching("Series Competitor Matching"),
     SeriesValidation("Series Validation"),
@@ -95,7 +95,7 @@ enum class DesktopSection(val label: String) {
     ElevationCache("Elevation Data"),
     ElevationCacheImport("Import Elevation Data"),
     Tools("More..."),
-    EventValidator("Event Validator"),
+    EventValidator("Race Validator"),
     KmlTools("Course Tools"),
     SportIdentTools("SPORTident"),
     SportIdentTimeSync("Time Sync"),

@@ -49,11 +49,11 @@ class DesktopProjectDiagnosticsTest {
     fun reportsClosedProjectState() {
         val diagnostics = DesktopProjectDiagnostics.from(null)
 
-        assertEquals("No Event File open", diagnostics.projectState)
+        assertEquals("No Race File open", diagnostics.projectState)
         assertEquals("", diagnostics.schemaText)
         assertEquals(0, diagnostics.categoryCount)
-        assertEquals("No Event File open", diagnostics.validationState)
-        assertEquals("No Event File open", diagnostics.liveResultPlanText)
+        assertEquals("No Race File open", diagnostics.validationState)
+        assertEquals("No Race File open", diagnostics.liveResultPlanText)
         assertTrue(diagnostics.validationIssues.isEmpty())
         assertTrue(diagnostics.betaLimitations.any { it.contains("SPORTident") })
         assertTrue(diagnostics.betaLimitations.any { it.contains("Android result-service configuration") })
@@ -64,7 +64,7 @@ class DesktopProjectDiagnosticsTest {
     fun reportsOpenProjectSummary() {
         val diagnostics = DesktopProjectDiagnostics.from(projectFile())
 
-        assertEquals("Event File open", diagnostics.projectState)
+        assertEquals("Race File open", diagnostics.projectState)
         assertEquals("Radio-Oracle schema 3", diagnostics.schemaText)
         assertEquals("race", diagnostics.raceId)
         assertEquals("Diagnostics Race", diagnostics.raceName)
@@ -94,7 +94,7 @@ class DesktopProjectDiagnosticsTest {
         val diagnostics = DesktopProjectDiagnostics.from(projectFile(raceName = ""))
 
         assertEquals("1 validation issue", diagnostics.validationState)
-        assertTrue(diagnostics.validationIssues.any { it.contains("Event name is blank") })
+        assertTrue(diagnostics.validationIssues.any { it.contains("Race name is blank") })
     }
 
     @Test

@@ -73,7 +73,7 @@ class RaceViewModel : ViewModel() {
         }
     }
 
-    /** Returns the local series name for this race when it belongs to a multi-event series. */
+    /** Returns the local series name for this race when it belongs to a multi-race series. */
     fun seriesNameForRace(raceId: UUID): String? = runBlocking {
         dataProcessor.getEventSeriesForRace(raceId)
             ?.series
@@ -92,21 +92,21 @@ class RaceViewModel : ViewModel() {
         dataProcessor.importRaceData(uri)
     }
 
-    /** Imports a full race backup from downloaded Event File JSON. */
+    /** Imports a full race backup from downloaded Race File JSON. */
     fun importRaceData(
         jsonString: String
     ) = runBlocking {
         dataProcessor.importRaceData(jsonString)
     }
 
-    /** Imports and saves a full Event Series package from a selected URI. */
+    /** Imports and saves a full Race Series package from a selected URI. */
     suspend fun importAndSaveEventSeriesPackage(uri: Uri): AndroidEventSeriesImport? {
         val eventSeriesImport = dataProcessor.importEventSeriesPackage(uri) ?: return null
         dataProcessor.saveEventSeriesImport(eventSeriesImport)
         return eventSeriesImport
     }
 
-    /** Imports and saves a full Event Series package downloaded from desktop transfer bytes. */
+    /** Imports and saves a full Race Series package downloaded from desktop transfer bytes. */
     suspend fun importAndSaveEventSeriesPackage(bytes: ByteArray): AndroidEventSeriesImport? {
         val eventSeriesImport = dataProcessor.importEventSeriesPackage(bytes) ?: return null
         dataProcessor.saveEventSeriesImport(eventSeriesImport)
@@ -126,7 +126,7 @@ class RaceViewModel : ViewModel() {
         dataProcessor.exportRaceData(uri, raceId)
     }
 
-    /** Exports a single Event File or the full Event Series package when the event is a series member. */
+    /** Exports a single Race File or the full Race Series package when the event is a series member. */
     fun exportRaceOrSeriesData(
         uri: Uri, raceId: UUID
     ) = runBlocking {
@@ -137,11 +137,11 @@ class RaceViewModel : ViewModel() {
     suspend fun exportRaceDataBytes(raceId: UUID): ByteArray =
         dataProcessor.exportRaceDataBytes(raceId)
 
-    /** Exports a single Event File or the full Event Series package as bytes. */
+    /** Exports a single Race File or the full Race Series package as bytes. */
     suspend fun exportRaceOrSeriesDataBytes(raceId: UUID): ByteArray =
         dataProcessor.exportRaceOrSeriesDataBytes(raceId)
 
-    /** Prepares the direct desktop upload for a single Event File or the containing Event Series package. */
+    /** Prepares the direct desktop upload for a single Race File or the containing Race Series package. */
     suspend fun desktopUploadForRaceOrSeries(raceId: UUID): DesktopFileTransferUpload =
         dataProcessor.desktopUploadForRaceOrSeries(raceId)
 

@@ -61,7 +61,7 @@ drift from the current `radio-o-standards` repository.
 The deployment check must:
 
 1. Review all release-candidate changes that affect ARDF JSON, ARDF XML, IOF
-   XML mapping, import/export behavior, or standards-facing event data.
+   XML mapping, import/export behavior, or standards-facing race data.
 2. Compare those changes with the current `radio-o-standards` schemas, examples,
    and README files.
 3. Record one of these outcomes in the release notes, deployment checklist, or
@@ -83,7 +83,7 @@ standards PR.
 
 ## Exceptions
 
-Private Event Files such as `.rom.json` may use Radio-Oracle-specific
+Private Race Files such as `.rom.json` may use Radio-Oracle-specific
 metadata when they are clearly not advertised as ARDF JSON or ARDF XML
-interchange files. Even then, Event File fields that duplicate standard
+interchange files. Even then, Race File fields that duplicate standard
 interchange concepts should stay easy to map back to `radio-o-standards`.

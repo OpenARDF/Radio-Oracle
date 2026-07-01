@@ -113,10 +113,10 @@ object DesktopProtectedCourseOrder {
         val trimmedOldPassword = oldPassword.trim()
         val trimmedNewPassword = newPassword.trim()
         require(trimmedOldPassword.isNotEmpty()) {
-            "Current Event Password cannot be blank."
+            "Current Race Password cannot be blank."
         }
         require(trimmedNewPassword.isNotEmpty()) {
-            "New Event Password cannot be blank."
+            "New Race Password cannot be blank."
         }
 
         val categories = projectFile.raceData.categories.map { categoryData ->

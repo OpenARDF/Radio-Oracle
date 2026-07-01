@@ -36,13 +36,13 @@ class EventProjectFactoryTest {
     fun createsEmptyProjectWithAndroidCompatibleRaceDefaults() {
         val projectFile = EventProjectFactory.createEmptyProject(
             raceId = "race-1",
-            raceName = " New Event ",
+            raceName = " New Race ",
             startDateTimeIso = "2026-05-31T14:30:00"
         )
 
         val race = projectFile.raceData.race
         assertEquals("race-1", race.id)
-        assertEquals("New Event", race.name)
+        assertEquals("New Race", race.name)
         assertEquals("", race.apiKey)
         assertEquals("2026-05-31T14:30:00", race.startDateTimeIso)
         assertEquals(RaceType.CLASSIC, race.raceType)

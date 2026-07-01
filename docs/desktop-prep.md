@@ -1,16 +1,16 @@
 # Desktop Preparation Notes
 
 These notes define the first desktop target before a user-visible desktop app is
-added. They keep the desktop effort focused on a small event-admin beta instead
+added. They keep the desktop effort focused on a small race-admin beta instead
 of full Android parity.
 
 ## Desktop Beta Boundary
 
-The first desktop app should be a thin UI over shared event-domain services. It
-should support event administration workflows that are useful away from the
+The first desktop app should be a thin UI over shared race-domain services. It
+should support race administration workflows that are useful away from the
 finish table:
 
-- create, open, edit, save, and export event files;
+- create, open, edit, save, and export race files;
 - manage races, categories, control points, aliases, competitors, readouts, and
   results;
 - manually enter or edit readout-equivalent punch data;
@@ -38,10 +38,10 @@ finish table:
   print target and detected system printers;
 - serve auto-refreshing loopback-only local result/category/start-list/in-forest
   displays plus `/results.json`, `/categories.json`, `/starts.json`, and
-  `/in-forest.json` endpoints from the open desktop Event File;
+  `/in-forest.json` endpoints from the open desktop Race File;
 - track started competitors without readouts in an In Forest desktop view;
 - recalculate results using shared services;
-- import/export supported event and result formats as they move into shared
+- import/export supported race and result formats as they move into shared
   code.
 
 macOS hardware validation and Windows packaged-app smoke validation are beta
@@ -66,7 +66,7 @@ The current desktop beta decisions are:
 
 - Keep the local result/start/in-forest server loopback-only. LAN exposure needs
   a separate hardening decision covering bind address, operator warnings, and
-  event-network security.
+  race-network security.
 - Use desktop system printing as the first beta printer transport. The WiFi
   Epson target is visible to Java/CUPS as `EPSON ET-2720 Series`; the DYMO
   system printer is not a Radio-Oracle target. ARDFEvent supports serial,
@@ -89,8 +89,8 @@ The current desktop beta decisions are:
 
 ## Storage
 
-Use file-backed Event File storage for the beta, most likely a `.rom.json`
-Event File. Shared SQL remains post-beta. A later SQL spike should compare Room KMP as
+Use file-backed Race File storage for the beta, most likely a `.rom.json`
+Race File. Shared SQL remains post-beta. A later SQL spike should compare Room KMP as
 the baseline candidate against SQLDelight as the fallback/comparison option.
 
 ## UI And Module Shape
@@ -106,7 +106,7 @@ print/send/readout actions, and a separate readout status surface that can stay
 visible during finish work. Do not copy ARDFEvent's Python/PyQt architecture or
 plugin system into Radio-Oracle unless a future integration creates a concrete
 need; keep Radio-Oracle centered on shared Kotlin services and the existing
-Android-compatible event model.
+Android-compatible race model.
 
 ARDFEvent-derived desktop parity gaps to track after the current live-result
 slices:
@@ -139,7 +139,7 @@ resizable windows, but those adaptations should extend the Android interface
 rather than inventing a separate desktop visual identity.
 
 The provisional desktop navigation direction is workflow-first and should be
-tested with real event use before treating it as a fixed design. Keep four
+tested with real race use before treating it as a fixed design. Keep four
 top-level workflow groups visible along the bottom of the desktop app, echoing
 Android bottom navigation:
 
@@ -158,15 +158,15 @@ Use breadcrumbs or equivalent context text, such as
 
 Initial placement guidance:
 
-- Setup: Event File commands, race details, categories, competitors,
+- Setup: Race File commands, race details, categories, competitors,
   aliases/control names, start-list setup, setup imports, setup exports, and
-  Event File diagnostics/validation under a Utils item.
+  Race File diagnostics/validation under a Utils item.
 - Race Operations: SI readout, continuous readout, unmatched readouts,
   competitor race-day status, in-forest monitoring, finish tickets, download
   station status, and printer readiness.
 - Results/File Export: results review, manual result status edits, live/local
   result display, ROBIS sending, result exports, JSON/XML/TXT/HTML exports, and
-  archival Event File copy export.
+  archival Race File copy export.
 - Help/About/App Settings: settings that affect app behavior, such as alias
   display, race-discipline mode, duplicate-SI policy, readout alert sounds,
   hardware/app preferences, logs, beta scope, help, and about information.
@@ -179,7 +179,7 @@ nearest bucket.
 The desktop app should keep platform concerns thin:
 
 - file pickers and local filesystem permissions in the desktop module;
-- event validation, formatting, placement, and import/export policy in shared
+- race validation, formatting, placement, and import/export policy in shared
   code;
 - desktop-only diagnostics and packaging metadata outside Android code.
 
@@ -195,7 +195,7 @@ Packaging should eventually provide:
 - version/build metadata tied to Git tags;
 - a repeatable package validation command;
 - a packaged-app smoke scenario that opens, edits, saves, reopens, and exports a
-  sample event.
+  sample race.
 
 Keep Hydraulic Conveyor as a comparison option if jDeploy cannot satisfy a
 specific requirement. Keep raw `jpackage` as a low-level fallback, not the
@@ -334,7 +334,7 @@ suffix resets to `a` for that new base version.
 
 After a public npm publish, `npm run jdeploy:registry-smoke -- <version>`
 installs that exact registry version in a temporary directory, launches it with
-the smoke Event File, confirms startup, and quits the app.
+the smoke Race File, confirms startup, and quits the app.
 
 The normal deployment sequence is:
 
@@ -398,7 +398,7 @@ Current local packaging evidence: the Gradle app-image checks,
 `npm run jdeploy:local-smoke`, and
 `npm run jdeploy:registry-smoke -- 1.0.5` pass on macOS with JDK 17 selected.
 Windows packaged-app smoke reached the installed executable and loaded the
-sample Event File; the npm helper scripts are cross-platform, but final Windows
+sample Race File; the npm helper scripts are cross-platform, but final Windows
 confirmation is still tracked through `CODEX_MAILBOX.md`.
 
 ### Desktop USB Feasibility
@@ -451,7 +451,7 @@ debug operations. Run it through Gradle with `--args`:
 ./gradlew :desktopApp:desktopAutomation --args='paths'
 ./gradlew :desktopApp:desktopAutomation --args='logs'
 ./gradlew :desktopApp:desktopAutomation --args='log-test smoke'
-./gradlew :desktopApp:desktopAutomation --args='open-event-file /path/to/Event.json'
+./gradlew :desktopApp:desktopAutomation --args='open-event-file /path/to/Race.json'
 ./gradlew :desktopApp:desktopAutomation --args='si-status'
 ./gradlew :desktopApp:desktopAutomation --args='printer-status'
 ```
@@ -516,10 +516,10 @@ For unattended smoke tests, cap the loop and shorten the insert timeout:
 RADIO_ORACLE_SI_LOOP_MAX_CARDS=1 RADIO_ORACLE_SI_CARD_EVENT_TIMEOUT_MS=1000 npm run desktop:usb-card-loop
 ```
 
-Current card-event evidence: `npm run desktop:usb-card-event` connected to the
+Current card-insertion evidence: `npm run desktop:usb-card-event` connected to the
 same station at `38400` baud, waited for an SI card action, and detected a card
-insert event with command `0xe8` and SI number `2005010`. That confirms the
-desktop serial path can reach the first live readout event before card block
+insert signal with command `0xe8` and SI number `2005010`. That confirms the
+desktop serial path can reach the first live readout signal before card block
 download.
 
 Current card-download evidence: `npm run desktop:usb-card-block` kept one
@@ -614,7 +614,7 @@ Optional environment variables:
   Radio-Oracle now writes the current computer time directly, including the
   SPORTident 1/256-second tick byte.
 
-Do not run the write-enabled command on event-critical hardware until the
+Do not run the write-enabled command on race-critical hardware until the
 non-critical validation matrix below has passed.
 
 ### SPORTident station time-write protocol findings
@@ -896,7 +896,7 @@ After the matrix, the station was restored to the computer's current time:
 requested `2026-06-27T19:08:45`, confirmed `2026-06-27T19:08:45`.
 
 For local macOS smoke tests, prefer copying the generated `.app` and sample
-Event File to `/tmp` before launching with `open ... --args <sample.rom.json>`.
+Race File to `/tmp` before launching with `open ... --args <sample.rom.json>`.
 Launching the checkout-built app bundle directly from `Documents/GitHub` can
 trigger a macOS Documents-folder permission prompt, which is not useful for
 repeatable package validation.
@@ -904,25 +904,25 @@ repeatable package validation.
 ## First Implementation Slices
 
 1. Done: add golden-file coverage for the existing full race export shape.
-2. Done: add a desktop app module with a minimal launch window and no event editing.
+2. Done: add a desktop app module with a minimal launch window and no race editing.
    The shell uses Compose Desktop, Android-derived colors, Android navigation
    vocabulary, and a non-editing status strip.
-3. In progress: add file-backed open/save for a shared Event File envelope.
+3. In progress: add file-backed open/save for a shared Race File envelope.
    The shared `.rom.json` envelope now has a tested JSON codec; desktop file
-   filesystem wiring and current Event File session state now live in the desktop
+   filesystem wiring and current Race File session state now live in the desktop
    app module. File menu open/save/export-copy/close wiring is present, dirty
    open/close/exit paths prompt to save, discard, or cancel, and the app can
-   create a new empty Event File using shared Android-compatible race defaults or
+   create a new empty Race File using shared Android-compatible race defaults or
    accept a startup `.rom.json` path for repeatable smoke runs.
-4. In progress: add the first event-admin screen backed by shared models and
+4. In progress: add the first race-admin screen backed by shared models and
    services. The Races section now shows race details from shared display models
    and can edit the race name, start date/time, race type, race level, race
-   band, and time limit through shared Event File editing rules. Desktop
-   Event File session state now tracks unsaved edits and can save back to the
-   current Event File path. The
+   band, and time limit through shared Race File editing rules. Desktop
+   Race File session state now tracks unsaved edits and can save back to the
+   current Race File path. The
    Categories section now shows category rows using shared effective race settings, can add categories with conservative
    defaults, and can edit category names, length, climb, and control-point
-   strings through shared Event File editing rules. Dense category and competitor
+   strings through shared Race File editing rules. Dense category and competitor
    grids use fixed-width columns with horizontal scrolling. Category,
    competitor, alias, readout, and result rows use one-line row action buttons;
    add actions stay reachable beside scrollable entry fields where the entry
@@ -933,20 +933,20 @@ repeatable package validation.
    and display formatting, can add uncategorized competitors with conservative
    defaults, and can edit competitor first and last names, category assignment,
    club, index, birth year, start numbers, SI numbers, and competitor deletion
-   through shared Event File editing rules. Deleted competitor readouts can be kept
+   through shared Race File editing rules. Deleted competitor readouts can be kept
    as unmatched readouts or deleted with the competitor, matching the Android
    deletion policy.
    The Aliases section can
    add/delete aliases and edit existing alias SI codes and names through shared
    alias validation rules. The Readouts section now shows matched and unmatched
-   SI-card readout rows and can delete readouts through shared Event File editing
+   SI-card readout rows and can delete readouts through shared Race File editing
    rules, set an explicit manual result status, or create manual readouts with
    competitor matching, SI number, start/finish seconds, and control punch
    codes. The Start List section can draw start times by category with a
    configurable interval and club rotation. The Results section now shows
    competitor result rows and can set the same explicit manual result status for
    matched readouts. The Settings
-   section now shows Event File diagnostics, shared event validation issues, and
+   section now shows Race File diagnostics, shared race validation issues, and
    the desktop beta scope boundary. The File menu can import Android-compatible
    category, competitor, ARDFEvent registration, start-list CSV, and
    race-backup JSON files; export
@@ -955,7 +955,7 @@ repeatable package validation.
    ROBIS start-list CSV, ARDFEvent-style results CSV, result TXT/HTML, IOF
    start/result-list XML, Android-shaped race-backup, live-result, and
    final-result JSON, and standards-facing ARDF JSON. A sample
-   smoke-test Event File is available at `samples/desktop-smoke.rom.json`, with
+   smoke-test Race File is available at `samples/desktop-smoke.rom.json`, with
    automated desktop coverage for the session-level open, edit, save, close,
    reopen, export-copy, CSV export, and ARDF JSON export flows.
 5. In progress: keep the jDeploy deployment path aligned with the desktop smoke
@@ -980,9 +980,9 @@ repeatable package validation.
    download stations for response timing and system-info differences. The
    desktop Readouts screen now has a single-shot "Download SI" action and
    experimental continuous "Start SI" / "Stop SI" controls that add
-   SI5/SI6/SI8/SI9/SIAC card readouts to the open Event File when the attached
+   SI5/SI6/SI8/SI9/SIAC card readouts to the open Race File when the attached
    station is present and in READOUT/SI MASTER mode.
-7. Long-term: add Station Maintenance after the desktop event-admin beta is
+7. Long-term: add Station Maintenance after the desktop race-admin beta is
    stable. The first version should be read-only for the attached USB
    master/download station and should report serial number, station mode/code,
    protocol flags, firmware/config metadata when available, and clear warnings

@@ -62,10 +62,10 @@ object EventSeriesPackageContents {
         val eventsById = eventFiles.associateBy { it.event.seriesEventId }
         val sortedEvents = seriesFile.sortedEvents()
         require(sortedEvents.isNotEmpty()) {
-            "Event Series package requires at least one event."
+            "Race Series package requires at least one race."
         }
         require(eventFiles.size == sortedEvents.size && sortedEvents.all { it.seriesEventId in eventsById }) {
-            "Event Series package must include one Event File for each manifest event."
+            "Race Series package must include one Race File for each manifest race."
         }
 
         val entries = buildList {
@@ -77,7 +77,7 @@ object EventSeriesPackageContents {
             )
             sortedEvents.forEach { event ->
                 val eventFile = requireNotNull(eventsById[event.seriesEventId]) {
-                    "Missing Event File for '${event.displayName}'."
+                    "Missing Race File for '${event.displayName}'."
                 }
                 add(
                     EventSeriesPackageTextEntry(
@@ -104,11 +104,11 @@ object EventSeriesPackageContents {
     fun normalizedPackagePath(path: String): String {
         val packagePath = path.replace('\\', '/')
         require(!packagePath.startsWith("/")) {
-            "Event Series package contains an unsafe path: $path"
+            "Race Series package contains an unsafe path: $path"
         }
         val segments = packagePath.split('/').filterNot { it == "." }
         require(segments.isNotEmpty() && segments.none { it == ".." || it.isBlank() }) {
-            "Event Series package contains an unsafe path: $path"
+            "Race Series package contains an unsafe path: $path"
         }
         return segments.joinToString("/")
     }

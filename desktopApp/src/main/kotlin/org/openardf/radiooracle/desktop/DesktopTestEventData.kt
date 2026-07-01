@@ -37,7 +37,7 @@ internal data class DesktopTestEventDataInsertResult(
 /**
  * Inserts deterministic desktop test fixtures in stages.
  *
- * The fixture is deliberately ordinary Event File data: logical controls,
+ * The fixture is deliberately ordinary Race File data: logical controls,
  * categories, categorized competitors, drawn starts, and SI numbers. Generated
  * SI downloads can then exercise Race Ops, Readouts, Results, exports, live
  * results, and status editing against the same course/category assignments.

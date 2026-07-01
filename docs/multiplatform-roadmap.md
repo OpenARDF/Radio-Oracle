@@ -3,35 +3,35 @@
 Status reviewed: 2026-06-30.
 
 Radio-Oracle is no longer an Android-only app with a hypothetical desktop beta.
-It is a shared Kotlin project with Android race-day workflows, a desktop Event
-File workflow, desktop packaging through jDeploy, and growing shared event,
-import/export, Course Analyzer, Event Series, and validation services. This
+It is a shared Kotlin project with Android race-day workflows, a desktop Race
+File workflow, desktop packaging through jDeploy, and growing shared race,
+import/export, Course Analyzer, Race Series, and validation services. This
 roadmap now tracks the work that remains after the initial multiplatform
-foundation and desktop event-admin milestones.
+foundation and desktop race-admin milestones.
 
 ## Current State
 
 The `:shared` Kotlin Multiplatform module is the core portability boundary. It
-contains platform-neutral event models, domain enums, SPORTident code and time
+contains platform-neutral race models, domain enums, SPORTident code and time
 helpers, duration and control/punch formatting, file definitions, alias and
-control parsing, import validation, result ranking, course evaluation, event
-validation, result placement, Event File envelope metadata, CSV row formatting,
+control parsing, import validation, result ranking, course evaluation, race
+validation, result placement, Race File envelope metadata, CSV row formatting,
 template rendering, standard-category parsing and presets, network endpoint
-definitions, result-send filtering, Event Series support, and many import/export
+definitions, result-send filtering, Race Series support, and many import/export
 helpers.
 
 Android remains the mature race-day platform for USB SPORTident readout,
 Bluetooth printing, Android-specific UI, Android Room persistence, Android
 resources, and platform permissions. Android has tested mappers between Room
-aggregates and shared event models, but Room remains the Android persistence
+aggregates and shared race models, but Room remains the Android persistence
 layer.
 
-Desktop is now an active event-admin and analysis platform. The desktop app uses
-file-backed `.rom.json` Event Files, exposes setup/race/results workflows, reads
+Desktop is now an active race-admin and analysis platform. The desktop app uses
+file-backed `.rom.json` Race Files, exposes setup/race/results workflows, reads
 SPORTident cards from attached READOUT/SI MASTER stations, supports desktop
 system printing for finish-ticket text, sends ROBIS live results, provides local
 and public result-site workflows, packages through jDeploy, and includes Course
-Analyzer, Event Validator, Event Series, and testing tools.
+Analyzer, Race Validator, Race Series, and testing tools.
 
 ## Validation Gates
 
@@ -73,7 +73,7 @@ Radio-Oracle must not intentionally drift farther from
 prior pull request to the standards repository. Follow
 [`standards-compatibility-policy.md`](standards-compatibility-policy.md) before
 changing ARDF JSON, ARDF XML, IOF mapping, import/export semantics, or
-standards-facing event data shapes. The same policy is a required pre-deployment
+standards-facing race data shapes. The same policy is a required pre-deployment
 inspection gate for every Android and desktop release candidate.
 
 ### IOF XML 3.0 And Radio Orienteering Extensions
@@ -113,7 +113,7 @@ Place extensions on the nearest IOF element that owns the concept:
 - `CourseControl/Extensions` for course-specific requirements for a particular
   appearance of a transmitter/control.
 - `Course/Extensions` for course-wide Radio Orienteering rules.
-- `RaceCourseData/Extensions` or event-level `Extensions` for race-wide radio
+- `RaceCourseData/Extensions` or race-level `Extensions` for race-wide radio
   rules and defaults.
 
 Imports should validate the IOF document first, parse supported IOF core data,
@@ -122,7 +122,7 @@ IOF content and unrecognized Radio Orienteering extensions should be shown in
 the import preview as unsupported/preserved data rather than silently discarded.
 Exports should always remain valid IOF XML 3.0 documents, with Radio
 Orienteering extension data treated as optional enhancement data rather than the
-primary full-fidelity Radio-Oracle exchange format. Use Event Files for
+primary full-fidelity Radio-Oracle exchange format. Use Race Files for
 lossless Radio-Oracle-to-Radio-Oracle interchange.
 
 ## Completed Milestones
@@ -132,8 +132,8 @@ should be treated as current project foundation rather than future work.
 
 ### Shared Foundation
 
-- Shared event models and tested Android mapper paths exist.
-- Core event validation, result placement, ranking, course evaluation, category
+- Shared race models and tested Android mapper paths exist.
+- Core race validation, result placement, ranking, course evaluation, category
   and control assignment policies, competitor identity fields, and many display
   helpers are shared.
 - CSV, TXT, HTML, IOF XML, ARDF JSON-facing policy, ROBIS request metadata, and
@@ -141,10 +141,10 @@ should be treated as current project foundation rather than future work.
 - The desktop smoke target and desktop app test suite are part of the normal
   verification surface.
 
-### Desktop Event-Admin App
+### Desktop Race-Admin App
 
-- Desktop can create, open, edit, save, and export Event Files.
-- Desktop setup workflows cover event settings, categories, controls,
+- Desktop can create, open, edit, save, and export Race Files.
+- Desktop setup workflows cover race settings, categories, controls,
   competitors, start lists, readouts, results, imports, exports, and live result
   settings.
 - Desktop can read SPORTident card downloads from attached READOUT/SI MASTER
@@ -189,13 +189,13 @@ should be treated as current project foundation rather than future work.
   geometry, route assumptions, circular LineString filtering, and per-leg
   `SS=#.##` speed factors.
 
-### Event Series And Start Fairness
+### Race Series And Start Fairness
 
-- Event Series manifests group existing Event Files without duplicating core
-  event data.
-- Desktop Event Series workflows support validation, clean export, competitor
+- Race Series manifests group existing Race Files without duplicating core
+  race data.
+- Desktop Race Series workflows support validation, clean export, competitor
   matching reports, start-fairness summaries, and start-fairness optimization.
-- Android can store, list, import, export, and transfer Event Series packages.
+- Android can store, list, import, export, and transfer Race Series packages.
 - The shared balanced-thirds start-list engine is used by series-aware start
   balancing tools.
 
@@ -214,7 +214,7 @@ These are deliberate limits in the current app, not necessarily defects.
   exposure is explicitly hardened and selected.
 - OCheckList/new-card import remains future work until sample files or schema
   details are available.
-- Shared SQL remains deferred; desktop Event Files are still the right storage
+- Shared SQL remains deferred; desktop Race Files are still the right storage
   model for the current desktop app.
 - Course Analyzer still lacks map passability knowledge. It does not know
   out-of-bounds areas, dense vegetation, lakes, uncrossable creeks/rivers,
@@ -223,13 +223,13 @@ These are deliberate limits in the current app, not necessarily defects.
 
 ## Medium-Term Roadmap
 
-### Shared Event Services
+### Shared Race Services
 
 - Continue extracting platform-neutral result recalculation glue from Android
   `ResultsProcessor` into shared services where it can be tested once and reused
-  by Android, desktop, and Event Series tools.
+  by Android, desktop, and Race Series tools.
 - Keep competitor identity semantics shared. SI number, bib number, call sign,
-  Person ID, full-name formatting, and cross-event matching keys must not drift
+  Person ID, full-name formatting, and cross-race matching keys must not drift
   between Android, desktop, and series workflows.
 - Move durable Android table ordering helpers toward shared comparators when the
   ordering reflects domain policy rather than Android-only UI behavior.
@@ -239,13 +239,13 @@ These are deliberate limits in the current app, not necessarily defects.
   `TextResultExports`, `HtmlResultExports`, `IofXmlExports`, and CSV paths so
   desktop and Android semantics do not diverge.
 
-### Event Validation And Error Recovery
+### Race Validation And Error Recovery
 
-- Keep expanding Event Validator coverage for setup consistency, import mistakes,
+- Keep expanding Race Validator coverage for setup consistency, import mistakes,
   category/control mismatches, unused controls, missing SI numbers, duplicate
   labels/codes, suspicious category assignments, and late-workflow edits.
-- Use validator logic from Series validation so each member Event File can be
-  checked independently before cross-event checks run.
+- Use validator logic from Series validation so each member Race File can be
+  checked independently before cross-race checks run.
 - Prefer source-of-truth repairs over display-only fixes: Setup > Controls owns
   SI-code-to-public-label mapping, Setup > Categories owns assigned controls,
   and downloaded SI readouts remain definitive evidence of visited station
@@ -293,20 +293,20 @@ These are deliberate limits in the current app, not necessarily defects.
 
 ### Competition And Series
 
-- Keep current single-event workflows as the default. Series and championship
+- Keep current single-race workflows as the default. Series and championship
   tools should remain opt-in and additive.
-- Move desktop-only Event Series reporting and optimization helpers into shared
+- Move desktop-only Race Series reporting and optimization helpers into shared
   code as they stabilize.
-- Extend Event Series with scoring and eligibility rules for championship
+- Extend Race Series with scoring and eligibility rules for championship
   standings.
-- Add explicit cross-event competitor identity and reconciliation support for
+- Add explicit cross-race competitor identity and reconciliation support for
   cases where SI numbers, start numbers, categories, or registration details are
   incomplete or change across days.
 - Add competition scoring calculations for overall standings, with configurable
   point/placement rules, category scope, absent-result handling, eligibility, and
   tie-break behavior.
-- Add championship exports for overall standings, per-event contributions, and
-  start-slot fairness traces as derived outputs over linked Event Files plus
+- Add championship exports for overall standings, per-race contributions, and
+  start-slot fairness traces as derived outputs over linked Race Files plus
   lightweight series metadata.
 - Add a Competition View only after the underlying series metadata,
   reconciliation, scoring, and export behavior is stable.
@@ -315,7 +315,7 @@ These are deliberate limits in the current app, not necessarily defects.
 
 - Add map-informed Course Analyzer modeling after the app can ingest or
   reference course-relevant map data. Future timing should combine category
-  factors, event-wide speed factor, per-leg `SS=#.##` factors, elevation,
+  factors, race-wide speed factor, per-leg `SS=#.##` factors, elevation,
   vegetation, runnability, barriers, water, out-of-bounds constraints, and other
   map-derived impediments.
 - Preserve the current category speed-factor table as a provisional input, not a
@@ -328,14 +328,14 @@ These are deliberate limits in the current app, not necessarily defects.
 - Continue improving analyzer import UX so saved, imported, calculated, and
   unsaved analyzer data are always clearly distinguished.
 
-### Event Editing Model
+### Race Editing Model
 
 - Add autosave plus transaction/undo as a medium-term workflow improvement.
 - Ordinary single-step edits should eventually autosave immediately and create a
   one-step undo checkpoint.
 - Multi-step tools and bulk actions, including Course Analyzer, course imports,
   test-data insertion, calculated-route saves, and fox renumbering, should run
-  inside explicit Event File transactions: stage all intermediate changes, then
+  inside explicit Race File transactions: stage all intermediate changes, then
   either discard the whole transaction on exit or commit and autosave it as one
   atomic change.
 - Undo after a committed transaction should revert the whole transaction, not its
@@ -343,7 +343,7 @@ These are deliberate limits in the current app, not necessarily defects.
 
 ### Storage
 
-Shared SQL is not on the critical path. Keep file-backed Event File storage for
+Shared SQL is not on the critical path. Keep file-backed Race File storage for
 desktop while shared domain models, services, and import/export APIs stabilize.
 After the desktop file workflow and shared services are stable, run a bounded
 shared SQL spike with Room KMP as the baseline candidate. SQLDelight remains the
@@ -355,7 +355,7 @@ Reasons:
   and transactions.
 - Moving persistence into shared SQL is a storage migration, not a small adapter
   change.
-- Desktop Event Files remain useful for transfer, review, testing, and series
+- Desktop Race Files remain useful for transfer, review, testing, and series
   packaging even if shared SQL is added later.
 
 ## Acceptance Criteria For Future Work
@@ -364,6 +364,6 @@ Reasons:
 - Platform-specific behavior lands behind platform smoke tests or documented
   manual hardware validation when automation is not practical.
 - Android behavior does not regress when shared code grows.
-- Desktop Event File compatibility is preserved across release versions.
+- Desktop Race File compatibility is preserved across release versions.
 - Release candidates pass the relevant `just` wrappers, standards inspection,
   packaging checks, and jDeploy release gates for the surfaces they affect.

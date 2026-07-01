@@ -60,7 +60,7 @@ object ArdfJsonExports {
         explicitNulls = false
     }
 
-    /** Exports a full ARDF JSON event document containing the current Radio-Oracle race. */
+    /** Exports a full ARDF JSON document containing the current Radio-Oracle race. */
     fun event(
         projectName: String,
         raceData: EventRaceData,

@@ -179,19 +179,19 @@ class DataProcessor private constructor(context: Context) {
 
     suspend fun createRace(race: Race) {
         ardfRepository.createRace(race)
-        DebugLog.info("Events", "Created event=${race.id} name=${race.name}")
+        DebugLog.info("Races", "Created race=${race.id} name=${race.name}")
     }
 
     suspend fun updateRace(race: Race) {
         ardfRepository.updateRace(race)
         updateResultsByRace(race.id)
-        DebugLog.info("Events", "Updated event=${race.id} name=${race.name}")
+        DebugLog.info("Races", "Updated race=${race.id} name=${race.name}")
     }
 
     suspend fun deleteRace(id: UUID) {
         val race = getRace(id)
         ardfRepository.deleteRace(id)
-        DebugLog.info("Events", "Deleted event=$id name=${race?.name ?: "unknown"}")
+        DebugLog.info("Races", "Deleted race=$id name=${race?.name ?: "unknown"}")
     }
 
     //CATEGORIES
@@ -437,7 +437,7 @@ class DataProcessor private constructor(context: Context) {
         }
     }
 
-    /** Recalculates stored results after scoring-rule changes that affect existing event data. */
+    /** Recalculates stored results after scoring-rule changes that affect existing race data. */
     suspend fun updateAllResults(reason: String) {
         val races = getRaces().first()
         races.forEach { race -> updateResultsByRace(race.id) }
@@ -480,34 +480,34 @@ class DataProcessor private constructor(context: Context) {
     suspend fun saveEventSeries(series: EventSeries, members: List<EventSeriesMember>) {
         ardfRepository.saveEventSeries(series, members)
         DebugLog.info(
-            "Event Series",
-            "Saved Android event series id=${series.seriesId} members=${members.size}"
+            "Race Series",
+            "Saved Android race series id=${series.seriesId} members=${members.size}"
         )
     }
 
     suspend fun createEventSeriesFromRace(raceId: UUID, seriesName: String): EventSeriesData {
-        val race = getRace(raceId) ?: throw IllegalArgumentException("Event not found: $raceId")
+        val race = getRace(raceId) ?: throw IllegalArgumentException("Race not found: $raceId")
         require(seriesName.isNotBlank()) {
             "Series name must not be blank."
         }
         require(getEventSeriesForRace(raceId) == null) {
-            "Event is already part of an Event Series."
+            "Race is already part of a Race Series."
         }
         val series = EventSeries(seriesId = UUID.randomUUID().toString(), name = seriesName.trim())
         val member = EventSeriesMemberships.memberForRace(series.seriesId, race, eventOrder = 0)
         saveEventSeries(series, listOf(member))
-        DebugLog.info("Event Series", "Created series id=${series.seriesId} event=$raceId")
+        DebugLog.info("Race Series", "Created series id=${series.seriesId} race=$raceId")
         return getEventSeries(series.seriesId) ?: EventSeriesData(series, listOf(member))
     }
 
     suspend fun addRaceToEventSeries(raceId: UUID, seriesId: String): EventSeriesData {
-        val race = getRace(raceId) ?: throw IllegalArgumentException("Event not found: $raceId")
-        val seriesData = getEventSeries(seriesId) ?: throw IllegalArgumentException("Event Series not found: $seriesId")
+        val race = getRace(raceId) ?: throw IllegalArgumentException("Race not found: $raceId")
+        val seriesData = getEventSeries(seriesId) ?: throw IllegalArgumentException("Race Series not found: $seriesId")
         require(getEventSeriesForRace(raceId) == null) {
-            "Event is already part of an Event Series."
+            "Race is already part of a Race Series."
         }
         saveEventSeries(seriesData.series, EventSeriesMemberships.appendRace(seriesData, race))
-        DebugLog.info("Event Series", "Added event=$raceId to series=$seriesId")
+        DebugLog.info("Race Series", "Added race=$raceId to series=$seriesId")
         return getEventSeries(seriesId) ?: seriesData
     }
 
@@ -516,11 +516,11 @@ class DataProcessor private constructor(context: Context) {
         val remainingMembers = EventSeriesMemberships.removeRace(seriesData, raceId)
         if (remainingMembers.isEmpty()) {
             deleteEventSeries(seriesData.series.seriesId)
-            DebugLog.info("Event Series", "Removed final event=$raceId from series=${seriesData.series.seriesId}")
+            DebugLog.info("Race Series", "Removed final race=$raceId from series=${seriesData.series.seriesId}")
             return null
         }
         saveEventSeries(seriesData.series, remainingMembers)
-        DebugLog.info("Event Series", "Removed event=$raceId from series=${seriesData.series.seriesId}")
+        DebugLog.info("Race Series", "Removed race=$raceId from series=${seriesData.series.seriesId}")
         return getEventSeries(seriesData.series.seriesId)
     }
 
@@ -533,15 +533,15 @@ class DataProcessor private constructor(context: Context) {
     suspend fun saveEventSeriesImport(eventSeriesImport: AndroidEventSeriesImport) {
         ardfRepository.saveEventSeriesImport(eventSeriesImport)
         DebugLog.info(
-            "Event Series",
-            "Saved Android event series import id=${eventSeriesImport.series.seriesId} " +
+            "Race Series",
+            "Saved Android race series import id=${eventSeriesImport.series.seriesId} " +
                 "members=${eventSeriesImport.memberImports.size}"
         )
     }
 
     suspend fun deleteEventSeries(seriesId: String) {
         ardfRepository.deleteEventSeries(seriesId)
-        DebugLog.info("Event Series", "Deleted Android event series id=$seriesId")
+        DebugLog.info("Race Series", "Deleted Android race series id=$seriesId")
     }
 
     private fun seriesResultDisplayLabel(eventName: String, wrapper: ResultWrapper): String {
@@ -593,10 +593,10 @@ class DataProcessor private constructor(context: Context) {
             is EventSeriesReadoutRoute.Matched -> {
                 val routedRace = route.memberData.raceData.race
                 DebugLog.info(
-                    "Event Series",
+                    "Race Series",
                     "Card read routed si=${cardData.siNumber} " +
                         "series=${route.memberData.member.seriesId} " +
-                        "event=${route.memberData.member.seriesEventId} " +
+                        "seriesRace=${route.memberData.member.seriesEventId} " +
                         "reason=${route.reason}"
                 )
                 val stored = processCardData(cardData, routedRace)
@@ -608,7 +608,7 @@ class DataProcessor private constructor(context: Context) {
             }
             is EventSeriesReadoutRoute.Ambiguous -> {
                 DebugLog.warn(
-                    "Event Series",
+                    "Race Series",
                     "Card read ambiguous si=${cardData.siNumber} " +
                         "candidates=${route.candidates.joinToString { it.member.seriesEventId }} " +
                         "reason=${route.reason}"
@@ -617,8 +617,8 @@ class DataProcessor private constructor(context: Context) {
             }
             EventSeriesReadoutRoute.NoMatch -> {
                 DebugLog.warn(
-                    "Event Series",
-                    "Card read did not match any series event si=${cardData.siNumber}"
+                    "Race Series",
+                    "Card read did not match any series race si=${cardData.siNumber}"
                 )
                 false
             }
@@ -742,8 +742,8 @@ class DataProcessor private constructor(context: Context) {
                 DataImportValidator.validateRaceDataImport(raceData, context)
                 val importedRaceData = raceData.withFreshImportIds()
                 DebugLog.info(
-                    "Events",
-                    "Prepared Event File import event=${importedRaceData.race.id} name=${importedRaceData.race.name} source=${importedRaceData.race.importSourceId ?: "none"}"
+                    "Races",
+                    "Prepared Race File import race=${importedRaceData.race.id} name=${importedRaceData.race.name} source=${importedRaceData.race.importSourceId ?: "none"}"
                 )
                 return importedRaceData
             }
@@ -757,8 +757,8 @@ class DataProcessor private constructor(context: Context) {
         DataImportValidator.validateRaceDataImport(raceData, context)
         val importedRaceData = raceData.withFreshImportIds()
         DebugLog.info(
-            "Events",
-            "Prepared downloaded Event File import event=${importedRaceData.race.id} name=${importedRaceData.race.name} source=${importedRaceData.race.importSourceId ?: "none"}"
+            "Races",
+            "Prepared downloaded Race File import race=${importedRaceData.race.id} name=${importedRaceData.race.name} source=${importedRaceData.race.importSourceId ?: "none"}"
         )
         return importedRaceData
     }
@@ -769,14 +769,14 @@ class DataProcessor private constructor(context: Context) {
         val eventSeriesImport = context.contentResolver.openInputStream(uri)?.use { input ->
             EventSeriesImport.prepareZipPackage(input)
         } ?: return null
-        return validateEventSeriesImport(context, eventSeriesImport, "Prepared Event Series import")
+        return validateEventSeriesImport(context, eventSeriesImport, "Prepared Race Series import")
     }
 
     @Throws(Exception::class)
     suspend fun importEventSeriesPackage(bytes: ByteArray): AndroidEventSeriesImport? {
         val context = getContext() ?: return null
         val eventSeriesImport = EventSeriesImport.prepareZipPackage(ByteArrayInputStream(bytes))
-        return validateEventSeriesImport(context, eventSeriesImport, "Prepared downloaded Event Series import")
+        return validateEventSeriesImport(context, eventSeriesImport, "Prepared downloaded Race Series import")
     }
 
     private fun validateEventSeriesImport(
@@ -788,7 +788,7 @@ class DataProcessor private constructor(context: Context) {
             DataImportValidator.validateRaceDataImport(raceData, context)
         }
         DebugLog.info(
-            "Event Series",
+            "Race Series",
             "$logMessagePrefix id=${eventSeriesImport.series.seriesId} " +
                 "members=${eventSeriesImport.memberImports.size}"
         )
@@ -797,7 +797,7 @@ class DataProcessor private constructor(context: Context) {
 
     suspend fun exportRaceData(uri: Uri, raceId: UUID) {
         fileProcessor?.exportRaceData(uri, raceId)
-        DebugLog.info("Events", "Exported event=$raceId")
+        DebugLog.info("Races", "Exported race=$raceId")
     }
 
     suspend fun exportRaceOrSeriesData(uri: Uri, raceId: UUID) {
@@ -807,20 +807,20 @@ class DataProcessor private constructor(context: Context) {
             return
         }
         writeEventSeriesPackageToUri(uri, seriesPackageBytes)
-        DebugLog.info("Event Series", "Exported Event Series package for event=$raceId")
+        DebugLog.info("Race Series", "Exported Race Series package for race=$raceId")
     }
 
     suspend fun exportEventSeriesPackage(uri: Uri, seriesId: String) {
         val seriesPackageBytes = exportEventSeriesPackageBytes(seriesId)
         writeEventSeriesPackageToUri(uri, seriesPackageBytes)
-        DebugLog.info("Event Series", "Exported Event Series package id=$seriesId")
+        DebugLog.info("Race Series", "Exported Race Series package id=$seriesId")
     }
 
     private fun writeEventSeriesPackageToUri(uri: Uri, bytes: ByteArray) {
         val context = getContext() ?: throw IllegalStateException("Could not access Android context.")
         context.contentResolver.openOutputStream(uri)?.use { output ->
             output.write(bytes)
-        } ?: throw IllegalStateException("Could not open Event Series export destination.")
+        } ?: throw IllegalStateException("Could not open Race Series export destination.")
     }
 
     suspend fun exportRaceDataBytes(raceId: UUID): ByteArray =
@@ -833,7 +833,7 @@ class DataProcessor private constructor(context: Context) {
         exportEventSeriesPackageBytesForRace(raceId) ?: exportRaceDataBytes(raceId)
 
     suspend fun desktopUploadForRaceOrSeries(raceId: UUID): DesktopFileTransferUpload {
-        val race = getRace(raceId) ?: throw IllegalArgumentException("Event not found: $raceId")
+        val race = getRace(raceId) ?: throw IllegalArgumentException("Race not found: $raceId")
         val seriesName = getEventSeriesForRace(raceId)
             ?.series
             ?.name
@@ -845,7 +845,7 @@ class DataProcessor private constructor(context: Context) {
     }
 
     suspend fun desktopUploadForSeries(seriesId: String): DesktopFileTransferUpload {
-        val seriesData = getEventSeries(seriesId) ?: throw IllegalArgumentException("Event Series not found: $seriesId")
+        val seriesData = getEventSeries(seriesId) ?: throw IllegalArgumentException("Race Series not found: $seriesId")
         val firstMember = seriesData.orderedMembers().firstOrNull()
         return EventFileTransferUploads.forRaceOrSeries(
             raceName = firstMember?.displayName ?: seriesData.series.name,
@@ -855,7 +855,7 @@ class DataProcessor private constructor(context: Context) {
     }
 
     suspend fun exportEventSeriesPackageBytes(seriesId: String): ByteArray {
-        val seriesData = getEventSeries(seriesId) ?: throw IllegalArgumentException("Event Series not found: $seriesId")
+        val seriesData = getEventSeries(seriesId) ?: throw IllegalArgumentException("Race Series not found: $seriesId")
         return exportEventSeriesPackageBytes(seriesData)
     }
 
@@ -867,7 +867,7 @@ class DataProcessor private constructor(context: Context) {
     private suspend fun exportEventSeriesPackageBytes(seriesData: EventSeriesData): ByteArray {
         val members = seriesData.orderedMembers()
         if (members.isEmpty()) {
-            throw IllegalArgumentException("Event Series export requires at least one event.")
+            throw IllegalArgumentException("Race Series export requires at least one race.")
         }
         return EventSeriesExport.packageBytes(
             seriesData = seriesData,
@@ -880,8 +880,8 @@ class DataProcessor private constructor(context: Context) {
     suspend fun saveRaceData(raceData: RaceData) {
         ardfRepository.saveRaceData(raceData)
         DebugLog.info(
-            "Events",
-            "Saved imported event=${raceData.race.id} name=${raceData.race.name} source=${raceData.race.importSourceId ?: "none"}"
+            "Races",
+            "Saved imported race=${raceData.race.id} name=${raceData.race.name} source=${raceData.race.importSourceId ?: "none"}"
         )
     }
 

@@ -144,7 +144,7 @@ class EventSeriesTransferRoundTripTests {
         assertEquals(unzipTextEntries(upload.bytes), unzipTextEntries(seriesUpload.bytes))
         assertTrue(EventFileTransferPayloads.isSeriesPackage(upload.fileName, upload.contentType))
         assertTrue(
-            "Android upload must not be a single Event File.",
+            "Android upload must not be a single Race File.",
             uploadBytes.first() != '{'.code.toByte()
         )
         val uploadEntries = unzipTextEntries(uploadBytes)

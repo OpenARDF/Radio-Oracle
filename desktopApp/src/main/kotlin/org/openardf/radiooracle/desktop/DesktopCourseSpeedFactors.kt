@@ -66,7 +66,7 @@ object DesktopCourseSpeedFactors {
         ),
         sourceLabel = "Provisional built-in category assumptions",
         explanation = "These category multipliers are provisional built-in assumptions, not a rules-derived " +
-            "or event-calibrated table. Future route modeling should keep this category table as one input " +
+            "or race-calibrated table. Future route modeling should keep this category table as one input " +
             "to per-leg speed adjustment alongside vegetation, runnability, climb, barriers, and other " +
             "map-derived course-condition factors."
     )

@@ -556,7 +556,7 @@ object DesktopCourseKmlImporter {
         }
 
         require(matchedCategoryCount > 0 || controls.isNotEmpty() || missingCategoryNames.isNotEmpty()) {
-            "No route names matched Event File category names, and no point controls matched existing controls."
+            "No route names matched Race File category names, and no point controls matched existing controls."
         }
 
         val summary = DesktopCourseKmlImportSummary(
@@ -1110,7 +1110,7 @@ object DesktopCourseKmlImporter {
         eventControls: List<EventControl>
     ): CourseMatchedControlResult {
         // Control names from map files are user-authored, so match the visible identifiers users can
-        // see in the Event File first. For explicit SI-like clues, also allow a unique SI/type match
+        // see in the Race File first. For explicit SI-like clues, also allow a unique SI/type match
         // so labels such as 2F can resolve to an existing control still labeled only as SI 42.
         // Duplicate tokens are ignored to avoid guessing.
         val controlTokens = eventControls.flatMap { control ->
@@ -1295,7 +1295,7 @@ object DesktopCourseKmlImporter {
         matchedControls: List<CourseMatchedControl>
     ): EventProjectFile {
         // Preserve organizer-authored course-file names as public labels, but do not
-        // overwrite labels the Event File already owns.
+        // overwrite labels the Race File already owns.
         val updates = matchedControls
             .filter { matchedControl -> matchedControl.importedName.isNotBlank() }
             .distinctBy { it.controlId }
@@ -1676,7 +1676,7 @@ object DesktopCourseKmlImporter {
             .asSequence()
             .filterNot { it.name.isCourseEndpointName() }
             // A named point that looks like a fox, beacon, spectator, or SI-coded control should
-            // stay in the missing-control review path if it did not match the Event File. Treating
+            // stay in the missing-control review path if it did not match the Race File. Treating
             // it as a mandatory waypoint makes the analyzer appear to recognize the location while
             // silently excluding it from fox/beacon assignment and scoring logic.
             .filterNot { it.isLikelyCourseControlPoint() }

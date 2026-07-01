@@ -58,7 +58,7 @@ compose.desktop {
         nativeDistributions {
             packageName = "Radio-Oracle"
             packageVersion = rootProject.ext.radioOracleVersion
-            description = "Desktop event administration shell for Radio-Oracle."
+            description = "Desktop race administration shell for Radio-Oracle."
             vendor = "OpenARDF"
             modules("jdk.httpserver", "java.net.http")
 

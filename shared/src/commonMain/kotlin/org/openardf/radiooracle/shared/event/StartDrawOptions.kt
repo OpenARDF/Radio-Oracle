@@ -31,7 +31,7 @@ import org.openardf.radiooracle.shared.time.DurationFormatter
 /**
  * Persisted start-list generator settings.
  *
- * These settings are part of the portable Event File data, not desktop-local
+ * These settings are part of the portable Race File data, not desktop-local
  * preferences. A race opened on another machine should show the same interval,
  * seed, club handling, starters-per-time controls, and series-optimization lock
  * state that were last saved with the event.
@@ -99,7 +99,7 @@ data class StartDrawOptions(
     fun withDefaultSeed(): StartDrawOptions =
         if (seed.isBlank()) copy(seed = DEFAULT_SEED) else this
 
-    /** True when the Event File already uses the Start List defaults expected for National events. */
+    /** True when the Race File already uses the Start List defaults expected for National races. */
     fun hasNationalEventDefaults(): Boolean =
         clubHandling == StartDrawClubHandling.IGNORE &&
             startersPerStartTime == NATIONAL_EVENT_STARTERS_PER_START_TIME &&
@@ -108,7 +108,7 @@ data class StartDrawOptions(
     /**
      * Returns the options an event-level Generate Start List action should use.
      *
-     * Series balancing may store generated preferred thirds in the Event File so
+     * Series balancing may store generated preferred thirds in the Race File so
      * the Series workflow can inspect its own target. Those series targets are
      * not event-level constraints: when an organizer redraws from the Event
      * Start List page, the event rules should govern and the separate Series

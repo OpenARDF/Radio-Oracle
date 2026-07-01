@@ -128,8 +128,8 @@ object DesktopPublicResultSiteExports {
             resultCount = EventResultDetails.from(projectFile.raceData).size
         )
         writeText(dataDirectory.resolve("event-summary.json"), eventSummaryJson(eventSummary))
-        val events = mergedEventSummaries(rootDataDirectory.resolve("events.json"), eventSummary)
-        writeText(rootDataDirectory.resolve("events.json"), eventsJson(events))
+        val events = mergedEventSummaries(rootDataDirectory.resolve("races.json"), eventSummary)
+        writeText(rootDataDirectory.resolve("races.json"), eventsJson(events))
         writeText(rootIndexPath, rootIndexHtml(events))
 
         return DesktopPublicResultSiteExportPaths(
@@ -325,11 +325,11 @@ object DesktopPublicResultSiteExports {
         }
     }
 
-    private fun rootIndexHtml(events: List<PublishedEventSummary>): String {
-        val eventLinks = if (events.isEmpty()) {
-            """<p class="empty-state">No public result events have been generated yet.</p>"""
+    private fun rootIndexHtml(races: List<PublishedEventSummary>): String {
+        val eventLinks = if (races.isEmpty()) {
+            """<p class="empty-state">No public result races have been generated yet.</p>"""
         } else {
-            events.joinToString(separator = "\n") { event ->
+            races.joinToString(separator = "\n") { event ->
                 """
                 <a class="event-link" href="${htmlText(event.path)}/">
                   <span>
@@ -361,7 +361,7 @@ object DesktopPublicResultSiteExports {
         <body>
           <header>
             <h1>OpenARDF Results</h1>
-            <p class="summary">Published Radio-Oracle event results.</p>
+            <p class="summary">Published Radio-Oracle race results.</p>
           </header>
           <main>
             $eventLinks
@@ -612,7 +612,7 @@ object DesktopPublicResultSiteExports {
     private fun eventsJson(events: List<PublishedEventSummary>): String =
         buildJsonObject {
             put(
-                "events",
+                "races",
                 buildJsonArray {
                     events.forEach { event ->
                         add(
@@ -633,7 +633,7 @@ object DesktopPublicResultSiteExports {
         val existing = if (Files.exists(eventsJsonPath)) {
             runCatching {
                 Json.parseToJsonElement(Files.readString(eventsJsonPath, StandardCharsets.UTF_8))
-                    .jsonObject["events"]
+                    .jsonObject["races"]
                     ?.jsonArray
                     ?.mapNotNull { element -> element.jsonObject.toPublishedEventSummaryOrNull() }
                     ?: emptyList()

@@ -309,8 +309,8 @@ class ARDFRepository private constructor(context: Context) {
                 eventDatabase.raceDao().deletePriorImportedCopies(importSourceId, raceData.race.id)
             if (deletedCount > 0) {
                 DebugLog.info(
-                    "Events",
-                    "Replaced prior imported event copies count=$deletedCount source=$importSourceId"
+                    "Races",
+                    "Replaced prior imported race copies count=$deletedCount source=$importSourceId"
                 )
             }
         }

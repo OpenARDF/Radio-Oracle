@@ -30,7 +30,7 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
 import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 
-/** Applies a calculated Course Analyzer route back into the saved Event File model. */
+/** Applies a calculated Course Analyzer route back into the saved Race File model. */
 object DesktopCourseAnalysisApplier {
     fun applyCalculatedRoute(
         projectFile: EventProjectFile,
@@ -40,7 +40,7 @@ object DesktopCourseAnalysisApplier {
     ): Pair<EventProjectFile, ProtectedCourseInfo> {
         val trimmedPassword = password.trim()
         require(trimmedPassword.isNotEmpty()) {
-            "Event Password is required."
+            "Race Password is required."
         }
         require(projectFile.raceData.categories.any { it.category.id == application.categoryId }) {
             "Category was not found: ${application.categoryId}"
@@ -139,7 +139,7 @@ object DesktopCourseAnalysisApplier {
     ): DesktopCourseFoxRenumberingApplyResult {
         val trimmedPassword = password.trim()
         require(trimmedPassword.isNotEmpty()) {
-            "Event Password is required."
+            "Race Password is required."
         }
         require(renumbering.improvesWait) {
             "No improved fox renumbering was calculated."

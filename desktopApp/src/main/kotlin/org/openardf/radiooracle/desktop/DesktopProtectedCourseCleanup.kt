@@ -36,7 +36,7 @@ object DesktopProtectedCourseCleanup {
     ): DesktopProtectedCourseCleanupResult {
         val trimmedPassword = password.trim()
         require(trimmedPassword.isNotEmpty()) {
-            "Event Password cannot be blank."
+            "Race Password cannot be blank."
         }
 
         val nextCourseInfoByCategoryId = protectedCourseInfoByCategoryId.toMutableMap()

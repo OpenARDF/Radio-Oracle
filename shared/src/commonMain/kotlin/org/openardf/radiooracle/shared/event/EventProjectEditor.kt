@@ -110,21 +110,21 @@ data class IofResultListImportOutcome(
     val importedReadouts: List<EventReadoutData> = emptyList()
 )
 
-/** Shared Event File editing helpers used by desktop and future non-Android flows. */
+/** Shared Race File editing helpers used by desktop and future non-Android flows. */
 object EventProjectEditor {
-    /** Returns a copy of the Event File linked to an Event Series manifest entry. */
+    /** Returns a copy of the Race File linked to a Race Series manifest entry. */
     fun updateSeriesLink(projectFile: EventProjectFile, seriesId: String, seriesEventId: String): EventProjectFile =
         projectFile.copy(seriesLink = EventSeriesLink(seriesId = seriesId.trim(), seriesEventId = seriesEventId.trim()))
 
-    /** Returns a copy of the Event File without Event Series backlink metadata. */
+    /** Returns a copy of the Race File without Race Series backlink metadata. */
     fun removeSeriesLink(projectFile: EventProjectFile): EventProjectFile =
         projectFile.copy(seriesLink = null)
 
-    /** Returns a copy of the Event File with a validated race name. */
+    /** Returns a copy of the Race File with a validated race name. */
     fun renameRace(projectFile: EventProjectFile, name: String): EventProjectFile {
         val trimmedName = name.trim()
         require(trimmedName.isNotEmpty()) {
-            "Event name cannot be blank."
+            "Race name cannot be blank."
         }
 
         return projectFile.copy(
@@ -134,7 +134,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with race-level settings changed. */
+    /** Returns a copy of the Race File with race-level settings changed. */
     fun updateRaceSettings(
         projectFile: EventProjectFile,
         raceType: RaceType,
@@ -164,7 +164,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with a validated race start date/time string. */
+    /** Returns a copy of the Race File with a validated race start date/time string. */
     fun updateRaceStartDateTime(projectFile: EventProjectFile, startDateTimeIso: String): EventProjectFile {
         val trimmedStart = startDateTimeIso.trim()
         require(trimmedStart.isNotEmpty()) {
@@ -178,7 +178,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with the event-wide Course Analyzer speed factor changed. */
+    /** Returns a copy of the Race File with the race-wide Course Analyzer speed factor changed. */
     fun updateCourseAnalyzerSpeedCompensationFactor(
         projectFile: EventProjectFile,
         factor: Double
@@ -197,7 +197,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with one validated category name changed. */
+    /** Returns a copy of the Race File with one validated category name changed. */
     fun renameCategory(
         projectFile: EventProjectFile,
         categoryId: String,
@@ -233,7 +233,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with one category's gender flag changed. */
+    /** Returns a copy of the Race File with one category's gender flag changed. */
     fun updateCategoryGender(
         projectFile: EventProjectFile,
         categoryId: String,
@@ -257,7 +257,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with a new category using conservative defaults. */
+    /** Returns a copy of the Race File with a new category using conservative defaults. */
     fun addCategory(
         projectFile: EventProjectFile,
         categoryId: String,
@@ -306,9 +306,9 @@ object EventProjectEditor {
     }
 
     /**
-     * Returns a copy of the Event File with one category and its course removed.
+     * Returns a copy of the Race File with one category and its course removed.
      *
-     * Desktop Event Files do not have Room foreign keys, so this helper makes
+     * Desktop Race Files do not have Room foreign keys, so this helper makes
      * the deletion policy explicit: category-owned control points disappear with
      * the category, remaining categories are renumbered, and kept competitors are
      * made uncategorized instead of retaining an invisible dangling category ID.
@@ -443,7 +443,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with a category course parsed from a control-point string. */
+    /** Returns a copy of the Race File with a category course parsed from a control-point string. */
     fun updateCategoryControlPoints(
         projectFile: EventProjectFile,
         categoryId: String,
@@ -503,7 +503,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with a category course replaced by exact stored control IDs. */
+    /** Returns a copy of the Race File with a category course replaced by exact stored control IDs. */
     fun replaceCategoryAssignedControls(
         projectFile: EventProjectFile,
         categoryId: String,
@@ -566,7 +566,7 @@ object EventProjectEditor {
             .filterValues { controls -> controls.size == 1 }
             .mapValues { (_, controls) -> controls.single() }
 
-    /** Returns a copy of the Event File with validated category length and climb. */
+    /** Returns a copy of the Race File with validated category length and climb. */
     fun updateCategoryPhysicalStats(
         projectFile: EventProjectFile,
         categoryId: String,
@@ -599,7 +599,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with one category's encrypted protected course order changed. */
+    /** Returns a copy of the Race File with one category's encrypted protected course order changed. */
     fun updateCategoryEncryptedIdealOrder(
         projectFile: EventProjectFile,
         categoryId: String,
@@ -627,7 +627,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with one category's encrypted protected course data changed. */
+    /** Returns a copy of the Race File with one category's encrypted protected course data changed. */
     fun updateCategoryEncryptedCourseInfo(
         projectFile: EventProjectFile,
         categoryId: String,
@@ -655,7 +655,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with one global logical control changed. */
+    /** Returns a copy of the Race File with one global logical control changed. */
     fun updateControl(
         projectFile: EventProjectFile,
         controlId: String,
@@ -695,7 +695,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with a global logical control appended. */
+    /** Returns a copy of the Race File with a global logical control appended. */
     fun addControl(
         projectFile: EventProjectFile,
         controlId: String,
@@ -761,7 +761,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with imported global controls added or merged by SI code and role. */
+    /** Returns a copy of the Race File with imported global controls added or merged by SI code and role. */
     fun importControlRows(
         projectFile: EventProjectFile,
         rows: List<ControlCsvImportRow>,
@@ -796,7 +796,7 @@ object EventProjectEditor {
             }
         }
 
-    /** Returns a copy of the Event File with a global logical control and dependent category assignments removed. */
+    /** Returns a copy of the Race File with a global logical control and dependent category assignments removed. */
     fun removeControl(
         projectFile: EventProjectFile,
         controlId: String,
@@ -845,7 +845,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with one competitor's validated name changed. */
+    /** Returns a copy of the Race File with one competitor's validated name changed. */
     fun renameCompetitor(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -888,7 +888,7 @@ object EventProjectEditor {
         ))
     }
 
-    /** Returns a copy of the Event File with one competitor assigned to a category, or to no category. */
+    /** Returns a copy of the Race File with one competitor assigned to a category, or to no category. */
     fun assignCompetitorCategory(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -927,7 +927,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with one competitor's club and IOF Person/Id changed. */
+    /** Returns a copy of the Race File with one competitor's club and IOF Person/Id changed. */
     fun updateCompetitorClubPersonId(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -952,7 +952,7 @@ object EventProjectEditor {
     ): EventProjectFile =
         updateCompetitorClubPersonId(projectFile, competitorId, club, index)
 
-    /** Returns a copy of the Event File with one competitor's team and visible identity fields changed. */
+    /** Returns a copy of the Race File with one competitor's team and visible identity fields changed. */
     fun updateCompetitorClubBibCallSign(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -1008,7 +1008,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with one competitor's optional birth year changed. */
+    /** Returns a copy of the Race File with one competitor's optional birth year changed. */
     fun updateCompetitorBirthYear(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -1049,7 +1049,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with one competitor's optional drawn start time changed. */
+    /** Returns a copy of the Race File with one competitor's optional drawn start time changed. */
     fun updateCompetitorStartTime(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -1086,7 +1086,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with persisted start-list generator settings changed. */
+    /** Returns a copy of the Race File with persisted start-list generator settings changed. */
     fun updateStartDrawSettings(
         projectFile: EventProjectFile,
         intervalText: String,
@@ -1174,11 +1174,11 @@ object EventProjectEditor {
     }
 
     /**
-     * Draws the current event after deriving current-day start thirds from
+     * Draws the current race after deriving current-day start thirds from
      * previously exported start-list CSVs.
      *
      * The historical inputs are intentionally the simple starts CSV rows rather
-     * than full Event Files: organizers can select the exported starts from
+     * than full Race Files: organizers can select the exported starts from
      * previous championship days and Radio-Oracle can infer which third each
      * competitor occupied on each day. Matching uses persistent competitor
      * identity fields: SI number, then bib number, then call sign. Rows without
@@ -1306,7 +1306,7 @@ object EventProjectEditor {
         }
     }
 
-    /** Returns a copy of the Event File with one competitor's SI number changed. */
+    /** Returns a copy of the Race File with one competitor's SI number changed. */
     fun updateCompetitorNumbers(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -1358,7 +1358,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with a new uncategorized competitor appended. */
+    /** Returns a copy of the Race File with a new uncategorized competitor appended. */
     fun addCompetitor(
         projectFile: EventProjectFile,
         competitorId: String,
@@ -2061,7 +2061,7 @@ object EventProjectEditor {
     }
 
     /**
-     * Returns a copy of the Event File with one competitor removed.
+     * Returns a copy of the Race File with one competitor removed.
      *
      * This mirrors Android's Room-backed deletion policy for retained results:
      * the competitor record is always removed, and its matched readout is either
@@ -2105,10 +2105,10 @@ object EventProjectEditor {
     }
 
     /**
-     * Returns a copy of the Event File with one readout/result removed.
+     * Returns a copy of the Race File with one readout/result removed.
      *
      * Android deletes the result row and relies on Room to cascade punch rows.
-     * Desktop Event Files keep result and punch data together, so removing
+     * Desktop Race Files keep result and punch data together, so removing
      * the readout data from its matched competitor or unmatched list expresses
      * the same policy without a database.
      */
@@ -2186,7 +2186,7 @@ object EventProjectEditor {
     }
 
     /**
-     * Returns a copy of the Event File with one readout set to a manual status.
+     * Returns a copy of the Race File with one readout set to a manual status.
      *
      * Android can recalculate automatic status because it has Room-backed race,
      * category, and punch services available. The desktop project editor keeps
@@ -2374,7 +2374,7 @@ object EventProjectEditor {
         ).withResultPlaces()
     }
 
-    /** Returns a copy of the Event File with successfully exported matched readouts marked sent. */
+    /** Returns a copy of the Race File with successfully exported matched readouts marked sent. */
     fun markReadoutsSent(
         projectFile: EventProjectFile,
         resultIds: Set<String>
@@ -2877,7 +2877,7 @@ object EventProjectEditor {
             .mapNotNull { it.controlIndex }
             .toSet()
 
-    /** Returns a copy of the Event File with one validated alias changed. */
+    /** Returns a copy of the Race File with one validated alias changed. */
     fun updateAlias(
         projectFile: EventProjectFile,
         aliasId: String,
@@ -2914,7 +2914,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with a validated alias appended. */
+    /** Returns a copy of the Race File with a validated alias appended. */
     fun addAlias(
         projectFile: EventProjectFile,
         aliasId: String,
@@ -2955,7 +2955,7 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Event File with one alias removed. */
+    /** Returns a copy of the Race File with one alias removed. */
     fun removeAlias(projectFile: EventProjectFile, aliasId: String): EventProjectFile {
         require(projectFile.raceData.aliases.any { it.id == aliasId }) {
             "Alias was not found: $aliasId"
@@ -2973,9 +2973,9 @@ object EventProjectEditor {
 
     private fun IofXmlCompetitorMatchIssue.importMessage(): String =
         when (this) {
-            IofXmlCompetitorMatchIssue.UNKNOWN_CLASS -> "Class was not found in this Event File."
+            IofXmlCompetitorMatchIssue.UNKNOWN_CLASS -> "Class was not found in this Race File."
             IofXmlCompetitorMatchIssue.MISSING_CONTROL_CARD -> "ControlCard is missing; SI number was not updated."
-            IofXmlCompetitorMatchIssue.UNKNOWN_COMPETITOR -> "Competitor was not found in this Event File."
+            IofXmlCompetitorMatchIssue.UNKNOWN_COMPETITOR -> "Competitor was not found in this Race File."
             IofXmlCompetitorMatchIssue.DUPLICATE_MATCH -> "Competitor match is not unique."
         }
 
@@ -3004,7 +3004,7 @@ object EventProjectEditor {
      * When a Person ID is available it remains the strongest identity; for
      * EventReg website imports without a Person ID, name plus club is the best
      * repeatable key available for deciding whether a downloaded competitor is
-     * already present in the current Event File.
+     * already present in the current Race File.
      */
     private fun CompetitorCsvImportRow.importKey(): String =
         competitorImportKey(personId = personId, firstName = firstName, lastName = lastName, club = club)
@@ -3029,8 +3029,8 @@ object EventProjectEditor {
             }
         /*
          * EventReg follow-up CSVs can supply Person IDs after an
-         * Event File was created without them. Only use this fallback when the
-         * existing event has one unambiguous same-name/same-club competitor.
+         * Race File was created without them. Only use this fallback when the
+         * existing race has one unambiguous same-name/same-club competitor.
          */
         return matches.singleOrNull()?.index ?: -1
     }
@@ -4273,12 +4273,12 @@ object EventProjectEditor {
 
         /*
          * Cost order:
-         * 1. Do not exceed physical capacity in the current event's third.
+         * 1. Do not exceed physical capacity in the current race's third.
          * 2. Avoid assigning the same person to one third more than twice over
          *    the multi-day series.
          * 3. If this is likely the fourth event and the person has never had an
          *    early start, strongly prefer the first third now.
-         * 4. Keep the current event balanced across thirds.
+         * 4. Keep the current race balanced across thirds.
          * 5. Normalize desirability over the series: middle is best, late is
          *    second, early is least desirable.
          */

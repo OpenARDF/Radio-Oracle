@@ -251,7 +251,7 @@ class DesktopLocalResultServer(
 
     private fun indexHtml(): String {
         val projectFile = projectSupplier()
-        val raceName = projectFile?.raceData?.race?.name ?: "No Event File open"
+        val raceName = projectFile?.raceData?.race?.name ?: "No Race File open"
         val results = projectFile?.let { EventResultDetails.from(it.raceData) } ?: emptyList()
         val groupedResults = results.groupBy { it.categoryId to it.categoryName }
 
@@ -294,7 +294,7 @@ class DesktopLocalResultServer(
     private fun categoriesHtml(): String {
         val projectFile = projectSupplier()
         val raceData = projectFile?.raceData
-        val raceName = raceData?.race?.name ?: "No Event File open"
+        val raceName = raceData?.race?.name ?: "No Race File open"
 
         return buildString {
             append("<!doctype html><html><head><meta charset=\"utf-8\">")
@@ -330,7 +330,7 @@ class DesktopLocalResultServer(
     private fun startsHtml(): String {
         val projectFile = projectSupplier()
         val raceData = projectFile?.raceData
-        val raceName = raceData?.race?.name ?: "No Event File open"
+        val raceName = raceData?.race?.name ?: "No Race File open"
         val details = raceData?.let { EventStartListDetails.from(it) }
 
         return buildString {
@@ -368,7 +368,7 @@ class DesktopLocalResultServer(
     private fun inForestHtml(): String {
         val projectFile = projectSupplier()
         val raceData = projectFile?.raceData
-        val raceName = raceData?.race?.name ?: "No Event File open"
+        val raceName = raceData?.race?.name ?: "No Race File open"
         val details = raceData?.let { EventInForestDetails.from(it, raceElapsedSeconds(it.race.startDateTimeIso)) }
 
         return buildString {

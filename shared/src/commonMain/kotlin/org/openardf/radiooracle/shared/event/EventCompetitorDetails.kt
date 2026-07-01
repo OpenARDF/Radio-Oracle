@@ -26,7 +26,7 @@ package org.openardf.radiooracle.shared.event
 
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
-/** Shared read-only competitor row prepared for desktop and other event-admin surfaces. */
+/** Shared read-only competitor row prepared for desktop and other race-admin surfaces. */
 data class EventCompetitorDetails(
     val id: String,
     val firstName: String,
@@ -106,7 +106,7 @@ data class EventCompetitorDetails(
                 if (apparentAge in 0 until minimumAge) {
                     add(
                         "Apparent birth year/category discrepancy: competitor appears to be " +
-                            "$apparentAge on the event date, too young for ${category.name}."
+                            "$apparentAge on the race date, too young for ${category.name}."
                     )
                 }
             }

@@ -59,10 +59,10 @@ object DesktopCourseAnalysisExports {
     fun reportText(result: DesktopCourseAnalysisSummary): String =
         buildString {
             appendLine("Course Analyzer")
-            appendLine("Event: ${result.eventName.ifBlank { "Untitled Event" }}")
-            appendLine("Event file: ${result.eventFileName?.takeIf { it.isNotBlank() } ?: "Unsaved Event File"}")
-            appendLine("Event format: ${result.eventFormatLabel}")
-            appendLine("Event type: ${result.eventTypeLabel}")
+            appendLine("Race: ${result.eventName.ifBlank { "Untitled Race" }}")
+            appendLine("Race file: ${result.eventFileName?.takeIf { it.isNotBlank() } ?: "Unsaved Race File"}")
+            appendLine("Race format: ${result.eventFormatLabel}")
+            appendLine("Race type: ${result.eventTypeLabel}")
             appendLine("Analyzed: ${result.analysisPerformedAtText}")
             appendLine("Category: ${result.categoryName}")
             appendLine("Rules applied: ${result.rulesDocumentLabel}")
@@ -239,13 +239,13 @@ object DesktopCourseAnalysisExports {
     private fun speedModelText(speedModel: DesktopCourseSpeedModel): String =
         "${twoDecimalText(speedModel.effectiveSpeedMetersPerSecond)} m/s; " +
             "${speedModel.categoryModelLabel} x${twoDecimalText(speedModel.categorySpeedMultiplier)}, " +
-            "event x${twoDecimalText(speedModel.compensationFactor)}"
+            "race x${twoDecimalText(speedModel.compensationFactor)}"
 
     private fun speedFactorExplanation(speedModel: DesktopCourseSpeedModel): String =
-        "Assumed running speed equals race-format baseline speed x category multiplier x event speed factor. " +
+        "Assumed running speed equals race-format baseline speed x category multiplier x race speed factor. " +
             "${speedModel.categoryFactorSourceLabel}: ${speedModel.categoryFactorExplanation} " +
-            "The event speed factor is adjustable, saved in the Event File, and applies to every category by default; the current event factor is x${twoDecimalText(speedModel.compensationFactor)}. " +
-            "Imported KML/KMZ SS=#.## speed specifiers replace the event factor for the following leg only."
+            "The race speed factor is adjustable, saved in the Race File, and applies to every category by default; the current race factor is x${twoDecimalText(speedModel.compensationFactor)}. " +
+            "Imported KML/KMZ SS=#.## speed specifiers replace the race factor for the following leg only."
 
     private fun kmlText(result: DesktopCourseAnalysisSummary, kmlFileStem: String): String =
         buildString {

@@ -306,7 +306,7 @@ private enum class SeriesStartFairnessStatus(val label: String) {
     GenerateStarts("Generate start lists before checking fairness"),
     AddIdentityData("Add SI, bib, or call sign identity data"),
     MoreHistoryNeeded("More identified start history needed"),
-    AllEventsLocked("All Event Files are locked for Series optimization"),
+    AllEventsLocked("All Race Files are locked for Series optimization"),
     NoOptimizationNeeded("No optimization needed"),
     ManualReviewRecommended("Manual start-parameter review recommended"),
     NoBetterOptimizationsFound("No better optimizations found"),
@@ -342,8 +342,8 @@ private val CompetitorTableColumnHints = mapOf(
     "Call sign" to "Optional radio call sign or on-air identifier for this competitor.",
     "Birth" to "Optional birth year.",
     "Category" to "Competition category assigned to this competitor.",
-    "Start no." to "Event-specific start number used by this Event File and its start list.",
-    "Start time" to "Drawn start time in minutes and seconds from the event start, such as 012:00.",
+    "Start no." to "Race-specific start number used by this Race File and its start list.",
+    "Start time" to "Drawn start time in minutes and seconds from the race start, such as 012:00.",
     "SI no." to "SPORTident card number assigned to this competitor."
 )
 
@@ -633,11 +633,11 @@ fun main(args: Array<String>) = application {
                 seriesLink = savedProject.seriesLink,
                 store = DesktopEventSeriesFiles
             )
-                ?: return "Event Series metadata was not refreshed because no series manifest was found near this Event File."
+                ?: return "Race Series metadata was not refreshed because no series manifest was found near this Race File."
             return runCatching {
                 val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
                 val seriesFolder = requireNotNull(manifestPath.parent) {
-                    "Event Series manifest has no parent folder."
+                    "Race Series manifest has no parent folder."
                 }
                 val refreshedSeriesFile = DesktopEventSeriesActions.refreshLinkedEventMetadata(
                     seriesFile = seriesFile,
@@ -649,14 +649,14 @@ fun main(args: Array<String>) = application {
                     DesktopEventSeriesFiles.write(manifestPath, refreshedSeriesFile)
                     DesktopDebugLog.info(
                         "EventSeries",
-                        "Refreshed saved Event File metadata in ${manifestPath.fileName} for ${savedPath.fileName}."
+                        "Refreshed saved Race File metadata in ${manifestPath.fileName} for ${savedPath.fileName}."
                     )
                 }
                 null
             }.getOrElse { error ->
                 val message = error.message ?: error::class.simpleName ?: "Unknown error"
-                DesktopDebugLog.error("EventSeries", "Failed to refresh saved Event File metadata: $message")
-                "Event Series metadata refresh failed: $message"
+                DesktopDebugLog.error("EventSeries", "Failed to refresh saved Race File metadata: $message")
+                "Race Series metadata refresh failed: $message"
             }
         }
 
@@ -706,7 +706,7 @@ fun main(args: Array<String>) = application {
                 }.getOrElse {
                     DesktopDebugLog.error(
                         "EventSeries",
-                        "Failed to refresh Event Series events manifest=$manifestPath: ${it.message ?: it::class.simpleName}"
+                        "Failed to refresh Race Series races manifest=$manifestPath: ${it.message ?: it::class.simpleName}"
                     )
                     seriesEventSummaries = emptyList()
                     seriesStartFairnessSummary = null
@@ -774,7 +774,7 @@ fun main(args: Array<String>) = application {
         fun deleteControlAfterProtectedRouteCheck(controlId: String, promptIfLocked: Boolean = true): Boolean {
             val currentProject = projectSession.currentProject
             if (currentProject == null) {
-                projectStatusText = "Edit failed: Load an Event File before deleting controls."
+                projectStatusText = "Edit failed: Load a Race File before deleting controls."
                 return false
             }
             if (currentProject.hasProtectedCategoryData() && protectedCoursePassword == null) {
@@ -792,7 +792,7 @@ fun main(args: Array<String>) = application {
             }
             val result = runCatching {
                 val currentProjectForDelete = projectSession.currentProject
-                    ?: throw IllegalStateException("Load an Event File before deleting controls.")
+                    ?: throw IllegalStateException("Load a Race File before deleting controls.")
                 val cleanupResult = if (protectedCourseInfoByCategoryId.isNotEmpty()) {
                     val password = protectedCoursePassword
                         ?: throw IllegalStateException("Unlock course data before deleting controls so protected route references can be cleaned.")
@@ -878,7 +878,7 @@ fun main(args: Array<String>) = application {
                 recentImportReport = DesktopImportReport(
                     title = "Restored ${checkpoint.title}",
                     lines = listOf(
-                        "The Event File was restored to the in-memory checkpoint captured before that import.",
+                        "The Race File was restored to the in-memory checkpoint captured before that import.",
                         "Persistent rollback backup file: ${checkpoint.backupPath}"
                     )
                 )
@@ -961,7 +961,7 @@ fun main(args: Array<String>) = application {
             protectedIdealOrderByCategoryId = emptyMap()
             protectedCourseInfoByCategoryId = emptyMap()
             if (wasUnlocked) {
-                projectStatusText = "Event Password lock applied."
+                projectStatusText = "Race Password lock applied."
             }
         }
 
@@ -1012,7 +1012,7 @@ fun main(args: Array<String>) = application {
                 }.onFailure { error ->
                     DesktopDebugLog.error(
                         "EventSeries",
-                        "Could not remember last opened Event Series member: ${error.message ?: error::class.simpleName}"
+                        "Could not remember last opened Race Series member: ${error.message ?: error::class.simpleName}"
                     )
                 }
                 projectStatusText = "Opened ${path.fileName}"
@@ -1032,8 +1032,8 @@ fun main(args: Array<String>) = application {
                 hasUnsavedEventDefinitionChanges = false
                 isEventDefinitionSaveDialogVisible = false
                 syncProjectState()
-                projectStatusText = "No Event File open."
-                DesktopDebugLog.info("EventFile", "Closed Event File")
+                projectStatusText = "No Race File open."
+                DesktopDebugLog.info("EventFile", "Closed Race File")
             }.onFailure { error ->
                 projectStatusText = "Close failed: ${error.message ?: error::class.simpleName}"
                 DesktopDebugLog.error("EventFile", "Close failed: ${error.message ?: error::class.simpleName}")
@@ -1045,7 +1045,7 @@ fun main(args: Array<String>) = application {
             lockProtectedCourseOrder()
             val project = EventProjectFactory.createEmptyProject(
                 raceId = UUID.randomUUID().toString(),
-                raceName = "New Event",
+                raceName = "New Race",
                 startDateTimeIso = DesktopDateTimeText.isoText(DesktopDateTimeText.defaultStartDateTime())
             )
             projectSession.newProject(project)
@@ -1053,8 +1053,8 @@ fun main(args: Array<String>) = application {
             hasUnsavedEventDefinitionChanges = false
             isEventDefinitionSaveDialogVisible = false
             syncProjectState()
-            projectStatusText = "New unsaved Event File."
-            DesktopDebugLog.info("EventFile", "Created new unsaved Event File")
+            projectStatusText = "New unsaved Race File."
+            DesktopDebugLog.info("EventFile", "Created new unsaved Race File")
         }
 
         fun localResultsWebPageUrl(rootUrl: String, eventPath: String?): String =
@@ -1065,7 +1065,7 @@ fun main(args: Array<String>) = application {
 
         fun regenerateLocalResultsWebPage(): String {
             val currentProject = requireNotNull(projectSession.currentProject) {
-                "Open or create an Event File before starting the local web server."
+                "Open or create a Race File before starting the local web server."
             }
             val directory = localResultsWebServerDirectory
                 ?: Files.createTempDirectory("radio-oracle-local-results-web").also {
@@ -1119,7 +1119,7 @@ fun main(args: Array<String>) = application {
                     return
                 }
                 val savedPath = projectSession.currentPath
-                    ?: error("Save the current Event File before $targetDescription.")
+                    ?: error("Save the current Race File before $targetDescription.")
                 projectSession.save()
                 projectSession.currentProject?.let { savedProject ->
                     refreshSavedEventSeriesMetadata(savedProject, savedPath)
@@ -1150,7 +1150,7 @@ fun main(args: Array<String>) = application {
                     DesktopDebugLog.info(
                         "EventSeries",
                         "Started SI card ${download.readout.siNumber} in forest for " +
-                            "${update.updatedCompetitorCount} Practice series event(s)."
+                            "${update.updatedCompetitorCount} Practice series race(s)."
                     )
                     scheduleLocalResultsWebPageRefresh()
                     return if (update.updatedCompetitorCount > 0) {
@@ -1229,7 +1229,7 @@ fun main(args: Array<String>) = application {
             if (matchedSeriesEvent != null && matchedPathKey != null && matchedPathKey != currentPathKey) {
                 saveOpenEventBeforeSeriesReadout("routing this SI readout to ${matchedSeriesEvent.event.displayName}")
                 check(openProject(matchedSeriesEvent.eventPath)) {
-                    "Could not open matched Event File ${matchedSeriesEvent.eventPath.fileName}."
+                    "Could not open matched Race File ${matchedSeriesEvent.eventPath.fileName}."
                 }
                 DesktopDebugLog.info(
                     "EventSeries",
@@ -1238,7 +1238,7 @@ fun main(args: Array<String>) = application {
             } else if (matchedSeriesEvent == null && initialProject.seriesLink != null) {
                 DesktopDebugLog.info(
                     "EventSeries",
-                    "No unique series event matched SI card ${download.readout.siNumber}; keeping readout on the open Event File."
+                    "No unique series race matched SI card ${download.readout.siNumber}; keeping readout on the open Race File."
                 )
             }
             val currentProject = projectSession.currentProject ?: return DesktopSportIdentAppendOutcome.DuplicateIgnored
@@ -1288,8 +1288,8 @@ fun main(args: Array<String>) = application {
             }
             val currentProject = projectSession.currentProject
             if (currentProject == null) {
-                projectStatusText = "Open or create an Event File before downloading SI cards."
-                DesktopDebugLog.warn("SI", "Single SI download requested with no Event File open")
+                projectStatusText = "Open or create a Race File before downloading SI cards."
+                DesktopDebugLog.warn("SI", "Single SI download requested with no Race File open")
                 return
             }
             val preflightWarning = raceOpsPreflightWarning(
@@ -1372,7 +1372,7 @@ fun main(args: Array<String>) = application {
         fun insertTestSportIdentDownloads() {
             val currentProject = projectSession.currentProject
             if (currentProject == null) {
-                projectStatusText = "Open or create an Event File before inserting test SI downloads."
+                projectStatusText = "Open or create a Race File before inserting test SI downloads."
                 return
             }
             runCatching {
@@ -1396,7 +1396,7 @@ fun main(args: Array<String>) = application {
         fun insertTestControls() {
             val currentProject = projectSession.currentProject
             if (currentProject == null) {
-                projectStatusText = "Open or create an Event File before inserting test controls."
+                projectStatusText = "Open or create a Race File before inserting test controls."
                 return
             }
             runCatching {
@@ -1419,7 +1419,7 @@ fun main(args: Array<String>) = application {
         fun insertTestCategories() {
             val currentProject = projectSession.currentProject
             if (currentProject == null) {
-                projectStatusText = "Open or create an Event File before inserting test categories."
+                projectStatusText = "Open or create a Race File before inserting test categories."
                 return
             }
             runCatching {
@@ -1442,7 +1442,7 @@ fun main(args: Array<String>) = application {
         fun insertTestCompetitors() {
             val currentProject = projectSession.currentProject
             if (currentProject == null) {
-                projectStatusText = "Open or create an Event File before inserting test competitors."
+                projectStatusText = "Open or create a Race File before inserting test competitors."
                 return
             }
             runCatching {
@@ -1468,8 +1468,8 @@ fun main(args: Array<String>) = application {
             }
             val currentProject = projectSession.currentProject
             if (currentProject == null) {
-                projectStatusText = "Open or create an Event File before downloading SI cards."
-                DesktopDebugLog.warn("SI", "Continuous SI readout requested with no Event File open")
+                projectStatusText = "Open or create a Race File before downloading SI cards."
+                DesktopDebugLog.warn("SI", "Continuous SI readout requested with no Race File open")
                 return
             }
             val preflightWarning = raceOpsPreflightWarning(
@@ -1644,7 +1644,7 @@ fun main(args: Array<String>) = application {
             val currentProjectForPlan = projectSession.currentProject
             if (currentProjectForPlan == null) {
                 if (!automatic) {
-                    projectStatusText = "Open or create an Event File before sending live results."
+                    projectStatusText = "Open or create a Race File before sending live results."
                 }
                 return
             }
@@ -1765,7 +1765,7 @@ fun main(args: Array<String>) = application {
                 syncProjectState()
                 projectSession.currentPath?.let(DesktopLastEventFilePreferences::rememberEventFile)
                 projectStatusText = buildString {
-                    append("Saved ${projectSession.currentPath?.fileName ?: "Event File"}")
+                    append("Saved ${projectSession.currentPath?.fileName ?: "Race File"}")
                     if (seriesRefreshWarning != null) {
                         append(". ")
                         append(seriesRefreshWarning)
@@ -1774,7 +1774,7 @@ fun main(args: Array<String>) = application {
                 val settingsLog = projectSession.currentProject?.startDrawSettingsLogText().orEmpty()
                 DesktopDebugLog.info(
                     "EventFile",
-                    "Saved ${projectSession.currentPath?.fileName ?: "Event File"} $settingsLog"
+                    "Saved ${projectSession.currentPath?.fileName ?: "Race File"} $settingsLog"
                 )
             }.onFailure { error ->
                 projectStatusText = "Save failed: ${error.message ?: error::class.simpleName}"
@@ -1784,15 +1784,15 @@ fun main(args: Array<String>) = application {
 
         fun createEventSeriesWithCurrentEvent() {
             val currentProject = projectSession.currentProject ?: run {
-                projectStatusText = "Open or create an Event File before creating an Event Series."
+                projectStatusText = "Open or create a Race File before creating a Race Series."
                 return
             }
             val currentPath = projectSession.currentPath ?: run {
-                projectStatusText = "Save this Event File before creating an Event Series."
+                projectStatusText = "Save this Race File before creating a Race Series."
                 return
             }
             val seriesFolder = currentPath.parent ?: run {
-                projectStatusText = "Event Series creation failed: Event File has no parent folder."
+                projectStatusText = "Race Series creation failed: Race File has no parent folder."
                 return
             }
             runCatching {
@@ -1807,7 +1807,7 @@ fun main(args: Array<String>) = application {
                 projectFile = projectSession.updateCurrentProject { result.eventProjectFile }
                 projectSession.save()
                 syncProjectState()
-                projectStatusText = "Created Event Series ${result.manifestPath.fileName} and linked this Event File."
+                projectStatusText = "Created Race Series ${result.manifestPath.fileName} and linked this Race File."
                 DesktopDebugLog.info(
                     "EventSeries",
                     "Created ${result.manifestPath.fileName} for ${currentPath.fileName} " +
@@ -1816,25 +1816,25 @@ fun main(args: Array<String>) = application {
                 )
                 recordActivity(projectStatusText)
             }.onFailure { error ->
-                projectStatusText = "Create Event Series failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Create Race Series failed: ${error.message ?: error::class.simpleName}"
                 DesktopDebugLog.error("EventSeries", projectStatusText)
             }
         }
 
         fun linkCurrentEventToSeries() {
             val currentProject = projectSession.currentProject ?: run {
-                projectStatusText = "Open or create an Event File before linking to an Event Series."
+                projectStatusText = "Open or create a Race File before linking to a Race Series."
                 return
             }
             val currentPath = projectSession.currentPath ?: run {
-                projectStatusText = "Save this Event File before linking to an Event Series."
+                projectStatusText = "Save this Race File before linking to a Race Series."
                 return
             }
             val manifestPath = DesktopFileDialogs.chooseOpenEventSeries() ?: return
             runCatching {
                 val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
                 val seriesFolder = requireNotNull(manifestPath.parent) {
-                    "Event Series manifest has no parent folder."
+                    "Race Series manifest has no parent folder."
                 }
                 val result = DesktopEventSeriesActions.linkCurrentEvent(
                     seriesFile = seriesFile,
@@ -1846,7 +1846,7 @@ fun main(args: Array<String>) = application {
                 projectFile = projectSession.updateCurrentProject { result.eventProjectFile }
                 projectSession.save()
                 syncProjectState()
-                projectStatusText = "Linked this Event File to ${manifestPath.fileName}."
+                projectStatusText = "Linked this Race File to ${manifestPath.fileName}."
                 DesktopDebugLog.info(
                     "EventSeries",
                     "Linked ${currentPath.fileName} to ${manifestPath.fileName} " +
@@ -1855,18 +1855,18 @@ fun main(args: Array<String>) = application {
                 )
                 recordActivity(projectStatusText)
             }.onFailure { error ->
-                projectStatusText = "Link Event Series failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Link Race Series failed: ${error.message ?: error::class.simpleName}"
                 DesktopDebugLog.error("EventSeries", projectStatusText)
             }
         }
 
         fun removeCurrentEventFromSeries() {
             val currentProject = projectSession.currentProject ?: run {
-                projectStatusText = "Open or create an Event File before removing a series link."
+                projectStatusText = "Open or create a Race File before removing a series link."
                 return
             }
             val manifestPath = currentSeriesManifestPath() ?: run {
-                projectStatusText = "Series manifest not found near this Event File; no link was removed."
+                projectStatusText = "Series manifest not found near this Race File; no link was removed."
                 return
             }
             runCatching {
@@ -1876,10 +1876,10 @@ fun main(args: Array<String>) = application {
                 projectFile = projectSession.updateCurrentProject { result.eventProjectFile }
                 projectSession.save()
                 syncProjectState()
-                projectStatusText = "Removed this Event File from ${manifestPath.fileName}."
+                projectStatusText = "Removed this Race File from ${manifestPath.fileName}."
                 recordActivity(projectStatusText)
             }.onFailure { error ->
-                projectStatusText = "Remove Event Series link failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Remove Race Series link failed: ${error.message ?: error::class.simpleName}"
             }
         }
 
@@ -1887,7 +1887,7 @@ fun main(args: Array<String>) = application {
             val manifestPath = currentSeriesManifestPath() ?: run {
                 eventSeriesValidationState = null
                 eventSeriesValidationEventPath = projectSession.currentPath?.toAbsolutePath()?.normalize()
-                projectStatusText = "Series manifest not found near this Event File."
+                projectStatusText = "Series manifest not found near this Race File."
                 return
             }
             runCatching {
@@ -1900,9 +1900,9 @@ fun main(args: Array<String>) = application {
                 )
                 eventSeriesValidationEventPath = projectSession.currentPath?.toAbsolutePath()?.normalize()
                 projectStatusText = if (issues.isEmpty()) {
-                    "Event Series validation passed."
+                    "Race Series validation passed."
                 } else {
-                    "Event Series validation found ${issues.size} issue${if (issues.size == 1) "" else "s"}: ${issues.first().message}"
+                    "Race Series validation found ${issues.size} issue${if (issues.size == 1) "" else "s"}: ${issues.first().message}"
                 }
             }.onFailure { error ->
                 val message = error.message ?: error::class.simpleName ?: "Unknown error"
@@ -1912,28 +1912,28 @@ fun main(args: Array<String>) = application {
                     errorMessage = message
                 )
                 eventSeriesValidationEventPath = projectSession.currentPath?.toAbsolutePath()?.normalize()
-                projectStatusText = "Event Series validation failed: $message"
+                projectStatusText = "Race Series validation failed: $message"
             }
         }
 
         fun addEventToCurrentSeries() {
             val currentProject = projectSession.currentProject ?: run {
-                projectStatusText = "Open or create an Event File before adding another event to a series."
+                projectStatusText = "Open or create a Race File before adding another race to a series."
                 return
             }
             if (currentProject.seriesLink == null) {
-                projectStatusText = "Link this Event File to an Event Series before adding another series event."
+                projectStatusText = "Link this Race File to a Race Series before adding another series race."
                 return
             }
             val manifestPath = currentSeriesManifestPath() ?: run {
-                projectStatusText = "Series manifest not found near this Event File."
+                projectStatusText = "Series manifest not found near this Race File."
                 return
             }
             val eventPath = DesktopFileDialogs.chooseEventSeriesMemberEventFile() ?: return
             runCatching {
                 val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
                 val seriesFolder = requireNotNull(manifestPath.parent) {
-                    "Event Series manifest has no parent folder."
+                    "Race Series manifest has no parent folder."
                 }
                 val eventProjectFile = DesktopEventSeriesFiles.readEvent(eventPath)
                 val result = DesktopEventSeriesActions.addEventToSeries(
@@ -1943,16 +1943,16 @@ fun main(args: Array<String>) = application {
                     eventProjectFile = eventProjectFile
                 )
                 val addedLink = requireNotNull(result.eventProjectFile.seriesLink) {
-                    "Added Event File did not receive an Event Series backlink."
+                    "Added Race File did not receive a Race Series backlink."
                 }
-                // The added Event File is not the currently open document, so write it through the series store.
+                // The added Race File is not the currently open document, so write it through the series store.
                 DesktopEventSeriesFiles.write(manifestPath, result.seriesFile)
                 DesktopEventSeriesFiles.writeEvent(eventPath, result.eventProjectFile)
                 val verifiedSeriesFile = DesktopEventSeriesFiles.read(manifestPath)
                 val verifiedEvent = requireNotNull(
                     verifiedSeriesFile.events.firstOrNull { it.seriesEventId == addedLink.seriesEventId }
                 ) {
-                    "Event Series manifest write did not include ${eventPath.fileName}."
+                    "Race Series manifest write did not include ${eventPath.fileName}."
                 }
                 refreshSeriesEventSummaries()
                 DesktopDebugLog.info(
@@ -1962,26 +1962,26 @@ fun main(args: Array<String>) = application {
                         "eventFilePath=${verifiedEvent.eventFilePath}"
                 )
                 val actionVerb = if (verifiedSeriesFile.events.size > seriesFile.events.size) "Added" else "Updated"
-                projectStatusText = "$actionVerb ${eventPath.fileName} in ${manifestPath.fileName}; series now has ${verifiedSeriesFile.events.size} events."
+                projectStatusText = "$actionVerb ${eventPath.fileName} in ${manifestPath.fileName}; series now has ${verifiedSeriesFile.events.size} races."
                 recordActivity(projectStatusText)
             }.onFailure { error ->
-                projectStatusText = "Add Event to Series failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Add Race to Series failed: ${error.message ?: error::class.simpleName}"
                 DesktopDebugLog.error("EventSeries", projectStatusText)
             }
         }
 
         fun exportCurrentEventSeries() {
             val manifestPath = currentSeriesManifestPath() ?: run {
-                projectStatusText = "Series manifest not found near this Event File."
+                projectStatusText = "Series manifest not found near this Race File."
                 return
             }
             val targetFolder = DesktopFileDialogs.chooseExportEventSeriesDirectory() ?: return
             runCatching {
                 val result = DesktopEventSeriesActions.exportSeries(DesktopEventSeriesFiles, manifestPath, targetFolder)
-                projectStatusText = "Exported Event Series to ${result.manifestPath.parent} with ${result.eventFilePaths.size} Event File${if (result.eventFilePaths.size == 1) "" else "s"}."
+                projectStatusText = "Exported Race Series to ${result.manifestPath.parent} with ${result.eventFilePaths.size} Race File${if (result.eventFilePaths.size == 1) "" else "s"}."
                 recordActivity(projectStatusText)
             }.onFailure { error ->
-                projectStatusText = "Export Event Series failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Export Race Series failed: ${error.message ?: error::class.simpleName}"
             }
         }
 
@@ -1992,7 +1992,7 @@ fun main(args: Array<String>) = application {
                 return false
             }
             val manifestPath = currentSeriesManifestPath() ?: run {
-                projectStatusText = "Series manifest not found near this Event File."
+                projectStatusText = "Series manifest not found near this Race File."
                 return false
             }
             return runCatching {
@@ -2002,11 +2002,11 @@ fun main(args: Array<String>) = application {
                     DesktopEventSeriesFiles.write(manifestPath, updatedSeriesFile)
                 }
                 refreshSeriesEventSummaries()
-                projectStatusText = "Renamed Event Series to $trimmedName."
+                projectStatusText = "Renamed Race Series to $trimmedName."
                 recordActivity(projectStatusText)
                 true
             }.getOrElse { error ->
-                projectStatusText = "Rename Event Series failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Rename Race Series failed: ${error.message ?: error::class.simpleName}"
                 false
             }
         }
@@ -2018,7 +2018,7 @@ fun main(args: Array<String>) = application {
                 return false
             }
             val manifestPath = currentSeriesManifestPath() ?: run {
-                projectStatusText = "Series manifest not found near this Event File."
+                projectStatusText = "Series manifest not found near this Race File."
                 return false
             }
             return runCatching {
@@ -2030,26 +2030,26 @@ fun main(args: Array<String>) = application {
                     fileNameStem = trimmedFileNameStem
                 )
                 refreshSeriesEventSummaries()
-                projectStatusText = "Renamed Event Series file to ${updatedManifestPath.fileName}."
+                projectStatusText = "Renamed Race Series file to ${updatedManifestPath.fileName}."
                 recordActivity(projectStatusText)
                 true
             }.getOrElse { error ->
-                projectStatusText = "Rename Event Series file failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Rename Race Series file failed: ${error.message ?: error::class.simpleName}"
                 false
             }
         }
 
         fun balanceStartListFromEventSeries() {
             val currentProject = projectSession.currentProject ?: run {
-                projectStatusText = "Open or create an Event File before balancing the open event for its series."
+                projectStatusText = "Open or create a Race File before balancing the open race for its series."
                 return
             }
             val link = currentProject.seriesLink ?: run {
-                projectStatusText = "Link this Event File to an Event Series before balancing the open event for its series."
+                projectStatusText = "Link this Race File to a Race Series before balancing the open race for its series."
                 return
             }
             val manifestPath = currentSeriesManifestPath() ?: run {
-                projectStatusText = "Series manifest not found near this Event File."
+                projectStatusText = "Series manifest not found near this Race File."
                 return
             }
             runCatching {
@@ -2061,7 +2061,7 @@ fun main(args: Array<String>) = application {
                     validationIssues.first().message
                 }
                 val settings = currentProject.raceData.effectiveStartDrawSettings()
-                DesktopDebugLog.info("StartList", "Balance Open Event for Series using ${currentProject.startDrawSettingsLogText()}")
+                DesktopDebugLog.info("StartList", "Balance Open Race for Series using ${currentProject.startDrawSettingsLogText()}")
                 val balanced = EventSeriesSupport.drawStartListWithSeriesBalancedStartGroups(
                     seriesFile = seriesFile,
                     linkedEvents = linkedEvents,
@@ -2074,26 +2074,26 @@ fun main(args: Array<String>) = application {
                 seriesStartFairnessOptimizationResult = null
                 clearEventStartListDrawHistory()
                 syncProjectState()
-                projectStatusText = "Balanced the open Event File for its series. Save the Event File to keep the draw."
+                projectStatusText = "Balanced the open Race File for its series. Save the Race File to keep the draw."
                 recordActivity(projectStatusText)
-                DesktopDebugLog.info("StartList", "Balanced open event for series ${balanced.startDrawSettingsLogText()}")
+                DesktopDebugLog.info("StartList", "Balanced open race for series ${balanced.startDrawSettingsLogText()}")
             }.onFailure { error ->
-                projectStatusText = "Balance Open Event for Series failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Balance Open Race for Series failed: ${error.message ?: error::class.simpleName}"
                 DesktopDebugLog.error("StartList", projectStatusText)
             }
         }
 
         fun optimizeSeriesStartFairness() {
             val currentPath = projectSession.currentPath ?: run {
-                projectStatusText = "Open and save an Event File in this Event Series before optimizing series starts."
+                projectStatusText = "Open and save a Race File in this Race Series before optimizing series starts."
                 return
             }
             if (projectSession.hasUnsavedChanges) {
-                projectStatusText = "Save the current Event File before optimizing series starts."
+                projectStatusText = "Save the current Race File before optimizing series starts."
                 return
             }
             val manifestPath = currentSeriesManifestPath() ?: run {
-                projectStatusText = "Series manifest not found near this Event File."
+                projectStatusText = "Series manifest not found near this Race File."
                 return
             }
             runCatching {
@@ -2108,7 +2108,7 @@ fun main(args: Array<String>) = application {
                     updated.path.toAbsolutePath().normalize() == normalizedCurrentPath
                 }
 
-                // The optimizer evaluates the series as one problem, but each Event File remains
+                // The optimizer evaluates the series as one problem, but each Race File remains
                 // independently stored. Write non-open files directly and route the open file
                 // through the project session so dirty-state and in-memory UI state stay coherent.
                 result.updatedEventFiles
@@ -2137,10 +2137,10 @@ fun main(args: Array<String>) = application {
                 projectStatusText = when {
                     numberedResult.improved ->
                         "Optimized Series Start Fairness: ${numberedResult.initialUnevenHistoryCount} -> " +
-                            "${numberedResult.finalUnevenHistoryCount} uneven histories across ${numberedResult.optimizedEventCount} updated events. " +
+                            "${numberedResult.finalUnevenHistoryCount} uneven histories across ${numberedResult.optimizedEventCount} updated races. " +
                             "${numberedResult.solutionLabel()}."
                     numberedResult.alternateSolution ->
-                        "Found an alternate Series Start Fairness solution with the same fairness score across ${numberedResult.optimizedEventCount} updated events. " +
+                        "Found an alternate Series Start Fairness solution with the same fairness score across ${numberedResult.optimizedEventCount} updated races. " +
                             "${numberedResult.solutionLabel()}."
                     else ->
                         "Series Start Fairness optimizer found no alternate or improved start lists after ${numberedResult.attemptedCandidateCount} candidates. " +
@@ -2199,7 +2199,7 @@ fun main(args: Array<String>) = application {
             val currentProject = projectSession.currentProject ?: return false
             val trimmedPassword = password.trim()
             if (trimmedPassword.isEmpty()) {
-                projectStatusText = "Event Password cannot be blank."
+                projectStatusText = "Race Password cannot be blank."
                 return false
             }
 
@@ -2343,7 +2343,7 @@ fun main(args: Array<String>) = application {
             }
             runCatching {
                 val currentProject = projectFile
-                    ?: throw IllegalStateException("Load an Event File before editing course order.")
+                    ?: throw IllegalStateException("Load a Race File before editing course order.")
                 val trimmedIdealOrder = idealOrderText.trim()
                 if (trimmedIdealOrder.isNotEmpty()) {
                     val assignedControls = assignedProtectedIdealOrderControls(currentProject, categoryId)
@@ -2385,7 +2385,7 @@ fun main(args: Array<String>) = application {
 
         fun discardCurrentEventChangesFromDisk(): Boolean {
             val path = projectSession.currentPath ?: run {
-                projectStatusText = "Cannot dump changes because this Event File has not been saved to disk yet."
+                projectStatusText = "Cannot dump changes because this Race File has not been saved to disk yet."
                 return false
             }
             return runCatching {
@@ -2402,7 +2402,7 @@ fun main(args: Array<String>) = application {
                     protectedIdealOrderByCategoryId = emptyMap()
                     protectedCourseInfoByCategoryId = emptyMap()
                 }
-                projectStatusText = "Unsaved Event File changes dumped. Reloaded ${path.fileName} from disk."
+                projectStatusText = "Unsaved Race File changes dumped. Reloaded ${path.fileName} from disk."
                 DesktopDebugLog.info("EventFile", "Dumped unsaved changes and reloaded ${path.fileName}")
             }.onFailure { error ->
                 projectStatusText = "Dump changes failed: ${error.message ?: error::class.simpleName}"
@@ -2417,7 +2417,7 @@ fun main(args: Array<String>) = application {
             }
             return runCatching {
                 val currentProject = projectFile
-                    ?: throw IllegalStateException("Load an Event File before applying calculated route.")
+                    ?: throw IllegalStateException("Load a Race File before applying calculated route.")
                 val currentCourseInfo = protectedCourseInfoByCategoryId[application.categoryId]
                     ?: throw IllegalStateException("Course data is missing for the selected category.")
                 val (updatedProject, updatedCourseInfo) = DesktopCourseAnalysisApplier.applyCalculatedRoute(
@@ -2430,7 +2430,7 @@ fun main(args: Array<String>) = application {
                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId + (application.categoryId to application.idealOrderText)
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId + (application.categoryId to updatedCourseInfo)
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
-                projectStatusText = "Saved calculated route and fox numbering to the Event File. Save Event to write changes to disk."
+                projectStatusText = "Saved calculated route and fox numbering to the Race File. Save Race to write changes to disk."
                 projectStatusText
             }.getOrElse { error ->
                 projectStatusText = "Save calculated route failed: ${error.message ?: error::class.simpleName}"
@@ -2445,7 +2445,7 @@ fun main(args: Array<String>) = application {
             }
             return runCatching {
                 val currentProject = projectFile
-                    ?: throw IllegalStateException("Load an Event File before saving fox renumbering.")
+                    ?: throw IllegalStateException("Load a Race File before saving fox renumbering.")
                 val result = DesktopCourseAnalysisApplier.applyFoxRenumberingOnly(
                     projectFile = currentProject,
                     renumbering = renumbering,
@@ -2454,7 +2454,7 @@ fun main(args: Array<String>) = application {
                 projectFile = projectSession.updateCurrentProject { result.projectFile }
                 syncProtectedCourseState(result.projectFile, password)
                 projectStatusText =
-                    "Saved fox renumbering to ${result.changedControlCount} controls across ${result.affectedCategoryCount} categories. Save Event to write changes to disk."
+                    "Saved fox renumbering to ${result.changedControlCount} controls across ${result.affectedCategoryCount} categories. Save Race to write changes to disk."
                 projectStatusText
             }.getOrElse { error ->
                 projectStatusText = "Save fox renumbering failed: ${error.message ?: error::class.simpleName}"
@@ -2464,7 +2464,7 @@ fun main(args: Array<String>) = application {
 
         fun updateCourseAnalyzerSpeedFactor(factor: Double): String =
             runCatching {
-                projectFile ?: throw IllegalStateException("Load an Event File before updating Course Analyzer speed.")
+                projectFile ?: throw IllegalStateException("Load a Race File before updating Course Analyzer speed.")
                 projectFile = projectSession.updateCurrentProject { project ->
                     EventProjectEditor.updateCourseAnalyzerSpeedCompensationFactor(project, factor)
                 }
@@ -2483,7 +2483,7 @@ fun main(args: Array<String>) = application {
             }
             return runCatching {
                 val currentProject = projectFile
-                    ?: throw IllegalStateException("Load an Event File before updating control locations.")
+                    ?: throw IllegalStateException("Load a Race File before updating control locations.")
                 val result = DesktopProtectedControlLocationUpdater.applyControlLocation(
                     projectFile = currentProject,
                     courseInfoByCategoryId = protectedCourseInfoByCategoryId,
@@ -2514,11 +2514,11 @@ fun main(args: Array<String>) = application {
             val trimmedNewPassword = newPassword.trim()
             val trimmedConfirmPassword = confirmPassword.trim()
             if (trimmedNewPassword.isEmpty()) {
-                projectStatusText = "New Event Password cannot be blank."
+                projectStatusText = "New Race Password cannot be blank."
                 return false
             }
             if (trimmedNewPassword != trimmedConfirmPassword) {
-                projectStatusText = "New Event Passwords do not match."
+                projectStatusText = "New Race Passwords do not match."
                 return false
             }
 
@@ -2527,7 +2527,7 @@ fun main(args: Array<String>) = application {
                     !categoryData.category.encryptedCourseInfo.isNullOrBlank()
             }
             if (hasEncryptedCourseProtection && trimmedOldPassword.isEmpty()) {
-                projectStatusText = "Current Event Password cannot be blank."
+                projectStatusText = "Current Race Password cannot be blank."
                 return false
             }
 
@@ -2568,13 +2568,13 @@ fun main(args: Array<String>) = application {
                 }.toMap()
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
                 projectStatusText = if (hasEncryptedCourseProtection) {
-                    "Event Password updated. Unsaved changes."
+                    "Race Password updated. Unsaved changes."
                 } else {
-                    "Event Password set. Unsaved changes."
+                    "Race Password set. Unsaved changes."
                 }
                 true
             }.getOrElse { error ->
-                projectStatusText = "Event Password update failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Race Password update failed: ${error.message ?: error::class.simpleName}"
                 false
             }
         }
@@ -2585,7 +2585,7 @@ fun main(args: Array<String>) = application {
             password: String,
             allowInternetDownload: Boolean
         ): Pair<CourseAnalysisElevationPreparationResult, DesktopRouteElevationResult> {
-            val currentProject = projectSession.currentProject ?: error("No Event File open.")
+            val currentProject = projectSession.currentProject ?: error("No Race File open.")
             val currentJob = coroutineContext[Job]
             if (courseKmlKmzElevationJob?.isActive == true && courseKmlKmzElevationJob != currentJob) {
                 error("Course elevation retrieval is already running.")
@@ -2740,7 +2740,7 @@ fun main(args: Array<String>) = application {
             summary: DesktopCourseAnalysisSummary
         ): CourseAnalysisElevationPreparationResult {
             val password = protectedCoursePassword
-            var latestProject = projectSession.currentProject ?: error("No Event File open.")
+            var latestProject = projectSession.currentProject ?: error("No Race File open.")
             var latestCourseInfo = protectedCourseInfoByCategoryId
             val statusParts = mutableListOf<String>()
             if (summary.hasMissingElevationData) {
@@ -2959,9 +2959,9 @@ fun main(args: Array<String>) = application {
                 }
                 desktop.open(directory.toFile())
             }.onSuccess {
-                projectStatusText = "Opened Event File folder: $directory"
+                projectStatusText = "Opened Race File folder: $directory"
             }.onFailure { error ->
-                projectStatusText = "Could not open Event File folder: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Could not open Race File folder: ${error.message ?: error::class.simpleName}"
             }
         }
 
@@ -3139,7 +3139,7 @@ fun main(args: Array<String>) = application {
                     "${selectedSummary.importedCategoryCount} categories received stored route data.",
                     "${selectedSummary.duplicateCategoryCount} duplicate categories skipped.",
                     "${selectedSummary.controlIdentityUpdateCount} control identities updated.",
-                    "$retainedImportedSiConflictCount imported SI conflicts retained existing Event File numbers.",
+                    "$retainedImportedSiConflictCount imported SI conflicts retained existing Race File numbers.",
                     "${selectedSummary.changedControlLocationCount} control locations updated.",
                     "${selectedSummary.categoryAssignmentUpdates.size.takeIf { applyCategoryAssignments } ?: 0} assigned-control lists replaced.",
                     "${selectedSummary.createdCategoryNames.size} missing categories created.",
@@ -3339,7 +3339,7 @@ fun main(args: Array<String>) = application {
                             controlPointCount = summary.controlPointCount,
                             labelConversions = summary.labelConversions
                         )
-                        projectStatusText = "Choose the Event File category for this $formatLabel route."
+                        projectStatusText = "Choose the Race File category for this $formatLabel route."
                     } else if (
                         summary.routeCount > 0 &&
                         summary.matchedCategoryCount == 0 &&
@@ -3349,7 +3349,7 @@ fun main(args: Array<String>) = application {
                         pendingCourseKmlKmzImportReview = null
                         pendingCourseKmlKmzCategoryMapping = null
                         projectStatusText =
-                            "$formatLabel route data was not applied because the Event File has no categories."
+                            "$formatLabel route data was not applied because the Race File has no categories."
                     } else if (summary.isControlLocationNoOp && !summary.hasLabelConversions) {
                         pendingCourseKmlKmzImportReview = null
                         pendingCourseKmlKmzCategoryMapping = null
@@ -3499,12 +3499,12 @@ fun main(args: Array<String>) = application {
         }
 
         fun chooseExportCourseKmlKmz() {
-            projectStatusText = "Enter the Event Password before exporting protected controls/route KML/KMZ data."
+            projectStatusText = "Enter the Race Password before exporting protected controls/route KML/KMZ data."
             pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.Export
         }
 
         fun chooseExportCourseGpx() {
-            projectStatusText = "Enter the Event Password before exporting protected controls/route GPX data."
+            projectStatusText = "Enter the Race Password before exporting protected controls/route GPX data."
             pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.ExportGpx
         }
 
@@ -3535,7 +3535,7 @@ fun main(args: Array<String>) = application {
         }
 
         fun chooseExportCourseOverlays() {
-            projectStatusText = "Enter the Event Password before exporting OOM course overlay files."
+            projectStatusText = "Enter the Race Password before exporting OOM course overlay files."
             pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.ExportOverlays
         }
 
@@ -3930,7 +3930,7 @@ fun main(args: Array<String>) = application {
             DesktopFileDialogs.chooseImportIofXml("Import IOF EntryList XML")?.let { path ->
                 runCatching {
                     val currentProject = projectSession.currentProject
-                        ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
+                        ?: throw IllegalStateException("Open or create a Race File before importing IOF XML.")
                     val parsed = IofXmlImports.validatedEntryList(
                         Files.readString(path),
                         IofXmlSchemaResource.loadBundledSchema()
@@ -4191,7 +4191,7 @@ fun main(args: Array<String>) = application {
             DesktopFileDialogs.chooseImportIofXml("Import IOF Start List XML")?.let { path ->
                 runCatching {
                     val currentProject = projectSession.currentProject
-                        ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
+                        ?: throw IllegalStateException("Open or create a Race File before importing IOF XML.")
                     val parsed = IofXmlImports.validatedStartList(
                         Files.readString(path),
                         IofXmlSchemaResource.loadBundledSchema()
@@ -4215,7 +4215,7 @@ fun main(args: Array<String>) = application {
         fun applyIofStartListImport(review: PendingIofStartListImportReview) {
             runCatching {
                 val currentProject = projectSession.currentProject
-                    ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
+                    ?: throw IllegalStateException("Open or create a Race File before importing IOF XML.")
                 val outcome = EventProjectEditor.importIofStartList(currentProject, review.startList)
                 checkpointBeforeImport("IOF StartList import ${review.path.fileName}")
                 projectFile = projectSession.updateCurrentProject { outcome.projectFile }
@@ -4251,7 +4251,7 @@ fun main(args: Array<String>) = application {
             DesktopFileDialogs.chooseImportIofXml("Import IOF CourseData XML")?.let { path ->
                 runCatching {
                     val currentProject = projectSession.currentProject
-                        ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
+                        ?: throw IllegalStateException("Open or create a Race File before importing IOF XML.")
                     val parsed = IofXmlImports.validatedCourseData(
                         Files.readString(path),
                         IofXmlSchemaResource.loadBundledSchema(),
@@ -4278,7 +4278,7 @@ fun main(args: Array<String>) = application {
         fun applyIofCourseDataImport(review: PendingIofCourseDataImportReview) {
             runCatching {
                 val currentProject = projectSession.currentProject
-                    ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
+                    ?: throw IllegalStateException("Open or create a Race File before importing IOF XML.")
                 checkpointBeforeImport("IOF CourseData import ${review.path.fileName}")
                 val outcome = EventProjectEditor.importIofCourseData(currentProject, review.courseData)
                 projectFile = projectSession.updateCurrentProject { outcome.projectFile }
@@ -4313,7 +4313,7 @@ fun main(args: Array<String>) = application {
             DesktopFileDialogs.chooseImportIofXml("Import IOF Result List XML")?.let { path ->
                 runCatching {
                     val currentProject = projectSession.currentProject
-                        ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
+                        ?: throw IllegalStateException("Open or create a Race File before importing IOF XML.")
                     val parsed = IofXmlImports.validatedResultList(
                         Files.readString(path),
                         IofXmlSchemaResource.loadBundledSchema()
@@ -4342,7 +4342,7 @@ fun main(args: Array<String>) = application {
         fun applyIofResultListImport(review: PendingIofResultListImportReview) {
             runCatching {
                 val currentProject = projectSession.currentProject
-                    ?: throw IllegalStateException("Open or create an Event File before importing IOF XML.")
+                    ?: throw IllegalStateException("Open or create a Race File before importing IOF XML.")
                 val outcome = EventProjectEditor.importIofResultList(
                     projectFile = currentProject,
                     preview = review.resultList,
@@ -4431,7 +4431,7 @@ fun main(args: Array<String>) = application {
                 }.onSuccess { eventPath ->
                     openOrImportSelectedEventFile(eventPath)
                 }.onFailure { error ->
-                    projectStatusText = "Open Event Series failed: ${error.message ?: error::class.simpleName}"
+                    projectStatusText = "Open Race Series failed: ${error.message ?: error::class.simpleName}"
                     DesktopDebugLog.error("EventSeries", projectStatusText)
                 }
                 return
@@ -4442,7 +4442,7 @@ fun main(args: Array<String>) = application {
                 DesktopProjectFilePaths.isProjectFileName(path.fileName.toString()) ->
                     PendingDirtyProjectAction.OpenProject(path)
                 else -> {
-                    projectStatusText = "Unsupported Event File type: ${path.fileName}"
+                    projectStatusText = "Unsupported Race File type: ${path.fileName}"
                     return
                 }
             }
@@ -4466,7 +4466,7 @@ fun main(args: Array<String>) = application {
         fun openSeriesEvent(summary: DesktopEventSeriesEventSummary) {
             when {
                 summary.isCurrentEvent -> projectStatusText = "${summary.displayName} is already open."
-                !summary.exists -> projectStatusText = "Series event file is missing: ${summary.eventFilePath}"
+                !summary.exists -> projectStatusText = "Series race file is missing: ${summary.eventFilePath}"
                 else -> openOrImportSelectedEventFile(summary.resolvedPath)
             }
         }
@@ -4502,11 +4502,11 @@ fun main(args: Array<String>) = application {
                 result.onSuccess { importResult ->
                     val totalCompetitors = importResult.generatedFiles.sumOf { it.competitorCount }
                     projectStatusText =
-                        "Generated ${importResult.generatedFiles.size} Event Files with $totalCompetitors competitor entries in ${importResult.outputDirectory}."
+                        "Generated ${importResult.generatedFiles.size} Race Files with $totalCompetitors competitor entries in ${importResult.outputDirectory}."
                     isEventRegImportDialogVisible = false
                     DesktopDebugLog.info(
                         "EventReg",
-                        "Generated ${importResult.generatedFiles.size} Event Files from ${importResult.sourceUrl}"
+                        "Generated ${importResult.generatedFiles.size} Race Files from ${importResult.sourceUrl}"
                     )
                 }.onFailure { error ->
                     projectStatusText = "EventReg import failed: ${error.message ?: error::class.simpleName}"
@@ -4597,18 +4597,18 @@ fun main(args: Array<String>) = application {
 
         fun sendEventFileToAndroid() {
             if (projectSession.currentProject == null) {
-                projectStatusText = "Open or create an Event File before sending to Android."
+                projectStatusText = "Open or create a Race File before sending to Android."
                 return
             }
             if (projectSession.currentPath == null || hasProtectedUnsavedChanges()) {
                 if (!saveCurrentProject()) {
-                    projectStatusText = "Save the Event File before sending it to Android."
+                    projectStatusText = "Save the Race File before sending it to Android."
                     return
                 }
             }
 
             val path = projectSession.currentPath ?: run {
-                projectStatusText = "Save the Event File before sending it to Android."
+                projectStatusText = "Save the Race File before sending it to Android."
                 return
             }
 
@@ -4651,17 +4651,17 @@ fun main(args: Array<String>) = application {
                             val message = when (reason) {
                                 DesktopEventFileTransferStopReason.Downloaded ->
                                     if (isSeriesTransfer) {
-                                        "Event Series package downloaded by Android. Transfer stopped."
+                                        "Race Series package downloaded by Android. Transfer stopped."
                                     } else {
-                                        "Event File downloaded by Android. Transfer stopped."
+                                        "Race File downloaded by Android. Transfer stopped."
                                     }
                                 DesktopEventFileTransferStopReason.Cancelled ->
-                                    if (isSeriesTransfer) "Event Series transfer cancelled." else "Event File transfer cancelled."
+                                    if (isSeriesTransfer) "Race Series transfer cancelled." else "Race File transfer cancelled."
                                 DesktopEventFileTransferStopReason.Timeout ->
                                     if (isSeriesTransfer) {
-                                        "Event Series transfer expired after 10 minutes."
+                                        "Race Series transfer expired after 10 minutes."
                                     } else {
-                                        "Event File transfer expired after 10 minutes."
+                                        "Race File transfer expired after 10 minutes."
                                     }
                             }
                             projectStatusText = message
@@ -4697,9 +4697,9 @@ fun main(args: Array<String>) = application {
                     statusText = "Waiting for Android to download ${session.fileName}. The link expires after 10 minutes or one download."
                 )
                 projectStatusText = if (isSeriesTransfer) {
-                    "Event Series transfer ready at ${session.url}"
+                    "Race Series transfer ready at ${session.url}"
                 } else {
-                    "Event File transfer ready at ${session.url}"
+                    "Race File transfer ready at ${session.url}"
                 }
                 DesktopDebugLog.info(
                     "EventFile",
@@ -4726,11 +4726,11 @@ fun main(args: Array<String>) = application {
                 EventFileTransferPayloads.isSeriesPackage(result.fileName, result.contentType) -> {
                     if (hasProtectedUnsavedChanges()) {
                         projectStatusText =
-                            "$savedText Saved to ${result.path}. Save or close the current Event File before importing it."
+                            "$savedText Saved to ${result.path}. Save or close the current Race File before importing it."
                         DesktopAndroidFileReceiveResultDialogState.savedOnly(
                             fileName = result.fileName,
                             path = result.path,
-                            reason = "The current desktop Event File has unsaved changes, so the received Event Series package was not loaded."
+                            reason = "The current desktop Race File has unsaved changes, so the received Race Series package was not loaded."
                         )
                     } else {
                         runCatching {
@@ -4753,21 +4753,21 @@ fun main(args: Array<String>) = application {
                             DesktopLastEventFilePreferences.rememberEventFile(eventPath)
                             syncProjectState()
                             projectStatusText =
-                                "Imported Event Series from Android to ${unpacked.manifestPath.parent} with ${unpacked.eventFilePaths.size} Event Files."
+                                "Imported Race Series from Android to ${unpacked.manifestPath.parent} with ${unpacked.eventFilePaths.size} Race Files."
                             DesktopDebugLog.info("EventSeries", projectStatusText)
                             DesktopAndroidFileReceiveResultDialogState.loaded(
                                 fileName = result.fileName,
                                 path = unpacked.manifestPath,
-                                loadedMessage = "The received Event Series package is now open."
+                                loadedMessage = "The received Race Series package is now open."
                             )
                         }.getOrElse { error ->
                             projectStatusText =
-                                "$savedText Saved to ${result.path}, but Event Series import failed: ${error.message ?: error::class.simpleName}"
+                                "$savedText Saved to ${result.path}, but Race Series import failed: ${error.message ?: error::class.simpleName}"
                             DesktopDebugLog.error("EventSeries", projectStatusText)
                             DesktopAndroidFileReceiveResultDialogState.failedToLoad(
                                 fileName = result.fileName,
                                 path = result.path,
-                                failure = "Event Series import failed: ${error.message ?: error::class.simpleName}"
+                                failure = "Race Series import failed: ${error.message ?: error::class.simpleName}"
                             )
                         }
                     }
@@ -4775,11 +4775,11 @@ fun main(args: Array<String>) = application {
                 result.fileName.lowercase().endsWith(DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION) -> {
                     if (hasProtectedUnsavedChanges()) {
                         projectStatusText =
-                            "$savedText Saved to ${result.path}. Save or close the current Event File before importing it."
+                            "$savedText Saved to ${result.path}. Save or close the current Race File before importing it."
                         DesktopAndroidFileReceiveResultDialogState.savedOnly(
                             fileName = result.fileName,
                             path = result.path,
-                            reason = "The current desktop Event File has unsaved changes, so the received Android Event File was not loaded."
+                            reason = "The current desktop Race File has unsaved changes, so the received Android Race File was not loaded."
                         )
                     } else {
                         runCatching {
@@ -4793,11 +4793,11 @@ fun main(args: Array<String>) = application {
                             hasUnsavedEventDefinitionChanges = false
                             isEventDefinitionSaveDialogVisible = false
                             syncProjectState()
-                            projectStatusText = "Imported ${result.path.fileName} from Android. Save it to choose its desktop Event File path."
+                            projectStatusText = "Imported ${result.path.fileName} from Android. Save it to choose its desktop Race File path."
                             DesktopAndroidFileReceiveResultDialogState.loaded(
                                 fileName = result.fileName,
                                 path = result.path,
-                                loadedMessage = "The received Android Event File is now open as an unsaved desktop Event File."
+                                loadedMessage = "The received Android Race File is now open as an unsaved desktop Race File."
                             )
                         }.getOrElse { error ->
                             projectStatusText =
@@ -4814,11 +4814,11 @@ fun main(args: Array<String>) = application {
                 DesktopProjectFilePaths.isProjectFileName(result.fileName) -> {
                     if (hasProtectedUnsavedChanges()) {
                         projectStatusText =
-                            "$savedText Saved to ${result.path}. Save or close the current Event File before opening it."
+                            "$savedText Saved to ${result.path}. Save or close the current Race File before opening it."
                         DesktopAndroidFileReceiveResultDialogState.savedOnly(
                             fileName = result.fileName,
                             path = result.path,
-                            reason = "The current desktop Event File has unsaved changes, so the received desktop Event File was not opened."
+                            reason = "The current desktop Race File has unsaved changes, so the received desktop Race File was not opened."
                         )
                     } else {
                         runCatching {
@@ -4835,7 +4835,7 @@ fun main(args: Array<String>) = application {
                             DesktopAndroidFileReceiveResultDialogState.loaded(
                                 fileName = result.fileName,
                                 path = result.path,
-                                loadedMessage = "The received desktop Event File is now open."
+                                loadedMessage = "The received desktop Race File is now open."
                             )
                         }.getOrElse { error ->
                             projectStatusText =
@@ -4987,9 +4987,9 @@ fun main(args: Array<String>) = application {
             return when (action) {
                 DesktopNavAction.SaveEventFile ->
                     if (projectFile == null) {
-                        "Open or create an Event File before saving."
+                        "Open or create a Race File before saving."
                     } else {
-                        "There are no Event File changes to save."
+                        "There are no Race File changes to save."
                     }
                 DesktopNavAction.CloseEventFile,
                 DesktopNavAction.ImportEventRegCompetitorsCsv,
@@ -5044,17 +5044,17 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.AddEventToSeries,
                 DesktopNavAction.ValidateEventSeries,
                 DesktopNavAction.ExportEventSeries ->
-                    "Open or create an Event File first."
+                    "Open or create a Race File first."
                 DesktopNavAction.DownloadSiCard ->
                     when {
-                        projectFile == null -> "Open or create an Event File before downloading SI cards."
+                        projectFile == null -> "Open or create a Race File before downloading SI cards."
                         isDownloadingSiReadout -> "An SI card download is already in progress."
                         isContinuousSiReadoutActive -> "Stop continuous SI readout before downloading one card."
                         else -> "SI card download is not available right now."
                     }
                 DesktopNavAction.StartContinuousSiReadout ->
                     when {
-                        projectFile == null -> "Open or create an Event File before starting continuous SI readout."
+                        projectFile == null -> "Open or create a Race File before starting continuous SI readout."
                         isDownloadingSiReadout -> "Wait for the current SI card download to finish."
                         isContinuousSiReadoutActive -> "Continuous SI readout is already running."
                         else -> "Continuous SI readout is not available right now."
@@ -5064,7 +5064,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.OpenLocalResultsWebPage,
                 DesktopNavAction.PreviewLocalResultsWebPage,
                 DesktopNavAction.StartLocalResultsWebServer ->
-                    "Open or create an Event File before starting the local web server."
+                    "Open or create a Race File before starting the local web server."
                 DesktopNavAction.StopLocalResultsWebServer ->
                     "The local results web server is not running."
                 DesktopNavAction.OpenPublicResultsSitePreview ->
@@ -5079,7 +5079,7 @@ fun main(args: Array<String>) = application {
                     "The public results site preview is not running."
                 DesktopNavAction.SendRobis ->
                     if (projectFile == null) {
-                        "Open or create an Event File before sending ROBIS results."
+                        "Open or create a Race File before sending ROBIS results."
                     } else {
                         "ROBIS results are already being sent."
                     }
@@ -5199,19 +5199,19 @@ fun main(args: Array<String>) = application {
 
         MenuBar {
             Menu("File") {
-                Item("New Event File", onClick = ::requestNewEventFile)
-                Item("Load Event File...", onClick = ::chooseOpenEventFile)
+                Item("New Race File", onClick = ::requestNewEventFile)
+                Item("Load Race File...", onClick = ::chooseOpenEventFile)
                 Item("Import EventReg Website...", onClick = ::showEventRegImportDialog)
                 Item(
-                    "Save Event",
+                    "Save Race",
                     enabled = canSaveEventFile(),
                     onClick = {
                         saveCurrentProject()
                     }
                 )
-                Item("Send Event to Android", enabled = projectFile != null, onClick = ::sendEventFileToAndroid)
+                Item("Send Race to Android", enabled = projectFile != null, onClick = ::sendEventFileToAndroid)
                 Item("Receive File from Android", onClick = ::receiveFileFromAndroid)
-                Item("Close Event File", enabled = projectFile != null, onClick = ::requestCloseEventFile)
+                Item("Close Race File", enabled = projectFile != null, onClick = ::requestCloseEventFile)
             }
         }
 
@@ -5308,7 +5308,7 @@ fun main(args: Array<String>) = application {
                                 session = session,
                                 qrCode = desktopEventFileTransferQrCode(session.url)
                             )
-                            projectStatusText = "Event File transfer ready at ${session.url}"
+                            projectStatusText = "Race File transfer ready at ${session.url}"
                         }.onFailure { error ->
                             projectStatusText = "Could not update transfer URL: ${error.message ?: error::class.simpleName}"
                         }
@@ -5434,13 +5434,13 @@ fun main(args: Array<String>) = application {
                 },
                 description = when (unlockAction) {
                     CourseKmlKmzUnlockAction.Import ->
-                        "KML/KMZ controls/route data includes coordinates and route details that require the Event Password."
+                        "KML/KMZ controls/route data includes coordinates and route details that require the Race Password."
                     CourseKmlKmzUnlockAction.ImportGpx ->
-                        "GPX controls/route data includes coordinates and route details that require the Event Password."
+                        "GPX controls/route data includes coordinates and route details that require the Race Password."
                     CourseKmlKmzUnlockAction.ImportControls ->
-                        "KML/KMZ control-location data includes coordinates that require the Event Password."
+                        "KML/KMZ control-location data includes coordinates that require the Race Password."
                     CourseKmlKmzUnlockAction.ImportControlsGpx ->
-                        "GPX control-location data includes coordinates that require the Event Password."
+                        "GPX control-location data includes coordinates that require the Race Password."
                     CourseKmlKmzUnlockAction.Export ->
                         "Controls/route KML/KMZ export includes sensitive coordinates and routes. The exported file will be placed inside a password-locked ZIP."
                     CourseKmlKmzUnlockAction.ExportGpx ->
@@ -5487,7 +5487,7 @@ fun main(args: Array<String>) = application {
                 ?: "this control"
             CourseKmlKmzUnlockDialog(
                 title = "Unlock course data to delete control",
-                description = "The Event File contains password-protected imported course or route data. Before deleting $controlLabel, Radio-Oracle needs the Event Password so it can clean any stored course references to that control.",
+                description = "The Race File contains password-protected imported course or route data. Before deleting $controlLabel, Radio-Oracle needs the Race Password so it can clean any stored course references to that control.",
                 confirmLabel = "Unlock and Delete",
                 onUnlock = { password ->
                     if (unlockProtectedCourseOrder(password)) {
@@ -6110,7 +6110,7 @@ fun main(args: Array<String>) = application {
             onDrawStartList = { interval, options ->
                 runCatching {
                     val currentProject = requireNotNull(projectSession.currentProject) {
-                        "Open or create an Event File before generating starts."
+                        "Open or create a Race File before generating starts."
                     }
                     val currentPath = projectSession.currentPath
                     val protectedOptions = options.copy(
@@ -6332,7 +6332,7 @@ fun main(args: Array<String>) = application {
             onPreviewFinishTicket = { resultId ->
                 runCatching {
                     val currentProject = requireNotNull(projectSession.currentProject) {
-                        "Open or create an Event File before previewing finish tickets."
+                        "Open or create a Race File before previewing finish tickets."
                     }
                     FinishTicketRenderer.render(
                         currentProject.raceData,
@@ -6348,7 +6348,7 @@ fun main(args: Array<String>) = application {
             onPrintFinishTicket = { resultId ->
                 val currentProject = projectSession.currentProject
                 if (currentProject == null) {
-                    projectStatusText = "Open or create an Event File before printing finish tickets."
+                    projectStatusText = "Open or create a Race File before printing finish tickets."
                 } else {
                     projectStatusText = "Printing finish ticket..."
                     appCoroutineScope.launch {
@@ -6525,7 +6525,7 @@ fun main(args: Array<String>) = application {
             onDiscardUnsavedNewEventFile = {
                 closeProject(discardUnsavedChanges = true)
                 newEventDraftProject = null
-                projectStatusText = "New Event File discarded."
+                projectStatusText = "New Race File discarded."
             }
         )
     }
@@ -6548,7 +6548,7 @@ private fun ControlRoleWarningDialog(
     )
 }
 
-/** Prompts for the standard save/discard/cancel decision before replacing or closing a dirty Event File. */
+/** Prompts for the standard save/discard/cancel decision before replacing or closing a dirty Race File. */
 @Composable
 private fun UnsavedChangesDialog(
     onSave: () -> Unit,
@@ -6560,7 +6560,7 @@ private fun UnsavedChangesDialog(
         title = { Text("Unsaved changes") },
         text = {
             Text(
-                "The current Event File has unsaved changes. Save before continuing, discard those changes, or cancel to avoid losing edits."
+                "The current Race File has unsaved changes. Save before continuing, discard those changes, or cancel to avoid losing edits."
             )
         },
         confirmButton = {
@@ -6590,14 +6590,14 @@ private fun EventDefinitionSaveDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Event definition changed") },
+        title = { Text("Race definition changed") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "The Event name, start time, format, event type, band, or time limit was changed for an existing Event File."
+                    "The Race name, start time, format, race type, band, or time limit was changed for an existing Race File."
                 )
                 Text(
-                    "These fields affect competitors, controls, courses, Race Ops, and Results. Save as a new Event File unless you intentionally want to replace the loaded file."
+                    "These fields affect competitors, controls, courses, Race Ops, and Results. Save as a new Race File unless you intentionally want to replace the loaded file."
                 )
                 currentPath?.let { path ->
                     Text(
@@ -6610,7 +6610,7 @@ private fun EventDefinitionSaveDialog(
         },
         confirmButton = {
             Button(onClick = onSaveAsNew) {
-                Text("Save As New Event File...")
+                Text("Save As New Race File...")
             }
         },
         dismissButton = {
@@ -6634,9 +6634,9 @@ private fun UnsavedNewEventFileDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Unsaved new Event File") },
+        title = { Text("Unsaved new Race File") },
         text = {
-            Text("Save this new Event File before leaving this page, or discard it?")
+            Text("Save this new Race File before leaving this page, or discard it?")
         },
         confirmButton = {
             Button(onClick = onSave) {
@@ -6726,7 +6726,7 @@ private fun BulkCategoryActionDialog(
         BulkCategoryAction.DeleteAllAssignedControls ->
             "This removes all assigned controls, beacons, category length/climb data, and protected course/order data from $categoryCount categories. Category names and competitors are kept."
         BulkCategoryAction.DeleteAllCategories ->
-            "This removes all category names, assigned controls, category length/climb data, and protected course/order data from the Event File. Competitors are kept but become uncategorized."
+            "This removes all category names, assigned controls, category length/climb data, and protected course/order data from the Race File. Competitors are kept but become uncategorized."
     }
     AlertDialog(
         onDismissRequest = onCancel,
@@ -6774,7 +6774,7 @@ private fun DeleteAllControlsDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "This removes all $controlCount controls from the Event File and clears dependent category control assignments, length, and climb data."
+                    "This removes all $controlCount controls from the Race File and clears dependent category control assignments, length, and climb data."
                 )
                 Text(
                     text = if (affectedCategoryCount > 0) {
@@ -6823,7 +6823,7 @@ private fun DeleteAllCompetitorsDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "This removes all $competitorCount competitors from the Event File and clears competitor lists from categories."
+                    "This removes all $competitorCount competitors from the Race File and clears competitor lists from categories."
                 )
                 Text(
                     text = if (matchedReadoutCount > 0) {
@@ -7009,10 +7009,10 @@ private fun CourseKmlKmzImportReviewDialog(
                         Text("Categories: $categoriesText")
                         if (summary.missingCategoryNames.isNotEmpty() || summary.missingControlNames.isNotEmpty()) {
                             if (summary.missingCategoryNames.isNotEmpty()) {
-                                Text("Categories listed in $formatLabel but not in the Event File: ${summary.missingCategoryNames.joinToString()}")
+                                Text("Categories listed in $formatLabel but not in the Race File: ${summary.missingCategoryNames.joinToString()}")
                             }
                             if (summary.missingControlNames.isNotEmpty()) {
-                                Text("Controls listed in $formatLabel but not in the Event File: ${summary.missingControlNames.joinToString()}")
+                                Text("Controls listed in $formatLabel but not in the Race File: ${summary.missingControlNames.joinToString()}")
                             }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -7061,7 +7061,7 @@ private fun CourseKmlKmzImportReviewDialog(
                         }
                         Text("Matched course controls: ${courseControlMatchSummary(selectedSummary.matchedFoxCount, selectedSummary.matchedBeaconCount, selectedSummary.matchedSpectatorCount)}")
                         if (selectedSiConflictCount > 0) {
-                            Text("Imported SI= lines differ from existing Event File SI numbers: $selectedSiConflictCount")
+                            Text("Imported SI= lines differ from existing Race File SI numbers: $selectedSiConflictCount")
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -7070,13 +7070,13 @@ private fun CourseKmlKmzImportReviewDialog(
                                     checked = overwriteImportedSiNumbers,
                                     onCheckedChange = { overwriteImportedSiNumbers = it }
                                 )
-                                Text("Overwrite Event File SI numbers from imported SI= lines")
+                                Text("Overwrite Race File SI numbers from imported SI= lines")
                             }
                             Text(
                                 text = if (overwriteImportedSiNumbers) {
-                                    "The imported SI= values will replace the existing Event File SI numbers for matched controls."
+                                    "The imported SI= values will replace the existing Race File SI numbers for matched controls."
                                 } else {
-                                    "The current Event File SI numbers will be retained; imported SI= values remain in the source file only."
+                                    "The current Race File SI numbers will be retained; imported SI= values remain in the source file only."
                                 },
                                 fontSize = 12.sp,
                                 color = Color.DarkGray
@@ -7086,7 +7086,7 @@ private fun CourseKmlKmzImportReviewDialog(
                             Text("Control identities to update from SI= lines: $selectedSiUpdateCount")
                         }
                         if (selectedSummary.labelConversions.isNotEmpty()) {
-                            Text("Imported control names to treat as existing Event File labels:")
+                            Text("Imported control names to treat as existing Race File labels:")
                             selectedSummary.labelConversions.take(8).forEach { conversion ->
                                 Text("${conversion.importedName} -> ${conversion.eventControlLabel}")
                             }
@@ -7125,27 +7125,27 @@ private fun CourseKmlKmzImportReviewDialog(
                         }
                         Text(
                             text = if (selectedSummary.isDuplicateOnly) {
-                                "This file has the same SHA-256 hash as route data already stored in the Event File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Event File unchanged."
+                                "This file has the same SHA-256 hash as route data already stored in the Race File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Race File unchanged."
                             } else if (
                                 selectedSummary.hasLabelConversions &&
                                 selectedSummary.importedCategoryCount == 0 &&
                                 selectedSummary.assignedCategoryControlCount == 0 &&
                                 selectedSummary.changedControlLocationCount == 0
                             ) {
-                                "Analyze Imported Data will use these $formatLabel names as matches to existing Event File labels in the active Event File model. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Save Event is still required to write changes to disk. Cancel leaves the Event File unchanged."
+                                "Analyze Imported Data will use these $formatLabel names as matches to existing Race File labels in the active Race File model. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
                             } else if (
                                 selectedSummary.importedCategoryCount == 0 &&
                                 (selectedSummary.changedControlLocationCount > 0 || selectedSummary.controlIdentityUpdateCount > 0)
                             ) {
-                                "Analyze Imported Data will update control identities or locations in the active Event File model. Affected stored route geometry is invalidated when locations change so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Save Event is still required to write changes to disk. Cancel leaves the Event File unchanged."
+                                "Analyze Imported Data will update control identities or locations in the active Race File model. Affected stored route geometry is invalidated when locations change so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
                             } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.controlSiConflictCount > 0) {
-                                "Choose whether to retain current Event File SI numbers or overwrite them from imported SI= lines. Cancel leaves the Event File unchanged."
+                                "Choose whether to retain current Race File SI numbers or overwrite them from imported SI= lines. Cancel leaves the Race File unchanged."
                             } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.assignedCategoryControlCount > 0) {
-                                "Analyze Imported Data will make the matched $formatLabel control points active in memory for Course Analyzer. Category assigned controls are changed only when the assignment checkbox is selected. Save Event is still required to write changes to disk. Cancel leaves the Event File unchanged."
+                                "Analyze Imported Data will make the matched $formatLabel control points active in memory for Course Analyzer. Category assigned controls are changed only when the assignment checkbox is selected. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
                             } else if (selectedSummary.hasLabelConversions) {
-                                "Analyze Imported Data will use these $formatLabel names as matches to existing Event File labels, then update route facts, ideal order, and any changed control locations in the active Event File model. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Save Event is still required to write changes to disk. Cancel leaves the Event File unchanged."
+                                "Analyze Imported Data will use these $formatLabel names as matches to existing Race File labels, then update route facts, ideal order, and any changed control locations in the active Race File model. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
                             } else {
-                                "Analyze Imported Data will update route facts, ideal order, and any changed control locations in the active Event File model. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import becomes active. Save Event is still required to write changes to disk. Cancel leaves the Event File unchanged."
+                                "Analyze Imported Data will update route facts, ideal order, and any changed control locations in the active Race File model. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import becomes active. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
                             },
                             fontSize = 13.sp,
                             color = Color.DarkGray
@@ -7268,7 +7268,7 @@ private fun IofEntryListImportReviewDialog(
             ) {
                 Text("File: ${review.path.fileName}")
                 review.entryList.eventName?.takeIf { it.isNotBlank() }?.let { eventName ->
-                    Text("Event: $eventName")
+                    Text("Race: $eventName")
                 }
                 Text("Entry rows in file: ${review.entryList.entries.size}")
                 Text("Competitors to add: ${review.importedCount}")
@@ -7327,7 +7327,7 @@ private fun IofStartListImportReviewDialog(
             ) {
                 Text("File: ${review.path.fileName}")
                 review.startList.eventName?.takeIf { it.isNotBlank() }?.let { eventName ->
-                    Text("Event: $eventName")
+                    Text("Race: $eventName")
                 }
                 Text("Start rows in file: ${review.startList.entries.size}")
                 Text("Competitors to update: ${review.updatedCount}")
@@ -7382,7 +7382,7 @@ private fun IofResultListImportReviewDialog(
             ) {
                 Text("File: ${review.path.fileName}")
                 review.resultList.eventName?.takeIf { it.isNotBlank() }?.let { eventName ->
-                    Text("Event: $eventName")
+                    Text("Race: $eventName")
                 }
                 Text("Result rows in file: ${review.resultList.entries.size}")
                 Text("Readouts to import: ${review.importedCount}")
@@ -7582,7 +7582,7 @@ private fun CourseKmlKmzCategoryMappingDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("File: ${mapping.sourceName}")
-                Text("No route name or file name matched an Event File category.")
+                Text("No route name or file name matched a Race File category.")
                 Text("Choose the category this $formatLabel route should update.")
                 CourseAnalysisCategoryPicker(
                     selectedCategoryId = selectedCategoryId,
@@ -7592,7 +7592,7 @@ private fun CourseKmlKmzCategoryMappingDialog(
                 )
                 Text("Matched course controls: ${courseControlMatchSummary(mapping.matchedFoxCount, mapping.matchedBeaconCount, mapping.matchedSpectatorCount)}")
                 if (mapping.labelConversions.isNotEmpty()) {
-                    Text("Imported control names to treat as existing Event File labels:")
+                    Text("Imported control names to treat as existing Race File labels:")
                     mapping.labelConversions.take(8).forEach { conversion ->
                         Text("${conversion.importedName} -> ${conversion.eventControlLabel}")
                     }
@@ -7601,7 +7601,7 @@ private fun CourseKmlKmzCategoryMappingDialog(
                     }
                 }
                 Text(
-                    text = "The selected category will be used only for this import. Control labels and public labels are not renamed. Cancel leaves the Event File unchanged.",
+                    text = "The selected category will be used only for this import. Control labels and public labels are not renamed. Cancel leaves the Race File unchanged.",
                     fontSize = 13.sp,
                     color = Color.DarkGray
                 )
@@ -7848,14 +7848,14 @@ private fun UnsavedSubmenuChangesDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Unsaved Event changes") },
-        text = { Text("Save Event changes before leaving this menu?") },
+        title = { Text("Unsaved Race changes") },
+        text = { Text("Save Race changes before leaving this menu?") },
         confirmButton = {
             Button(
                 onClick = onSave,
                 colors = saveEventButtonColors()
             ) {
-                Text("Save Event")
+                Text("Save Race")
             }
         },
         dismissButton = {
@@ -7880,15 +7880,15 @@ private fun CourseAnalysisEntryDirtyEventDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Save Event before Course Analyzer") },
+        title = { Text("Save Race before Course Analyzer") },
         text = {
             Text(
-                "The Event File has unsaved changes. Course Analyzer needs a clean starting point so imported, calculated, or renumbered course data can be clearly saved or discarded."
+                "The Race File has unsaved changes. Course Analyzer needs a clean starting point so imported, calculated, or renumbered course data can be clearly saved or discarded."
             )
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DisabledReasonTooltip("Save the current in-memory Event File changes to disk, then enter Course Analyzer.") {
+                DisabledReasonTooltip("Save the current in-memory Race File changes to disk, then enter Course Analyzer.") {
                     Button(
                         onClick = onSaveAndContinue,
                         colors = saveEventButtonColors()
@@ -7898,9 +7898,9 @@ private fun CourseAnalysisEntryDirtyEventDialog(
                 }
                 DisabledReasonTooltip(
                     if (canDumpChanges) {
-                        "Discard all current in-memory Event File changes by reloading the Event File from disk, then enter Course Analyzer."
+                        "Discard all current in-memory Race File changes by reloading the Race File from disk, then enter Course Analyzer."
                     } else {
-                        "This Event File has not been saved to disk yet, so there is no saved file to reload."
+                        "This Race File has not been saved to disk yet, so there is no saved file to reload."
                     }
                 ) {
                     Button(
@@ -7913,7 +7913,7 @@ private fun CourseAnalysisEntryDirtyEventDialog(
             }
         },
         dismissButton = {
-            DisabledReasonTooltip("Do not enter Course Analyzer. Return to Setup > More... > Course Tools with the current Event File changes still in memory.") {
+            DisabledReasonTooltip("Do not enter Course Analyzer. Return to Setup > More... > Course Tools with the current Race File changes still in memory.") {
                 Button(onClick = onCancel) {
                     Text("Cancel")
                 }
@@ -7934,7 +7934,7 @@ private fun UnsavedCourseAnalysisDataDialog(
         title = { Text("Unsaved Analyzer Data") },
         text = { Text("Course changes will be lost when you exit the analyzer.") },
         confirmButton = {
-            DisabledReasonTooltip("Save the active Event File model to disk, then exit Course Analyzer.") {
+            DisabledReasonTooltip("Save the active Race File model to disk, then exit Course Analyzer.") {
                 Button(
                     onClick = onSaveAndExit,
                     colors = saveEventButtonColors()
@@ -7947,9 +7947,9 @@ private fun UnsavedCourseAnalysisDataDialog(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DisabledReasonTooltip(
                     if (canDiscardToDisk) {
-                        "Discard imported, calculated, renumbered, or other analyzer changes by reloading the Event File from disk, then exit Course Analyzer."
+                        "Discard imported, calculated, renumbered, or other analyzer changes by reloading the Race File from disk, then exit Course Analyzer."
                     } else {
-                        "This Event File has not been saved to disk yet, so there is no saved file to reload."
+                        "This Race File has not been saved to disk yet, so there is no saved file to reload."
                     }
                 ) {
                     Button(
@@ -8028,7 +8028,7 @@ private fun NationalStartListDefaultsDialog(
         title = { Text("Reset Start List settings?") },
         text = {
             Text(
-                "National events usually use Ignore clubs, 2 per time, and No start groups. " +
+                "National races usually use Ignore clubs, 2 per time, and No start groups. " +
                     "Reset the current Start List settings to those defaults?"
             )
         },
@@ -8048,8 +8048,8 @@ private fun NationalStartListDefaultsDialog(
 @Composable
 private fun EventRegImportDialog(
     title: String = "Import EventReg Website",
-    idleDescription: String = "Creates one Event File for each competition class column with registered competitors.",
-    importingDescription: String = "Downloading registration table and generating Event Files...",
+    idleDescription: String = "Creates one Race File for each competition class column with registered competitors.",
+    importingDescription: String = "Downloading registration table and generating Race Files...",
     url: String,
     isImporting: Boolean,
     onUrlChange: (String) -> Unit,
@@ -8120,12 +8120,12 @@ private data class DesktopEventFileTransferResultDialogState(
         fun downloaded(fileName: String, path: Path, byteCount: Long): DesktopEventFileTransferResultDialogState =
             DesktopEventFileTransferResultDialogState(
                 title = "Android Download Complete",
-                summary = "Android downloaded the Event File.",
+                summary = "Android downloaded the Race File.",
                 sourcePath = path,
                 details = listOf(
                     "Downloaded file: $fileName",
                     "Bytes sent: $byteCount",
-                    "Android imports the downloaded Event File into its race list."
+                    "Android imports the downloaded Race File into its race list."
                 )
             )
 
@@ -8208,7 +8208,7 @@ private fun EventFileTransferDialog(
 
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Send Event to Android") },
+        title = { Text("Send Race to Android") },
         text = {
             Column(
                 modifier = Modifier.widthIn(min = 420.dp, max = 560.dp),
@@ -8217,7 +8217,7 @@ private fun EventFileTransferDialog(
                 Text("Scan this code from Android, or enter the URL manually. Use trusted Wi-Fi or a phone hotspot.")
                 Image(
                     bitmap = state.qrCode.toComposeImageBitmap(),
-                    contentDescription = "Android Event File transfer QR code",
+                    contentDescription = "Android Race File transfer QR code",
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
                         .width(260.dp)
@@ -8288,7 +8288,7 @@ private fun EventFileTransferResultDialog(
                     Text(detail)
                 }
                 state.sourcePath?.let { path ->
-                    Text("Desktop Event File location:")
+                    Text("Desktop Race File location:")
                     SelectionContainer {
                         Text(path.toString(), style = MaterialTheme.typography.body2)
                     }
@@ -8470,7 +8470,7 @@ private fun CompetitorCsvImportOptionsDialog(
                     }
                     Text(
                         text = if (createMissingCategories) {
-                            "Created categories will not have course data unless route data was imported for them separately. Review Course Analyzer and add course data before the event."
+                            "Created categories will not have course data unless route data was imported for them separately. Review Course Analyzer and add course data before the race."
                         } else {
                             "Competitors in these categories will be imported without a category assignment."
                         },
@@ -8649,7 +8649,7 @@ private data class BypassedDisabledNavigation(
     val itemId: String?
 )
 
-private const val DisabledNavigationExplorationStatus = "Disabled menu being explored; some commands may not work until required event data is complete."
+private const val DisabledNavigationExplorationStatus = "Disabled menu being explored; some commands may not work until required race data is complete."
 
 private fun DesktopPendingNavigation.updatedBypassedDisabledNavigation(
     previous: BypassedDisabledNavigation?,
@@ -8936,12 +8936,12 @@ private enum class CourseAnalysisSaveAction(
     CalculatedRoute(
         buttonLabel = "Save Calculated Route",
         title = "Save calculated route?",
-        message = "This will replace the saved route and saved fox numbering for the selected category with the calculated route data. Any improved calculated fox numbering will also be saved to affected course data. The Event File will have unsaved changes until you click Save Event."
+        message = "This will replace the saved route and saved fox numbering for the selected category with the calculated route data. Any improved calculated fox numbering will also be saved to affected course data. The Race File will have unsaved changes until you click Save Race."
     ),
     FoxRenumberingOnly(
         buttonLabel = "Save Fox Renumbering Only",
         title = "Save fox renumbering?",
-        message = "This will keep the saved route geometry, ignore calculated-route changes, and replace saved fox numbering with the Section 1 wait-time recommendation. The Event File will have unsaved changes until you click Save Event."
+        message = "This will keep the saved route geometry, ignore calculated-route changes, and replace saved fox numbering with the Section 1 wait-time recommendation. The Race File will have unsaved changes until you click Save Race."
     )
 }
 
@@ -9066,7 +9066,7 @@ internal data class EventSeriesUiContext(
 /**
  * Builds the launchable desktop app shell.
  *
- * This composable owns only shell state for now. Event data, persistence, and
+ * This composable owns only shell state for now. Race data, persistence, and
  * SI-reader workflows should be introduced through shared services in later
  * slices instead of being embedded directly in the desktop UI.
  */
@@ -9083,7 +9083,7 @@ private fun RadioOManagerDesktopApp(
     seriesCompetitorMatchSummaries: List<DesktopEventSeriesCompetitorMatchSummary> = emptyList(),
     seriesCompetitorIdentityCoverageSummaries: List<DesktopEventSeriesCompetitorIdentityCoverageSummary> = emptyList(),
     eventSeriesValidationState: EventSeriesValidationUiState? = null,
-    projectStatusText: String = "No Event File open.",
+    projectStatusText: String = "No Race File open.",
     hasUnsavedChanges: Boolean = false,
     siReaderState: DesktopSiReaderUiState = DesktopSiReaderUiState.disconnected(),
     siPortMutex: Mutex = Mutex(),
@@ -9863,7 +9863,7 @@ private fun RadioOracleSplashScreen(onDismiss: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(14.dp))
             Text(
-                text = "Desktop event administration for radio orienteering. Prepare Event Files, import competitors, controls, courses, and elevation data, manage SPORTident readouts, analyze courses, and publish results from one workspace.",
+                text = "Desktop race administration for radio orienteering. Prepare Race Files, import competitors, controls, courses, and elevation data, manage SPORTident readouts, analyze courses, and publish results from one workspace.",
                 color = DesktopPalette.Black,
                 fontSize = 16.sp,
                 modifier = Modifier
@@ -9894,8 +9894,8 @@ private fun rememberRadioOracleLogoBitmap() = remember {
 internal fun desktopTopBarEventText(projectFile: EventProjectFile?): String =
     projectFile?.raceData?.race?.name
         ?.takeIf { it.isNotBlank() }
-        ?.let { "Event: $it" }
-        ?: "No event file loaded"
+        ?.let { "Race: $it" }
+        ?: "No race file loaded"
 
 internal fun desktopTopBarSeriesText(seriesContext: EventSeriesUiContext): String =
     "Series: ${seriesContext.seriesName.ifBlank { "Untitled Series" }}"
@@ -9909,9 +9909,9 @@ internal fun desktopEventFileFolderText(eventFilePath: Path?, workingFolder: Pat
     val directory = eventFilePath?.parent ?: workingFolder
     val directoryText = directory.toAbsolutePath().normalize().toString()
     return if (eventFilePath == null) {
-        "Event File Folder: $directoryText (first save default)"
+        "Race File Folder: $directoryText (first save default)"
     } else {
-        "Event File Folder: $directoryText"
+        "Race File Folder: $directoryText"
     }
 }
 
@@ -10233,7 +10233,7 @@ private fun NavigationRail(
                     colors = saveEventButtonColors()
                 ) {
                     Text(
-                        text = "Save Event",
+                        text = "Save Race",
                         fontSize = 13.sp,
                         lineHeight = 15.sp,
                         maxLines = 1,
@@ -11248,7 +11248,7 @@ private fun formatSportIdentDuration(totalMillis: Long): String {
     }.joinToString(" ")
 }
 
-/** Shows event readiness, read-only diagnostics, recent imports, and desktop test tools. */
+/** Shows race readiness, read-only diagnostics, recent imports, and desktop test tools. */
 @Composable
 private fun EventDiagnosticsPanel(
     diagnostics: DesktopProjectDiagnostics,
@@ -11262,12 +11262,12 @@ private fun EventDiagnosticsPanel(
     onInsertTestCompetitors: () -> Unit,
     onInsertTestSportIdentDownloads: () -> Unit
 ) {
-    val isEventFileOpen = diagnostics.projectState == "Event File open"
+    val isEventFileOpen = diagnostics.projectState == "Race File open"
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        DetailRow("Event File", diagnostics.projectState)
+        DetailRow("Race File", diagnostics.projectState)
         DetailRow("Schema", diagnostics.schemaText.ifBlank { "None" })
         DetailRow("Race ID", diagnostics.raceId.ifBlank { "None" })
-        DetailRow("Event name", diagnostics.raceName.ifBlank { "None" })
+        DetailRow("Race name", diagnostics.raceName.ifBlank { "None" })
         DetailRow(
             "Start",
             diagnostics.startDateTimeIso.takeIf { it.isNotBlank() }
@@ -11295,7 +11295,7 @@ private fun EventDiagnosticsPanel(
             )
         }
         Text(
-            text = "Event Readiness",
+            text = "Race Readiness",
             color = DesktopPalette.PrimaryVariant,
             fontWeight = FontWeight.Bold,
             fontSize = 15.sp
@@ -11340,7 +11340,7 @@ private fun EventDiagnosticsPanel(
                     ButtonLabel("Restore Before Import")
                 }
                 Text(
-                    text = "Restores the in-memory Event File state captured before ${recentImportCheckpoint.title}. A persistent .rom.json rollback copy was also saved at ${recentImportCheckpoint.backupPath}. Save after restore if you want to keep the in-app rollback.",
+                    text = "Restores the in-memory Race File state captured before ${recentImportCheckpoint.title}. A persistent .rom.json rollback copy was also saved at ${recentImportCheckpoint.backupPath}. Save after restore if you want to keep the in-app rollback.",
                     color = Color.DarkGray,
                     fontSize = 12.sp
                 )
@@ -11506,7 +11506,7 @@ private fun RobisLiveResultsPanel(
             Checkbox(
                 checked = isBackgroundLiveResultSendingEnabled,
                 onCheckedChange = onSetBackgroundLiveResultSendingEnabled,
-                enabled = diagnostics.projectState == "Event File open"
+                enabled = diagnostics.projectState == "Race File open"
             )
             Text(
                 text = "Background ROBIS sending",
@@ -11516,7 +11516,7 @@ private fun RobisLiveResultsPanel(
         }
         Button(
             onClick = onSendRobisLiveResults,
-            enabled = diagnostics.projectState == "Event File open" && !isSendingLiveResults
+            enabled = diagnostics.projectState == "Race File open" && !isSendingLiveResults
         ) {
             ButtonLabel(if (isSendingLiveResults) "Sending" else "Send ROBIS")
         }
@@ -11598,7 +11598,7 @@ private fun AppSettingsPanel(
                 printerDiagnostics.detectedPrinterNames.joinToString().ifBlank { "None" }
             )
         }
-        AppSettingsSection(if (projectFile?.hasCoursePasswordSet() == true) "Reset Event Password" else "Set Event Password") {
+        AppSettingsSection(if (projectFile?.hasCoursePasswordSet() == true) "Reset Race Password" else "Set Race Password") {
             CoursePasswordSettingsPanel(
                 projectFile = projectFile,
                 isCourseDataUnlocked = isCourseDataUnlocked,
@@ -11780,11 +11780,11 @@ private fun CoursePasswordSettingsPanel(
         Text(
             text = when {
                 projectFile == null ->
-                    "Open or create an Event File before setting an Event Password."
+                    "Open or create a Race File before setting a Race Password."
                 hasCoursePassword ->
-                    "Resetting the Event Password requires the current Event Password. Sensitive Event File data is ${if (isCourseDataUnlocked) "currently unlocked" else "currently locked"}."
+                    "Resetting the Race Password requires the current Race Password. Sensitive Race File data is ${if (isCourseDataUnlocked) "currently unlocked" else "currently locked"}."
                 else ->
-                    "Set an Event Password before importing route data or editing stored course order. Accessing sensitive data can still create an Event Password when none exists."
+                    "Set a Race Password before importing route data or editing stored course order. Accessing sensitive data can still create a Race Password when none exists."
             },
             color = DesktopPalette.Black,
             fontSize = 13.sp
@@ -11797,7 +11797,7 @@ private fun CoursePasswordSettingsPanel(
                 TextField(
                     value = oldPasswordDraft,
                     onValueChange = { oldPasswordDraft = it },
-                    label = { Text("Current Event Password") },
+                    label = { Text("Current Race Password") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier
@@ -11808,7 +11808,7 @@ private fun CoursePasswordSettingsPanel(
             TextField(
                 value = newPasswordDraft,
                 onValueChange = { newPasswordDraft = it },
-                label = { Text(if (hasCoursePassword) "New Event Password" else "Event Password") },
+                label = { Text(if (hasCoursePassword) "New Race Password" else "Race Password") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 enabled = projectFile != null,
@@ -11832,7 +11832,7 @@ private fun CoursePasswordSettingsPanel(
                     onClick = ::submitPasswordChange,
                     enabled = projectFile != null && canSubmit
                 ) {
-                    ButtonLabel(if (hasCoursePassword) "Reset Event Password" else "Set Event Password")
+                    ButtonLabel(if (hasCoursePassword) "Reset Race Password" else "Set Race Password")
                 }
             }
         }
@@ -11853,10 +11853,10 @@ private fun coursePasswordSubmitDisabledReason(
     confirmPassword: String
 ): String? =
     when {
-        projectFile == null -> "Open or create an Event File before setting an Event Password."
-        hasCoursePassword && oldPassword.isBlank() -> "Enter the current Event Password before resetting it."
-        newPassword.isBlank() -> "Enter a new Event Password."
-        confirmPassword.isBlank() -> "Confirm the new Event Password."
+        projectFile == null -> "Open or create a Race File before setting a Race Password."
+        hasCoursePassword && oldPassword.isBlank() -> "Enter the current Race Password before resetting it."
+        newPassword.isBlank() -> "Enter a new Race Password."
+        confirmPassword.isBlank() -> "Confirm the new Race Password."
         else -> null
     }
 
@@ -12120,7 +12120,7 @@ private fun StartListDetailsPanel(
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.Top) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.width(210.dp)) {
                 FairnessScoreBlock(
-                    label = "Event Start Fairness Score",
+                    label = "Race Start Fairness Score",
                     score = details.quality.score,
                     color = details.quality.severity.toStartListColor()
                 )
@@ -12196,23 +12196,23 @@ private fun StartListDetailRow(row: EventStartListRow) {
     }
 }
 
-/** Shows the manifest-owned Event Files in the active Event Series. */
+/** Shows the manifest-owned Race Files in the active Race Series. */
 @Composable
 private fun EventSeriesEventsPanel(
     summaries: List<DesktopEventSeriesEventSummary>,
     onOpenEvent: (DesktopEventSeriesEventSummary) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Add Event stays in the left menu; this panel only contains row-specific Open actions.
+        // Add Race stays in the left menu; this panel only contains row-specific Open actions.
         if (summaries.isEmpty()) {
             Text(
-                text = "No Event Series manifest was found for this Event File.",
+                text = "No Race Series manifest was found for this Race File.",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
             return@Column
         }
-        DetailHeaderRow(listOf("Events", "Missing files"))
+        DetailHeaderRow(listOf("Races", "Missing files"))
         DetailGridRow(
             listOf(
                 summaries.size.toString(),
@@ -12228,7 +12228,7 @@ private fun EventSeriesEventsPanel(
     }
 }
 
-/** Shows the latest validation result for the active Event Series manifest. */
+/** Shows the latest validation result for the active Race Series manifest. */
 @Composable
 private fun EventSeriesValidationPanel(
     state: EventSeriesValidationUiState?,
@@ -12305,7 +12305,7 @@ private fun EventSeriesValidationHeaderRow() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text("Severity", modifier = Modifier.width(96.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
-        Text("Series Event", modifier = Modifier.width(168.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Series Race", modifier = Modifier.width(168.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text("Issue", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
     }
 }
@@ -12345,7 +12345,7 @@ private fun EventSeriesValidationIssueRow(issue: EventSeriesValidationIssue) {
     }
 }
 
-/** Shows self-validation results for the currently open Event File. */
+/** Shows self-validation results for the currently open Race File. */
 @Composable
 private fun EventValidatorPanel(projectFile: EventProjectFile?) {
     val issues = remember(projectFile) {
@@ -12360,14 +12360,14 @@ private fun EventValidatorPanel(projectFile: EventProjectFile?) {
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = projectFile?.raceData?.race?.name?.takeIf { it.isNotBlank() } ?: "No Event File open",
+            text = projectFile?.raceData?.race?.name?.takeIf { it.isNotBlank() } ?: "No Race File open",
             color = DesktopPalette.Disconnected,
             fontSize = 13.sp
         )
 
         if (projectFile == null) {
             Text(
-                text = "Open or create an Event File before validating.",
+                text = "Open or create a Race File before validating.",
                 color = DesktopPalette.Disconnected,
                 fontSize = 13.sp
             )
@@ -12385,7 +12385,7 @@ private fun EventValidatorPanel(projectFile: EventProjectFile?) {
 
         if (issues.isEmpty()) {
             Text(
-                text = "No event validation issues found.",
+                text = "No race validation issues found.",
                 color = DesktopPalette.PrimaryVariant,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold
@@ -12450,7 +12450,7 @@ private fun EventValidationIssueRow(issue: EventValidationIssue) {
     }
 }
 
-/** Summarizes generated start-list fairness across all Event Files in the active Event Series. */
+/** Summarizes generated start-list fairness across all Race Files in the active Race Series. */
 @Composable
 private fun EventSeriesStartFairnessPanel(
     summary: DesktopEventSeriesStartFairnessSummary?,
@@ -12459,7 +12459,7 @@ private fun EventSeriesStartFairnessPanel(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = "Reviews generated start lists across all manifest-listed events in this series.",
+            text = "Reviews generated start lists across all manifest-listed races in this series.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -12470,17 +12470,17 @@ private fun EventSeriesStartFairnessPanel(
         )
         summary?.let {
             Text(
-                text = "History is shown left to right by ${it.historyOrderDescription}. Event Series > Events uses the same ordering.",
+                text = "History is shown left to right by ${it.historyOrderDescription}. Race Series > Races uses the same ordering.",
                 color = DesktopPalette.Disconnected,
                 fontSize = 13.sp
             )
             Text(
                 text = if (it.lockedForOptimizationEventCount == 0) {
-                    "All ${it.unlockedForOptimizationEventCount} readable Event Files are available to Series optimization."
+                    "All ${it.unlockedForOptimizationEventCount} readable Race Files are available to Series optimization."
                 } else {
-                    "Series optimization can adjust ${it.unlockedForOptimizationEventCount} unlocked Event File" +
+                    "Series optimization can adjust ${it.unlockedForOptimizationEventCount} unlocked Race File" +
                         "${if (it.unlockedForOptimizationEventCount == 1) "" else "s"}; " +
-                        "${it.lockedForOptimizationEventCount} locked Event File" +
+                        "${it.lockedForOptimizationEventCount} locked Race File" +
                         "${if (it.lockedForOptimizationEventCount == 1) " is" else "s are"} preserved."
                 },
                 color = if (it.lockedForOptimizationEventCount == 0) DesktopPalette.Disconnected else DesktopPalette.Reading,
@@ -12488,13 +12488,13 @@ private fun EventSeriesStartFairnessPanel(
             )
         }
         Text(
-            text = "Balance Open Event for Series redraws only the open Event File, using other series events with generated starts as start-third history.",
+            text = "Balance Open Race for Series redraws only the open Race File, using other series races with generated starts as start-third history.",
             color = DesktopPalette.Disconnected,
             fontSize = 13.sp
         )
         if (summary == null) {
             Text(
-                text = "No start fairness summary is available for this Event File.",
+                text = "No start fairness summary is available for this Race File.",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
@@ -12526,13 +12526,13 @@ private fun EventSeriesStartFairnessPanel(
                     )
                 }
                 Text(
-                    text = "Tries randomized valid starts for each Event File, keeps only changes that improve or preserve whole-series fairness, and numbers distinct solutions found this session.",
+                    text = "Tries randomized valid starts for each Race File, keeps only changes that improve or preserve whole-series fairness, and numbers distinct solutions found this session.",
                     color = DesktopPalette.Disconnected,
                     fontSize = 13.sp
                 )
                 if (fairnessStatus == SeriesStartFairnessStatus.ManualReviewRecommended) {
                     Text(
-                        text = "The optimizer could not find a fairer draw with the current event start settings. Consider adjusting one or more event start-list settings, such as start interval, competitors per start time, or inserted empty starts, then optimize again.",
+                        text = "The optimizer could not find a fairer draw with the current race start settings. Consider adjusting one or more race start-list settings, such as start interval, competitors per start time, or inserted empty starts, then optimize again.",
                         color = DesktopPalette.Error,
                         fontSize = 13.sp
                     )
@@ -12545,11 +12545,11 @@ private fun EventSeriesStartFairnessPanel(
             val resultText = when {
                 result.improved ->
                     "Optimizer improved uneven histories from ${result.initialUnevenHistoryCount} to " +
-                        "${result.finalUnevenHistoryCount}, with ${result.optimizedEventCount} Event File" +
+                        "${result.finalUnevenHistoryCount}, with ${result.optimizedEventCount} Race File" +
                         "${if (result.optimizedEventCount == 1) "" else "s"} updated."
                 result.alternateSolution ->
                     "Optimizer found an alternate valid draw with the same fairness score, with " +
-                        "${result.optimizedEventCount} Event File${if (result.optimizedEventCount == 1) "" else "s"} updated."
+                        "${result.optimizedEventCount} Race File${if (result.optimizedEventCount == 1) "" else "s"} updated."
                 else ->
                     "Optimizer did not find an alternate or improved valid draw after ${result.attemptedCandidateCount} candidates."
             }
@@ -12574,7 +12574,7 @@ private fun EventSeriesStartFairnessPanel(
             )
         }
 
-        DetailHeaderRow(listOf("Events in series", "With generated starts", "Without generated starts", "Missing files"))
+        DetailHeaderRow(listOf("Races in series", "With generated starts", "Without generated starts", "Missing files"))
         DetailGridRow(
             listOf(
                 summary.seriesEventCount.toString(),
@@ -12602,7 +12602,7 @@ private fun EventSeriesStartFairnessPanel(
             )
         )
         Text(
-            text = "Uneven means a competitor's early/middle/late counts differ by more than one. Use the Action column when manually editing starts or regenerating affected event start lists.",
+            text = "Uneven means a competitor's early/middle/late counts differ by more than one. Use the Action column when manually editing starts or regenerating affected race start lists.",
             color = DesktopPalette.Disconnected,
             fontSize = 13.sp
         )
@@ -12739,7 +12739,7 @@ private fun EventSeriesStartFairnessHistoryRow(
     }
 }
 
-/** Shows competitor identity matching diagnostics for the active Event Series. */
+/** Shows competitor identity matching diagnostics for the active Race Series. */
 @Composable
 private fun EventSeriesCompetitorMatchingPanel(
     summaries: List<DesktopEventSeriesCompetitorMatchSummary>,
@@ -12747,7 +12747,7 @@ private fun EventSeriesCompetitorMatchingPanel(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = "Compares competitor identity matches across all manifest-listed events in this series.",
+            text = "Compares competitor identity matches across all manifest-listed races in this series.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -12758,7 +12758,7 @@ private fun EventSeriesCompetitorMatchingPanel(
         )
         if (summaries.isEmpty()) {
             Text(
-                text = "At least two readable series events are needed for competitor matching.",
+                text = "At least two readable series races are needed for competitor matching.",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
@@ -12774,7 +12774,7 @@ private fun EventSeriesCompetitorMatchingPanel(
         val partialIdentityCount = identityCoverageSummaries.count { it.missingEventNames.isNotEmpty() }
         val duplicateIdentityCount = identityCoverageSummaries.count { it.duplicateEventNames.isNotEmpty() }
 
-        DetailHeaderRow(listOf("Events in series", "Identified competitors", "All events", "Partial", "Duplicate issues"))
+        DetailHeaderRow(listOf("Races in series", "Identified competitors", "All races", "Partial", "Duplicate issues"))
         DetailGridRow(
             listOf(
                 eventCount.toString(),
@@ -12786,7 +12786,7 @@ private fun EventSeriesCompetitorMatchingPanel(
         )
         if (identityCoverageSummaries.isEmpty()) {
             Text(
-                text = "No competitors with SI numbers, bib numbers, call signs, or manual overrides were found in the readable series events.",
+                text = "No competitors with SI numbers, bib numbers, call signs, or manual overrides were found in the readable series races.",
                 color = DesktopPalette.Disconnected,
                 fontSize = 13.sp
             )
@@ -12810,7 +12810,7 @@ private fun EventSeriesCompetitorMatchingPanel(
         )
         if (summaries.any { it.matchCount > 0 } && summaries.any { it.matchCount == 0 }) {
             Text(
-                text = "Some event pairs have matches and some do not. Rows marked Current include the loaded Event File.",
+                text = "Some race pairs have matches and some do not. Rows marked Current include the loaded Race File.",
                 color = DesktopPalette.Disconnected,
                 fontSize = 13.sp
             )
@@ -12834,7 +12834,7 @@ private fun EventSeriesCompetitorIdentityCoverageHeaderRow() {
         Text("Identity", modifier = Modifier.width(120.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text("Competitor", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text("Coverage", modifier = Modifier.width(96.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
-        Text("Events", modifier = Modifier.weight(1.1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Races", modifier = Modifier.weight(1.1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text("Missing", modifier = Modifier.weight(1.1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text("Issues", modifier = Modifier.width(96.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
     }
@@ -12904,7 +12904,7 @@ private fun EventSeriesCompetitorMatchingHeaderRow() {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("Event Pair", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text("Race Pair", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text("Competitors", modifier = Modifier.width(120.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text("Current", modifier = Modifier.width(64.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Text("Matched", modifier = Modifier.width(80.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -12958,7 +12958,7 @@ private fun EventSeriesCompetitorMatchingRow(summary: DesktopEventSeriesCompetit
     }
 }
 
-/** Lets organizers edit manifest-owned settings for the active Event Series. */
+/** Lets organizers edit manifest-owned settings for the active Race Series. */
 @Composable
 private fun EventSeriesSettingsPanel(
     seriesContext: EventSeriesUiContext?,
@@ -12967,7 +12967,7 @@ private fun EventSeriesSettingsPanel(
 ) {
     if (seriesContext == null) {
         Text(
-            text = "No Event Series manifest was found for this Event File.",
+            text = "No Race Series manifest was found for this Race File.",
             color = DesktopPalette.Black,
             fontSize = 14.sp
         )
@@ -13482,7 +13482,7 @@ private fun ManualReadoutAddRow(
     }
 }
 
-/** Shows one readout row with deletion routed through shared Event File editing rules. */
+/** Shows one readout row with deletion routed through shared Race File editing rules. */
 @Composable
 private fun ReadoutDetailRow(
     readout: EventReadoutDetails,
@@ -14513,7 +14513,7 @@ private fun CategoryPicker(
     }
 }
 
-/** Shows editable global logical controls backed by shared Event File editing rules. */
+/** Shows editable global logical controls backed by shared Race File editing rules. */
 @Composable
 private fun ControlDetailsPanel(
     controls: List<EventControlDetails>,
@@ -14893,9 +14893,9 @@ private fun KmlCreateCoursePanel(projectFile: EventProjectFile?) {
             )
         }.onSuccess { result ->
             val reuseText = if (result.reusedControlCount > 0) {
-                " reused ${result.reusedControlCount} Event File controls."
+                " reused ${result.reusedControlCount} Race File controls."
             } else {
-                " no Event File controls reused."
+                " no Race File controls reused."
             }
             val folderStatus = openKmlToolsOutputFolder(result.outputPath).orEmpty()
             statusText = "Created ${result.outputPath.fileName}; wrote ${result.pointCount} ${result.eventType.createCourseTypeLabel()} course points;$reuseText$folderStatus"
@@ -15390,7 +15390,7 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
             ButtonLabel("Import Controls KML/KMZ...")
         }
         Text(
-            text = "Controls CSV files update control identity fields only: SI code, role, scoring, public label, and notes. They do not contain latitude/longitude columns and cannot update control locations. Control coordinates require the Event Password and are not written to public control fields.",
+            text = "Controls CSV files update control identity fields only: SI code, role, scoring, public label, and notes. They do not contain latitude/longitude columns and cannot update control locations. Control coordinates require the Race Password and are not written to public control fields.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -15402,12 +15402,12 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
         )
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             KmlImportInstruction("Use KML Placemark elements. Each imported Placemark must have a nonblank name.")
-            KmlImportInstruction("Control points are Point placemarks. Their names must match existing Event File controls.")
+            KmlImportInstruction("Control points are Point placemarks. Their names must match existing Race File controls.")
             KmlImportInstruction("Control point names may use an SI code, control label, or public label.")
             KmlImportInstruction("Matched point placemarks update control locations when their latitude/longitude differs from stored course data.")
             KmlImportInstruction("Use visible labels such as 31, M, Beacon, S, or Spectator; do not add type suffixes to SI codes.")
             KmlImportInstruction("Routes are LineString placemarks with at least two coordinates. A KML/KMZ with point placemarks only can still update changed control locations.")
-            KmlImportInstruction("Each route LineString name must match an Event File category name, such as M21.")
+            KmlImportInstruction("Each route LineString name must match a Race File category name, such as M21.")
             KmlImportInstruction("Matching ignores case, trims leading/trailing spaces, and collapses repeated whitespace.")
             KmlImportInstruction("Coordinates are read as longitude,latitude,elevation. Elevation may be omitted.")
             KmlImportInstruction("Controls more than 50 meters from a matched category route are not included in the imported route order.")
@@ -15933,12 +15933,12 @@ private fun CourseAnalyzerGuidance() {
             fontSize = 13.sp
         )
         Text(
-            text = "KML/KMZ course files must contain named control Point placemarks. Route LineStrings are used when present; if a Course Analyzer KML/KMZ import has no course route LineString, Radio-Oracle creates an initial M21 route from Start through the foxes and beacon to Finish before analysis. GPX course files must contain named control waypoints and at least one route or track named by Event File category, such as M21.",
+            text = "KML/KMZ course files must contain named control Point placemarks. Route LineStrings are used when present; if a Course Analyzer KML/KMZ import has no course route LineString, Radio-Oracle creates an initial M21 route from Start through the foxes and beacon to Finish before analysis. GPX course files must contain named control waypoints and at least one route or track named by Race File category, such as M21.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            KmlImportInstruction("Optional KML/KMZ SS=#.## values in Start, fox, beacon, spectator, or LineString descriptions replace the event speed factor for the following leg; Finish SS values are ignored.")
+            KmlImportInstruction("Optional KML/KMZ SS=#.## values in Start, fox, beacon, spectator, or LineString descriptions replace the race speed factor for the following leg; Finish SS values are ignored.")
             KmlImportInstruction("Choose a category, then Analyze to compare the saved route with the calculated route candidate.")
             KmlImportInstruction("Export Analysis writes the displayed analysis plus route/control data for external review.")
             KmlImportInstruction("Save Calculated Route replaces saved route and numbering data when the calculated route is available.")
@@ -15991,7 +15991,7 @@ private fun CourseAnalysisPanel(
             )
             DisabledReasonTooltip(
                 if (passwordDraft.isBlank()) {
-                    "Enter the Event Password to view route data and run analysis."
+                    "Enter the Race Password to view route data and run analysis."
                 } else {
                     null
                 }
@@ -16277,7 +16277,7 @@ private fun CourseAnalysisPanel(
         }
         Text(
             text = speedStatusText
-                ?: "Speed factor is event-wide by default: 1.00 normal, below 1.00 slower conditions, above 1.00 faster conditions. Per-leg speed factors specified in course component descriptions with SS=#.## override the event-wide factor for the following leg.",
+                ?: "Speed factor is race-wide by default: 1.00 normal, below 1.00 slower conditions, above 1.00 faster conditions. Per-leg speed factors specified in course component descriptions with SS=#.## override the race-wide factor for the following leg.",
             color = if (speedStatusText?.contains("failed", ignoreCase = true) == true ||
                 speedStatusText?.contains("must be", ignoreCase = true) == true
             ) {
@@ -17134,13 +17134,13 @@ private fun climbText(value: Int?): String =
 private fun courseAnalysisSpeedModelText(speedModel: DesktopCourseSpeedModel): String =
     "${twoDecimalText(speedModel.effectiveSpeedMetersPerSecond)} m/s; " +
         "${speedModel.categoryModelLabel} x${twoDecimalText(speedModel.categorySpeedMultiplier)}, " +
-        "event x${twoDecimalText(speedModel.compensationFactor)}"
+        "race x${twoDecimalText(speedModel.compensationFactor)}"
 
 private fun courseAnalysisSpeedFactorExplanation(speedModel: DesktopCourseSpeedModel): String =
-    "Assumed running speed equals race-format baseline speed x category multiplier x event speed factor. " +
+    "Assumed running speed equals race-format baseline speed x category multiplier x race speed factor. " +
         "${speedModel.categoryFactorSourceLabel}: ${speedModel.categoryFactorExplanation} " +
-        "The event speed factor is adjustable, saved in the Event File, and applies to every category by default; the current event factor is x${twoDecimalText(speedModel.compensationFactor)}. " +
-        "Imported KML/KMZ SS=#.## speed specifiers replace the event factor for the following leg only."
+        "The race speed factor is adjustable, saved in the Race File, and applies to every category by default; the current race factor is x${twoDecimalText(speedModel.compensationFactor)}. " +
+        "Imported KML/KMZ SS=#.## speed specifiers replace the race factor for the following leg only."
 
 private fun secondsText(value: Int?): String =
     value?.let(::compactSecondsText) ?: "Unknown"
@@ -17474,9 +17474,9 @@ private fun duplicateControlRoleWarning(controls: List<EventControl>, changedRol
     val counts = ControlRoleCounts.from(controls.map { it.type })
     return when {
         changedRole == ControlPointType.BEACON && counts.beacons > 1 ->
-            "This Event File now has ${counts.beacons} Beacon controls. Radio-orienteering events should have exactly one Beacon."
+            "This Race File now has ${counts.beacons} Beacon controls. Radio-orienteering races should have exactly one Beacon."
         changedRole == ControlPointType.SEPARATOR && counts.spectators > 1 ->
-            "This Event File now has ${counts.spectators} Spectator controls. Sprint courses should have no more than one Spectator."
+            "This Race File now has ${counts.spectators} Spectator controls. Sprint courses should have no more than one Spectator."
         else -> null
     }
 }
@@ -17502,7 +17502,7 @@ private fun controlCourseRuleWarning(
         RaceType.SHORT -> {
             val foxes = details.count { it.type == ControlPointType.CONTROL }
             if (foxes > 5) {
-                "This ${raceType.toDisplayLabel()} Event File now has $foxes Fox controls. ${raceType.toDisplayLabel()} events should have exactly five Foxes."
+                "This ${raceType.toDisplayLabel()} Race File now has $foxes Fox controls. ${raceType.toDisplayLabel()} races should have exactly five Foxes."
             } else {
                 null
             }
@@ -17514,7 +17514,7 @@ private fun controlCourseRuleWarning(
 
 private fun sprintLoopFoxLimitWarning(loopLabel: String, foxes: Int): String? =
     if (foxes > 5) {
-        "This Sprint Event File now has $foxes $loopLabel Fox controls. Sprint events should have exactly five $loopLabel Foxes."
+        "This Sprint Race File now has $foxes $loopLabel Fox controls. Sprint races should have exactly five $loopLabel Foxes."
     } else {
         null
     }
@@ -18314,7 +18314,7 @@ private fun CategoryDeleteButton(
     }
 }
 
-/** Shows editable race metadata backed by shared Event File editing rules. */
+/** Shows editable race metadata backed by shared Race File editing rules. */
 @Composable
 private fun RaceDetailsPanel(
     details: EventRaceDetails,
@@ -18343,7 +18343,7 @@ private fun RaceDetailsPanel(
     var wasRaceNameFocused by remember { mutableStateOf(false) }
     var shouldPromptForEventStartAfterNameEdit by remember { mutableStateOf(false) }
     var isEventStartPromptVisible by remember { mutableStateOf(false) }
-    var eventStartPromptReason by remember { mutableStateOf("event definition") }
+    var eventStartPromptReason by remember { mutableStateOf("race definition") }
     val currentEventFileName = eventFilePath?.fileName?.toString()
     var eventFileNameDraft by remember(currentEventFileName, details.name) {
         mutableStateOf(
@@ -18398,7 +18398,7 @@ private fun RaceDetailsPanel(
     fun commitRaceNameDraft() {
         if (shouldPromptForEventStartAfterNameEdit) {
             shouldPromptForEventStartAfterNameEdit = false
-            promptForEventStart("event name")
+            promptForEventStart("race name")
         }
     }
 
@@ -18436,7 +18436,7 @@ private fun RaceDetailsPanel(
                         wasRaceNameFocused = focusState.isFocused
                     }
                     .commitOnEnter(::commitRaceNameDraft),
-                label = { Text("Event name") }
+                label = { Text("Race name") }
             )
         }
         TextField(
@@ -18454,7 +18454,7 @@ private fun RaceDetailsPanel(
                     wasEventFileNameFocused = focusState.isFocused
                 }
                 .commitOnEnter(::commitEventFileNameDraft),
-            label = { Text("Event file name") }
+            label = { Text("Race file name") }
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -18462,7 +18462,7 @@ private fun RaceDetailsPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             DateTimePickerField(
-                label = "Event Start date/time",
+                label = "Race Start date/time",
                 value = startDateTimeDraft,
                 onValueChange = {
                     startDateTimeDraft = it
@@ -18472,7 +18472,7 @@ private fun RaceDetailsPanel(
             )
         }
         Text(
-            text = "Used for Race Ops elapsed time, in-forest status, finish/result timestamps, and exports. Set this to the event's actual start, not the file creation time.",
+            text = "Used for Race Ops elapsed time, in-forest status, finish/result timestamps, and exports. Set this to the race's actual start, not the file creation time.",
             color = DesktopPalette.Disconnected,
             fontSize = 13.sp
         )
@@ -18488,7 +18488,7 @@ private fun RaceDetailsPanel(
                     selectedRaceFormat = it
                     applyRaceSettings(raceType = it.raceType, raceBand = it.raceBand)
                     if (changed) {
-                        promptForEventStart("event format")
+                        promptForEventStart("race format")
                     }
                 },
                 Modifier.weight(1f)
@@ -18505,7 +18505,7 @@ private fun RaceDetailsPanel(
                     }
                     applyRaceSettings(raceLevel = it, timeLimitMinutes = nextTimeLimitMinutes)
                     if (changed) {
-                        promptForEventStart("event type")
+                        promptForEventStart("race type")
                     }
                 },
                 Modifier.weight(1f)
@@ -18543,8 +18543,8 @@ private fun RaceDetailsPanel(
     if (isEventStartPromptVisible) {
         DateTimePickerDialog(
             initialValue = startDateTimeDraft,
-            title = "Enter Event Start date/time",
-            description = "The $eventStartPromptReason changed. Confirm or update the Event Start date/time for this event.",
+            title = "Enter Race Start date/time",
+            description = "The $eventStartPromptReason changed. Confirm or update the Race Start date/time for this race.",
             onValueSelected = {
                 isEventStartPromptVisible = false
                 startDateTimeDraft = it
@@ -18599,7 +18599,7 @@ private fun DateTimePickerField(
 @Composable
 private fun DateTimePickerDialog(
     initialValue: LocalDateTime,
-    title: String = "Pick Event Start date/time",
+    title: String = "Pick Race Start date/time",
     description: String? = null,
     onValueSelected: (LocalDateTime) -> Unit,
     onDismiss: () -> Unit
@@ -19498,7 +19498,7 @@ private fun PublicResultsSiteWorkflowPanel() {
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Save Cloudflare Settings once with the Pages project name, branch, account ID, and API token. Generate Public Results Site writes the static site folder for the current event. Public Site Preview opens the generated event folder locally for review. Publish Public Results Site uploads the generated site root to Cloudflare Pages.",
+            text = "Save Cloudflare Settings once with the Pages project name, branch, account ID, and API token. Generate Public Results Site writes the static site folder for the current race. Public Site Preview opens the generated race folder locally for review. Publish Public Results Site uploads the generated site root to Cloudflare Pages.",
             color = DesktopPalette.Black,
             fontSize = 14.sp
         )
@@ -19530,7 +19530,7 @@ private fun PublicResultsSiteLinkPanel(
         )
         if (publishedUrl.isNullOrBlank()) {
             Text(
-                text = "Publish the public results site first. After a successful publish, this screen will show the public event link and QR code.",
+                text = "Publish the public results site first. After a successful publish, this screen will show the public race link and QR code.",
                 color = DesktopPalette.Black,
                 fontSize = 14.sp
             )
@@ -19550,7 +19550,7 @@ private fun PublicResultsSiteLinkPanel(
             contentScale = ContentScale.Fit
         )
         Text(
-            text = "Scan the QR code or open the link below to view the published event results.",
+            text = "Scan the QR code or open the link below to view the published race results.",
             color = DesktopPalette.Black,
             fontSize = 14.sp
         )
@@ -19670,7 +19670,7 @@ private fun StartDrawStartGroupMode.toDisplayLabel(): String =
         StartDrawStartGroupMode.BALANCED_MULTI_DAY_THIRDS -> "Balanced thirds"
     }
 
-/** Shows the current SI-reader connection state and Event File save status. */
+/** Shows the current SI-reader connection state and Race File save status. */
 @Composable
 private fun StatusStrip(
     projectStatusText: String,

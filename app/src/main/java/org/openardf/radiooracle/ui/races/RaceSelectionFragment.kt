@@ -465,7 +465,7 @@ class RaceSelectionFragment : Fragment() {
                 }
 
                 raceData = raceViewModel.importRaceData(download.text())
-                    ?: throw IllegalStateException("Invalid Event File.")
+                    ?: throw IllegalStateException("Invalid Race File.")
                 progressDialog.dismiss()
                 findNavController().navigate(
                     RaceSelectionFragmentDirections.raceCreateOfModify(
@@ -501,7 +501,7 @@ class RaceSelectionFragment : Fragment() {
                 DesktopFileTransferUploadDialogs.show(this@RaceSelectionFragment, upload)
             } catch (error: Exception) {
                 progressDialog.dismiss()
-                displayAlert(error.message ?: "Could not prepare Event File for desktop upload.")
+                displayAlert(error.message ?: "Could not prepare Race File for desktop upload.")
             }
         }
     }
@@ -643,18 +643,18 @@ class RaceSelectionFragment : Fragment() {
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
                 val position = viewHolder.bindingAdapterPosition
                 if (position == RecyclerView.NO_POSITION) {
-                    DebugLog.warn("Events", "Swipe delete ignored because row position was stale")
+                    DebugLog.warn("Races", "Swipe delete ignored because row position was stale")
                     return
                 }
                 val adapter = recyclerView.adapter as? RaceRecyclerViewAdapter
                 val race = adapter?.raceAt(position)
                 if (race == null) {
                     recyclerView.adapter?.notifyItemChanged(position)
-                    DebugLog.warn("Events", "Swipe delete ignored because row position was unavailable")
+                    DebugLog.warn("Races", "Swipe delete ignored because row position was unavailable")
                     return
                 }
 
-                DebugLog.info("Events", "Swipe delete requested event=${race.id} name=${race.name}")
+                DebugLog.info("Races", "Swipe delete requested race=${race.id} name=${race.name}")
                 confirmRaceDeletionFromSwipe(race, position)
             }
 

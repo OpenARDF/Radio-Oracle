@@ -39,7 +39,7 @@ import java.util.UUID
  * Moshi adapter for converting category Room aggregates to the race JSON schema.
  *
  * Older Android JSON can contain category-level race settings. They are deliberately normalized
- * here because the owning race is the only source of truth for event type, band, and time limit.
+ * here because the owning race is the only source of truth for race type, band, and time limit.
  */
 class CategoryJsonAdapter(val raceId: UUID) {
     /** Serializes a category, including its ordered control points. */

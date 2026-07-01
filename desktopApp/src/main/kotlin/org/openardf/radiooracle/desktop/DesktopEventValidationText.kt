@@ -28,14 +28,14 @@ import org.openardf.radiooracle.shared.event.EventValidationIssue
 import org.openardf.radiooracle.shared.event.EventValidationIssueSeverity
 import org.openardf.radiooracle.shared.event.EventValidationRules
 
-/** Desktop copy for shared Event File validation issues. */
+/** Desktop copy for shared Race File validation issues. */
 object DesktopEventValidationText {
     fun severityFor(issue: EventValidationIssue): EventValidationIssueSeverity =
         EventValidationRules.severity(issue)
 
     fun areaFor(issue: EventValidationIssue): String =
         when (issue) {
-            EventValidationIssue.BlankRaceName -> "Event File"
+            EventValidationIssue.BlankRaceName -> "Race File"
             EventValidationIssue.NoCategories,
             is EventValidationIssue.DuplicateCategoryNames,
             is EventValidationIssue.InvalidCategoryControlPoints,
@@ -65,7 +65,7 @@ object DesktopEventValidationText {
 
     fun messageFor(issue: EventValidationIssue): String =
         when (issue) {
-            EventValidationIssue.BlankRaceName -> "Event name is blank."
+            EventValidationIssue.BlankRaceName -> "Race name is blank."
             EventValidationIssue.NoCategories -> "At least one category must be defined."
             is EventValidationIssue.DuplicateCategoryNames ->
                 "Duplicate category names: ${issue.names.joinToString()}."
@@ -108,7 +108,7 @@ object DesktopEventValidationText {
                 "Category ${issue.categoryName} references missing controls: ${issue.controlIds.joinToString()}."
             is EventValidationIssue.LegacyCategoryRaceSettings ->
                 "Category ${issue.categoryName} contains legacy category-specific race settings. " +
-                    "Radio-Oracle ignores them and will clear them when the Event File is saved."
+                    "Radio-Oracle ignores them and will clear them when the Race File is saved."
             is EventValidationIssue.MissingCategoryAssignedControls ->
                 "Category ${issue.categoryName} has no assigned controls."
             is EventValidationIssue.CategoryCourseRequirementIssue ->

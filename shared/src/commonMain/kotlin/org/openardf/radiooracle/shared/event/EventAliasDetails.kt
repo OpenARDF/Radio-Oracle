@@ -24,7 +24,7 @@
 
 package org.openardf.radiooracle.shared.event
 
-/** Shared alias row prepared for desktop and other event-admin surfaces. */
+/** Shared alias row prepared for desktop and other race-admin surfaces. */
 data class EventAliasDetails(
     val id: String,
     val siCode: Int,

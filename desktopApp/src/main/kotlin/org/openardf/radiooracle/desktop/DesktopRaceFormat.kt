@@ -27,7 +27,7 @@ package org.openardf.radiooracle.desktop
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceType
 
-/** Desktop Event File format choices that determine both rule family and radio band. */
+/** Desktop Race File format choices that determine both rule family and radio band. */
 enum class DesktopRaceFormat(
     val label: String,
     val raceType: RaceType,

@@ -22,7 +22,7 @@ Columns:
 - `start_time`: Optional start time relative to the race start, formatted as `HH:MM` or `MM:SS` according to the app's duration parser.
 - `si_rent`: `1` when the SI card is rented, otherwise `0`.
 - `preferred_start_group`: Optional start third assignment for championship-style draws. Use `1`, `2`, or `3`; leave blank for no assignment.
-- `bib_number`: Optional visible bib number. Bib Number is a numeric code assigned, often arbitrarily, by event organizers to each individual competitor. Bib numbers uniquely identify competitors and are never shared among competitors. All competitors must be assigned a bib number if bib numbers are used at all. If omitted, Radio-Oracle leaves the bib number blank; it does not fall back to `person_id`, legacy `index`, or `start_number`.
+- `bib_number`: Optional visible bib number. Bib Number is a numeric code assigned, often arbitrarily, by race organizers to each individual competitor. Bib numbers uniquely identify competitors and are never shared among competitors. All competitors must be assigned a bib number if bib numbers are used at all. If omitted, Radio-Oracle leaves the bib number blank; it does not fall back to `person_id`, legacy `index`, or `start_number`.
 - `call_sign`: Optional call sign. Duplicate checks are case-insensitive.
 
 Example:

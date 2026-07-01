@@ -57,14 +57,14 @@ fun startupProjectPath(
 ): Path? =
     commandLinePath ?: lastEventFileStore.lastEventFile()
 
-/** Opens an optional startup Event File path for repeatable desktop smoke runs. */
+/** Opens an optional startup Race File path for repeatable desktop smoke runs. */
 fun openStartupProject(
     session: DesktopProjectSession,
     path: Path?,
     onOpened: (Path) -> Unit = {}
 ): String {
     if (path == null) {
-        return "No Event File open."
+        return "No Race File open."
     }
 
     return runCatching {

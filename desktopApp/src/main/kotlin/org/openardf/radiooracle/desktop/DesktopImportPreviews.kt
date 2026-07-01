@@ -226,7 +226,7 @@ object DesktopImportPreviews {
         val eventTypeText = DesktopCourseFormatDetector.run { eventRaceType.displayName() }
         return inferredTypes.distinct().map { inferredType ->
             val importTypeText = DesktopCourseFormatDetector.run { inferredType.displayName() }
-            "Import data suggests $importTypeText, but the Event File is $eventTypeText."
+            "Import data suggests $importTypeText, but the Race File is $eventTypeText."
         }
     }
 

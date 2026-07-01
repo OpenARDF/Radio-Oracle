@@ -1,6 +1,6 @@
 # Radio-Oracle
 
-Radio-Oracle is an app for managing radio orienteering events, including event
+Radio-Oracle is an app for managing radio orienteering races, including race
 setup, SPORTident readout, results, exports, and live-result support.
 
 Download the latest desktop release:
@@ -15,17 +15,17 @@ Radio-Oracle is intended to help organizers:
 1. create or import races, categories, controls, and competitors
 2. read SPORTident cards
 3. calculate and review results
-4. export event data and results
+4. export race data and results
 5. print finish tickets
 6. send live results
 
-The goal is to make radio orienteering event administration practical before,
+The goal is to make radio orienteering race administration practical before,
 during, and after race day.
 
 ## Platform Status
 
 - Android is the established race-day app.
-- The desktop app is a beta for event setup, administration, analysis, readout,
+- The desktop app is a beta for race setup, administration, analysis, readout,
   and results work on Windows and macOS.
 - Linux desktop support is best-effort and not yet a primary validation target.
 
@@ -35,12 +35,12 @@ The project currently includes:
 
 - Android race-day workflows for SPORTident readout, results, printing, and live
   results
-- a desktop Event File editor for `.rom.json` event data
+- a desktop Race File editor for `.rom.json` race data
 - desktop import/export tools for categories, competitors, starts, readouts,
   results, Android-compatible JSON, IOF XML, ARDF JSON, KML/KMZ controls, and
   course analysis artifacts
 - desktop SPORTident download support for attached READOUT/SI MASTER stations
-- shared Kotlin event, result, import/export, and validation logic
+- shared Kotlin race, result, import/export, and validation logic
 
 ## More Information
 

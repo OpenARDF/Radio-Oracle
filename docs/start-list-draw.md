@@ -12,14 +12,14 @@ The generator assigns relative start times to competitors while balancing hard l
 - Avoid same-club starts when `Avoid same club` is enabled.
 - Avoid same first-fox conflicts for similarly fast categories when protected course-order data is available.
 - Honor assigned championship start thirds when `Preferred thirds` mode is enabled.
-- Balance start thirds across multiple competition days through the Event Series tools.
+- Balance start thirds across multiple competition days through the Race Series tools.
 - Make non-default seeded draws repeatable across machines and runs.
 
-Some events do not have enough categories or clubs to satisfy every best practice. In that case the generator completes the draw, and the evaluator reports the remaining compromises as orange or red findings.
+Some races do not have enough categories or clubs to satisfy every best practice. In that case the generator completes the draw, and the evaluator reports the remaining compromises as orange or red findings.
 
 ## Persisted Settings
 
-Start List settings are stored in the event project data, not desktop-local preferences. The persisted values are:
+Start List settings are stored in the race project data, not desktop-local preferences. The persisted values are:
 
 - `intervalSeconds`
 - `clubHandling`
@@ -28,13 +28,13 @@ Start List settings are stored in the event project data, not desktop-local pref
 - `startGroupMode`
 - `lockedForSeriesOptimization`
 
-The seed is persisted for compatibility and repeatable internal generation, but it is not shown on the desktop Start List screen. The desktop `Generate Start List` button supplies a hidden non-default seed on each press and tries to find a start order that has not already been generated for that Event File during the current desktop session. Radio-Oracle numbers distinct generated start orders and shows the current start order number next to the button. If the event constraints do not produce another unique order, the draw returns to start order #1.
+The seed is persisted for compatibility and repeatable internal generation, but it is not shown on the desktop Start List screen. The desktop `Generate Start List` button supplies a hidden non-default seed on each press and tries to find a start order that has not already been generated for that Race File during the current desktop session. Radio-Oracle numbers distinct generated start orders and shows the current start order number next to the button. If the race constraints do not produce another unique order, the draw returns to start order #1.
 
-`startGroupMode` defaults to `No start groups`. In that mode, no start-third rule is applied and the generator behaves like a normal single-event draw. When changed to `Preferred thirds`, the generator uses each competitor's optional `preferredStartGroup` value. The canonical competitor CSV column is `preferred_start_group`; blank means no assignment, and accepted values are `1`, `2`, and `3`.
+`startGroupMode` defaults to `No start groups`. In that mode, no start-third rule is applied and the generator behaves like a normal single-race draw. When changed to `Preferred thirds`, the generator uses each competitor's optional `preferredStartGroup` value. The canonical competitor CSV column is `preferred_start_group`; blank means no assignment, and accepted values are `1`, `2`, and `3`.
 
-`Balanced thirds` is an internal mode used by series balancing tools. It derives current-day preferred thirds from other series Event Files with generated starts, saves those assignments into the current Event File, then runs the same constrained draw as `Preferred thirds`.
+`Balanced thirds` is an internal mode used by series balancing tools. It derives current-day preferred thirds from other series Race Files with generated starts, saves those assignments into the current Race File, then runs the same constrained draw as `Preferred thirds`.
 
-`lockedForSeriesOptimization` is set from the desktop Start List checkbox labeled `Lock this start list`. When checked, the Start List screen disables start-list controls that would redraw or reinterpret the current order: interval, club handling, starters per time, start-group mode, and `Generate Start List`. The Series optimizer also skips locked Event Files and reports how many unlocked Event Files remain available for optimization.
+`lockedForSeriesOptimization` is set from the desktop Start List checkbox labeled `Lock this start list`. When checked, the Start List screen disables start-list controls that would redraw or reinterpret the current order: interval, club handling, starters per time, start-group mode, and `Generate Start List`. The Series optimizer also skips locked Race Files and reports how many unlocked Race Files remain available for optimization.
 
 ## Draw Model
 
@@ -80,31 +80,31 @@ Many championships have four separate competitions on consecutive days. Fairness
 
 Radio-Oracle supports this with series-aware desktop workflows:
 
-- `Balance Open Event for Series` redraws only the open Event File, using other series Event Files that already have generated starts.
+- `Balance Open Race for Series` redraws only the open Race File, using other series Race Files that already have generated starts.
 - `Optimize Series Starts` searches for improved randomized start-list combinations across the series.
 
 `Optimize Series Starts` can be pressed repeatedly to look for alternate randomized solutions. Radio-Oracle numbers distinct whole-series start assignments found during the current desktop session and reports when a press repeats an earlier solution.
 
-If an Event File's Start List page has `Lock this start list` checked, `Optimize Series Starts` leaves that Event File's generated starts unchanged and searches only through the unlocked events. This supports manual decisions such as keeping one event fixed while improving fairness with the remaining days.
+If a Race File's Start List page has `Lock this start list` checked, `Optimize Series Starts` leaves that Race File's generated starts unchanged and searches only through the unlocked races. This supports manual decisions such as keeping one race fixed while improving fairness with the remaining days.
 
-The Start Fairness panel reports a 0-100 fairness number. A score of 100 means every identified competitor with at least two generated starts is balanced as well as mathematically possible across early, middle, and late thirds. For example, one start in each third is perfect across three events, and a 2/1/1 split is perfect across four events. If no identified competitor has enough generated starts to score, the fairness number is 0 until more start history exists.
+The Start Fairness panel reports a 0-100 fairness number. A score of 100 means every identified competitor with at least two generated starts is balanced as well as mathematically possible across early, middle, and late thirds. For example, one start in each third is perfect across three races, and a 2/1/1 split is perfect across four races. If no identified competitor has enough generated starts to score, the fairness number is 0 until more start history exists.
 
-If the score is high enough, the panel reports that no optimization is needed. If optimization has already been attempted and no better result was found, a low score reports that manual start-parameter review may be needed. Possible interventions include changing one or more event start intervals, changing competitors per start time, or inserting empty starts before optimizing again.
+If the score is high enough, the panel reports that no optimization is needed. If optimization has already been attempted and no better result was found, a low score reports that manual start-parameter review may be needed. Possible interventions include changing one or more race start intervals, changing competitors per start time, or inserting empty starts before optimizing again.
 
-For an Event File linked to a series, the Start List page shows both `Event Start Fairness Score` and `Series Start Fairness Score`. The series score uses the open in-memory Event File for the current event, so manual start-time edits are reflected before the Event File is saved. Other series events still contribute from their saved Event Files.
+For a Race File linked to a series, the Start List page shows both `Race Start Fairness Score` and `Series Start Fairness Score`. The series score uses the open in-memory Race File for the current race, so manual start-time edits are reflected before the Race File is saved. Other series races still contribute from their saved Race Files.
 
-The Series Events list and the Start Fairness History column are ordered by event date/time when every series event has a usable date. If any series event is missing a date or has an invalid date, Radio-Oracle falls back to the stored series order.
+The Series Races list and the Start Fairness History column are ordered by race date/time when every series race has a usable date. If any series race is missing a date or has an invalid date, Radio-Oracle falls back to the stored series order.
 
 For series-based balancing:
 
-1. Link the Event File to an Event Series from Event File > Settings > Event Series.
-2. Open the Event File for the next day.
-3. Use the contextual Series workflow to select `Balance Open Event for Series`.
-4. Radio-Oracle reads other series events that already have generated starts, computes preferred thirds, saves those assignments, and draws the open event's start list in `Balanced thirds` mode.
+1. Link the Race File to a Race Series from Race File > Settings > Race Series.
+2. Open the Race File for the next day.
+3. Use the contextual Series workflow to select `Balance Open Race for Series`.
+4. Radio-Oracle reads other series races that already have generated starts, computes preferred thirds, saves those assignments, and draws the open race's start list in `Balanced thirds` mode.
 
-Prior starts from linked Event Files are matched to current competitors by persistent identity fields: SI number, bib number, then call sign. Start/order numbers are not used as competitor identity keys.
+Prior starts from linked Race Files are matched to current competitors by persistent identity fields: SI number, bib number, then call sign. Start/order numbers are not used as competitor identity keys.
 
-Each other generated-start Event File selected by the series manifest is converted into first, middle, and late thirds by sorting its distinct start times and applying the same third-boundary rule used by the draw. The current-day assignment heuristic then evaluates each competitor's history:
+Each other generated-start Race File selected by the series manifest is converted into first, middle, and late thirds by sorting its distinct start times and applying the same third-boundary rule used by the draw. The current-day assignment heuristic then evaluates each competitor's history:
 
 - A third already used twice by that competitor receives a large penalty.
 - If the competitor has three prior starts and none were early, non-early choices receive a large penalty.
@@ -114,7 +114,7 @@ Each other generated-start Event File selected by the series manifest is convert
 
 The algorithm is a deterministic heuristic, not an exhaustive optimizer. It is intended to produce reviewable, fair assignments when participant lists differ between days. If the field is too constrained, the draw still completes and the quality evaluator flags any saved current-day start-third violations in red.
 
-The goodness factor evaluates whether the saved start order honored the balanced assignments produced by `Balance Open Event for Series`. It does not re-read the other Event Files during scoring, and it does not separately prove that the balanced assignment was globally optimal across every day. In balanced mode, the multi-day fairness work happens when Radio-Oracle computes the current-day preferred thirds; the quality score then verifies that the final drawn start order stayed inside those computed thirds.
+The goodness factor evaluates whether the saved start order honored the balanced assignments produced by `Balance Open Race for Series`. It does not re-read the other Race Files during scoring, and it does not separately prove that the balanced assignment was globally optimal across every day. In balanced mode, the multi-day fairness work happens when Radio-Oracle computes the current-day preferred thirds; the quality score then verifies that the final drawn start order stayed inside those computed thirds.
 
 ## Seeded Randomization
 

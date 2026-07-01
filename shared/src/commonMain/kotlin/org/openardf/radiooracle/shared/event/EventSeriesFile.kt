@@ -31,10 +31,10 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.time.LocalDateTime
 
-/** Legacy manifest file name used inside a Radio-Oracle Event Series folder. */
+/** Legacy manifest file name used inside a Radio-Oracle Race Series folder. */
 const val EVENT_SERIES_FILE_NAME = "series.radio-oracle.json"
 
-/** Suffix for user-named Event Series manifests, for example `Championship.series.radio-oracle.json`. */
+/** Suffix for user-named Race Series manifests, for example `Championship.series.radio-oracle.json`. */
 const val EVENT_SERIES_NAMED_FILE_SUFFIX = ".series.radio-oracle.json"
 
 /** Returns true for the legacy fixed manifest name and the newer user-named manifest convention. */
@@ -42,7 +42,7 @@ fun isEventSeriesFileName(fileName: String): Boolean =
     fileName == EVENT_SERIES_FILE_NAME ||
         fileName.endsWith(EVENT_SERIES_NAMED_FILE_SUFFIX, ignoreCase = true)
 
-/** Portable manifest for a multi-event competition or championship. */
+/** Portable manifest for a multi-race competition or championship. */
 @Serializable
 data class EventSeriesFile(
     val schemaVersion: Int = EventSeriesFileFormat.CURRENT_SCHEMA_VERSION,
@@ -69,9 +69,9 @@ data class EventSeriesFile(
     fun sortedEvents(): List<EventSeriesEvent> {
         val eventsWithDates = events.map { event -> event to event.seriesStartDateTimeOrNull() }
         /*
-         * Championship history is easier to read by event date, but only when every
+         * Championship history is easier to read by race date, but only when every
          * manifest entry has a parseable date. Partial date sorting would move some
-         * entries while leaving undated events ambiguous, so stored order remains the
+         * entries while leaving undated races ambiguous, so stored order remains the
          * predictable fallback.
          */
         return if (eventsWithDates.isNotEmpty() && eventsWithDates.all { it.second != null }) {
@@ -89,15 +89,15 @@ data class EventSeriesFile(
     private fun validateMembership() {
         val duplicateEventIds = events.groupBy { it.seriesEventId }.filterValues { it.size > 1 }.keys
         require(duplicateEventIds.isEmpty()) {
-            "Series contains duplicate event ids: ${duplicateEventIds.joinToString()}"
+            "Series contains duplicate race ids: ${duplicateEventIds.joinToString()}"
         }
         val duplicateOrders = events.groupBy { it.order }.filterValues { it.size > 1 }.keys
         require(duplicateOrders.isEmpty()) {
-            "Series contains duplicate event order values: ${duplicateOrders.joinToString()}"
+            "Series contains duplicate race order values: ${duplicateOrders.joinToString()}"
         }
         val duplicatePaths = events.groupBy { it.eventFilePath }.filterValues { it.size > 1 }.keys
         require(duplicatePaths.isEmpty()) {
-            "Series contains duplicate event file paths: ${duplicatePaths.joinToString()}"
+            "Series contains duplicate race file paths: ${duplicatePaths.joinToString()}"
         }
         val duplicateOverrides = competitorMatchOverrides
             .groupBy { it.competitorKey() }
@@ -111,14 +111,14 @@ data class EventSeriesFile(
             it.fromSeriesEventId !in eventIds || it.toSeriesEventId !in eventIds
         }
         require(overridesWithUnknownEvents.isEmpty()) {
-            "Series contains competitor match overrides for unknown event ids: " +
+            "Series contains competitor match overrides for unknown race ids: " +
                 overridesWithUnknownEvents.joinToString { it.eventKey() }
         }
         val sameEventOverrides = competitorMatchOverrides.filter {
             it.fromSeriesEventId == it.toSeriesEventId
         }
         require(sameEventOverrides.isEmpty()) {
-            "Series contains competitor match overrides within the same event: " +
+            "Series contains competitor match overrides within the same race: " +
                 sameEventOverrides.joinToString { it.eventKey() }
         }
     }
@@ -136,22 +136,22 @@ data class EventSeriesEvent(
 ) {
     init {
         require(seriesEventId.isNotBlank()) {
-            "Series event id must not be blank."
+            "Series race id must not be blank."
         }
         require(eventFilePath.isNotBlank()) {
-            "Series event file path must not be blank."
+            "Series race file path must not be blank."
         }
         require(order >= 0) {
-            "Series event order must not be negative."
+            "Series race order must not be negative."
         }
         require(displayName.isNotBlank()) {
-            "Series event display name must not be blank."
+            "Series race display name must not be blank."
         }
         require(!eventFilePath.startsWith("/")) {
-            "Series event file path must be relative."
+            "Series race file path must be relative."
         }
         require(eventFilePath.split('/').none { it == ".." }) {
-            "Series event file path must not escape the series folder."
+            "Series race file path must not escape the series folder."
         }
     }
 }
@@ -161,7 +161,7 @@ private fun EventSeriesEvent.seriesStartDateTimeOrNull(): LocalDateTime? =
         LocalDateTime.parse(startDateTimeIso.trim().replace(' ', 'T'))
     }.getOrNull()
 
-/** Operator-approved identity match for one competitor across two series events. */
+/** Operator-approved identity match for one competitor across two series races. */
 @Serializable
 data class EventSeriesCompetitorMatchOverride(
     val fromSeriesEventId: String,
@@ -171,13 +171,13 @@ data class EventSeriesCompetitorMatchOverride(
 ) {
     init {
         require(fromSeriesEventId.isNotBlank()) {
-            "Override source event id must not be blank."
+            "Override source race id must not be blank."
         }
         require(fromCompetitorId.isNotBlank()) {
             "Override source competitor id must not be blank."
         }
         require(toSeriesEventId.isNotBlank()) {
-            "Override target event id must not be blank."
+            "Override target race id must not be blank."
         }
         require(toCompetitorId.isNotBlank()) {
             "Override target competitor id must not be blank."
@@ -191,7 +191,7 @@ data class EventSeriesCompetitorMatchOverride(
         "$fromSeriesEventId->$toSeriesEventId"
 }
 
-/** JSON codec for portable Event Series manifests. */
+/** JSON codec for portable Race Series manifests. */
 object EventSeriesFileJson {
     @OptIn(ExperimentalSerializationApi::class)
     private val json = Json {
@@ -207,13 +207,13 @@ object EventSeriesFileJson {
     fun decode(text: String): EventSeriesFile {
         val seriesFile = json.decodeFromString<EventSeriesFile>(text)
         require(seriesFile.isSupportedSchema()) {
-            "Unsupported Radio-Oracle Event Series schema version: ${seriesFile.schemaVersion}"
+            "Unsupported Radio-Oracle Race Series schema version: ${seriesFile.schemaVersion}"
         }
         return seriesFile
     }
 }
 
-/** Schema metadata for portable Radio-Oracle Event Series manifests. */
+/** Schema metadata for portable Radio-Oracle Race Series manifests. */
 object EventSeriesFileFormat {
     const val CURRENT_SCHEMA_VERSION = 1
 

@@ -39,7 +39,7 @@ import org.openardf.radiooracle.shared.event.EVENT_SERIES_FILE_NAME
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_NAMED_FILE_SUFFIX
 import org.openardf.radiooracle.shared.event.isEventSeriesFileName
 
-/** Event File path helpers shared by desktop file dialogs and tests. */
+/** Race File path helpers shared by desktop file dialogs and tests. */
 object DesktopProjectFilePaths {
     const val PROJECT_EXTENSION = ".json"
     private const val LEGACY_PROJECT_EXTENSION = ".rom.json"
@@ -55,7 +55,7 @@ object DesktopProjectFilePaths {
     const val KML_EXTENSION = ".kml"
     const val TXT_EXTENSION = ".txt"
 
-    /** Returns a path with the standard Radio-Oracle desktop Event File extension. */
+    /** Returns a path with the standard Radio-Oracle desktop Race File extension. */
     fun withProjectExtension(path: Path): Path =
         if (isProjectFileName(path.fileName.toString())) {
             path
@@ -72,12 +72,12 @@ object DesktopProjectFilePaths {
             .joinToString("")
             .replace(Regex("\\s+"), " ")
             .trim()
-            .ifBlank { "Event File" }
+            .ifBlank { "Race File" }
 
     fun defaultProjectFileName(eventName: String): String =
         withProjectExtension(Path.of(defaultFileStem(eventName))).fileName.toString()
 
-    /** Returns the editable Event File display name without current or legacy project extensions. */
+    /** Returns the editable Race File display name without current or legacy project extensions. */
     fun projectFileDisplayStem(fileName: String): String =
         fileName
             .removeSuffix(LEGACY_PROJECT_EXTENSION)
@@ -89,7 +89,7 @@ object DesktopProjectFilePaths {
     fun defaultCsvFileName(eventName: String, suffix: String? = null): String {
         val sanitizedSuffix = suffix
             ?.let(::defaultFileStem)
-            ?.takeUnless { it == "Event File" }
+            ?.takeUnless { it == "Race File" }
         val stem = listOfNotNull(defaultFileStem(eventName), sanitizedSuffix).joinToString(" ")
         return withCsvExtension(Path.of(stem)).fileName.toString()
     }
@@ -97,7 +97,7 @@ object DesktopProjectFilePaths {
     fun defaultPdfFileName(eventName: String, suffix: String? = null): String {
         val sanitizedSuffix = suffix
             ?.let(::defaultFileStem)
-            ?.takeUnless { it == "Event File" }
+            ?.takeUnless { it == "Race File" }
         val stem = listOfNotNull(defaultFileStem(eventName), sanitizedSuffix).joinToString(" ")
         return withPdfExtension(Path.of(stem)).fileName.toString()
     }
@@ -207,17 +207,17 @@ object DesktopFileOverwriteConfirmation {
         }
 }
 
-/** File filters for selectable Event Files; directories stay visible so users can browse normally. */
+/** File filters for selectable Race Files; directories stay visible so users can browse normally. */
 object DesktopEventFileChooserFilters {
     fun openableEventFiles(): FileFilter =
         EventFileFilter(
-            description = "Radio-Oracle Event Files (*.json, *.rom.json, *.ardfjs, *.series.radio-oracle.json)",
+            description = "Radio-Oracle Race Files (*.json, *.rom.json, *.ardfjs, *.series.radio-oracle.json)",
             acceptsFileName = DesktopProjectFilePaths::isOpenableEventFileName
         )
 
     fun desktopEventFiles(): FileFilter =
         EventFileFilter(
-            description = "Radio-Oracle Desktop Event Files (*.json, *.rom.json)",
+            description = "Radio-Oracle Desktop Race Files (*.json, *.rom.json)",
             acceptsFileName = { name ->
                 DesktopProjectFilePaths.isProjectFileName(name) &&
                     !DesktopProjectFilePaths.isEventSeriesManifestName(name)
@@ -236,7 +236,7 @@ object DesktopEventFileChooserFilters {
     }
 }
 
-/** Remembers and prepares the desktop directory used for user-visible Event Files. */
+/** Remembers and prepares the desktop directory used for user-visible Race Files. */
 object DesktopEventFileLocations {
     private const val APP_DOCUMENTS_FOLDER = "Radio-Oracle"
     private const val LAST_EVENT_FILE_DIRECTORY_KEY = "lastEventFileDirectory"
@@ -267,24 +267,24 @@ object DesktopEventFileLocations {
     }
 }
 
-/** AWT-backed file chooser for desktop Event Files. */
+/** AWT-backed file chooser for desktop Race Files. */
 object DesktopFileDialogs {
-    /** Lets the user choose an existing Event File, returning null when cancelled. */
+    /** Lets the user choose an existing Race File, returning null when cancelled. */
     fun chooseOpenProject(): Path? =
-        chooseLoadEventFile("Open Radio-Oracle Event File", DesktopEventFileChooserFilters.openableEventFiles())
+        chooseLoadEventFile("Open Radio-Oracle Race File", DesktopEventFileChooserFilters.openableEventFiles())
 
-    /** Lets the user choose an existing desktop Event File to add to an Event Series. */
+    /** Lets the user choose an existing desktop Race File to add to a Race Series. */
     fun chooseEventSeriesMemberEventFile(): Path? =
-        chooseLoadEventFile("Add Event File to Event Series", DesktopEventFileChooserFilters.desktopEventFiles())
+        chooseLoadEventFile("Add Race File to Race Series", DesktopEventFileChooserFilters.desktopEventFiles())
 
-    /** Lets the user choose an existing Event Series manifest, returning null when cancelled. */
+    /** Lets the user choose an existing Race Series manifest, returning null when cancelled. */
     fun chooseOpenEventSeries(): Path? =
-        chooseSeriesManifest("Open Radio-Oracle Event Series")
+        chooseSeriesManifest("Open Radio-Oracle Race Series")
 
     /** Lets the user choose a save location, returning null when cancelled. */
     fun chooseSaveProject(raceName: String? = null, suggestedFileName: String? = null): Path? =
         chooseSaveEventFile(
-            title = "Save Radio-Oracle Event File",
+            title = "Save Radio-Oracle Race File",
             defaultFileName = suggestedFileName
                 ?.takeIf { it.isNotBlank() }
                 ?.let(DesktopProjectFilePaths::defaultProjectFileName)
@@ -293,7 +293,7 @@ object DesktopFileDialogs {
 
     /** Lets the user choose an export-copy location, returning null when cancelled. */
     fun chooseExportProject(): Path? =
-        chooseSaveEventFile("Export Radio-Oracle Event File Copy")
+        chooseSaveEventFile("Export Radio-Oracle Race File Copy")
 
     fun chooseExportCsv(title: String, eventName: String? = null, suffix: String? = null): Path? =
         chooseSaveFile(
@@ -309,7 +309,7 @@ object DesktopFileDialogs {
 
     fun chooseExportAndroidRaceBackupJson(eventName: String? = null): Path? =
         chooseSaveFile(
-            title = "Save Android Event File",
+            title = "Save Android Race File",
             extension = DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION,
             defaultFileName = eventName?.let(DesktopProjectFilePaths::defaultAndroidEventJsonFileName)
         ) { DesktopProjectFilePaths.withAndroidRaceBackupJsonExtension(it) }
@@ -349,7 +349,7 @@ object DesktopFileDialogs {
     fun chooseExportEventSeriesDirectory(): Path? {
         val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
         val chooser = JFileChooser(directory.toFile())
-        chooser.dialogTitle = "Export Event Series"
+        chooser.dialogTitle = "Export Race Series"
         chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
         chooser.approveButtonText = "Export Here"
         if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) {

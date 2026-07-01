@@ -40,7 +40,7 @@ import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-/** Writes Android-local Event Series data as a desktop-importable series package. */
+/** Writes Android-local Race Series data as a desktop-importable series package. */
 object EventSeriesExport {
     fun packageBytes(
         seriesData: EventSeriesData,
@@ -48,7 +48,7 @@ object EventSeriesExport {
     ): ByteArray {
         val members = seriesData.orderedMembers()
         require(members.isNotEmpty()) {
-            "Event Series export requires at least one event."
+            "Race Series export requires at least one race."
         }
         val seriesFile = EventSeriesFile(
             seriesId = seriesData.series.seriesId,
@@ -60,7 +60,7 @@ object EventSeriesExport {
             ZipOutputStream(output).use { zip ->
                 val eventFiles = members.map { member ->
                     val raceData = raceDataById[member.localRaceId]
-                        ?: throw IllegalArgumentException("Missing Event data for '${member.displayName}'.")
+                        ?: throw IllegalArgumentException("Missing race data for '${member.displayName}'.")
                     EventSeriesPackageEventFile(
                         event = member.toEventSeriesEvent(),
                         projectFile =

@@ -31,7 +31,7 @@ import org.openardf.radiooracle.shared.sound.SoundType
 
 /** Plays short user-feedback sounds for readout outcomes. */
 object SoundProcessor {
-    /** Plays the sound associated with the supplied readout event type. */
+    /** Plays the sound associated with the supplied readout type. */
     fun makeSound(context: Context, type: SoundType) {
         val sound = when (type) {
             SoundType.ERROR_UNKNOWN -> R.raw.si_error

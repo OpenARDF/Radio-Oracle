@@ -195,7 +195,7 @@ class AppCommandReceiver : BroadcastReceiver() {
         try {
             dataProcessor.saveRaceData(raceData)
             dataProcessor.setCurrentRace(race.id)
-            summary += "event id=${race.id} name=${race.name}"
+            summary += "race id=${race.id} name=${race.name}"
             summary += "schemaValidation=${if (iofSchema != null) "enabled" else "not-configured"}"
 
             val courseImport = importIofXml(
@@ -279,12 +279,12 @@ class AppCommandReceiver : BroadcastReceiver() {
             val roundTripRaceData = iofSmokeRoundTripRaceData(dataProcessor.getRaceData(race.id))
             val roundTripRace = roundTripRaceData.race
             dataProcessor.saveRaceData(roundTripRaceData)
-            summary += "roundTrip event id=${roundTripRace.id} name=${roundTripRace.name}"
+            summary += "roundTrip race id=${roundTripRace.id} name=${roundTripRace.name}"
 
             val registrationRoundTripRaceData = iofSmokeEmptyRoundTripRaceData(dataProcessor.getRaceData(race.id))
             val registrationRoundTripRace = registrationRoundTripRaceData.race
             dataProcessor.saveRaceData(registrationRoundTripRaceData)
-            summary += "registrationRoundTrip event id=${registrationRoundTripRace.id} name=${registrationRoundTripRace.name}"
+            summary += "registrationRoundTrip race id=${registrationRoundTripRace.id} name=${registrationRoundTripRace.name}"
 
             val exportedCourseDataImport = importIofXmlFile(
                 courseDataOutput,
@@ -359,7 +359,7 @@ class AppCommandReceiver : BroadcastReceiver() {
         } finally {
             if (!keepEvent) {
                 dataProcessor.deleteRace(race.id)
-                summary += "event deleted=${race.id}"
+                summary += "race deleted=${race.id}"
             }
             val summaryFile = File(outputDir, "smoke-summary.txt")
             summaryFile.writeText(summary.joinToString(separator = "\n", postfix = "\n"))
@@ -542,10 +542,10 @@ class AppCommandReceiver : BroadcastReceiver() {
 
     private suspend fun listEvents(dataProcessor: DataProcessor) {
         val races = dataProcessor.getRaces().first().sortedBy { it.startDateTime }
-        DebugLog.info(TAG, "Command listed events count=${races.size}")
-        Log.i(TAG, "events count=${races.size}")
+        DebugLog.info(TAG, "Command listed races count=${races.size}")
+        Log.i(TAG, "races count=${races.size}")
         races.forEach { race ->
-            val message = "event id=${race.id} name=${race.name} source=${race.importSourceId ?: "local"}"
+            val message = "race id=${race.id} name=${race.name} source=${race.importSourceId ?: "local"}"
             DebugLog.info(TAG, message)
             Log.i(TAG, message)
         }
@@ -563,7 +563,7 @@ class AppCommandReceiver : BroadcastReceiver() {
             members.forEach { member ->
                 val race = dataProcessor.getRace(member.localRaceId)
                 val memberMessage = "series-member series=${seriesData.series.seriesId} " +
-                    "event=${member.seriesEventId} localRace=${member.localRaceId} " +
+                    "seriesRace=${member.seriesEventId} localRace=${member.localRaceId} " +
                     "name=${race?.name ?: member.displayName}"
                 DebugLog.info(TAG, memberMessage)
                 Log.i(TAG, memberMessage)
@@ -575,27 +575,27 @@ class AppCommandReceiver : BroadcastReceiver() {
         val eventId = intent.uuidExtra() ?: return missingEventId()
         val race = dataProcessor.getRace(eventId)
         if (race == null) {
-            DebugLog.warn(TAG, "Command delete ignored missing event=$eventId")
-            Log.w(TAG, "event not found id=$eventId")
+            DebugLog.warn(TAG, "Command delete ignored missing race=$eventId")
+            Log.w(TAG, "race not found id=$eventId")
             return
         }
 
         dataProcessor.deleteRace(eventId)
-        DebugLog.info(TAG, "Command deleted event=$eventId name=${race.name}")
-        Log.i(TAG, "deleted event id=$eventId name=${race.name}")
+        DebugLog.info(TAG, "Command deleted race=$eventId name=${race.name}")
+        Log.i(TAG, "deleted race id=$eventId name=${race.name}")
     }
 
     private suspend fun selectEvent(dataProcessor: DataProcessor, intent: Intent) {
         val eventId = intent.uuidExtra() ?: return missingEventId()
         val race = dataProcessor.setCurrentRace(eventId)
         if (race == null) {
-            DebugLog.warn(TAG, "Command select ignored missing event=$eventId")
-            Log.w(TAG, "event not found id=$eventId")
+            DebugLog.warn(TAG, "Command select ignored missing race=$eventId")
+            Log.w(TAG, "race not found id=$eventId")
             return
         }
 
-        DebugLog.info(TAG, "Command selected event=$eventId name=${race.name}")
-        Log.i(TAG, "selected event id=$eventId name=${race.name}")
+        DebugLog.info(TAG, "Command selected race=$eventId name=${race.name}")
+        Log.i(TAG, "selected race id=$eventId name=${race.name}")
     }
 
     private suspend fun createSeriesFromEvents(dataProcessor: DataProcessor, intent: Intent) {
@@ -605,8 +605,8 @@ class AppCommandReceiver : BroadcastReceiver() {
             ?: return missingEventIds()
         val races = eventIds.map { eventId ->
             dataProcessor.getRace(eventId) ?: run {
-                DebugLog.warn(TAG, "Command create series ignored missing event=$eventId")
-                Log.w(TAG, "event not found id=$eventId")
+                DebugLog.warn(TAG, "Command create series ignored missing race=$eventId")
+                Log.w(TAG, "race not found id=$eventId")
                 return
             }
         }
@@ -627,7 +627,7 @@ class AppCommandReceiver : BroadcastReceiver() {
         val receiveUrl = intent.desktopReceiveUrl() ?: return
         val upload = dataProcessor.desktopUploadForRaceOrSeries(eventId)
         DesktopFileTransferUploader().upload(receiveUrl, upload)
-        val message = "sent event-or-series id=$eventId file=${upload.fileName} " +
+        val message = "sent race-or-series id=$eventId file=${upload.fileName} " +
             "contentType=${upload.contentType} bytes=${upload.bytes.size}"
         DebugLog.info(TAG, "Command $message")
         Log.i(TAG, message)
@@ -700,15 +700,15 @@ class AppCommandReceiver : BroadcastReceiver() {
         val race = intent.uuidExtra(EXTRA_EVENT_ID)?.let { eventId ->
             dataProcessor.getRace(eventId).also {
                 if (it == null) {
-                    DebugLog.warn(TAG, "Command print latest ignored missing event=$eventId")
-                    Log.w(TAG, "event not found id=$eventId")
+                    DebugLog.warn(TAG, "Command print latest ignored missing race=$eventId")
+                    Log.w(TAG, "race not found id=$eventId")
                 }
             }
         } ?: latestRace(dataProcessor)
 
         if (race == null) {
-            DebugLog.warn(TAG, "Command print latest ignored because no events exist")
-            Log.w(TAG, "no events available")
+            DebugLog.warn(TAG, "Command print latest ignored because no races exist")
+            Log.w(TAG, "no races available")
             return
         }
 
@@ -716,11 +716,11 @@ class AppCommandReceiver : BroadcastReceiver() {
             .first()
             .maxByOrNull { it.result.readoutTime }
         if (resultData == null) {
-            DebugLog.warn(TAG, "Command print latest ignored because event has no readouts event=${race.id}")
-            Log.w(TAG, "event has no readouts id=${race.id}")
+            DebugLog.warn(TAG, "Command print latest ignored because race has no readouts race=${race.id}")
+            Log.w(TAG, "race has no readouts id=${race.id}")
             return
         }
-        printFinishTicket(dataProcessor, race, resultData, "latest event=${race.id}")
+        printFinishTicket(dataProcessor, race, resultData, "latest race=${race.id}")
     }
 
     private suspend fun latestRace(dataProcessor: DataProcessor): Race? =

@@ -31,7 +31,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 
-/** File envelope for future shared Event File import/export. */
+/** File envelope for future shared Race File import/export. */
 @Serializable
 data class EventProjectFile(
     val schemaVersion: Int = EventProjectFileFormat.CURRENT_SCHEMA_VERSION,
@@ -44,7 +44,7 @@ data class EventProjectFile(
         EventProjectFileFormat.isSupportedSchema(schemaVersion)
 }
 
-/** Optional backlink from an Event File to its authoritative series manifest entry. */
+/** Optional backlink from a Race File to its authoritative series manifest entry. */
 @Serializable
 data class EventSeriesLink(
     val seriesId: String,
@@ -55,12 +55,12 @@ data class EventSeriesLink(
             "Series id must not be blank."
         }
         require(seriesEventId.isNotBlank()) {
-            "Series event id must not be blank."
+            "Series race id must not be blank."
         }
     }
 }
 
-/** JSON codec for portable `.rom.json` Event Files. */
+/** JSON codec for portable `.rom.json` Race Files. */
 object EventProjectFileJson {
     @OptIn(ExperimentalSerializationApi::class)
     private val json = Json {
@@ -70,16 +70,16 @@ object EventProjectFileJson {
         prettyPrint = true
     }
 
-    /** Returns the in-memory form that will be persisted when this Event File is written. */
+    /** Returns the in-memory form that will be persisted when this Race File is written. */
     fun normalizedForStorage(projectFile: EventProjectFile): EventProjectFile =
         clearPublicControlLocations(clearLegacyCategoryRaceSettings(projectFile))
 
-    /** Encodes an Event File using the stable, shared desktop-beta JSON format. */
+    /** Encodes a Race File using the stable, shared desktop-beta JSON format. */
     fun encode(projectFile: EventProjectFile): String =
         json.encodeToString(normalizedForStorage(projectFile))
 
     /**
-     * Decodes an Event File and rejects schema versions this build does not support.
+     * Decodes a Race File and rejects schema versions this build does not support.
      *
      * Unknown fields are tolerated for additive metadata inside a supported schema
      * version, but schema upgrades must still increment `schemaVersion`.
@@ -98,7 +98,7 @@ object EventProjectFileJson {
         val needsControlScoringMigration = !text.contains("\"scored\"")
         val projectFile = json.decodeFromString<EventProjectFile>(text)
         require(projectFile.isSupportedSchema()) {
-            "Unsupported Radio-Oracle Event File schema version: ${projectFile.schemaVersion}"
+            "Unsupported Radio-Oracle Race File schema version: ${projectFile.schemaVersion}"
         }
         val backfilledProjectFile = if (needsControlBackfill) {
             EventControlCatalog.backfillControls(projectFile)
@@ -151,7 +151,7 @@ object EventProjectFileJson {
         )
 }
 
-/** Schema metadata for portable Radio-Oracle Event Files. */
+/** Schema metadata for portable Radio-Oracle Race Files. */
 object EventProjectFileFormat {
     const val APP_NAME = "Radio-Oracle"
     const val CURRENT_SCHEMA_VERSION = 3

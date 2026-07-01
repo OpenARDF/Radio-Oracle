@@ -959,11 +959,11 @@ class DesktopAutomationCliTest {
 
     @Test
     fun navSelectReportsNewEventFileAction() {
-        val result = runAutomation("nav-select", "Event File > New Event File")
+        val result = runAutomation("nav-select", "Race File > New Race File")
 
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"command\":\"nav-select\""))
-        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Event File > New Event File\""))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Race File > New Race File\""))
         assertTrue(result.stdout.contains("\"selectedSection\":\"Races\""))
         assertTrue(result.stdout.contains("\"action\":\"NewEventFile\""))
     }
@@ -982,11 +982,11 @@ class DesktopAutomationCliTest {
 
     @Test
     fun navSelectReportsClearSeriesValidationPath() {
-        val result = runAutomation("nav-select", "Event Series > Series Validation")
+        val result = runAutomation("nav-select", "Race Series > Series Validation")
 
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"command\":\"nav-select\""))
-        assertTrue(result.stdout.contains("\"breadcrumb\":\"Event Series > Series Validation\""))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Race Series > Series Validation\""))
         assertTrue(result.stdout.contains("\"selectedSection\":\"Series Validation\""))
         assertTrue(result.stdout.contains("\"selectedItemId\":\"series.validation\""))
         assertTrue(result.stdout.contains("\"action\":null"))
@@ -994,16 +994,16 @@ class DesktopAutomationCliTest {
 
     @Test
     fun navTreeReportsMenuStructureAsJson() {
-        val result = runAutomation("nav-tree", "--workflow", "Event Series")
+        val result = runAutomation("nav-tree", "--workflow", "Race Series")
 
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"command\":\"nav-tree\""))
-        assertTrue(result.stdout.contains("\"workflow\":\"Event Series\""))
-        assertTrue(result.stdout.contains("\"path\":\"Event Series > Events\""))
-        assertTrue(result.stdout.contains("\"path\":\"Event Series > Events > Add Event to Series...\""))
+        assertTrue(result.stdout.contains("\"workflow\":\"Race Series\""))
+        assertTrue(result.stdout.contains("\"path\":\"Race Series > Races\""))
+        assertTrue(result.stdout.contains("\"path\":\"Race Series > Races > Add Race to Series...\""))
         assertTrue(result.stdout.contains("\"action\":\"AddEventToSeries\""))
         assertFalse(result.stdout.contains("Open Series Event"))
-        assertFalse(result.stdout.contains("Event Series > Series Validation > Validate Series"))
+        assertFalse(result.stdout.contains("Race Series > Series Validation > Validate Series"))
     }
 
     @Test
@@ -1018,11 +1018,11 @@ class DesktopAutomationCliTest {
 
     @Test
     fun navSelectDraftModeReportsGuardBeforeLeavingNewEventFile() {
-        val result = runAutomation("nav-select", "--draft", "Event File > New Event File > < Back")
+        val result = runAutomation("nav-select", "--draft", "Race File > New Race File > < Back")
 
         assertEquals(0, result.exitCode)
-        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Event File\", \"New Event File\", \"< Back\"]"))
-        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Event File > New Event File\""))
+        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Race File\", \"New Race File\", \"< Back\"]"))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Race File > New Race File\""))
         assertTrue(result.stdout.contains("\"selectedItemId\":\"setup.event-file.new\""))
         assertTrue(result.stdout.contains("\"action\":\"NewEventFile\""))
         assertTrue(result.stdout.contains("\"guarded\":true"))
@@ -1030,41 +1030,41 @@ class DesktopAutomationCliTest {
 
     @Test
     fun navSelectDraftModeReportsGuardBeforeWorkflowSwitch() {
-        val result = runAutomation("nav-select", "--draft", "Event File > New Event File > Race Ops")
+        val result = runAutomation("nav-select", "--draft", "Race File > New Race File > Race Ops")
 
         assertEquals(0, result.exitCode)
-        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Event File\", \"New Event File\", \"Race Ops\"]"))
-        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Event File > New Event File\""))
+        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Race File\", \"New Race File\", \"Race Ops\"]"))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Race File > New Race File\""))
         assertTrue(result.stdout.contains("\"selectedItemId\":\"setup.event-file.new\""))
         assertTrue(result.stdout.contains("\"guarded\":true"))
     }
 
     @Test
     fun navSelectDefaultDraftModeDoesNotGuardBeforeWorkflowSwitch() {
-        val result = runAutomation("nav-select", "--default-draft", "Event File > New Event File > Race Ops")
+        val result = runAutomation("nav-select", "--default-draft", "Race File > New Race File > Race Ops")
 
         assertEquals(0, result.exitCode)
-        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Event File\", \"New Event File\", \"Race Ops\"]"))
+        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Race File\", \"New Race File\", \"Race Ops\"]"))
         assertTrue(result.stdout.contains("\"workflow\":\"Race Operations\""))
         assertTrue(result.stdout.contains("\"guarded\":false"))
     }
 
     @Test
     fun navSelectDraftModeDoesNotGuardSaveFromNewEventFile() {
-        val result = runAutomation("nav-select", "--draft", "Event File > New Event File > Save Event")
+        val result = runAutomation("nav-select", "--draft", "Race File > New Race File > Save Race")
 
         assertEquals(0, result.exitCode)
-        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Event File\", \"New Event File\", \"Save Event\"]"))
+        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Race File\", \"New Race File\", \"Save Race\"]"))
         assertTrue(result.stdout.contains("\"action\":\"SaveEventFile\""))
         assertTrue(result.stdout.contains("\"guarded\":false"))
     }
 
     @Test
     fun navSelectReportsEventFileSaveAction() {
-        val result = runAutomation("nav-select", "Event File > Save Event")
+        val result = runAutomation("nav-select", "Race File > Save Race")
 
         assertEquals(0, result.exitCode)
-        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Event File\""))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Race File\""))
         assertTrue(result.stdout.contains("\"selectedSection\":\"Races\""))
         assertTrue(result.stdout.contains("\"action\":\"SaveEventFile\""))
         assertTrue(result.stdout.contains("\"guarded\":false"))
@@ -1072,23 +1072,23 @@ class DesktopAutomationCliTest {
 
     @Test
     fun navSelectReportsAndroidEventFileActionsUnderEventFile() {
-        val sendResult = runAutomation("nav-select", "Event File > Android... > Send Event to Android")
-        val receiveResult = runAutomation("nav-select", "Event File > Android... > Receive File from Android")
-        val exportResult = runAutomation("nav-select", "Event File > Android... > Save Android Event File...")
+        val sendResult = runAutomation("nav-select", "Race File > Android... > Send Race to Android")
+        val receiveResult = runAutomation("nav-select", "Race File > Android... > Receive File from Android")
+        val exportResult = runAutomation("nav-select", "Race File > Android... > Save Android Race File...")
 
         assertEquals(0, sendResult.exitCode)
         assertTrue(sendResult.stdout.contains("\"action\":\"SendEventFileToAndroid\""))
-        assertTrue(sendResult.stdout.contains("\"breadcrumb\":\"Setup > Event File > Android...\""))
+        assertTrue(sendResult.stdout.contains("\"breadcrumb\":\"Setup > Race File > Android...\""))
         assertTrue(sendResult.stdout.contains("\"selectedItemId\":\"setup.event-file.android\""))
 
         assertEquals(0, receiveResult.exitCode)
         assertTrue(receiveResult.stdout.contains("\"action\":\"ReceiveFileFromAndroid\""))
-        assertTrue(receiveResult.stdout.contains("\"breadcrumb\":\"Setup > Event File > Android...\""))
+        assertTrue(receiveResult.stdout.contains("\"breadcrumb\":\"Setup > Race File > Android...\""))
         assertTrue(receiveResult.stdout.contains("\"selectedItemId\":\"setup.event-file.android\""))
 
         assertEquals(0, exportResult.exitCode)
         assertTrue(exportResult.stdout.contains("\"action\":\"ExportAndroidRaceBackupJson\""))
-        assertTrue(exportResult.stdout.contains("\"breadcrumb\":\"Setup > Event File > Android...\""))
+        assertTrue(exportResult.stdout.contains("\"breadcrumb\":\"Setup > Race File > Android...\""))
         assertTrue(exportResult.stdout.contains("\"selectedItemId\":\"setup.event-file.android\""))
     }
 

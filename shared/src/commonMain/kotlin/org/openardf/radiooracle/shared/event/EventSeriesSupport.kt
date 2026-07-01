@@ -109,28 +109,28 @@ object EventSeriesSupport {
             when {
                 link == null -> issues += EventSeriesValidationIssue(
                     severity = EventSeriesIssueSeverity.WARNING,
-                    message = "Event File '${event.displayName}' does not have a series backlink.",
+                    message = "Race File '${event.displayName}' does not have a series backlink.",
                     seriesEventId = event.seriesEventId
                 )
                 link.seriesId != seriesFile.seriesId -> issues += EventSeriesValidationIssue(
                     severity = EventSeriesIssueSeverity.ERROR,
-                    message = "Event File '${event.displayName}' links to a different series.",
+                    message = "Race File '${event.displayName}' links to a different series.",
                     seriesEventId = event.seriesEventId
                 )
                 link.seriesEventId != event.seriesEventId -> issues += EventSeriesValidationIssue(
                     severity = EventSeriesIssueSeverity.ERROR,
-                    message = "Event File '${event.displayName}' links to a different series event.",
+                    message = "Race File '${event.displayName}' links to a different series race.",
                     seriesEventId = event.seriesEventId
                 )
             }
         }
-        // A copied or buggy Event File can carry the same underlying race id as another file.
+        // A copied or buggy Race File can carry the same underlying race id as another file.
         // Series membership can still be unique through seriesEventId/path, but validation should
         // flag the duplicate because other import, diagnostic, and UI code may still assume race ids
-        // distinguish Event Files.
+        // distinguish Race Files.
         linkedEvents
             .groupBy { it.projectFile.raceData.race.id }
-            .filter { (raceId, events) -> raceId.isNotBlank() && events.size > 1 }
+            .filter { (raceId, races) -> raceId.isNotBlank() && races.size > 1 }
             .values
             .forEach { duplicateEvents ->
                 duplicateEvents.forEach { linked ->
@@ -141,7 +141,7 @@ object EventSeriesSupport {
                         .joinToString(", ")
                     issues += EventSeriesValidationIssue(
                         severity = EventSeriesIssueSeverity.WARNING,
-                        message = "Event File '${linked.event.displayName}' has a duplicate race ID shared with: $otherEventNames.",
+                        message = "Race File '${linked.event.displayName}' has a duplicate race ID shared with: $otherEventNames.",
                         seriesEventId = linked.event.seriesEventId
                     )
                 }
@@ -155,9 +155,9 @@ object EventSeriesSupport {
                 .forEach { linked ->
                     issues += EventSeriesValidationIssue(
                         severity = EventSeriesIssueSeverity.ERROR,
-                        message = "Event File '${linked.event.displayName}' has race level " +
+                        message = "Race File '${linked.event.displayName}' has race level " +
                             "${linked.projectFile.raceData.race.raceLevel.toDisplayLabel()}; " +
-                            "series member events must all use ${expectedRaceLevel.toDisplayLabel()}.",
+                            "series member races must all use ${expectedRaceLevel.toDisplayLabel()}.",
                         seriesEventId = linked.event.seriesEventId
                     )
                 }
@@ -167,9 +167,9 @@ object EventSeriesSupport {
     }
 
     /**
-     * Returns generated-start histories from every manifest-listed series event except the
+     * Returns generated-start histories from every manifest-listed series race except the
      * event being redrawn. Series fairness is a whole-series problem once other draws exist;
-     * calendar dates and manifest order are intentionally not used to exclude later events.
+     * calendar dates and manifest order are intentionally not used to exclude later races.
      */
     fun otherSeriesStartRowsForCurrentEvent(
         seriesFile: EventSeriesFile,
@@ -325,7 +325,7 @@ object EventSeriesSupport {
         grouped.filterValues { it.size > 1 }.keys.forEach { duplicateKey ->
             issues += EventSeriesValidationIssue(
                 severity = EventSeriesIssueSeverity.WARNING,
-                message = "Event '${event.event.displayName}' has duplicate $issueLabel $duplicateKey.",
+                message = "Race '${event.event.displayName}' has duplicate $issueLabel $duplicateKey.",
                 seriesEventId = event.event.seriesEventId
             )
         }

@@ -198,7 +198,7 @@ class CategoryEditDialogFragment : DialogFragment() {
 
         samePropertiesCheckBox.isChecked = true
         // Legacy category-level race settings remain in the layout for compatibility, but the app
-        // now inherits event type, band, and time limit from the Race and clears category overrides.
+        // now inherits race type, band, and time limit from the Race and clears category overrides.
         samePropertiesCheckBox.visibility = View.GONE
         raceTypeLayout.visibility = View.GONE
         bandLayout.visibility = View.GONE

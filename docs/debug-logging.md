@@ -1,7 +1,7 @@
 # Hidden Debug Logging
 
 Radio-Oracle writes a small diagnostic log under app-private storage. The logs
-are intended for developer troubleshooting and are not part of normal Event File
+are intended for developer troubleshooting and are not part of normal Race File
 data.
 
 ## Location
@@ -37,13 +37,13 @@ Android records low-volume breadcrumbs for:
 Desktop records low-volume breadcrumbs for:
 
 - app startup and log initialization;
-- Event File create/open/save/save-as/close/export-copy results;
+- Race File create/open/save/save-as/close/export-copy results;
 - SI station status changes;
 - single and continuous SI readout start/stop, timeout, failure, and card
   download outcomes.
 
 The log should not contain raw live-result payloads, API keys, full imported
-files, competitor names, or other broad personal event data.
+files, competitor names, or other broad personal race data.
 
 ## Developer Extraction
 

@@ -51,8 +51,8 @@ data class EventRace(
  * Portable category definition.
  *
  * The category race-setting fields are retained for backward compatibility with older Android
- * databases, CSV files, and Event Files. Current Radio-Oracle behavior treats the Event File race
- * settings as authoritative: categories do not override event type, band, or time limit.
+ * databases, CSV files, and Race Files. Current Radio-Oracle behavior treats the Race File
+ * settings as authoritative: categories do not override race type, band, or time limit.
  */
 @Serializable
 data class EventCategory(
@@ -89,7 +89,7 @@ data class EventCategory(
 /**
  * Password-protected route-derived course data.
  *
- * KML/KMZ files may live outside the Event File, but their derived length, climb,
+ * KML/KMZ files may live outside the Race File, but their derived length, climb,
  * ideal order, and route geometry are sensitive before competition day. The
  * desktop app therefore encrypts this payload before storing it in
  * EventCategory.encryptedCourseInfo instead of copying those values into public
@@ -306,7 +306,7 @@ data class EventCompetitorData(
     val readoutData: EventReadoutData?
 )
 
-/** Portable complete event aggregate used for project import/export and desktop workflows. */
+/** Portable complete race aggregate used for project import/export and desktop workflows. */
 @Serializable
 data class EventRaceData(
     val race: EventRace,

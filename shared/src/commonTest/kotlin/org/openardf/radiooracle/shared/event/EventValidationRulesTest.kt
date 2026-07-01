@@ -152,7 +152,7 @@ class EventValidationRulesTest {
         assertTrue(issues.contains(EventValidationIssue.NoCategories))
         assertTrue(
             issues.contains(
-                EventValidationIssue.ControlInventoryIssue("Classic events should define exactly 5 fox controls; found 1.")
+                EventValidationIssue.ControlInventoryIssue("Classic races should define exactly 5 fox controls; found 1.")
             )
         )
         assertTrue(issues.contains(EventValidationIssue.MissingCompetitorSiNumbers(setOf("RUNNER one"))))

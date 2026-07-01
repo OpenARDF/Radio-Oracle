@@ -38,7 +38,7 @@ test focused on the existing Android behavior, not new desktop functionality.
   - duplicate reads attempted: `1`
   - final result rows: `16`
   - final punch rows: `128`
-  - duplicate card event did not create an extra result row.
+  - duplicate card read did not create an extra result row.
 - Focused log checks found no Radio-Oracle crash, ANR, force-finish, or
   process-death signatures.
 

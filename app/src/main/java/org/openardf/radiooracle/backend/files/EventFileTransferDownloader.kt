@@ -71,7 +71,7 @@ class EventFileTransferDownloader(
     @Throws(EventFileTransferException::class)
     fun download(rawUrl: String): EventFileTransferDownload {
         val url = EventFileTransferUrlValidator.validate(rawUrl)
-        DebugLog.info("EventFileTransfer", "Downloading Event File from ${safeUrlDescription(url)}")
+        DebugLog.info("EventFileTransfer", "Downloading Race File from ${safeUrlDescription(url)}")
         val request = Request.Builder().url(url).get().build()
 
         val response = try {
@@ -100,7 +100,7 @@ class EventFileTransferDownloader(
                 } else {
                     "event.rom.json"
                 }
-            DebugLog.info("EventFileTransfer", "Downloaded Event File bytes=${bytes.size} from ${safeUrlDescription(url)}")
+            DebugLog.info("EventFileTransfer", "Downloaded Race File bytes=${bytes.size} from ${safeUrlDescription(url)}")
             return EventFileTransferDownload(
                 fileName = fileName,
                 contentType = it.header("Content-Type"),

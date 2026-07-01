@@ -100,7 +100,7 @@ class DesktopEventSeriesTest {
         session.open(path)
         val issues = session.validateLinkedEvents()
 
-        assertEquals(listOf("Series event 'Day 1' is missing its Event File."), issues.map { it.message })
+        assertEquals(listOf("Series race 'Day 1' is missing its Race File."), issues.map { it.message })
     }
 
     @Test
@@ -869,7 +869,7 @@ class DesktopEventSeriesTest {
         )
 
         val history = summary.competitorHistories.single { it.identityLabel == "SI 111" }
-        assertEquals("event date/time", summary.historyOrderDescription)
+        assertEquals("race date/time", summary.historyOrderDescription)
         assertEquals("L E", history.thirdHistoryText)
     }
 
@@ -1301,7 +1301,7 @@ class DesktopEventSeriesTest {
             DesktopEventSeriesPackageFiles.unpack(zipPath, root.resolve("received"))
         }
 
-        assertEquals("Event Series package contains an unsafe path: ../series.radio-oracle.json", error.message)
+        assertEquals("Race Series package contains an unsafe path: ../series.radio-oracle.json", error.message)
     }
 
     @Test

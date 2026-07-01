@@ -75,7 +75,7 @@ class EventSeriesSupportTest {
 
         val issues = EventSeriesSupport.validateLinkedEvents(series, linkedEvents)
 
-        assertEquals(listOf("Event File 'day-2' links to a different series."), issues.map { it.message })
+        assertEquals(listOf("Race File 'day-2' links to a different series."), issues.map { it.message })
     }
 
     @Test
@@ -96,8 +96,8 @@ class EventSeriesSupportTest {
 
         assertEquals(
             listOf(
-                "Event File 'day-1' has a duplicate race ID shared with: day-2.",
-                "Event File 'day-2' has a duplicate race ID shared with: day-1."
+                "Race File 'day-1' has a duplicate race ID shared with: day-2.",
+                "Race File 'day-2' has a duplicate race ID shared with: day-1."
             ),
             issues.map { it.message }
         )
@@ -129,7 +129,7 @@ class EventSeriesSupportTest {
         val issues = EventSeriesSupport.validateLinkedEvents(series, linkedEvents)
 
         assertEquals(
-            listOf("Event File 'day-2' has race level Regional; series member events must all use Practice."),
+            listOf("Race File 'day-2' has race level Regional; series member races must all use Practice."),
             issues.map { it.message }
         )
         assertTrue(issues.all { it.severity == EventSeriesIssueSeverity.ERROR })

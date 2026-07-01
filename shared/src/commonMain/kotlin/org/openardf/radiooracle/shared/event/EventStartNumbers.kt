@@ -28,7 +28,7 @@ package org.openardf.radiooracle.shared.event
  * Derives event start numbers from assigned start times.
  *
  * In Radio-Oracle, a start number is the departure-slot sequence within a
- * specific Event File. Competitors starting together share the same start
+ * specific Race File. Competitors starting together share the same start
  * number; competitors without a drawn start time have no start number yet.
  */
 object EventStartNumbers {

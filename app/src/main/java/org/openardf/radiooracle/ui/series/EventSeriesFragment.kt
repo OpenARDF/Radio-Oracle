@@ -155,7 +155,7 @@ class EventSeriesFragment : Fragment() {
                 ).show()
             } catch (error: Exception) {
                 progressDialog.dismiss()
-                displayAlert(error.message ?: "Could not export Event Series.")
+                displayAlert(error.message ?: "Could not export Race Series.")
             }
         }
     }
@@ -177,7 +177,7 @@ class EventSeriesFragment : Fragment() {
                 DesktopFileTransferUploadDialogs.show(this@EventSeriesFragment, upload)
             } catch (error: Exception) {
                 progressDialog.dismiss()
-                displayAlert(error.message ?: "Could not prepare Event Series for desktop upload.")
+                displayAlert(error.message ?: "Could not prepare Race Series for desktop upload.")
             }
         }
     }
@@ -205,7 +205,7 @@ class EventSeriesFragment : Fragment() {
                     Toast.LENGTH_SHORT
                 ).show()
             } catch (error: Exception) {
-                displayAlert(error.message ?: "Could not remove Event Series grouping.")
+                displayAlert(error.message ?: "Could not remove Race Series grouping.")
             }
         }
     }

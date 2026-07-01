@@ -34,19 +34,19 @@ import org.openardf.radiooracle.shared.domain.RaceType
 
 class DesktopNavigationTest {
     private val eventFileMenuLabels = listOf(
-        "New Event File",
-        "Load Event File...",
+        "New Race File",
+        "Load Race File...",
         "Import EventReg Website...",
         "Android...",
         "Settings",
-        "Save Event",
-        "Close Event File"
+        "Save Race",
+        "Close Race File"
     )
 
     private val androidEventFileMenuLabels = listOf(
-        "Send Event to Android",
+        "Send Race to Android",
         "Receive File from Android",
-        "Save Android Event File..."
+        "Save Android Race File..."
     )
 
     @Test
@@ -118,19 +118,19 @@ class DesktopNavigationTest {
     @Test
     fun seriesEventsMenuIncludesAddEventAction() {
         val events = DesktopNavigation.rootItems(DesktopWorkflow.Series)
-            .first { it.label == "Events" }
+            .first { it.label == "Races" }
 
         assertEquals(
-            listOf("Add Event to Series..."),
+            listOf("Add Race to Series..."),
             events.children.map { it.label }
         )
-        assertEquals(DesktopNavAction.AddEventToSeries, events.children.first { it.label == "Add Event to Series..." }.action)
+        assertEquals(DesktopNavAction.AddEventToSeries, events.children.first { it.label == "Add Race to Series..." }.action)
     }
 
     @Test
     fun seriesEventsMenuDoesNotDuplicateRowSpecificOpenAction() {
         val events = DesktopNavigation.rootItems(DesktopWorkflow.Series)
-            .first { it.label == "Events" }
+            .first { it.label == "Races" }
 
         assertFalse(events.children.any { it.label == "Open Series Event..." })
     }
@@ -140,7 +140,7 @@ class DesktopNavigationTest {
         val roots = DesktopNavigation.rootItems(DesktopWorkflow.Series)
 
         assertEquals(
-            listOf("Balance Open Event for Series"),
+            listOf("Balance Open Race for Series"),
             roots.first { it.label == "Start Fairness" }.children.map { it.label }
         )
         assertEquals(
@@ -157,9 +157,9 @@ class DesktopNavigationTest {
     fun seriesActionsAvoidDuplicateMenuAndScreenButtons() {
         val roots = DesktopNavigation.rootItems(DesktopWorkflow.Series)
 
-        assertTrue(roots.first { it.label == "Events" }.children.any { it.label == "Add Event to Series..." })
+        assertTrue(roots.first { it.label == "Races" }.children.any { it.label == "Add Race to Series..." })
         assertFalse(roots.first { it.label == "Series Validation" }.children.any { it.label == "Validate Series" })
-        assertFalse(roots.first { it.label == "Events" }.children.any { it.label == "Open Series Event..." })
+        assertFalse(roots.first { it.label == "Races" }.children.any { it.label == "Open Series Event..." })
     }
 
     @Test
@@ -185,7 +185,7 @@ class DesktopNavigationTest {
     @Test
     fun placesCurrentDesktopSectionsUnderWorkflowGroups() {
         assertEquals(
-            listOf("Event File", "Controls", "Categories", "Competitors", "Start List", "More..."),
+            listOf("Race File", "Controls", "Categories", "Competitors", "Start List", "More..."),
             DesktopNavigation.rootItems(DesktopWorkflow.Setup).map { it.label }
         )
         assertEquals(
@@ -193,7 +193,7 @@ class DesktopNavigationTest {
             DesktopNavigation.rootItems(DesktopWorkflow.RaceOps).map { it.label }
         )
         assertEquals(
-            listOf("Events", "Start Fairness", "Competitor Matching", "Series Validation", "Series Settings"),
+            listOf("Races", "Start Fairness", "Competitor Matching", "Series Validation", "Series Settings"),
             DesktopNavigation.rootItems(DesktopWorkflow.Series).map { it.label }
         )
         assertEquals(
@@ -209,7 +209,7 @@ class DesktopNavigationTest {
     @Test
     fun seriesWorkflowRequiresSeriesContext() {
         assertEquals(
-            "Series is available after this Event File is linked to an Event Series.",
+            "Series is available after this Race File is linked to a Race Series.",
             DesktopNavigation.disabledWorkflowReason(
                 DesktopWorkflow.Series,
                 DesktopNavigationReadiness(hasEventFile = true, hasSeriesContext = false)
@@ -227,7 +227,7 @@ class DesktopNavigationTest {
     @Test
     fun featureSettingsUseSpecificSections() {
         val setupSiSettings = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
-            .first { it.label == "Event File" }
+            .first { it.label == "Race File" }
             .children
             .first { it.label == "Settings" }
             .children
@@ -254,11 +254,11 @@ class DesktopNavigationTest {
 
     @Test
     fun eventSeriesSettingsDrillIntoThirdLevelMenu() {
-        val eventFile = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+        val eventFile = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Race File" }
         val eventFileState = DesktopNavState().enter(eventFile)
         val settings = DesktopNavigation.currentItems(eventFileState).first { it.label == "Settings" }
         val settingsState = eventFileState.enter(settings)
-        val eventSeries = DesktopNavigation.currentItems(settingsState).first { it.label == "Event Series" }
+        val eventSeries = DesktopNavigation.currentItems(settingsState).first { it.label == "Race Series" }
         val eventSeriesState = settingsState.enter(eventSeries)
 
         assertTrue(DesktopNavigation.usesSeriesNavigationColor(settingsState, eventSeries))
@@ -278,7 +278,7 @@ class DesktopNavigationTest {
         )
         assertEquals(
             listOf(
-                "Create New Series with This Event",
+                "Create New Series with This Race",
                 "Link to Existing Series...",
                 "Change Series Link...",
                 "Remove from Series...",
@@ -351,7 +351,7 @@ class DesktopNavigationTest {
         assertEquals("setup.home", state.selectedItemId)
         assertEquals("Setup", DesktopNavigation.selectedLabel(state))
         assertEquals("Setup", DesktopNavigation.breadcrumb(state))
-        assertTrue(DesktopNavigation.selectedDescription(state).contains("create or open an Event File"))
+        assertTrue(DesktopNavigation.selectedDescription(state).contains("create or open a Race File"))
     }
 
     @Test
@@ -398,7 +398,7 @@ class DesktopNavigationTest {
     @Test
     fun backFromFirstLevelSubmenuReturnsToWorkflowHome() {
         val eventFile = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
-            .first { it.label == "Event File" }
+            .first { it.label == "Race File" }
         val state = DesktopNavState().enter(eventFile).back()
 
         assertTrue(state.submenuStack.isEmpty())
@@ -458,7 +458,7 @@ class DesktopNavigationTest {
     fun backFromNewEventFileActionReturnsToEventFileMenu() {
         val eventFileState = DesktopNavigation.selectItem(
             DesktopNavState(),
-            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Race File" }
         ).state
         val newEventState = DesktopNavigation.selectItem(
             eventFileState,
@@ -470,14 +470,14 @@ class DesktopNavigationTest {
         assertEquals(listOf("setup.event-file"), state.submenuStack)
         assertEquals(DesktopSection.Races, state.selectedSection)
         assertEquals("setup.event-file", state.selectedItemId)
-        assertEquals("Setup > Event File", DesktopNavigation.breadcrumb(state))
+        assertEquals("Setup > Race File", DesktopNavigation.breadcrumb(state))
     }
 
     @Test
     fun openEventFileActionFocusesLoadFileContext() {
         val eventFileState = DesktopNavigation.selectItem(
             DesktopNavState(),
-            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Race File" }
         ).state
 
         val selection = DesktopNavigation.selectItem(
@@ -489,7 +489,7 @@ class DesktopNavigationTest {
         assertEquals(listOf("setup.event-file"), selection.state.submenuStack)
         assertEquals(DesktopSection.Races, selection.state.selectedSection)
         assertEquals("setup.event-file.open", selection.state.selectedItemId)
-        assertEquals("Setup > Event File > Load Event File...", DesktopNavigation.breadcrumb(selection.state))
+        assertEquals("Setup > Race File > Load Race File...", DesktopNavigation.breadcrumb(selection.state))
         assertEquals(emptyList<String>(), DesktopNavigation.currentItems(selection.state).map { it.label })
     }
 
@@ -497,7 +497,7 @@ class DesktopNavigationTest {
     fun completedTransientActionReturnsToParentMenu() {
         val eventFileState = DesktopNavigation.selectItem(
             DesktopNavState(),
-            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Race File" }
         ).state
         val selection = DesktopNavigation.selectItem(
             eventFileState,
@@ -512,7 +512,7 @@ class DesktopNavigationTest {
         assertEquals(listOf("setup.event-file"), completedState.submenuStack)
         assertEquals("setup.event-file", completedState.selectedItemId)
         assertEquals(DesktopSection.Races, completedState.selectedSection)
-        assertEquals("Setup > Event File", DesktopNavigation.breadcrumb(completedState))
+        assertEquals("Setup > Race File", DesktopNavigation.breadcrumb(completedState))
         assertEquals(eventFileMenuLabels, DesktopNavigation.currentItems(completedState).map { it.label })
     }
 
@@ -520,7 +520,7 @@ class DesktopNavigationTest {
     fun completedNewEventFileActionKeepsEditingWorkspaceSelected() {
         val eventFileState = DesktopNavigation.selectItem(
             DesktopNavState(),
-            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Race File" }
         ).state
         val selection = DesktopNavigation.selectItem(
             eventFileState,
@@ -534,7 +534,7 @@ class DesktopNavigationTest {
 
         assertEquals("setup.event-file.new", completedState.selectedItemId)
         assertEquals(DesktopSection.Races, completedState.selectedSection)
-        assertEquals("Setup > Event File > New Event File", DesktopNavigation.breadcrumb(completedState))
+        assertEquals("Setup > Race File > New Race File", DesktopNavigation.breadcrumb(completedState))
         assertEquals(emptyList<String>(), DesktopNavigation.currentItems(completedState).map { it.label })
     }
 
@@ -542,7 +542,7 @@ class DesktopNavigationTest {
     fun unsavedNewEventDraftGuardBlocksNavigationAway() {
         val eventFileState = DesktopNavigation.selectItem(
             DesktopNavState(),
-            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Race File" }
         ).state
         val newEventState = DesktopNavigation.selectItem(
             eventFileState,
@@ -640,7 +640,7 @@ class DesktopNavigationTest {
     @Test
     fun eventFileActionsDeclareOpenEventFileRequirements() {
         val eventFileActions = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
-            .first { it.label == "Event File" }
+            .first { it.label == "Race File" }
             .children
 
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.NewEventFile }.requiresEventFile)
@@ -662,7 +662,7 @@ class DesktopNavigationTest {
                 "Live Results",
                 "Display Settings",
                 "App Settings",
-                "Event Series",
+                "Race Series",
                 "Readiness"
             ),
             eventFileActions.first { it.label == "Settings" }.children.map { it.label }
@@ -673,7 +673,7 @@ class DesktopNavigationTest {
     fun setupRowsDeclareWhichButtonsRequireAnOpenEventFile() {
         val setupItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
 
-        assertFalse(setupItems.first { it.label == "Event File" }.requiresEventFile)
+        assertFalse(setupItems.first { it.label == "Race File" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Controls" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Categories" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Competitors" }.requiresEventFile)
@@ -761,7 +761,7 @@ class DesktopNavigationTest {
         assertTrue(DesktopNavigation.canLongClickOverrideDisabledWorkflow(DesktopWorkflow.RaceOps, noEvent))
         assertTrue(DesktopNavigation.canLongClickOverrideDisabledWorkflow(DesktopWorkflow.ResultsExport, noEvent))
         assertEquals(
-            "Race Ops disabled: open or create an Event File first. Long-click for 3 seconds to explore this workflow.",
+            "Race Ops disabled: open or create a Race File first. Long-click for 3 seconds to explore this workflow.",
             DesktopNavigation.disabledWorkflowReasonWithOverrideHint(DesktopWorkflow.RaceOps, noEvent)
         )
         assertEquals(
@@ -815,7 +815,7 @@ class DesktopNavigationTest {
     fun disabledMenuOverrideAppliesOnlyToDisabledMenuEntries() {
         val setupItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
         val categories = setupItems.first { it.label == "Categories" }
-        val eventFile = setupItems.first { it.label == "Event File" }
+        val eventFile = setupItems.first { it.label == "Race File" }
         val noEvent = DesktopNavigationReadiness()
         val eventOnly = DesktopNavigationReadiness(hasEventFile = true)
 
@@ -832,11 +832,11 @@ class DesktopNavigationTest {
         val noEvent = DesktopNavigationReadiness()
 
         assertEquals(
-            "Open or create an Event File first.",
+            "Open or create a Race File first.",
             DesktopNavigation.disabledItemReasonWithMenuOverrideHint(disabledAction, noEvent)
         )
         assertEquals(
-            "Open or create an Event File first. Long-click for 3 seconds to explore this menu.",
+            "Open or create a Race File first. Long-click for 3 seconds to explore this menu.",
             DesktopNavigation.disabledItemReasonWithMenuOverrideHint(categories, noEvent)
         )
     }
@@ -866,7 +866,7 @@ class DesktopNavigationTest {
     @Test
     fun eventFileMenuOwnsDiagnostics() {
         val eventFileItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
-            .first { it.label == "Event File" }
+            .first { it.label == "Race File" }
             .children
 
         assertEquals(eventFileMenuLabels, eventFileItems.map { it.label })
@@ -1011,7 +1011,7 @@ class DesktopNavigationTest {
             courseTools.children.map { it.label }
         )
         assertEquals(
-            listOf("Event Validator", "Course Tools", "SPORTident", "About"),
+            listOf("Race Validator", "Course Tools", "SPORTident", "About"),
             tools.children.map { it.label }
         )
         val about = tools.children.first { it.label == "About" }
@@ -1072,7 +1072,7 @@ class DesktopNavigationTest {
     @Test
     fun androidEventFileActionsLiveInEventFileAndroidSubmenu() {
         val eventFileActions = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
-            .first { it.label == "Event File" }
+            .first { it.label == "Race File" }
             .children
             .first { it.label == "Android..." }
             .children
@@ -1083,11 +1083,11 @@ class DesktopNavigationTest {
             .children
 
         assertEquals(
-            "Save Android Event File...",
+            "Save Android Race File...",
             eventFileActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.label
         )
         assertEquals(
-            "Send Event to Android",
+            "Send Race to Android",
             eventFileActions.first { it.action == DesktopNavAction.SendEventFileToAndroid }.label
         )
         assertEquals(
@@ -1101,14 +1101,14 @@ class DesktopNavigationTest {
     fun androidEventFileSubmenuSupportsBackNavigation() {
         val eventFileState = DesktopNavigation.selectItem(
             DesktopNavState(),
-            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Race File" }
         ).state
         val androidState = DesktopNavigation.selectItem(
             eventFileState,
             DesktopNavigation.currentItems(eventFileState).first { it.label == "Android..." }
         ).state
 
-        assertEquals("Setup > Event File > Android...", DesktopNavigation.breadcrumb(androidState))
+        assertEquals("Setup > Race File > Android...", DesktopNavigation.breadcrumb(androidState))
         assertEquals(
             listOf("setup.event-file", "setup.event-file.android"),
             androidState.submenuStack
@@ -1118,26 +1118,26 @@ class DesktopNavigationTest {
 
         val backState = androidState.back()
 
-        assertEquals("Setup > Event File", DesktopNavigation.breadcrumb(backState))
+        assertEquals("Setup > Race File", DesktopNavigation.breadcrumb(backState))
         assertEquals(eventFileMenuLabels, DesktopNavigation.currentItems(backState).map { it.label })
     }
 
     @Test
     fun enteringEventFileMenuSelectsEventDetailsWorkspace() {
         val eventFile = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
-            .first { it.label == "Event File" }
+            .first { it.label == "Race File" }
 
         val state = DesktopNavState().enter(eventFile)
 
         assertEquals(DesktopSection.Races, state.selectedSection)
         assertEquals("setup.event-file", state.selectedItemId)
-        assertEquals("Setup > Event File", DesktopNavigation.breadcrumb(state))
+        assertEquals("Setup > Race File", DesktopNavigation.breadcrumb(state))
     }
 
     @Test
     fun newEventFileActionSelectsEventDetailsWorkspaceForImmediateEditing() {
         val eventFileState = DesktopNavState().enter(
-            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Race File" }
         )
         val newEventFile = DesktopNavigation.currentItems(eventFileState)
             .first { it.action == DesktopNavAction.NewEventFile }
@@ -1146,7 +1146,7 @@ class DesktopNavigationTest {
 
         assertEquals(DesktopSection.Races, state.selectedSection)
         assertEquals("setup.event-file.new", state.selectedItemId)
-        assertEquals("Setup > Event File > New Event File", DesktopNavigation.breadcrumb(state))
+        assertEquals("Setup > Race File > New Race File", DesktopNavigation.breadcrumb(state))
         assertEquals(emptyList<String>(), DesktopNavigation.currentItems(state).map { it.label })
     }
 
@@ -1154,7 +1154,7 @@ class DesktopNavigationTest {
     fun selectingNewEventFileDispatchesCreateAction() {
         val eventFileState = DesktopNavigation.selectItem(
             DesktopNavState(),
-            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Race File" }
         ).state
         val newEventFile = DesktopNavigation.currentItems(eventFileState)
             .first { it.action == DesktopNavAction.NewEventFile }
@@ -1170,19 +1170,19 @@ class DesktopNavigationTest {
     fun selectingNewEventFileHidesUnrelatedEventFileButtonsUntilBack() {
         val eventFileState = DesktopNavigation.selectItem(
             DesktopNavState(),
-            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Event File" }
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Race File" }
         ).state
         val state = DesktopNavigation.selectItem(
             eventFileState,
-            DesktopNavigation.currentItems(eventFileState).first { it.label == "New Event File" }
+            DesktopNavigation.currentItems(eventFileState).first { it.label == "New Race File" }
         ).state
 
-        assertEquals("Setup > Event File > New Event File", DesktopNavigation.breadcrumb(state))
+        assertEquals("Setup > Race File > New Race File", DesktopNavigation.breadcrumb(state))
         assertEquals(emptyList<String>(), DesktopNavigation.currentItems(state).map { it.label })
 
         val backState = state.back()
 
-        assertEquals("Setup > Event File", DesktopNavigation.breadcrumb(backState))
+        assertEquals("Setup > Race File", DesktopNavigation.breadcrumb(backState))
         assertEquals(eventFileMenuLabels, DesktopNavigation.currentItems(backState).map { it.label })
     }
 

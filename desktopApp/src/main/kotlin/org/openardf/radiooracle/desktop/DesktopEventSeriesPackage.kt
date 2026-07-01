@@ -52,11 +52,11 @@ object DesktopEventSeriesPackageFiles {
     fun packageForManifest(store: EventSeriesStore, manifestPath: Path): DesktopEventSeriesPackage {
         val seriesFile = store.read(manifestPath)
         val seriesFolder = requireNotNull(manifestPath.parent) {
-            "Event Series manifest must have a parent folder."
+            "Race Series manifest must have a parent folder."
         }
         val members = seriesFile.sortedEvents()
         require(members.isNotEmpty()) {
-            "Event Series package requires at least one event."
+            "Race Series package requires at least one event."
         }
 
         val missing = members
@@ -64,7 +64,7 @@ object DesktopEventSeriesPackageFiles {
             .filterNot { (_, path) -> store.exists(path) }
             .map { (event, _) -> event.eventFilePath }
         require(missing.isEmpty()) {
-            "Cannot send Event Series because required Event Files are missing: ${missing.joinToString()}"
+            "Cannot send Race Series because required Race Files are missing: ${missing.joinToString()}"
         }
 
         val content = EventSeriesPackageContents.build(
@@ -105,14 +105,14 @@ object DesktopEventSeriesPackageFiles {
                     if (packageEntry.kind != EventSeriesPackageEntryKind.IGNORED) {
                         val targetPath = targetDirectory.resolve(Path.of(packageEntry.path)).normalize()
                         require(targetPath.startsWith(targetDirectory)) {
-                            "Event Series package contains an unsafe path: ${entry.name}"
+                            "Race Series package contains an unsafe path: ${entry.name}"
                         }
                         targetPath.parent?.let(Files::createDirectories)
                         Files.write(targetPath, zip.readBytes())
                         when (packageEntry.kind) {
                             EventSeriesPackageEntryKind.MANIFEST -> {
                                 require(manifestPath == null) {
-                                    "Event Series package contains more than one manifest."
+                                    "Race Series package contains more than one manifest."
                                 }
                                 manifestPath = targetPath
                             }
@@ -131,7 +131,7 @@ object DesktopEventSeriesPackageFiles {
 
         return DesktopEventSeriesPackageImportResult(
             manifestPath = requireNotNull(manifestPath) {
-                "Event Series package does not contain a series manifest."
+                "Race Series package does not contain a series manifest."
             },
             eventFilePaths = eventFilePaths
         )

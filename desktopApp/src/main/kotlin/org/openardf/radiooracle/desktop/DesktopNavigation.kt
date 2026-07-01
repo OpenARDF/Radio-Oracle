@@ -39,7 +39,7 @@ enum class DesktopWorkflow(
 ) {
     Setup("Setup", "Setup", requiresEventFileInBottomBar = false),
     RaceOps("Race Operations", "Race Ops"),
-    Series("Event Series", "Series"),
+    Series("Race Series", "Series"),
     ResultsExport("Results/File Export", "Results"),
     SettingsHelp("Help/About/App Settings", "Settings", requiresEventFileInBottomBar = false);
 
@@ -48,7 +48,7 @@ enum class DesktopWorkflow(
 
         fun bottomBarEntries(readiness: DesktopNavigationReadiness): List<DesktopWorkflow> =
             if (readiness.hasSeriesContext) {
-                // When a series is active, put cross-event planning before event-scoped workflows.
+                // When a series is active, put cross-race planning before event-scoped workflows.
                 listOf(Series, Setup, RaceOps, ResultsExport)
             } else {
                 bottomBarEntries
@@ -306,7 +306,7 @@ object DesktopNavigation {
             DesktopWorkflow.Setup -> listOf(
                 group(
                     "setup.event-file",
-                    "Event File",
+                    "Race File",
                     workflow,
                     eventFileActions(workflow),
                     DesktopSection.Races,
@@ -552,7 +552,7 @@ object DesktopNavigation {
                     listOf(
                         item(
                             "setup.tools.event-validator",
-                            "Event Validator",
+                            "Race Validator",
                             workflow,
                             DesktopSection.EventValidator
                         ),
@@ -654,10 +654,10 @@ object DesktopNavigation {
             DesktopWorkflow.Series -> listOf(
                 group(
                     "series.events",
-                    "Events",
+                    "Races",
                     workflow,
                     listOf(
-                        action("series.events.add", "Add Event to Series...", workflow, DesktopNavAction.AddEventToSeries)
+                        action("series.events.add", "Add Race to Series...", workflow, DesktopNavAction.AddEventToSeries)
                     ),
                     DesktopSection.SeriesEvents
                 ),
@@ -668,7 +668,7 @@ object DesktopNavigation {
                     listOf(
                         action(
                             "series.start-fairness.balance",
-                            "Balance Open Event for Series",
+                            "Balance Open Race for Series",
                             workflow,
                             DesktopNavAction.BalanceStartListFromEventSeries
                         )
@@ -848,7 +848,7 @@ object DesktopNavigation {
                                 action("results.export-ardf-json", "Export ARDF JSON...", workflow, DesktopNavAction.ExportArdfJson)
                             )
                         ),
-                        action("results.export-copy", "Export Event File Copy...", workflow, DesktopNavAction.ExportEventFileCopy)
+                        action("results.export-copy", "Export Race File Copy...", workflow, DesktopNavAction.ExportEventFileCopy)
                     )
                 )
             )
@@ -980,7 +980,7 @@ object DesktopNavigation {
                 }
             DesktopWorkflow.Series ->
                 if (!readiness.hasSeriesContext) {
-                    "Series is available after this Event File is linked to an Event Series."
+                    "Series is available after this Race File is linked to a Race Series."
                 } else {
                     null
                 }
@@ -1012,7 +1012,7 @@ object DesktopNavigation {
             return null
         }
         if (item.requiresEventFile && !readiness.hasEventFile) {
-            return "Open or create an Event File first."
+            return "Open or create a Race File first."
         }
         return when {
             item.id.startsWith("setup.categories") ->
@@ -1024,7 +1024,7 @@ object DesktopNavigation {
             item.workflow == DesktopWorkflow.RaceOps ->
                 setupIncompleteReason(readiness, "Race Ops")
             item.workflow == DesktopWorkflow.Series ->
-                "Link this Event File to an Event Series first."
+                "Link this Race File to a Race Series first."
             item.workflow == DesktopWorkflow.ResultsExport ->
                 "Results need at least one SI-card readout or unmatched readout."
             else -> null
@@ -1058,7 +1058,7 @@ object DesktopNavigation {
 
     private fun setupRequirementReason(readiness: DesktopNavigationReadiness): String =
         when {
-            !readiness.hasEventFile -> "open or create an Event File first."
+            !readiness.hasEventFile -> "open or create a Race File first."
             !readiness.hasControls -> "enter controls first."
             !readiness.hasCategories -> "enter categories first."
             !readiness.hasCompetitors -> "enter competitors first."
@@ -1193,20 +1193,20 @@ object DesktopNavigation {
 
     private val workflowDescriptions: Map<DesktopWorkflow, String> = mapOf(
         DesktopWorkflow.Setup to
-            "Use Setup to create or open an Event File, define controls and courses, maintain categories and competitors, and draw or import the start list before competition operations begin.",
+            "Use Setup to create or open a Race File, define controls and courses, maintain categories and competitors, and draw or import the start list before competition operations begin.",
         DesktopWorkflow.RaceOps to
             "Use Race Ops during competition to download SI cards, monitor active competitors, review unmatched readouts, and print finish tickets after setup data is complete.",
         DesktopWorkflow.Series to
-            "Use Series to move between linked events, review cross-event start fairness and competitor matching, validate the series, and export a clean series backup.",
+            "Use Series to move between linked races, review cross-race start fairness and competitor matching, validate the series, and export a clean series backup.",
         DesktopWorkflow.ResultsExport to
-            "Use Results/File Export to review scored finishers by category after readouts are matched. Use Live Results to run local web-server or ROBIS live publishing, and use Exports to write final result, readout, Event File, JSON, XML, and ARDF-compatible files.",
+            "Use Results/File Export to review scored finishers by category after readouts are matched. Use Live Results to run local web-server or ROBIS live publishing, and use Exports to write final result, readout, Race File, JSON, XML, and ARDF-compatible files.",
         DesktopWorkflow.SettingsHelp to
-            "Use Settings for app preferences, hardware-related options, logs, beta-scope information, and about information that is not tied to one event workflow."
+            "Use Settings for app preferences, hardware-related options, logs, beta-scope information, and about information that is not tied to one race workflow."
     )
 
     private val itemDescriptions: Map<String, String> = mapOf(
         "setup.event-file" to
-            "Use Event File to create, open, import, save, close, and inspect event files, including settings and readiness tools that affect the whole event.",
+            "Use Race File to create, open, import, save, close, and inspect race files, including settings and readiness tools that affect the whole race.",
         "setup.controls" to
             "Use Controls to manually enter controls, import controls and courses from supported file types, analyze courses with appropriate elevation data applied, and import elevation DEMs.",
         "setup.controls.elevation-cache" to
@@ -1216,11 +1216,11 @@ object DesktopNavigation {
         "setup.controls.elevation-cache.import-dem" to
             "Use Import DEM File to add one or more existing Radio-Oracle DEM cache JSON files, including cache files packaged inside a ZIP archive.",
         "setup.controls.import" to
-            "Use Import to bring control CSV, KML/KMZ, GPX, or IOF CourseData XML files into the current Event File.",
+            "Use Import to bring control CSV, KML/KMZ, GPX, or IOF CourseData XML files into the current Race File.",
         "setup.controls.export" to
             "Use Export to write control CSV, protected KML/KMZ or GPX files, IOF CourseData XML, and course overlays.",
         "setup.controls.import-controls" to
-            "Use Import Controls CSV to review and apply additions or updates to the event control catalog.",
+            "Use Import Controls CSV to review and apply additions or updates to the race control catalog.",
         "setup.controls.import-kml-kmz" to
             "Use Import Controls KML/KMZ to import control locations and category route geometry from mapping files.",
         "setup.controls.import-gpx" to
@@ -1244,7 +1244,7 @@ object DesktopNavigation {
         "setup.categories.protected-course-order" to
             "Use Course Order to unlock and review protected ideal routes and course-location data that may affect scoring and analysis.",
         "setup.categories.import" to
-            "Use Import Categories CSV to review and apply late category additions or corrections without replacing unrelated event data.",
+            "Use Import Categories CSV to review and apply late category additions or corrections without replacing unrelated race data.",
         "setup.categories.delete-all-assigned-controls" to
             "Use Delete All Control Assignments to clear every category course, length, climb, and protected course field while keeping category names and competitors.",
         "setup.categories.delete-all-categories" to
@@ -1254,9 +1254,9 @@ object DesktopNavigation {
         "setup.competitors" to
             "Use Competitors to add, import, export, edit, and assign competitors to categories before drawing starts or running race operations.",
         "setup.competitors.import" to
-            "Use Import Competitors CSV to append or update competitor lists while preserving existing event setup data.",
+            "Use Import Competitors CSV to append or update competitor lists while preserving existing race setup data.",
         "setup.competitors.import-eventreg" to
-            "Use Import EventReg Website to bring competitor data from EventReg exports into the current Event File.",
+            "Use Import EventReg Website to bring competitor data from EventReg exports into the current Race File.",
         "setup.competitors.import-iof-entry-list" to
             "Use Import IOF EntryList XML to import schema-valid IOF EntryList registrations as competitors.",
         "setup.competitors.export" to
@@ -1268,9 +1268,9 @@ object DesktopNavigation {
         "setup.start-list" to
             "Use Start List to import, draw, balance, review, and export competitor start times once categories and assignments are ready.",
         "setup.start-list.import" to
-            "Use Import Starts CSV to apply externally prepared start times to the competitors in this Event File.",
+            "Use Import Starts CSV to apply externally prepared start times to the competitors in this Race File.",
         "setup.start-list.import-iof" to
-            "Use Import IOF Start List XML to apply a standards-compliant IOF XML start-list file to the competitors in this Event File.",
+            "Use Import IOF Start List XML to apply a standards-compliant IOF XML start-list file to the competitors in this Race File.",
         "setup.start-list.exports" to
             "Use Exports to write start lists in formats useful for starts, category checks, ROBIS, and IOF XML workflows.",
         "setup.start-list.export-csv" to
@@ -1284,15 +1284,15 @@ object DesktopNavigation {
         "setup.start-list.export-iof" to
             "Use Export IOF Start List XML to write an IOF XML start-list file.",
         "setup.tools" to
-            "Use More to open standalone utilities, app information, and other event-support workflows.",
+            "Use More to open standalone utilities, app information, and other race-support workflows.",
         "setup.tools.event-validator" to
-            "Use Event Validator to check whether the current Event File is internally consistent before race-day workflows.",
+            "Use Race Validator to check whether the current Race File is internally consistent before race-day workflows.",
         "setup.tools.about" to
             "Use About to view the app version, build date, platform, project, license, and update information.",
         "setup.tools.course-tools" to
             "Use Course Tools to analyze or modify course-related files and course data.",
         "setup.tools.sportident" to
-            "Use SPORTident tools for station preparation tasks that are not tied to one Event File.",
+            "Use SPORTident tools for station preparation tasks that are not tied to one Race File.",
         "setup.tools.sportident.time-sync" to
             "Use Time Sync to inspect the attached SPORTident station before station-clock synchronization.",
         "setup.tools.course-tools.course-analysis" to
@@ -1340,11 +1340,11 @@ object DesktopNavigation {
         "results.send-robis" to
             "Use Send ROBIS to send unsent matched live results to the configured ROBIS endpoint.",
         "results.exports" to
-            "Use Exports to write result, readout, event-copy, JSON, XML, and ARDF-compatible files after race data is available.",
+            "Use Exports to write result, readout, race-copy, JSON, XML, and ARDF-compatible files after race data is available.",
         "results.exports.result-files" to
             "Use Result Files to export scored results and readouts in CSV, TXT, HTML, and ARDFEvent-compatible formats.",
         "results.exports.cloudflare-website" to
-            "Use Cloudflare Website to generate the public results site, preview the event folder locally, publish the generated site to Cloudflare Pages, and open the Cloudflare settings used by publishing.",
+            "Use Cloudflare Website to generate the public results site, preview the race folder locally, publish the generated site to Cloudflare Pages, and open the Cloudflare settings used by publishing.",
         "results.export-csv" to
             "Use Export Results CSV to write scored results as a spreadsheet-friendly file.",
         "results.export-ardfevent" to
@@ -1358,7 +1358,7 @@ object DesktopNavigation {
         "results.publish-public-site" to
             "Use Publish Public Results Site to deploy the generated public results site to Cloudflare Pages.",
         "results.view-public-results" to
-            "Use View Public Results after publishing to show the public event link and QR code for competitors and spectators.",
+            "Use View Public Results after publishing to show the public race link and QR code for competitors and spectators.",
         "results.public-site-preview" to
             "Use Public Site Preview to open or stop the local preview of the generated public results site.",
         "results.open-public-site-preview" to
@@ -1380,11 +1380,11 @@ object DesktopNavigation {
         "results.export-iof" to
             "Use Export IOF Result List XML to write an IOF XML result-list file.",
         "results.export-ardf-json" to
-            "Use Export ARDF JSON to write ARDF-oriented event and result data.",
+            "Use Export ARDF JSON to write ARDF-oriented race and result data.",
         "results.export-copy" to
-            "Use Export Event File Copy to save a copy of the complete Event File without changing the current working file.",
+            "Use Export Race File Copy to save a copy of the complete Race File without changing the current working file.",
         "settings.app" to
-            "Use App Settings to review desktop app settings, readiness information, and event-level support options.",
+            "Use App Settings to review desktop app settings, readiness information, and race-level support options.",
         "settings.hardware" to
             "Use Hardware Preferences to review printer and hardware-related desktop settings.",
         "settings.help" to
@@ -1396,21 +1396,21 @@ object DesktopNavigation {
         "settings.about" to
             "Use About Radio-Oracle to view the app version, project identity, and maintainer information.",
         "setup.event-file.new" to
-            "Use New Event File to create a fresh event setup draft.",
+            "Use New Race File to create a fresh race setup draft.",
         "setup.event-file.open" to
-            "Use Load Event File to open a desktop Event File or import an Android Event File by file extension.",
+            "Use Load Race File to open a desktop Race File or import an Android Race File by file extension.",
         "setup.event-file.import-eventreg" to
-            "Use Import EventReg Website to create event files from EventReg website exports.",
+            "Use Import EventReg Website to create race files from EventReg website exports.",
         "setup.event-file.android" to
-            "Use Android to share Event Files with Android devices or save an Android-compatible Event File.",
+            "Use Android to share Race Files with Android devices or save an Android-compatible Race File.",
         "setup.event-file.export-android" to
-            "Use Save Android Event File to write a backup JSON file for Android compatibility.",
+            "Use Save Android Race File to write a backup JSON file for Android compatibility.",
         "setup.event-file.send-android" to
-            "Use Send Event to Android to share the saved Event File over local Wi-Fi.",
+            "Use Send Race to Android to share the saved Race File over local Wi-Fi.",
         "setup.event-file.receive-android" to
-            "Use Receive File from Android to accept an Event File or supporting file over local Wi-Fi.",
+            "Use Receive File from Android to accept a Race File or supporting file over local Wi-Fi.",
         "setup.event-file.settings" to
-            "Use Settings to adjust event-related readout, live result, display, app, and readiness options.",
+            "Use Settings to adjust race-related readout, live result, display, app, and readiness options.",
         "setup.event-file.si-settings" to
             "Use SI Readout Settings to configure SI-card download behavior used during Race Ops.",
         "setup.event-file.live-settings" to
@@ -1418,48 +1418,48 @@ object DesktopNavigation {
         "setup.event-file.display-settings" to
             "Use Display Settings to configure readout and result display preferences.",
         "setup.event-file.app-settings" to
-            "Use App Settings to review app-level settings, hardware status, and event password options.",
+            "Use App Settings to review app-level settings, hardware status, and race password options.",
         "setup.event-file.series-settings" to
-            "Use Event Series settings to create, link, change, remove, or validate the current Event File's series membership.",
+            "Use Race Series settings to create, link, change, remove, or validate the current Race File's series membership.",
         "setup.event-file.series-create" to
-            "Use Create New Series with This Event to start a manifest-backed multi-event series from the current Event File.",
+            "Use Create New Series with This Race to start a manifest-backed multi-race series from the current Race File.",
         "setup.event-file.series-link" to
-            "Use Link to Existing Series to add the current Event File to an existing Event Series manifest.",
+            "Use Link to Existing Series to add the current Race File to an existing Race Series manifest.",
         "setup.event-file.series-change" to
-            "Use Change Series Link to move this Event File to another manifest entry.",
+            "Use Change Series Link to move this Race File to another manifest entry.",
         "setup.event-file.series-remove" to
-            "Use Remove from Series to clear this Event File's series link and remove its manifest entry when possible.",
+            "Use Remove from Series to clear this Race File's series link and remove its manifest entry when possible.",
         "setup.event-file.series-validate" to
-            "Use Validate Series Link to check this Event File backlink against the open Event Series manifest.",
+            "Use Validate Series Link to check this Race File backlink against the open Race Series manifest.",
         "setup.event-file.diagnostics" to
-            "Use Readiness to inspect event consistency, recent imports, generated test data tools, and diagnostics.",
+            "Use Readiness to inspect race consistency, recent imports, generated test data tools, and diagnostics.",
         "setup.event-file.save" to
-            "Use Save Event to write the current Event File to its existing path.",
+            "Use Save Race to write the current Race File to its existing path.",
         "setup.event-file.close" to
-            "Use Close Event File to close the active event after handling any unsaved changes.",
+            "Use Close Race File to close the active race after handling any unsaved changes.",
         "series.events" to
-            "Use Events to review the manifest-listed Event Files and open another event in the same series.",
+            "Use Races to review the manifest-listed Race Files and open another race in the same series.",
         "series.events.add" to
-            "Use Add Event to Series to add another Event File to the open Event Series manifest.",
+            "Use Add Race to Series to add another Race File to the open Race Series manifest.",
         "series.start-fairness" to
-            "Use Start Fairness to review generated start thirds across all events in this series.",
+            "Use Start Fairness to review generated start thirds across all races in this series.",
         "series.start-fairness.balance" to
-            "Use Balance Open Event for Series to redraw only the open event, using other series events with generated starts as the start-third history source.",
+            "Use Balance Open Race for Series to redraw only the open race, using other series races with generated starts as the start-third history source.",
         "series.competitor-matching" to
-            "Use Competitor Matching to review same-person matches across series events by SI number, bib number, call sign, and overrides.",
+            "Use Competitor Matching to review same-person matches across series races by SI number, bib number, call sign, and overrides.",
         "series.validation" to
-            "Use Series Validation to check manifest membership, required Event Files, backlinks, and cross-event consistency.",
+            "Use Series Validation to check manifest membership, required Race Files, backlinks, and cross-race consistency.",
         "series.settings" to
             "Use Series Settings to review series metadata and export a clean backup package.",
         "series.settings.export" to
-            "Use Export Series to copy only the manifest and manifest-listed Event Files to a clean backup folder."
+            "Use Export Series to copy only the manifest and manifest-listed Race Files to a clean backup folder."
     )
 
     private fun eventFileActions(workflow: DesktopWorkflow): List<DesktopNavItem> =
         listOf(
             action(
                 "setup.event-file.new",
-                "New Event File",
+                "New Race File",
                 workflow,
                 DesktopNavAction.NewEventFile,
                 requiresEventFile = false,
@@ -1467,7 +1467,7 @@ object DesktopNavigation {
             ),
             action(
                 "setup.event-file.open",
-                "Load Event File...",
+                "Load Race File...",
                 workflow,
                 DesktopNavAction.OpenEventFile,
                 requiresEventFile = false
@@ -1487,7 +1487,7 @@ object DesktopNavigation {
                 listOf(
                     action(
                         "setup.event-file.send-android",
-                        "Send Event to Android",
+                        "Send Race to Android",
                         workflow,
                         DesktopNavAction.SendEventFileToAndroid,
                         section = DesktopSection.EventFile
@@ -1502,7 +1502,7 @@ object DesktopNavigation {
                     ),
                     action(
                         "setup.event-file.export-android",
-                        "Save Android Event File...",
+                        "Save Android Race File...",
                         workflow,
                         DesktopNavAction.ExportAndroidRaceBackupJson,
                         section = DesktopSection.EventFile
@@ -1546,12 +1546,12 @@ object DesktopNavigation {
                     ),
                     group(
                         "setup.event-file.series-settings",
-                        "Event Series",
+                        "Race Series",
                         workflow,
                         listOf(
                             action(
                                 "setup.event-file.series-create",
-                                "Create New Series with This Event",
+                                "Create New Series with This Race",
                                 workflow,
                                 DesktopNavAction.CreateEventSeriesWithCurrentEvent
                             ),
@@ -1593,8 +1593,8 @@ object DesktopNavigation {
                 DesktopSection.Settings,
                 requiresEventFile = false
             ),
-            action("setup.event-file.save", "Save Event", workflow, DesktopNavAction.SaveEventFile),
-            action("setup.event-file.close", "Close Event File", workflow, DesktopNavAction.CloseEventFile)
+            action("setup.event-file.save", "Save Race", workflow, DesktopNavAction.SaveEventFile),
+            action("setup.event-file.close", "Close Race File", workflow, DesktopNavAction.CloseEventFile)
         )
 
     private fun item(

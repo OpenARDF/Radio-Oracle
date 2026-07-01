@@ -34,7 +34,7 @@ data class TimedPunchCsvField(
     val timeText: String
 )
 
-/** Shared CSV row formatter for event import/export formats used by Android and desktop. */
+/** Shared CSV row formatter for race import/export formats used by Android and desktop. */
 object EventCsvRows {
     /** Formats a category row in the legacy semicolon-delimited category export shape. */
     fun categoryRow(category: EventCategory): String {

@@ -301,7 +301,7 @@ object DesktopAutomationCli {
     private fun recalculateResults(args: List<String>, out: PrintStream, err: PrintStream): Int {
         val pathText = args.firstOrNull { !it.startsWith("--") }
         if (pathText.isNullOrBlank()) {
-            err.println("recalculate-results requires an Event File path.")
+            err.println("recalculate-results requires a Race File path.")
             return 64
         }
         val writeChanges = "--write" in args
@@ -333,7 +333,7 @@ object DesktopAutomationCli {
         val eventFileText = args.getOrNull(0)
         val siteRootText = args.getOrNull(1)
         if (eventFileText.isNullOrBlank() || siteRootText.isNullOrBlank()) {
-            err.println("export-public-results-site requires Event File and public site root paths.")
+            err.println("export-public-results-site requires Race File and public site root paths.")
             return 64
         }
         return runCatching {
@@ -463,7 +463,7 @@ object DesktopAutomationCli {
     private fun openEventFile(args: List<String>, out: PrintStream, err: PrintStream): Int {
         val pathText = args.firstOrNull()
         if (pathText.isNullOrBlank()) {
-            err.println("open-event-file requires an Event File path.")
+            err.println("open-event-file requires a Race File path.")
             return 64
         }
         return runCatching {
@@ -484,7 +484,7 @@ object DesktopAutomationCli {
             )
             0
         }.getOrElse { error ->
-            err.println("Failed to open Event File: ${error.message ?: error::class.simpleName}")
+            err.println("Failed to open Race File: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -492,7 +492,7 @@ object DesktopAutomationCli {
     private fun eventStartListVerify(args: List<String>, out: PrintStream, err: PrintStream): Int {
         val pathText = args.firstOrNull { !it.startsWith("--") }
         if (pathText.isNullOrBlank()) {
-            err.println("event-start-list-verify requires an Event File path.")
+            err.println("event-start-list-verify requires a Race File path.")
             return 64
         }
         val maxCompetitors = optionValue(args, "--max-competitors")?.toIntOrNull() ?: 10
@@ -516,7 +516,7 @@ object DesktopAutomationCli {
                 "--max-competitors must be at least 1."
             }
             require(competitorData.size <= maxCompetitors) {
-                "Event has ${competitorData.size} drawable competitors; refusing exhaustive ${competitorData.size}! search. " +
+                "Race has ${competitorData.size} drawable competitors; refusing exhaustive ${competitorData.size}! search. " +
                     "Pass a larger --max-competitors value if this is intentional."
             }
 
@@ -556,7 +556,7 @@ object DesktopAutomationCli {
             )
             0
         }.getOrElse { error ->
-            err.println("Event start-list verification failed: ${error.message ?: error::class.simpleName}")
+            err.println("Race start-list verification failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -665,12 +665,12 @@ object DesktopAutomationCli {
         val settings = projectFile.raceData.effectiveStartDrawSettings()
         val competitorData = drawableCompetitorData(projectFile)
         require(competitorData.size <= maxEventCompetitors) {
-            "Event '${event.displayName}' has ${competitorData.size} drawable competitors; refusing exhaustive search above " +
+            "Race '${event.displayName}' has ${competitorData.size} drawable competitors; refusing exhaustive search above " +
                 "--max-event-competitors $maxEventCompetitors."
         }
         val possibleOrderCount = factorial(competitorData.size)
         require(possibleOrderCount <= maxEventOrders) {
-            "Event '${event.displayName}' has $possibleOrderCount possible start orders; refusing exhaustive search above " +
+            "Race '${event.displayName}' has $possibleOrderCount possible start orders; refusing exhaustive search above " +
                 "--max-event-orders $maxEventOrders."
         }
 
@@ -711,7 +711,7 @@ object DesktopAutomationCli {
     }
 
     private fun exhaustiveSeriesStartFairnessSearch(
-        events: List<SeriesStartFairnessVerificationEvent>,
+        races: List<SeriesStartFairnessVerificationEvent>,
         sampleLimit: Int
     ): SeriesStartFairnessExhaustiveResult {
         var bestScore: SeriesStartFairnessVerificationScore? = null
@@ -720,7 +720,7 @@ object DesktopAutomationCli {
         val samples = mutableListOf<String>()
 
         fun visit(eventIndex: Int) {
-            if (eventIndex == events.size) {
+            if (eventIndex == races.size) {
                 val score = seriesVerificationScore(selected)
                 val currentBest = bestScore
                 if (currentBest == null || score < currentBest) {
@@ -738,7 +738,7 @@ object DesktopAutomationCli {
                 }
                 return
             }
-            events[eventIndex].signatures.forEach { signature ->
+            races[eventIndex].signatures.forEach { signature ->
                 selected += signature
                 visit(eventIndex + 1)
                 selected.removeAt(selected.lastIndex)
@@ -885,7 +885,7 @@ object DesktopAutomationCli {
         val sourceText = args.getOrNull(0)
         val targetText = args.getOrNull(1)
         if (sourceText.isNullOrBlank() || targetText.isNullOrBlank()) {
-            err.println("import-android-event-file requires Android Event File and target desktop Event File paths.")
+            err.println("import-android-event-file requires Android Race File and target desktop Race File paths.")
             return 64
         }
         return runCatching {
@@ -911,7 +911,7 @@ object DesktopAutomationCli {
             )
             0
         }.getOrElse { error ->
-            err.println("Failed to import Android Event File: ${error.message ?: error::class.simpleName}")
+            err.println("Failed to import Android Race File: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -920,7 +920,7 @@ object DesktopAutomationCli {
         val sourceText = args.getOrNull(0)
         val targetText = args.getOrNull(1)
         if (sourceText.isNullOrBlank() || targetText.isNullOrBlank()) {
-            err.println("export-android-event-file requires desktop Event File and target Android Event File paths.")
+            err.println("export-android-event-file requires desktop Race File and target Android Race File paths.")
             return 64
         }
         return runCatching {
@@ -944,7 +944,7 @@ object DesktopAutomationCli {
             )
             0
         }.getOrElse { error ->
-            err.println("Failed to export Android Event File: ${error.message ?: error::class.simpleName}")
+            err.println("Failed to export Android Race File: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -953,7 +953,7 @@ object DesktopAutomationCli {
         val eventFileText = args.getOrNull(0)
         val csvText = args.getOrNull(1)
         if (eventFileText.isNullOrBlank() || csvText.isNullOrBlank()) {
-            err.println("import-competitors-csv requires Event File and competitors CSV paths.")
+            err.println("import-competitors-csv requires Race File and competitors CSV paths.")
             return 64
         }
         return runCatching {
@@ -1009,7 +1009,7 @@ object DesktopAutomationCli {
         val eventFileText = args.getOrNull(0)
         val categoryText = args.getOrNull(1)
         if (eventFileText.isNullOrBlank() || categoryText.isNullOrBlank()) {
-            err.println("remove-category requires Event File path and category ID or unique category name.")
+            err.println("remove-category requires Race File path and category ID or unique category name.")
             return 64
         }
         val deleteCompetitors = "--delete-competitors" in args
@@ -1062,12 +1062,12 @@ object DesktopAutomationCli {
     private fun eventSeriesList(args: List<String>, out: PrintStream, err: PrintStream): Int {
         val manifestText = args.getOrNull(0)
         if (manifestText.isNullOrBlank()) {
-            err.println("event-series-list requires an Event Series manifest path.")
+            err.println("event-series-list requires a Race Series manifest path.")
             return 64
         }
         return runCatching {
             val manifestPath = Path.of(manifestText)
-            val currentEventPath = optionValue(args, "--current-event")?.let(Path::of)
+            val currentEventPath = (optionValue(args, "--current-race") ?: optionValue(args, "--current-event"))?.let(Path::of)
             val summaries = DesktopEventSeriesActions.eventSummaries(
                 store = DesktopEventSeriesFiles,
                 manifestPath = manifestPath,
@@ -1096,7 +1096,7 @@ object DesktopAutomationCli {
             )
             0
         }.getOrElse { error ->
-            err.println("Event Series list failed: ${error.message ?: error::class.simpleName}")
+            err.println("Race Series list failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -1105,14 +1105,14 @@ object DesktopAutomationCli {
         val manifestText = args.getOrNull(0)
         val eventFileText = args.getOrNull(1)
         if (manifestText.isNullOrBlank() || eventFileText.isNullOrBlank()) {
-            err.println("event-series-add-event requires Event Series manifest and Event File paths.")
+            err.println("event-series-add-event requires Race Series manifest and Race File paths.")
             return 64
         }
         return runCatching {
             val manifestPath = Path.of(manifestText)
             val eventPath = Path.of(eventFileText)
             val seriesFolder = requireNotNull(manifestPath.parent) {
-                "Event Series manifest has no parent folder."
+                "Race Series manifest has no parent folder."
             }
             val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
             val eventProjectFile = DesktopEventSeriesFiles.readEvent(eventPath)
@@ -1125,7 +1125,7 @@ object DesktopAutomationCli {
             DesktopEventSeriesFiles.write(manifestPath, result.seriesFile)
             DesktopEventSeriesFiles.writeEvent(eventPath, result.eventProjectFile)
             val link = requireNotNull(result.eventProjectFile.seriesLink) {
-                "Added Event File did not receive an Event Series backlink."
+                "Added Race File did not receive a Race Series backlink."
             }
             val manifestEvent = result.seriesFile.events.first { it.seriesEventId == link.seriesEventId }
             out.println(
@@ -1141,7 +1141,7 @@ object DesktopAutomationCli {
             )
             0
         }.getOrElse { error ->
-            err.println("Add Event to Series failed: ${error.message ?: error::class.simpleName}")
+            err.println("Add Race to Series failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -1149,7 +1149,7 @@ object DesktopAutomationCli {
     private fun eventSeriesValidate(args: List<String>, out: PrintStream, err: PrintStream): Int {
         val manifestText = args.getOrNull(0)
         if (manifestText.isNullOrBlank()) {
-            err.println("event-series-validate requires an Event Series manifest path.")
+            err.println("event-series-validate requires a Race Series manifest path.")
             return 64
         }
         val requireClean = "--require-clean" in args
@@ -1179,7 +1179,7 @@ object DesktopAutomationCli {
             )
             if (requireClean && issues.isNotEmpty()) 69 else 0
         }.getOrElse { error ->
-            err.println("Event Series validation failed: ${error.message ?: error::class.simpleName}")
+            err.println("Race Series validation failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -1188,7 +1188,7 @@ object DesktopAutomationCli {
         val manifestText = args.getOrNull(0)
         val targetFolderText = args.getOrNull(1)
         if (manifestText.isNullOrBlank() || targetFolderText.isNullOrBlank()) {
-            err.println("event-series-export requires Event Series manifest and target folder paths.")
+            err.println("event-series-export requires Race Series manifest and target folder paths.")
             return 64
         }
         return runCatching {
@@ -1211,7 +1211,7 @@ object DesktopAutomationCli {
             )
             0
         }.getOrElse { error ->
-            err.println("Event Series export failed: ${error.message ?: error::class.simpleName}")
+            err.println("Race Series export failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -1219,7 +1219,7 @@ object DesktopAutomationCli {
     private fun eventSeriesPackageFingerprint(args: List<String>, out: PrintStream, err: PrintStream): Int {
         val packageText = args.getOrNull(0)
         if (packageText.isNullOrBlank()) {
-            err.println("event-series-package-fingerprint requires an Event Series package ZIP path.")
+            err.println("event-series-package-fingerprint requires a Race Series package ZIP path.")
             return 64
         }
         return runCatching {
@@ -1256,7 +1256,7 @@ object DesktopAutomationCli {
             )
             0
         }.getOrElse { error ->
-            err.println("Event Series package fingerprint failed: ${error.message ?: error::class.simpleName}")
+            err.println("Race Series package fingerprint failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -1265,7 +1265,7 @@ object DesktopAutomationCli {
         val manifestText = args.getOrNull(0)
         val currentEventText = args.getOrNull(1)
         if (manifestText.isNullOrBlank() || currentEventText.isNullOrBlank()) {
-            err.println("event-series-match requires Event Series manifest and current Event File paths.")
+            err.println("event-series-match requires Race Series manifest and current Race File paths.")
             return 64
         }
         return runCatching {
@@ -1332,7 +1332,7 @@ object DesktopAutomationCli {
             )
             0
         }.getOrElse { error ->
-            err.println("Event Series competitor matching failed: ${error.message ?: error::class.simpleName}")
+            err.println("Race Series competitor matching failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -1341,7 +1341,7 @@ object DesktopAutomationCli {
         val manifestText = args.getOrNull(0)
         val currentEventText = args.getOrNull(1)
         if (manifestText.isNullOrBlank() || currentEventText.isNullOrBlank()) {
-            err.println("event-series-start-fairness requires Event Series manifest and current Event File paths.")
+            err.println("event-series-start-fairness requires Race Series manifest and current Race File paths.")
             return 64
         }
         return runCatching {
@@ -1405,7 +1405,7 @@ object DesktopAutomationCli {
             )
             0
         }.getOrElse { error ->
-            err.println("Event Series start fairness summary failed: ${error.message ?: error::class.simpleName}")
+            err.println("Race Series start fairness summary failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -1414,7 +1414,7 @@ object DesktopAutomationCli {
         val manifestText = args.getOrNull(0)
         val currentEventText = args.getOrNull(1)
         if (manifestText.isNullOrBlank() || currentEventText.isNullOrBlank()) {
-            err.println("event-series-optimize-start-fairness requires Event Series manifest and current Event File paths.")
+            err.println("event-series-optimize-start-fairness requires Race Series manifest and current Race File paths.")
             return 64
         }
         val writeChanges = "--write" in args
@@ -1466,7 +1466,7 @@ object DesktopAutomationCli {
             )
             0
         }.getOrElse { error ->
-            err.println("Event Series start fairness optimization failed: ${error.message ?: error::class.simpleName}")
+            err.println("Race Series start fairness optimization failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -1475,10 +1475,10 @@ object DesktopAutomationCli {
         val manifestText = args.getOrNull(0)
         val currentEventText = args.getOrNull(1)
         if (manifestText.isNullOrBlank() || currentEventText.isNullOrBlank()) {
-            err.println("event-series-start-fairness-verify requires Event Series manifest and current Event File paths.")
+            err.println("event-series-start-fairness-verify requires Race Series manifest and current Race File paths.")
             return 64
         }
-        val maxEvents = optionValue(args, "--max-events")?.toIntOrNull() ?: 4
+        val maxEvents = optionValue(args, "--max-races")?.toIntOrNull() ?: 4
         val maxEventCompetitors = optionValue(args, "--max-event-competitors")?.toIntOrNull() ?: 9
         val maxEventOrders = optionValue(args, "--max-event-orders")?.toLongOrNull() ?: 500_000L
         val maxCombinations = optionValue(args, "--max-combinations")?.toLongOrNull() ?: 1_000_000L
@@ -1487,7 +1487,7 @@ object DesktopAutomationCli {
         val optimizerCandidates = optionValue(args, "--optimizer-candidates")?.toIntOrNull() ?: 32
         val sampleLimit = optionValue(args, "--sample-limit")?.toIntOrNull() ?: 12
         return runCatching {
-            require(maxEvents >= 1) { "--max-events must be at least 1." }
+            require(maxEvents >= 1) { "--max-races must be at least 1." }
             require(maxEventCompetitors >= 1) { "--max-event-competitors must be at least 1." }
             require(maxEventOrders >= 1L) { "--max-event-orders must be at least 1." }
             require(maxCombinations >= 1L) { "--max-combinations must be at least 1." }
@@ -1508,21 +1508,21 @@ object DesktopAutomationCli {
                     sourceSortedEvents.any { it.seriesEventId == requestedId }
                 }
                 require(missing.isEmpty()) {
-                    "Series event id(s) not found: ${missing.joinToString()}."
+                    "Series race id(s) not found: ${missing.joinToString()}."
                 }
                 selected
             }
             val verificationSeriesFile = sourceSeriesFile.copy(events = sortedEvents)
             val seriesFolder = requireNotNull(manifestPath.parent) {
-                "Event Series manifest must have a parent folder."
+                "Race Series manifest must have a parent folder."
             }
             require(sortedEvents.size <= maxEvents) {
-                "Series has ${sortedEvents.size} events; refusing exhaustive search above --max-events $maxEvents."
+                "Series has ${sortedEvents.size} races; refusing exhaustive search above --max-races $maxEvents."
             }
             val verificationEvents = sortedEvents.map { event ->
                 val eventPath = seriesFolder.resolve(event.eventFilePath).normalize()
                 require(DesktopEventSeriesFiles.exists(eventPath)) {
-                    "Event File '${event.displayName}' is missing."
+                    "Race File '${event.displayName}' is missing."
                 }
                 val projectFile = DesktopEventSeriesFiles.readEvent(eventPath)
                 verifySeriesEventStartSignatures(
@@ -1541,7 +1541,7 @@ object DesktopAutomationCli {
             )
             if (combinationCount > BigInteger.valueOf(maxCombinations)) {
                 // The verifier is meant for small, exact checks. Large real series should still
-                // return the measured per-event search space so we can choose useful tighter bounds.
+                // return the measured per-race search space so we can choose useful tighter bounds.
                 out.println(
                     jsonObject(
                         "command" to "event-series-start-fairness-verify",
@@ -1562,7 +1562,7 @@ object DesktopAutomationCli {
                 return 0
             }
             val exhaustive = exhaustiveSeriesStartFairnessSearch(
-                events = verificationEvents,
+                races = verificationEvents,
                 sampleLimit = sampleLimit.coerceAtLeast(0)
             )
             val optimizerResults = (1..optimizerSamples).map { sampleIndex ->
@@ -1571,8 +1571,8 @@ object DesktopAutomationCli {
                 } else {
                     /*
                      * Subset verification is for proving optimizer reach on bounded real-world
-                     * cases. The wrapper keeps Event File reads on disk but limits the manifest
-                     * that the optimizer sees to the exact same selected events being exhausted.
+                     * cases. The wrapper keeps Race File reads on disk but limits the manifest
+                     * that the optimizer sees to the exact same selected races being exhausted.
                      */
                     object : EventSeriesStore by DesktopEventSeriesFiles {
                         override fun read(path: Path): EventSeriesFile =
@@ -1629,7 +1629,7 @@ object DesktopAutomationCli {
             )
             0
         }.getOrElse { error ->
-            err.println("Event Series start fairness verification failed: ${error.message ?: error::class.simpleName}")
+            err.println("Race Series start fairness verification failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -1637,7 +1637,7 @@ object DesktopAutomationCli {
     private fun readinessSummary(args: List<String>, out: PrintStream, err: PrintStream): Int {
         val pathText = args.firstOrNull { !it.startsWith("--") }
         if (pathText.isNullOrBlank()) {
-            err.println("readiness-summary requires an Event File path.")
+            err.println("readiness-summary requires a Race File path.")
             return 64
         }
         val requireReady = "--require-ready" in args
@@ -1731,7 +1731,7 @@ object DesktopAutomationCli {
                 selectedLabels += label
                 return@forEach
             }
-            if (label == "Save Event") {
+            if (label == "Save Race") {
                 action = DesktopNavAction.SaveEventFile
                 selectedLabels += label
                 return@forEach
@@ -2081,43 +2081,43 @@ object DesktopAutomationCli {
 
         Commands:
           version                         Print desktop build metadata as JSON.
-          paths                           Print Event File, app-data, and log paths as JSON.
+          paths                           Print Race File, app-data, and log paths as JSON.
           logs                            Initialize logging and print current log files as JSON.
           log-test [message]              Write a desktop automation log entry.
-          open-event-file <path>          Decode and validate an Event File.
+          open-event-file <path>          Decode and validate a Race File.
           import-android-event-file <android-path> <desktop-path>
-                                          Convert an Android Event File into a desktop Event File.
+                                          Convert an Android Race File into a desktop Race File.
           export-android-event-file <desktop-path> <android-path>
-                                          Save a desktop Event File as an Android Event File.
-          import-competitors-csv <event-path> <csv-path> [--update-existing]
-                                          Import competitors CSV into an Event File.
-          remove-category <event-path> <category-id-or-name> [--delete-competitors] [--write]
+                                          Save a desktop Race File as an Android Race File.
+          import-competitors-csv <race-file-path> <csv-path> [--update-existing]
+                                          Import competitors CSV into a Race File.
+          remove-category <race-file-path> <category-id-or-name> [--delete-competitors] [--write]
                                           Remove one category and report before/after counts; writes only with --write.
-          event-series-list <manifest-path> [--current-event <event-path>]
-                                          List series manifest events as JSON.
-          event-series-add-event <manifest-path> <event-path>
-                                          Add an Event File to a series manifest and write its backlink.
+          event-series-list <manifest-path> [--current-race <race-file-path>]
+                                          List series manifest races as JSON.
+          event-series-add-event <manifest-path> <race-file-path>
+                                          Add a Race File to a series manifest and write its backlink.
           event-series-validate <manifest-path> [--require-clean]
-                                          Validate a series manifest and linked Event Files; fail when issues exist with --require-clean.
+                                          Validate a series manifest and linked Race Files; fail when issues exist with --require-clean.
           event-series-export <manifest-path> <target-folder>
-                                          Copy the manifest and only manifest-listed Event Files to a clean folder.
+                                          Copy the manifest and only manifest-listed Race Files to a clean folder.
           event-series-package-fingerprint <zip-path>
-                                          Print a stable semantic fingerprint for an Event Series package ZIP.
-          event-series-match <manifest-path> <current-event-path>
-                                          Print competitor matching diagnostics for the current series event.
-          event-series-start-fairness <manifest-path> <current-event-path>
-                                          Print start fairness input diagnostics for the current series event.
-          event-series-optimize-start-fairness <manifest-path> <current-event-path> [--write] [--seed-salt <text>]
-                                          Try to improve or preserve series start fairness with randomized candidates; writes changed Event Files only with --write.
-          event-series-start-fairness-verify <manifest-path> <current-event-path> [--series-event-id <id>]... [--max-events <n>] [--max-event-competitors <n>] [--max-event-orders <n>] [--max-combinations <n>] [--optimizer-samples <n>]
+                                          Print a stable semantic fingerprint for a Race Series package ZIP.
+          event-series-match <manifest-path> <current-race-file-path>
+                                          Print competitor matching diagnostics for the current series race.
+          event-series-start-fairness <manifest-path> <current-race-file-path>
+                                          Print start fairness input diagnostics for the current series race.
+          event-series-optimize-start-fairness <manifest-path> <current-race-file-path> [--write] [--seed-salt <text>]
+                                          Try to improve or preserve series start fairness with randomized candidates; writes changed Race Files only with --write.
+          event-series-start-fairness-verify <manifest-path> <current-race-file-path> [--series-event-id <id>]... [--max-races <n>] [--max-event-competitors <n>] [--max-event-orders <n>] [--max-combinations <n>] [--optimizer-samples <n>]
                                           Exhaustively verify small series start-third combinations and compare optimizer reach.
-          event-start-list-verify <event-path> [--max-competitors <n>] [--sample-limit <n>] [--generator-samples <n>]
-                                          Exhaustively count event start orders that score 100/100.
+          event-start-list-verify <race-file-path> [--max-competitors <n>] [--sample-limit <n>] [--generator-samples <n>]
+                                          Exhaustively count race start orders that score 100/100.
           route-generator <kml-or-kmz-path> [--type classic|foxoring|sprint] [--row-limit <n>] [--export <pdf-path>]
                                           Generate Route Generator rows as JSON; optionally export PDF/KML.
-          readiness-summary [--require-ready] <event-path>
+          readiness-summary [--require-ready] <race-file-path>
                                           Print validation and readiness issues as JSON.
-          recalculate-results [--write] <event-path>
+          recalculate-results [--write] <race-file-path>
                                           Re-evaluate stored readouts against current courses.
           export-public-results-site <event-file> <site-root>
                                           Generate the Cloudflare Pages-ready public site root.

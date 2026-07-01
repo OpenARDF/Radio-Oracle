@@ -1,6 +1,6 @@
 {
-  "event": {
-    "name": "OpenARDF Cloudflare Test Event",
+  "race": {
+    "name": "OpenARDF Cloudflare Test Race",
     "date": "2026-06-19",
     "format": "Classic"
   },

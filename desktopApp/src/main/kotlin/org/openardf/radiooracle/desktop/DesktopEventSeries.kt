@@ -50,7 +50,7 @@ import java.util.Base64
 import java.util.prefs.Preferences
 import kotlin.math.roundToInt
 
-/** Storage boundary used by desktop Event Series session logic. */
+/** Storage boundary used by desktop Race Series session logic. */
 interface EventSeriesStore {
     fun read(path: Path): EventSeriesFile
     fun write(path: Path, seriesFile: EventSeriesFile)
@@ -63,7 +63,7 @@ interface EventSeriesStore {
     }
 }
 
-/** Desktop filesystem adapter for Radio-Oracle Event Series manifests. */
+/** Desktop filesystem adapter for Radio-Oracle Race Series manifests. */
 object DesktopEventSeriesFiles : EventSeriesStore {
     override fun read(path: Path): EventSeriesFile =
         EventSeriesFileJson.decode(Files.readString(path, StandardCharsets.UTF_8))
@@ -93,7 +93,7 @@ object DesktopEventSeriesFiles : EventSeriesStore {
         val normalizedTarget = target.toAbsolutePath().normalize()
         target.parent?.let { Files.createDirectories(it) }
         if (normalizedSource != normalizedTarget && Files.exists(target)) {
-            error("Event Series manifest already exists at ${target.fileName}.")
+            error("Race Series manifest already exists at ${target.fileName}.")
         }
         if (normalizedSource != normalizedTarget && Files.exists(source)) {
             Files.move(source, target)
@@ -159,7 +159,7 @@ object DesktopEventSeriesStartFairnessSolutionNumbers {
     }
 }
 
-/** Tracks the currently open Event Series manifest and its folder. */
+/** Tracks the currently open Race Series manifest and its folder. */
 class DesktopEventSeriesSession(private val store: EventSeriesStore) {
     var currentSeries: EventSeriesFile? = null
         private set
@@ -190,7 +190,7 @@ class DesktopEventSeriesSession(private val store: EventSeriesStore) {
 
     fun updateCurrentSeries(transform: (EventSeriesFile) -> EventSeriesFile): EventSeriesFile {
         val seriesFile = requireNotNull(currentSeries) {
-            "Cannot edit before an Event Series is open."
+            "Cannot edit before a Race Series is open."
         }
         val updatedSeries = transform(seriesFile)
         currentSeries = updatedSeries
@@ -200,10 +200,10 @@ class DesktopEventSeriesSession(private val store: EventSeriesStore) {
 
     fun save() {
         val path = requireNotNull(currentPath) {
-            "Cannot save before an Event Series path is selected."
+            "Cannot save before a Race Series path is selected."
         }
         val seriesFile = requireNotNull(currentSeries) {
-            "Cannot save before an Event Series is open."
+            "Cannot save before a Race Series is open."
         }
         store.write(path, seriesFile)
         hasUnsavedChanges = false
@@ -211,7 +211,7 @@ class DesktopEventSeriesSession(private val store: EventSeriesStore) {
 
     fun closeSeries(discardUnsavedChanges: Boolean = false) {
         check(discardUnsavedChanges || !hasUnsavedChanges) {
-            "Cannot close while there are unsaved Event Series changes."
+            "Cannot close while there are unsaved Race Series changes."
         }
         currentSeries = null
         currentPath = null
@@ -220,10 +220,10 @@ class DesktopEventSeriesSession(private val store: EventSeriesStore) {
 
     fun loadLinkedEvents(): List<EventSeriesLinkedEvent> {
         val folder = requireNotNull(currentFolder) {
-            "Cannot load linked Event Files before an Event Series path is selected."
+            "Cannot load linked Race Files before a Race Series path is selected."
         }
         val seriesFile = requireNotNull(currentSeries) {
-            "Cannot load linked Event Files before an Event Series is open."
+            "Cannot load linked Race Files before a Race Series is open."
         }
         return seriesFile.sortedEvents().map { event ->
             EventSeriesLinkedEvent(
@@ -238,7 +238,7 @@ class DesktopEventSeriesSession(private val store: EventSeriesStore) {
         val folder = currentFolder ?: return listOf(
             EventSeriesValidationIssue(
                 severity = EventSeriesIssueSeverity.ERROR,
-                message = "Event Series path is not selected."
+                message = "Race Series path is not selected."
             )
         )
         val loadedEvents = mutableListOf<EventSeriesLinkedEvent>()
@@ -248,7 +248,7 @@ class DesktopEventSeriesSession(private val store: EventSeriesStore) {
             if (!store.exists(path)) {
                 issues += EventSeriesValidationIssue(
                     severity = EventSeriesIssueSeverity.ERROR,
-                    message = "Series event '${event.displayName}' is missing its Event File.",
+                    message = "Series race '${event.displayName}' is missing its Race File.",
                     seriesEventId = event.seriesEventId
                 )
             } else {
@@ -266,7 +266,7 @@ class DesktopEventSeriesSession(private val store: EventSeriesStore) {
                         EventValidationIssueSeverity.ERROR -> EventSeriesIssueSeverity.ERROR
                         EventValidationIssueSeverity.WARNING -> EventSeriesIssueSeverity.WARNING
                     },
-                    message = "Event '${linkedEvent.event.displayName}' self-validation: " +
+                    message = "Race '${linkedEvent.event.displayName}' self-validation: " +
                         DesktopEventValidationText.messageFor(issue),
                     seriesEventId = linkedEvent.event.seriesEventId
                 )
@@ -274,7 +274,7 @@ class DesktopEventSeriesSession(private val store: EventSeriesStore) {
         }
 }
 
-/** High-level desktop operations for Event Series membership and clean export. */
+/** High-level desktop operations for Race Series membership and clean export. */
 object DesktopEventSeriesActions {
     const val DEFAULT_SERIES_NAME = "New Series"
 
@@ -376,7 +376,7 @@ object DesktopEventSeriesActions {
         fileNameStem: String
     ): Path {
         val seriesFolder = requireNotNull(manifestPath.parent) {
-            "Event Series manifest must have a parent folder."
+            "Race Series manifest must have a parent folder."
         }
         val normalizedCurrentPath = manifestPath.toAbsolutePath().normalize()
         val targetPath = manifestPathForSeriesFileName(
@@ -400,7 +400,7 @@ object DesktopEventSeriesActions {
     ): Path {
         val seriesFile = store.read(manifestPath)
         val seriesFolder = requireNotNull(manifestPath.parent) {
-            "Event Series manifest must have a parent folder."
+            "Race Series manifest must have a parent folder."
         }
         val memberPaths = seriesFile.sortedEvents().map { event ->
             seriesFolder.resolve(event.eventFilePath).normalize()
@@ -413,7 +413,7 @@ object DesktopEventSeriesActions {
             return rememberedPath
         }
         return memberPaths.firstOrNull(store::exists)
-            ?: error("Event Series contains no readable Event Files.")
+            ?: error("Race Series contains no readable Race Files.")
     }
 
     fun rememberOpenedSeriesEvent(
@@ -440,11 +440,11 @@ object DesktopEventSeriesActions {
     ): List<DesktopEventSeriesEventSummary> {
         val seriesFile = store.read(manifestPath)
         val seriesFolder = requireNotNull(manifestPath.parent) {
-            "Event Series manifest must have a parent folder."
+            "Race Series manifest must have a parent folder."
         }
         val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize()
-        // The Events screen should be cheap and tolerant: list manifest entries and file presence
-        // without reading every Event File just to render the workflow panel.
+        // The Races screen should be cheap and tolerant: list manifest entries and file presence
+        // without reading every Race File just to render the workflow panel.
         return seriesFile.sortedEvents().mapIndexed { index, event ->
             val resolvedPath = seriesFolder.resolve(event.eventFilePath).normalize()
             DesktopEventSeriesEventSummary(
@@ -470,7 +470,7 @@ object DesktopEventSeriesActions {
     ): List<DesktopEventSeriesCompetitorMatchSummary> {
         val seriesFile = store.read(manifestPath)
         val seriesFolder = requireNotNull(manifestPath.parent) {
-            "Event Series manifest must have a parent folder."
+            "Race Series manifest must have a parent folder."
         }
         val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize()
         val loadedEvents = seriesFile.sortedEvents().mapNotNull { event ->
@@ -516,7 +516,7 @@ object DesktopEventSeriesActions {
     ): List<DesktopEventSeriesCompetitorIdentityCoverageSummary> {
         val seriesFile = store.read(manifestPath)
         val seriesFolder = requireNotNull(manifestPath.parent) {
-            "Event Series manifest must have a parent folder."
+            "Race Series manifest must have a parent folder."
         }
         val loadedEvents = seriesFile.sortedEvents().mapNotNull { event ->
             val resolvedPath = seriesFolder.resolve(event.eventFilePath).normalize()
@@ -617,7 +617,7 @@ object DesktopEventSeriesActions {
     ): DesktopEventSeriesStartFairnessSummary? {
         val seriesFile = store.read(manifestPath)
         val seriesFolder = requireNotNull(manifestPath.parent) {
-            "Event Series manifest must have a parent folder."
+            "Race Series manifest must have a parent folder."
         }
         val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize() ?: return null
         val currentProject = currentProjectFile ?: return null
@@ -668,7 +668,7 @@ object DesktopEventSeriesActions {
             currentEventName = currentEvent.displayName,
             currentEventOrder = currentEvent.order,
             historyOrderDescription = if (seriesFile.usesDateTimeEventOrder()) {
-                "event date/time"
+                "race date/time"
             } else {
                 "stored series order"
             },
@@ -733,25 +733,25 @@ object DesktopEventSeriesActions {
             "Start fairness optimizer must run at least one pass."
         }
         require(candidatesPerEvent > 0) {
-            "Start fairness optimizer must try at least one candidate per event."
+            "Start fairness optimizer must try at least one candidate per race."
         }
         val seriesFile = store.read(manifestPath)
         val seriesFolder = requireNotNull(manifestPath.parent) {
-            "Event Series manifest must have a parent folder."
+            "Race Series manifest must have a parent folder."
         }
         val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize()
-        val events = seriesFile.sortedEvents().map { event ->
+        val races = seriesFile.sortedEvents().map { event ->
             val path = seriesFolder.resolve(event.eventFilePath).normalize()
             require(store.exists(path)) {
-                "Event File '${event.displayName}' is missing."
+                "Race File '${event.displayName}' is missing."
             }
             DesktopEventSeriesStartFairnessOptimizationEvent(event, path, store.readEvent(path))
         }.toMutableList()
-        require(events.size >= 2) {
-            "At least two Event Files are needed to optimize series start fairness."
+        require(races.size >= 2) {
+            "At least two Race Files are needed to optimize series start fairness."
         }
 
-        val initialScore = startFairnessScore(events)
+        val initialScore = startFairnessScore(races)
         var bestScore = initialScore
         val updatedIndexes = mutableSetOf<Int>()
         var acceptedCandidateCount = 0
@@ -760,8 +760,8 @@ object DesktopEventSeriesActions {
 
         for (passIndex in 0 until maxPasses) {
             var passAcceptedCandidate = false
-            events.indices.forEach { eventIndex ->
-                val baseEvent = events[eventIndex]
+            races.indices.forEach { eventIndex ->
+                val baseEvent = races[eventIndex]
                 if (baseEvent.projectFile.isLockedForSeriesStartOptimization()) {
                     return@forEach
                 }
@@ -780,7 +780,7 @@ object DesktopEventSeriesActions {
                         options = settings.options.copy(seed = candidateSeed)
                     )
                     val candidateEvent = baseEvent.copy(projectFile = candidateProject)
-                    val candidateScore = startFairnessScore(events.withReplacement(eventIndex, candidateEvent))
+                    val candidateScore = startFairnessScore(races.withReplacement(eventIndex, candidateEvent))
                     val candidateStartAssignment = startAssignmentSignature(candidateProject)
                     if (
                         candidateScore < bestEventScore ||
@@ -792,7 +792,7 @@ object DesktopEventSeriesActions {
                     }
                 }
                 if (bestEventScore < bestScore || bestEventScore == bestScore && bestStartAssignment != baseStartAssignment) {
-                    events[eventIndex] = bestEvent
+                    races[eventIndex] = bestEvent
                     bestScore = bestEventScore
                     updatedIndexes += eventIndex
                     acceptedCandidateCount++
@@ -806,7 +806,7 @@ object DesktopEventSeriesActions {
         }
 
         val updatedFiles = updatedIndexes.sorted().map { index ->
-            val event = events[index]
+            val event = races[index]
             DesktopEventSeriesStartFairnessOptimizedEventFile(
                 seriesEventId = event.event.seriesEventId,
                 displayName = event.event.displayName,
@@ -827,7 +827,7 @@ object DesktopEventSeriesActions {
             completedPassCount = completedPassCount,
             optimizedEventCount = updatedFiles.size,
             updatedEventFiles = updatedFiles,
-            solutionSignature = seriesStartAssignmentSignature(events)
+            solutionSignature = seriesStartAssignmentSignature(races)
         )
     }
 
@@ -946,9 +946,9 @@ object DesktopEventSeriesActions {
     private fun Int?.orZero(): Int = this ?: 0
 
     private fun startFairnessScore(
-        events: List<DesktopEventSeriesStartFairnessOptimizationEvent>
+        races: List<DesktopEventSeriesStartFairnessOptimizationEvent>
     ): DesktopEventSeriesStartFairnessScore {
-        val histories = events
+        val histories = races
             .flatMapIndexed { index, event ->
                 startFairnessStarts(event.event, eventSequenceIndex = index, event.projectFile)
             }
@@ -986,9 +986,9 @@ object DesktopEventSeriesActions {
             .sortedBy { it.first }
 
     private fun seriesStartAssignmentSignature(
-        events: List<DesktopEventSeriesStartFairnessOptimizationEvent>
+        races: List<DesktopEventSeriesStartFairnessOptimizationEvent>
     ): String =
-        events.joinToString("|") { event ->
+        races.joinToString("|") { event ->
             event.event.seriesEventId + ":" +
                 startAssignmentSignature(event.projectFile)
                     .joinToString(",") { (competitorId, startSeconds) -> "$competitorId=${startSeconds ?: "none"}" }
@@ -1069,7 +1069,7 @@ object DesktopEventSeriesActions {
             startDateTimeIso = eventProjectFile.raceData.race.startDateTimeIso,
             formatLabel = eventProjectFile.raceData.race.raceType.name
         )
-        // Re-selecting an existing Event File refreshes its manifest metadata without changing its order.
+        // Re-selecting an existing Race File refreshes its manifest metadata without changing its order.
         val updatedSeriesFile = seriesFile.copy(
             events = seriesFile.events.filterNot {
                 it.seriesEventId == resolvedSeriesEventId || it.eventFilePath == relativeEventPath
@@ -1097,7 +1097,7 @@ object DesktopEventSeriesActions {
             it.seriesEventId != existingEvent.seriesEventId && it.eventFilePath == relativeEventPath
         }
         require(conflictingPath == null) {
-            "Cannot refresh Event Series metadata because ${relativeEventPath} is already assigned to ${conflictingPath?.displayName}."
+            "Cannot refresh Race Series metadata because ${relativeEventPath} is already assigned to ${conflictingPath?.displayName}."
         }
         val race = eventProjectFile.raceData.race
         val refreshedEvent = existingEvent.copy(
@@ -1106,7 +1106,7 @@ object DesktopEventSeriesActions {
             startDateTimeIso = race.startDateTimeIso,
             formatLabel = race.raceType.name
         )
-        // The manifest carries planning metadata for the workflow, but the Event File remains the
+        // The manifest carries planning metadata for the workflow, but the Race File remains the
         // race-day source of truth. Refreshing on save lets harmless Event Name/date tweaks flow into
         // series screens without asking organizers to manually edit the manifest.
         return seriesFile.copy(
@@ -1129,14 +1129,14 @@ object DesktopEventSeriesActions {
     fun exportSeries(store: EventSeriesStore, manifestPath: Path, targetFolder: Path): EventSeriesExportResult {
         val seriesFile = store.read(manifestPath)
         val sourceFolder = requireNotNull(manifestPath.parent) {
-            "Event Series manifest must have a parent folder."
+            "Race Series manifest must have a parent folder."
         }
         val missingFiles = seriesFile.sortedEvents()
             .map { it to sourceFolder.resolve(it.eventFilePath).normalize() }
             .filterNot { (_, path) -> store.exists(path) }
             .map { (event, _) -> event.eventFilePath }
         require(missingFiles.isEmpty()) {
-            "Cannot export Event Series because required Event Files are missing: ${missingFiles.joinToString()}"
+            "Cannot export Race Series because required Race Files are missing: ${missingFiles.joinToString()}"
         }
 
         val targetManifest = targetFolder.resolve(manifestPath.fileName)
@@ -1156,7 +1156,7 @@ object DesktopEventSeriesActions {
         val legacyManifest = directory.resolve(EVENT_SERIES_FILE_NAME).takeIf(exists)
         /*
          * Folder contents are not authoritative series membership. This scan only finds
-         * possible manifest containers; the manifest entries still decide which Event Files
+         * possible manifest containers; the manifest entries still decide which Race Files
          * belong to the series, and unrelated JSON clutter is ignored.
          */
         val namedManifests = runCatching {
@@ -1184,13 +1184,13 @@ object DesktopEventSeriesActions {
             .joinToString("")
             .replace(Regex("\\s+"), " ")
             .trim()
-            .ifBlank { "Event Series" }
+            .ifBlank { "Race Series" }
 
     private fun relativeEventPath(seriesFolder: Path, eventPath: Path): String {
         val normalizedFolder = seriesFolder.toAbsolutePath().normalize()
         val normalizedEventPath = eventPath.toAbsolutePath().normalize()
         require(normalizedEventPath.startsWith(normalizedFolder)) {
-            "Event File must be inside the Event Series folder before it can be added to the manifest."
+            "Race File must be inside the Race Series folder before it can be added to the manifest."
         }
         return normalizedFolder.relativize(normalizedEventPath).toString().replace('\\', '/')
     }
@@ -1201,8 +1201,8 @@ object DesktopEventSeriesActions {
         if (normalizedPreferredId !in usedIds) {
             return normalizedPreferredId
         }
-        // Older copied Event Files can share the same race id. In a series, membership is per
-        // Event File, so duplicate race ids on different paths need distinct series event ids.
+        // Older copied Race Files can share the same race id. In a series, membership is per
+        // Race File, so duplicate race ids on different paths need distinct series race ids.
         val fileName = relativeEventPath.substringAfterLast('/')
         val fileNameWithoutProjectExtension = fileName
             .removeSuffix(".rom.json")

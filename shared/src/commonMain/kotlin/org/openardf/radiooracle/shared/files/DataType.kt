@@ -24,7 +24,7 @@
 
 package org.openardf.radiooracle.shared.files
 
-/** Logical event data groups that can be imported or exported. */
+/** Logical race data groups that can be imported or exported. */
 enum class DataType(var value: Int) {
     CATEGORIES(0),
     COMPETITORS(1),

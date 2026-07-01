@@ -42,7 +42,7 @@ class DesktopStartupProjectTest {
 
         val status = openStartupProject(session, null)
 
-        assertEquals("No Event File open.", status)
+        assertEquals("No Race File open.", status)
         assertNull(session.currentProject)
     }
 
@@ -64,11 +64,11 @@ class DesktopStartupProjectTest {
     @Test
     fun reportsStartupOpenFailureWithoutChangingSession() {
         val path = Path.of("missing.rom.json")
-        val session = DesktopProjectSession(StartupProjectFileStore(readError = IllegalArgumentException("Missing Event File")))
+        val session = DesktopProjectSession(StartupProjectFileStore(readError = IllegalArgumentException("Missing Race File")))
 
         val status = openStartupProject(session, path)
 
-        assertEquals("Open failed: Missing Event File", status)
+        assertEquals("Open failed: Missing Race File", status)
         assertNull(session.currentProject)
         assertNull(session.currentPath)
     }
@@ -95,14 +95,14 @@ class DesktopStartupProjectTest {
         val projectFile = projectFile("USA and IARU Region 2 Radio Orienteering 80m Classic")
 
         assertEquals(
-            "Event: USA and IARU Region 2 Radio Orienteering 80m Classic",
+            "Race: USA and IARU Region 2 Radio Orienteering 80m Classic",
             desktopTopBarEventText(projectFile)
         )
     }
 
     @Test
     fun topBarTextShowsEmptyEventFileState() {
-        assertEquals("No event file loaded", desktopTopBarEventText(null))
+        assertEquals("No race file loaded", desktopTopBarEventText(null))
     }
 
     @Test
@@ -125,7 +125,7 @@ class DesktopStartupProjectTest {
     @Test
     fun eventFilePageShowsSavedEventFileFolder() {
         assertEquals(
-            "Event File Folder: /Users/example/Documents/Radio-Oracle",
+            "Race File Folder: /Users/example/Documents/Radio-Oracle",
             desktopEventFileFolderText(
                 eventFilePath = Path.of("/Users/example/Documents/Radio-Oracle/Day 1.json"),
                 workingFolder = Path.of("/Users/example/Documents/Other")
@@ -136,7 +136,7 @@ class DesktopStartupProjectTest {
     @Test
     fun eventFilePageShowsFirstSaveDefaultFolderForUnsavedEvent() {
         assertEquals(
-            "Event File Folder: /Users/example/Documents/Radio-Oracle (first save default)",
+            "Race File Folder: /Users/example/Documents/Radio-Oracle (first save default)",
             desktopEventFileFolderText(
                 eventFilePath = null,
                 workingFolder = Path.of("/Users/example/Documents/Radio-Oracle")

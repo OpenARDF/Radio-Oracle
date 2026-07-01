@@ -7,7 +7,7 @@ async function loadResults() {
 }
 
 function renderSummary(data) {
-  document.getElementById("event-name").textContent = data.event.name;
+  document.getElementById("race-name").textContent = data.race.name;
   document.getElementById("category-count").textContent = data.categories.length.toString();
   document.getElementById("published-at").textContent = data.publishedAt;
 }
@@ -70,8 +70,8 @@ loadResults()
   .then((data) => {
     renderSummary(data);
     renderResults(data);
-    document.getElementById("search").addEventListener("input", (event) => {
-      renderResults(data, event.target.value);
+    document.getElementById("search").addEventListener("input", (inputChange) => {
+      renderResults(data, inputChange.target.value);
     });
   })
   .catch((error) => {
