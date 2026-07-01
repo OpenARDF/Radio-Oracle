@@ -31,6 +31,19 @@ plugins {
 
 def firebaseConfigFile = file("google-services.json")
 def firebaseEnabled = firebaseConfigFile.isFile()
+def releaseSigningPropertiesFile = rootProject.file("keystore.properties")
+def releaseSigningProperties = new Properties()
+
+if (releaseSigningPropertiesFile.isFile()) {
+    releaseSigningPropertiesFile.withInputStream { releaseSigningProperties.load(it) }
+}
+
+def releaseSigningConfigured = [
+    "storeFile",
+    "storePassword",
+    "keyAlias",
+    "keyPassword"
+].every { releaseSigningProperties.getProperty(it)?.trim() }
 
 if (firebaseEnabled) {
     apply plugin: "com.google.gms.google-services"
@@ -45,12 +58,23 @@ android {
         applicationId = "org.openardf.radiooracle"
         minSdk = 26
         targetSdk = 35
-        versionCode = 31
+        versionCode = 32
         versionName = rootProject.ext.radioOracleVersion
         buildConfigField "String", "BUILD_DATE_UTC", "\"${java.time.Instant.now().toString()}\""
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [radioOracleCommandReceiverExported: "false"]
+    }
+
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            release {
+                storeFile = file(releaseSigningProperties.getProperty("storeFile"))
+                storePassword = releaseSigningProperties.getProperty("storePassword")
+                keyAlias = releaseSigningProperties.getProperty("keyAlias")
+                keyPassword = releaseSigningProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -59,6 +83,10 @@ android {
         }
 
         release {
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.release
+            }
+
             minifyEnabled = true
 
             // Enables resource shrinking
