@@ -1182,6 +1182,53 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun importsGpxMorseFoxAliasesCaseInsensitively() {
+        val gpxPath = Files.createTempFile("morse-fox-aliases", ".gpx")
+        Files.writeString(gpxPath, sampleGpxWithMorseFoxAliases())
+        val baseProject = classicPresetProject()
+            .withControlPublicLabel(siCode = 31, publicLabel = "Fox 1")
+            .withControlPublicLabel(siCode = 32, publicLabel = "Fox 2")
+            .withControlPublicLabel(siCode = 33, publicLabel = "Fox 3")
+            .withControlPublicLabel(siCode = 34, publicLabel = "Fox 4")
+            .withControlPublicLabel(siCode = 35, publicLabel = "Fox 5")
+        val project = EventProjectEditor.addCategory(
+            baseProject,
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = gpxPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { 100.0 }
+        )
+
+        val category = updated.raceData.categories.single().category
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals(5, summary.matchedControlPointCount)
+        assertEquals(
+            listOf(
+                DesktopCourseKmlLabelConversion("moi", "Fox 2"),
+                DesktopCourseKmlLabelConversion("Mos", "Fox 3"),
+                DesktopCourseKmlLabelConversion("moh", "Fox 4")
+            ),
+            summary.labelConversions
+        )
+        assertEquals("'Fox 1' 'Fox 2' 'Fox 3' 'Fox 4' 'Fox 5'", DesktopProtectedCourseOrder.decrypt(category.encryptedIdealOrder!!, "course-key"))
+        assertEquals(
+            baseProject.raceData.controls
+                .filter { it.siCode in 31..35 }
+                .sortedBy { it.siCode }
+                .map { it.id },
+            protectedCourseInfo.controlPoints.map { it.controlId }
+        )
+    }
+
+    @Test
     fun preservesExistingControlSiCodesWhenImportedDescriptionLinesDifferByDefault() {
         val kmlPath = Files.createTempFile("description-si-controls", ".kml")
         Files.writeString(kmlPath, sampleKmlWithDescriptionSiLines())
@@ -2091,6 +2138,36 @@ class DesktopCourseKmlImportTest {
             <rtept lat="39.0000" lon="-95.0000" />
             <rtept lat="39.0000" lon="-94.9990" />
             <rtept lat="39.0000" lon="-94.9980" />
+          </rte>
+        </gpx>
+        """.trimIndent().trimStart()
+
+    private fun sampleGpxWithMorseFoxAliases(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gpx version="1.1" creator="Radio-Oracle test" xmlns="http://www.topografix.com/GPX/1/1">
+          <wpt lat="39.0000" lon="-95.0000">
+            <name>MOE</name>
+          </wpt>
+          <wpt lat="39.0000" lon="-94.9990">
+            <name>moi</name>
+          </wpt>
+          <wpt lat="39.0000" lon="-94.9980">
+            <name>Mos</name>
+          </wpt>
+          <wpt lat="39.0000" lon="-94.9970">
+            <name>moh</name>
+          </wpt>
+          <wpt lat="39.0000" lon="-94.9960">
+            <name>MO5</name>
+          </wpt>
+          <rte>
+            <name>M21</name>
+            <rtept lat="39.0000" lon="-95.0000" />
+            <rtept lat="39.0000" lon="-94.9990" />
+            <rtept lat="39.0000" lon="-94.9980" />
+            <rtept lat="39.0000" lon="-94.9970" />
+            <rtept lat="39.0000" lon="-94.9960" />
           </rte>
         </gpx>
         """.trimIndent().trimStart()
