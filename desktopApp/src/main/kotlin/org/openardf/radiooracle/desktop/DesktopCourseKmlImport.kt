@@ -1994,8 +1994,12 @@ private fun EventControl.roleAliasTokens(): List<ControlMatchToken> =
     when (type) {
         ControlPointType.SEPARATOR -> listOf("S", "Spectator", "Separator")
         ControlPointType.BEACON -> listOf("M", "B", "Beacon")
-        ControlPointType.CONTROL -> emptyList()
+        ControlPointType.CONTROL -> foxNumber()?.let(ControlRoleLabelRules::foxAliasTokens).orEmpty()
     }.map { ControlMatchToken(it, this) }
+
+private fun EventControl.foxNumber(): Int? =
+    listOf(label, publicLabel, displayCourseLabel())
+        .firstNotNullOfOrNull(ControlRoleLabelRules::foxNumber)
 
 private fun CourseMatchedControl.assignedControlToken(): String =
     when (type) {

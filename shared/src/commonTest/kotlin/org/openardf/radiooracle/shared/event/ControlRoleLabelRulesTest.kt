@@ -43,9 +43,16 @@ class ControlRoleLabelRulesTest {
     @Test
     fun infersFoxRolesFromPublicLabels() {
         assertEquals(ControlPointType.CONTROL, ControlRoleLabelRules.inferredRole("Fox 1"))
+        assertEquals(ControlPointType.CONTROL, ControlRoleLabelRules.inferredRole("Fox-1"))
         assertEquals(ControlPointType.CONTROL, ControlRoleLabelRules.inferredRole("1"))
         assertEquals(ControlPointType.CONTROL, ControlRoleLabelRules.inferredRole("1F"))
         assertEquals(ControlPointType.CONTROL, ControlRoleLabelRules.inferredRole("F1"))
+        assertEquals(ControlPointType.CONTROL, ControlRoleLabelRules.inferredRole("Mos"))
+        assertEquals(1, ControlRoleLabelRules.foxNumber("MOE"))
+        assertEquals(2, ControlRoleLabelRules.foxNumber("moi"))
+        assertEquals(3, ControlRoleLabelRules.foxNumber("Mos"))
+        assertEquals(4, ControlRoleLabelRules.foxNumber("moh"))
+        assertEquals(5, ControlRoleLabelRules.foxNumber("MO5"))
     }
 
     @Test

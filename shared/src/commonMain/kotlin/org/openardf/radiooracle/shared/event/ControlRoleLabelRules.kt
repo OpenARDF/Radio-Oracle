@@ -39,6 +39,24 @@ object ControlRoleLabelRules {
         }
     }
 
+    fun foxNumber(publicLabel: String?): Int? {
+        val label = publicLabel.normalizedRoleLabel()
+        return morseFoxAliases[label]
+            ?: FOX_NUMBER_LABEL_REGEX.matchEntire(label)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            ?: SPRINT_FAST_FOX_LABEL_REGEX.matchEntire(label)?.groupValues?.drop(1)?.firstOrNull { it.isNotBlank() }?.toIntOrNull()
+    }
+
+    fun foxAliasTokens(foxNumber: Int): List<String> =
+        buildList {
+            add("Fox $foxNumber")
+            add("Fox$foxNumber")
+            add("Fox-$foxNumber")
+            add(foxNumber.toString())
+            morseFoxAliases.entries
+                .filter { it.value == foxNumber }
+                .mapTo(this) { it.key }
+        }.distinct()
+
     fun inferredSpecialRole(publicLabel: String?): ControlPointType? {
         return inferredRole(publicLabel).takeIf { it != ControlPointType.CONTROL }
     }
@@ -60,14 +78,26 @@ object ControlRoleLabelRules {
     private fun String.isFoxLabel(): Boolean =
         this == "FOX" ||
             startsWith("FOX ") ||
-            matches(FOX_NUMBER_LABEL_REGEX) ||
+            foxNumber(this) != null ||
             matches(SPRINT_FAST_FOX_LABEL_REGEX)
 
     private fun String?.normalizedRoleLabel(): String =
-        orEmpty().trim().uppercase().replace(Regex("\\s+"), " ")
+        orEmpty()
+            .trim()
+            .uppercase()
+            .replace(Regex("[^A-Z0-9]+"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
 
-    private val FOX_NUMBER_LABEL_REGEX = Regex("(?:FOX ?)?\\d+")
-    private val SPRINT_FAST_FOX_LABEL_REGEX = Regex("(?:\\d+F|F\\d+)")
+    private val FOX_NUMBER_LABEL_REGEX = Regex("(?:FOX ?)?(\\d+)")
+    private val SPRINT_FAST_FOX_LABEL_REGEX = Regex("(?:(\\d+)F|F(\\d+))")
     private val SPECTATOR_LABELS = setOf("S", "SP", "SPEC", "SPECTATOR", "SEP", "SEPARATOR")
     private val BEACON_LABELS = setOf("B", "BB", "M", "MO", "BEACON", "FINISH BEACON")
+    private val morseFoxAliases = mapOf(
+        "MOE" to 1,
+        "MOI" to 2,
+        "MOS" to 3,
+        "MOH" to 4,
+        "MO5" to 5
+    )
 }

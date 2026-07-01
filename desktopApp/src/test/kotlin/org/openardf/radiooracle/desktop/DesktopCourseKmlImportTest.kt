@@ -1146,6 +1146,42 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun importsMorseFoxAliasesCaseInsensitively() {
+        val kmlPath = Files.createTempFile("morse-fox-aliases", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithMorseFoxAliases())
+        val baseProject = classicPresetProject()
+            .withControlPublicLabel(siCode = 31, publicLabel = "Fox 1")
+            .withControlPublicLabel(siCode = 32, publicLabel = "Fox 2")
+            .withControlPublicLabel(siCode = 33, publicLabel = "Fox 3")
+            .withControlPublicLabel(siCode = 34, publicLabel = "Fox 4")
+            .withControlPublicLabel(siCode = 35, publicLabel = "Fox 5")
+        val project = EventProjectEditor.addCategory(
+            baseProject,
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { 100.0 }
+        )
+
+        val category = updated.raceData.categories.single().category
+        assertEquals(5, summary.matchedControlPointCount)
+        assertEquals(
+            listOf(
+                DesktopCourseKmlLabelConversion("moi", "Fox 2"),
+                DesktopCourseKmlLabelConversion("Mos", "Fox 3"),
+                DesktopCourseKmlLabelConversion("moh", "Fox 4")
+            ),
+            summary.labelConversions
+        )
+        assertEquals("'Fox 1' 'Fox 2' 'Fox 3' 'Fox 4' 'Fox 5'", DesktopProtectedCourseOrder.decrypt(category.encryptedIdealOrder!!, "course-key"))
+    }
+
+    @Test
     fun preservesExistingControlSiCodesWhenImportedDescriptionLinesDifferByDefault() {
         val kmlPath = Files.createTempFile("description-si-controls", ".kml")
         Files.writeString(kmlPath, sampleKmlWithDescriptionSiLines())
@@ -2928,6 +2964,47 @@ class DesktopCourseKmlImportTest {
                   -95.0000,39.0000,0
                   -94.9990,39.0000,0
                   -94.9980,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleKmlWithMorseFoxAliases(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>MOE</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>moi</name>
+              <Point><coordinates>-94.9990,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Mos</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>moh</name>
+              <Point><coordinates>-94.9970,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>MO5</name>
+              <Point><coordinates>-94.9960,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9990,39.0000,0
+                  -94.9980,39.0000,0
+                  -94.9970,39.0000,0
+                  -94.9960,39.0000,0
                 </coordinates>
               </LineString>
             </Placemark>
