@@ -28,6 +28,7 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.widget.Toolbar
+import androidx.core.content.ContextCompat
 import androidx.navigation.fragment.findNavController
 import androidx.preference.CheckBoxPreference
 import androidx.preference.ListPreference
@@ -44,6 +45,9 @@ class SettingsFragment : PreferenceFragmentCompat() {
         view.findViewById<Toolbar>(R.id.settings_toolbar)?.let { toolbar ->
             toolbar.title = getString(R.string.global_settings)
             toolbar.subtitle = getString(R.string.general_main)
+            val onToolbarColor = ContextCompat.getColor(requireContext(), R.color.white)
+            toolbar.setTitleTextColor(onToolbarColor)
+            toolbar.setSubtitleTextColor(onToolbarColor)
         }
     }
 

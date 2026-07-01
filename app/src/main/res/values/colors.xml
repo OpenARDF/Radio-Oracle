@@ -17,6 +17,7 @@
     <color name="category_men_background">#E8F3FF</color>
     <color name="category_women_background">#FFECEC</color>
     <color name="event_toolbar_background">#3700B3</color>
+    <color name="settings_heading_blue">@color/event_toolbar_background</color>
     <color name="series_navigation_background">#FFD59E</color>
     <color name="control_role_fox_background">#CDEFD1</color>
     <color name="control_role_special_background">#D8E9FF</color>

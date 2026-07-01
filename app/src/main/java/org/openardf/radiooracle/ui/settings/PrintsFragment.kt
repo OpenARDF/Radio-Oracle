@@ -68,6 +68,9 @@ class PrintsFragment : PreferenceFragmentCompat() {
         view.findViewById<Toolbar>(R.id.settings_toolbar)?.let { toolbar ->
             toolbar.title = getString(R.string.global_settings)
             toolbar.subtitle = getString(R.string.general_print)
+            val onToolbarColor = ContextCompat.getColor(requireContext(), R.color.white)
+            toolbar.setTitleTextColor(onToolbarColor)
+            toolbar.setSubtitleTextColor(onToolbarColor)
         }
     }
 

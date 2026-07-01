@@ -112,6 +112,19 @@
     <!-- Customised App Theme with the Toolbar-->
     <style name="PrefsTheme" parent="PreferenceThemeOverlay.v14.Material">
         <item name="android:layout">@layout/fragment_settings</item>
+        <item name="checkBoxPreferenceStyle">@style/Preference.CheckBoxPreference.RadioOracle</item>
+        <item name="preferenceCategoryTitleTextAppearance">@style/TextAppearance.RadioOracle.PreferenceCategory</item>
+        <item name="preferenceCategoryTitleTextColor">@color/settings_heading_blue</item>
+    </style>
+
+    <style name="Preference.CheckBoxPreference.RadioOracle" parent="@style/Preference.CheckBoxPreference.Material">
+        <item name="android:widgetLayout">@layout/preference_widget_checkbox_radio_oracle</item>
+    </style>
+
+    <style name="TextAppearance.RadioOracle.PreferenceCategory" parent="@style/TextAppearance.AppCompat.Body1">
+        <item name="android:textColor">@color/settings_heading_blue</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
     </style>
 
 

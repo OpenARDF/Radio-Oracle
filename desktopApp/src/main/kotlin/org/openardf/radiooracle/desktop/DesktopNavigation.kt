@@ -657,7 +657,7 @@ object DesktopNavigation {
                     "Races",
                     workflow,
                     listOf(
-                        action("series.events.add", "Add Race to Series...", workflow, DesktopNavAction.AddEventToSeries)
+                        action("series.events.add", "Add Race To Series...", workflow, DesktopNavAction.AddEventToSeries)
                     ),
                     DesktopSection.SeriesEvents
                 ),
@@ -668,7 +668,7 @@ object DesktopNavigation {
                     listOf(
                         action(
                             "series.start-fairness.balance",
-                            "Balance Open Race for Series",
+                            "Balance Open Race For Series",
                             workflow,
                             DesktopNavAction.BalanceStartListFromEventSeries
                         )
@@ -1406,9 +1406,9 @@ object DesktopNavigation {
         "setup.event-file.export-android" to
             "Use Save Android Race File to write a backup JSON file for Android compatibility.",
         "setup.event-file.send-android" to
-            "Use Send Race to Android to share the saved Race File over local Wi-Fi.",
+            "Use Send Race To Android to share the saved Race File over local Wi-Fi.",
         "setup.event-file.receive-android" to
-            "Use Receive File from Android to accept a Race File or supporting file over local Wi-Fi.",
+            "Use Receive File From Android to accept a Race File or supporting file over local Wi-Fi.",
         "setup.event-file.settings" to
             "Use Settings to adjust race-related readout, live result, display, app, and readiness options.",
         "setup.event-file.si-settings" to
@@ -1422,13 +1422,13 @@ object DesktopNavigation {
         "setup.event-file.series-settings" to
             "Use Race Series settings to create, link, change, remove, or validate the current Race File's series membership.",
         "setup.event-file.series-create" to
-            "Use Create New Series with This Race to start a manifest-backed multi-race series from the current Race File.",
+            "Use Create New Series With This Race to start a manifest-backed multi-race series from the current Race File.",
         "setup.event-file.series-link" to
-            "Use Link to Existing Series to add the current Race File to an existing Race Series manifest.",
+            "Use Link To Existing Series to add the current Race File to an existing Race Series manifest.",
         "setup.event-file.series-change" to
             "Use Change Series Link to move this Race File to another manifest entry.",
         "setup.event-file.series-remove" to
-            "Use Remove from Series to clear this Race File's series link and remove its manifest entry when possible.",
+            "Use Remove From Series to clear this Race File's series link and remove its manifest entry when possible.",
         "setup.event-file.series-validate" to
             "Use Validate Series Link to check this Race File backlink against the open Race Series manifest.",
         "setup.event-file.diagnostics" to
@@ -1440,11 +1440,11 @@ object DesktopNavigation {
         "series.events" to
             "Use Races to review the manifest-listed Race Files and open another race in the same series.",
         "series.events.add" to
-            "Use Add Race to Series to add another Race File to the open Race Series manifest.",
+            "Use Add Race To Series to add another Race File to the open Race Series manifest.",
         "series.start-fairness" to
             "Use Start Fairness to review generated start thirds across all races in this series.",
         "series.start-fairness.balance" to
-            "Use Balance Open Race for Series to redraw only the open race, using other series races with generated starts as the start-third history source.",
+            "Use Balance Open Race For Series to redraw only the open race, using other series races with generated starts as the start-third history source.",
         "series.competitor-matching" to
             "Use Competitor Matching to review same-person matches across series races by SI number, bib number, call sign, and overrides.",
         "series.validation" to
@@ -1487,14 +1487,14 @@ object DesktopNavigation {
                 listOf(
                     action(
                         "setup.event-file.send-android",
-                        "Send Race to Android",
+                        "Send Race To Android",
                         workflow,
                         DesktopNavAction.SendEventFileToAndroid,
                         section = DesktopSection.EventFile
                     ),
                     action(
                         "setup.event-file.receive-android",
-                        "Receive File from Android",
+                        "Receive File From Android",
                         workflow,
                         DesktopNavAction.ReceiveFileFromAndroid,
                         requiresEventFile = false,
@@ -1551,13 +1551,13 @@ object DesktopNavigation {
                         listOf(
                             action(
                                 "setup.event-file.series-create",
-                                "Create New Series with This Race",
+                                "Create New Series With This Race",
                                 workflow,
                                 DesktopNavAction.CreateEventSeriesWithCurrentEvent
                             ),
                             action(
                                 "setup.event-file.series-link",
-                                "Link to Existing Series...",
+                                "Link To Existing Series...",
                                 workflow,
                                 DesktopNavAction.LinkCurrentEventToSeries
                             ),
@@ -1569,7 +1569,7 @@ object DesktopNavigation {
                             ),
                             action(
                                 "setup.event-file.series-remove",
-                                "Remove from Series...",
+                                "Remove From Series...",
                                 workflow,
                                 DesktopNavAction.RemoveCurrentEventFromSeries
                             ),

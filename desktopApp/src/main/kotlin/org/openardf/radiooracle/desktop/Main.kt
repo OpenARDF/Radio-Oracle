@@ -5209,8 +5209,8 @@ fun main(args: Array<String>) = application {
                         saveCurrentProject()
                     }
                 )
-                Item("Send Race to Android", enabled = projectFile != null, onClick = ::sendEventFileToAndroid)
-                Item("Receive File from Android", onClick = ::receiveFileFromAndroid)
+                Item("Send Race To Android", enabled = projectFile != null, onClick = ::sendEventFileToAndroid)
+                Item("Receive File From Android", onClick = ::receiveFileFromAndroid)
                 Item("Close Race File", enabled = projectFile != null, onClick = ::requestCloseEventFile)
             }
         }
@@ -5242,7 +5242,7 @@ fun main(args: Array<String>) = application {
         }
         pendingSiModeWarning?.let { warning ->
             SiStationModeWarningDialog(
-                title = warning.warningTitle ?: "SI station mode warning",
+                title = warning.warningTitle ?: "SI Station Mode Warning",
                 message = warning.warningMessage ?: warning.statusText,
                 onDismiss = { pendingSiModeWarning = null }
             )
@@ -6538,7 +6538,7 @@ private fun ControlRoleWarningDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Check control role") },
+        title = { Text("Check Control Role") },
         text = { Text(warning) },
         confirmButton = {
             Button(onClick = onDismiss) {
@@ -6557,7 +6557,7 @@ private fun UnsavedChangesDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Unsaved changes") },
+        title = { Text("Unsaved Changes") },
         text = {
             Text(
                 "The current Race File has unsaved changes. Save before continuing, discard those changes, or cancel to avoid losing edits."
@@ -6590,7 +6590,7 @@ private fun EventDefinitionSaveDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Race definition changed") },
+        title = { Text("Race Definition Changed") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
@@ -6634,7 +6634,7 @@ private fun UnsavedNewEventFileDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Unsaved new Race File") },
+        title = { Text("Unsaved New Race File") },
         text = {
             Text("Save this new Race File before leaving this page, or discard it?")
         },
@@ -6770,7 +6770,7 @@ private fun DeleteAllControlsDialog(
     val canSubmit = controlCount > 0 || affectedCategoryCount > 0
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Delete all controls") },
+        title = { Text("Delete All Controls") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
@@ -6819,7 +6819,7 @@ private fun DeleteAllCompetitorsDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Delete all competitors") },
+        title = { Text("Delete All Competitors") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
@@ -7005,14 +7005,14 @@ private fun CourseKmlKmzImportReviewDialog(
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        Text("Matched categories: ${selectedSummary.matchedCategoryCount} of ${selectedSummary.routeCount} routes")
+                        Text("Matched Categories: ${selectedSummary.matchedCategoryCount} Of ${selectedSummary.routeCount} Routes")
                         Text("Categories: $categoriesText")
                         if (summary.missingCategoryNames.isNotEmpty() || summary.missingControlNames.isNotEmpty()) {
                             if (summary.missingCategoryNames.isNotEmpty()) {
-                                Text("Categories listed in $formatLabel but not in the Race File: ${summary.missingCategoryNames.joinToString()}")
+                                Text("Categories Listed In $formatLabel But Not In The Race File: ${summary.missingCategoryNames.joinToString()}")
                             }
                             if (summary.missingControlNames.isNotEmpty()) {
-                                Text("Controls listed in $formatLabel but not in the Race File: ${summary.missingControlNames.joinToString()}")
+                                Text("Controls Listed In $formatLabel But Not In The Race File: ${summary.missingControlNames.joinToString()}")
                             }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -7022,7 +7022,7 @@ private fun CourseKmlKmzImportReviewDialog(
                                     checked = createMissingCategories,
                                     onCheckedChange = { createMissingCategories = it }
                                 )
-                                Text("Create missing categories and controls, then save course data")
+                                Text("Create Missing Categories And Controls, Then Save Course Data")
                             }
                             Text(
                                 text = if (createMissingCategories) {
@@ -7036,10 +7036,10 @@ private fun CourseKmlKmzImportReviewDialog(
                             )
                         }
                         if (selectedSummary.importedCategoryCount > 0) {
-                            Text("Categories to update: ${selectedSummary.importedCategoryCount}")
+                            Text("Categories To Update: ${selectedSummary.importedCategoryCount}")
                         }
                         if (selectedSummary.assignedCategoryControlCount > 0) {
-                            Text("Category assigned control points available to copy: ${selectedSummary.assignedCategoryControlCount}")
+                            Text("Category Assigned Control Points Available To Copy: ${selectedSummary.assignedCategoryControlCount}")
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -7048,7 +7048,7 @@ private fun CourseKmlKmzImportReviewDialog(
                                     checked = applyCategoryAssignments,
                                     onCheckedChange = { applyCategoryAssignments = it }
                                 )
-                                Text("Replace category assigned controls with matched $formatLabel controls")
+                                Text("Replace Category Assigned Controls With Matched $formatLabel Controls")
                             }
                             Text(
                                 "If selected, existing assigned controls for the matched category are replaced and stored in neutral fox-label order, not route order.",
@@ -7057,11 +7057,11 @@ private fun CourseKmlKmzImportReviewDialog(
                             )
                         }
                         if (selectedSummary.duplicateCategoryCount > 0) {
-                            Text("Duplicate categories already imported: ${selectedSummary.duplicateCategoryCount}")
+                            Text("Duplicate Categories Already Imported: ${selectedSummary.duplicateCategoryCount}")
                         }
-                        Text("Matched course controls: ${courseControlMatchSummary(selectedSummary.matchedFoxCount, selectedSummary.matchedBeaconCount, selectedSummary.matchedSpectatorCount)}")
+                        Text("Matched Course Controls: ${courseControlMatchSummary(selectedSummary.matchedFoxCount, selectedSummary.matchedBeaconCount, selectedSummary.matchedSpectatorCount)}")
                         if (selectedSiConflictCount > 0) {
-                            Text("Imported SI= lines differ from existing Race File SI numbers: $selectedSiConflictCount")
+                            Text("Imported SI= Lines Differ From Existing Race File SI Numbers: $selectedSiConflictCount")
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -7070,7 +7070,7 @@ private fun CourseKmlKmzImportReviewDialog(
                                     checked = overwriteImportedSiNumbers,
                                     onCheckedChange = { overwriteImportedSiNumbers = it }
                                 )
-                                Text("Overwrite Race File SI numbers from imported SI= lines")
+                                Text("Overwrite Race File SI Numbers From Imported SI= Lines")
                             }
                             Text(
                                 text = if (overwriteImportedSiNumbers) {
@@ -7083,10 +7083,10 @@ private fun CourseKmlKmzImportReviewDialog(
                             )
                         }
                         if (selectedSiUpdateCount > 0) {
-                            Text("Control identities to update from SI= lines: $selectedSiUpdateCount")
+                            Text("Control Identities To Update From SI= Lines: $selectedSiUpdateCount")
                         }
                         if (selectedSummary.labelConversions.isNotEmpty()) {
-                            Text("Imported control names to treat as existing Race File labels:")
+                            Text("Imported Control Names To Treat As Existing Race File Labels:")
                             selectedSummary.labelConversions.take(8).forEach { conversion ->
                                 Text("${conversion.importedName} -> ${conversion.eventControlLabel}")
                             }
@@ -7095,7 +7095,7 @@ private fun CourseKmlKmzImportReviewDialog(
                             }
                         }
                         if (selectedSummary.changedControlLocationCount > 0) {
-                            Text("Control locations to update: ${selectedSummary.changedControlLocationCount}")
+                            Text("Control Locations To Update: ${selectedSummary.changedControlLocationCount}")
                             Text("Stored courses affected by location changes: ${selectedSummary.controlLocationAffectedCategoryCount}")
                         }
                         if (canFetchElevations) {
@@ -7194,7 +7194,7 @@ private fun CategoriesCsvImportReviewDialog(
     val preview = review.preview
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Review categories CSV import") },
+        title = { Text("Review Categories CSV Import") },
         text = {
             Column(
                 modifier = Modifier
@@ -7210,8 +7210,8 @@ private fun CategoriesCsvImportReviewDialog(
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Text("Categories to add: ${preview.addedCount}")
-                Text("Categories to update: ${preview.updatedCount}")
+                Text("Categories To Add: ${preview.addedCount}")
+                Text("Categories To Update: ${preview.updatedCount}")
                 if (review.invalidLineCount > 0) {
                     Text(
                         text = "Invalid rows skipped: ${review.invalidLineCount}",
@@ -7258,7 +7258,7 @@ private fun IofEntryListImportReviewDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Review IOF EntryList import") },
+        title = { Text("Review IOF EntryList Import") },
         text = {
             Column(
                 modifier = Modifier
@@ -7270,9 +7270,9 @@ private fun IofEntryListImportReviewDialog(
                 review.entryList.eventName?.takeIf { it.isNotBlank() }?.let { eventName ->
                     Text("Race: $eventName")
                 }
-                Text("Entry rows in file: ${review.entryList.entries.size}")
-                Text("Competitors to add: ${review.importedCount}")
-                Text("Competitors to update: ${review.updatedCount}")
+                Text("Entry Rows In File: ${review.entryList.entries.size}")
+                Text("Competitors To Add: ${review.importedCount}")
+                Text("Competitors To Update: ${review.updatedCount}")
                 if (review.skippedCount > 0) {
                     Text(
                         text = "Competitors to skip: ${review.skippedCount}",
@@ -7280,7 +7280,7 @@ private fun IofEntryListImportReviewDialog(
                     )
                 }
                 if (review.missingCategoryNames.isNotEmpty()) {
-                    Text("Categories to create: ${review.missingCategoryNames.joinToString()}")
+                    Text("Categories To Create: ${review.missingCategoryNames.joinToString()}")
                 }
                 review.warningLines.forEach { warning ->
                     Text(
@@ -7317,7 +7317,7 @@ private fun IofStartListImportReviewDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Review IOF StartList import") },
+        title = { Text("Review IOF StartList Import") },
         text = {
             Column(
                 modifier = Modifier
@@ -7329,8 +7329,8 @@ private fun IofStartListImportReviewDialog(
                 review.startList.eventName?.takeIf { it.isNotBlank() }?.let { eventName ->
                     Text("Race: $eventName")
                 }
-                Text("Start rows in file: ${review.startList.entries.size}")
-                Text("Competitors to update: ${review.updatedCount}")
+                Text("Start Rows In File: ${review.startList.entries.size}")
+                Text("Competitors To Update: ${review.updatedCount}")
                 if (review.skippedCount > 0) {
                     Text(
                         text = "Start rows to skip: ${review.skippedCount}",
@@ -7372,7 +7372,7 @@ private fun IofResultListImportReviewDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Review IOF ResultList import") },
+        title = { Text("Review IOF ResultList Import") },
         text = {
             Column(
                 modifier = Modifier
@@ -7384,8 +7384,8 @@ private fun IofResultListImportReviewDialog(
                 review.resultList.eventName?.takeIf { it.isNotBlank() }?.let { eventName ->
                     Text("Race: $eventName")
                 }
-                Text("Result rows in file: ${review.resultList.entries.size}")
-                Text("Readouts to import: ${review.importedCount}")
+                Text("Result Rows In File: ${review.resultList.entries.size}")
+                Text("Readouts To Import: ${review.importedCount}")
                 if (review.skippedCount > 0) {
                     Text(
                         text = "Result rows to skip: ${review.skippedCount}",
@@ -7428,7 +7428,7 @@ private fun IofCourseDataImportReviewDialog(
     val preview = review.preview
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Review IOF CourseData import") },
+        title = { Text("Review IOF CourseData Import") },
         text = {
             Column(
                 modifier = Modifier
@@ -7444,8 +7444,8 @@ private fun IofCourseDataImportReviewDialog(
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Text("Categories to add: ${preview.addedCount}")
-                Text("Categories to update: ${preview.updatedCount}")
+                Text("Categories To Add: ${preview.addedCount}")
+                Text("Categories To Update: ${preview.updatedCount}")
                 if (preview.affectedCompetitorCount > 0) {
                     Text("Updated categories currently include ${preview.affectedCompetitorCount} competitor${if (preview.affectedCompetitorCount == 1) "" else "s"}.")
                 }
@@ -7495,7 +7495,7 @@ private fun ControlsCsvImportReviewDialog(
     var syncMissingControls by remember(review.path, preview.missingExistingCount) { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Review controls CSV import") },
+        title = { Text("Review Controls CSV Import") },
         text = {
             Column(
                 modifier = Modifier
@@ -7511,12 +7511,12 @@ private fun ControlsCsvImportReviewDialog(
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Text("Controls to add: ${preview.addedCount}")
-                Text("Controls to update: ${preview.changedCount}")
-                Text("Unchanged controls: ${preview.unchangedCount}")
+                Text("Controls To Add: ${preview.addedCount}")
+                Text("Controls To Update: ${preview.changedCount}")
+                Text("Unchanged Controls: ${preview.unchangedCount}")
                 if (preview.missingExistingCount > 0) {
-                    Text("Existing controls missing from CSV: ${preview.missingExistingCount}")
-                    Text("Unused missing controls that can be removed: ${preview.removableMissingCount}")
+                    Text("Existing Controls Missing From CSV: ${preview.missingExistingCount}")
+                    Text("Unused Missing Controls That Can Be Removed: ${preview.removableMissingCount}")
                     if (preview.usedMissingCount > 0) {
                         Text(
                             text = "Missing controls kept because they are used: ${preview.usedMissingCount}",
@@ -7531,7 +7531,7 @@ private fun ControlsCsvImportReviewDialog(
                             checked = syncMissingControls,
                             onCheckedChange = { syncMissingControls = it }
                         )
-                        Text("Remove unused existing controls missing from the CSV")
+                        Text("Remove Unused Existing Controls Missing From The CSV")
                     }
                 }
                 if (review.invalidLineCount > 0) {
@@ -7578,7 +7578,7 @@ private fun CourseKmlKmzCategoryMappingDialog(
     }
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Choose route category") },
+        title = { Text("Choose Route Category") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("File: ${mapping.sourceName}")
@@ -7590,9 +7590,9 @@ private fun CourseKmlKmzCategoryMappingDialog(
                     onCategorySelected = { selectedCategoryId = it },
                     modifier = Modifier.width(280.dp)
                 )
-                Text("Matched course controls: ${courseControlMatchSummary(mapping.matchedFoxCount, mapping.matchedBeaconCount, mapping.matchedSpectatorCount)}")
+                Text("Matched Course Controls: ${courseControlMatchSummary(mapping.matchedFoxCount, mapping.matchedBeaconCount, mapping.matchedSpectatorCount)}")
                 if (mapping.labelConversions.isNotEmpty()) {
-                    Text("Imported control names to treat as existing Race File labels:")
+                    Text("Imported Control Names To Treat As Existing Race File Labels:")
                     mapping.labelConversions.take(8).forEach { conversion ->
                         Text("${conversion.importedName} -> ${conversion.eventControlLabel}")
                     }
@@ -7656,7 +7656,7 @@ private fun CourseKmlKmzElevationProgressDialog(
     val remaining = (total - completed).coerceAtLeast(0)
     AlertDialog(
         onDismissRequest = {},
-        title = { Text("Retrieving course elevations") },
+        title = { Text("Retrieving Course Elevations") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
@@ -7735,7 +7735,7 @@ private fun DemFileImportReviewDialog(
     val hasImportableFiles = review.importableCount > 0
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Import DEM files") },
+        title = { Text("Import DEM Files") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
@@ -7756,7 +7756,7 @@ private fun DemFileImportReviewDialog(
                     )
                 }
                 if (review.candidates.isNotEmpty()) {
-                    Text("Valid DEM files", fontWeight = FontWeight.Bold)
+                    Text("Valid DEM Files", fontWeight = FontWeight.Bold)
                     review.candidates.take(8).forEach { candidate ->
                         Text(
                             text = buildString {
@@ -7786,7 +7786,7 @@ private fun DemFileImportReviewDialog(
                     }
                 }
                 if (review.issues.isNotEmpty()) {
-                    Text("Skipped files", fontWeight = FontWeight.Bold)
+                    Text("Skipped Files", fontWeight = FontWeight.Bold)
                     review.issues.take(8).forEach { issue ->
                         Text(
                             text = "${issue.displayName}: ${issue.reason}",
@@ -7848,7 +7848,7 @@ private fun UnsavedSubmenuChangesDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Unsaved Race changes") },
+        title = { Text("Unsaved Race Changes") },
         text = { Text("Save Race changes before leaving this menu?") },
         confirmButton = {
             Button(
@@ -7880,7 +7880,7 @@ private fun CourseAnalysisEntryDirtyEventDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Save Race before Course Analyzer") },
+        title = { Text("Save Race Before Course Analyzer") },
         text = {
             Text(
                 "The Race File has unsaved changes. Course Analyzer needs a clean starting point so imported, calculated, or renumbered course data can be clearly saved or discarded."
@@ -7893,7 +7893,7 @@ private fun CourseAnalysisEntryDirtyEventDialog(
                         onClick = onSaveAndContinue,
                         colors = saveEventButtonColors()
                     ) {
-                        Text("Save and Continue")
+                        Text("Save And Continue")
                     }
                 }
                 DisabledReasonTooltip(
@@ -7907,7 +7907,7 @@ private fun CourseAnalysisEntryDirtyEventDialog(
                         onClick = onDumpAndContinue,
                         enabled = canDumpChanges
                     ) {
-                        Text("Dump Changes and Continue")
+                        Text("Dump Changes And Continue")
                     }
                 }
             }
@@ -7939,7 +7939,7 @@ private fun UnsavedCourseAnalysisDataDialog(
                     onClick = onSaveAndExit,
                     colors = saveEventButtonColors()
                 ) {
-                    Text("Save and Exit")
+                    Text("Save And Exit")
                 }
             }
         },
@@ -7961,7 +7961,7 @@ private fun UnsavedCourseAnalysisDataDialog(
                 }
                 DisabledReasonTooltip("Cancel this exit action and return to Course Analyzer without saving or discarding changes.") {
                     Button(onClick = onReturnToAnalyzer) {
-                        Text("Return to Analyzer")
+                        Text("Return To Analyzer")
                     }
                 }
             }
@@ -7997,7 +7997,7 @@ private fun AssignedControlsWarningDialog(
 
     AlertDialog(
         onDismissRequest = if (canRestore) onRestore else onKeep,
-        title = { Text("Assigned Controls warning") },
+        title = { Text("Assigned Controls Warning") },
         text = {
             Text(message)
         },
@@ -8025,7 +8025,7 @@ private fun NationalStartListDefaultsDialog(
 ) {
     AlertDialog(
         onDismissRequest = onKeepCurrent,
-        title = { Text("Reset Start List settings?") },
+        title = { Text("Reset Start List Settings?") },
         text = {
             Text(
                 "National races usually use Ignore clubs, 2 per time, and No start groups. " +
@@ -8039,7 +8039,7 @@ private fun NationalStartListDefaultsDialog(
         },
         dismissButton = {
             Button(onClick = onKeepCurrent) {
-                Text("Keep current")
+                Text("Keep Current")
             }
         }
     )
@@ -8065,7 +8065,7 @@ private fun EventRegImportDialog(
                     value = url,
                     onValueChange = onUrlChange,
                     enabled = !isImporting,
-                    label = { Text("Registration list URL") },
+                    label = { Text("Registration List URL") },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -8208,7 +8208,7 @@ private fun EventFileTransferDialog(
 
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Send Race to Android") },
+        title = { Text("Send Race To Android") },
         text = {
             Column(
                 modifier = Modifier.widthIn(min = 420.dp, max = 560.dp),
@@ -8288,7 +8288,7 @@ private fun EventFileTransferResultDialog(
                     Text(detail)
                 }
                 state.sourcePath?.let { path ->
-                    Text("Desktop Race File location:")
+                    Text("Desktop Race File Location:")
                     SelectionContainer {
                         Text(path.toString(), style = MaterialTheme.typography.body2)
                     }
@@ -8321,7 +8321,7 @@ private fun AndroidFileReceiveResultDialog(
                     Text(detail)
                 }
                 state.savedPath?.let { path ->
-                    Text("Saved location:")
+                    Text("Saved Location:")
                     SelectionContainer {
                         Text(path.toString(), style = MaterialTheme.typography.body2)
                     }
@@ -8347,7 +8347,7 @@ private fun AndroidFileReceiveDialog(
 
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Receive File from Android") },
+        title = { Text("Receive File From Android") },
         text = {
             Column(
                 modifier = Modifier.widthIn(min = 420.dp, max = 560.dp),
@@ -11267,7 +11267,7 @@ private fun EventDiagnosticsPanel(
         DetailRow("Race File", diagnostics.projectState)
         DetailRow("Schema", diagnostics.schemaText.ifBlank { "None" })
         DetailRow("Race ID", diagnostics.raceId.ifBlank { "None" })
-        DetailRow("Race name", diagnostics.raceName.ifBlank { "None" })
+        DetailRow("Race Name", diagnostics.raceName.ifBlank { "None" })
         DetailRow(
             "Start",
             diagnostics.startDateTimeIso.takeIf { it.isNotBlank() }
@@ -11653,7 +11653,7 @@ private fun CloudflarePagesPublishSettingsPanel(
                     projectNameDraft = it
                     clearSaveConfirmation()
                 },
-                label = { Text("Pages project") },
+                label = { Text("Pages Project") },
                 singleLine = true,
                 modifier = Modifier
                     .weight(1f)
@@ -11690,7 +11690,7 @@ private fun CloudflarePagesPublishSettingsPanel(
                 apiTokenDraft = it
                 clearSaveConfirmation()
             },
-            label = { Text("API token") },
+            label = { Text("API Token") },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier
@@ -12996,7 +12996,7 @@ private fun EventSeriesSettingsPanel(
             TextField(
                 value = nameDraft,
                 onValueChange = { nameDraft = it },
-                label = { Text("Series name") },
+                label = { Text("Series Name") },
                 modifier = Modifier
                     .widthIn(min = 360.dp, max = 640.dp)
                     .commitOnEnter {
@@ -13028,7 +13028,7 @@ private fun EventSeriesSettingsPanel(
             TextField(
                 value = fileNameDraft,
                 onValueChange = { fileNameDraft = it },
-                label = { Text("Series file name") },
+                label = { Text("Series File Name") },
                 modifier = Modifier
                     .widthIn(min = 320.dp, max = 520.dp)
                     .commitOnEnter {
@@ -13455,7 +13455,7 @@ private fun ManualReadoutAddRow(
                 .width(ReadoutTableColumns[3].width)
                 .commitOnEnter(onCommit),
             singleLine = true,
-            label = { Text("Start s") }
+            label = { Text("Start S") }
         )
         TextField(
             value = finishSecondsDraft,
@@ -13464,7 +13464,7 @@ private fun ManualReadoutAddRow(
                 .width(ReadoutTableColumns[4].width)
                 .commitOnEnter(onCommit),
             singleLine = true,
-            label = { Text("Finish s") }
+            label = { Text("Finish S") }
         )
         TextField(
             value = controlCodesDraft,
@@ -13559,7 +13559,7 @@ private fun FinishTicketPreviewDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Finish ticket preview") },
+        title = { Text("Finish Ticket Preview") },
         text = {
             Text(
                 text = text,
@@ -13597,7 +13597,7 @@ private fun ReadoutDeleteButton(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete readout") },
+            title = { Text("Delete Readout") },
             text = { Text("Delete readout for SI ${readout.siNumberText}?") },
             confirmButton = {
                 Button(
@@ -13713,7 +13713,7 @@ private fun ReadoutEditDialog(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     LabeledTextField(
-                        label = "Start elapsed",
+                        label = "Start Elapsed",
                         value = startSeconds,
                         onValueChange = {
                             if (!draft.isPractice) {
@@ -13725,7 +13725,7 @@ private fun ReadoutEditDialog(
                         onCommit = ::saveDraft
                     )
                     LabeledTextField(
-                        label = "Finish elapsed",
+                        label = "Finish Elapsed",
                         value = finishSeconds,
                         onValueChange = { finishSeconds = it },
                         modifier = Modifier.width(160.dp),
@@ -13733,7 +13733,7 @@ private fun ReadoutEditDialog(
                     )
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Control punches", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("Control Punches", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         ReadoutControlPicker(
                             selectedControlId = selectedControlId,
@@ -14436,7 +14436,7 @@ private fun CompetitorDeleteButton(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete competitor") },
+            title = { Text("Delete Competitor") },
             text = { Text("Delete ${competitor.fullName}? The readout can be kept as unmatched or deleted too.") },
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -14446,7 +14446,7 @@ private fun CompetitorDeleteButton(
                             onRemoveCompetitor(competitor.id, false)
                         }
                     ) {
-                        Text("Keep readout")
+                        Text("Keep Readout")
                     }
                     Button(
                         onClick = {
@@ -14454,7 +14454,7 @@ private fun CompetitorDeleteButton(
                             onRemoveCompetitor(competitor.id, true)
                         }
                     ) {
-                        Text("Delete readout")
+                        Text("Delete Readout")
                     }
                 }
             },
@@ -14814,7 +14814,7 @@ private fun KmlMoveCoursePanel() {
             TextField(
                 value = latitudeDraft,
                 onValueChange = { latitudeDraft = it },
-                label = { Text("New Start latitude") },
+                label = { Text("New Start Latitude") },
                 singleLine = true,
                 modifier = Modifier
                     .width(180.dp)
@@ -14823,7 +14823,7 @@ private fun KmlMoveCoursePanel() {
             TextField(
                 value = longitudeDraft,
                 onValueChange = { longitudeDraft = it },
-                label = { Text("New Start longitude") },
+                label = { Text("New Start Longitude") },
                 singleLine = true,
                 modifier = Modifier
                     .width(180.dp)
@@ -14955,7 +14955,7 @@ private fun KmlCreateCoursePanel(projectFile: EventProjectFile?) {
             TextField(
                 value = latitudeDraft,
                 onValueChange = { latitudeDraft = it },
-                label = { Text("Location latitude") },
+                label = { Text("Location Latitude") },
                 singleLine = true,
                 modifier = Modifier
                     .width(180.dp)
@@ -14964,7 +14964,7 @@ private fun KmlCreateCoursePanel(projectFile: EventProjectFile?) {
             TextField(
                 value = longitudeDraft,
                 onValueChange = { longitudeDraft = it },
-                label = { Text("Location longitude") },
+                label = { Text("Location Longitude") },
                 singleLine = true,
                 modifier = Modifier
                     .width(180.dp)
@@ -15261,7 +15261,7 @@ private fun RouteGeneratorTypeChoiceDialog(
         ?: "unknown"
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Choose route type") },
+        title = { Text("Choose Route Type") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -15775,7 +15775,7 @@ private fun VenueElevationCacheImportPanel(
                     },
                     enabled = localSourceCanCreate
                 ) {
-                    ButtonLabel("Create Cache from Local Source")
+                    ButtonLabel("Create Cache From Local Source")
                 }
                 Button(
                     onClick = {
@@ -16166,7 +16166,7 @@ private fun CourseAnalysisPanel(
                     speedFactorDraft = it
                     speedStatusText = null
                 },
-                label = { Text("Speed factor") },
+                label = { Text("Speed Factor") },
                 singleLine = true,
                 modifier = Modifier
                     .width(126.dp)
@@ -16296,7 +16296,7 @@ private fun CourseAnalysisPanel(
         var downloadBeforeAnalyzing by remember(prompt) { mutableStateOf(canDownloadMissingElevationData) }
         AlertDialog(
             onDismissRequest = { pendingMissingDataResult = null },
-            title = { Text("Course analysis data is incomplete") },
+            title = { Text("Course Analysis Data Is Incomplete") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
@@ -17065,18 +17065,18 @@ private fun CourseAnalysisWaitRenumbering(renumbering: DesktopCourseWaitRenumber
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            text = "Wait-time renumbering check",
+            text = "Wait-Time Renumbering Check",
             color = DesktopPalette.Black,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold
         )
         CourseAnalysisRow(
-            label = "Current / best wait",
+            label = "Current / Best Wait",
             value = "${secondsText(renumbering.currentTotalWaitSeconds)} / ${secondsText(renumbering.bestTotalWaitSeconds)}",
             valueColor = if (renumbering.improvesWait) DesktopPalette.Error else DesktopPalette.Connected
         )
         CourseAnalysisRow(
-            label = "Likely improvement",
+            label = "Likely Improvement",
             value = secondsText((renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds).coerceAtLeast(0)),
             valueColor = if (renumbering.improvesWait) DesktopPalette.Connected else DesktopPalette.Disconnected
         )
@@ -17188,7 +17188,7 @@ private fun ControlAddRow(
                     .width(ControlTableColumns[0].width)
                     .commitOnEnter(onCommit),
                 singleLine = true,
-                label = { Text("SI code") }
+                label = { Text("SI Code") }
             )
             ControlTypeDropdown(
                 type = typeDraft,
@@ -17203,7 +17203,7 @@ private fun ControlAddRow(
                     .width(ControlTableColumns[2].width)
                     .commitOnEnter(onCommit),
                 singleLine = true,
-                label = { Text("Public label") }
+                label = { Text("Public Label") }
             )
             TextField(
                 value = notesDraft,
@@ -17307,7 +17307,7 @@ private fun ControlDetailRow(
                         }
                         .commitOnEnter(::commitSiCodeDraft),
                     singleLine = true,
-                    label = { Text("SI code", color = rowTextColor) },
+                    label = { Text("SI Code", color = rowTextColor) },
                     textStyle = textFieldStyle
                 )
             }
@@ -17335,7 +17335,7 @@ private fun ControlDetailRow(
                         }
                         .commitOnEnter(::commitPublicLabelDraft),
                     singleLine = true,
-                    label = { Text("Public label", color = rowTextColor) },
+                    label = { Text("Public Label", color = rowTextColor) },
                     textStyle = textFieldStyle
                 )
             }
@@ -17390,7 +17390,7 @@ private fun ControlDeleteButton(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete control") },
+            title = { Text("Delete Control") },
             text = { Text("Delete control $displayLabel (${control.siCodeText})?") },
             confirmButton = {
                 Button(
@@ -17936,7 +17936,7 @@ private fun ProtectedIdealOrderEditor(
                     }
                 },
             singleLine = true,
-            label = { Text("Ideal order") }
+            label = { Text("Ideal Order") }
         )
         Box(modifier = Modifier.width(ProtectedIdealOrderPickerWidth)) {
             Button(
@@ -17990,7 +17990,7 @@ private fun CategoryAddRow(
                 .width(CategoryTableColumns[0].width)
                 .commitOnEnter(onCommit),
             singleLine = true,
-            label = { Text("New category") }
+            label = { Text("New Category") }
         )
         Spacer(modifier = Modifier.width(CategoryTableColumns[1].width))
         Spacer(modifier = Modifier.width(CategoryTableColumns[2].width))
@@ -18073,7 +18073,7 @@ private fun CategoryDetailRow(
                 .width(CategoryTableColumns[2].width)
                 .commitOnEnter { applyPhysicalStats() },
             singleLine = true,
-            label = { Text("Length m") }
+            label = { Text("Length M") }
         )
         TextField(
             value = climbMetersDraft,
@@ -18085,7 +18085,7 @@ private fun CategoryDetailRow(
                 .width(CategoryTableColumns[3].width)
                 .commitOnEnter { applyPhysicalStats() },
             singleLine = true,
-            label = { Text("Climb m") }
+            label = { Text("Climb M") }
         )
         AssignedControlsEditor(
             controlPointsDraft = controlPointsDraft,
@@ -18264,7 +18264,7 @@ private fun CategoryDeleteButton(
         val hasAssignedCompetitors = category.assignedCompetitorCount > 0
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete category") },
+            title = { Text("Delete Category") },
             text = {
                 Text(
                     if (hasAssignedCompetitors) {
@@ -18283,7 +18283,7 @@ private fun CategoryDeleteButton(
                                 onRemoveCategory(category.id, false)
                             }
                         ) {
-                            Text("Keep competitors")
+                            Text("Keep Competitors")
                         }
                         Button(
                             onClick = {
@@ -18291,7 +18291,7 @@ private fun CategoryDeleteButton(
                                 onRemoveCategory(category.id, true)
                             }
                         ) {
-                            Text("Delete competitors")
+                            Text("Delete Competitors")
                         }
                     }
                 } else {
@@ -18436,7 +18436,7 @@ private fun RaceDetailsPanel(
                         wasRaceNameFocused = focusState.isFocused
                     }
                     .commitOnEnter(::commitRaceNameDraft),
-                label = { Text("Race name") }
+                label = { Text("Race Name") }
             )
         }
         TextField(
@@ -18454,7 +18454,7 @@ private fun RaceDetailsPanel(
                     wasEventFileNameFocused = focusState.isFocused
                 }
                 .commitOnEnter(::commitEventFileNameDraft),
-            label = { Text("Race file name") }
+            label = { Text("Race File Name") }
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -18462,7 +18462,7 @@ private fun RaceDetailsPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             DateTimePickerField(
-                label = "Race Start date/time",
+                label = "Race Start Date/Time",
                 value = startDateTimeDraft,
                 onValueChange = {
                     startDateTimeDraft = it

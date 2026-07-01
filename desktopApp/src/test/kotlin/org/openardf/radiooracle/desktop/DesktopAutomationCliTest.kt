@@ -1000,7 +1000,7 @@ class DesktopAutomationCliTest {
         assertTrue(result.stdout.contains("\"command\":\"nav-tree\""))
         assertTrue(result.stdout.contains("\"workflow\":\"Race Series\""))
         assertTrue(result.stdout.contains("\"path\":\"Race Series > Races\""))
-        assertTrue(result.stdout.contains("\"path\":\"Race Series > Races > Add Race to Series...\""))
+        assertTrue(result.stdout.contains("\"path\":\"Race Series > Races > Add Race To Series...\""))
         assertTrue(result.stdout.contains("\"action\":\"AddEventToSeries\""))
         assertFalse(result.stdout.contains("Open Series Event"))
         assertFalse(result.stdout.contains("Race Series > Series Validation > Validate Series"))
@@ -1072,8 +1072,8 @@ class DesktopAutomationCliTest {
 
     @Test
     fun navSelectReportsAndroidEventFileActionsUnderEventFile() {
-        val sendResult = runAutomation("nav-select", "Race File > Android... > Send Race to Android")
-        val receiveResult = runAutomation("nav-select", "Race File > Android... > Receive File from Android")
+        val sendResult = runAutomation("nav-select", "Race File > Android... > Send Race To Android")
+        val receiveResult = runAutomation("nav-select", "Race File > Android... > Receive File From Android")
         val exportResult = runAutomation("nav-select", "Race File > Android... > Save Android Race File...")
 
         assertEquals(0, sendResult.exitCode)

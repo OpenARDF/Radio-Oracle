@@ -44,8 +44,8 @@ class DesktopNavigationTest {
     )
 
     private val androidEventFileMenuLabels = listOf(
-        "Send Race to Android",
-        "Receive File from Android",
+        "Send Race To Android",
+        "Receive File From Android",
         "Save Android Race File..."
     )
 
@@ -121,10 +121,10 @@ class DesktopNavigationTest {
             .first { it.label == "Races" }
 
         assertEquals(
-            listOf("Add Race to Series..."),
+            listOf("Add Race To Series..."),
             events.children.map { it.label }
         )
-        assertEquals(DesktopNavAction.AddEventToSeries, events.children.first { it.label == "Add Race to Series..." }.action)
+        assertEquals(DesktopNavAction.AddEventToSeries, events.children.first { it.label == "Add Race To Series..." }.action)
     }
 
     @Test
@@ -140,7 +140,7 @@ class DesktopNavigationTest {
         val roots = DesktopNavigation.rootItems(DesktopWorkflow.Series)
 
         assertEquals(
-            listOf("Balance Open Race for Series"),
+            listOf("Balance Open Race For Series"),
             roots.first { it.label == "Start Fairness" }.children.map { it.label }
         )
         assertEquals(
@@ -157,7 +157,7 @@ class DesktopNavigationTest {
     fun seriesActionsAvoidDuplicateMenuAndScreenButtons() {
         val roots = DesktopNavigation.rootItems(DesktopWorkflow.Series)
 
-        assertTrue(roots.first { it.label == "Races" }.children.any { it.label == "Add Race to Series..." })
+        assertTrue(roots.first { it.label == "Races" }.children.any { it.label == "Add Race To Series..." })
         assertFalse(roots.first { it.label == "Series Validation" }.children.any { it.label == "Validate Series" })
         assertFalse(roots.first { it.label == "Races" }.children.any { it.label == "Open Series Event..." })
     }
@@ -278,10 +278,10 @@ class DesktopNavigationTest {
         )
         assertEquals(
             listOf(
-                "Create New Series with This Race",
-                "Link to Existing Series...",
+                "Create New Series With This Race",
+                "Link To Existing Series...",
                 "Change Series Link...",
-                "Remove from Series...",
+                "Remove From Series...",
                 "Validate Series Link"
             ),
             DesktopNavigation.currentItems(eventSeriesState).map { it.label }
@@ -1087,11 +1087,11 @@ class DesktopNavigationTest {
             eventFileActions.first { it.action == DesktopNavAction.ExportAndroidRaceBackupJson }.label
         )
         assertEquals(
-            "Send Race to Android",
+            "Send Race To Android",
             eventFileActions.first { it.action == DesktopNavAction.SendEventFileToAndroid }.label
         )
         assertEquals(
-            "Receive File from Android",
+            "Receive File From Android",
             eventFileActions.first { it.action == DesktopNavAction.ReceiveFileFromAndroid }.label
         )
         assertFalse(resultJsonActions.any { it.action == DesktopNavAction.ExportAndroidRaceBackupJson })

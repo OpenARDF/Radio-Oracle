@@ -19,7 +19,7 @@
     <string name="general_display">Display</string>
     <string name="general_duplicate">Duplicate</string>
     <string name="general_finish">Finish</string>
-    <string name="general_finish_time">Finish time</string>
+    <string name="general_finish_time">Finish Time</string>
     <string name="general_gender">Gender</string>
     <string name="general_gender_man">Men</string>
     <string name="general_gender_woman">Women</string>
@@ -28,7 +28,7 @@
     <string name="general_length">Length</string>
     <string name="general_limit">Limit</string>
     <string name="general_main">Main</string>
-    <string name="general_max_age">Maximal age</string>
+    <string name="general_max_age">Maximal Age</string>
     <string name="general_name">Name</string>
     <string name="general_ok" translatable="false">OK</string>
     <string name="general_points">Points</string>
@@ -39,32 +39,32 @@
     <string name="general_readouts">Readouts</string>
     <string name="general_required">Required</string>
     <string name="general_results">Results</string>
-    <string name="general_run_time">Run time</string>
-    <string name="general_check_time">Check time</string>
-    <string name="general_si_number">SI number</string>
+    <string name="general_run_time">Run Time</string>
+    <string name="general_check_time">Check Time</string>
+    <string name="general_si_number">SI Number</string>
     <string name="general_splits">Splits</string>
     <string name="general_start">Start</string>
-    <string name="general_start_time">Start time</string>
+    <string name="general_start_time">Start Time</string>
     <string name="general_status">Status</string>
     <string name="general_type">Type</string>
     <string name="general_url" translatable="false">URL/Race Id</string>
-    <string name="general_year_of_birth">Year of birth</string>
-    <string name="general_exit_title">Exit app</string>
+    <string name="general_year_of_birth">Year Of Birth</string>
+    <string name="general_exit_title">Exit App</string>
     <string name="general_exit_confirmation">Do you really want to exit the app?</string>
-    <string name="general_unknown_error">Unknown error</string>
+    <string name="general_unknown_error">Unknown Error</string>
 
     <!--    Sportident-->
     <string name="duplicate_si_number">Duplicate SI number!</string>
     <string name="si_number_invalid_range">Invalid SI number range!</string>
 
     <!--Imports-->
-    <string name="files_data">Files and data</string>
-    <string name="data_type">Data type</string>
-    <string name="data_format">Data format</string>
+    <string name="files_data">Files And Data</string>
+    <string name="data_type">Data Type</string>
+    <string name="data_format">Data Format</string>
     <string name="data_import">Import</string>
     <string name="data_export">Export</string>
-    <string name="data_import_data">Import data</string>
-    <string name="data_import_preview_info">Number of records: %1$d</string>
+    <string name="data_import_data">Import Data</string>
+    <string name="data_import_preview_info">Number Of Records: %1$d</string>
     <string name="data_import_file_error">Error when opening file!</string>
     <string name="data_import_format_not_supported">Given datatype is not supported for import</string>
     <string name="data_import_invalid_line">Invalid data at line %1$d: %2$s</string>
@@ -85,10 +85,10 @@
 
     <!--Race-->
     <string name="race_import_file">Open Race File</string>
-    <string name="race_import_internet">Import from ROBIS</string>
-    <string name="race_receive_desktop">Receive from Desktop</string>
-    <string name="race_send_desktop">Send to Desktop</string>
-    <string name="race_send_file_desktop">Send Picked File to Desktop</string>
+    <string name="race_import_internet">Import From ROBIS</string>
+    <string name="race_receive_desktop">Receive From Desktop</string>
+    <string name="race_send_desktop">Send To Desktop</string>
+    <string name="race_send_file_desktop">Send Picked File To Desktop</string>
     <string name="race_export_success">Race exported successfully</string>
     <string name="race_export_failure">Failed to export race</string>
     <string name="race_import_success">Race imported successfully</string>
@@ -100,22 +100,22 @@
     <string name="event_series_export">Export Race Series</string>
     <string name="event_series_export_progress">Exporting Race Series...</string>
     <string name="event_series_export_success">Race Series exported successfully</string>
-    <string name="event_series_send_desktop">Send Race Series to Desktop</string>
+    <string name="event_series_send_desktop">Send Race Series To Desktop</string>
     <string name="event_series_open_member">Open %1$s</string>
-    <string name="event_series_add_event">Add to series</string>
-    <string name="event_series_add_to_existing_title">Add race to series</string>
+    <string name="event_series_add_event">Add To Series</string>
+    <string name="event_series_add_to_existing_title">Add Race To Series</string>
     <string name="event_series_add_to_existing_success">Added to series: %1$s</string>
-    <string name="event_series_create_new">Create new series</string>
+    <string name="event_series_create_new">Create New Series</string>
     <string name="event_series_create_new_title">Create Race Series</string>
     <string name="event_series_create_new_success">Created series: %1$s</string>
     <string name="event_series_default_name">%1$s Series</string>
     <string name="event_series_membership_error">Race Series update failed</string>
-    <string name="event_series_name_hint">Series name</string>
+    <string name="event_series_name_hint">Series Name</string>
     <string name="event_series_name_required">Enter a series name.</string>
-    <string name="event_series_remove_event">Remove from series</string>
+    <string name="event_series_remove_event">Remove From Series</string>
     <string name="event_series_remove_event_confirmation">Remove "%1$s" from "%2$s"? The race and its results will stay on this device.</string>
     <string name="event_series_remove_event_success">Removed from series</string>
-    <string name="event_series_remove_grouping">Remove series grouping</string>
+    <string name="event_series_remove_grouping">Remove Series Grouping</string>
     <string name="event_series_remove_grouping_confirmation">Remove grouping for "%1$s"? Races and results in this series will stay on this device.</string>
     <string name="event_series_remove_grouping_success">Series grouping removed</string>
     <string name="event_series_toolbar_title">Series</string>
@@ -123,28 +123,28 @@
     <string name="race_toolbar_title">Races</string>
     <string name="race_level">Level</string>
     <string name="race_series_label">Series: %1$s</string>
-    <string name="race_type">Race type</string>
-    <string name="race_api_key">API key</string>
+    <string name="race_type">Race Type</string>
+    <string name="race_api_key">API Key</string>
     <string name="race_limit_hint">Limit (min)</string>
-    <string name="race_start_time_hint">Start time (hh:mm)</string>
-    <string name="race_relative_start_time_hint">Relative start time (mm:ss)</string>
+    <string name="race_start_time_hint">Start Time (hh:mm)</string>
+    <string name="race_relative_start_time_hint">Relative Start Time (mm:ss)</string>
     <string name="race_end_confirmation">Do you really want to close the current race?</string>
 
-    <string name="race_create">Create race</string>
-    <string name="race_edit">Edit race</string>
-    <string name="race_import">Import race</string>
-    <string name="race_delete">Delete race</string>
+    <string name="race_create">Create Race</string>
+    <string name="race_edit">Edit Race</string>
+    <string name="race_import">Import Race</string>
+    <string name="race_delete">Delete Race</string>
     <string name="race_delete_confirmation">Do you really want to delete this race?</string>
-    <string name="race_export">Export race</string>
-    <string name="race_end">Close race</string>
-    <string name="event_file_receive_title">Receive from Desktop</string>
+    <string name="race_export">Export Race</string>
+    <string name="race_end">Close Race</string>
+    <string name="event_file_receive_title">Receive From Desktop</string>
     <string name="event_file_receive_message">Scan the desktop QR code, or enter the transfer URL. Use trusted Wi-Fi or a phone hotspot.</string>
     <string name="event_file_receive_scan_qr">Scan QR</string>
     <string name="event_file_receive_enter_url">Enter URL</string>
     <string name="event_file_receive_url_hint">http://192.168.1.10:12345/...</string>
     <string name="event_file_receive_progress">Receiving Race File...</string>
     <string name="event_file_receive_success">Imported race: %1$s</string>
-    <string name="event_file_send_title">Send to Desktop</string>
+    <string name="event_file_send_title">Send To Desktop</string>
     <string name="event_file_send_message">Start Receive from Android on the desktop, then scan its QR code or enter the receive URL.</string>
     <string name="event_file_send_scan_qr">Scan QR</string>
     <string name="event_file_send_enter_url">Enter URL</string>
@@ -153,23 +153,23 @@
     <string name="event_file_send_success">Sent to desktop: %1$s</string>
 
     <!--Categories-->
-    <string name="si_codes">SI codes</string>
-    <string name="category_create_standard_categories">Create standard categories</string>
-    <string name="category_alias_manage">Manage aliases</string>
-    <string name="category_alias_create">Create standard aliases</string>
-    <string name="no_category">No category</string>
-    <string name="category_create">Create category</string>
-    <string name="category_edit">Edit category</string>
-    <string name="category_duplicate">Duplicate category</string>
-    <string name="category_delete">Delete category</string>
+    <string name="si_codes">SI Codes</string>
+    <string name="category_create_standard_categories">Create Standard Categories</string>
+    <string name="category_alias_manage">Manage Aliases</string>
+    <string name="category_alias_create">Create Standard Aliases</string>
+    <string name="no_category">No Category</string>
+    <string name="category_create">Create Category</string>
+    <string name="category_edit">Edit Category</string>
+    <string name="category_duplicate">Duplicate Category</string>
+    <string name="category_delete">Delete Category</string>
     <string name="category_delete_confirmation">Do you really want to delete this category?\n%1$s</string>
-    <string name="category_delete_competitors">Also delete competitors in this category</string>
+    <string name="category_delete_competitors">Also Delete Competitors In This Category</string>
     <string name="category_length_title">Length (m)</string>
     <string name="category_climb_title">Climb (m)</string>
     <string name="category_exists">Category already exists!</string>
-    <string name="control_points">Control points</string>
-    <string name="nonexistent_year">Invalid year</string>
-    <string name="category_same_type">Same type as race</string>
+    <string name="control_points">Control Points</string>
+    <string name="nonexistent_year">Invalid Year</string>
+    <string name="category_same_type">Same Type As Race</string>
 
     <!--Control points-->
     <string name="control_point_edit_hint">Input SI codes, separated by space. ! stands for spectator control (sprint only), B for beacon. Aliases are then managed in a separate dialog.</string>
@@ -189,20 +189,20 @@
     <string name="category_preset_czech">Czech</string>
 
     <!--Competitors-->
-    <string name="competitor_first_name">First name</string>
-    <string name="competitor_last_name">Last name</string>
-    <string name="competitor_start_number">Start number</string>
+    <string name="competitor_first_name">First Name</string>
+    <string name="competitor_last_name">Last Name</string>
+    <string name="competitor_start_number">Start Number</string>
     <string name="competitor_start_number_header">Start #</string>
-    <string name="competitor_to_limit">To limit</string>
-    <string name="competitor_create">Create competitor</string>
-    <string name="competitor_edit">Edit competitor</string>
+    <string name="competitor_to_limit">To Limit</string>
+    <string name="competitor_create">Create Competitor</string>
+    <string name="competitor_edit">Edit Competitor</string>
     <string name="competitor_manual_gender">Advanced/import: Men</string>
-    <string name="competitor_delete">Delete competitor</string>
-    <string name="competitor_delete_all">Delete all competitors</string>
+    <string name="competitor_delete">Delete Competitor</string>
+    <string name="competitor_delete_all">Delete All Competitors</string>
     <string name="competitor_delete_confirmation">Do you really want to delete this competitor?\n%1$s</string>
-    <string name="competitor_delete_readout_data">Also delete readout data (if exist)</string>
+    <string name="competitor_delete_readout_data">Also Delete Readout Data (If Exist)</string>
     <string name="competitor_delete_all_confirmation">Do you really want to delete all competitors? This action CAN\'T be undone!</string>
-    <string name="competitor_rent_chip">Rent chip</string>
+    <string name="competitor_rent_chip">Rent Chip</string>
 
     <string name="competitor_hint_code">Code</string>
     <string name="competitor_hint_time_format" translatable="false">HH:MM:SS</string>
@@ -212,18 +212,18 @@
     <string name="readout_punch_si_week_label">Week</string>
 
     <string name="competitor_display_overview">Overview</string>
-    <string name="competitor_display_start_list">Start list</string>
-    <string name="competitor_display_finish_reached">Finish reached</string>
-    <string name="competitor_display_on_the_way">On the way</string>
-    <string name="competitor_display_si_rent">SI rent</string>
+    <string name="competitor_display_start_list">Start List</string>
+    <string name="competitor_display_finish_reached">Finish Reached</string>
+    <string name="competitor_display_on_the_way">On The Way</string>
+    <string name="competitor_display_si_rent">SI Rent</string>
 
     <!--SI station display-->
-    <string name="si_service">SI service</string>
+    <string name="si_service">SI Service</string>
     <string name="si_ready">SI service started</string>
     <string name="si_connected">SI station %1$d connected</string>
     <string name="si_connected_but_no_race">SI station %1$d connected, but no race set!</string>
     <string name="si_station_wrong_mode_status">SI station %1$d is in %2$s mode</string>
-    <string name="si_station_wrong_mode_title">SI station mode warning</string>
+    <string name="si_station_wrong_mode_title">SI Station Mode Warning</string>
     <string name="si_station_wrong_mode_message">SI station %1$d is connected, but it appears to be in %2$s mode instead of READOUT/SI MASTER. Reprogram the station in a download-capable mode before using it for SI-card downloads.</string>
     <string name="si_disconnected">SI station disconnected</string>
     <string name="si_reading">SI station %1$d reading card %2$d </string>
@@ -235,30 +235,30 @@
     <!--Readout-->
     <string name="readout_started">Started</string>
     <string name="readout_finished">Finished</string>
-    <string name="readout_in_limit">In limit</string>
-    <string name="readout_detail_title">Readout detail</string>
+    <string name="readout_in_limit">In Limit</string>
+    <string name="readout_detail_title">Readout Detail</string>
     <string name="readout_detail_order">Order</string>
     <string name="readout_detail_code">Code</string>
-    <string name="readout_detail_real_time">Real time</string>
+    <string name="readout_detail_real_time">Real Time</string>
     <string name="readout_detail_split">Split</string>
     <string name="readout_detail_status">Status</string>
     <string name="readout_si_number" translatable="false">SI: %1$s</string>
     <string name="readout_si_exists">Duplicate SI %1$d ignored. Readout already exists.</string>
     <string name="readout_named_unmatched_si_exists">SI %1$d already has a named readout. Open Readouts to add the competitor.</string>
     <string name="readout_competitor_exists">Readout for this competitor already exists!</string>
-    <string name="readout_add_card_competitor_title">Add competitor?</string>
+    <string name="readout_add_card_competitor_title">Add Competitor?</string>
     <string name="readout_add_card_competitor_message">SI card %2$d was read as %1$s. Add this competitor to the race?</string>
-    <string name="readout_add_card_competitor_positive">Add competitor</string>
-    <string name="readout_unknown_category">Unknown category</string>
-    <string name="readout_unknown_competitor">Unknown competitor</string>
-    <string name="readout_time">Readout time</string>
-    <string name="readout_create_readout">Create readout</string>
-    <string name="readout_edit_readout">Edit readout</string>
-    <string name="readout_delete_readout">Delete readout</string>
-    <string name="readout_delete_all">Delete all readouts</string>
+    <string name="readout_add_card_competitor_positive">Add Competitor</string>
+    <string name="readout_unknown_category">Unknown Category</string>
+    <string name="readout_unknown_competitor">Unknown Competitor</string>
+    <string name="readout_time">Readout Time</string>
+    <string name="readout_create_readout">Create Readout</string>
+    <string name="readout_edit_readout">Edit Readout</string>
+    <string name="readout_delete_readout">Delete Readout</string>
+    <string name="readout_delete_all">Delete All Readouts</string>
     <string name="readout_delete_all_confirmation">Do you really want to delete all readouts? This action CAN\'T be undone!</string>
-    <string name="readout_create_category_from_readout">Create a category from this readout</string>
-    <string name="readout_assign_control_points">Assign controls to a category</string>
+    <string name="readout_create_category_from_readout">Create Category From This Readout</string>
+    <string name="readout_assign_control_points">Assign Controls To Category</string>
     <string name="readout_no_category_exists">No category exists in this race!</string>
     <string name="readout_delete_readout_confirmation">Do you really want to delete readout for SI card %1$d?</string>
 
@@ -271,43 +271,43 @@
     <string name="punch_type_finish" translatable="false">F</string>
 
     <!--Results-->
-    <string name="results_share">Share results</string>
-    <string name="results_service">Results service</string>
+    <string name="results_share">Share Results</string>
+    <string name="results_service">Results Service</string>
     <string name="results_export_error">Error when exporting data: %1$s</string>
     <string name="results_generated_with">Results generated at %1$s with</string>
-    <string name="results_splits">Results with splits</string>
-    <string name="results_recalculate">Recalculate all results</string>
+    <string name="results_splits">Results With Splits</string>
+    <string name="results_recalculate">Recalculate All Results</string>
 
     <!-- Result service -->
-    <string name="result_service_enable">Enable results service</string>
-    <string name="result_service_interval">Interval of export (s)</string>
-    <string name="result_service_send_again">Send results again</string>
+    <string name="result_service_enable">Enable Results Service</string>
+    <string name="result_service_interval">Interval Of Export (s)</string>
+    <string name="result_service_send_again">Send Results Again</string>
     <string name="result_service_api_key_missing">API key must be set.</string>
     <string name="result_service_status_text">%1$s, sent at %2$s</string>
     <string name="result_service_status_text_counter">, results %1$d/%2$d</string>
     <string name="result_service_invalid_result">Invalid result: %1$s, SI: %2$d, Person ID: %3$s, Cause: %4$s</string>
 
-    <string name="result_service_validation_error">Validation error</string>
-    <string name="result_service_server_error">Internal server error</string>
-    <string name="result_service_invalid_api_key">Invalid API key</string>
-    <string name="result_service_unknown_response">Unknown response</string>
+    <string name="result_service_validation_error">Validation Error</string>
+    <string name="result_service_server_error">Internal Server Error</string>
+    <string name="result_service_invalid_api_key">Invalid API Key</string>
+    <string name="result_service_unknown_response">Unknown Response</string>
 
     <!-- Prints -->
-    <string name="prints_result_ticket">Print ticket</string>
+    <string name="prints_result_ticket">Print Ticket</string>
     <string name="prints_bluetooth_disabled">Bluetooth needs to be on for printing!</string>
     <string name="prints_error">Error when printing! %1$s</string>
     <string name="prints_error_init">Error with printer init!</string>
 
     <!-- =============================================== PREFERENCES ===============================================-->
-    <string name="global_settings">Global settings</string>
+    <string name="global_settings">Global Settings</string>
 
     <string name="preferences_general">General</string>
     <string name="preferences_prints">Prints</string>
 
     <!--Preferences:general-->
-    <string name="preferences_general_keep_screen_open">Prevent system from locking screen</string>
+    <string name="preferences_general_keep_screen_open">Prevent System From Locking Screen</string>
     <string name="preferences_general_keep_screen_open_hint">When selected, the screen won\'t automatically turn off.</string>
-    <string name="preferences_general_show_log" tools:ignore="UnusedResources">Show log</string>
+    <string name="preferences_general_show_log" tools:ignore="UnusedResources">Show Log</string>
     <string name="preferences_general_language">Language</string>
     <string name="preferences_general_language_hint">Manually select a language of the app. The app needs to be restarted after.</string>
 
@@ -325,13 +325,13 @@
     </array>
 
     <!--Preferences:readouts-->
-    <string name="preferences_sounds_enable_error_sounds">Enable error sounds</string>
+    <string name="preferences_sounds_enable_error_sounds">Enable Error Sounds</string>
     <string name="preferences_sounds_enable_sounds_hint">Enable if you want error sounds after card was read</string>
-    <string name="preferences_readout_duplicate_actions">Duplicate SI card actions</string>
+    <string name="preferences_readout_duplicate_actions">Duplicate SI Card Actions</string>
     <string name="preferences_readout_duplicate_actions_hint">Select what should be performed when a card is read twice.</string>
     <string name="preferences_readout_duplicate_ignore">Ignore</string>
     <string name="preferences_readout_duplicate_replace">Replace</string>
-    <string name="preferences_readout_duplicate_new">Create new readout</string>
+    <string name="preferences_readout_duplicate_new">Create New Readout</string>
 
     <string name="preferences_readout_duplicate_ignore_value" translatable="false">ignore</string>
     <string name="preferences_readout_duplicate_replace_value" translatable="false">replace</string>
@@ -350,16 +350,16 @@
     </string-array>
 
     <!--Preferences:results-->
-    <string name="preferences_results_time_format">Time format</string>
+    <string name="preferences_results_time_format">Time Format</string>
     <string name="preferences_results_time_format_hint">Time format used in results display. Either mm:ss or hh:mm:ss\n[%1$s]</string>
     <string name="preferences_results_time_format_minutes" translatable="false">mm:ss</string>
     <string name="preferences_results_time_format_hours" translatable="false">hh:mm:ss</string>
-    <string name="preferences_results_use_aliases">Use aliases</string>
+    <string name="preferences_results_use_aliases">Use Aliases</string>
     <string name="preferences_results_use_aliases_hint">Use defined aliases for control points instead of SI codes</string>
-    <string name="preferences_results_service">Result service sending</string>
+    <string name="preferences_results_service">Result Service Sending</string>
     <string name="preferences_results_service_hint">Select when to send the results with the result service.</string>
 
-    <string name="preferences_result_service_matched">When competitor matched</string>
+    <string name="preferences_result_service_matched">When Competitor Matched</string>
     <string name="preferences_result_service_always">Always</string>
 
     <string name="preferences_result_service_matched_value" translatable="false">competitor_matched</string>
@@ -381,27 +381,27 @@
     </string-array>
 
     <!--Preferences:files-->
-    <string name="preferences_files_prefer_app_start_time">Don\'t overwrite start time</string>
+    <string name="preferences_files_prefer_app_start_time">Don\'t Overwrite Start Time</string>
     <string name="preferences_file_prefer_app_start_time_hint"> When importing start times, a preset start time in the app won\'t be overwritten by the one in a file.</string>
 
     <!--Preferences:print-->
     <string name="preferences_prints_hint">Printer selection, automatic printing etc.</string>
-    <string name="preferences_prints_enable">Enable printing</string>
-    <string name="preferences_prints_select_printer">Select printer</string>
+    <string name="preferences_prints_enable">Enable Printing</string>
+    <string name="preferences_prints_select_printer">Select Printer</string>
     <string name="preferences_prints_select_printer_hint">Select the device you want to print with. Make sure Bluetooth is on and the device is paired.\n[%1$s]</string>
-    <string name="preferences_prints_automatic">Automatic ticket printout </string>
+    <string name="preferences_prints_automatic">Automatic Ticket Printout </string>
     <string name="preferences_prints_automatic_hint">Select when to print the tickets automatically.\n[%1$s] </string>
-    <string name="preferences_prints_double_print">Print finish ticket twice</string>
+    <string name="preferences_prints_double_print">Print Finish Ticket Twice</string>
     <string name="preferences_prints_double_print_hint">Use this option if you want to print each finish ticket twice</string>
-    <string name="preferences_prints_double_print_delay">Delay between double printing (seconds)</string>
-    <string name="preferences_prints_remove_diacritics">Remove diacritics from printing </string>
+    <string name="preferences_prints_double_print_delay">Delay Between Double Printing (seconds)</string>
+    <string name="preferences_prints_remove_diacritics">Remove Diacritics From Printing </string>
     <string name="preferences_prints_remove_diacritics_hint">Use this option if you face issues when printing tickets.</string>
     <string name="print_bluetooth_not_supported">Unfortunately, your device does not support Bluetooth.</string>
 
-    <string name="print_automatic_manually">Print manually</string>
-    <string name="print_automatic_category_matched">Print when competitor and his category are matched to the readout</string>
-    <string name="print_automatic_competitor_matched">Print when competitor is matched to the readout</string>
-    <string name="print_automatic_always">Always print automatic</string>
+    <string name="print_automatic_manually">Print Manually</string>
+    <string name="print_automatic_category_matched">Print When Competitor And Category Are Matched To The Readout</string>
+    <string name="print_automatic_competitor_matched">Print When Competitor Is Matched To The Readout</string>
+    <string name="print_automatic_always">Always Print Automatically</string>
 
     <string name="print_automatic_manually_value" translatable="false">manually</string>
     <string name="print_automatic_category_matched_value" translatable="false">category_matched</string>
@@ -430,7 +430,7 @@
     <string name="about_app_project">Project: %1$s</string>
     <string name="about_app_license">License: %1$s</string>
     <string name="about_app_updates">Updates: %1$s</string>
-    <string name="about_app_check_updates">Check for updates</string>
+    <string name="about_app_check_updates">Check For Updates</string>
     <string name="about_app_project_url" translatable="false">https://github.com/OpenARDF/Radio-Oracle</string>
     <string name="about_app_license_label" translatable="false">MIT License</string>
     <string name="about_app_license_url" translatable="false">https://opensource.org/license/mit</string>
@@ -456,9 +456,9 @@
 
     <string name="data_type_categories">Categories</string>
     <string name="data_type_competitors">Competitors</string>
-    <string name="data_type_competitor_starts">Competitor starts</string>
+    <string name="data_type_competitor_starts">Competitor Starts</string>
     <string name="data_type_results">Results</string>
-    <string name="data_type_readout_data">SI Readout data</string>
+    <string name="data_type_readout_data">SI Readout Data</string>
 
     <!-- Providers-->
     <string name="provider_type_robis" translatable="false">ROBis</string>
@@ -468,11 +468,11 @@
 
     <string name="result_status_ok">OK</string>
     <string name="result_status_mispunched">Mispunched</string>
-    <string name="result_status_no_ranking">No ranking</string>
+    <string name="result_status_no_ranking">No Ranking</string>
     <string name="result_status_disqualified">Disqualified</string>
-    <string name="result_status_did_not_start">Did not start</string>
-    <string name="result_status_did_not_finish">Did not finish</string>
-    <string name="result_status_over_limit">Over time limit</string>
+    <string name="result_status_did_not_start">Did Not Start</string>
+    <string name="result_status_did_not_finish">Did Not Finish</string>
+    <string name="result_status_over_limit">Over Time Limit</string>
     <string name="result_status_unofficial">Unofficial</string>
     <string name="result_status_error">Error</string>
 
@@ -488,7 +488,7 @@
 
     <string name="result_service_status_disabled">Disabled</string>
     <string name="result_service_status_running">Running</string>
-    <string name="result_service_status_no_network">No network</string>
+    <string name="result_service_status_no_network">No Network</string>
     <string name="result_service_status_unauthorized">Unauthorized</string>
     <string name="result_service_status_error">Error</string>
 
