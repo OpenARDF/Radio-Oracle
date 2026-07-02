@@ -9,17 +9,23 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
+data class DesktopMagneticDeclinationResult(
+    val degrees: Double,
+    val usesExpiredCoefficients: Boolean
+)
+
 /**
  * Offline WMM2025 declination calculator, ported from NOAA/NCEI's public-domain
  * WMM C implementation and WMM.COF coefficients.
  *
  * Source: NOAA WMM2025 Linux package, `GeomagnetismLibrary.c` and `WMM.COF`.
- * WMM2025 is valid for dates 2025.0 through 2030.0.
+ * WMM2025 is valid for dates 2025.0 through 2030.0. Radio-Oracle continues
+ * extrapolating with expired coefficients because route-map orientation only
+ * needs practical ARDF map alignment, not survey-grade magnetic data.
  */
 object DesktopMagneticDeclination {
     private const val MODEL_EPOCH = 2025.0
-    private const val MIN_DECIMAL_YEAR = 2025.0
-    private const val MAX_DECIMAL_YEAR = 2030.0
+    private const val EXPIRATION_DECIMAL_YEAR = 2030.0
     private const val MAX_DEGREE = 12
     private const val NUM_TERMS = (MAX_DEGREE + 1) * (MAX_DEGREE + 2) / 2
     private const val WGS84_A_KM = 6378.137
@@ -30,13 +36,17 @@ object DesktopMagneticDeclination {
     private val cache = ConcurrentHashMap<String, Double>()
 
     fun degrees(point: CourseGeoPoint, date: LocalDate = LocalDate.now()): Double? =
-        degrees(point, decimalYear(date))
+        result(point, date)?.degrees
 
     internal fun degrees(point: CourseGeoPoint, decimalYear: Double): Double? {
+        return result(point, decimalYear)?.degrees
+    }
+
+    fun result(point: CourseGeoPoint, date: LocalDate = LocalDate.now()): DesktopMagneticDeclinationResult? =
+        result(point, decimalYear(date))
+
+    internal fun result(point: CourseGeoPoint, decimalYear: Double): DesktopMagneticDeclinationResult? {
         if (point.latitude !in -90.0..90.0 || point.longitude !in -180.0..360.0) {
-            return null
-        }
-        if (decimalYear !in MIN_DECIMAL_YEAR..MAX_DECIMAL_YEAR) {
             return null
         }
         val key = listOf(
@@ -44,13 +54,17 @@ object DesktopMagneticDeclination {
             String.format(Locale.US, "%.4f", point.longitude),
             String.format(Locale.US, "%.4f", decimalYear)
         ).joinToString("|")
-        return cache.getOrPut(key) {
+        val degrees = cache.getOrPut(key) {
             calculateDeclinationDegrees(
                 latitudeDegrees = point.latitude.coerceIn(-89.99999, 89.99999),
                 longitudeDegrees = point.longitude,
                 decimalYear = decimalYear
             )
         }
+        return DesktopMagneticDeclinationResult(
+            degrees = degrees,
+            usesExpiredCoefficients = decimalYear >= EXPIRATION_DECIMAL_YEAR
+        )
     }
 
     private fun decimalYear(date: LocalDate): Double =

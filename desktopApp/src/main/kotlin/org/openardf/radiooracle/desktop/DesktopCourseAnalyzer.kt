@@ -72,6 +72,7 @@ data class DesktopCourseAnalysisSummary(
     val profileComparison: List<DesktopCourseElevationProfileSummary>,
     val elevationCacheNotes: List<String>,
     val routeMaps: List<DesktopCourseRouteMap>,
+    val usesExpiredMagneticDeclinationModel: Boolean,
     val kmlFolders: List<DesktopCourseKmlExportFolder>,
     val calculatedRouteApplication: DesktopCourseCalculatedRouteApplication?,
     val missingElements: List<String>,
@@ -169,7 +170,8 @@ data class DesktopCourseRouteMap(
     val points: List<DesktopCourseRouteMapPoint>,
     val routeLabels: List<String>,
     val routePointIndexes: List<Int> = emptyList(),
-    val magneticDeclinationDegrees: Double? = null
+    val magneticDeclinationDegrees: Double? = null,
+    val magneticDeclinationUsesExpiredModel: Boolean = false
 )
 
 data class DesktopCourseRouteMapPoint(
@@ -250,8 +252,13 @@ enum class DesktopCourseRouteMapPointType {
 
 internal fun DesktopCourseRouteMap.northOrientationText(): String =
     magneticDeclinationDegrees?.let { declination ->
-        "Magnetic north (${magneticDeclinationText(declination)} declination)"
+        val expirationText = if (magneticDeclinationUsesExpiredModel) ", expired WMM2025 coefficients" else ""
+        "Magnetic north (${magneticDeclinationText(declination)} declination$expirationText)"
     } ?: "True north"
+
+internal fun expiredMagneticDeclinationModelWarningText(): String =
+    "Warning: WMM2025 magnetic declination coefficients expired on December 31, 2029; " +
+        "2D route depictions still use the expired model for magnetic-north orientation."
 
 internal fun magneticDeclinationText(degrees: Double): String {
     val absoluteDegrees = String.format(Locale.US, "%.1f°", abs(degrees))
@@ -380,23 +387,24 @@ object DesktopCourseAnalyzer {
         }
         val categoryData = projectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
             ?: return "Select a category before running analysis."
-        if (protectedCourseInfo == null || protectedCourseInfo.route.size < 2) {
+        val courseInfo = protectedCourseInfo?.withFiniteCourseGeometry()
+        if (courseInfo == null || courseInfo.route.size < 2) {
             return "Stored course route data is unavailable for the selected category. Import course KML/KMZ or GPX data before running analysis."
         }
 
         val idealOrderText = protectedIdealOrderText?.takeIf { it.isNotBlank() }
-            ?: protectedCourseInfo.idealOrder.takeIf { it.isNotBlank() }
+            ?: courseInfo.idealOrder.takeIf { it.isNotBlank() }
         val categoryAssignedControls = assignedControls(projectFile, categoryId)
-        val allProtectedControls = protectedAssignedControls(projectFile, protectedCourseInfo, null)
+        val allProtectedControls = protectedAssignedControls(projectFile, courseInfo, null)
         val terminalBeaconControl = allProtectedControls.firstOrNull { it.type == ControlPointType.BEACON }
             ?: categoryAssignedControls.firstOrNull { it.type == ControlPointType.BEACON }
-        val protectedRouteControls = protectedAssignedControls(projectFile, protectedCourseInfo, idealOrderText)
+        val protectedRouteControls = protectedAssignedControls(projectFile, courseInfo, idealOrderText)
             .withTerminalBeacon(terminalBeaconControl)
         val assignedControls = protectedRouteControls.ifEmpty { categoryAssignedControls.withTerminalBeacon(terminalBeaconControl) }
         val providedControls = idealOrderText
             ?.let { idealOrder ->
                 runCatching {
-                    val ids = resolveProtectedIdealOrderControlIds(idealOrder, assignedControls, protectedCourseInfo)
+                    val ids = resolveProtectedIdealOrderControlIds(idealOrder, assignedControls, courseInfo)
                     ids.mapNotNull { id -> assignedControls.firstOrNull { it.id == id } }
                 }.getOrNull()
             }
@@ -404,13 +412,13 @@ object DesktopCourseAnalyzer {
             .withTerminalBeacon(terminalBeaconControl)
         val canBuildImportedRouteSection = providedControls.isNotEmpty()
 
-        val courseObjectPoints = protectedCourseInfo.effectiveCourseObjectPoints()
+        val courseObjectPoints = courseInfo.effectiveCourseObjectPoints()
         val route = normalizedImportedRoute(
-            protectedCourseInfo.route.map { CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters) },
+            courseInfo.route.map { CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters) },
             courseObjectPoints
         )
-        val protectedControlPointsById = protectedCourseInfo.controlPoints.associateBy { it.controlId }
-        val protectedCoordinateLookup = protectedCoordinateLookup(protectedCourseInfo)
+        val protectedControlPointsById = courseInfo.controlPoints.associateBy { it.controlId }
+        val protectedCoordinateLookup = protectedCoordinateLookup(courseInfo)
         val controlsWithPoints = assignedControls.map { control ->
             ControlAnalysisPoint(
                 control = control,
@@ -450,8 +458,10 @@ object DesktopCourseAnalyzer {
         analysisPerformedAtText: String = DesktopDateTimeText.displayText(LocalDateTime.now().withNano(0)),
         elevationLookup: (CourseGeoPoint) -> Double? = { null },
         elevationCacheNotes: (List<CourseGeoPoint>) -> List<String> = { emptyList() },
-        magneticDeclinationProvider: (CourseGeoPoint) -> Double? = { null }
+        magneticDeclinationProvider: (CourseGeoPoint) -> DesktopMagneticDeclinationResult? = { null }
     ): DesktopCourseAnalysisSummary {
+        val rawProtectedCourseInfo = protectedCourseInfo
+        val courseInfo = rawProtectedCourseInfo?.withFiniteCourseGeometry()
         val categoryData = projectFile.raceData.categories.first { it.category.id == categoryId }
         val category = categoryData.category
         val raceType = category.effectiveRaceType(projectFile.raceData.race)
@@ -462,30 +472,33 @@ object DesktopCourseAnalyzer {
             compensationFactor = projectFile.raceData.race.courseAnalyzerSpeedCompensationFactor
         )
         val idealOrderText = protectedIdealOrderText?.takeIf { it.isNotBlank() }
-            ?: protectedCourseInfo?.idealOrder?.takeIf { it.isNotBlank() }
+            ?: courseInfo?.idealOrder?.takeIf { it.isNotBlank() }
         val categoryAssignedControls = assignedControls(projectFile, categoryId)
-        val allProtectedControls = protectedCourseInfo
+        val allProtectedControls = courseInfo
             ?.let { protectedAssignedControls(projectFile, it, null) }
             .orEmpty()
         val terminalBeaconControl = allProtectedControls.firstOrNull { it.type == ControlPointType.BEACON }
             ?: categoryAssignedControls.firstOrNull { it.type == ControlPointType.BEACON }
-        val protectedRouteControls = protectedCourseInfo
+        val protectedRouteControls = courseInfo
             ?.let { protectedAssignedControls(projectFile, it, idealOrderText) }
             .orEmpty()
             .withTerminalBeacon(terminalBeaconControl)
         val assignedControls = protectedRouteControls.ifEmpty { categoryAssignedControls.withTerminalBeacon(terminalBeaconControl) }
         val sameCourseCategoryNames = sameCourseCategoryNames(projectFile, categoryId)
-        val protectedControlPointsById = protectedCourseInfo?.controlPoints.orEmpty().associateBy { it.controlId }
-        val protectedCoordinateLookup = protectedCoordinateLookup(protectedCourseInfo)
+        val protectedControlPointsById = courseInfo?.controlPoints.orEmpty().associateBy { it.controlId }
+        val protectedCoordinateLookup = protectedCoordinateLookup(courseInfo)
         val missing = mutableListOf<String>()
 
-        if (protectedCourseInfo == null) {
+        if (courseInfo == null) {
             missing += "Route data is locked by the Race Password or has not been imported for ${category.name}."
         }
-        val courseObjectPoints = protectedCourseInfo?.effectiveCourseObjectPoints().orEmpty()
-        val legSpeedFactors = protectedCourseInfo?.legSpeedFactors() ?: CourseLegSpeedFactors.Empty
+        if (rawProtectedCourseInfo != null && rawProtectedCourseInfo != courseInfo) {
+            missing += "Stored course route data contains invalid latitude/longitude values; invalid points were ignored. Re-import the GPX/KML course data when practical."
+        }
+        val courseObjectPoints = courseInfo?.effectiveCourseObjectPoints().orEmpty()
+        val legSpeedFactors = courseInfo?.legSpeedFactors() ?: CourseLegSpeedFactors.Empty
         val route = normalizedImportedRoute(
-            protectedCourseInfo?.route.orEmpty().map {
+            courseInfo?.route.orEmpty().map {
                 CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters)
             },
             courseObjectPoints
@@ -499,17 +512,17 @@ object DesktopCourseAnalyzer {
         }
         var hasMissingCourseObjectElevations = false
         var hasMissingProtectedControlElevations = false
-        protectedCourseInfo?.let { courseInfo ->
+        courseInfo?.let { info ->
             when {
-                courseInfo.courseObjects.isEmpty() -> {
+                info.courseObjects.isEmpty() -> {
                     missing += "Course object points are missing for start, finish, controls, beacon, or spectator if assigned."
                 }
-                courseInfo.courseObjects.any { it.elevationMeters == null } -> {
+                info.courseObjects.any { it.elevationMeters == null } -> {
                     hasMissingCourseObjectElevations = true
                     missing += "Course object elevations are missing or incomplete."
                 }
             }
-            if (courseInfo.controlPoints.any { it.elevationMeters == null }) {
+            if (info.controlPoints.any { it.elevationMeters == null }) {
                 hasMissingProtectedControlElevations = true
                 missing += "Control location elevations are missing or incomplete."
             }
@@ -533,7 +546,7 @@ object DesktopCourseAnalyzer {
                     "Missing coordinates category=${category.name}: " +
                     "controls=${missingCoordinateControls.joinToString { it.control.publicDisplayLabel() }}; " +
                     "assigned=${assignedControls.size} controlLocationPoints=${protectedCourseInfo?.controlPoints?.size ?: 0} " +
-                    "courseObjects=${protectedCourseInfo?.courseObjects?.size ?: 0} " +
+                    "courseObjects=${courseInfo?.courseObjects?.size ?: 0} " +
                     "tokenMatches=${protectedCoordinateLookup.pointsByToken.size} " +
                     "singleBeacon=${protectedCoordinateLookup.singleBeaconPoint != null} " +
                     "singleSpectator=${protectedCoordinateLookup.singleSpectatorPoint != null}"
@@ -569,7 +582,7 @@ object DesktopCourseAnalyzer {
         val calculatedRouteStops = calculatedRoute
             ?.let { routeCandidate -> calculatedRouteStops(routeCandidate.controls, mandatoryWaypoints) }
             .orEmpty()
-        val routeMapMagneticDeclinationDegrees = routeMapReferencePoint(
+        val routeMapMagneticDeclination = routeMapReferencePoint(
             route = route,
             start = start,
             finish = finish,
@@ -584,12 +597,16 @@ object DesktopCourseAnalyzer {
                     )
                 }
                 .getOrNull()
+                ?.takeIf { it.degrees.isFinite() }
         }
+        val routeMapMagneticDeclinationDegrees = routeMapMagneticDeclination?.degrees
+        val routeMapMagneticDeclinationUsesExpiredModel =
+            routeMapMagneticDeclination?.usesExpiredCoefficients == true
 
         val providedControlsFromOrder = idealOrderText
             ?.let { idealOrder ->
                 runCatching {
-                    val ids = resolveProtectedIdealOrderControlIds(idealOrder, assignedControls, protectedCourseInfo)
+                    val ids = resolveProtectedIdealOrderControlIds(idealOrder, assignedControls, courseInfo)
                     ids.mapNotNull { id -> assignedControls.firstOrNull { it.id == id } }
                 }.getOrElse { error ->
                     missing += "Saved route order could not be resolved: ${error.message ?: error::class.simpleName}."
@@ -684,7 +701,7 @@ object DesktopCourseAnalyzer {
             providedRouteAnalysis(
                 route = route,
                 providedRoutePoints = providedRoutePoints,
-                protectedCourseInfo = protectedCourseInfo,
+                protectedCourseInfo = courseInfo,
                 timing = providedTiming
             )
         } else {
@@ -855,7 +872,8 @@ object DesktopCourseAnalyzer {
                             )
                         },
                         routePoints = listOfNotNull(start) + labeledCalculatedRouteStops.map { it.point } + listOfNotNull(finish),
-                        magneticDeclinationDegrees = routeMapMagneticDeclinationDegrees
+                        magneticDeclinationDegrees = routeMapMagneticDeclinationDegrees,
+                        magneticDeclinationUsesExpiredModel = routeMapMagneticDeclinationUsesExpiredModel
                     )
                 )
             }
@@ -889,7 +907,8 @@ object DesktopCourseAnalyzer {
                     },
                     waypoints = courseObjectPoints.filter { it.type == ProtectedCourseObjectType.WAYPOINT },
                     routePoints = route,
-                    magneticDeclinationDegrees = routeMapMagneticDeclinationDegrees
+                    magneticDeclinationDegrees = routeMapMagneticDeclinationDegrees,
+                    magneticDeclinationUsesExpiredModel = routeMapMagneticDeclinationUsesExpiredModel
                 )
             )
         }
@@ -1079,6 +1098,7 @@ object DesktopCourseAnalyzer {
             profileComparison = profileComparison,
             elevationCacheNotes = elevationCacheNotes(profileRoutePoints),
             routeMaps = routeMaps,
+            usesExpiredMagneticDeclinationModel = routeMapMagneticDeclinationUsesExpiredModel,
             kmlFolders = kmlFolders,
             calculatedRouteApplication = calculatedRouteApplication,
             missingElements = missing.distinct(),
@@ -2669,6 +2689,40 @@ object DesktopCourseAnalyzer {
             this + beacon
         }
 
+    private fun ProtectedCourseInfo.withFiniteCourseGeometry(): ProtectedCourseInfo =
+        copy(
+            route = route
+                .filter { it.latitude.isValidLatitude() && it.longitude.isValidLongitude() }
+                .map { point ->
+                    point.copy(elevationMeters = point.elevationMeters.finiteOrNull())
+                },
+            controlPoints = controlPoints
+                .filter { it.latitude.isValidLatitude() && it.longitude.isValidLongitude() }
+                .map { control ->
+                    control.copy(
+                        elevationMeters = control.elevationMeters.finiteOrNull(),
+                        speedFactor = control.speedFactor.finiteOrNull()
+                    )
+                },
+            courseObjects = courseObjects
+                .filter { it.latitude.isValidLatitude() && it.longitude.isValidLongitude() }
+                .map { courseObject ->
+                    courseObject.copy(
+                        elevationMeters = courseObject.elevationMeters.finiteOrNull(),
+                        speedFactor = courseObject.speedFactor.finiteOrNull()
+                    )
+                }
+        )
+
+    private fun Double?.finiteOrNull(): Double? =
+        this?.takeIf { it.isFinite() }
+
+    private fun Double.isValidLatitude(): Boolean =
+        isFinite() && this in -90.0..90.0
+
+    private fun Double.isValidLongitude(): Boolean =
+        isFinite() && this in -180.0..180.0
+
     private fun ProtectedCourseInfo.effectiveCourseObjectPoints(): List<ProtectedCourseObjectPoint> =
         buildList {
             addAll(courseObjects)
@@ -3030,7 +3084,8 @@ object DesktopCourseAnalyzer {
         labelOverrides: Map<String, String> = emptyMap(),
         waypoints: List<ProtectedCourseObjectPoint> = emptyList(),
         routePoints: List<CourseGeoPoint> = emptyList(),
-        magneticDeclinationDegrees: Double? = null
+        magneticDeclinationDegrees: Double? = null,
+        magneticDeclinationUsesExpiredModel: Boolean = false
     ): DesktopCourseRouteMap? {
         fun labelFor(controlPoint: ControlAnalysisPoint): String =
             labelOverrides[controlPoint.control.id] ?: controlPoint.control.analysisRouteLabel()
@@ -3109,7 +3164,8 @@ object DesktopCourseAnalyzer {
             },
             routeLabels = routeLabels,
             routePointIndexes = routePointIndexes,
-            magneticDeclinationDegrees = magneticDeclinationDegrees
+            magneticDeclinationDegrees = magneticDeclinationDegrees,
+            magneticDeclinationUsesExpiredModel = magneticDeclinationUsesExpiredModel
         )
     }
 

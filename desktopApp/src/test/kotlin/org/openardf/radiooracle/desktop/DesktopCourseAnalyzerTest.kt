@@ -1813,6 +1813,51 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun analyzerIgnoresInvalidStoredProtectedCoordinates() {
+        val baseProtectedInfo = protectedInfo(foxCount = 2)
+        val protectedInfo = baseProtectedInfo.copy(
+            route = listOf(
+                baseProtectedInfo.route.first(),
+                ProtectedCourseRoutePoint(latitude = Double.NaN, longitude = -94.99, elevationMeters = 120.0),
+                baseProtectedInfo.route.last()
+            ),
+            controlPoints = baseProtectedInfo.controlPoints + ProtectedCourseControlPoint(
+                controlId = "bad-control",
+                label = "Bad",
+                latitude = Double.NaN,
+                longitude = -94.99,
+                type = ControlPointType.CONTROL,
+                elevationMeters = Double.POSITIVE_INFINITY,
+                speedFactor = Double.NaN
+            ),
+            courseObjects = baseProtectedInfo.courseObjects + ProtectedCourseObjectPoint(
+                id = "bad-object",
+                label = "Bad",
+                type = ProtectedCourseObjectType.WAYPOINT,
+                latitude = 39.0,
+                longitude = Double.POSITIVE_INFINITY,
+                elevationMeters = Double.NaN,
+                speedFactor = Double.NaN
+            )
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 2),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = protectedInfo.idealOrder,
+            magneticDeclinationProvider = { DesktopMagneticDeclinationResult(Double.NaN, usesExpiredCoefficients = false) }
+        )
+
+        assertTrue(summary.missingElements.any { it.contains("invalid latitude/longitude values") })
+        assertNotNull(summary.providedRouteSection)
+        assertTrue(summary.routeMaps.flatMap { it.points }.all { point ->
+            point.xFraction.isFinite() && point.yFraction.isFinite()
+        })
+        assertTrue(summary.routeMaps.all { it.magneticDeclinationDegrees == null })
+    }
+
+    @Test
     fun routeMapUsesMagneticDeclinationWhenProvided() {
         val trueNorthSummary = DesktopCourseAnalyzer.analyze(
             projectFile = projectFile(foxCount = 3),
@@ -1825,7 +1870,7 @@ class DesktopCourseAnalyzerTest {
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo(foxCount = 3),
             protectedIdealOrderText = null,
-            magneticDeclinationProvider = { 90.0 }
+            magneticDeclinationProvider = { DesktopMagneticDeclinationResult(90.0, usesExpiredCoefficients = false) }
         )
 
         val trueNorthMap = requireNotNull(trueNorthSummary.routeMaps.single())
@@ -1843,6 +1888,29 @@ class DesktopCourseAnalyzerTest {
 
         val reportText = DesktopCourseAnalysisExports.reportText(magneticNorthSummary)
         assertTrue(reportText.contains("Orientation: Magnetic north (90.0° E declination)"))
+    }
+
+    @Test
+    fun routeMapUsesExpiredMagneticDeclinationWithWarning() {
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 3),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo(foxCount = 3),
+            protectedIdealOrderText = null,
+            magneticDeclinationProvider = { DesktopMagneticDeclinationResult(90.0, usesExpiredCoefficients = true) }
+        )
+
+        val routeMap = requireNotNull(summary.routeMaps.single())
+
+        assertEquals(90.0, routeMap.magneticDeclinationDegrees ?: 0.0, 0.001)
+        assertTrue(routeMap.magneticDeclinationUsesExpiredModel)
+        assertTrue(summary.usesExpiredMagneticDeclinationModel)
+        assertTrue(routeMap.northOrientationText().contains("expired WMM2025 coefficients"))
+
+        val reportText = DesktopCourseAnalysisExports.reportText(summary)
+        val unwrappedReportText = reportText.replace('\n', ' ')
+        assertTrue(unwrappedReportText.contains("WMM2025 magnetic declination coefficients expired on December 31, 2029"))
+        assertTrue(unwrappedReportText.contains("2D route depictions still use the expired model"))
     }
 
     private fun EventProjectFile.withAliasesAndUnmatchedControlReadout(): EventProjectFile {

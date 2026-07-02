@@ -187,6 +187,9 @@ object DesktopCourseAnalysisExports {
         }
         appendLine()
         appendLine("2D route depictions")
+        if (result.usesExpiredMagneticDeclinationModel) {
+            appendWrapped(expiredMagneticDeclinationModelWarningText())
+        }
         if (result.routeMaps.isEmpty()) {
             appendLine("No route depictions available.")
         } else {

@@ -16090,7 +16090,7 @@ private fun CourseAnalysisPanel(
                 eventFileName = eventFilePath?.fileName?.toString(),
                 elevationLookup = DesktopVenueElevationCache::elevationMeters,
                 elevationCacheNotes = DesktopVenueElevationCache::analysisSourceNotes,
-                magneticDeclinationProvider = DesktopMagneticDeclination::degrees
+                magneticDeclinationProvider = DesktopMagneticDeclination::result
             )
         }
     fun analyzeDisabledReason(categoryId: String?): String? =
@@ -16118,16 +16118,20 @@ private fun CourseAnalysisPanel(
         return summary
     }
 
+    fun showAnalysisSummary(summary: DesktopCourseAnalysisSummary) {
+        onAnalysisResultChange(summary)
+    }
+
     fun acceptAnalysisSummary(categoryId: String, summary: DesktopCourseAnalysisSummary) {
         if (summary.missingElements.isEmpty()) {
-            onAnalysisResultChange(summary)
+            showAnalysisSummary(summary)
         } else if (shouldPromptForCourseAnalysisMissingData(summary)) {
             pendingMissingDataResult = CourseAnalysisMissingDataPrompt(
                 categoryId = categoryId,
                 summary = summary
             )
         } else {
-            onAnalysisResultChange(summary)
+            showAnalysisSummary(summary)
         }
     }
 
@@ -16288,6 +16292,13 @@ private fun CourseAnalysisPanel(
             },
             fontSize = 13.sp
         )
+        analysisResult?.takeIf { it.usesExpiredMagneticDeclinationModel }?.let {
+            Text(
+                text = expiredMagneticDeclinationModelWarningText(),
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
         CourseAnalysisResultView(analysisResult)
     }
 
@@ -16340,7 +16351,7 @@ private fun CourseAnalysisPanel(
                     onClick = {
                         pendingMissingDataResult = null
                         if (!downloadBeforeAnalyzing || !canDownloadMissingElevationData) {
-                            onAnalysisResultChange(summary)
+                            showAnalysisSummary(summary)
                             return@Button
                         }
                         if (isAnalyzing) {

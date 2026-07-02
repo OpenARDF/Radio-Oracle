@@ -2,6 +2,7 @@ package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DesktopMagneticDeclinationTest {
@@ -40,11 +41,24 @@ class DesktopMagneticDeclinationTest {
     }
 
     @Test
-    fun wmm2025DeclinationReturnsNullOutsideValidEpoch() {
-        assertNull(
-            DesktopMagneticDeclination.degrees(
+    fun wmm2025DeclinationContinuesWithExpiredCoefficients() {
+        val result = requireNotNull(
+            DesktopMagneticDeclination.result(
                 CourseGeoPoint(latitude = 39.0, longitude = -95.0),
                 decimalYear = 2030.1
+            )
+        )
+
+        assertTrue(result.degrees.isFinite())
+        assertTrue(result.usesExpiredCoefficients)
+    }
+
+    @Test
+    fun wmm2025DeclinationReturnsNullForInvalidCoordinates() {
+        assertNull(
+            DesktopMagneticDeclination.result(
+                CourseGeoPoint(latitude = Double.NaN, longitude = -95.0),
+                decimalYear = 2025.0
             )
         )
     }
