@@ -125,6 +125,34 @@ Orienteering extension data treated as optional enhancement data rather than the
 primary full-fidelity Radio-Oracle exchange format. Use Race Files for
 lossless Radio-Oracle-to-Radio-Oracle interchange.
 
+`radio-o-standards` is a useful reference and interoperability target for this
+work, but Radio-Oracle should not adopt its ARDF XML schema verbatim without an
+explicit compatibility review. Its current XML examples are valuable because
+they keep the document root in the IOF 3.0 namespace and put ARDF-specific data
+under IOF `Extensions`; that is the compatibility shape Radio-Oracle should
+preserve. Avoid designs that make the ARDF namespace the document root for
+normal IOF interchange, because those files would no longer be ordinary IOF XML
+3.0 documents.
+
+Before implementing the extension surface, resolve the namespace and vocabulary
+relationship deliberately: either consume the external `radio-o-standards`
+namespace, map it into the OpenARDF `ro` namespace above, or submit standards
+changes that converge the two. The initial Radio-Oracle extension should cover
+only fields that map cleanly to the app's domain model and current IOF export
+surfaces, such as class sex/age metadata, class-required controls,
+control-code-to-radio-alias mapping, beacon/spectator/control roles, and
+result-side valid-punch counts. Broader transmitter metadata such as schedules,
+frequency, modulation, power, polarization, and exclusion-zone geometry should
+remain explicit follow-up vocabulary rather than hidden overloads.
+
+Validation for this work must stay local and reproducible. Use Radio-Oracle's
+vendored or configured IOF 3.0 schema first, then validate any supported Radio
+Orienteering extension schema as an additional layer. Do not make routine
+validation depend on remote GitHub schema URLs. When importing, align ambiguous
+terms with Radio-Oracle's model before persisting them; for example, be precise
+about `Separator` versus spectator controls, `Beacon` versus finish beacons,
+and `ValidPunches` versus Radio-Oracle scoring and status rules.
+
 ## Completed Milestones
 
 These items were roadmap goals earlier, but are now implemented enough that they
