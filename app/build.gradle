@@ -29,6 +29,8 @@ plugins {
     id("androidx.navigation.safeargs")
 }
 
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 def firebaseConfigFile = file("google-services.json")
 def firebaseEnabled = firebaseConfigFile.isFile()
 def releaseSigningPropertiesFile = rootProject.file("keystore.properties")
@@ -52,15 +54,15 @@ if (firebaseEnabled) {
 
 android {
     namespace = "org.openardf.radiooracle"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "org.openardf.radiooracle"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 37
         versionCode = 34
         versionName = rootProject.ext.radioOracleVersion
-        buildConfigField "String", "BUILD_DATE_UTC", "\"${java.time.Instant.now().toString()}\""
+        buildConfigField "String", "BUILD_DATE_UTC", "\"${Instant.now().toString()}\""
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [radioOracleCommandReceiverExported: "false"]
@@ -103,9 +105,12 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
+    kotlin {
+        compilerOptions {
+            jvmTarget = JvmTarget.JVM_17
+        }
     }
+
     buildFeatures {
         viewBinding = true
         buildConfig = true
@@ -115,10 +120,10 @@ android {
         resources {
             // Exclude duplicate OSGI MANIFEST entries from dependencies (okhttp logging-interceptor, jspecify etc.)
             // Keep these exclusions narrow to avoid removing useful metadata from other libs.
-            excludes += [
+            excludes.addAll([
                 "META-INF/versions/**/OSGI-INF/MANIFEST.MF",
                 "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
-            ]
+            ])
         }
     }
 
