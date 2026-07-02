@@ -170,9 +170,9 @@ object DesktopCourseFileReader {
             .split(Regex("\\s+"))
             .mapNotNull { coordinate ->
                 val fields = coordinate.split(',')
-                val longitude = fields.getOrNull(0)?.toDoubleOrNull()?.validLongitudeOrNull()
-                val latitude = fields.getOrNull(1)?.toDoubleOrNull()?.validLatitudeOrNull()
-                val elevation = fields.getOrNull(2)?.toDoubleOrNull()?.finiteOrNull()
+                val longitude = fields.getOrNull(0)?.toDoubleOrNull().validLongitudeOrNull()
+                val latitude = fields.getOrNull(1)?.toDoubleOrNull().validLatitudeOrNull()
+                val elevation = fields.getOrNull(2)?.toDoubleOrNull().finiteCourseValueOrNull()
                 if (latitude == null || longitude == null) {
                     null
                 } else {
@@ -314,23 +314,14 @@ private fun org.w3c.dom.Node.namedDescendants(tagName: String): List<org.w3c.dom
 
 private fun org.w3c.dom.Node.toGpxPoint(): CourseGeoPoint? {
     val attributes = attributes ?: return null
-    val latitude = attributes.getNamedItem("lat")?.nodeValue?.toDoubleOrNull()?.validLatitudeOrNull() ?: return null
-    val longitude = attributes.getNamedItem("lon")?.nodeValue?.toDoubleOrNull()?.validLongitudeOrNull() ?: return null
+    val latitude = attributes.getNamedItem("lat")?.nodeValue?.toDoubleOrNull().validLatitudeOrNull() ?: return null
+    val longitude = attributes.getNamedItem("lon")?.nodeValue?.toDoubleOrNull().validLongitudeOrNull() ?: return null
     return CourseGeoPoint(
         latitude = latitude,
         longitude = longitude,
-        elevationMeters = childText("ele")?.trim()?.toDoubleOrNull()?.finiteOrNull()
+        elevationMeters = childText("ele")?.trim()?.toDoubleOrNull().finiteCourseValueOrNull()
     )
 }
-
-private fun Double.finiteOrNull(): Double? =
-    takeIf { it.isFinite() }
-
-private fun Double.validLatitudeOrNull(): Double? =
-    finiteOrNull()?.takeIf { it in -90.0..90.0 }
-
-private fun Double.validLongitudeOrNull(): Double? =
-    finiteOrNull()?.takeIf { it in -180.0..180.0 }
 
 private fun org.w3c.dom.Node.descendants(): Sequence<org.w3c.dom.Node> =
     sequence {

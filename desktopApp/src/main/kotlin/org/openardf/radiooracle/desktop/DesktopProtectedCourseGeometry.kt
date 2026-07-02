@@ -70,19 +70,10 @@ internal fun ProtectedCourseInfo.finiteCourseGeoPoints(): List<CourseGeoPoint> =
         }
 
 private fun ProtectedCourseRoutePoint.hasValidCoordinate(): Boolean =
-    latitude.isValidCourseLatitude() && longitude.isValidCourseLongitude()
+    latitude.isValidLatitude() && longitude.isValidLongitude()
 
 private fun ProtectedCourseControlPoint.hasValidCoordinate(): Boolean =
-    latitude.isValidCourseLatitude() && longitude.isValidCourseLongitude()
+    latitude.isValidLatitude() && longitude.isValidLongitude()
 
 private fun ProtectedCourseObjectPoint.hasValidCoordinate(): Boolean =
-    latitude.isValidCourseLatitude() && longitude.isValidCourseLongitude()
-
-private fun Double?.finiteCourseValueOrNull(): Double? =
-    this?.takeIf { it.isFinite() }
-
-private fun Double.isValidCourseLatitude(): Boolean =
-    isFinite() && this in -90.0..90.0
-
-private fun Double.isValidCourseLongitude(): Boolean =
-    isFinite() && this in -180.0..180.0
+    latitude.isValidLatitude() && longitude.isValidLongitude()

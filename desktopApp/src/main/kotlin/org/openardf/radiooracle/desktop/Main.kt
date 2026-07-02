@@ -14756,9 +14756,9 @@ private fun KmlMoveCoursePanel() {
     val parsedLongitude = longitudeDraft.trim().toDoubleOrNull()
     val canApply = selectedPath != null &&
         parsedLatitude != null &&
-        parsedLatitude in -90.0..90.0 &&
+        parsedLatitude.isValidLatitude() &&
         parsedLongitude != null &&
-        parsedLongitude in -180.0..180.0
+        parsedLongitude.isValidLongitude()
 
     fun chooseFile() {
         DesktopFileDialogs.chooseKmlToolsFile()?.let { path ->
@@ -14864,9 +14864,9 @@ private fun KmlCreateCoursePanel(projectFile: EventProjectFile?) {
     val parsedLongitude = longitudeDraft.trim().toDoubleOrNull()
     val canCreate = selectedPath != null &&
         parsedLatitude != null &&
-        parsedLatitude in -90.0..90.0 &&
+        parsedLatitude.isValidLatitude() &&
         parsedLongitude != null &&
-        parsedLongitude in -180.0..180.0
+        parsedLongitude.isValidLongitude()
 
     fun chooseOutputFile() {
         DesktopFileDialogs.chooseExportCreateCourseKml(
@@ -17763,9 +17763,9 @@ private fun ProtectedControlLocationUpdatePanel(
     val parsedLongitude = longitudeDraft.trim().toDoubleOrNull()
     val canApply = selectedControlId != null &&
         parsedLatitude != null &&
-        parsedLatitude in -90.0..90.0 &&
+        parsedLatitude.isValidLatitude() &&
         parsedLongitude != null &&
-        parsedLongitude in -180.0..180.0
+        parsedLongitude.isValidLongitude()
     fun applyLocationUpdate() {
         val controlId = selectedControlId ?: return
         if (canApply) {

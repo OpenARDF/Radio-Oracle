@@ -210,8 +210,8 @@ object DesktopKmlTools {
         val tokens = value.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
         val translated = tokens.mapNotNull { token ->
             val fields = token.split(',')
-            val longitude = fields.getOrNull(0)?.toDoubleOrNull() ?: return@mapNotNull null
-            val latitude = fields.getOrNull(1)?.toDoubleOrNull() ?: return@mapNotNull null
+            val longitude = fields.getOrNull(0)?.toDoubleOrNull().validLongitudeOrNull() ?: return@mapNotNull null
+            val latitude = fields.getOrNull(1)?.toDoubleOrNull().validLatitudeOrNull() ?: return@mapNotNull null
             val nextPoint = DesktopKmlToolsPoint(
                 latitude = latitude + latitudeDelta,
                 longitude = longitude + longitudeDelta
@@ -231,8 +231,8 @@ object DesktopKmlTools {
             .split(Regex("\\s+"))
             .mapNotNull { token ->
                 val fields = token.split(',')
-                val longitude = fields.getOrNull(0)?.toDoubleOrNull()
-                val latitude = fields.getOrNull(1)?.toDoubleOrNull()
+                val longitude = fields.getOrNull(0)?.toDoubleOrNull().validLongitudeOrNull()
+                val latitude = fields.getOrNull(1)?.toDoubleOrNull().validLatitudeOrNull()
                 if (latitude == null || longitude == null) {
                     null
                 } else {
@@ -246,8 +246,8 @@ object DesktopKmlTools {
         longitudeDelta: Double
     ): String? {
         val fields = value.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
-        val longitude = fields.getOrNull(0)?.toDoubleOrNull() ?: return null
-        val latitude = fields.getOrNull(1)?.toDoubleOrNull() ?: return null
+        val longitude = fields.getOrNull(0)?.toDoubleOrNull().validLongitudeOrNull() ?: return null
+        val latitude = fields.getOrNull(1)?.toDoubleOrNull().validLatitudeOrNull() ?: return null
         val nextPoint = DesktopKmlToolsPoint(
             latitude = latitude + latitudeDelta,
             longitude = longitude + longitudeDelta
@@ -266,8 +266,8 @@ object DesktopKmlTools {
     }
 
     private fun validatePoint(point: DesktopKmlToolsPoint, label: String) {
-        require(point.latitude in -90.0..90.0) { "$label latitude must be between -90 and 90." }
-        require(point.longitude in -180.0..180.0) { "$label longitude must be between -180 and 180." }
+        require(point.latitude.isValidLatitude()) { "$label latitude must be between -90 and 90." }
+        require(point.longitude.isValidLongitude()) { "$label longitude must be between -180 and 180." }
     }
 
     private fun writeTextAtomically(outputPath: Path, text: String) {

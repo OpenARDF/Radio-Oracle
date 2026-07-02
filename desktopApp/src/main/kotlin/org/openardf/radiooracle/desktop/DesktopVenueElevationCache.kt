@@ -2504,10 +2504,10 @@ internal fun desktopPdalStacWgs84BoundingBoxFromInfo(output: String): DesktopVen
     val minLatitude = values[1] ?: error("Missing minimum latitude.")
     val maxLongitude = values[if (values.size == 6) 3 else 2] ?: error("Missing maximum longitude.")
     val maxLatitude = values[if (values.size == 6) 4 else 3] ?: error("Missing maximum latitude.")
-    require(minLatitude in -90.0..90.0 && maxLatitude in -90.0..90.0) {
+    require(minLatitude.isValidLatitude() && maxLatitude.isValidLatitude()) {
         "PDAL STAC bbox latitude values are outside WGS84 range."
     }
-    require(minLongitude in -180.0..180.0 && maxLongitude in -180.0..180.0) {
+    require(minLongitude.isValidLongitude() && maxLongitude.isValidLongitude()) {
         "PDAL STAC bbox longitude values are outside WGS84 range."
     }
     return DesktopVenueElevationBoundingBox(

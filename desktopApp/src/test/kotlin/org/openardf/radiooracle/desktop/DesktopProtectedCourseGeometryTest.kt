@@ -94,10 +94,7 @@ class DesktopProtectedCourseGeometryTest {
         assertEquals(listOf("start"), sanitized.courseObjects.map { it.id })
         assertNull(sanitized.courseObjects.single().speedFactor)
         assertTrue(sanitized.finiteCourseGeoPoints().all { point ->
-            point.latitude.isFinite() &&
-                point.latitude in -90.0..90.0 &&
-                point.longitude.isFinite() &&
-                point.longitude in -180.0..180.0
+            point.hasValidWgs84Coordinate()
         })
     }
 }

@@ -76,10 +76,10 @@ object DesktopProtectedControlLocationUpdater {
             "No control location updates were provided."
         }
         uniqueUpdates.forEach { update ->
-            require(update.latitude in -90.0..90.0) {
+            require(update.latitude.isValidLatitude()) {
                 "Latitude must be between -90 and 90."
             }
-            require(update.longitude in -180.0..180.0) {
+            require(update.longitude.isValidLongitude()) {
                 "Longitude must be between -180 and 180."
             }
         }
@@ -185,7 +185,7 @@ object DesktopProtectedControlLocationUpdater {
     private fun parseLatitude(latitudeText: String): Double {
         val latitude = latitudeText.trim().toDoubleOrNull()
             ?: throw IllegalArgumentException("Latitude must be a number.")
-        require(latitude in -90.0..90.0) {
+        require(latitude.isValidLatitude()) {
             "Latitude must be between -90 and 90."
         }
         return latitude
@@ -194,7 +194,7 @@ object DesktopProtectedControlLocationUpdater {
     private fun parseLongitude(longitudeText: String): Double {
         val longitude = longitudeText.trim().toDoubleOrNull()
             ?: throw IllegalArgumentException("Longitude must be a number.")
-        require(longitude in -180.0..180.0) {
+        require(longitude.isValidLongitude()) {
             "Longitude must be between -180 and 180."
         }
         return longitude

@@ -251,8 +251,8 @@ object DesktopCreateCourseKml {
         DesktopExportPrimitives.compactKmlCoordinate(point.longitude, point.latitude, 0.0)
 
     private fun validatePoint(point: DesktopKmlToolsPoint, label: String) {
-        require(point.latitude in -90.0..90.0) { "$label latitude must be between -90 and 90." }
-        require(point.longitude in -180.0..180.0) { "$label longitude must be between -180 and 180." }
+        require(point.latitude.isValidLatitude()) { "$label latitude must be between -90 and 90." }
+        require(point.longitude.isValidLongitude()) { "$label longitude must be between -180 and 180." }
     }
 
     private fun writeTextAtomically(outputPath: Path, text: String) {
