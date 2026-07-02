@@ -264,6 +264,41 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun ignoresNonFiniteOcadGpxRoutePointsBeforeCourseDisplay() {
+        val gpxPath = Files.createTempFile("ocad-route-points", ".gpx")
+        Files.writeString(gpxPath, sampleOcadGpxWithNamedRoutePointsAndInvalidCoordinate())
+        val project = EventProjectEditor.addCategory(
+            classicPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = gpxPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { 100.0 }
+        )
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals(2, summary.matchedControlPointCount)
+        assertEquals("fox1 fox2", protectedCourseInfo.idealOrder)
+        assertTrue(protectedCourseInfo.route.all { it.latitude.isFinite() && it.longitude.isFinite() })
+
+        val analysis = DesktopCourseAnalyzer.analyze(
+            projectFile = updated,
+            categoryId = "cat-m21",
+            protectedCourseInfo = protectedCourseInfo,
+            protectedIdealOrderText = null
+        )
+        val routeMap = requireNotNull(analysis.providedRouteSection?.routeMap)
+        assertTrue(routeMap.points.all { it.xFraction.isFinite() && it.yFraction.isFinite() })
+    }
+
+    @Test
     fun courseAnalyzerImportSynthesizesM21RouteWhenNoLineStringExists() {
         val controlsOnlyPath = Files.createTempFile("radio-oracle-controls", ".kml")
         Files.writeString(controlsOnlyPath, controlsOnlyAnalyzerKml())
@@ -2138,6 +2173,25 @@ class DesktopCourseKmlImportTest {
             <rtept lat="39.0000" lon="-95.0000" />
             <rtept lat="39.0000" lon="-94.9990" />
             <rtept lat="39.0000" lon="-94.9980" />
+          </rte>
+        </gpx>
+        """.trimIndent().trimStart()
+
+    private fun sampleOcadGpxWithNamedRoutePointsAndInvalidCoordinate(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gpx version="1.1" creator="OCAD" xmlns="http://www.topografix.com/GPX/1/1">
+          <rte>
+            <name>M21</name>
+            <rtept lat="39.0000" lon="-95.0000">
+              <name>fox1</name>
+            </rtept>
+            <rtept lat="NaN" lon="-94.9990">
+              <name>bad point</name>
+            </rtept>
+            <rtept lat="39.0000" lon="-94.9980">
+              <name>fox2</name>
+            </rtept>
           </rte>
         </gpx>
         """.trimIndent().trimStart()
