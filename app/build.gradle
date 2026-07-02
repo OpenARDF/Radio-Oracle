@@ -60,7 +60,7 @@ android {
         applicationId = "org.openardf.radiooracle"
         minSdk = 26
         targetSdk = 37
-        versionCode = 34
+        versionCode = 35
         versionName = rootProject.ext.radioOracleVersion
         buildConfigField "String", "BUILD_DATE_UTC", "\"${Instant.now().toString()}\""
 
@@ -117,14 +117,12 @@ android {
     }
 
     packaging {
-        resources {
-            // Exclude duplicate OSGI MANIFEST entries from dependencies (okhttp logging-interceptor, jspecify etc.)
-            // Keep these exclusions narrow to avoid removing useful metadata from other libs.
-            excludes.addAll([
-                "META-INF/versions/**/OSGI-INF/MANIFEST.MF",
-                "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
-            ])
-        }
+        // Exclude duplicate OSGI MANIFEST entries from dependencies (okhttp logging-interceptor, jspecify etc.)
+        // Keep these exclusions narrow to avoid removing useful metadata from other libs.
+        resources.excludes.addAll([
+            "META-INF/versions/**/OSGI-INF/MANIFEST.MF",
+            "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        ])
     }
 
     testOptions {
