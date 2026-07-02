@@ -23,6 +23,9 @@
 -keep class org.openardf.radiooracle.backend.room.entity.** { *; }
 -keep class org.openardf.radiooracle.backend.room.enums.** { *; }
 -keep class org.openardf.radiooracle.backend.files.json.** { *; }
+# Android room enum packages are Kotlin typealiases; keep the real shared
+# domain classes for Moshi's reflective JSON adapters in minified builds.
+-keep class org.openardf.radiooracle.shared.domain.** { *; }
 -keep class org.openardf.radiooracle.ui.races.** {*;}
 
 # Xerces references optional Java XML APIs that are not present on Android.

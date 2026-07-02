@@ -131,7 +131,13 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
     }
 
     private suspend fun print(formatted: String): PrintAttemptResult {
-        val context = appContext.get()!!
+        val context = appContext.get()
+        if (context == null) {
+            printerReady = false
+            printer = null
+            logError("Print failed because application context is unavailable")
+            return PrintAttemptResult.FAILED
+        }
 
         val setupStatus = preparePrinter()
         if (setupStatus != PrinterSetupStatus.READY) {
@@ -140,6 +146,13 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
                 PrinterSetupStatus.FAILED -> PrintAttemptResult.FAILED
                 PrinterSetupStatus.READY -> PrintAttemptResult.PRINTED
             }
+        }
+
+        val activePrinter = printer
+        if (activePrinter == null) {
+            printerReady = false
+            logError("Print failed because Bluetooth printer was not initialized")
+            return PrintAttemptResult.FAILED
         }
 
         val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
@@ -159,7 +172,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
 
         return try {
             logInfo("Submitting ESC/POS print job lines=${textToPrint.lines().size}")
-            printer!!.printFormattedText(textToPrint + "\n\n[C]${version}", 100)
+            activePrinter.printFormattedText(textToPrint + "\n\n[C]${version}", 100)
             logInfo("ESC/POS print job submitted")
             PrintAttemptResult.PRINTED
         } catch (e: Exception) {
@@ -169,6 +182,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
                     ?: "Failed to print"
             )
             printerReady = false
+            printer = null
             PrintAttemptResult.FAILED
         }
     }
@@ -179,9 +193,10 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
     }
 
     private fun makeToast(message: String) {
+        val context = appContext.get() ?: return
         CoroutineScope(Dispatchers.Main).launch {
             Toast.makeText(
-                appContext.get(), message, Toast.LENGTH_LONG
+                context, message, Toast.LENGTH_LONG
             ).show()
         }
     }
