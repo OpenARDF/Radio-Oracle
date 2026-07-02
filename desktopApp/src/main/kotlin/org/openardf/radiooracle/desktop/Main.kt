@@ -16089,7 +16089,8 @@ private fun CourseAnalysisPanel(
                 protectedIdealOrderText = protectedIdealOrderByCategoryId[categoryId],
                 eventFileName = eventFilePath?.fileName?.toString(),
                 elevationLookup = DesktopVenueElevationCache::elevationMeters,
-                elevationCacheNotes = DesktopVenueElevationCache::analysisSourceNotes
+                elevationCacheNotes = DesktopVenueElevationCache::analysisSourceNotes,
+                magneticDeclinationProvider = DesktopMagneticDeclination::degrees
             )
         }
     fun analyzeDisabledReason(categoryId: String?): String? =
@@ -16920,6 +16921,11 @@ private fun CourseAnalysisRouteMap(routeMap: DesktopCourseRouteMap) {
             color = DesktopPalette.Black,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = routeMap.northOrientationText(),
+            color = DesktopPalette.Disconnected,
+            fontSize = 11.sp
         )
         Box(
             modifier = Modifier

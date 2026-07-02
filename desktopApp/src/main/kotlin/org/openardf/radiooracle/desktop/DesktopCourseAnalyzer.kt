@@ -44,9 +44,12 @@ import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import java.time.LocalDateTime
+import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 data class DesktopCourseAnalysisSummary(
     val eventName: String,
@@ -165,7 +168,8 @@ data class DesktopCourseRouteMap(
     val title: String,
     val points: List<DesktopCourseRouteMapPoint>,
     val routeLabels: List<String>,
-    val routePointIndexes: List<Int> = emptyList()
+    val routePointIndexes: List<Int> = emptyList(),
+    val magneticDeclinationDegrees: Double? = null
 )
 
 data class DesktopCourseRouteMapPoint(
@@ -242,6 +246,20 @@ enum class DesktopCourseRouteMapPointType {
     Beacon,
     Spectator,
     Waypoint
+}
+
+internal fun DesktopCourseRouteMap.northOrientationText(): String =
+    magneticDeclinationDegrees?.let { declination ->
+        "Magnetic north (${magneticDeclinationText(declination)} declination)"
+    } ?: "True north"
+
+internal fun magneticDeclinationText(degrees: Double): String {
+    val absoluteDegrees = String.format(Locale.US, "%.1f°", abs(degrees))
+    return when {
+        degrees > 0.05 -> "$absoluteDegrees E"
+        degrees < -0.05 -> "$absoluteDegrees W"
+        else -> "0.0°"
+    }
 }
 
 data class DesktopCourseWaitRow(
@@ -431,7 +449,8 @@ object DesktopCourseAnalyzer {
         eventFileName: String? = null,
         analysisPerformedAtText: String = DesktopDateTimeText.displayText(LocalDateTime.now().withNano(0)),
         elevationLookup: (CourseGeoPoint) -> Double? = { null },
-        elevationCacheNotes: (List<CourseGeoPoint>) -> List<String> = { emptyList() }
+        elevationCacheNotes: (List<CourseGeoPoint>) -> List<String> = { emptyList() },
+        magneticDeclinationProvider: (CourseGeoPoint) -> Double? = { null }
     ): DesktopCourseAnalysisSummary {
         val categoryData = projectFile.raceData.categories.first { it.category.id == categoryId }
         val category = categoryData.category
@@ -550,6 +569,22 @@ object DesktopCourseAnalyzer {
         val calculatedRouteStops = calculatedRoute
             ?.let { routeCandidate -> calculatedRouteStops(routeCandidate.controls, mandatoryWaypoints) }
             .orEmpty()
+        val routeMapMagneticDeclinationDegrees = routeMapReferencePoint(
+            route = route,
+            start = start,
+            finish = finish,
+            controls = displayControlsWithPoints,
+            courseObjects = courseObjectPoints
+        )?.let { point ->
+            runCatching { magneticDeclinationProvider(point) }
+                .onFailure { error ->
+                    DesktopDebugLog.warn(
+                        "CourseAnalysis",
+                        "Magnetic declination lookup failed: ${error.message ?: error::class.simpleName}"
+                    )
+                }
+                .getOrNull()
+        }
 
         val providedControlsFromOrder = idealOrderText
             ?.let { idealOrder ->
@@ -819,7 +854,8 @@ object DesktopCourseAnalyzer {
                                 elevationMeters = waypoint.point.elevationMeters
                             )
                         },
-                        routePoints = listOfNotNull(start) + labeledCalculatedRouteStops.map { it.point } + listOfNotNull(finish)
+                        routePoints = listOfNotNull(start) + labeledCalculatedRouteStops.map { it.point } + listOfNotNull(finish),
+                        magneticDeclinationDegrees = routeMapMagneticDeclinationDegrees
                     )
                 )
             }
@@ -852,7 +888,8 @@ object DesktopCourseAnalyzer {
                         controlsWithPoints.firstOrNull { it.control.id == control.id }
                     },
                     waypoints = courseObjectPoints.filter { it.type == ProtectedCourseObjectType.WAYPOINT },
-                    routePoints = route
+                    routePoints = route,
+                    magneticDeclinationDegrees = routeMapMagneticDeclinationDegrees
                 )
             )
         }
@@ -2992,7 +3029,8 @@ object DesktopCourseAnalyzer {
         routeControls: List<ControlAnalysisPoint> = controls,
         labelOverrides: Map<String, String> = emptyMap(),
         waypoints: List<ProtectedCourseObjectPoint> = emptyList(),
-        routePoints: List<CourseGeoPoint> = emptyList()
+        routePoints: List<CourseGeoPoint> = emptyList(),
+        magneticDeclinationDegrees: Double? = null
     ): DesktopCourseRouteMap? {
         fun labelFor(controlPoint: ControlAnalysisPoint): String =
             labelOverrides[controlPoint.control.id] ?: controlPoint.control.analysisRouteLabel()
@@ -3052,25 +3090,72 @@ object DesktopCourseAnalyzer {
         if (labeledPoints.size < 2) {
             return null
         }
-        val minLatitude = labeledPoints.minOf { it.point.latitude }
-        val maxLatitude = labeledPoints.maxOf { it.point.latitude }
-        val minLongitude = labeledPoints.minOf { it.point.longitude }
-        val maxLongitude = labeledPoints.maxOf { it.point.longitude }
-        val latitudeRange = max(0.000001, maxLatitude - minLatitude)
-        val longitudeRange = max(0.000001, maxLongitude - minLongitude)
+        val projectedPoints = projectedRouteMapPoints(labeledPoints, magneticDeclinationDegrees)
+        val minX = projectedPoints.minOf { it.xMeters }
+        val maxX = projectedPoints.maxOf { it.xMeters }
+        val minY = projectedPoints.minOf { it.yMeters }
+        val maxY = projectedPoints.maxOf { it.yMeters }
+        val xRange = max(0.001, maxX - minX)
+        val yRange = max(0.001, maxY - minY)
         return DesktopCourseRouteMap(
             title = title,
-            points = labeledPoints.map { source ->
+            points = projectedPoints.map { projected ->
                 DesktopCourseRouteMapPoint(
-                    label = source.label,
-                    xFraction = (source.point.longitude - minLongitude) / longitudeRange,
-                    yFraction = (maxLatitude - source.point.latitude) / latitudeRange,
-                    type = source.type
+                    label = projected.source.label,
+                    xFraction = (projected.xMeters - minX) / xRange,
+                    yFraction = (maxY - projected.yMeters) / yRange,
+                    type = projected.source.type
                 )
             },
             routeLabels = routeLabels,
-            routePointIndexes = routePointIndexes
+            routePointIndexes = routePointIndexes,
+            magneticDeclinationDegrees = magneticDeclinationDegrees
         )
+    }
+
+    private fun routeMapReferencePoint(
+        route: List<CourseGeoPoint>,
+        start: CourseGeoPoint?,
+        finish: CourseGeoPoint?,
+        controls: List<ControlAnalysisPoint>,
+        courseObjects: List<ProtectedCourseObjectPoint>
+    ): CourseGeoPoint? {
+        val points = buildList {
+            addAll(route)
+            start?.let(::add)
+            finish?.let(::add)
+            controls.mapNotNull { it.point }.forEach(::add)
+            courseObjects.map { it.toGeoPoint() }.forEach(::add)
+        }
+        if (points.isEmpty()) {
+            return null
+        }
+        return CourseGeoPoint(
+            latitude = points.map { it.latitude }.average(),
+            longitude = points.map { it.longitude }.average()
+        )
+    }
+
+    private fun projectedRouteMapPoints(
+        sourcePoints: List<RouteMapSourcePoint>,
+        magneticDeclinationDegrees: Double?
+    ): List<ProjectedRouteMapPoint> {
+        val centerLatitude = sourcePoints.map { it.point.latitude }.average()
+        val centerLongitude = sourcePoints.map { it.point.longitude }.average()
+        val latitudeMetersPerDegree = 111_320.0
+        val longitudeMetersPerDegree = latitudeMetersPerDegree * max(0.000001, cos(Math.toRadians(centerLatitude)))
+        val angleRadians = Math.toRadians(magneticDeclinationDegrees ?: 0.0)
+        val cosAngle = cos(angleRadians)
+        val sinAngle = sin(angleRadians)
+        return sourcePoints.map { source ->
+            val eastMeters = (source.point.longitude - centerLongitude) * longitudeMetersPerDegree
+            val northMeters = (source.point.latitude - centerLatitude) * latitudeMetersPerDegree
+            ProjectedRouteMapPoint(
+                source = source,
+                xMeters = eastMeters * cosAngle - northMeters * sinAngle,
+                yMeters = eastMeters * sinAngle + northMeters * cosAngle
+            )
+        }
     }
 
     private fun routeIntermediateSources(
@@ -4060,6 +4145,12 @@ private data class RouteMapSourcePoint(
     val label: String,
     val point: CourseGeoPoint,
     val type: DesktopCourseRouteMapPointType
+)
+
+private data class ProjectedRouteMapPoint(
+    val source: RouteMapSourcePoint,
+    val xMeters: Double,
+    val yMeters: Double
 )
 
 private data class CalculatedRoute(

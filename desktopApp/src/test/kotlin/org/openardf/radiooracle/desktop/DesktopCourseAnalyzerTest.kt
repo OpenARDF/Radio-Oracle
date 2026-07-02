@@ -58,6 +58,7 @@ import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 class DesktopCourseAnalyzerTest {
@@ -1809,6 +1810,39 @@ class DesktopCourseAnalyzerTest {
         assertFalse(summary.calculatedIdealOrder.any { it == "32" || it == "34" })
         assertTrue(routeMap.points.map { it.label }.containsAll(listOf("31", "32", "33", "34", "35", "B")))
         assertEquals(listOf("S", "31", "33", "35", "B", "F"), routeMap.routeLabels)
+    }
+
+    @Test
+    fun routeMapUsesMagneticDeclinationWhenProvided() {
+        val trueNorthSummary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 3),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo(foxCount = 3),
+            protectedIdealOrderText = null
+        )
+        val magneticNorthSummary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 3),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo(foxCount = 3),
+            protectedIdealOrderText = null,
+            magneticDeclinationProvider = { 90.0 }
+        )
+
+        val trueNorthMap = requireNotNull(trueNorthSummary.routeMaps.single())
+        val magneticNorthMap = requireNotNull(magneticNorthSummary.routeMaps.single())
+        val trueStart = trueNorthMap.points.single { it.label == "S" && it.type == DesktopCourseRouteMapPointType.Start }
+        val trueFinish = trueNorthMap.points.single { it.label == "F" }
+        val magneticStart = magneticNorthMap.points.single { it.label == "S" && it.type == DesktopCourseRouteMapPointType.Start }
+        val magneticFinish = magneticNorthMap.points.single { it.label == "F" }
+
+        assertNull(trueNorthMap.magneticDeclinationDegrees)
+        assertEquals(90.0, magneticNorthMap.magneticDeclinationDegrees ?: 0.0, 0.001)
+        assertTrue("True-north fixture should run east-west.", abs(trueFinish.xFraction - trueStart.xFraction) > 0.9)
+        assertTrue("Magnetic-north rotation should make the route nearly vertical.", abs(magneticFinish.xFraction - magneticStart.xFraction) < 0.01)
+        assertTrue("Magnetic-north rotation should keep route extent visible.", abs(magneticFinish.yFraction - magneticStart.yFraction) > 0.9)
+
+        val reportText = DesktopCourseAnalysisExports.reportText(magneticNorthSummary)
+        assertTrue(reportText.contains("Orientation: Magnetic north (90.0° E declination)"))
     }
 
     private fun EventProjectFile.withAliasesAndUnmatchedControlReadout(): EventProjectFile {

@@ -192,6 +192,7 @@ object DesktopCourseAnalysisExports {
         } else {
             result.routeMaps.forEach { routeMap ->
                 appendLine("${routeMap.title}: ${routeMap.routeLabels.joinToString(" -> ")}")
+                appendLine("  Orientation: ${routeMap.northOrientationText()}")
                 routeMap.points.forEach { point ->
                     appendLine("  ${point.label}: x=${twoDecimalText(point.xFraction)}, y=${twoDecimalText(point.yFraction)}, ${point.type}")
                 }
@@ -725,6 +726,7 @@ object DesktopCourseAnalysisExports {
                     val left = 54.0 + column * 270.0
                     val bottom = 405.0 - row * 255.0
                     appendText(left, bottom + 205.0, 12, routeMap.title)
+                    appendText(left, bottom + 191.0, 8, routeMap.northOrientationText())
                     appendRouteMap(routeMap, left, bottom, 225.0, 185.0)
                 }
         }
