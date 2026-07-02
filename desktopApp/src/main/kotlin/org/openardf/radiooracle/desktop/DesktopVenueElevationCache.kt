@@ -99,6 +99,12 @@ data class DesktopVenueElevationBoundingBox(
     val maxLongitude: Double
 ) {
     init {
+        require(minLatitude.isValidLatitude() && maxLatitude.isValidLatitude()) {
+            "Latitude values must be finite and between -90 and 90."
+        }
+        require(minLongitude.isValidLongitude() && maxLongitude.isValidLongitude()) {
+            "Longitude values must be finite and between -180 and 180."
+        }
         require(minLatitude <= maxLatitude) { "Minimum latitude must not exceed maximum latitude." }
         require(minLongitude <= maxLongitude) { "Minimum longitude must not exceed maximum longitude." }
     }
@@ -280,18 +286,21 @@ object DesktopVenueElevationCache {
         resolutionMeters: Double,
         bufferMeters: Double
     ): DesktopVenueElevationCacheEstimate {
-        require(resolutionMeters > 0.0) { "Resolution must be greater than zero." }
+        require(resolutionMeters.isFinite() && resolutionMeters > 0.0) { "Resolution must be a finite value greater than zero." }
         val expanded = boundingBox.expanded(bufferMeters)
         val columns = gridCount(expanded.widthMeters(), resolutionMeters)
         val rows = gridCount(expanded.heightMeters(), resolutionMeters)
-        val pointCount = rows * columns
+        val pointCount = rows.toLong() * columns.toLong()
+        require(pointCount in 1L..MAX_ELEVATION_GRID_POINT_COUNT) {
+            "Elevation grid would contain ${pointCount.toString()} points; choose a smaller area or coarser resolution."
+        }
         return DesktopVenueElevationCacheEstimate(
             boundingBox = expanded,
             resolutionMeters = resolutionMeters,
             rowCount = rows,
             columnCount = columns,
-            pointCount = pointCount,
-            rawBytes = pointCount.toLong() * java.lang.Double.BYTES
+            pointCount = pointCount.toInt(),
+            rawBytes = pointCount * java.lang.Double.BYTES.toLong()
         )
     }
 
@@ -830,6 +839,9 @@ object DesktopVenueElevationCache {
                             )
                         }.getOrNull()
                         estimatedRawBytes?.let { rawBytes ->
+                            require(rawBytes <= MAX_ELEVATION_GRID_RAW_BYTES) {
+                                "Elevation grid would require approximately ${rawBytes.toString()} raw bytes; choose a smaller area or coarser resolution."
+                            }
                             onProgress(
                                 DesktopVenueElevationCacheProgress(
                                     venueName = cleanVenueName,
@@ -1114,11 +1126,16 @@ object DesktopVenueElevationCache {
         require(metadata.version == CACHE_VERSION) { "Unsupported cache version ${metadata.version}." }
         require(metadata.venueName.isNotBlank()) { "Missing venue name." }
         require(metadata.sourceName.isNotBlank()) { "Missing source name." }
-        require(metadata.resolutionMeters > 0.0) { "Resolution must be greater than zero." }
+        require(metadata.resolutionMeters.isFinite() && metadata.resolutionMeters > 0.0) {
+            "Resolution must be a finite value greater than zero."
+        }
         require(metadata.rowCount > 0) { "Row count must be greater than zero." }
         require(metadata.columnCount > 0) { "Column count must be greater than zero." }
         require(metadata.rowCount.toLong() * metadata.columnCount.toLong() == cacheFile.elevations.size.toLong()) {
             "Elevation count ${cacheFile.elevations.size} does not match ${metadata.rowCount} x ${metadata.columnCount}."
+        }
+        require(cacheFile.elevations.all { it == null || it.isFinite() }) {
+            "Elevation values must be finite numbers or null."
         }
         metadata.boundingBox.toPublic()
     }
@@ -1979,6 +1996,8 @@ private const val WASHINGTON_DNR_DOWNLOAD_URL = "https://lidarportal.dnr.wa.gov/
 private const val FEET_TO_METERS = 0.3048
 private const val US_SURVEY_FOOT_TO_METERS = 1200.0 / 3937.0
 private const val GDAL_SAMPLE_PROGRESS_INTERVAL = 5_000
+private const val MAX_ELEVATION_GRID_POINT_COUNT = 25_000_000L
+private const val MAX_ELEVATION_GRID_RAW_BYTES = MAX_ELEVATION_GRID_POINT_COUNT * 8L
 
 internal data class DesktopGdalElevationUnits(
     val label: String,
@@ -2541,7 +2560,9 @@ internal data class DesktopPdalPointCloudExtentEstimate(
         val cellSize = resolutionMeters.coerceAtLeast(0.01)
         val columns = ceil(widthMeters / cellSize).toLong() + 1L
         val rows = ceil(heightMeters / cellSize).toLong() + 1L
-        return rows.coerceAtLeast(1L) * columns.coerceAtLeast(1L) * java.lang.Double.BYTES.toLong()
+        return rows.coerceAtLeast(1L)
+            .saturatingMultiply(columns.coerceAtLeast(1L))
+            .saturatingMultiply(java.lang.Double.BYTES.toLong())
     }
 
     fun unionOrNull(other: DesktopPdalPointCloudExtentEstimate): DesktopPdalPointCloudExtentEstimate? {
@@ -2558,6 +2579,13 @@ internal data class DesktopPdalPointCloudExtentEstimate(
             maxY = max(maxY, other.maxY)
         )
     }
+}
+
+private fun Long.saturatingMultiply(other: Long): Long {
+    if (this <= 0L || other <= 0L) {
+        return 0L
+    }
+    return if (this > Long.MAX_VALUE / other) Long.MAX_VALUE else this * other
 }
 
 internal fun desktopPdalSummaryPointCloudExtentEstimateFromInfo(output: String): DesktopPdalPointCloudExtentEstimate {

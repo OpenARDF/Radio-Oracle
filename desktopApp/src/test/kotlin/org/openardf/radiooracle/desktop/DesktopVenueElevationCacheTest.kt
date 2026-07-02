@@ -283,6 +283,40 @@ class DesktopVenueElevationCacheTest {
     }
 
     @Test
+    fun rejectsOversizedElevationGridEstimateBeforePointCountOverflow() {
+        val result = runCatching {
+            DesktopVenueElevationCache.estimate(
+                DesktopVenueElevationBoundingBox(
+                    minLatitude = 44.0,
+                    maxLatitude = 45.0,
+                    minLongitude = -122.0,
+                    maxLongitude = -121.0
+                ),
+                resolutionMeters = 1.0,
+                bufferMeters = 0.0
+            )
+        }
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("choose a smaller area or coarser resolution") == true)
+    }
+
+    @Test
+    fun pointCloudRawByteEstimateSaturatesInsteadOfOverflowingNegative() {
+        val estimate = DesktopPdalPointCloudExtentEstimate(
+            minX = 0.0,
+            maxX = 1.0e12,
+            minY = 0.0,
+            maxY = 1.0e12,
+            isGeographic = false,
+            horizontalUnitMeters = 1.0,
+            srsKey = "EPSG:3857"
+        )
+
+        assertEquals(Long.MAX_VALUE, estimate.rawBytes(0.01))
+    }
+
+    @Test
     fun estimatesPointCloudOutputBytesFromProjectedFootSummary() {
         val estimate = desktopPdalSummaryPointCloudExtentEstimateFromInfo(
             """
@@ -563,6 +597,46 @@ class DesktopVenueElevationCacheTest {
             assertEquals(1, summary.importedCount)
             assertTrue(Files.exists(summary.targetDirectory.resolve("billy-bob.roelev.json")))
             assertEquals(listOf("Test Venue"), DesktopVenueElevationCache.listings().map { it.venueName })
+        }
+    }
+
+    @Test
+    fun rejectsImportedDemJsonWithNonFiniteElevationValues() {
+        withTemporaryUserHome { home ->
+            val sourceDirectory = home.resolve("Downloads")
+            Files.createDirectories(sourceDirectory)
+            val sourcePath = sourceDirectory.resolve("bad-elevation.json")
+            Files.writeString(
+                sourcePath,
+                cacheJson("Oregon DOGAMI LiDAR DTM", 3.0, 200.0)
+                    .replace("200.0, 200.0, 200.0, 200.0", "200.0, \"NaN\", 200.0, 200.0")
+            )
+
+            val review = DesktopVenueElevationCache.reviewDemFileImport(listOf(sourcePath))
+
+            assertEquals(0, review.importableCount)
+            assertEquals(1, review.issues.size)
+            assertTrue(review.issues.single().reason.contains("Elevation values must be finite"))
+        }
+    }
+
+    @Test
+    fun rejectsImportedDemJsonWithNonFiniteBounds() {
+        withTemporaryUserHome { home ->
+            val sourceDirectory = home.resolve("Downloads")
+            Files.createDirectories(sourceDirectory)
+            val sourcePath = sourceDirectory.resolve("bad-bounds.json")
+            Files.writeString(
+                sourcePath,
+                cacheJson("Oregon DOGAMI LiDAR DTM", 3.0, 200.0)
+                    .replace("\"maxLatitude\": 45.1", "\"maxLatitude\": \"Infinity\"")
+            )
+
+            val review = DesktopVenueElevationCache.reviewDemFileImport(listOf(sourcePath))
+
+            assertEquals(0, review.importableCount)
+            assertEquals(1, review.issues.size)
+            assertTrue(review.issues.single().reason.contains("Latitude values must be finite"))
         }
     }
 
