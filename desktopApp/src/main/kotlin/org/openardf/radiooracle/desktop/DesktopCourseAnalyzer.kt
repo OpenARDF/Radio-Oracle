@@ -2689,40 +2689,6 @@ object DesktopCourseAnalyzer {
             this + beacon
         }
 
-    private fun ProtectedCourseInfo.withFiniteCourseGeometry(): ProtectedCourseInfo =
-        copy(
-            route = route
-                .filter { it.latitude.isValidLatitude() && it.longitude.isValidLongitude() }
-                .map { point ->
-                    point.copy(elevationMeters = point.elevationMeters.finiteOrNull())
-                },
-            controlPoints = controlPoints
-                .filter { it.latitude.isValidLatitude() && it.longitude.isValidLongitude() }
-                .map { control ->
-                    control.copy(
-                        elevationMeters = control.elevationMeters.finiteOrNull(),
-                        speedFactor = control.speedFactor.finiteOrNull()
-                    )
-                },
-            courseObjects = courseObjects
-                .filter { it.latitude.isValidLatitude() && it.longitude.isValidLongitude() }
-                .map { courseObject ->
-                    courseObject.copy(
-                        elevationMeters = courseObject.elevationMeters.finiteOrNull(),
-                        speedFactor = courseObject.speedFactor.finiteOrNull()
-                    )
-                }
-        )
-
-    private fun Double?.finiteOrNull(): Double? =
-        this?.takeIf { it.isFinite() }
-
-    private fun Double.isValidLatitude(): Boolean =
-        isFinite() && this in -90.0..90.0
-
-    private fun Double.isValidLongitude(): Boolean =
-        isFinite() && this in -180.0..180.0
-
     private fun ProtectedCourseInfo.effectiveCourseObjectPoints(): List<ProtectedCourseObjectPoint> =
         buildList {
             addAll(courseObjects)

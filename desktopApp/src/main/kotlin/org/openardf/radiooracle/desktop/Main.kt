@@ -19633,9 +19633,7 @@ private fun LabeledTextField(
 }
 
 private fun ProtectedCourseInfo.courseGeoPoints(): List<CourseGeoPoint> =
-    route.map { CourseGeoPoint(it.latitude, it.longitude) } +
-        controlPoints.map { CourseGeoPoint(it.latitude, it.longitude) } +
-        courseObjects.map { CourseGeoPoint(it.latitude, it.longitude) }
+    finiteCourseGeoPoints()
 
 private fun List<CourseGeoPoint>.venueBoundingBoxOrNull(): DesktopVenueElevationBoundingBox? =
     takeIf { it.isNotEmpty() }?.let { points ->

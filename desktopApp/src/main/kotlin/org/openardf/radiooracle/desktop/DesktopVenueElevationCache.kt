@@ -1274,9 +1274,7 @@ object DesktopVenueElevationCache {
         }
 
     private fun ProtectedCourseInfo.allGeoPoints(): List<CourseGeoPoint> =
-        route.map { CourseGeoPoint(it.latitude, it.longitude) } +
-            controlPoints.map { CourseGeoPoint(it.latitude, it.longitude) } +
-            courseObjects.map { CourseGeoPoint(it.latitude, it.longitude) }
+        finiteCourseGeoPoints()
 
     private fun List<CourseGeoPoint>.boundingBoxOrNull(): DesktopVenueElevationBoundingBox? =
         takeIf { it.isNotEmpty() }?.let { points ->

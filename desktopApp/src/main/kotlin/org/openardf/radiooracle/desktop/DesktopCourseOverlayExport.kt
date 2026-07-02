@@ -144,6 +144,7 @@ object DesktopCourseOverlayExporter {
                 ?.takeIf { it.isNotBlank() }
                 ?.let { encryptedValue ->
                     categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
+                        .withFiniteCourseGeometry()
                 }
         }.toMap()
     }
