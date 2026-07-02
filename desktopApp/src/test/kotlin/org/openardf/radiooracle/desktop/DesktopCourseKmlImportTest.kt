@@ -285,6 +285,8 @@ class DesktopCourseKmlImportTest {
             "course-key"
         )
         assertEquals(2, summary.matchedControlPointCount)
+        assertEquals(2, summary.assignedCategoryControlCount)
+        assertEquals("31 32", summary.categoryAssignmentUpdates.single().controlPointsText)
         assertEquals("fox1 fox2", protectedCourseInfo.idealOrder)
         assertTrue(protectedCourseInfo.route.all { it.latitude.isFinite() && it.longitude.isFinite() })
 

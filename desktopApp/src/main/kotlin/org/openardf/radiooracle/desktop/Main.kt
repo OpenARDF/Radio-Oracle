@@ -6883,6 +6883,22 @@ private fun controlsRouteImportFormatLabel(sourceName: String): String =
         "KML/KMZ"
     }
 
+internal fun defaultApplyCategoryAssignments(
+    projectFile: EventProjectFile,
+    updates: List<DesktopCourseKmlCategoryAssignmentUpdate>,
+    categoryAssumptions: List<DesktopCourseKmlCategoryAssumption>
+): Boolean {
+    if (updates.isEmpty() || categoryAssumptions.isNotEmpty()) {
+        return false
+    }
+    val categoriesById = projectFile.raceData.categories.associateBy { it.category.id }
+    return updates.all { update ->
+        categoriesById[update.categoryId]?.let { categoryData ->
+            categoryData.controlPoints.isEmpty() && categoryData.publicControlIds.isEmpty()
+        } == true
+    }
+}
+
 @Suppress("DEPRECATION")
 private fun EventCategoryData.restorableControlPointsText(): String =
     category.controlPointsString.takeIf { it.isNotBlank() }
@@ -6918,6 +6934,11 @@ private fun CourseKmlKmzImportReviewDialog(
     } else {
         summary
     }
+    val selectedProject = if (createMissingCategories) {
+        review.createdMissingCategoryProject ?: review.updatedProject
+    } else {
+        review.updatedProject
+    }
     val hasMissingImportItems = summary.missingCategoryNames.isNotEmpty() || summary.missingControlNames.isNotEmpty()
     val blocksKeepForMissingItems = hasMissingImportItems && !createMissingCategories
     val categoriesText = selectedSummary.matchedCategoryNames
@@ -6935,8 +6956,18 @@ private fun CourseKmlKmzImportReviewDialog(
     ) {
         mutableStateOf(canFetchElevations)
     }
-    var applyCategoryAssignments by remember(review.sourceName, summary.sourceSha256) {
-        mutableStateOf(false)
+    var applyCategoryAssignments by remember(
+        review.sourceName,
+        summary.sourceSha256,
+        createMissingCategories
+    ) {
+        mutableStateOf(
+            defaultApplyCategoryAssignments(
+                projectFile = selectedProject,
+                updates = selectedSummary.categoryAssignmentUpdates,
+                categoryAssumptions = selectedSummary.categoryAssumptions
+            )
+        )
     }
     var overwriteImportedSiNumbers by remember(review.sourceName, summary.sourceSha256) {
         mutableStateOf(false)
