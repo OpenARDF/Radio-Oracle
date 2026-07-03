@@ -3133,6 +3133,7 @@ fun main(args: Array<String>) = application {
             val retainedImportedSiConflictCount = selectedSummary.controlSiConflictCount
                 .takeIf { !overwriteImportedSiNumbers }
                 ?: 0
+            val controlsOnlyImportWarningLines = controlsOnlyImportWarningLines(updatedProject, selectedSummary)
             recentImportReport = DesktopImportReport(
                 title = "Controls/route $formatLabel: ${review.sourceName}",
                 lines = withRollbackBackupLine(listOf(
@@ -3152,7 +3153,8 @@ fun main(args: Array<String>) = application {
                     selectedSummary.rejectedRoutes.map { rejected ->
                         "Skipped route ${rejected.routeName} for ${rejected.categoryName}: ${rejected.reason}"
                     } +
-                    selectedSummary.eventTypeWarnings)
+                    selectedSummary.eventTypeWarnings +
+                    controlsOnlyImportWarningLines)
             )
             if (fetchElevations) {
                 startCourseKmlKmzElevationFetch(review.copy(summary = selectedSummary))
@@ -3195,7 +3197,7 @@ fun main(args: Array<String>) = application {
                     } else {
                         "Imported controls/route data for ${selectedSummary.importedCategoryCount} categories.$locationText$assignedText$duplicateText$createdText$createdControlsText Unsaved changes."
                     }
-                }
+                } + controlsOnlyImportWarningLines.firstOrNull()?.let { " $it" }.orEmpty()
             }
         }
 
@@ -6928,6 +6930,27 @@ private fun EventCategoryData.restorableControlPointsText(): String =
                 ControlPointDefinition(controlPoint.siCode, controlPoint.type, controlPoint.order)
             }
         )
+
+internal fun controlsOnlyImportWarningLines(
+    projectFile: EventProjectFile,
+    summary: DesktopCourseKmlImportSummary
+): List<String> {
+    if (summary.routeCount != 0 || summary.controlPointCount == 0 || projectFile.raceData.categories.isEmpty()) {
+        return emptyList()
+    }
+    val warningReasonsByControlId = controlSuspicionReasonsByControlId(
+        controls = projectFile.raceData.controls.map { it.toControlDetails() },
+        categories = projectFile.raceData.categories
+    )
+    val unassignedControlCount = unusedControlWarningCount(warningReasonsByControlId)
+    if (unassignedControlCount == 0) {
+        return emptyList()
+    }
+    val noun = if (unassignedControlCount == 1) "control is" else "controls are"
+    return listOf(
+        "$unassignedControlCount $noun not assigned to any category; those controls will show red in Setup > Controls until category control lists are updated."
+    )
+}
 
 @Composable
 private fun CourseKmlKmzImportReviewDialog(
@@ -14651,7 +14674,8 @@ private fun ControlDetailsPanel(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ControlStatsRow(
             controls = controls,
-            raceType = raceType
+            raceType = raceType,
+            warningReasonsByControlId = warningReasonsByControlId
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -14731,9 +14755,15 @@ private fun ControlDetailsPanel(
 @Composable
 private fun ControlStatsRow(
     controls: List<EventControlDetails>,
-    raceType: RaceType
+    raceType: RaceType,
+    warningReasonsByControlId: Map<String, List<String>>
 ) {
-    val items = controlStatsItems(controls, raceType)
+    val unusedControlCount = unusedControlWarningCount(warningReasonsByControlId)
+    val items = controlStatsItems(controls, raceType) + ControlStatsItem(
+        label = "Unused",
+        count = unusedControlCount,
+        isCompliant = unusedControlCount == 0
+    )
     val firstWarningLabel = items.firstOrNull { !it.isCompliant }?.label
     Row(
         modifier = Modifier.fillMaxWidth(),

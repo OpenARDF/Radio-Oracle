@@ -27,6 +27,9 @@ package org.openardf.radiooracle.desktop
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventControlDetails
 
+internal const val UnassignedControlReason = "Control is not assigned to any category."
+private const val MissingPublicLabelReason = "Control has no Public label."
+
 /**
  * Computes warning reasons for controls that look suspicious on the Setup > Controls screen.
  *
@@ -53,10 +56,10 @@ internal fun controlSuspicionReasonsByControlId(
     return controls.associate { control ->
         val reasons = buildList {
             if (categories.isNotEmpty() && control.id !in assignedControlIds) {
-                add("Control is not assigned to any category.")
+                add(UnassignedControlReason)
             }
             if (control.publicLabel.isBlank()) {
-                add("Control has no Public label.")
+                add(MissingPublicLabelReason)
             } else if (control.normalizedPublicLabel() in duplicatePublicLabels) {
                 add("Public label \"${control.publicLabel.trim()}\" is also used by another control.")
             }
@@ -64,6 +67,9 @@ internal fun controlSuspicionReasonsByControlId(
         control.id to reasons
     }
 }
+
+internal fun unusedControlWarningCount(warningReasonsByControlId: Map<String, List<String>>): Int =
+    warningReasonsByControlId.values.count { reasons -> UnassignedControlReason in reasons }
 
 @Suppress("DEPRECATION")
 private fun assignedControlIds(

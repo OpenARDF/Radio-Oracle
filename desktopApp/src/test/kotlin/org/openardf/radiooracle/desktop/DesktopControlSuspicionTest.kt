@@ -32,8 +32,11 @@ import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlDetails
 import org.openardf.radiooracle.shared.event.EventControlPoint
+import org.openardf.radiooracle.shared.event.EventProjectEditor
+import org.openardf.radiooracle.shared.event.EventProjectFactory
 
 class DesktopControlSuspicionTest {
     @Test
@@ -71,6 +74,7 @@ class DesktopControlSuspicionTest {
             reasons.getValue("fox3")
         )
         assertTrue(reasons.getValue("beacon").isEmpty())
+        assertEquals(2, unusedControlWarningCount(reasons))
     }
 
     @Test
@@ -118,6 +122,31 @@ class DesktopControlSuspicionTest {
         )
 
         assertTrue(reasons.getValue("fox1").isEmpty())
+    }
+
+    @Test
+    fun controlsOnlyImportWarningExplainsUnassignedControls() {
+        val projectWithCategory = EventProjectEditor.addCategory(
+            projectFile = EventProjectFactory.createEmptyProject("race", "Control Import Test", "2026-07-03T09:00"),
+            categoryId = "cat",
+            name = "M21"
+        )
+        val project = projectWithCategory.copy(
+            raceData = projectWithCategory.raceData.copy(
+                controls = listOf(
+                    EventControl("fox-1", "race", "Fox 1", 131, ControlPointType.CONTROL, publicLabel = "Fox 1"),
+                    EventControl("fox-2", "race", "Fox 2", 132, ControlPointType.CONTROL, publicLabel = "Fox 2")
+                )
+            )
+        )
+
+        assertEquals(
+            listOf(
+                "2 controls are not assigned to any category; those controls will show red in Setup > Controls until category control lists are updated."
+            ),
+            controlsOnlyImportWarningLines(project, controlsOnlySummary(controlPointCount = 2))
+        )
+        assertTrue(controlsOnlyImportWarningLines(project, controlsOnlySummary(routeCount = 1)).isEmpty())
     }
 
     private fun control(
@@ -171,5 +200,39 @@ class DesktopControlSuspicionTest {
             type = type,
             order = 1,
             controlId = controlId
+        )
+
+    private fun controlsOnlySummary(
+        routeCount: Int = 0,
+        controlPointCount: Int = 0
+    ): DesktopCourseKmlImportSummary =
+        DesktopCourseKmlImportSummary(
+            matchedCategoryCount = 0,
+            routeCount = routeCount,
+            controlPointCount = controlPointCount,
+            matchedControlPointCount = 0,
+            matchedFoxCount = 0,
+            matchedBeaconCount = 0,
+            matchedSpectatorCount = 0,
+            labelConversions = emptyList(),
+            matchedCategoryIds = emptyList(),
+            matchedCategoryNames = emptyList(),
+            routeElevationPointCount = 0,
+            missingElevationPointCount = 0,
+            importedCategoryCount = 0,
+            categoryAssignmentUpdates = emptyList(),
+            changedControlLocationCount = 0,
+            controlLocationAffectedCategoryCount = 0,
+            duplicateCategoryCount = 0,
+            duplicateMissingElevationPointCount = 0,
+            missingCategoryNames = emptyList(),
+            createdCategoryNames = emptyList(),
+            missingControlNames = emptyList(),
+            createdControlNames = emptyList(),
+            deletedControlNames = emptyList(),
+            categoryAssumptions = emptyList(),
+            rejectedRoutes = emptyList(),
+            eventTypeWarnings = emptyList(),
+            sourceSha256 = "test"
         )
 }
