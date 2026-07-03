@@ -25,6 +25,7 @@
 package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -37,6 +38,7 @@ import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import java.nio.file.Files
 import java.util.Locale
@@ -480,7 +482,7 @@ class DesktopCourseKmlImportTest {
         assertEquals(listOf("31", "32", "33", "34", "35", "M"), protectedInfo("M21").controlPoints.map { it.label })
         assertEquals(listOf("31", "33", "35", "M"), protectedInfo("M50").controlPoints.map { it.label })
         assertEquals(listOf("32", "34", "35", "M"), protectedInfo("W65").controlPoints.map { it.label })
-        assertEquals(8, protectedInfo("M50").courseObjects.size)
+        assertEquals(listOf("Start", "31", "33", "35", "M", "Finish"), protectedInfo("M50").courseObjects.map { it.label })
     }
 
     @Test
@@ -1263,6 +1265,99 @@ class DesktopCourseKmlImportTest {
                 .map { it.id },
             protectedCourseInfo.controlPoints.map { it.controlId }
         )
+    }
+
+    @Test
+    fun importsOcadGpxFoxNamesIntoExistingNumericSiControls() {
+        val gpxPath = Files.createTempFile("ocad-scout-classic", ".gpx")
+        Files.writeString(gpxPath, sampleOcadGpxWithScoutClassicTracks())
+        val baseProject = classicPresetProject()
+            .withControlIdentity(oldSiCode = 31, newSiCode = 31, label = "FOX 1", publicLabel = "FOX1")
+            .withControlIdentity(oldSiCode = 32, newSiCode = 32, label = "32", publicLabel = "")
+            .withControlIdentity(oldSiCode = 33, newSiCode = 33, label = "33", publicLabel = "")
+            .withControlIdentity(oldSiCode = 34, newSiCode = 34, label = "4", publicLabel = "FOX4")
+            .withControlIdentity(oldSiCode = 35, newSiCode = 35, label = "5", publicLabel = "FOX5")
+            .withControlPublicLabel(siCode = 99, publicLabel = "B")
+        val project = listOf("M21", "M70").fold(baseProject) { currentProject, categoryName ->
+            EventProjectEditor.addCategory(
+                projectFile = currentProject,
+                categoryId = "cat-${categoryName.lowercase()}",
+                name = categoryName
+            )
+        }
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = gpxPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val controlsById = updated.raceData.controls.associateBy { it.id }
+        fun protectedInfo(categoryName: String) = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single { it.category.name == categoryName }.category.encryptedCourseInfo),
+            "course-key"
+        )
+        fun ProtectedCourseInfo.controlSiCodes(): List<Int> =
+            controlPoints.map { controlPoint -> requireNotNull(controlsById[controlPoint.controlId]).siCode }
+
+        val m21Info = protectedInfo("M21")
+        val m70Info = protectedInfo("M70")
+        assertEquals(6, summary.matchedControlPointCount)
+        assertEquals(2, summary.importedCategoryCount)
+        assertEquals(listOf("M21", "M70"), summary.matchedCategoryNames)
+        assertEquals(listOf(32, 34, 31, 35, 33, 99), m21Info.controlSiCodes())
+        assertEquals("FOX2 FOX4 FOX1 FOX5 FOX3 B", m21Info.idealOrder)
+        assertEquals(listOf("Start", "FOX2", "FOX4", "FOX1", "FOX5", "FOX3", "B", "Finish"), m21Info.courseObjects.map { it.label })
+        assertEquals(listOf(35, 33, 99), m70Info.controlSiCodes())
+        assertEquals("FOX5 FOX3 B", m70Info.idealOrder)
+        assertEquals(listOf("Start", "FOX5", "FOX3", "B", "Finish"), m70Info.courseObjects.map { it.label })
+        assertEquals(
+            listOf(
+                DesktopCourseKmlLabelConversion("FOX2", "32"),
+                DesktopCourseKmlLabelConversion("FOX3", "33")
+            ),
+            summary.labelConversions.filter { it.importedName in setOf("FOX2", "FOX3") }
+        )
+    }
+
+    @Test
+    fun importAllControlsDeletesUnmatchedControlsThatExceedClassicLimits() {
+        val gpxPath = Files.createTempFile("ocad-scout-classic", ".gpx")
+        Files.writeString(gpxPath, sampleOcadGpxWithScoutClassicTracks())
+        val projectWithCategory = EventProjectEditor.addCategory(
+            projectFile = classicPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+        val projectWithStaleControls = projectWithCategory.copy(
+            raceData = projectWithCategory.raceData.copy(
+                controls = projectWithCategory.raceData.controls + listOf(
+                    EventControl("stale-41", "race", "41", 41, ControlPointType.CONTROL),
+                    EventControl("stale-42", "race", "42", 42, ControlPointType.CONTROL),
+                    EventControl("stale-90", "race", "90B", 90, ControlPointType.BEACON)
+                )
+            )
+        )
+        val project = EventProjectEditor.updateCategoryControlPoints(
+            projectFile = projectWithStaleControls,
+            categoryId = "cat-m21",
+            controlPointsText = "31 32 33 34 35 41 42 90B"
+        ) { index -> "cat-m21-control-${index + 1}" }
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = gpxPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null },
+            createMissingControls = true
+        )
+
+        assertEquals(listOf("41 (41)", "42 (42)", "90B (90)"), summary.deletedControlNames)
+        assertFalse(updated.raceData.controls.any { it.siCode in setOf(41, 42, 90) })
+        val updatedCategory = updated.raceData.categories.single { it.category.id == "cat-m21" }
+        assertEquals(listOf(31, 32, 33, 34, 35), updatedCategory.controlPoints.map { it.siCode })
+        assertEquals("31 32 33 34 35", updatedCategory.category.controlPointsString)
     }
 
     @Test
@@ -2176,6 +2271,44 @@ class DesktopCourseKmlImportTest {
             <rtept lat="39.0000" lon="-94.9990" />
             <rtept lat="39.0000" lon="-94.9980" />
           </rte>
+        </gpx>
+        """.trimIndent().trimStart()
+
+    private fun sampleOcadGpxWithScoutClassicTracks(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gpx version="1.1" creator="OCAD 2020.8.4.4823" xmlns="http://www.topografix.com/GPX/1/1">
+          <wpt lat="35.00113526" lon="-106.29762296"><name>S1</name></wpt>
+          <wpt lat="34.99798144" lon="-106.32312509"><name>B</name></wpt>
+          <wpt lat="35.00582704" lon="-106.30440855"><name>FOX1</name></wpt>
+          <wpt lat="35.00233493" lon="-106.28221280"><name>FOX2</name></wpt>
+          <wpt lat="34.99952284" lon="-106.31194746"><name>FOX3</name></wpt>
+          <wpt lat="35.01091486" lon="-106.28653278"><name>FOX4</name></wpt>
+          <wpt lat="35.00635377" lon="-106.31124181"><name>FOX5</name></wpt>
+          <wpt lat="34.99743600" lon="-106.32351917"><name>F1</name></wpt>
+          <trk>
+            <name>M21</name>
+            <trkseg>
+              <trkpt lat="35.00113526" lon="-106.29762296"><name>S1</name></trkpt>
+              <trkpt lat="35.00233493" lon="-106.28221280"><name>FOX2</name></trkpt>
+              <trkpt lat="35.01091486" lon="-106.28653278"><name>FOX4</name></trkpt>
+              <trkpt lat="35.00582704" lon="-106.30440855"><name>FOX1</name></trkpt>
+              <trkpt lat="35.00635377" lon="-106.31124181"><name>FOX5</name></trkpt>
+              <trkpt lat="34.99952284" lon="-106.31194746"><name>FOX3</name></trkpt>
+              <trkpt lat="34.99798144" lon="-106.32312509"><name>B</name></trkpt>
+              <trkpt lat="34.99743600" lon="-106.32351917"><name>F1</name></trkpt>
+            </trkseg>
+          </trk>
+          <trk>
+            <name>m70</name>
+            <trkseg>
+              <trkpt lat="35.00113526" lon="-106.29762296"><name>S1</name></trkpt>
+              <trkpt lat="35.00635377" lon="-106.31124181"><name>FOX5</name></trkpt>
+              <trkpt lat="34.99952284" lon="-106.31194746"><name>FOX3</name></trkpt>
+              <trkpt lat="34.99798144" lon="-106.32312509"><name>B</name></trkpt>
+              <trkpt lat="34.99743600" lon="-106.32351917"><name>F1</name></trkpt>
+            </trkseg>
+          </trk>
         </gpx>
         """.trimIndent().trimStart()
 

@@ -430,6 +430,15 @@ class DesktopVenueElevationCacheTest {
     }
 
     @Test
+    fun treatsGdalNoDataSentinelAsMissingElevation() {
+        assertEquals(null, "-9999.0".gdalElevationSampleMetersOrNull())
+        assertEquals(null, "-9999.0".gdalElevationSampleMetersOrNull(0.3048))
+        assertEquals(null, "nan".gdalElevationSampleMetersOrNull())
+        assertEquals(null, "inf".gdalElevationSampleMetersOrNull())
+        assertEquals(123.4, requireNotNull("123.4".gdalElevationSampleMetersOrNull()), 0.0)
+    }
+
+    @Test
     fun prefersLidarDtmCacheOverFinerUsgsCache() {
         withTemporaryUserHome { home ->
             val cacheDirectory = home
@@ -571,6 +580,27 @@ class DesktopVenueElevationCacheTest {
                 DesktopVenueElevationCache.analysisSourceNotes(
                     listOf(CourseGeoPoint(latitude = 40.0, longitude = -120.0))
                 )
+            )
+        }
+    }
+
+    @Test
+    fun treatsCachedNoDataSentinelAsMissingElevation() {
+        withTemporaryUserHome { home ->
+            val cacheDirectory = home
+                .resolve("Library")
+                .resolve("Application Support")
+                .resolve("Radio-Oracle")
+                .resolve("elevations")
+            Files.createDirectories(cacheDirectory)
+            Files.writeString(
+                cacheDirectory.resolve("bad-nodata.roelev.json"),
+                cacheJson("Local LiDAR Raster - Test", 3.0, -9999.0)
+            )
+
+            assertEquals(
+                null,
+                DesktopVenueElevationCache.elevationMeters(CourseGeoPoint(latitude = 45.0, longitude = -122.0))
             )
         }
     }

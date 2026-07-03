@@ -3061,6 +3061,7 @@ object DesktopCourseAnalyzer {
         val routeControlIds = routeControls.map { it.control.id }.toSet()
         val controlsToDisplay = (routeControls + controls.filterNot { it.control.id in routeControlIds })
             .distinctBy { it.control.id }
+            .distinctBy { controlPoint -> controlPoint.point?.coordinateKey() ?: controlPoint.control.id }
         val labeledPoints = buildList {
             start?.let { add(RouteMapSourcePoint("S", it, DesktopCourseRouteMapPointType.Start)) }
             controlsToDisplay.forEach { controlPoint ->

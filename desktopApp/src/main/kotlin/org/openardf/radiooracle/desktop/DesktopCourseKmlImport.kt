@@ -85,6 +85,7 @@ data class DesktopCourseKmlImportSummary(
     val createdCategoryNames: List<String>,
     val missingControlNames: List<String> = emptyList(),
     val createdControlNames: List<String> = emptyList(),
+    val deletedControlNames: List<String> = emptyList(),
     val categoryAssumptions: List<DesktopCourseKmlCategoryAssumption>,
     val rejectedRoutes: List<DesktopCourseKmlRejectedRoute> = emptyList(),
     val eventTypeWarnings: List<String>,
@@ -296,12 +297,31 @@ object DesktopCourseKmlImporter {
                 )
             )
         }
-        val matchedControlResult = matchedControls(importedControlsForControlMatching, projectWithMissingControls.raceData.controls)
+        val preliminaryMatchedControlResult = matchedControls(
+            importedControlsForControlMatching,
+            projectWithMissingControls.raceData.controls
+        )
+        val staleControlsToDelete = if (createMissingControls) {
+            DesktopControlImportPruning.unmatchedControlsExceedingRaceLimits(
+                projectFile = projectWithMissingControls,
+                importedControlIds = preliminaryMatchedControlResult.controls.mapTo(mutableSetOf()) { it.controlId }
+            )
+        } else {
+            emptyList()
+        }
+        val projectWithPrunedControls = staleControlsToDelete.fold(projectWithMissingControls) { currentProject, control ->
+            EventProjectEditor.removeControl(
+                projectFile = currentProject,
+                controlId = control.id,
+                clearProtectedCourseData = false
+            )
+        }
+        val matchedControlResult = matchedControls(importedControlsForControlMatching, projectWithPrunedControls.raceData.controls)
         val controlSiConflictCount = matchedControlResult.controls.count { it.hasSiCodeConflict() }
         val hintedProject = if (siImportPolicy == DesktopCourseKmlSiImportPolicy.OverwriteFromImport) {
-            applyControlSiHints(projectWithMissingControls, matchedControlResult.controls)
+            applyControlSiHints(projectWithPrunedControls, matchedControlResult.controls)
         } else {
-            projectWithMissingControls
+            projectWithPrunedControls
         }
         val matchedControlsForHintedProject = matchedControls(importedControlsForControlMatching, hintedProject.raceData.controls)
         val labeledProject = applyControlPublicLabelHints(hintedProject, matchedControlsForHintedProject.controls)
@@ -508,7 +528,7 @@ object DesktopCourseKmlImporter {
                     ?: route.speedFactorHint
                 val courseObjects = courseObjectsForRoute(
                     route = sampledRoute,
-                    controls = allProtectedControlPoints.values.toList(),
+                    controls = controlPoints,
                     waypoints = protectedRouteWaypoints,
                     firstLegSpeedFactor = firstLegSpeedFactor
                 )
@@ -582,6 +602,7 @@ object DesktopCourseKmlImporter {
             createdCategoryNames = createdCategoryNames,
             missingControlNames = missingControls.map { it.displayCourseLabel() },
             createdControlNames = createdControlNames,
+            deletedControlNames = staleControlsToDelete.map { it.importDeletedControlDisplayName() },
             categoryAssumptions = routeCategoryTargets.assumptions,
             rejectedRoutes = rejectedRoutes,
             eventTypeWarnings = DesktopImportPreviews.eventTypeWarnings(
@@ -601,7 +622,7 @@ object DesktopCourseKmlImporter {
         )
         DesktopDebugLog.info(
             "CourseKml",
-            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} assignedCategoryControls=${summary.assignedCategoryControlCount} changedControlLocations=${summary.changedControlLocationCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} missingControls=${summary.missingControlNames.size} createdControls=${summary.createdControlNames.size} labelConversions=${summary.labelConversions.size} missingElevationPoints=${summary.missingElevationPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
+            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} assignedCategoryControls=${summary.assignedCategoryControlCount} changedControlLocations=${summary.changedControlLocationCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} missingControls=${summary.missingControlNames.size} createdControls=${summary.createdControlNames.size} deletedControls=${summary.deletedControlNames.size} labelConversions=${summary.labelConversions.size} missingElevationPoints=${summary.missingElevationPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
         )
         return updatedProject to summary
     }
@@ -1141,6 +1162,11 @@ object DesktopCourseKmlImporter {
             val exactMatch = controlsByToken[imported.name.normalizedCourseName()]
             val identityMatch = imported.inferredControlIdentity()?.let { identity ->
                 controlsByIdentity["${identity.first}|${identity.second.name}"]
+                    ?.takeUnless {
+                        identity.second == ControlPointType.CONTROL &&
+                            imported.name.isExplicitFoxKeywordLabel() &&
+                            imported.name.hasAmbiguousControlRoleAliasMatch(eventControls)
+                    }
             }
             val match = exactMatch
                 ?: controlsByCompactToken[imported.name.compactCourseName()]
@@ -1176,6 +1202,7 @@ object DesktopCourseKmlImporter {
     private fun CourseControlPoint.inferredControlIdentity(): Pair<Int, ControlPointType>? {
         val hasIdentityClue = siCodeHint?.takeIf(SportIdentCodes::isSICodeValid) != null ||
             sprintFastFoxNumber(name) != null ||
+            ControlRoleLabelRules.foxNumber(name) != null ||
             name.trim().matches(Regex("""\d+"""))
         if (!hasIdentityClue) {
             return null
@@ -1184,6 +1211,25 @@ object DesktopCourseKmlImporter {
         val siCode = inferredControlSiCode(name, type, siCodeHint) ?: return null
         return siCode to type
     }
+
+    private fun String.hasAmbiguousControlRoleAliasMatch(eventControls: List<EventControl>): Boolean {
+        val normalizedName = normalizedCourseName()
+        val compactName = compactCourseName()
+        val matchingControlIds = eventControls
+            .filter { control -> control.type == ControlPointType.CONTROL }
+            .filter { control ->
+                control.roleAliasTokens().any { token ->
+                    token.token.normalizedCourseName() == normalizedName ||
+                        token.token.compactCourseName() == compactName
+                }
+            }
+            .map { it.id }
+            .distinct()
+        return matchingControlIds.size > 1
+    }
+
+    private fun String.isExplicitFoxKeywordLabel(): Boolean =
+        normalizedCourseName().contains("fox")
 
     private fun missingCourseControls(
         importedControls: List<CourseControlPoint>,

@@ -1264,6 +1264,7 @@ object DesktopVenueElevationCache {
 
     private fun DesktopVenueElevationCacheFile.elevationAt(row: Int, column: Int): Double? =
         elevations.getOrNull(row * metadata.columnCount + column)
+            .usableElevationMetersOrNull()
 
     private fun selectedCache(point: CourseGeoPoint): DesktopVenueElevationCacheFile? =
         loadCaches()
@@ -1924,7 +1925,7 @@ object DesktopVenueElevationCache {
         return DesktopVenueElevationCacheFile(
             metadata = parseCacheMetadata(metadata),
             elevations = root.getValue("elevations").jsonArray.map { value ->
-                if (value == JsonNull) null else value.jsonPrimitive.doubleOrNull
+                value.cacheElevationMetersOrNull()
             },
             path = path
         )
@@ -1998,6 +1999,26 @@ private const val US_SURVEY_FOOT_TO_METERS = 1200.0 / 3937.0
 private const val GDAL_SAMPLE_PROGRESS_INTERVAL = 5_000
 private const val MAX_ELEVATION_GRID_POINT_COUNT = 25_000_000L
 private const val MAX_ELEVATION_GRID_RAW_BYTES = MAX_ELEVATION_GRID_POINT_COUNT * 8L
+private const val MIN_USABLE_ELEVATION_METERS = -1_000.0
+
+private fun Double?.usableElevationMetersOrNull(): Double? =
+    this?.takeIf { it.isFinite() && it > MIN_USABLE_ELEVATION_METERS }
+
+private fun JsonElement.cacheElevationMetersOrNull(): Double? {
+    if (this == JsonNull) {
+        return null
+    }
+    val value = jsonPrimitive.doubleOrNull
+    require(value == null || value.isFinite()) {
+        "Elevation values must be finite numbers or null."
+    }
+    return value.usableElevationMetersOrNull()
+}
+
+internal fun String.gdalElevationSampleMetersOrNull(valueMultiplier: Double = 1.0): Double? {
+    val rawValue = trim().toDoubleOrNull().usableElevationMetersOrNull() ?: return null
+    return (rawValue * valueMultiplier).usableElevationMetersOrNull()
+}
 
 internal data class DesktopGdalElevationUnits(
     val label: String,
@@ -2218,12 +2239,7 @@ private class DesktopGdalTools(
                         elevations[outputLineCount] = line
                             .split(',')
                             .lastOrNull()
-                            ?.trim()
-                            ?.takeUnless {
-                                it.equals("nan", ignoreCase = true) || it.equals("inf", ignoreCase = true)
-                            }
-                            ?.toDoubleOrNull()
-                            ?.times(valueMultiplier)
+                            ?.gdalElevationSampleMetersOrNull(valueMultiplier)
                     }
                     outputLineCount += 1
                     if (outputLineCount % GDAL_SAMPLE_PROGRESS_INTERVAL == 0 || outputLineCount == points.size) {

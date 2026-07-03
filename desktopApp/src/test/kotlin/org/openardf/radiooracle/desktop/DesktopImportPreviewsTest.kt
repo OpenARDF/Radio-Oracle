@@ -25,6 +25,7 @@
 package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.ControlPointType
@@ -192,6 +193,43 @@ class DesktopImportPreviewsTest {
     }
 
     @Test
+    fun previewsControlsCsvOverLimitStaleControlsForSyncDeletion() {
+        val preview = DesktopImportPreviews.controlsCsvPreview(
+            projectFile = overLimitClassicProject(),
+            sourceName = "classic-controls.csv",
+            rows = listOf(
+                ControlCsvImportRow(31, ControlPointType.CONTROL, scored = true, publicLabel = "1", notes = ""),
+                ControlCsvImportRow(32, ControlPointType.CONTROL, scored = true, publicLabel = "2", notes = ""),
+                ControlCsvImportRow(33, ControlPointType.CONTROL, scored = true, publicLabel = "3", notes = ""),
+                ControlCsvImportRow(34, ControlPointType.CONTROL, scored = true, publicLabel = "4", notes = ""),
+                ControlCsvImportRow(35, ControlPointType.CONTROL, scored = true, publicLabel = "5", notes = ""),
+                ControlCsvImportRow(99, ControlPointType.BEACON, scored = false, publicLabel = "M", notes = "")
+            ),
+            protectedCourseInfoByCategoryId = emptyMap()
+        )
+
+        assertEquals(3, preview.missingExistingCount)
+        assertEquals(listOf("41 (41)", "42 (42)", "90B (90)"), preview.overLimitDeletedControlNames)
+    }
+
+    @Test
+    fun sharedImportPruningRemovesAssignedStaleControlsAboveClassicLimits() {
+        val project = overLimitClassicProject()
+        val importedIds = project.raceData.controls
+            .filter { it.siCode in setOf(31, 32, 33, 34, 35, 99) }
+            .mapTo(mutableSetOf()) { it.id }
+
+        val result = DesktopControlImportPruning.pruneUnmatchedControlsExceedingRaceLimits(project, importedIds)
+
+        assertEquals(listOf("41 (41)", "42 (42)", "90B (90)"), result.deletedControlNames)
+        assertFalse(result.projectFile.raceData.controls.any { it.siCode in setOf(41, 42, 90) })
+        assertEquals(
+            listOf(31, 32, 33, 34, 35, 99),
+            result.projectFile.raceData.categories.single().controlPoints.map { it.siCode }
+        )
+    }
+
+    @Test
     fun doesNotInferSprintFromFoxoringFastLabelControlNames() {
         val warnings = DesktopImportPreviews.eventTypeWarnings(
             eventRaceType = RaceType.FOXORING,
@@ -350,6 +388,71 @@ class DesktopImportPreviewsTest {
                 } else {
                     emptyList()
                 }
+            )
+        )
+    }
+
+    private fun overLimitClassicProject(): EventProjectFile {
+        val race = EventRace(
+            id = "race",
+            name = "Preview Race",
+            apiKey = "",
+            startDateTimeIso = "2026-06-01T10:00",
+            raceType = RaceType.CLASSIC,
+            raceLevel = RaceLevel.PRACTICE,
+            raceBand = RaceBand.M80,
+            timeLimitSeconds = 7_200
+        )
+        val controls = listOf(
+            EventControl("control-31", race.id, "1", 31, ControlPointType.CONTROL),
+            EventControl("control-32", race.id, "2", 32, ControlPointType.CONTROL),
+            EventControl("control-33", race.id, "3", 33, ControlPointType.CONTROL),
+            EventControl("control-34", race.id, "4", 34, ControlPointType.CONTROL),
+            EventControl("control-35", race.id, "5", 35, ControlPointType.CONTROL),
+            EventControl("control-41", race.id, "41", 41, ControlPointType.CONTROL),
+            EventControl("control-42", race.id, "42", 42, ControlPointType.CONTROL),
+            EventControl("control-99", race.id, "M", 99, ControlPointType.BEACON),
+            EventControl("control-90", race.id, "90B", 90, ControlPointType.BEACON)
+        )
+        val category = EventCategory(
+            id = "cat",
+            raceId = race.id,
+            name = "M21",
+            isMan = true,
+            maxAge = null,
+            lengthMeters = 0,
+            climbMeters = 0,
+            order = 0,
+            differentProperties = false,
+            raceType = null,
+            raceBand = null,
+            timeLimitSeconds = null,
+            controlPointsString = "31 32 33 34 35 41 42 99B 90B"
+        )
+        return EventProjectFile(
+            raceData = EventRaceData(
+                race = race,
+                categories = listOf(
+                    EventCategoryData(
+                        category = category,
+                        controlPoints = controls.mapIndexed { index, control ->
+                            EventControlPoint(
+                                id = "point-${control.id}",
+                                categoryId = category.id,
+                                siCode = control.siCode,
+                                type = control.type,
+                                order = index + 1,
+                                controlId = control.id
+                            )
+                        },
+                        competitors = emptyList(),
+                        publicControlIds = controls.map { it.id }
+                    )
+                ),
+                aliases = emptyList(),
+                competitorData = emptyList(),
+                unmatchedReadoutData = emptyList(),
+                controls = controls
             )
         )
     }

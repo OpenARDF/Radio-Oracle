@@ -27,6 +27,7 @@ package org.openardf.radiooracle.desktop
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
@@ -48,6 +49,7 @@ data class DesktopControlsCsvImportPreview(
     val missingExistingCount: Int,
     val removableMissingCount: Int,
     val usedMissingCount: Int,
+    val overLimitDeletedControlNames: List<String>,
     val affectedAssignedCategoryCount: Int,
     val affectedProtectedCourseCount: Int,
     val eventTypeWarnings: List<String>
@@ -191,6 +193,18 @@ object DesktopImportPreviews {
             assignedCategoryUseCount(projectFile, setOf(controlId)) > 0 ||
                 protectedCourseUseCount(protectedCourseInfoByCategoryId, setOf(controlId)) > 0
         }
+        var previewControlIndex = 0
+        val previewProject = EventProjectEditor.importControlRows(
+            projectFile = projectFile,
+            rows = rows,
+            controlIdFactory = { "preview-control-${++previewControlIndex}" }
+        )
+        val importedControlIds = previewProject.raceData.controls
+            .filter { it.siCode to it.type in importedIdentities }
+            .mapTo(mutableSetOf()) { it.id }
+        val overLimitDeletedControlNames = DesktopControlImportPruning
+            .unmatchedControlsExceedingRaceLimits(previewProject, importedControlIds)
+            .map { it.importDeletedControlDisplayName() }
 
         return DesktopControlsCsvImportPreview(
             addedCount = addedCount,
@@ -199,6 +213,7 @@ object DesktopImportPreviews {
             missingExistingCount = missingExistingControls.size,
             removableMissingCount = missingExistingIds.size - usedMissingIds.size,
             usedMissingCount = usedMissingIds.size,
+            overLimitDeletedControlNames = overLimitDeletedControlNames,
             affectedAssignedCategoryCount = assignedCategoryUseCount(projectFile, changedControlIds),
             affectedProtectedCourseCount = protectedCourseUseCount(protectedCourseInfoByCategoryId, changedControlIds),
             eventTypeWarnings = eventTypeWarnings(

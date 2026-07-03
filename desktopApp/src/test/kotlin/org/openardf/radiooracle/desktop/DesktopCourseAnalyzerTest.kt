@@ -1788,6 +1788,73 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun routeMapShowsOnePublicLabelForControlsSharingCoordinates() {
+        val baseProject = projectFile(
+            foxCount = 2,
+            publicLabels = listOf("Fox1", "Fox2"),
+            siCodes = listOf(101, 102),
+            assignControls = false
+        )
+        val baseProtectedInfo = protectedInfo(foxCount = 2)
+        val staleControls = listOf(
+            EventControl(
+                id = "stale-31",
+                raceId = RACE_ID,
+                label = "31",
+                siCode = 31,
+                type = ControlPointType.CONTROL,
+                latitude = baseProtectedInfo.controlPoints[0].latitude,
+                longitude = baseProtectedInfo.controlPoints[0].longitude
+            ),
+            EventControl(
+                id = "stale-32",
+                raceId = RACE_ID,
+                label = "32",
+                siCode = 32,
+                type = ControlPointType.CONTROL,
+                latitude = baseProtectedInfo.controlPoints[1].latitude,
+                longitude = baseProtectedInfo.controlPoints[1].longitude
+            )
+        )
+        val projectFile = baseProject.copy(
+            raceData = baseProject.raceData.copy(
+                controls = baseProject.raceData.controls + staleControls
+            )
+        )
+        val protectedInfo = baseProtectedInfo.copy(
+            idealOrder = "Fox1 Fox2 Beacon",
+            controlPoints = baseProtectedInfo.controlPoints.map { control ->
+                when (control.controlId) {
+                    "control-1" -> control.copy(label = "Fox1")
+                    "control-2" -> control.copy(label = "Fox2")
+                    else -> control
+                }
+            },
+            courseObjects = baseProtectedInfo.courseObjects.map { courseObject ->
+                when (courseObject.id) {
+                    "control-1" -> courseObject.copy(label = "Fox1")
+                    "control-2" -> courseObject.copy(label = "Fox2")
+                    else -> courseObject
+                }
+            }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = protectedInfo.idealOrder
+        )
+
+        val routeMapLabels = requireNotNull(summary.providedRouteSection?.routeMap).points
+            .filter { it.type == DesktopCourseRouteMapPointType.Control }
+            .map { it.label }
+        assertEquals(1, routeMapLabels.count { it == "Fox1" })
+        assertEquals(1, routeMapLabels.count { it == "Fox2" })
+        assertFalse(routeMapLabels.any { it == "31" || it == "32" })
+    }
+
+    @Test
     fun calculatedRouteUsesControlsFromStoredRouteInsteadOfBroaderCategoryAssignments() {
         val baseProtectedInfo = protectedInfo(foxCount = 5)
         val routeControlIds = setOf("control-1", "control-3", "control-5", "control-beacon")

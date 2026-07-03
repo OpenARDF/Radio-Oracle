@@ -3228,19 +3228,15 @@ fun main(args: Array<String>) = application {
                         categoryOverrideId = categoryOverrideId,
                         requireRoutes = requireRoutes
                     )
-                    val createdPreview = preview.second
-                        .takeIf { it.missingCategoryNames.isNotEmpty() || it.missingControlNames.isNotEmpty() }
-                        ?.let {
-                            DesktopCourseKmlImporter.importProtectedCourseInfo(
-                                path = path,
-                                projectFile = baseProject,
-                                password = password,
-                                categoryOverrideId = categoryOverrideId,
-                                createMissingCategories = true,
-                                createMissingControls = true,
-                                requireRoutes = requireRoutes
-                            )
-                        }
+                    val createdPreview = DesktopCourseKmlImporter.importProtectedCourseInfo(
+                        path = path,
+                        projectFile = baseProject,
+                        password = password,
+                        categoryOverrideId = categoryOverrideId,
+                        createMissingCategories = true,
+                        createMissingControls = true,
+                        requireRoutes = requireRoutes
+                    )
                     val overwritePreview = preview.second
                         .takeIf { it.controlSiConflictCount > 0 }
                         ?.let {
@@ -3253,8 +3249,8 @@ fun main(args: Array<String>) = application {
                                 siImportPolicy = DesktopCourseKmlSiImportPolicy.OverwriteFromImport
                             )
                         }
-                    val overwriteCreatedPreview = createdPreview?.second
-                        ?.takeIf { it.controlSiConflictCount > 0 }
+                    val overwriteCreatedPreview = createdPreview.second
+                        .takeIf { it.controlSiConflictCount > 0 }
                         ?.let {
                             DesktopCourseKmlImporter.importProtectedCourseInfo(
                                 path = path,
@@ -3270,8 +3266,8 @@ fun main(args: Array<String>) = application {
                     CourseKmlKmzImportPreview(
                         updatedProject = preview.first,
                         summary = preview.second,
-                        createdMissingCategoryProject = createdPreview?.first,
-                        createdMissingCategorySummary = createdPreview?.second,
+                        createdMissingCategoryProject = createdPreview.first,
+                        createdMissingCategorySummary = createdPreview.second,
                         overwriteSiProject = overwritePreview?.first,
                         overwriteSiSummary = overwritePreview?.second,
                         overwriteSiCreatedMissingCategoryProject = overwriteCreatedPreview?.first,
@@ -4107,34 +4103,31 @@ fun main(args: Array<String>) = application {
                 checkpointBeforeImport("controls CSV import ${review.path.fileName}")
                 var deletedMissingControls = 0
                 var skippedMissingControls = 0
+                var deletedMissingControlNames = emptyList<String>()
                 projectFile = projectSession.updateCurrentProject { currentProject ->
                     val importedIdentities = review.rows.mapTo(mutableSetOf()) { it.siCode to it.type }
                     val missingExistingControls = currentProject.raceData.controls
                         .filterNot { it.siCode to it.type in importedIdentities }
-                    val usedControlIds = currentProject.raceData.categories
-                        .flatMap { it.controlPoints.map { controlPoint -> controlPoint.controlId } + it.publicControlIds }
-                        .toSet() +
-                        protectedCourseInfoByCategoryId.values.flatMap { courseInfo ->
-                            courseInfo.controlPoints.map { it.controlId } + courseInfo.courseObjects.map { it.id }
-                        }
-                    val removableMissingControlIds = if (syncMissingControls) {
-                        missingExistingControls.map { it.id }.filterNot { it in usedControlIds }
-                    } else {
-                        emptyList()
-                    }
-                    skippedMissingControls = if (syncMissingControls) {
-                        missingExistingControls.size - removableMissingControlIds.size
-                    } else {
-                        0
-                    }
-                    deletedMissingControls = removableMissingControlIds.size
                     val importedProject = EventProjectEditor.importControlRows(
                         currentProject,
                         review.rows,
                         controlIdFactory = { UUID.randomUUID().toString() }
                     )
-                    removableMissingControlIds.fold(importedProject) { project, controlId ->
-                        EventProjectEditor.removeControl(project, controlId)
+                    if (syncMissingControls) {
+                        val importedControlIds = importedProject.raceData.controls
+                            .filter { it.siCode to it.type in importedIdentities }
+                            .mapTo(mutableSetOf()) { it.id }
+                        val pruneResult = DesktopControlImportPruning.pruneUnmatchedControlsExceedingRaceLimits(
+                            projectFile = importedProject,
+                            importedControlIds = importedControlIds
+                        )
+                        deletedMissingControls = pruneResult.deletedControls.size
+                        deletedMissingControlNames = pruneResult.deletedControlNames
+                        skippedMissingControls = missingExistingControls.size - deletedMissingControls
+                        pruneResult.projectFile
+                    } else {
+                        skippedMissingControls = 0
+                        importedProject
                     }
                 }
                 syncProjectState()
@@ -4152,13 +4145,17 @@ fun main(args: Array<String>) = application {
                     ) + (
                         if (syncMissingControls) {
                             listOf(
-                                "$deletedMissingControls controls missing from the CSV removed.",
-                                "$skippedMissingControls missing controls kept because they are used."
+                                "$deletedMissingControls stale over-limit controls missing from the CSV removed.",
+                                "$skippedMissingControls missing controls kept because they do not exceed event-type limits."
                             )
                         } else {
                             listOf("${review.preview.missingExistingCount} existing controls were missing from the CSV and kept.")
                         }
-                        ) + listOf(projectFile?.resultImpactWarning("Control definitions changed")?.trim().orEmpty()).filter { it.isNotBlank() } +
+                        ) +
+                        deletedMissingControlNames.takeIf { it.isNotEmpty() }?.let { names ->
+                            listOf("Deleted controls: ${names.joinToString()}.")
+                        }.orEmpty() +
+                        listOf(projectFile?.resultImpactWarning("Control definitions changed")?.trim().orEmpty()).filter { it.isNotBlank() } +
                         review.preview.eventTypeWarnings)
                 )
                 projectStatusText = importStatusText(
@@ -4258,6 +4255,16 @@ fun main(args: Array<String>) = application {
                         currentProject.raceData.race
                     )
                     val warningLines = iofWarningLines(parsed.unsupportedItems)
+                    val importedIdentities = parsed.parsedData.categories
+                        .flatMap { categoryData -> categoryData.controlPoints.map { it.siCode to it.type } }
+                        .toSet()
+                    val previewImportProject = EventProjectEditor.importIofCourseData(currentProject, parsed.parsedData).projectFile
+                    val previewImportedControlIds = previewImportProject.raceData.controls
+                        .filter { it.siCode to it.type in importedIdentities }
+                        .mapTo(mutableSetOf()) { it.id }
+                    val deletedControlNames = DesktopControlImportPruning
+                        .unmatchedControlsExceedingRaceLimits(previewImportProject, previewImportedControlIds)
+                        .map { it.importDeletedControlDisplayName() }
                     pendingIofCourseDataImportReview = PendingIofCourseDataImportReview(
                         path = path,
                         courseData = parsed.parsedData,
@@ -4266,6 +4273,7 @@ fun main(args: Array<String>) = application {
                             sourceName = path.fileName.toString(),
                             categories = parsed.parsedData.categories
                         ),
+                        deletedControlNames = deletedControlNames,
                         warningLines = warningLines
                     )
                     projectStatusText = "Review IOF CourseData import before applying it."
@@ -4281,15 +4289,28 @@ fun main(args: Array<String>) = application {
                     ?: throw IllegalStateException("Open or create a Race File before importing IOF XML.")
                 checkpointBeforeImport("IOF CourseData import ${review.path.fileName}")
                 val outcome = EventProjectEditor.importIofCourseData(currentProject, review.courseData)
-                projectFile = projectSession.updateCurrentProject { outcome.projectFile }
+                val importedIdentities = review.courseData.categories
+                    .flatMap { categoryData -> categoryData.controlPoints.map { it.siCode to it.type } }
+                    .toSet()
+                val importedControlIds = outcome.projectFile.raceData.controls
+                    .filter { it.siCode to it.type in importedIdentities }
+                    .mapTo(mutableSetOf()) { it.id }
+                val pruneResult = DesktopControlImportPruning.pruneUnmatchedControlsExceedingRaceLimits(
+                    projectFile = outcome.projectFile,
+                    importedControlIds = importedControlIds
+                )
+                projectFile = projectSession.updateCurrentProject { pruneResult.projectFile }
                 syncProjectState()
                 pendingIofCourseDataImportReview = null
                 recentImportReport = DesktopImportReport(
                     title = "IOF CourseData XML: ${review.path.fileName}",
                     lines = withRollbackBackupLine(listOf(
                         "${outcome.importedCount} categories added.",
-                        "${outcome.updatedCount} categories updated by name."
-                    ) + review.warningLines)
+                        "${outcome.updatedCount} categories updated by name.",
+                        "${pruneResult.deletedControls.size} stale over-limit controls removed."
+                    ) + pruneResult.deletedControlNames.takeIf { it.isNotEmpty() }?.let { names ->
+                        listOf("Deleted controls: ${names.joinToString()}.")
+                    }.orEmpty() + review.warningLines)
                 )
                 projectStatusText = buildString {
                     append("Imported ${outcome.importedCount} IOF CourseData categor")
@@ -6921,13 +6942,18 @@ private fun CourseKmlKmzImportReviewDialog(
 ) {
     val summary = review.summary
     val formatLabel = controlsRouteImportFormatLabel(review.sourceName)
+    val importAllSummary = review.createdMissingCategorySummary ?: summary
+    val importAllHasControlListChanges = summary.missingCategoryNames.isNotEmpty() ||
+        summary.missingControlNames.isNotEmpty() ||
+        importAllSummary.deletedControlNames.isNotEmpty()
     var createMissingCategories by remember(
         review.sourceName,
         summary.sourceSha256,
         summary.missingCategoryNames,
-        summary.missingControlNames
+        summary.missingControlNames,
+        importAllSummary.deletedControlNames
     ) {
-        mutableStateOf(summary.missingCategoryNames.isNotEmpty() || summary.missingControlNames.isNotEmpty())
+        mutableStateOf(importAllHasControlListChanges)
     }
     val selectedSummary = if (createMissingCategories) {
         review.createdMissingCategorySummary ?: summary
@@ -7038,7 +7064,7 @@ private fun CourseKmlKmzImportReviewDialog(
                         }
                         Text("Matched Categories: ${selectedSummary.matchedCategoryCount} Of ${selectedSummary.routeCount} Routes")
                         Text("Categories: $categoriesText")
-                        if (summary.missingCategoryNames.isNotEmpty() || summary.missingControlNames.isNotEmpty()) {
+                        if (importAllHasControlListChanges) {
                             if (summary.missingCategoryNames.isNotEmpty()) {
                                 Text("Categories Listed In $formatLabel But Not In The Race File: ${summary.missingCategoryNames.joinToString()}")
                             }
@@ -7053,17 +7079,39 @@ private fun CourseKmlKmzImportReviewDialog(
                                     checked = createMissingCategories,
                                     onCheckedChange = { createMissingCategories = it }
                                 )
-                                Text("Create Missing Categories And Controls, Then Save Course Data")
+                                Text(
+                                    if (hasMissingImportItems) {
+                                        "Create Missing Categories And Controls, Then Save Course Data"
+                                    } else {
+                                        "Import All $formatLabel Controls Into The Controls List"
+                                    }
+                                )
                             }
                             Text(
-                                text = if (createMissingCategories) {
+                                text = if (createMissingCategories && hasMissingImportItems) {
                                     "Created categories will be saved without competitors. Created controls will be added to Setup > Controls so route analysis and category assignments can use them."
-                                } else {
+                                } else if (!createMissingCategories && hasMissingImportItems) {
                                     "Route-bearing imports cannot be made active while listed categories or controls are missing. Create them, or cancel and add them manually before importing again."
+                                } else {
+                                    "The active controls list will be synchronized with the imported $formatLabel controls where event-type limits require stale unmatched controls to be removed."
                                 },
                                 fontSize = 12.sp,
                                 color = if (blocksKeepForMissingItems) DesktopPalette.Error else Color.DarkGray,
                                 fontWeight = if (blocksKeepForMissingItems) FontWeight.Bold else FontWeight.Normal
+                            )
+                            if (createMissingCategories) {
+                                Text(
+                                    DesktopControlImportPruning.ImportAllControlsDeletionNotice,
+                                    fontSize = 12.sp,
+                                    color = Color.DarkGray
+                                )
+                            }
+                        }
+                        if (selectedSummary.deletedControlNames.isNotEmpty()) {
+                            Text(
+                                text = "Existing Controls To Delete: ${selectedSummary.deletedControlNames.joinToString()}",
+                                color = DesktopPalette.Warning,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                         if (selectedSummary.importedCategoryCount > 0) {
@@ -7489,6 +7537,18 @@ private fun IofCourseDataImportReviewDialog(
                 if (preview.categoriesWithProtectedCoursePreservedCount > 0) {
                     Text("Protected controls/route course data will be preserved for ${preview.categoriesWithProtectedCoursePreservedCount} updated categor${if (preview.categoriesWithProtectedCoursePreservedCount == 1) "y" else "ies"}.")
                 }
+                if (review.deletedControlNames.isNotEmpty()) {
+                    Text(
+                        DesktopControlImportPruning.ImportAllControlsDeletionNotice,
+                        fontSize = 12.sp,
+                        color = Color.DarkGray
+                    )
+                    Text(
+                        text = "Existing Controls To Delete: ${review.deletedControlNames.joinToString()}",
+                        color = DesktopPalette.Warning,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 review.warningLines.forEach { warning ->
                     Text(
                         text = warning,
@@ -7497,7 +7557,7 @@ private fun IofCourseDataImportReviewDialog(
                     )
                 }
                 Text(
-                    "This import updates existing categories by name and appends new names. It does not delete categories missing from the IOF CourseData XML.",
+                    "This import updates existing categories by name and appends new names. It does not delete categories missing from the IOF CourseData XML; stale unmatched controls may be deleted only when keeping them would exceed event-type control limits.",
                     fontSize = 12.sp,
                     color = Color.DarkGray
                 )
@@ -7547,10 +7607,10 @@ private fun ControlsCsvImportReviewDialog(
                 Text("Unchanged Controls: ${preview.unchangedCount}")
                 if (preview.missingExistingCount > 0) {
                     Text("Existing Controls Missing From CSV: ${preview.missingExistingCount}")
-                    Text("Unused Missing Controls That Can Be Removed: ${preview.removableMissingCount}")
+                    Text("Stale Over-Limit Controls That Would Be Removed: ${preview.overLimitDeletedControlNames.size}")
                     if (preview.usedMissingCount > 0) {
                         Text(
-                            text = "Missing controls kept because they are used: ${preview.usedMissingCount}",
+                            text = "Missing controls currently used by categories or stored courses: ${preview.usedMissingCount}",
                             color = DesktopPalette.Warning
                         )
                     }
@@ -7562,7 +7622,21 @@ private fun ControlsCsvImportReviewDialog(
                             checked = syncMissingControls,
                             onCheckedChange = { syncMissingControls = it }
                         )
-                        Text("Remove Unused Existing Controls Missing From The CSV")
+                        Text("Synchronize Controls List To This CSV")
+                    }
+                    if (syncMissingControls) {
+                        Text(
+                            DesktopControlImportPruning.ImportAllControlsDeletionNotice,
+                            fontSize = 12.sp,
+                            color = Color.DarkGray
+                        )
+                    }
+                    if (syncMissingControls && preview.overLimitDeletedControlNames.isNotEmpty()) {
+                        Text(
+                            text = "Existing Controls To Delete: ${preview.overLimitDeletedControlNames.joinToString()}",
+                            color = DesktopPalette.Warning,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
                 if (review.invalidLineCount > 0) {
@@ -7578,7 +7652,7 @@ private fun ControlsCsvImportReviewDialog(
                     )
                 }
                 Text(
-                    "This import adds new controls and updates matching controls by SI code and type. Missing controls are deleted only when the sync checkbox is selected and the control is unused.",
+                    "This import adds new controls and updates matching controls by SI code and type. Existing controls missing from the CSV are deleted only when synchronization is selected and keeping them would exceed event-type control limits.",
                     fontSize = 12.sp,
                     color = Color.DarkGray
                 )
@@ -8890,6 +8964,7 @@ private data class PendingIofCourseDataImportReview(
     val path: Path,
     val courseData: IofCourseDataPreview,
     val preview: DesktopCategoryCsvImportPreview,
+    val deletedControlNames: List<String>,
     val warningLines: List<String>
 )
 
