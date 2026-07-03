@@ -123,6 +123,44 @@ class SportIdentCardReadoutParserTest {
         assertEquals("Runner Alice", cardHolder.displayName)
     }
 
+    @Test
+    fun parsesSi6FixedWidthCardHolderNamesWithZeroPadding() {
+        val data = ByteArray(2 * SportIdentProtocol.SI_CARD_BLOCK_SIZE) { 0x00 }
+        writeAscii(data, 0x30, "Runner")
+        writeAscii(data, 0x44, "Alice")
+
+        val cardHolder = assertNotNull(SportIdentCardReadoutParser.parseFixedCardHolder(data))
+
+        assertEquals("Alice", cardHolder.firstName)
+        assertEquals("Runner", cardHolder.lastName)
+        assertEquals("Runner Alice", cardHolder.displayName)
+    }
+
+    @Test
+    fun parsesSemicolonCardHolderWithZeroPadding() {
+        val data = ByteArray(2 * SportIdentProtocol.SI_CARD_BLOCK_SIZE) { 0x00 }
+        writeAscii(data, 0x20, "Alice;Runner;OK Test;")
+
+        val cardHolder = assertNotNull(SportIdentCardReadoutParser.parseSemicolonCardHolder(data, 2))
+
+        assertEquals("Alice", cardHolder.firstName)
+        assertEquals("Runner", cardHolder.lastName)
+        assertEquals("OK Test", cardHolder.club)
+        assertEquals("Runner Alice", cardHolder.displayName)
+    }
+
+    @Test
+    fun stripsControlCharactersFromCardHolderText() {
+        val data = ByteArray(2 * SportIdentProtocol.SI_CARD_BLOCK_SIZE) { 0x00 }
+        writeAscii(data, 0x20, "Ali\u0001ce;Run\u0002ner;OK\u0003 Test;")
+
+        val cardHolder = assertNotNull(SportIdentCardReadoutParser.parseSemicolonCardHolder(data, 2))
+
+        assertEquals("Alice", cardHolder.firstName)
+        assertEquals("Runner", cardHolder.lastName)
+        assertEquals("OK Test", cardHolder.club)
+    }
+
     private fun writePunch(data: ByteArray, offset: Int, code: Int, seconds: Int) {
         data[offset] = ((code / 256) shl 6).toByte()
         data[offset + 1] = (code and 0xff).toByte()

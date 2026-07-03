@@ -257,7 +257,9 @@ object SportIdentCardReadoutParser {
         if (data.size < offset + length) {
             return null
         }
-        val end = (offset until offset + length).firstOrNull { data[it] == SPACE || data[it] == NULL } ?: offset + length
+        val end = (offset until offset + length)
+            .firstOrNull { isCardHolderTerminator(data[it]) || data[it] == SPACE }
+            ?: offset + length
         return data.copyOfRange(offset, end).toAsciiString()
     }
 
@@ -265,12 +267,16 @@ object SportIdentCardReadoutParser {
         if (data.size < offset + length) {
             return null
         }
-        val end = (offset until offset + length).firstOrNull { data[it] == NULL } ?: offset + length
+        val end = (offset until offset + length).firstOrNull { isCardHolderTerminator(data[it]) } ?: offset + length
         return data.copyOfRange(offset, end).toAsciiString()
     }
 
+    private fun isCardHolderTerminator(byte: Byte): Boolean =
+        byte == NULL || byte == ZERO
+
     private fun ByteArray.toAsciiString(): String? =
         map { byte -> byte.toUnsignedInt().toChar() }
+            .filterNot { it.isISOControl() || it == '\u007f' }
             .joinToString("")
             .trim()
             .ifBlank { null }
@@ -279,6 +285,7 @@ object SportIdentCardReadoutParser {
     private const val SI5_PUNCH_BYTES = 3
     private const val SI5_TIME_BYTES = 2
     private const val NULL: Byte = 0xEE.toByte()
+    private const val ZERO: Byte = 0x00
     private const val SPACE: Byte = 0x20
     private const val SI_CARD5_SERIES = 5
     private const val SI_CARD6_SERIES = 6
