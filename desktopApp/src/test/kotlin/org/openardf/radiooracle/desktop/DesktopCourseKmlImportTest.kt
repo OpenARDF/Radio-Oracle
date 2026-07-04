@@ -769,6 +769,49 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun pointOnlySprintImportKeepsCreatedFastControlsWhenRaceFileStartedClassic() {
+        val kmlPath = Files.createTempFile("Sprint All controls", ".kml")
+        Files.writeString(kmlPath, samplePointOnlySprintAllControlsKml())
+        val baseProject = classicPresetProject()
+        val project = baseProject.copy(
+            raceData = baseProject.raceData.copy(
+                controls = baseProject.raceData.controls.map { control ->
+                    val staleImportedName = when (control.label) {
+                        in listOf("1", "2", "3", "4", "5") -> control.label
+                        "M" -> "B"
+                        else -> ""
+                    }
+                    control.copy(
+                        publicLabel = null,
+                        notes = staleImportedName.takeIf { it.isNotBlank() }
+                    )
+                }
+            )
+        )
+
+        val (updatedProject, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null },
+            createMissingControls = true,
+            requireRoutes = false
+        )
+
+        assertEquals(11, summary.matchedControlPointCount)
+        assertEquals(listOf("1F", "2F", "3F", "4F", "5F"), summary.createdControlNames)
+        assertEquals(emptyList<String>(), summary.deletedControlNames)
+        assertEquals(
+            listOf("1", "2", "3", "4", "5", "1F", "2F", "3F", "4F", "5F", "B"),
+            updatedProject.raceData.controls.map { it.publicLabel }
+        )
+        assertEquals(
+            List(11) { null },
+            updatedProject.raceData.controls.map { it.notes }
+        )
+    }
+
+    @Test
     fun matchesImportedFoxLabelsToExistingControlsByInferredSiCode() {
         val kmlPath = Files.createTempFile("radio-oracle-foxoring-si-labels", ".kml")
         Files.writeString(kmlPath, sampleFoxoringKmlWithSiCodeLabeledControls())

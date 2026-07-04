@@ -44,11 +44,13 @@ object DesktopControlImportPruning {
 
     fun unmatchedControlsExceedingRaceLimits(
         projectFile: EventProjectFile,
-        importedControlIds: Set<String>
+        importedControlIds: Set<String>,
+        raceTypeOverride: RaceType? = null
     ): List<EventControl> {
+        val raceType = raceTypeOverride ?: projectFile.raceData.race.raceType
         val controlsByType = projectFile.raceData.controls.groupBy { it.type }
         return ControlPointType.values().flatMap { type ->
-            val allowedCount = allowedRaceControlCount(projectFile.raceData.race.raceType, type)
+            val allowedCount = allowedRaceControlCount(raceType, type)
                 ?: return@flatMap emptyList()
             val controls = controlsByType[type].orEmpty()
             val excessCount = controls.size - allowedCount
@@ -64,9 +66,10 @@ object DesktopControlImportPruning {
 
     fun pruneUnmatchedControlsExceedingRaceLimits(
         projectFile: EventProjectFile,
-        importedControlIds: Set<String>
+        importedControlIds: Set<String>,
+        raceTypeOverride: RaceType? = null
     ): DesktopControlImportPruneResult {
-        val controlsToDelete = unmatchedControlsExceedingRaceLimits(projectFile, importedControlIds)
+        val controlsToDelete = unmatchedControlsExceedingRaceLimits(projectFile, importedControlIds, raceTypeOverride)
         val prunedProject = controlsToDelete.fold(projectFile) { currentProject, control ->
             EventProjectEditor.removeControl(
                 projectFile = currentProject,

@@ -258,7 +258,13 @@ object DesktopCourseKmlImporter {
                 )
             )
         }
-        val sprintContext = isSprintCourseImport(projectWithMissingCategories, courseData)
+        val sourceName = path.fileName.toString()
+        val sprintContext = isSprintCourseImport(projectWithMissingCategories, courseData, sourceName)
+        val importControlLimitRaceType = importControlLimitRaceType(
+            projectFile = projectWithMissingCategories,
+            sourceName = sourceName,
+            courseData = courseData
+        )
         val endpointAwareControlsForMatching = if (sprintContext) {
             // Sprint maps may use one "S" as a route endpoint and another "S"/"Sp" as spectator;
             // keep those points route-specific so one course cannot reclassify another course's spectator.
@@ -303,7 +309,8 @@ object DesktopCourseKmlImporter {
         val staleControlsToDelete = if (createMissingControls) {
             DesktopControlImportPruning.unmatchedControlsExceedingRaceLimits(
                 projectFile = projectWithMissingControls,
-                importedControlIds = preliminaryMatchedControlResult.controls.mapTo(mutableSetOf()) { it.controlId }
+                importedControlIds = preliminaryMatchedControlResult.controls.mapTo(mutableSetOf()) { it.controlId },
+                raceTypeOverride = importControlLimitRaceType
             )
         } else {
             emptyList()
@@ -340,7 +347,7 @@ object DesktopCourseKmlImporter {
         )
         val hasSprintRouteTargets = routeCategoryTargets.targets.values.flatten().any { categoryData ->
             categoryData.category.effectiveRaceType(labeledProject.raceData.race) == RaceType.SPRINT
-        } || isSprintCourseImport(labeledProject, courseData)
+        } || isSprintCourseImport(labeledProject, courseData, sourceName)
         val controlsForLocationUpdates = if (hasSprintRouteTargets) {
             controls.filterNot { it.type == ControlPointType.SEPARATOR && it.point.isNearAnyRouteEndpoint(courseData.routes) }
         } else {
@@ -790,9 +797,33 @@ object DesktopCourseKmlImporter {
             .singleOrNull()
     }
 
-    private fun isSprintCourseImport(projectFile: EventProjectFile, courseData: DesktopCourseKmlData): Boolean =
+    private fun isSprintCourseImport(
+        projectFile: EventProjectFile,
+        courseData: DesktopCourseKmlData,
+        sourceName: String
+    ): Boolean =
         projectFile.raceData.race.raceType == RaceType.SPRINT ||
-            courseData.routes.any { route -> route.name.contains("sprint", ignoreCase = true) }
+            importFormatText(sourceName, courseData).contains("sprint")
+
+    private fun importControlLimitRaceType(
+        projectFile: EventProjectFile,
+        sourceName: String,
+        courseData: DesktopCourseKmlData
+    ): RaceType {
+        val formatText = importFormatText(sourceName, courseData)
+        return when {
+            formatText.contains("sprint") -> RaceType.SPRINT
+            formatText.contains("foxoring") || formatText.contains("fox-o") || formatText.contains("fox o") -> RaceType.FOXORING
+            formatText.contains("classic") -> RaceType.CLASSIC
+            formatText.contains("orienteering") -> RaceType.ORIENTEERING
+            else -> projectFile.raceData.race.raceType
+        }
+    }
+
+    private fun importFormatText(sourceName: String, courseData: DesktopCourseKmlData): String =
+        (listOf(sourceName) + courseData.routes.map { it.name })
+            .joinToString(" ")
+            .lowercase()
 
     @Suppress("UNUSED_PARAMETER")
     private fun controlMatchingCourseControls(
