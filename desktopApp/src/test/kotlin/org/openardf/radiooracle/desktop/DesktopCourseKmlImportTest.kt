@@ -812,6 +812,56 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun pointOnlySprintImportPromotesChampionshipSiLabelsFromNotesToPublicLabels() {
+        val kmlPath = Files.createTempFile("Sprint All controls", ".kml")
+        Files.writeString(kmlPath, samplePointOnlySprintAllControlsKml())
+        val baseProject = sprintPresetProject()
+        val project = baseProject.copy(
+            raceData = baseProject.raceData.copy(
+                controls = listOf(
+                    EventControl("control-b-136-beacon", "race", "B", 136, ControlPointType.BEACON, notes = "B"),
+                    EventControl("control-s-137-separator", "race", "S", 137, ControlPointType.SEPARATOR, notes = "S"),
+                    EventControl("control-1-161-control", "race", "1", 161, ControlPointType.CONTROL, notes = "1"),
+                    EventControl("control-2-162-control", "race", "2", 162, ControlPointType.CONTROL, notes = "2"),
+                    EventControl("control-3-163-control", "race", "3", 163, ControlPointType.CONTROL, notes = "3"),
+                    EventControl("control-4-164-control", "race", "4", 164, ControlPointType.CONTROL, notes = "4"),
+                    EventControl("control-5-165-control", "race", "5", 165, ControlPointType.CONTROL, notes = "5"),
+                    EventControl("control-1f-171-control", "race", "1F", 171, ControlPointType.CONTROL, notes = "1F"),
+                    EventControl("control-2f-172-control", "race", "2F", 172, ControlPointType.CONTROL, notes = "2F"),
+                    EventControl("control-3f-173-control", "race", "3F", 173, ControlPointType.CONTROL, notes = "3F"),
+                    EventControl("control-4f-174-control", "race", "4F", 174, ControlPointType.CONTROL, notes = "4F"),
+                    EventControl("control-5f-175-control", "race", "5F", 175, ControlPointType.CONTROL, notes = "5F")
+                )
+            )
+        )
+
+        val (updatedProject, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null },
+            createMissingControls = true,
+            requireRoutes = false
+        )
+
+        assertEquals(
+            "missing=${summary.missingControlNames} created=${summary.createdControlNames} deleted=${summary.deletedControlNames}",
+            11,
+            summary.matchedControlPointCount
+        )
+        assertEquals(emptyList<String>(), summary.createdControlNames)
+        assertEquals(emptyList<String>(), summary.deletedControlNames)
+        assertEquals(
+            listOf("B", null, "1", "2", "3", "4", "5", "1F", "2F", "3F", "4F", "5F"),
+            updatedProject.raceData.controls.map { it.publicLabel }
+        )
+        assertEquals(
+            listOf(null, "S", null, null, null, null, null, null, null, null, null, null),
+            updatedProject.raceData.controls.map { it.notes }
+        )
+    }
+
+    @Test
     fun matchesImportedFoxLabelsToExistingControlsByInferredSiCode() {
         val kmlPath = Files.createTempFile("radio-oracle-foxoring-si-labels", ".kml")
         Files.writeString(kmlPath, sampleFoxoringKmlWithSiCodeLabeledControls())
