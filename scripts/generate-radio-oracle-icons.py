@@ -48,25 +48,6 @@ def draw_background(draw: ImageDraw.ImageDraw, size: int) -> None:
         color = tuple(lerp(BG_TOP[i], BG_BOTTOM[i], t) for i in range(3))
         draw.line([(0, y), (size, y)], fill=color)
 
-    contour = (255, 255, 255, 13)
-    for offset in (-185, -90, 8, 112):
-        box = [
-            scaled(size, -125 + offset),
-            scaled(size, 66),
-            scaled(size, 372 + offset),
-            scaled(size, 562),
-        ]
-        draw.arc(box, start=204, end=338, fill=contour, width=line_width(size, 5))
-
-    for offset in (-96, 42, 180):
-        box = [
-            scaled(size, 140 + offset),
-            scaled(size, -118),
-            scaled(size, 700 + offset),
-            scaled(size, 442),
-        ]
-        draw.arc(box, start=112, end=248, fill=contour, width=line_width(size, 4))
-
 
 def draw_oracle_mark(draw: ImageDraw.ImageDraw, size: int, include_shadow: bool) -> None:
     def p(x: float, y: float) -> tuple[int, int]:
