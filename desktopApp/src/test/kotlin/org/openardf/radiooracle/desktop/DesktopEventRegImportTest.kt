@@ -51,6 +51,35 @@ class DesktopEventRegImportTest {
     }
 
     @Test
+    fun parsesGoogleSheetRegistrationSummaryWithSiCardsAndBibNumbers() {
+        val registration = DesktopEventRegSpreadsheetParser.parseCsv(
+            csvText = sampleGoogleSheetCsv(),
+            eventName = "Radio-O Champs Reg Summary"
+        )
+
+        assertEquals("Radio-O Champs Reg Summary", registration.eventName)
+        assertEquals(listOf("Sprint", "FoxO", "SprMod-NC"), registration.competitions.map { it.name })
+        assertEquals(
+            listOf("Fala", "Kerns"),
+            registration.competitions.first { it.name == "Sprint" }.competitors.map { it.lastName }
+        )
+        assertEquals(
+            listOf("Kerns", "Boyd"),
+            registration.competitions.first { it.name == "SprMod-NC" }.competitors.map { it.lastName }
+        )
+
+        val fala = registration.competitions.first { it.name == "Sprint" }.competitors.first()
+        assertEquals(8400555, fala.siNumber)
+        assertEquals("101", fala.bibNumber)
+        assertEquals("BOK", fala.club)
+        assertEquals("K4FAL", fala.callSign)
+        assertEquals(1991, fala.birthYear)
+        assertEquals(true, fala.isMan)
+        assertEquals("conf-1", fala.personId)
+        assertEquals("05:00", fala.startTimeText)
+    }
+
+    @Test
     fun generatesOneEventFilePerCompetitionWithCompetitors() {
         val outputDirectory = Files.createTempDirectory("radio-oracle-eventreg-test")
         val ids = generateSequence(1) { it + 1 }.map { "id-$it" }.iterator()
@@ -106,6 +135,76 @@ class DesktopEventRegImportTest {
     }
 
     @Test
+    fun generatesEventFilesFromGoogleSheetWithSiCardsAndBibNumbers() {
+        val outputDirectory = Files.createTempDirectory("radio-oracle-google-sheet-test")
+        val ids = generateSequence(1) { it + 1 }.map { "id-$it" }.iterator()
+
+        val result = DesktopEventRegImporter.importFromGoogleSheet(
+            url = "https://docs.google.com/spreadsheets/d/test-spreadsheet-id/edit",
+            outputDirectory = outputDirectory,
+            startDateTimeIso = "2026-07-03T09:00",
+            fetchSpreadsheet = {
+                SpreadsheetDownload(
+                    bytes = sampleGoogleSheetCsv().toByteArray(),
+                    contentType = "text/csv",
+                    fileName = "Radio-O Champs Reg Summary_02jul26.csv"
+                )
+            },
+            idFactory = { ids.next() }
+        )
+
+        assertEquals(3, result.generatedFiles.size)
+        assertEquals(
+            listOf(
+                "Radio-O Champs Reg Summary_02jul26 - Sprint.json",
+                "Radio-O Champs Reg Summary_02jul26 - FoxO.json",
+                "Radio-O Champs Reg Summary_02jul26 - SprMod-NC.json"
+            ),
+            result.generatedFiles.map { it.path.fileName.toString() }
+        )
+        val generatedFileNames = Files.list(outputDirectory).use { paths ->
+            paths.map { it.fileName.toString() }.sorted().toList()
+        }
+        assertEquals(
+            listOf(
+                "Radio-O Champs Reg Summary_02jul26 - FoxO.json",
+                "Radio-O Champs Reg Summary_02jul26 - SprMod-NC.json",
+                "Radio-O Champs Reg Summary_02jul26 - Sprint.json"
+            ),
+            generatedFileNames
+        )
+
+        val sprintProject = DesktopProjectFiles.read(
+            result.generatedFiles.first { it.competitionName == "Sprint" }.path
+        )
+        val fala = sprintProject.raceData.competitorData
+            .first { it.competitorCategory.competitor.lastName == "Fala" }
+            .competitorCategory
+            .competitor
+        assertEquals(8400555, fala.siNumber)
+        assertEquals("101", fala.bibNumber)
+        assertEquals("K4FAL", fala.callSign)
+        assertEquals("conf-1", fala.index)
+        assertEquals(RaceType.SPRINT, sprintProject.raceData.race.raceType)
+
+        val sprintCategoryRows = sprintProject.categoryImportRows()
+        assertEquals(listOf("M-21", "W-65"), sprintCategoryRows.map { it.name })
+
+        val sprintCompetitorRows = sprintProject.competitorImportRows()
+        assertEquals(listOf("Fala", "Kerns"), sprintCompetitorRows.map { it.lastName })
+        assertEquals(listOf(8400555, 1800859), sprintCompetitorRows.map { it.siNumber })
+        assertEquals(listOf("101", "102"), sprintCompetitorRows.map { it.bibNumber })
+        assertEquals(listOf("M-21", "W-65"), sprintCompetitorRows.map { it.categoryName })
+
+        val foxProject = DesktopProjectFiles.read(
+            result.generatedFiles.first { it.competitionName == "FoxO" }.path
+        )
+        assertEquals(RaceType.FOXORING, foxProject.raceData.race.raceType)
+        assertTrue(foxProject.raceData.competitorData.any { it.competitorCategory.competitor.lastName == "Boyd" })
+        assertFalse(foxProject.raceData.competitorData.any { it.competitorCategory.competitor.lastName == "Kerns" })
+    }
+
+    @Test
     fun generatesOneCompetitorCsvPerCompetitionWithEventFileStem() {
         val outputDirectory = Files.createTempDirectory("radio-oracle-eventreg-competitors-test")
         val ids = generateSequence(1) { it + 1 }.map { "id-$it" }.iterator()
@@ -135,6 +234,14 @@ class DesktopEventRegImportTest {
         assertEquals(listOf("M-21", "W-65"), sprintRows.map { it.categoryName })
         assertEquals(listOf(true, false), sprintRows.map { it.isMan })
     }
+
+    private fun sampleGoogleSheetCsv(): String =
+        """
+        ,First,Last,ConfNum,Status,Bib#,YearBorn,Sex,Club,E-Punch ID,RentPunch,Sprint Class,Sprint Crs,Sprint Start,FoxO Class,FoxO Crs,FoxO Start,SprMod-NC Crs, Call--Call
+        0,Gheorghe,Fala,conf-1,Confirmed,101,1991-01-01 00:00:00,M,BOK,8400555,N,M-21,M-21,05:00,M-21,M-21,,NC,K4FAL
+        1,Kathleen,Kerns,conf-2,Confirmed,102,1959-01-01 00:00:00,F,MTHD,1800859,N,W-65,W-65,,NC,,,Competing,K7KER
+        2,Gerald,Boyd,conf-3,Confirmed,103,1957-01-01 00:00:00,M,NMO,247347,N,NC,,,M-60,M-60,,Competing,WB8WFK
+        """.trimIndent()
 
     private fun sampleRegistrationHtml(): String =
         """

@@ -33,6 +33,7 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvExports
+import java.io.ByteArrayInputStream
 import java.io.StringReader
 import java.net.URI
 import java.net.http.HttpClient
@@ -44,10 +45,13 @@ import java.nio.file.Path
 import java.time.Duration
 import java.util.UUID
 import java.util.prefs.Preferences
+import java.util.zip.ZipInputStream
 import javax.swing.text.MutableAttributeSet
 import javax.swing.text.html.HTML
 import javax.swing.text.html.HTMLEditorKit
 import javax.swing.text.html.parser.ParserDelegator
+import javax.xml.parsers.DocumentBuilderFactory
+import org.w3c.dom.Element
 
 data class DesktopEventRegGeneratedFile(
     val competitionName: String,
@@ -88,11 +92,20 @@ data class DesktopEventRegCompetitor(
     val lastName: String,
     val club: String,
     val categoryName: String,
-    val startTimeText: String?
+    val startTimeText: String?,
+    val siNumber: Int? = null,
+    val startNumber: Int? = null,
+    val bibNumber: String = "",
+    val callSign: String = "",
+    val birthYear: Int? = null,
+    val personId: String = "",
+    val isMan: Boolean? = null,
+    val siRent: Boolean = false
 )
 
 object DesktopEventRegImportPreferences {
     private const val LAST_EVENT_REG_URL_KEY = "lastEventRegUrl"
+    private const val LAST_GOOGLE_SHEET_URL_KEY = "lastGoogleSheetUrl"
     private val preferences: Preferences =
         Preferences.userNodeForPackage(DesktopEventRegImportPreferences::class.java)
 
@@ -101,6 +114,13 @@ object DesktopEventRegImportPreferences {
 
     fun rememberRegistrationUrl(url: String) {
         preferences.put(LAST_EVENT_REG_URL_KEY, url.trim())
+    }
+
+    fun lastGoogleSheetUrl(): String =
+        preferences.get(LAST_GOOGLE_SHEET_URL_KEY, "")
+
+    fun rememberGoogleSheetUrl(url: String) {
+        preferences.put(LAST_GOOGLE_SHEET_URL_KEY, url.trim())
     }
 }
 
@@ -149,6 +169,50 @@ object DesktopEventRegImporter {
         )
     }
 
+    fun importFromGoogleSheet(
+        url: String,
+        outputDirectory: Path,
+        startDateTimeIso: String,
+        fetchSpreadsheet: (String) -> SpreadsheetDownload = ::fetchSpreadsheet,
+        idFactory: () -> String = { UUID.randomUUID().toString() }
+    ): DesktopEventRegImportResult {
+        val normalizedUrl = normalizedUrl(url, label = "Spreadsheet URL")
+        val registration = DesktopEventRegSpreadsheetParser.parse(
+            download = fetchSpreadsheet(normalizedUrl),
+            fallbackEventName = "Google Sheets Registration"
+        )
+        val projects = DesktopEventRegProjectBuilder.buildProjects(
+            registration = registration,
+            startDateTimeIso = startDateTimeIso,
+            idFactory = idFactory
+        )
+
+        require(projects.isNotEmpty()) {
+            "No competition columns with registered competitors were found."
+        }
+
+        Files.createDirectories(outputDirectory)
+        val generatedFiles = projects.map { generatedProject ->
+            val path = uniqueProjectPath(
+                outputDirectory.resolve(
+                    DesktopProjectFilePaths.defaultProjectFileName(generatedProject.projectFile.raceData.race.name)
+                )
+            )
+            DesktopProjectFiles.write(path, generatedProject.projectFile)
+            DesktopEventRegGeneratedFile(
+                competitionName = generatedProject.competitionName,
+                path = path,
+                competitorCount = generatedProject.competitorCount
+            )
+        }
+
+        return DesktopEventRegImportResult(
+            sourceUrl = normalizedUrl,
+            outputDirectory = outputDirectory,
+            generatedFiles = generatedFiles
+        )
+    }
+
     fun importFromWebsite(
         url: String,
         outputDirectory: Path,
@@ -190,17 +254,17 @@ object DesktopEventRegImporter {
         )
     }
 
-    private fun normalizedUrl(url: String): String {
+    private fun normalizedUrl(url: String, label: String = "Website URL"): String {
         val trimmed = url.trim()
         require(trimmed.isNotEmpty()) {
-            "Website URL cannot be blank."
+            "$label cannot be blank."
         }
         val uri = URI(trimmed)
         require(uri.scheme == "https" || uri.scheme == "http") {
-            "Website URL must start with http:// or https://."
+            "$label must start with http:// or https://."
         }
         require(!uri.host.isNullOrBlank()) {
-            "Website URL must include a host."
+            "$label must include a host."
         }
         return uri.toString()
     }
@@ -220,6 +284,94 @@ object DesktopEventRegImporter {
             "Website returned HTTP ${response.statusCode()}."
         }
         return response.body()
+    }
+
+    private fun fetchSpreadsheet(url: String): SpreadsheetDownload {
+        val googleId = googleSpreadsheetId(url)
+        val candidateUrls = if (googleId != null) {
+            listOf(
+                "https://docs.google.com/spreadsheets/d/$googleId/export?format=csv&gid=0",
+                "https://docs.google.com/spreadsheets/d/$googleId/export?format=xlsx",
+                "https://drive.google.com/uc?export=download&id=$googleId"
+            )
+        } else {
+            listOf(url)
+        }
+
+        val errors = mutableListOf<String>()
+        candidateUrls.forEach { candidateUrl ->
+            runCatching { downloadSpreadsheet(candidateUrl) }
+                .onSuccess { download ->
+                    if (download.isUsableSpreadsheet()) {
+                        return download
+                    }
+                    errors += "downloaded unsupported content from $candidateUrl"
+                }
+                .onFailure { error ->
+                    errors += error.message ?: error::class.simpleName.orEmpty()
+                }
+        }
+
+        val suffix = errors.filter { it.isNotBlank() }.distinct().joinToString("; ")
+        error(
+            if (suffix.isBlank()) {
+                "Spreadsheet could not be downloaded as CSV or XLSX."
+            } else {
+                "Spreadsheet could not be downloaded as CSV or XLSX: $suffix"
+            }
+        )
+    }
+
+    private fun downloadSpreadsheet(url: String): SpreadsheetDownload {
+        val request = HttpRequest.newBuilder(URI(url))
+            .timeout(Duration.ofSeconds(45))
+            .header("User-Agent", "Radio-Oracle/${DesktopBuildInfo.displayVersion}")
+            .GET()
+            .build()
+        val response = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(15))
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build()
+            .send(request, HttpResponse.BodyHandlers.ofByteArray())
+        require(response.statusCode() in 200..299) {
+            "Spreadsheet returned HTTP ${response.statusCode()}."
+        }
+        return SpreadsheetDownload(
+            bytes = response.body(),
+            contentType = response.headers().firstValue("Content-Type").orElse(""),
+            fileName = fileNameFromContentDisposition(
+                response.headers().firstValue("Content-Disposition").orElse("")
+            )
+        )
+    }
+
+    private fun googleSpreadsheetId(url: String): String? {
+        val uri = URI(url)
+        if (!uri.host.orEmpty().contains("google.com", ignoreCase = true)) {
+            return null
+        }
+        return Regex("/spreadsheets/d/([^/?#]+)").find(uri.rawPath)?.groupValues?.get(1)
+            ?: uri.rawQuery
+                ?.split("&")
+                ?.firstOrNull { it.startsWith("id=") }
+                ?.substringAfter("=")
+    }
+
+    private fun fileNameFromContentDisposition(value: String): String? {
+        val utf8 = Regex("filename\\*=UTF-8''([^;]+)", RegexOption.IGNORE_CASE)
+            .find(value)
+            ?.groupValues
+            ?.get(1)
+            ?.let { java.net.URLDecoder.decode(it, StandardCharsets.UTF_8) }
+        if (!utf8.isNullOrBlank()) {
+            return utf8
+        }
+        return Regex("filename=\"?([^\";]+)\"?", RegexOption.IGNORE_CASE)
+            .find(value)
+            ?.groupValues
+            ?.get(1)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
     }
 
     private fun uniqueProjectPath(initialPath: Path): Path {
@@ -243,6 +395,339 @@ object DesktopEventRegImporter {
         }
         return path
     }
+}
+
+data class SpreadsheetDownload(
+    val bytes: ByteArray,
+    val contentType: String = "",
+    val fileName: String? = null
+) {
+    fun isXlsx(): Boolean =
+        bytes.size >= 4 &&
+            bytes[0] == 'P'.code.toByte() &&
+            bytes[1] == 'K'.code.toByte()
+
+    fun isCsvLike(): Boolean {
+        if (isXlsx()) {
+            return false
+        }
+        val lowerType = contentType.lowercase()
+        if (lowerType.contains("csv") || lowerType.startsWith("text/")) {
+            return true
+        }
+        val prefix = bytes.decodeToString(endIndex = minOf(bytes.size, 512)).trimStart()
+        return prefix.contains("First,") && prefix.contains("Last,")
+    }
+
+    fun isUsableSpreadsheet(): Boolean =
+        isXlsx() || isCsvLike()
+}
+
+object DesktopEventRegSpreadsheetParser {
+    fun parse(download: SpreadsheetDownload, fallbackEventName: String): DesktopEventRegRegistration {
+        val rows = if (download.isXlsx()) {
+            XlsxFirstSheetReader.readRows(download.bytes)
+        } else {
+            parseCommaRows(String(download.bytes, StandardCharsets.UTF_8).substringBefore('\u000c'))
+        }
+        return parseRows(
+            rows = rows,
+            eventName = eventNameFromFileName(download.fileName) ?: fallbackEventName
+        )
+    }
+
+    fun parseCsv(csvText: String, eventName: String): DesktopEventRegRegistration =
+        parseRows(parseCommaRows(csvText.substringBefore('\u000c')), eventName)
+
+    fun parseRows(rows: List<List<String>>, eventName: String): DesktopEventRegRegistration {
+        val headerIndex = rows.indexOfFirst { row ->
+            row.any { it.normalizedHeader() == "first" } &&
+                row.any { it.normalizedHeader() == "last" }
+        }
+        require(headerIndex >= 0) {
+            "Spreadsheet is missing First and Last columns."
+        }
+        val headers = rows[headerIndex].map { it.trim() }
+        val bodyRows = rows.drop(headerIndex + 1).filter { row -> row.any { it.isNotBlank() } }
+        val columns = SpreadsheetColumns(headers)
+
+        val competitionColumns = spreadsheetCompetitionColumns(headers)
+        require(competitionColumns.isNotEmpty()) {
+            "Spreadsheet has no competition class or course columns."
+        }
+
+        val competitions = competitionColumns.mapNotNull { column ->
+            val competitors = bodyRows.mapNotNull { row ->
+                val categoryName = spreadsheetCategoryName(
+                    competitionName = column.competitionName,
+                    classValue = row.getOrBlank(column.classIndex),
+                    courseValue = row.getOrBlank(column.courseIndex)
+                )
+                if (categoryName.isBlank()) {
+                    return@mapNotNull null
+                }
+                val firstName = row.getOrBlank(columns.firstNameIndex)
+                val lastName = row.getOrBlank(columns.lastNameIndex)
+                if (firstName.isBlank() && lastName.isBlank()) {
+                    return@mapNotNull null
+                }
+                DesktopEventRegCompetitor(
+                    firstName = firstName,
+                    lastName = lastName,
+                    club = row.getOrBlank(columns.clubIndex),
+                    categoryName = categoryName,
+                    startTimeText = row.getOrBlank(column.startIndex).let(::normalizedStartTime),
+                    siNumber = row.getOrBlank(columns.siNumberIndex).numericText().toIntOrNull(),
+                    startNumber = row.getOrBlank(columns.startNumberIndex).numericText().toIntOrNull(),
+                    bibNumber = row.getOrBlank(columns.bibNumberIndex).trim(),
+                    callSign = row.getOrBlank(columns.callSignIndex).trim(),
+                    birthYear = row.getOrBlank(columns.birthYearIndex).birthYear(),
+                    personId = row.getOrBlank(columns.personIdIndex).trim(),
+                    isMan = row.getOrBlank(columns.sexIndex).sexIsMan(),
+                    siRent = row.getOrBlank(columns.siRentIndex).yesLike()
+                )
+            }
+            if (competitors.isEmpty()) {
+                null
+            } else {
+                DesktopEventRegCompetition(column.competitionName, competitors)
+            }
+        }
+
+        return DesktopEventRegRegistration(
+            eventName = eventName.ifBlank { "Google Sheets Registration" },
+            competitions = competitions
+        )
+    }
+
+    private fun spreadsheetCompetitionColumns(headers: List<String>): List<SpreadsheetCompetitionColumn> {
+        val classColumns = headers.mapIndexedNotNull { index, header ->
+            val name = header.trim().removeSuffix(" Class")
+            if (header.endsWith(" Class") && name.isNotBlank()) {
+                SpreadsheetCompetitionColumn(
+                    competitionName = name,
+                    classIndex = index,
+                    courseIndex = headers.indexOfFirstHeader("$name Crs"),
+                    startIndex = headers.indexOfFirstHeader("$name Start")
+                )
+            } else {
+                null
+            }
+        }
+        val classNames = classColumns.mapTo(mutableSetOf()) { it.competitionName.lowercase() }
+        val courseOnlyColumns = headers.mapIndexedNotNull { index, header ->
+            val name = header.trim().removeSuffix(" Crs")
+            if (header.endsWith(" Crs") && name.isNotBlank() && name.lowercase() !in classNames) {
+                SpreadsheetCompetitionColumn(
+                    competitionName = name,
+                    classIndex = null,
+                    courseIndex = index,
+                    startIndex = headers.indexOfFirstHeader("$name Start")
+                )
+            } else {
+                null
+            }
+        }
+        return classColumns + courseOnlyColumns
+    }
+
+    private fun spreadsheetCategoryName(competitionName: String, classValue: String, courseValue: String): String {
+        val value = classValue.trim().ifBlank { courseValue.trim() }
+        return when (value.lowercase()) {
+            "", "-", "n", "no", "nc" -> ""
+            "y", "comp", "competing" -> competitionName
+            else -> value
+        }
+    }
+
+    private fun parseCommaRows(csvText: String): List<List<String>> {
+        val rows = mutableListOf<List<String>>()
+        val row = mutableListOf<String>()
+        val cell = StringBuilder()
+        var inQuotes = false
+        var index = 0
+        while (index < csvText.length) {
+            val ch = csvText[index]
+            when {
+                ch == '"' && inQuotes && index + 1 < csvText.length && csvText[index + 1] == '"' -> {
+                    cell.append('"')
+                    index++
+                }
+                ch == '"' -> inQuotes = !inQuotes
+                ch == ',' && !inQuotes -> {
+                    row += cell.toString().trim()
+                    cell.clear()
+                }
+                (ch == '\n' || ch == '\r') && !inQuotes -> {
+                    if (ch == '\r' && index + 1 < csvText.length && csvText[index + 1] == '\n') {
+                        index++
+                    }
+                    row += cell.toString().trim()
+                    cell.clear()
+                    if (row.any { it.isNotBlank() }) {
+                        rows += row.toList()
+                    }
+                    row.clear()
+                }
+                else -> cell.append(ch)
+            }
+            index++
+        }
+        row += cell.toString().trim()
+        if (row.any { it.isNotBlank() }) {
+            rows += row.toList()
+        }
+        return rows
+    }
+
+    private fun normalizedStartTime(value: String): String? =
+        value.trim().takeIf { it.matches(Regex("\\d{1,3}:\\d{2}")) }
+
+    private fun eventNameFromFileName(fileName: String?): String? =
+        fileName
+            ?.substringBeforeLast(".")
+            ?.replace(Regex("\\s+-\\s+Sheet\\d+$"), "")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+
+    private fun List<String>.indexOfFirstHeader(vararg candidates: String): Int? {
+        val normalizedCandidates = candidates.map { it.normalizedHeader() }.toSet()
+        return indexOfFirst { it.normalizedHeader() in normalizedCandidates }.takeIf { it >= 0 }
+    }
+
+    private fun List<String>.getOrBlank(index: Int?): String =
+        index?.let { getOrNull(it) }?.trim().orEmpty()
+
+    private fun String.normalizedHeader(): String =
+        trim().removePrefix("\ufeff").lowercase().replace(Regex("\\s+"), " ")
+
+    private fun String.numericText(): String =
+        trim().removeSuffix(".0").filter { it.isDigit() }
+
+    private fun String.birthYear(): Int? {
+        val trimmed = trim()
+        return Regex("^\\d{4}").find(trimmed)?.value?.toIntOrNull()
+    }
+
+    private fun String.sexIsMan(): Boolean? =
+        when (trim().uppercase()) {
+            "M", "MALE" -> true
+            "F", "W", "FEMALE", "WOMAN" -> false
+            else -> null
+        }
+
+    private fun String.yesLike(): Boolean =
+        trim().uppercase() in setOf("Y", "YES", "TRUE", "1")
+
+    private data class SpreadsheetCompetitionColumn(
+        val competitionName: String,
+        val classIndex: Int?,
+        val courseIndex: Int?,
+        val startIndex: Int?
+    )
+
+    private class SpreadsheetColumns(headers: List<String>) {
+        val firstNameIndex = requireNotNull(headers.indexOfFirstHeader("First", "First Name")) {
+            "Spreadsheet is missing a First column."
+        }
+        val lastNameIndex = requireNotNull(headers.indexOfFirstHeader("Last", "Last Name")) {
+            "Spreadsheet is missing a Last column."
+        }
+        val clubIndex = headers.indexOfFirstHeader("Club")
+        val siNumberIndex = headers.indexOfFirstHeader("E-Punch ID", "SI Card#", "SI", "SI Number")
+        val bibNumberIndex = headers.indexOfFirstHeader("Bib#", "Bib", "Bib Number")
+        val callSignIndex = headers.indexOfFirstHeader("Call--Call", "Call", "Call Sign")
+        val birthYearIndex = headers.indexOfFirstHeader("YearBorn", "Birth Year", "Year Born")
+        val sexIndex = headers.indexOfFirstHeader("Sex", "Gender")
+        val personIdIndex = headers.indexOfFirstHeader("ConfNum", "Confirmation Number", "Person ID")
+        val siRentIndex = headers.indexOfFirstHeader("RentPunch", "Rent SI?", "SI Rent")
+        val startNumberIndex = headers.indexOfFirstHeader("Start Number", "Start #")
+    }
+}
+
+private object XlsxFirstSheetReader {
+    fun readRows(bytes: ByteArray): List<List<String>> {
+        val entries = unzip(bytes)
+        val sharedStrings = entries["xl/sharedStrings.xml"]?.let(::readSharedStrings).orEmpty()
+        val sheetXml = entries["xl/worksheets/sheet1.xml"]
+            ?: error("XLSX workbook is missing the first worksheet.")
+        return readSheetRows(sheetXml, sharedStrings)
+    }
+
+    private fun unzip(bytes: ByteArray): Map<String, ByteArray> {
+        val entries = mutableMapOf<String, ByteArray>()
+        ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                if (!entry.isDirectory) {
+                    entries[entry.name] = zip.readBytes()
+                }
+                zip.closeEntry()
+            }
+        }
+        return entries
+    }
+
+    private fun readSharedStrings(bytes: ByteArray): List<String> {
+        val document = parseXml(bytes)
+        val nodes = document.documentElement.getElementsByTagNameNS("*", "si")
+        return (0 until nodes.length).map { index ->
+            val element = nodes.item(index) as Element
+            element.getElementsByTagNameNS("*", "t").asElements().joinToString("") { it.textContent }
+        }
+    }
+
+    private fun readSheetRows(bytes: ByteArray, sharedStrings: List<String>): List<List<String>> {
+        val document = parseXml(bytes)
+        val rows = document.documentElement.getElementsByTagNameNS("*", "row")
+        return (0 until rows.length).mapNotNull { rowIndex ->
+            val rowElement = rows.item(rowIndex) as Element
+            val cells = mutableListOf<String>()
+            val cellNodes = rowElement.getElementsByTagNameNS("*", "c")
+            for (cellIndex in 0 until cellNodes.length) {
+                val cell = cellNodes.item(cellIndex) as Element
+                val columnIndex = cell.getAttribute("r").takeIf { it.isNotBlank() }?.let(::xlsxColumnIndex)
+                    ?: cells.size
+                while (cells.size < columnIndex) {
+                    cells += ""
+                }
+                cells += cellValue(cell, sharedStrings)
+            }
+            cells.takeIf { row -> row.any { it.isNotBlank() } }
+        }
+    }
+
+    private fun cellValue(cell: Element, sharedStrings: List<String>): String {
+        val type = cell.getAttribute("t")
+        return when (type) {
+            "s" -> cell.firstChildText("v")?.toIntOrNull()?.let { sharedStrings.getOrNull(it) }.orEmpty()
+            "inlineStr" -> cell.getElementsByTagNameNS("*", "t").asElements().joinToString("") { it.textContent }
+            else -> cell.firstChildText("v").orEmpty()
+        }.trim()
+    }
+
+    private fun xlsxColumnIndex(cellReference: String): Int {
+        val letters = cellReference.takeWhile { it.isLetter() }.uppercase()
+        var value = 0
+        letters.forEach { char ->
+            value = value * 26 + (char - 'A' + 1)
+        }
+        return (value - 1).coerceAtLeast(0)
+    }
+
+    private fun parseXml(bytes: ByteArray) =
+        DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+            runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
+        }.newDocumentBuilder().parse(ByteArrayInputStream(bytes))
+
+    private fun Element.firstChildText(localName: String): String? {
+        val nodes = getElementsByTagNameNS("*", localName)
+        return if (nodes.length == 0) null else nodes.item(0).textContent
+    }
+
+    private fun org.w3c.dom.NodeList.asElements(): List<Element> =
+        (0 until length).mapNotNull { item(it) as? Element }
 }
 
 object DesktopEventRegRegistrationParser {
@@ -449,18 +934,21 @@ private fun String.eventRegRaceFormat(): EventRegRaceFormat {
 
 private fun DesktopEventRegCompetitor.toImportRow(): CompetitorCsvImportRow =
     CompetitorCsvImportRow(
-        siNumber = null,
-        startNumber = null,
+        siNumber = siNumber,
+        startNumber = startNumber,
         firstName = firstName,
         lastName = lastName,
         categoryName = categoryName,
-        isMan = StandardCategoryRules.inferIsManFromName(categoryName)
+        isMan = isMan
+            ?: StandardCategoryRules.inferIsManFromName(categoryName)
             ?: categoryName.trim().uppercase().startsWith("M"),
-        birthYear = null,
+        birthYear = birthYear,
         club = club,
-        personId = "",
+        personId = personId,
         startTimeText = startTimeText,
-        siRent = false
+        siRent = siRent,
+        bibNumber = bibNumber,
+        callSign = callSign
     )
 
 private class RegListTableParser : HTMLEditorKit.ParserCallback() {

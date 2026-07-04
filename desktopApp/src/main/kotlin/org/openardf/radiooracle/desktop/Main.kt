@@ -515,6 +515,7 @@ fun main(args: Array<String>) = application {
         var eventSeriesValidationState by remember { mutableStateOf<EventSeriesValidationUiState?>(null) }
         var eventSeriesValidationEventPath by remember { mutableStateOf<Path?>(null) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
+        var isGoogleSheetImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzUnlockAction by remember { mutableStateOf<CourseKmlKmzUnlockAction?>(null) }
         var pendingProtectedControlDeleteId by remember { mutableStateOf<String?>(null) }
@@ -539,7 +540,9 @@ fun main(args: Array<String>) = application {
         var venueElevationCacheRefreshToken by remember { mutableStateOf(0) }
         var pendingDemFileImportReview by remember { mutableStateOf<DesktopVenueElevationDemImportReview?>(null) }
         var eventRegImportUrl by remember { mutableStateOf(DesktopEventRegImportPreferences.lastRegistrationUrl()) }
+        var googleSheetImportUrl by remember { mutableStateOf(DesktopEventRegImportPreferences.lastGoogleSheetUrl()) }
         var isImportingEventRegWebsite by remember { mutableStateOf(false) }
+        var isImportingGoogleSheet by remember { mutableStateOf(false) }
         var isImportingEventRegCompetitorCsvs by remember { mutableStateOf(false) }
         var isImportingCourseKmlKmz by remember { mutableStateOf(false) }
         var pendingCompetitorsCsvImportReview by remember { mutableStateOf<PendingCompetitorsCsvImportReview?>(null) }
@@ -3853,10 +3856,13 @@ fun main(args: Array<String>) = application {
         fun importCompetitorsCsv() {
             DesktopFileDialogs.chooseImportCsv("Import Competitors CSV")?.let { path ->
                 runCatching {
+                    val result = EventCsvImports.parseAndroidCompetitorRows(Files.readString(path))
                     pendingCompetitorsCsvImportReview = PendingCompetitorsCsvImportReview(
                         path = path,
+                        rows = result.rows,
+                        invalidLineCount = result.invalidLines.size,
                         missingCategoryNames = missingCompetitorCategoryNames(
-                            path = path,
+                            rows = result.rows,
                             projectFile = requireNotNull(projectSession.currentProject)
                         )
                     )
@@ -3867,11 +3873,36 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun importCompetitorsCsv(path: Path, synchronizeToCsv: Boolean, createMissingCategories: Boolean) {
+        fun importCompetitorsRaceFile() {
+            DesktopFileDialogs.chooseOpenProject()?.let { path ->
+                runCatching {
+                    val sourceProject = DesktopProjectFiles.read(path)
+                    val rows = sourceProject.competitorImportRows()
+                    pendingCompetitorsCsvImportReview = PendingCompetitorsCsvImportReview(
+                        path = path,
+                        rows = rows,
+                        invalidLineCount = 0,
+                        missingCategoryNames = missingCompetitorCategoryNames(
+                            rows = rows,
+                            projectFile = requireNotNull(projectSession.currentProject)
+                        )
+                    )
+                    syncCompetitorsCsvImport = false
+                }.onFailure { error ->
+                    projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
+        fun importCompetitorsFromRows(
+            path: Path,
+            rows: List<CompetitorCsvImportRow>,
+            invalidLineCount: Int,
+            synchronizeToCsv: Boolean,
+            createMissingCategories: Boolean
+        ) {
             runCatching {
-                val csvText = Files.readString(path)
-                val result = EventCsvImports.parseAndroidCompetitorRows(csvText)
-                checkpointBeforeImport("competitors CSV import ${path.fileName}")
+                checkpointBeforeImport("competitors import ${path.fileName}")
                 var importWarnings = emptyList<String>()
                 var importedRows = 0
                 var updatedRows = 0
@@ -3880,7 +3911,7 @@ fun main(args: Array<String>) = application {
                 projectFile = projectSession.updateCurrentProject { currentProject ->
                     val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
                         projectFile = currentProject,
-                        rows = result.rows,
+                        rows = rows,
                         competitorIdFactory = { UUID.randomUUID().toString() },
                         categoryIdFactory = { UUID.randomUUID().toString() },
                         duplicatePolicy = if (synchronizeToCsv) {
@@ -3900,15 +3931,15 @@ fun main(args: Array<String>) = application {
                 }
                 syncProjectState()
                 pendingCompetitorsCsvImportReview = null
-                recordActivity("Applied competitors CSV import ${path.fileName}.")
+                recordActivity("Applied competitors import ${path.fileName}.")
                 recentImportReport = DesktopImportReport(
-                    title = "Competitors CSV: ${path.fileName}",
+                    title = "Competitors: ${path.fileName}",
                     lines = withRollbackBackupLine(listOf(
                         "$importedRows competitors added.",
                         "$updatedRows competitors updated.",
                         "$skippedRows competitors skipped.",
                         "$deletedRows competitors removed by sync.",
-                        "${result.invalidLines.size} invalid rows skipped."
+                        "$invalidLineCount invalid rows skipped."
                     ) + importWarnings)
                 )
                 projectStatusText = competitorImportStatusText(
@@ -3916,7 +3947,7 @@ fun main(args: Array<String>) = application {
                     updatedRows = updatedRows,
                     skippedRows = skippedRows,
                     deletedRows = deletedRows,
-                    invalidRows = result.invalidLines.size,
+                    invalidRows = invalidLineCount,
                     fileName = path.fileName.toString()
                 ) + warningStatusSuffix(importWarnings)
             }.onFailure { error ->
@@ -4023,6 +4054,29 @@ fun main(args: Array<String>) = application {
                         )
                     )
                     projectStatusText = "Review categories CSV import before applying it."
+                }.onFailure { error ->
+                    projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
+        fun importCategoriesRaceFile() {
+            DesktopFileDialogs.chooseOpenProject()?.let { path ->
+                runCatching {
+                    val currentProject = requireNotNull(projectSession.currentProject)
+                    val sourceProject = DesktopProjectFiles.read(path)
+                    val rows = sourceProject.categoryImportRows()
+                    pendingCategoriesCsvImportReview = PendingCategoriesCsvImportReview(
+                        path = path,
+                        rows = rows,
+                        invalidLineCount = 0,
+                        preview = DesktopImportPreviews.categoryCsvPreview(
+                            projectFile = currentProject,
+                            sourceName = path.fileName.toString(),
+                            rows = rows
+                        )
+                    )
+                    projectStatusText = "Review Race File category import before applying it."
                 }.onFailure { error ->
                     projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
                 }
@@ -4499,6 +4553,11 @@ fun main(args: Array<String>) = application {
             isEventRegImportDialogVisible = true
         }
 
+        fun showGoogleSheetImportDialog() {
+            googleSheetImportUrl = DesktopEventRegImportPreferences.lastGoogleSheetUrl()
+            isGoogleSheetImportDialogVisible = true
+        }
+
         fun showEventRegCompetitorCsvImportDialog() {
             eventRegImportUrl = DesktopEventRegImportPreferences.lastRegistrationUrl()
             isEventRegCompetitorCsvImportDialogVisible = true
@@ -4536,6 +4595,41 @@ fun main(args: Array<String>) = application {
                     DesktopDebugLog.error("EventReg", projectStatusText)
                 }
                 isImportingEventRegWebsite = false
+            }
+        }
+
+        fun importGoogleSheet(url: String) {
+            if (isImportingGoogleSheet) {
+                return
+            }
+            val trimmedUrl = url.trim()
+            isImportingGoogleSheet = true
+            projectStatusText = "Importing Google Sheet..."
+            DesktopEventRegImportPreferences.rememberGoogleSheetUrl(trimmedUrl)
+            appCoroutineScope.launch {
+                val result = runCatching {
+                    withContext(Dispatchers.IO) {
+                        DesktopEventRegImporter.importFromGoogleSheet(
+                            url = trimmedUrl,
+                            outputDirectory = DesktopEventFileLocations.preparePreferredEventFileDirectory(),
+                            startDateTimeIso = DesktopDateTimeText.isoText(DesktopDateTimeText.defaultStartDateTime())
+                        )
+                    }
+                }
+                result.onSuccess { importResult ->
+                    val totalCompetitors = importResult.generatedFiles.sumOf { it.competitorCount }
+                    projectStatusText =
+                        "Generated ${importResult.generatedFiles.size} Race Files with $totalCompetitors competitor entries in ${importResult.outputDirectory}."
+                    isGoogleSheetImportDialogVisible = false
+                    DesktopDebugLog.info(
+                        "GoogleSheet",
+                        "Generated ${importResult.generatedFiles.size} Race Files from ${importResult.sourceUrl}"
+                    )
+                }.onFailure { error ->
+                    projectStatusText = "Google Sheet import failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("GoogleSheet", projectStatusText)
+                }
+                isImportingGoogleSheet = false
             }
         }
 
@@ -4981,6 +5075,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.OpenEventFile,
                 DesktopNavAction.ReceiveFileFromAndroid,
                 DesktopNavAction.ImportEventRegWebsite,
+                DesktopNavAction.ImportGoogleSheet,
                 DesktopNavAction.ImportDemFile -> true
                 DesktopNavAction.ImportEventRegCompetitorsCsv -> projectFile != null
                 DesktopNavAction.ShowDebugLogHelp,
@@ -5019,6 +5114,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportIofEntryListXml,
                 DesktopNavAction.ExportIofEntryListXml,
                 DesktopNavAction.ImportCategoriesCsv,
+                DesktopNavAction.ImportCategoriesRaceFile,
                 DesktopNavAction.ImportIofCourseDataXml,
                 DesktopNavAction.ImportCourseKmlKmz,
                 DesktopNavAction.ImportCourseGpx,
@@ -5026,6 +5122,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportControlsGpx,
                 DesktopNavAction.ImportControlsCsv,
                 DesktopNavAction.ImportCompetitorsCsv,
+                DesktopNavAction.ImportCompetitorsRaceFile,
                 DesktopNavAction.ImportStartsCsv,
                 DesktopNavAction.ImportIofStartListXml,
                 DesktopNavAction.DeleteAllControls,
@@ -5110,6 +5207,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.OpenEventFile,
                 DesktopNavAction.ReceiveFileFromAndroid,
                 DesktopNavAction.ImportEventRegWebsite,
+                DesktopNavAction.ImportGoogleSheet,
                 DesktopNavAction.ImportDemFile,
                 DesktopNavAction.ShowDebugLogHelp,
                 DesktopNavAction.ShowAbout -> null
@@ -5122,12 +5220,14 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.OpenEventFile -> chooseOpenEventFile()
                 DesktopNavAction.ReceiveFileFromAndroid -> receiveFileFromAndroid()
                 DesktopNavAction.ImportEventRegWebsite -> showEventRegImportDialog()
+                DesktopNavAction.ImportGoogleSheet -> showGoogleSheetImportDialog()
                 DesktopNavAction.ImportEventRegCompetitorsCsv -> showEventRegCompetitorCsvImportDialog()
                 DesktopNavAction.ImportIofEntryListXml -> importIofEntryListXml()
                 DesktopNavAction.ExportIofEntryListXml -> exportIofEntryListXml()
                 DesktopNavAction.SaveEventFile -> saveCurrentProject()
                 DesktopNavAction.CloseEventFile -> requestCloseEventFile()
                 DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
+                DesktopNavAction.ImportCategoriesRaceFile -> importCategoriesRaceFile()
                 DesktopNavAction.ImportIofCourseDataXml -> importIofCourseDataXml()
                 DesktopNavAction.ImportControlsCsv -> importControlsCsv()
                 DesktopNavAction.ImportCourseKmlKmz -> chooseImportCourseKmlKmz()
@@ -5144,6 +5244,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.DeleteAllCompetitors ->
                     isDeleteAllCompetitorsDialogVisible = true
                 DesktopNavAction.ImportCompetitorsCsv -> importCompetitorsCsv()
+                DesktopNavAction.ImportCompetitorsRaceFile -> importCompetitorsRaceFile()
                 DesktopNavAction.ImportStartsCsv -> importCompetitorStartsCsv()
                 DesktopNavAction.ImportIofStartListXml -> importIofStartListXml()
                 DesktopNavAction.ExportEventFileCopy -> exportEventFileCopy()
@@ -5424,6 +5525,23 @@ fun main(args: Array<String>) = application {
                 onCancel = {
                     if (!isImportingEventRegWebsite) {
                         isEventRegImportDialogVisible = false
+                    }
+                }
+            )
+        }
+        if (isGoogleSheetImportDialogVisible) {
+            EventRegImportDialog(
+                title = "Import Google Sheet",
+                urlLabel = "Spreadsheet URL",
+                idleDescription = "Creates one Race File for each competition class or course column with registered competitors.",
+                importingDescription = "Downloading spreadsheet and generating Race Files...",
+                url = googleSheetImportUrl,
+                isImporting = isImportingGoogleSheet,
+                onUrlChange = { googleSheetImportUrl = it },
+                onImport = { importGoogleSheet(googleSheetImportUrl) },
+                onCancel = {
+                    if (!isImportingGoogleSheet) {
+                        isGoogleSheetImportDialogVisible = false
                     }
                 }
             )
@@ -5728,7 +5846,13 @@ fun main(args: Array<String>) = application {
                 synchronizeToCsv = syncCompetitorsCsvImport,
                 onSynchronizeToCsvChange = { syncCompetitorsCsvImport = it },
                 onImport = { createMissingCategories ->
-                    importCompetitorsCsv(review.path, syncCompetitorsCsvImport, createMissingCategories)
+                    importCompetitorsFromRows(
+                        path = review.path,
+                        rows = review.rows,
+                        invalidLineCount = review.invalidLineCount,
+                        synchronizeToCsv = syncCompetitorsCsvImport,
+                        createMissingCategories = createMissingCategories
+                    )
                 },
                 onCancel = { pendingCompetitorsCsvImportReview = null }
             )
@@ -8176,6 +8300,7 @@ private fun NationalStartListDefaultsDialog(
 @Composable
 private fun EventRegImportDialog(
     title: String = "Import EventReg Website",
+    urlLabel: String = "Registration List URL",
     idleDescription: String = "Creates one Race File for each competition class column with registered competitors.",
     importingDescription: String = "Downloading registration table and generating Race Files...",
     url: String,
@@ -8193,7 +8318,7 @@ private fun EventRegImportDialog(
                     value = url,
                     onValueChange = onUrlChange,
                     enabled = !isImporting,
-                    label = { Text("Registration List URL") },
+                    label = { Text(urlLabel) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -8551,7 +8676,7 @@ private fun CompetitorCsvImportOptionsDialog(
     }
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Import Competitors CSV") },
+        title = { Text("Import Competitors") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
@@ -8565,14 +8690,14 @@ private fun CompetitorCsvImportOptionsDialog(
                         onCheckedChange = onSynchronizeToCsvChange
                     )
                     Text(
-                        text = "Synchronize competitors to CSV",
+                        text = "Synchronize competitors to source",
                         fontSize = 13.sp,
                         color = DesktopPalette.Black
                     )
                 }
                 Text(
                     text = if (synchronizeToCsv) {
-                        "Updates matching competitors and removes current competitors not included in the CSV."
+                        "Updates matching competitors and removes current competitors not included in the source."
                     } else {
                         "Default: adds new competitors and leaves matching existing competitors unchanged."
                     },
@@ -8581,7 +8706,7 @@ private fun CompetitorCsvImportOptionsDialog(
                 )
                 if (missingCategoryNames.isNotEmpty()) {
                     Text(
-                        text = "New categories in CSV: ${missingCategoryNames.joinToString()}",
+                        text = "New categories in source: ${missingCategoryNames.joinToString()}",
                         fontSize = 13.sp,
                         color = DesktopPalette.Black
                     )
@@ -8973,6 +9098,8 @@ private data class CourseKmlKmzImportPreview(
 
 private data class PendingCompetitorsCsvImportReview(
     val path: Path,
+    val rows: List<CompetitorCsvImportRow>,
+    val invalidLineCount: Int,
     val missingCategoryNames: List<String>
 )
 
@@ -19412,6 +19539,65 @@ private fun missingCompetitorCategoryNames(rows: List<CompetitorCsvImportRow>, p
         .filter { it.isNotEmpty() }
         .distinct()
         .filterNot { it in existingCategoryNames }
+}
+
+internal fun EventProjectFile.categoryImportRows(): List<CategoryCsvImportRow> =
+    raceData.categories
+        .sortedWith(compareBy({ it.category.order }, { it.category.name }))
+        .map { categoryData ->
+            val category = categoryData.category
+            CategoryCsvImportRow(
+                name = category.name,
+                isMan = category.isMan,
+                maxAge = category.maxAge ?: 99,
+                lengthMeters = category.lengthMeters,
+                climbMeters = category.climbMeters,
+                followsRacePresets = true,
+                raceType = null,
+                timeLimitMinutes = null,
+                raceBand = null,
+                controlPointsText = categoryData.importControlPointsText(),
+                encryptedIdealOrder = category.encryptedIdealOrder
+            )
+        }
+
+private fun EventCategoryData.importControlPointsText(): String =
+    ControlPointRules.formatControlPoints(
+        controlPoints
+            .sortedBy { it.order }
+            .map { controlPoint ->
+                ControlPointDefinition(
+                    siCode = controlPoint.siCode,
+                    type = controlPoint.type,
+                    order = controlPoint.order
+                )
+            }
+    )
+
+internal fun EventProjectFile.competitorImportRows(): List<CompetitorCsvImportRow> {
+    val categoriesById = raceData.categories.associateBy { it.category.id }
+    return raceData.competitorData
+        .map { competitorData ->
+            val competitor = competitorData.competitorCategory.competitor
+            CompetitorCsvImportRow(
+                siNumber = competitor.siNumber,
+                startNumber = competitor.startNumber,
+                firstName = competitor.firstName,
+                lastName = competitor.lastName,
+                categoryName = categoriesById[competitor.categoryId]?.category?.name.orEmpty(),
+                isMan = competitor.isMan,
+                birthYear = competitor.birthYear,
+                club = competitor.club,
+                personId = competitor.index,
+                startTimeText = competitor.drawnStartTimeSeconds?.let {
+                    DurationFormatter.secondsToFormattedString(it, useMinutes = true)
+                },
+                siRent = competitor.siRent,
+                preferredStartGroup = competitor.preferredStartGroup,
+                bibNumber = competitor.bibNumber,
+                callSign = competitor.callSign
+            )
+        }
 }
 
 private fun startListDrawStatusText(details: EventStartListDetails): String {

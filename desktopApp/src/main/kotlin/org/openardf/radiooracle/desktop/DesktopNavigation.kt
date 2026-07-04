@@ -68,12 +68,14 @@ enum class DesktopNavAction {
     NewEventFile,
     OpenEventFile,
     ImportEventRegWebsite,
+    ImportGoogleSheet,
     ImportIofEntryListXml,
     ExportIofEntryListXml,
     ImportEventRegCompetitorsCsv,
     SaveEventFile,
     CloseEventFile,
     ImportCategoriesCsv,
+    ImportCategoriesRaceFile,
     ImportIofCourseDataXml,
     ImportCourseKmlKmz,
     ImportCourseGpx,
@@ -81,6 +83,7 @@ enum class DesktopNavAction {
     ImportControlsGpx,
     ImportControlsCsv,
     ImportCompetitorsCsv,
+    ImportCompetitorsRaceFile,
     ImportStartsCsv,
     ImportIofStartListXml,
     ImportDemFile,
@@ -434,6 +437,12 @@ object DesktopNavigation {
                             DesktopNavAction.ImportCategoriesCsv
                         ),
                         action(
+                            "setup.categories.import-race-file",
+                            "Import Categories From Race File...",
+                            workflow,
+                            DesktopNavAction.ImportCategoriesRaceFile
+                        ),
+                        action(
                             "setup.categories.export",
                             "Export Categories CSV...",
                             workflow,
@@ -464,6 +473,12 @@ object DesktopNavigation {
                             "Import Competitors CSV...",
                             workflow,
                             DesktopNavAction.ImportCompetitorsCsv
+                        ),
+                        action(
+                            "setup.competitors.import-race-file",
+                            "Import Competitors From Race File...",
+                            workflow,
+                            DesktopNavAction.ImportCompetitorsRaceFile
                         ),
                         action(
                             "setup.competitors.import-eventreg",
@@ -1245,6 +1260,8 @@ object DesktopNavigation {
             "Use Course Order to unlock and review protected ideal routes and course-location data that may affect scoring and analysis.",
         "setup.categories.import" to
             "Use Import Categories CSV to review and apply late category additions or corrections without replacing unrelated race data.",
+        "setup.categories.import-race-file" to
+            "Use Import Categories From Race File to update only category records from another Radio-Oracle Race File.",
         "setup.categories.delete-all-assigned-controls" to
             "Use Delete All Control Assignments to clear every category course, length, climb, and protected course field while keeping category names and competitors.",
         "setup.categories.delete-all-categories" to
@@ -1255,6 +1272,8 @@ object DesktopNavigation {
             "Use Competitors to add, import, export, edit, and assign competitors to categories before drawing starts or running race operations.",
         "setup.competitors.import" to
             "Use Import Competitors CSV to append or update competitor lists while preserving existing race setup data.",
+        "setup.competitors.import-race-file" to
+            "Use Import Competitors From Race File to update only competitor records from another Radio-Oracle Race File.",
         "setup.competitors.import-eventreg" to
             "Use Import EventReg Website to bring competitor data from EventReg exports into the current Race File.",
         "setup.competitors.import-iof-entry-list" to
@@ -1401,6 +1420,8 @@ object DesktopNavigation {
             "Use Load Race File to open a desktop Race File or import an Android Race File by file extension.",
         "setup.event-file.import-eventreg" to
             "Use Import EventReg Website to create race files from EventReg website exports.",
+        "setup.event-file.import-google-sheet" to
+            "Use Import Google Sheet to create race files from a registration spreadsheet link.",
         "setup.event-file.android" to
             "Use Android to share Race Files with Android devices or save an Android-compatible Race File.",
         "setup.event-file.export-android" to
@@ -1477,6 +1498,14 @@ object DesktopNavigation {
                 "Import EventReg Website...",
                 workflow,
                 DesktopNavAction.ImportEventRegWebsite,
+                requiresEventFile = false,
+                section = DesktopSection.Races
+            ),
+            action(
+                "setup.event-file.import-google-sheet",
+                "Import Google Sheet...",
+                workflow,
+                DesktopNavAction.ImportGoogleSheet,
                 requiresEventFile = false,
                 section = DesktopSection.Races
             ),

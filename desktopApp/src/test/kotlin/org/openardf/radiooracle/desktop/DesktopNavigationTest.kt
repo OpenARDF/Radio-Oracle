@@ -37,6 +37,7 @@ class DesktopNavigationTest {
         "New Race File",
         "Load Race File...",
         "Import EventReg Website...",
+        "Import Google Sheet...",
         "Android...",
         "Settings",
         "Save Race",
@@ -901,6 +902,7 @@ class DesktopNavigationTest {
             listOf(
                 "Course Order",
                 "Import Categories CSV...",
+                "Import Categories From Race File...",
                 "Export Categories CSV...",
                 "Delete All Control Assignments...",
                 "Delete All Categories...",
@@ -954,6 +956,7 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "Import Competitors CSV...",
+                "Import Competitors From Race File...",
                 "Import EventReg Website...",
                 "Import IOF EntryList XML...",
                 "Export Competitors CSV...",
@@ -963,6 +966,10 @@ class DesktopNavigationTest {
             competitorItems.map { it.label }
         )
         assertEquals(DesktopNavAction.ImportCategoriesCsv, categoryItems.first { it.label == "Import Categories CSV..." }.action)
+        assertEquals(
+            DesktopNavAction.ImportCategoriesRaceFile,
+            categoryItems.first { it.label == "Import Categories From Race File..." }.action
+        )
         assertEquals(
             DesktopNavAction.ImportIofCourseDataXml,
             controlItems.first { it.label == "Import" }.children.first { it.label == "Import IOF CourseData XML..." }.action
@@ -981,6 +988,10 @@ class DesktopNavigationTest {
             categoryItems.first { it.label == "Delete All Categories..." }.action
         )
         assertEquals(DesktopNavAction.ImportCompetitorsCsv, competitorItems.first { it.label == "Import Competitors CSV..." }.action)
+        assertEquals(
+            DesktopNavAction.ImportCompetitorsRaceFile,
+            competitorItems.first { it.label == "Import Competitors From Race File..." }.action
+        )
         assertEquals(DesktopNavAction.ImportEventRegCompetitorsCsv, competitorItems.first { it.label == "Import EventReg Website..." }.action)
         assertTrue(competitorItems.first { it.label == "Import EventReg Website..." }.requiresEventFile)
         assertEquals(DesktopNavAction.ImportIofEntryListXml, competitorItems.first { it.label == "Import IOF EntryList XML..." }.action)
@@ -1207,6 +1218,7 @@ class DesktopNavigationTest {
             listOf(
                 "Course Order",
                 "Import Categories CSV...",
+                "Import Categories From Race File...",
                 "Export Categories CSV...",
                 "Delete All Control Assignments...",
                 "Delete All Categories..."
