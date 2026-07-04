@@ -612,6 +612,29 @@ class DesktopVenueElevationCacheTest {
     }
 
     @Test
+    fun calculatesElevationQualityDiagnosticsWarnings() {
+        val elevations = MutableList<Double?>(100) { 100.0 }
+        elevations[0] = -20.0
+        elevations[50] = null
+        elevations[51] = 180.0
+
+        val diagnostics = desktopVenueElevationQualityDiagnostics(
+            elevations = elevations,
+            rowCount = 1,
+            columnCount = 100
+        )
+
+        assertEquals(100, diagnostics.pointCount)
+        assertEquals(99, diagnostics.resolvedPointCount)
+        assertEquals(1, diagnostics.missingCount)
+        assertEquals(1, diagnostics.lowElevationBelowZeroCount)
+        assertTrue(diagnostics.adjacentDeltaAtLeast20MeterCount > 0)
+        assertTrue(diagnostics.warningMessages.any { it.contains("missing grid points") })
+        assertTrue(diagnostics.warningMessages.any { it.contains("below 0 m") })
+        assertTrue(diagnostics.warningMessages.any { it.contains("neighboring-cell jumps") })
+    }
+
+    @Test
     fun importsValidatedDemJsonFilesIntoCacheDirectory() {
         withTemporaryUserHome { home ->
             val sourceDirectory = home.resolve("Downloads")
@@ -632,7 +655,10 @@ class DesktopVenueElevationCacheTest {
             assertEquals(0, review.overwriteCount)
             assertEquals(1, summary.importedCount)
             assertTrue(Files.exists(summary.targetDirectory.resolve("billy-bob.roelev.json")))
-            assertEquals(listOf("Test Venue"), DesktopVenueElevationCache.listings().map { it.venueName })
+            val listing = DesktopVenueElevationCache.listings().single()
+            assertEquals("Test Venue", listing.venueName)
+            assertEquals(4, listing.resolvedPointCount)
+            assertEquals(0, listing.quality?.warningMessages?.size)
         }
     }
 
@@ -702,6 +728,54 @@ class DesktopVenueElevationCacheTest {
             assertEquals(null, listing.resolvedPointCount)
             assertEquals(Files.size(path), listing.fileSizeBytes)
             assertTrue(listing.fileModifiedAtIso.isNotBlank())
+        }
+    }
+
+    @Test
+    fun listsCachedVenueQualityDiagnosticsFromMetadata() {
+        withTemporaryUserHome { home ->
+            val cacheDirectory = home
+                .resolve("Library")
+                .resolve("Application Support")
+                .resolve("Radio-Oracle")
+                .resolve("elevations")
+            Files.createDirectories(cacheDirectory)
+            Files.writeString(
+                cacheDirectory.resolve("quality-listing.roelev.json"),
+                cacheJson("USGS 3DEP", 3.0, 100.0).replace(
+                    "\"createdAtIso\": \"2026-06-08T00:00:00Z\"",
+                    """
+                    "createdAtIso": "2026-06-08T00:00:00Z",
+                    "quality": {
+                      "pointCount": 4,
+                      "resolvedPointCount": 3,
+                      "missingCount": 1,
+                      "sentinelNoDataCount": 0,
+                      "minimumElevationMeters": 99.0,
+                      "maximumElevationMeters": 130.0,
+                      "p1ElevationMeters": 99.1,
+                      "p50ElevationMeters": 100.0,
+                      "p99ElevationMeters": 129.4,
+                      "lowElevationBelowZeroCount": 0,
+                      "lowElevationBelow50MeterCount": 0,
+                      "adjacentDeltaMaxMeters": 30.0,
+                      "adjacentDeltaAtLeast10MeterCount": 1,
+                      "adjacentDeltaAtLeast20MeterCount": 1,
+                      "warningMessages": ["Elevation cache has 1 missing grid points (25.0%)."]
+                    }
+                    """.trimIndent()
+                )
+            )
+
+            val listing = DesktopVenueElevationCache.listings().single()
+
+            assertEquals(3, listing.resolvedPointCount)
+            assertEquals(1, listing.quality?.missingCount)
+            assertEquals(30.0, listing.quality?.adjacentDeltaMaxMeters ?: 0.0, 0.0)
+            assertEquals(
+                listOf("Elevation cache has 1 missing grid points (25.0%)."),
+                listing.quality?.warningMessages
+            )
         }
     }
 

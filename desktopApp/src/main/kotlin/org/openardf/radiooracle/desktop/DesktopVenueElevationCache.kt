@@ -158,7 +158,8 @@ data class DesktopVenueElevationCacheSummary(
     val resolvedPointCount: Int,
     val sourceName: String,
     val resolutionMeters: Double,
-    val fileSha256: String
+    val fileSha256: String,
+    val quality: DesktopVenueElevationQualityDiagnostics? = null
 )
 
 data class DesktopVenueElevationCacheListing(
@@ -172,7 +173,26 @@ data class DesktopVenueElevationCacheListing(
     val createdAtIso: String,
     val boundingBox: DesktopVenueElevationBoundingBox,
     val fileSizeBytes: Long,
-    val fileModifiedAtIso: String
+    val fileModifiedAtIso: String,
+    val quality: DesktopVenueElevationQualityDiagnostics? = null
+)
+
+data class DesktopVenueElevationQualityDiagnostics(
+    val pointCount: Int,
+    val resolvedPointCount: Int,
+    val missingCount: Int,
+    val sentinelNoDataCount: Int,
+    val minimumElevationMeters: Double?,
+    val maximumElevationMeters: Double?,
+    val p1ElevationMeters: Double?,
+    val p50ElevationMeters: Double?,
+    val p99ElevationMeters: Double?,
+    val lowElevationBelowZeroCount: Int,
+    val lowElevationBelow50MeterCount: Int,
+    val adjacentDeltaMaxMeters: Double?,
+    val adjacentDeltaAtLeast10MeterCount: Int,
+    val adjacentDeltaAtLeast20MeterCount: Int,
+    val warningMessages: List<String>
 )
 
 data class DesktopVenueElevationSpotCheckSummary(
@@ -340,11 +360,12 @@ object DesktopVenueElevationCache {
                     resolutionMeters = metadata.resolutionMeters,
                     rowCount = metadata.rowCount,
                     columnCount = metadata.columnCount,
-                    resolvedPointCount = null,
+                    resolvedPointCount = metadata.quality?.resolvedPointCount,
                     createdAtIso = metadata.createdAtIso,
                     boundingBox = metadata.boundingBox.toPublic(),
                     fileSizeBytes = attributes.size(),
-                    fileModifiedAtIso = attributes.lastModifiedTime().toInstant().toString()
+                    fileModifiedAtIso = attributes.lastModifiedTime().toInstant().toString(),
+                    quality = metadata.quality
                 )
             }.getOrElse { error ->
                 DesktopDebugLog.warn("ElevationCache", "Could not list ${path.fileName}: ${error.message ?: error::class.simpleName}")
@@ -418,15 +439,27 @@ object DesktopVenueElevationCache {
             }
             if (candidate.zipEntryName == null) {
                 if (candidate.sourcePath.toAbsolutePath().normalize() != candidate.targetPath.toAbsolutePath().normalize()) {
-                    Files.copy(candidate.sourcePath, candidate.targetPath, StandardCopyOption.REPLACE_EXISTING)
+                    val importedText = importedDemCacheTextWithQualityMetadata(
+                        text = Files.readString(candidate.sourcePath),
+                        path = candidate.targetPath
+                    )
+                    Files.writeString(candidate.targetPath, importedText, StandardCharsets.UTF_8)
+                } else {
+                    val text = Files.readString(candidate.targetPath)
+                    val importedText = importedDemCacheTextWithQualityMetadata(text, candidate.targetPath)
+                    if (importedText != text) {
+                        Files.writeString(candidate.targetPath, importedText, StandardCharsets.UTF_8)
+                    }
                 }
             } else {
                 ZipFile(candidate.sourcePath.toFile()).use { zipFile ->
                     val entry = zipFile.getEntry(candidate.zipEntryName)
                         ?: throw IOException("${candidate.sourcePath.fileName} no longer contains ${candidate.zipEntryName}.")
-                    zipFile.getInputStream(entry).use { input ->
-                        Files.copy(input, candidate.targetPath, StandardCopyOption.REPLACE_EXISTING)
+                    val importedText = zipFile.getInputStream(entry).use { input ->
+                        val text = input.reader(StandardCharsets.UTF_8).readText()
+                        importedDemCacheTextWithQualityMetadata(text, candidate.targetPath)
                     }
+                    Files.writeString(candidate.targetPath, importedText, StandardCharsets.UTF_8)
                 }
             }
             importedCount += 1
@@ -603,6 +636,11 @@ object DesktopVenueElevationCache {
                     )
                 )
             }
+            val quality = desktopVenueElevationQualityDiagnostics(
+                elevations = elevations,
+                rowCount = estimate.rowCount,
+                columnCount = estimate.columnCount
+            )
             val file = DesktopVenueElevationCacheFile(
                 metadata = DesktopVenueElevationCacheMetadata(
                     version = CACHE_VERSION,
@@ -613,7 +651,8 @@ object DesktopVenueElevationCache {
                     rowCount = estimate.rowCount,
                     columnCount = estimate.columnCount,
                     boundingBox = estimate.boundingBox.toSerializable(),
-                    createdAtIso = Instant.now().toString()
+                    createdAtIso = Instant.now().toString(),
+                    quality = quality
                 ),
                 elevations = elevations
             )
@@ -626,7 +665,8 @@ object DesktopVenueElevationCache {
             DesktopDebugLog.info(
                 "ElevationCache",
                 "Downloaded venue=$cleanVenueName source=$DEFAULT_SOURCE_NAME resolution=${resolutionMeters}m " +
-                    "points=${points.size} resolved=${elevations.count { it != null }} file=${path.fileName} hash=${hash.take(12)}"
+                    "points=${quality.pointCount} resolved=${quality.resolvedPointCount} " +
+                    "warnings=${quality.warningMessages.size} file=${path.fileName} hash=${hash.take(12)}"
             )
             DesktopVenueElevationCacheSummary(
                 venueName = cleanVenueName,
@@ -634,10 +674,11 @@ object DesktopVenueElevationCache {
                 rowCount = estimate.rowCount,
                 columnCount = estimate.columnCount,
                 pointCount = points.size,
-                resolvedPointCount = elevations.count { it != null },
+                resolvedPointCount = quality.resolvedPointCount,
                 sourceName = DEFAULT_SOURCE_NAME,
                 resolutionMeters = resolutionMeters,
-                fileSha256 = hash
+                fileSha256 = hash,
+                quality = quality
             )
         }
 
@@ -684,6 +725,11 @@ object DesktopVenueElevationCache {
                 )
                 coroutineContext.ensureActive()
                 val elevations = gdal.sampleWgs84(rasterPath, points)
+                val quality = desktopVenueElevationQualityDiagnostics(
+                    elevations = elevations,
+                    rowCount = estimate.rowCount,
+                    columnCount = estimate.columnCount
+                )
                 onProgress(
                     DesktopVenueElevationCacheProgress(
                         venueName = cleanVenueName,
@@ -702,7 +748,8 @@ object DesktopVenueElevationCache {
                         rowCount = estimate.rowCount,
                         columnCount = estimate.columnCount,
                         boundingBox = estimate.boundingBox.toSerializable(),
-                        createdAtIso = Instant.now().toString()
+                        createdAtIso = Instant.now().toString(),
+                        quality = quality
                     ),
                     elevations = elevations
                 )
@@ -713,8 +760,8 @@ object DesktopVenueElevationCache {
                 DesktopDebugLog.info(
                     "ElevationCache",
                     "Downloaded venue=$cleanVenueName source=$WASHINGTON_DNR_SOURCE_NAME project=${dataset.projectName} " +
-                        "resolution=${resolutionMeters}m points=${points.size} resolved=${elevations.count { it != null }} " +
-                        "file=${path.fileName} hash=${hash.take(12)}"
+                        "resolution=${resolutionMeters}m points=${quality.pointCount} resolved=${quality.resolvedPointCount} " +
+                        "warnings=${quality.warningMessages.size} file=${path.fileName} hash=${hash.take(12)}"
                 )
                 DesktopVenueElevationCacheSummary(
                     venueName = cleanVenueName,
@@ -722,10 +769,11 @@ object DesktopVenueElevationCache {
                     rowCount = estimate.rowCount,
                     columnCount = estimate.columnCount,
                     pointCount = points.size,
-                    resolvedPointCount = elevations.count { it != null },
+                    resolvedPointCount = quality.resolvedPointCount,
                     sourceName = file.metadata.sourceName,
                     resolutionMeters = resolutionMeters,
-                    fileSha256 = hash
+                    fileSha256 = hash,
+                    quality = quality
                 )
             } finally {
                 runCatching { deleteRecursively(workDirectory) }
@@ -769,6 +817,11 @@ object DesktopVenueElevationCache {
                     )
                 )
             }
+            val quality = desktopVenueElevationQualityDiagnostics(
+                elevations = elevations,
+                rowCount = estimate.rowCount,
+                columnCount = estimate.columnCount
+            )
             val file = DesktopVenueElevationCacheFile(
                 metadata = DesktopVenueElevationCacheMetadata(
                     version = CACHE_VERSION,
@@ -779,7 +832,8 @@ object DesktopVenueElevationCache {
                     rowCount = estimate.rowCount,
                     columnCount = estimate.columnCount,
                     boundingBox = estimate.boundingBox.toSerializable(),
-                    createdAtIso = Instant.now().toString()
+                    createdAtIso = Instant.now().toString(),
+                    quality = quality
                 ),
                 elevations = elevations
             )
@@ -792,7 +846,8 @@ object DesktopVenueElevationCache {
             DesktopDebugLog.info(
                 "ElevationCache",
                 "Downloaded venue=$cleanVenueName source=$OREGON_DOGAMI_SOURCE_NAME resolution=${resolutionMeters}m " +
-                    "points=${points.size} resolved=${elevations.count { it != null }} file=${path.fileName} hash=${hash.take(12)}"
+                    "points=${quality.pointCount} resolved=${quality.resolvedPointCount} " +
+                    "warnings=${quality.warningMessages.size} file=${path.fileName} hash=${hash.take(12)}"
             )
             DesktopVenueElevationCacheSummary(
                 venueName = cleanVenueName,
@@ -800,10 +855,11 @@ object DesktopVenueElevationCache {
                 rowCount = estimate.rowCount,
                 columnCount = estimate.columnCount,
                 pointCount = points.size,
-                resolvedPointCount = elevations.count { it != null },
+                resolvedPointCount = quality.resolvedPointCount,
                 sourceName = OREGON_DOGAMI_SOURCE_NAME,
                 resolutionMeters = resolutionMeters,
-                fileSha256 = hash
+                fileSha256 = hash,
+                quality = quality
             )
         }
 
@@ -921,6 +977,11 @@ object DesktopVenueElevationCache {
             val cacheEstimate = requireNotNull(estimate) {
                 "Local elevation source extent could not be determined."
             }
+            val quality = desktopVenueElevationQualityDiagnostics(
+                elevations = elevations,
+                rowCount = cacheEstimate.rowCount,
+                columnCount = cacheEstimate.columnCount
+            )
             onProgress(
                 DesktopVenueElevationCacheProgress(
                     venueName = cleanVenueName,
@@ -939,7 +1000,8 @@ object DesktopVenueElevationCache {
                     rowCount = cacheEstimate.rowCount,
                     columnCount = cacheEstimate.columnCount,
                     boundingBox = cacheEstimate.boundingBox.toSerializable(),
-                    createdAtIso = Instant.now().toString()
+                    createdAtIso = Instant.now().toString(),
+                    quality = quality
                 ),
                 elevations = elevations
             )
@@ -953,8 +1015,8 @@ object DesktopVenueElevationCache {
                 "ElevationCache",
                 "Created venue=$cleanVenueName source=Local LiDAR Raster sourceFiles=${localElevationSourceLabel(sourcePaths)} " +
                     "unit=${elevationUnits.label} multiplier=${elevationUnits.valueMultiplier} " +
-                    "resolution=${resolutionMeters}m points=${points.size} resolved=${elevations.count { it != null }} " +
-                    "file=${path.fileName} hash=${hash.take(12)}"
+                    "resolution=${resolutionMeters}m points=${quality.pointCount} resolved=${quality.resolvedPointCount} " +
+                    "warnings=${quality.warningMessages.size} file=${path.fileName} hash=${hash.take(12)}"
             )
             DesktopVenueElevationCacheSummary(
                 venueName = cleanVenueName,
@@ -962,10 +1024,11 @@ object DesktopVenueElevationCache {
                 rowCount = cacheEstimate.rowCount,
                 columnCount = cacheEstimate.columnCount,
                 pointCount = points.size,
-                resolvedPointCount = elevations.count { it != null },
+                resolvedPointCount = quality.resolvedPointCount,
                 sourceName = file.metadata.sourceName,
                 resolutionMeters = resolutionMeters,
-                fileSha256 = hash
+                fileSha256 = hash,
+                quality = quality
             )
         }
 
@@ -1148,6 +1211,38 @@ object DesktopVenueElevationCache {
             "Elevation values must be finite numbers or null."
         }
         metadata.boundingBox.toPublic()
+    }
+
+    private fun importedDemCacheTextWithQualityMetadata(text: String, path: Path): String {
+        val root = json.parseToJsonElement(text).jsonObject
+        val metadataObject = root.getValue("metadata").jsonObject
+        val cacheFile = parseCacheFile(text, path)
+        validateImportedDemCache(cacheFile)
+        if (cacheFile.metadata.quality != null) {
+            return text
+        }
+        val quality = desktopVenueElevationQualityDiagnostics(
+            elevations = cacheFile.elevations,
+            rowCount = cacheFile.metadata.rowCount,
+            columnCount = cacheFile.metadata.columnCount
+        )
+        return buildJsonObject {
+            root.forEach { (key, value) ->
+                put(
+                    key,
+                    if (key == "metadata") {
+                        buildJsonObject {
+                            metadataObject.forEach { (metadataKey, metadataValue) ->
+                                put(metadataKey, metadataValue)
+                            }
+                            put("quality", quality.toJsonObject())
+                        }
+                    } else {
+                        value
+                    }
+                )
+            }
+        }.toString()
     }
 
     private fun String.removeSuffixIgnoreCase(suffix: String): String =
@@ -1881,6 +1976,9 @@ object DesktopVenueElevationCache {
                         }
                     )
                     put("createdAtIso", metadata.createdAtIso)
+                    metadata.quality?.let { quality ->
+                        put("quality", quality.toJsonObject())
+                    }
                 }
             )
             put(
@@ -1931,9 +2029,63 @@ object DesktopVenueElevationCache {
                 minLongitude = boundingBox.getValue("minLongitude").jsonPrimitive.content.toDouble(),
                 maxLongitude = boundingBox.getValue("maxLongitude").jsonPrimitive.content.toDouble()
             ),
-            createdAtIso = metadata.getValue("createdAtIso").jsonPrimitive.content
+            createdAtIso = metadata.getValue("createdAtIso").jsonPrimitive.content,
+            quality = metadata["quality"]?.jsonObject?.let { quality ->
+                runCatching { parseQualityDiagnostics(quality) }.getOrNull()
+            }
         )
     }
+
+    private fun DesktopVenueElevationQualityDiagnostics.toJsonObject(): JsonObject =
+        buildJsonObject {
+            fun putNullableDouble(name: String, value: Double?) {
+                put(name, value?.let(::JsonPrimitive) ?: JsonNull)
+            }
+
+            put("pointCount", pointCount)
+            put("resolvedPointCount", resolvedPointCount)
+            put("missingCount", missingCount)
+            put("sentinelNoDataCount", sentinelNoDataCount)
+            putNullableDouble("minimumElevationMeters", minimumElevationMeters)
+            putNullableDouble("maximumElevationMeters", maximumElevationMeters)
+            putNullableDouble("p1ElevationMeters", p1ElevationMeters)
+            putNullableDouble("p50ElevationMeters", p50ElevationMeters)
+            putNullableDouble("p99ElevationMeters", p99ElevationMeters)
+            put("lowElevationBelowZeroCount", lowElevationBelowZeroCount)
+            put("lowElevationBelow50MeterCount", lowElevationBelow50MeterCount)
+            putNullableDouble("adjacentDeltaMaxMeters", adjacentDeltaMaxMeters)
+            put("adjacentDeltaAtLeast10MeterCount", adjacentDeltaAtLeast10MeterCount)
+            put("adjacentDeltaAtLeast20MeterCount", adjacentDeltaAtLeast20MeterCount)
+            put(
+                "warningMessages",
+                buildJsonArray {
+                    warningMessages.forEach { message ->
+                        add(JsonPrimitive(message))
+                    }
+                }
+            )
+        }
+
+    private fun parseQualityDiagnostics(quality: JsonObject): DesktopVenueElevationQualityDiagnostics =
+        DesktopVenueElevationQualityDiagnostics(
+            pointCount = quality.getValue("pointCount").jsonPrimitive.content.toInt(),
+            resolvedPointCount = quality.getValue("resolvedPointCount").jsonPrimitive.content.toInt(),
+            missingCount = quality.getValue("missingCount").jsonPrimitive.content.toInt(),
+            sentinelNoDataCount = quality.getValue("sentinelNoDataCount").jsonPrimitive.content.toInt(),
+            minimumElevationMeters = quality["minimumElevationMeters"]?.jsonPrimitive?.doubleOrNull,
+            maximumElevationMeters = quality["maximumElevationMeters"]?.jsonPrimitive?.doubleOrNull,
+            p1ElevationMeters = quality["p1ElevationMeters"]?.jsonPrimitive?.doubleOrNull,
+            p50ElevationMeters = quality["p50ElevationMeters"]?.jsonPrimitive?.doubleOrNull,
+            p99ElevationMeters = quality["p99ElevationMeters"]?.jsonPrimitive?.doubleOrNull,
+            lowElevationBelowZeroCount = quality.getValue("lowElevationBelowZeroCount").jsonPrimitive.content.toInt(),
+            lowElevationBelow50MeterCount = quality.getValue("lowElevationBelow50MeterCount").jsonPrimitive.content.toInt(),
+            adjacentDeltaMaxMeters = quality["adjacentDeltaMaxMeters"]?.jsonPrimitive?.doubleOrNull,
+            adjacentDeltaAtLeast10MeterCount =
+                quality.getValue("adjacentDeltaAtLeast10MeterCount").jsonPrimitive.content.toInt(),
+            adjacentDeltaAtLeast20MeterCount =
+                quality.getValue("adjacentDeltaAtLeast20MeterCount").jsonPrimitive.content.toInt(),
+            warningMessages = quality["warningMessages"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty()
+        )
 
     private fun parseCacheFile(text: String, path: Path): DesktopVenueElevationCacheFile {
         val root = json.parseToJsonElement(text).jsonObject
@@ -2087,7 +2239,8 @@ private data class DesktopVenueElevationCacheMetadata(
     val rowCount: Int,
     val columnCount: Int,
     val boundingBox: DesktopVenueElevationBoundingBoxValue,
-    val createdAtIso: String
+    val createdAtIso: String,
+    val quality: DesktopVenueElevationQualityDiagnostics? = null
 )
 
 private data class DesktopVenueElevationBoundingBoxValue(
@@ -2110,6 +2263,154 @@ private const val GDAL_SAMPLE_PROGRESS_INTERVAL = 5_000
 private const val MAX_ELEVATION_GRID_POINT_COUNT = 25_000_000L
 private const val MAX_ELEVATION_GRID_RAW_BYTES = MAX_ELEVATION_GRID_POINT_COUNT * 8L
 private const val MIN_USABLE_ELEVATION_METERS = -1_000.0
+
+internal fun desktopVenueElevationQualityDiagnostics(
+    elevations: List<Double?>,
+    rowCount: Int,
+    columnCount: Int
+): DesktopVenueElevationQualityDiagnostics {
+    val expectedPointCount = (rowCount.toLong() * columnCount.toLong())
+        .coerceIn(0L, Int.MAX_VALUE.toLong())
+        .toInt()
+    val pointCount = expectedPointCount.takeIf { it > 0 } ?: elevations.size
+    val validValues = DoubleArray(elevations.size)
+    var resolvedPointCount = 0
+    var sentinelNoDataCount = 0
+    var lowElevationBelowZeroCount = 0
+    var lowElevationBelow50MeterCount = 0
+    elevations.forEach { value ->
+        val usableValue = value.usableElevationMetersOrNull()
+        if (usableValue == null) {
+            if (value != null) {
+                sentinelNoDataCount++
+            }
+        } else {
+            validValues[resolvedPointCount] = usableValue
+            resolvedPointCount++
+            if (usableValue < 0.0) {
+                lowElevationBelowZeroCount++
+            }
+            if (usableValue < 50.0) {
+                lowElevationBelow50MeterCount++
+            }
+        }
+    }
+
+    val sortedValues = validValues.copyOf(resolvedPointCount)
+    sortedValues.sort()
+    val minimumElevationMeters = sortedValues.firstOrNull()
+    val maximumElevationMeters = sortedValues.lastOrNull()
+    val p1ElevationMeters = sortedValues.percentileOrNull(0.01)
+    val p50ElevationMeters = sortedValues.percentileOrNull(0.50)
+    val p99ElevationMeters = sortedValues.percentileOrNull(0.99)
+
+    var adjacentDeltaMaxMeters: Double? = null
+    var adjacentDeltaAtLeast10MeterCount = 0
+    var adjacentDeltaAtLeast20MeterCount = 0
+    fun observeAdjacentDelta(firstIndex: Int, secondIndex: Int) {
+        val first = elevations.getOrNull(firstIndex).usableElevationMetersOrNull() ?: return
+        val second = elevations.getOrNull(secondIndex).usableElevationMetersOrNull() ?: return
+        val delta = abs(first - second)
+        adjacentDeltaMaxMeters = max(adjacentDeltaMaxMeters ?: delta, delta)
+        if (delta >= 10.0) {
+            adjacentDeltaAtLeast10MeterCount++
+        }
+        if (delta >= 20.0) {
+            adjacentDeltaAtLeast20MeterCount++
+        }
+    }
+    if (rowCount > 0 && columnCount > 0) {
+        repeat(rowCount) { row ->
+            repeat(columnCount) { column ->
+                val index = row * columnCount + column
+                if (column + 1 < columnCount) {
+                    observeAdjacentDelta(index, index + 1)
+                }
+                if (row + 1 < rowCount) {
+                    observeAdjacentDelta(index, index + columnCount)
+                }
+            }
+        }
+    }
+
+    val missingCount = (pointCount - resolvedPointCount).coerceAtLeast(0)
+    val warningMessages = buildList {
+        if (elevations.size != pointCount) {
+            add("Elevation cache metadata expects ${pointCount.countText()} grid points but the file contains ${elevations.size.countText()}.")
+        }
+        if (resolvedPointCount == 0 && pointCount > 0) {
+            add("Elevation cache has no usable elevation grid points.")
+        }
+        if (missingCount > 0 && pointCount > 0) {
+            val percent = 100.0 * missingCount.toDouble() / pointCount.toDouble()
+            add("Elevation cache has ${missingCount.countText()} missing grid points (${percent.percentText()}%).")
+        }
+        if (sentinelNoDataCount > 0) {
+            add("Elevation cache contains ${sentinelNoDataCount.countText()} no-data sentinel values.")
+        }
+        val p1 = p1ElevationMeters
+        if (lowElevationBelowZeroCount > 0 && p1 != null && p1 > 5.0) {
+            add(
+                "Elevation cache has ${lowElevationBelowZeroCount.countText()} cells below 0 m even though " +
+                    "the 1st percentile is ${p1.metersText()}; verify the source if below-sea-level values are unexpected."
+            )
+        }
+        val maxDelta = adjacentDeltaMaxMeters
+        if (adjacentDeltaAtLeast20MeterCount > 0 && maxDelta != null) {
+            add(
+                "Elevation cache has ${adjacentDeltaAtLeast20MeterCount.countText()} neighboring-cell jumps of 20 m or more " +
+                    "(max ${maxDelta.metersText()}); this can indicate raster seams or no-data edges."
+            )
+        }
+    }
+
+    return DesktopVenueElevationQualityDiagnostics(
+        pointCount = pointCount,
+        resolvedPointCount = resolvedPointCount,
+        missingCount = missingCount,
+        sentinelNoDataCount = sentinelNoDataCount,
+        minimumElevationMeters = minimumElevationMeters,
+        maximumElevationMeters = maximumElevationMeters,
+        p1ElevationMeters = p1ElevationMeters,
+        p50ElevationMeters = p50ElevationMeters,
+        p99ElevationMeters = p99ElevationMeters,
+        lowElevationBelowZeroCount = lowElevationBelowZeroCount,
+        lowElevationBelow50MeterCount = lowElevationBelow50MeterCount,
+        adjacentDeltaMaxMeters = adjacentDeltaMaxMeters,
+        adjacentDeltaAtLeast10MeterCount = adjacentDeltaAtLeast10MeterCount,
+        adjacentDeltaAtLeast20MeterCount = adjacentDeltaAtLeast20MeterCount,
+        warningMessages = warningMessages
+    )
+}
+
+private fun DoubleArray.percentileOrNull(fraction: Double): Double? {
+    if (isEmpty()) {
+        return null
+    }
+    val clampedFraction = fraction.coerceIn(0.0, 1.0)
+    val position = (size - 1).toDouble() * clampedFraction
+    val lowerIndex = floor(position).toInt()
+    val upperIndex = ceil(position).toInt()
+    if (lowerIndex == upperIndex) {
+        return this[lowerIndex]
+    }
+    val upperWeight = position - lowerIndex.toDouble()
+    val lowerWeight = 1.0 - upperWeight
+    return this[lowerIndex] * lowerWeight + this[upperIndex] * upperWeight
+}
+
+private fun Int.countText(): String =
+    "%,d".format(Locale.US, this)
+
+private fun Double.percentText(): String =
+    String.format(Locale.US, "%.1f", this)
+
+private fun Double.metersText(): String =
+    if (abs(this - roundToInt()) < 0.05) {
+        "${roundToInt()} m"
+    } else {
+        String.format(Locale.US, "%.1f m", this)
+    }
 
 private fun Double?.usableElevationMetersOrNull(): Double? =
     this?.takeIf { it.isFinite() && it > MIN_USABLE_ELEVATION_METERS }

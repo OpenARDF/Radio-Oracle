@@ -2902,10 +2902,11 @@ fun main(args: Array<String>) = application {
                 }
                 result.onSuccess { summary ->
                     venueElevationCacheRefreshToken++
+                    val qualitySuffix = summary.quality.statusWarningSuffix()
                     projectStatusText = if (isLocalFileImport) {
-                        "Imported ${summary.sourceName} elevation cache for ${summary.venueName}: ${summary.resolvedPointCount}/${summary.pointCount} points at ${summary.resolutionMeters.roundToInt()} m."
+                        "Imported ${summary.sourceName} elevation cache for ${summary.venueName}: ${summary.resolvedPointCount}/${summary.pointCount} points at ${summary.resolutionMeters.roundToInt()} m.$qualitySuffix"
                     } else {
-                        "Downloaded ${summary.sourceName} elevation cache for ${summary.venueName}: ${summary.resolvedPointCount}/${summary.pointCount} points at ${summary.resolutionMeters.roundToInt()} m."
+                        "Downloaded ${summary.sourceName} elevation cache for ${summary.venueName}: ${summary.resolvedPointCount}/${summary.pointCount} points at ${summary.resolutionMeters.roundToInt()} m.$qualitySuffix"
                     }
                 }.onFailure { error ->
                     projectStatusText = if (error is CancellationException) {
@@ -15816,6 +15817,22 @@ private fun VenueElevationCachePanel(
                         color = DesktopPalette.Black,
                         fontSize = 12.sp
                     )
+                    listing.quality?.warningMessages?.takeIf { it.isNotEmpty() }?.let { warnings ->
+                        warnings.take(3).forEach { warning ->
+                            Text(
+                                text = "Quality warning: $warning",
+                                color = DesktopPalette.Warning,
+                                fontSize = 12.sp
+                            )
+                        }
+                        if (warnings.size > 3) {
+                            Text(
+                                text = "${warnings.size - 3} more quality warnings are stored in the cache metadata.",
+                                color = DesktopPalette.Warning,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { onExportBoundingBoxKml(listing) }) {
                             ButtonLabel("KML Bounding Box")
@@ -19639,6 +19656,9 @@ private fun warningStatusSuffix(warnings: List<String>): String =
         " Warnings: " + warnings.take(3).joinToString(" ") +
                 if (warnings.size > 3) " +${warnings.size - 3} more." else ""
     }
+
+private fun DesktopVenueElevationQualityDiagnostics?.statusWarningSuffix(): String =
+    warningStatusSuffix(this?.warningMessages.orEmpty())
 
 private fun Modifier.commitOnEnter(onCommit: () -> Unit): Modifier =
     onPreviewKeyEvent { event ->
