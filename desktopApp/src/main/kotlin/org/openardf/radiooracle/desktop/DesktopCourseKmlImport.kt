@@ -185,7 +185,6 @@ object DesktopCourseKmlImporter {
     private const val USGS_3DEP_SAMPLE_METERS = 10.0
     private const val CONTROL_ROUTE_TOLERANCE_METERS = 50.0
     private const val ROUTE_ORIENTATION_TOLERANCE_METERS = 5.0
-    private const val CLIMB_NOISE_THRESHOLD_METERS = 1.0
     private val CATEGORY_ASSUMPTION_SEQUENCE = listOf(
         "M21", "M35", "M40", "M45", "M50", "M55", "M60", "M65", "M70", "M75", "M80", "M85", "M90",
         "W21", "W35", "W40", "W45", "W50", "W55", "W60", "W65", "W70", "W75", "W80", "W85", "W90"
@@ -1940,16 +1939,7 @@ object DesktopCourseKmlImporter {
         points.zipWithNext().sumOf { (start, end) -> start.distanceMetersTo(end) }
 
     private fun climbMetersOrNull(points: List<CourseGeoPoint>): Int? {
-        var total = 0.0
-        var measuredSegmentCount = 0
-        points.zipWithNext().forEach { (start, end) ->
-            val gain = (end.elevationMeters ?: return@forEach) - (start.elevationMeters ?: return@forEach)
-            measuredSegmentCount++
-            if (gain > CLIMB_NOISE_THRESHOLD_METERS) {
-                total += gain
-            }
-        }
-        return total.roundToInt().takeIf { measuredSegmentCount > 0 }
+        return DesktopCourseRouteMetricsCalculator.climbMetersOrNull(points)?.roundToInt()
     }
 
     private fun fileSha256(path: Path): String {

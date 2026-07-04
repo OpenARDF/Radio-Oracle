@@ -91,7 +91,7 @@ class DesktopCourseSharedRulesTest {
     }
 
     @Test
-    fun routeMetricsUsePositiveClimbOnlyAndFallBackToHorizontalComparisonWhenElevationIsIncomplete() {
+    fun routeMetricsUseProfileClimbAndFallBackToHorizontalComparisonWhenElevationIsIncomplete() {
         val route = listOf(
             CourseGeoPoint(latitude = 0.0, longitude = 0.0, elevationMeters = 100.0),
             CourseGeoPoint(latitude = 0.0, longitude = 0.001, elevationMeters = 130.0),
@@ -113,5 +113,27 @@ class DesktopCourseSharedRulesTest {
         assertNull(incompleteMetrics.climbMeters)
         assertNull(incompleteMetrics.effectiveLengthMeters)
         assertEquals(incompleteMetrics.horizontalLengthMeters, incompleteMetrics.comparisonLengthMeters, 0.001)
+    }
+
+    @Test
+    fun routeMetricsIgnoreSmallElevationWigglesButKeepSustainedClimb() {
+        val noisyFlatRoute = listOf(
+            CourseGeoPoint(latitude = 0.0, longitude = 0.0, elevationMeters = 100.0),
+            CourseGeoPoint(latitude = 0.0, longitude = 0.001, elevationMeters = 100.6),
+            CourseGeoPoint(latitude = 0.0, longitude = 0.002, elevationMeters = 100.1),
+            CourseGeoPoint(latitude = 0.0, longitude = 0.003, elevationMeters = 100.8),
+            CourseGeoPoint(latitude = 0.0, longitude = 0.004, elevationMeters = 100.2)
+        )
+
+        assertEquals(0.0, DesktopCourseRouteMetricsCalculator.climbMetersOrNull(noisyFlatRoute) ?: -1.0, 0.001)
+
+        val sustainedClimbRoute = noisyFlatRoute + CourseGeoPoint(
+            latitude = 0.0,
+            longitude = 0.005,
+            elevationMeters = 104.0
+        )
+
+        assertEquals(4.0, DesktopCourseRouteMetricsCalculator.climbMetersOrNull(sustainedClimbRoute) ?: -1.0, 0.001)
+        assertEquals(5.1, DesktopCourseRouteMetricsCalculator.rawPositiveClimbMetersOrNull(sustainedClimbRoute) ?: -1.0, 0.001)
     }
 }

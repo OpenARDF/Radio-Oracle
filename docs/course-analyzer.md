@@ -10,7 +10,7 @@ The Course Analyzer evaluates protected radio-orienteering course data after con
 - Calculated ideal route: Radio-Oracle's determination of the ideal route from the start, finish, assigned foxes, beacon, and spectator if the category uses one. When the route search is exhaustive, the shortest route by effective length is by definition the ideal route for the course, subject only to map data such as barriers, out-of-bounds areas, or other navigation constraints that Radio-Oracle does not currently model.
 - Horizontal distance: straight-line distance between route points, without elevation penalty.
 - Route length: the saved route geometry length when a saved route exists; for calculated routes, the straight-line distance through the calculated point order.
-- Climb: positive elevation gain along the route.
+- Climb: positive elevation gain along the route after elevation-profile smoothing and small-noise filtering.
 - Effective length: route length plus ten times climb. For example, 5.00 km with 100 m of climb is 6.00 km effective length.
 
 The analyzer report displays length values in kilometers to hundredths (`x.xx km`). Climb is displayed in meters with no decimal places. Analyzer time values omit a zero hours field, so `00:58:50` is displayed as `58:50`.
@@ -23,7 +23,11 @@ When local Elevation Cache samples are complete for the relevant route or course
 
 For the calculated ideal route, Radio-Oracle has no imported track line, so it samples each calculated straight leg at short intervals and applies cached elevation values to those samples. That sampled geometry is used for the calculated route's profile, climb, effective length, route comparison, and movement timing. If a cache value is unavailable for an intermediate sample, endpoint elevation interpolation is used when possible. When calculated-route samples are not covered by the local Elevation Cache, the incomplete-data warning states that the calculated route did not use downloaded elevations along the route and offers a `Download Calculated Route Elevations` action to create a 10 m USGS 3DEP cache around the calculated route bounds.
 
+Climb is calculated from the sampled elevation profile with the same shared route-metric logic for saved routes, imported KML/GPX routes, calculated routes, and generated-course comparisons. Radio-Oracle applies a 50 m distance-based median smoothing window, then counts sustained ascents using a 2 m prominence threshold. This avoids adding every small LiDAR or raster interpolation wiggle as extra climb while still counting gradual uphill sections whose individual sample-to-sample changes are small.
+
 The Elevation Cache resolution setting is the spacing of Radio-Oracle's local sampling grid. For example, entering `3` meters creates an approximately 3-meter cache grid over the selected bounds. It does not guarantee that the upstream USGS source DEM is 3-meter data at every sampled point. Radio-Oracle samples the USGS 3DEP dynamic elevation service, which is based on multi-resolution DEM sources. USGS documents 1/9 arc-second, approximately 3-meter, DEM coverage as partial in the conterminous United States, while 1/3 arc-second, approximately 10-meter north/south, DEM coverage is the full-coverage seamless U.S. product. As a result, a 3-meter cache may contain closely spaced samples derived from coarser source data where 3-meter or better DEM coverage is not available.
+
+For local LAS/LAZ point-cloud imports, Radio-Oracle rasterizes the point cloud through PDAL, classifies ground with SMRF, keeps ground-classified points, then samples the resulting raster with GDAL. Elevation-cache point lookup uses weighted bilinear interpolation when all four neighboring grid values are available, with an average-of-available-neighbors fallback at sparse or edge cells.
 
 Relevant USGS references:
 

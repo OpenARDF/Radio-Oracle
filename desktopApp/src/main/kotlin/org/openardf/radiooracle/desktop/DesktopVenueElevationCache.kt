@@ -1250,12 +1250,18 @@ object DesktopVenueElevationCache {
         val row1 = ceil(rowPosition).toInt().coerceAtMost(metadata.rowCount - 1)
         val column0 = floor(columnPosition).toInt()
         val column1 = ceil(columnPosition).toInt().coerceAtMost(metadata.columnCount - 1)
-        val samples = listOfNotNull(
-            elevationAt(row0, column0),
-            elevationAt(row0, column1),
-            elevationAt(row1, column0),
-            elevationAt(row1, column1)
-        )
+        val topLeft = elevationAt(row0, column0)
+        val topRight = elevationAt(row0, column1)
+        val bottomLeft = elevationAt(row1, column0)
+        val bottomRight = elevationAt(row1, column1)
+        if (topLeft != null && topRight != null && bottomLeft != null && bottomRight != null) {
+            val rowFraction = rowPosition - row0.toDouble()
+            val columnFraction = columnPosition - column0.toDouble()
+            val top = topLeft * (1.0 - columnFraction) + topRight * columnFraction
+            val bottom = bottomLeft * (1.0 - columnFraction) + bottomRight * columnFraction
+            return top * (1.0 - rowFraction) + bottom * rowFraction
+        }
+        val samples = listOfNotNull(topLeft, topRight, bottomLeft, bottomRight)
         if (samples.isEmpty()) {
             return null
         }
@@ -2099,7 +2105,7 @@ internal const val DESKTOP_ELEVATION_TOOL_WINDOWS_MINIFORGE_URL =
 
 internal val DESKTOP_ELEVATION_TOOL_INSTALL_HELP = listOf(
     "Local GeoTIFF/ZIP elevation imports require GDAL command-line tools.",
-    "LAS/LAZ point-cloud imports also require PDAL with readers.las and writers.gdal support.",
+    "LAS/LAZ point-cloud imports also require PDAL with readers.las, filters.smrf, filters.range, and writers.gdal support.",
     "Recommended on Windows, macOS, and Linux with Conda or Miniforge: $DESKTOP_ELEVATION_TOOL_INSTALL_COMMAND",
     "Windows: if PowerShell says 'conda' is not recognized, install Miniforge first: $DESKTOP_ELEVATION_TOOL_WINDOWS_MINIFORGE_URL",
     "After installing Miniforge, run the Conda install command from Miniforge Prompt, or run 'conda init powershell' in Miniforge Prompt and then close and reopen PowerShell.",
@@ -2484,11 +2490,28 @@ internal fun desktopPdalLasPointCloudRasterPipeline(
                         put("inputs", buildJsonArray { add(JsonPrimitive(reprojectionInput)) })
                         put("out_srs", "EPSG:3857")
                         put("error_on_failure", true)
+                        put("tag", "projected_ground_source")
+                    }
+                )
+                add(
+                    buildJsonObject {
+                        put("type", "filters.smrf")
+                        put("inputs", buildJsonArray { add(JsonPrimitive("projected_ground_source")) })
+                        put("tag", "ground_classified")
+                    }
+                )
+                add(
+                    buildJsonObject {
+                        put("type", "filters.range")
+                        put("inputs", buildJsonArray { add(JsonPrimitive("ground_classified")) })
+                        put("limits", "Classification[2:2]")
+                        put("tag", "ground_points")
                     }
                 )
                 add(
                     buildJsonObject {
                         put("type", "writers.gdal")
+                        put("inputs", buildJsonArray { add(JsonPrimitive("ground_points")) })
                         put("filename", outputRaster.toString())
                         put("gdaldriver", "GTiff")
                         put("resolution", cellSize)

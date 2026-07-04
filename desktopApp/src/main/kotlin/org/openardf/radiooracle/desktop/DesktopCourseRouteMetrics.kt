@@ -36,6 +36,9 @@ data class DesktopCourseRouteMetrics(
 }
 
 object DesktopCourseRouteMetricsCalculator {
+    const val DefaultElevationSmoothingWindowMeters: Double = 50.0
+    const val DefaultClimbProminenceMeters: Double = 2.0
+
     fun metrics(route: List<CourseGeoPoint>): DesktopCourseRouteMetrics {
         val horizontalLengthMeters = horizontalLengthMeters(route)
         val climbMeters = climbMetersOrNull(route)
@@ -49,14 +52,132 @@ object DesktopCourseRouteMetricsCalculator {
     fun horizontalLengthMeters(route: List<CourseGeoPoint>): Double =
         route.zipWithNext().sumOf { (start, end) -> start.distanceMetersTo(end) }
 
-    fun climbMetersOrNull(route: List<CourseGeoPoint>): Double? {
+    fun climbMetersOrNull(route: List<CourseGeoPoint>): Double? =
+        profileClimbMetersOrNull(route)
+
+    fun profileClimbMetersOrNull(
+        route: List<CourseGeoPoint>,
+        smoothingWindowMeters: Double = DefaultElevationSmoothingWindowMeters,
+        climbProminenceMeters: Double = DefaultClimbProminenceMeters
+    ): Double? {
+        if (route.size < 2 || route.any { it.elevationMeters == null }) {
+            return null
+        }
+        val distances = cumulativeDistances(route)
+        val elevations = smoothedElevations(route, distances, smoothingWindowMeters)
+        return prominenceFilteredPositiveClimb(elevations, climbProminenceMeters)
+    }
+
+    fun rawPositiveClimbMetersOrNull(route: List<CourseGeoPoint>): Double? {
         if (route.size < 2 || route.any { it.elevationMeters == null }) {
             return null
         }
         return route.zipWithNext()
-            .sumOf { (start, end) -> max(0.0, requireNotNull(end.elevationMeters) - requireNotNull(start.elevationMeters)) }
+            .sumOf { (start, end) ->
+                max(0.0, requireNotNull(end.elevationMeters) - requireNotNull(start.elevationMeters))
+            }
+    }
+
+    fun thresholdedPositiveClimbMetersOrNull(
+        route: List<CourseGeoPoint>,
+        thresholdMeters: Double
+    ): Double? {
+        if (route.size < 2 || route.any { it.elevationMeters == null }) {
+            return null
+        }
+        val threshold = thresholdMeters.takeIf { it.isFinite() && it > 0.0 } ?: 0.0
+        return route.zipWithNext()
+            .sumOf { (start, end) ->
+                val gain = requireNotNull(end.elevationMeters) - requireNotNull(start.elevationMeters)
+                if (gain > threshold) gain else 0.0
+            }
     }
 
     fun effectiveLengthMetersOrNull(route: List<CourseGeoPoint>): Double? =
         metrics(route).effectiveLengthMeters
+
+    private fun cumulativeDistances(route: List<CourseGeoPoint>): List<Double> {
+        var total = 0.0
+        return buildList(route.size) {
+            add(0.0)
+            route.zipWithNext().forEach { (start, end) ->
+                total += start.distanceMetersTo(end)
+                add(total)
+            }
+        }
+    }
+
+    private fun smoothedElevations(
+        route: List<CourseGeoPoint>,
+        distances: List<Double>,
+        smoothingWindowMeters: Double
+    ): List<Double> {
+        if (!smoothingWindowMeters.isFinite() || smoothingWindowMeters <= 0.0) {
+            return route.map { requireNotNull(it.elevationMeters) }
+        }
+        val radiusMeters = smoothingWindowMeters / 2.0
+        return route.indices.map { index ->
+            val center = distances[index]
+            val samples = route.indices
+                .asSequence()
+                .filter { sampleIndex -> kotlin.math.abs(distances[sampleIndex] - center) <= radiusMeters }
+                .map { sampleIndex -> requireNotNull(route[sampleIndex].elevationMeters) }
+                .sorted()
+                .toList()
+            median(samples)
+        }
+    }
+
+    private fun median(values: List<Double>): Double {
+        require(values.isNotEmpty()) { "Cannot calculate a median without values." }
+        val middle = values.size / 2
+        return if (values.size % 2 == 1) {
+            values[middle]
+        } else {
+            (values[middle - 1] + values[middle]) / 2.0
+        }
+    }
+
+    private fun prominenceFilteredPositiveClimb(elevations: List<Double>, prominenceMeters: Double): Double {
+        if (elevations.size < 2) {
+            return 0.0
+        }
+        val threshold = prominenceMeters.takeIf { it.isFinite() && it > 0.0 } ?: 0.0
+        if (threshold == 0.0) {
+            return elevations.zipWithNext().sumOf { (start, end) -> max(0.0, end - start) }
+        }
+
+        var referenceLow = elevations.first()
+        var candidateHigh = elevations.first()
+        var candidateLow = elevations.first()
+        var climbing = false
+        var total = 0.0
+
+        elevations.drop(1).forEach { elevation ->
+            if (climbing) {
+                if (elevation > candidateHigh) {
+                    candidateHigh = elevation
+                } else if (candidateHigh - elevation >= threshold) {
+                    total += candidateHigh - referenceLow
+                    candidateLow = elevation
+                    referenceLow = elevation
+                    climbing = false
+                }
+            } else {
+                if (elevation < candidateLow) {
+                    candidateLow = elevation
+                    referenceLow = elevation
+                } else if (elevation - candidateLow >= threshold) {
+                    referenceLow = candidateLow
+                    candidateHigh = elevation
+                    climbing = true
+                }
+            }
+        }
+
+        if (climbing) {
+            total += candidateHigh - referenceLow
+        }
+        return total
+    }
 }
