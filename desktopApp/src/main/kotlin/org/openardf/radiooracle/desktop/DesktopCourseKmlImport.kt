@@ -728,7 +728,7 @@ object DesktopCourseKmlImporter {
         categoryOverrideId: String?
     ): List<String> {
         val existingNames = categories.mapTo(mutableSetOf()) { it.category.name.categoryMatchText() }
-        val listedCategoryNames = routes.flatMap { route -> route.name.listedCategoryNames() }
+        val listedCategoryNames = routes.flatMap { route -> route.listedCategoryNames() }
         val assumedCategoryNames = routeCategoryTargets(
             routes = routes,
             categories = categories,
@@ -775,7 +775,7 @@ object DesktopCourseKmlImporter {
         val assumptions = mutableListOf<DesktopCourseKmlCategoryAssumption>()
         val remainingUnmatchedRoutes = routes
             .filterNot { it in targets }
-            .filter { it.name.listedCategoryNames().isEmpty() }
+            .filter { it.listedCategoryNames().isEmpty() }
         val fallbackCategoryNames = categoryAssumptionNames(categories, usedCategoryIds, remainingUnmatchedRoutes.size)
         remainingUnmatchedRoutes.zip(fallbackCategoryNames).forEach { (route, categoryName) ->
             assumptions += DesktopCourseKmlCategoryAssumption(route.name, categoryName)
@@ -817,15 +817,29 @@ object DesktopCourseKmlImporter {
         route: CourseRoute,
         categories: List<EventCategoryData>
     ): List<EventCategoryData> {
-        val exactCategoryData = categories.firstOrNull { categoryData ->
-            categoryData.category.name.matchesCategoryRouteName(route.name)
+        val nameMatches = route.name.matchedCategories(categories)
+        if (nameMatches.isNotEmpty()) {
+            return nameMatches
         }
-        return exactCategoryData
-            ?.let(::listOf)
+        return route.description
+            ?.matchedCategories(categories)
+            .orEmpty()
+    }
+
+    private fun String.matchedCategories(categories: List<EventCategoryData>): List<EventCategoryData> {
+        val exactCategoryData = categories.firstOrNull { categoryData ->
+            categoryData.category.name.matchesCategoryRouteName(this)
+        }
+        return exactCategoryData?.let(::listOf)
             ?: categories.filter { categoryData ->
-                route.name.containsEmbeddedCategoryName(categoryData.category.name)
+                containsEmbeddedCategoryName(categoryData.category.name)
             }
     }
+
+    private fun CourseRoute.listedCategoryNames(): List<String> =
+        name.listedCategoryNames().ifEmpty {
+            description?.listedCategoryNames().orEmpty()
+        }
 
     private fun categoryAssumptionNames(
         categories: List<EventCategoryData>,

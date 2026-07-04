@@ -87,10 +87,12 @@ object DesktopCourseFileReader {
                 ?.let(::parseCoordinates)
                 .orEmpty()
             if (lineCoordinates.size >= 2 && !lineCoordinates.isLikelyCircularLineString()) {
+                val description = placemark.childText("description")
                 routes += CourseRoute(
                     name = name,
                     points = lineCoordinates,
-                    speedFactorHint = placemark.childText("description").speedFactorHint(name)
+                    speedFactorHint = description.speedFactorHint(name),
+                    description = description
                 )
             }
         }
@@ -117,6 +119,7 @@ object DesktopCourseFileReader {
         document.documentElement.namedDescendants("rte").forEachIndexed { index, route ->
             val routeName = route.childText("name")?.trim().orEmpty()
                 .ifBlank { "Route ${index + 1}" }
+            val routeDescription = route.childText("desc")
             val points = route.namedDescendants("rtept").mapNotNull { routePoint ->
                 routePoint.toGpxPoint()?.also { point ->
                     routePoint.childText("name")?.trim()?.takeIf { it.isNotBlank() }?.let { name ->
@@ -125,12 +128,13 @@ object DesktopCourseFileReader {
                 }
             }
             if (points.size >= 2) {
-                routes += CourseRoute(name = routeName, points = points)
+                routes += CourseRoute(name = routeName, points = points, description = routeDescription)
             }
         }
         document.documentElement.namedDescendants("trk").forEachIndexed { index, track ->
             val trackName = track.childText("name")?.trim().orEmpty()
                 .ifBlank { "Track ${index + 1}" }
+            val trackDescription = track.childText("desc")
             val points = track.namedDescendants("trkpt").mapNotNull { trackPoint ->
                 trackPoint.toGpxPoint()?.also { point ->
                     trackPoint.childText("name")?.trim()?.takeIf { it.isNotBlank() }?.let { name ->
@@ -139,7 +143,7 @@ object DesktopCourseFileReader {
                 }
             }
             if (points.size >= 2) {
-                routes += CourseRoute(name = trackName, points = points)
+                routes += CourseRoute(name = trackName, points = points, description = trackDescription)
             }
         }
 
@@ -219,7 +223,8 @@ data class CourseControlPoint(
 data class CourseRoute(
     val name: String,
     val points: List<CourseGeoPoint>,
-    val speedFactorHint: Double? = null
+    val speedFactorHint: Double? = null,
+    val description: String? = null
 )
 
 data class CourseGeoPoint(

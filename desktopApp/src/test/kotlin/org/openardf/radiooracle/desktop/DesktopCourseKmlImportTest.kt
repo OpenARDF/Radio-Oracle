@@ -533,6 +533,73 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun importsSprintRoutesForCategoriesListedInLineStringDescriptions() {
+        val kmlPath = Files.createTempFile("Sprint Described Courses", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithSprintCategoryRouteDescriptions())
+        val expectedCategoryNames = listOf("M21", "M50", "W35", "M60", "W55", "M16", "W19", "W75", "M70")
+        val project = (expectedCategoryNames + "W21").fold(
+            classicPresetProject(raceName = "Sprint Test", startDateTimeIso = "2026-06-11T09:00")
+        ) { currentProject, categoryName ->
+            EventProjectEditor.addCategory(
+                currentProject,
+                categoryId = "cat-${categoryName.lowercase()}",
+                name = categoryName
+            )
+        }
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        fun courseLength(categoryName: String): Int = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single { it.category.name == categoryName }.category.encryptedCourseInfo),
+            "course-key"
+        ).lengthMeters!!
+
+        assertEquals(4, summary.routeCount)
+        assertEquals(emptyList<DesktopCourseKmlCategoryAssumption>(), summary.categoryAssumptions)
+        assertEquals(expectedCategoryNames.size, summary.matchedCategoryCount)
+        assertEquals(expectedCategoryNames.toSet(), summary.matchedCategoryNames.toSet())
+        assertEquals(expectedCategoryNames.size, summary.importedCategoryCount)
+        assertEquals(null, updated.raceData.categories.single { it.category.name == "W21" }.category.encryptedCourseInfo)
+        assertTrue(courseLength("M21") < courseLength("M50"))
+        assertEquals(courseLength("M50"), courseLength("W35"))
+        assertEquals(courseLength("M60"), courseLength("W55"))
+        assertEquals(courseLength("M16"), courseLength("W19"))
+        assertEquals(courseLength("M16"), courseLength("W75"))
+        assertEquals(courseLength("M16"), courseLength("M70"))
+    }
+
+    @Test
+    fun importsGpxTrackForCategoriesListedInDescription() {
+        val gpxPath = Files.createTempFile("radio-oracle-described-track", ".gpx")
+        Files.writeString(gpxPath, sampleGpxTrackWithCategoryDescription())
+        val project = listOf("M21", "W35", "M50").fold(classicPresetProject()) { currentProject, categoryName ->
+            EventProjectEditor.addCategory(
+                currentProject,
+                categoryId = "cat-${categoryName.lowercase()}",
+                name = categoryName
+            )
+        }
+
+        val (_, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = gpxPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        assertEquals(1, summary.routeCount)
+        assertEquals(emptyList<DesktopCourseKmlCategoryAssumption>(), summary.categoryAssumptions)
+        assertEquals(3, summary.matchedCategoryCount)
+        assertEquals(setOf("M21", "W35", "M50"), summary.matchedCategoryNames.toSet())
+        assertEquals(3, summary.importedCategoryCount)
+    }
+
+    @Test
     fun skipsMatchedRoutesWhoseLineStringsDoNotMatchCourseControls() {
         val kmlPath = Files.createTempFile("radio-oracle-mixed-routes", ".kml")
         Files.writeString(kmlPath, sampleKmlWithMixedValidAndInvalidRoutes())
@@ -2500,7 +2567,7 @@ class DesktopCourseKmlImportTest {
             <rtept lat="39.0000" lon="-94.9980" />
           </rte>
         </gpx>
-        """.trimIndent().trimStart()
+        """.trimIndent()
 
     private fun sampleOcadGpxWithScoutClassicTracks(): String =
         """
@@ -2792,7 +2859,7 @@ class DesktopCourseKmlImportTest {
             </Placemark>
           </Document>
         </kml>
-        """.trimIndent()
+        """.trimIndent().trimStart()
 
     private fun sampleKmlWithMandatoryWaypoint(): String =
         """
@@ -3185,6 +3252,89 @@ class DesktopCourseKmlImportTest {
           </Document>
         </kml>
         """.trimIndent()
+
+    private fun sampleKmlWithSprintCategoryRouteDescriptions(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Recommended Set #2 Course #1: S -&gt; 3 -&gt; 5 -&gt; 1 -&gt; 2 -&gt; 4 -&gt; SP -&gt; F</name>
+              <description>Matching Categories: M21
+Horizontal Length: 2.2 km</description>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9980,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>Recommended Set #2 Course #2: S -&gt; 5 -&gt; 1 -&gt; 2 -&gt; 4 -&gt; SP -&gt; F</name>
+              <description>Matching Categories: W35, M50
+Horizontal Length: 2.0 km</description>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9970,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>Recommended Set #2 Course #3: S -&gt; 4 -&gt; SP -&gt; F</name>
+              <description>Matching Categories: W55, M60
+Horizontal Length: 1.9 km</description>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9960,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>Recommended Set #2 Course #4: S -&gt; 2 -&gt; SP -&gt; F</name>
+              <description>Matching Categories: M16, W19, W75, M70
+Horizontal Length: 1.6 km</description>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9950,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent().trimStart()
+
+    private fun sampleGpxTrackWithCategoryDescription(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gpx version="1.1" creator="Radio-Oracle test" xmlns="http://www.topografix.com/GPX/1/1">
+          <wpt lat="39.0000" lon="-95.0000">
+            <name>31</name>
+          </wpt>
+          <wpt lat="39.0000" lon="-94.9980">
+            <name>32</name>
+          </wpt>
+          <trk>
+            <name>Recommended Set #2 Course #2</name>
+            <desc>Matching Categories: M21, W35, M50</desc>
+            <trkseg>
+              <trkpt lat="39.0000" lon="-95.0000" />
+              <trkpt lat="39.0000" lon="-94.9990" />
+              <trkpt lat="39.0000" lon="-94.9980" />
+            </trkseg>
+          </trk>
+        </gpx>
+        """.trimIndent().trimStart()
 
     private fun sampleRouteOnlyKmlWithCategoryNames(): String =
         """
