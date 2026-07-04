@@ -886,6 +886,69 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun controlsImportIgnoresCorridorLineStringsForSprintFoxoringAndClassic() {
+        val kmlPath = Files.createTempFile("Sprint Course Objects", ".kml")
+        Files.writeString(kmlPath, sampleSprintCourseObjectsWithCorridorLineStringsKml())
+        val projects = listOf(RaceType.SPRINT, RaceType.FOXORING, RaceType.CLASSIC).map { raceType ->
+            sprintControlPresetProject(raceType = raceType)
+        }.map { project ->
+            listOf("M21", "M50", "M60").fold(project) { currentProject, categoryName ->
+                EventProjectEditor.addCategory(
+                    currentProject,
+                    categoryId = "${currentProject.raceData.race.raceType}-$categoryName",
+                    name = categoryName
+                )
+            }
+        }
+
+        val summaries = projects.mapIndexed { index, project ->
+            val (_, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+                path = kmlPath,
+                projectFile = project,
+                password = "course-key-$index",
+                elevationProvider = { null },
+                createMissingControls = true,
+                requireRoutes = false
+            )
+            summary
+        }
+
+        summaries.forEach { summary ->
+            assertEquals(0, summary.routeCount)
+            assertEquals(0, summary.matchedCategoryCount)
+            assertEquals(0, summary.importedCategoryCount)
+            assertEquals(emptyList<DesktopCourseKmlRejectedRoute>(), summary.rejectedRoutes)
+            assertEquals(emptyList<DesktopCourseKmlCategoryAssumption>(), summary.categoryAssumptions)
+            assertEquals(emptyList<String>(), summary.createdControlNames)
+            assertEquals(11, summary.matchedControlPointCount)
+        }
+    }
+
+    @Test
+    fun controlsImportKeepsCategoryLineStringWithStartAndFinishEndpoints() {
+        val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithValidEndpointRoute())
+        val project = EventProjectEditor.addCategory(
+            classicPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (_, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null },
+            requireRoutes = false
+        )
+
+        assertEquals(1, summary.routeCount)
+        assertEquals(1, summary.matchedCategoryCount)
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals(emptyList<DesktopCourseKmlRejectedRoute>(), summary.rejectedRoutes)
+    }
+
+    @Test
     fun matchesImportedFoxLabelsToExistingControlsByInferredSiCode() {
         val kmlPath = Files.createTempFile("radio-oracle-foxoring-si-labels", ".kml")
         Files.writeString(kmlPath, sampleFoxoringKmlWithSiCodeLabeledControls())
@@ -2553,6 +2616,42 @@ class DesktopCourseKmlImportTest {
         </kml>
         """.trimIndent().trimStart()
 
+    private fun sampleKmlWithValidEndpointRoute(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>Start</name>
+              <Point><coordinates>-95.0010,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Finish</name>
+              <Point><coordinates>-94.9970,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0010,39.0000,0
+                  -95.0000,39.0000,0
+                  -94.9980,39.0000,0
+                  -94.9970,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent().trimStart()
+
     private fun sampleKmlWithImportSpeedSpecifiers(): String =
         """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -3226,6 +3325,49 @@ class DesktopCourseKmlImportTest {
         </kml>
         """.trimIndent()
 
+    private fun sampleSprintCourseObjectsWithCorridorLineStringsKml(): String =
+        samplePointOnlySprintAllControlsKml().replace(
+            "          </Folder>",
+            """
+            <Placemark>
+              <name>SP_CORRIDOR_END</name>
+              <Point><coordinates>-121.672900000000,45.301700000000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>ST_CORRIDOR_END</name>
+              <Point><coordinates>-121.671700000000,45.300400000000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Spectator Corridor</name>
+              <LineString>
+                <coordinates>
+                  -121.672900000000,45.301700000000,0
+                  -121.672234533023,45.3029183727603,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>Finish Corridor</name>
+              <LineString>
+                <coordinates>
+                  -121.671005324923,45.2968314768436,0
+                  -121.672258779476,45.2983419870845,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>M21 Start Corridor</name>
+              <LineString>
+                <coordinates>
+                  -121.671297229126,45.3007791974368,0
+                  -121.671700000000,45.300400000000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Folder>
+            """.trimIndent()
+        )
+
     private fun sampleFoxoringKmlWithSiCodeLabeledControls(): String =
         """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -3889,6 +4031,20 @@ class DesktopCourseKmlImportTest {
             raceData = project.raceData.copy(
                 race = project.raceData.race.copy(raceType = RaceType.SPRINT),
                 controls = EventControlCatalog.sprintPreset(raceId)
+            )
+        )
+    }
+
+    private fun sprintControlPresetProject(
+        raceType: RaceType,
+        raceId: String = "race-${raceType.name.lowercase()}",
+        raceName: String = "${raceType.name.lowercase()} Course Test",
+        startDateTimeIso: String = "2026-06-05T09:00"
+    ): EventProjectFile {
+        val project = sprintPresetProject(raceId, raceName, startDateTimeIso)
+        return project.copy(
+            raceData = project.raceData.copy(
+                race = project.raceData.race.copy(raceType = raceType)
             )
         )
     }

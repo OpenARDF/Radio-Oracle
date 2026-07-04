@@ -212,10 +212,22 @@ object DesktopCourseKmlImporter {
     ): Pair<EventProjectFile, DesktopCourseKmlImportSummary> {
         val sourceSha256 = fileSha256(path)
         val parsedCourseData = parse(path)
-        val courseData = if (requireRoutes && parsedCourseData.routes.isEmpty()) {
-            parsedCourseData.withSynthesizedAnalyzerRoute()
-        } else {
+        val controlImportCourseData = if (requireRoutes) {
             parsedCourseData
+        } else {
+            parsedCourseData.withControlImportCourseRoutes()
+        }
+        val courseData = if (requireRoutes && controlImportCourseData.routes.isEmpty()) {
+            controlImportCourseData.withSynthesizedAnalyzerRoute()
+        } else {
+            controlImportCourseData
+        }
+        val ignoredRouteCount = parsedCourseData.routes.size - controlImportCourseData.routes.size
+        if (!requireRoutes && ignoredRouteCount > 0) {
+            DesktopDebugLog.info(
+                "CourseKml",
+                "Control import ignored $ignoredRouteCount non-course route geometries from ${path.fileName}"
+            )
         }
         DesktopDebugLog.info(
             "CourseKml",
@@ -776,6 +788,30 @@ object DesktopCourseKmlImporter {
         }
         return RouteCategoryTargetResult(targets, assumptions)
     }
+
+    private fun DesktopCourseKmlData.withControlImportCourseRoutes(): DesktopCourseKmlData {
+        if (routes.isEmpty()) {
+            return this
+        }
+        val filteredRoutes = routes.filter { route -> route.hasStartAndFinishEndpoints(controls) }
+        return if (filteredRoutes.size == routes.size) this else copy(routes = filteredRoutes)
+    }
+
+    private fun CourseRoute.hasStartAndFinishEndpoints(controls: List<CourseControlPoint>): Boolean {
+        val first = points.firstOrNull() ?: return false
+        val last = points.lastOrNull() ?: return false
+        val starts = controls.filter { it.isCourseStartPoint() }
+        val finishes = controls.filter { it.isCourseFinishPoint() }
+        return starts.isNotEmpty() &&
+            finishes.isNotEmpty() &&
+            (
+                first.isNearAnyCoursePoint(starts) && last.isNearAnyCoursePoint(finishes) ||
+                    first.isNearAnyCoursePoint(finishes) && last.isNearAnyCoursePoint(starts)
+                )
+    }
+
+    private fun CourseGeoPoint.isNearAnyCoursePoint(controls: List<CourseControlPoint>): Boolean =
+        controls.any { control -> distanceMetersTo(control.point) <= CONTROL_ROUTE_TOLERANCE_METERS }
 
     private fun routeMatchedCategories(
         route: CourseRoute,
