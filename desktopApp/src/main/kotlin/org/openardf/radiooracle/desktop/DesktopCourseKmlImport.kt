@@ -1353,6 +1353,9 @@ object DesktopCourseKmlImporter {
             if (!control.publicLabel.isNullOrBlank()) {
                 return@fold currentProject
             }
+            val notes = control.notes
+                ?.takeUnless { it.trim() == matchedControl.importedName.trim() }
+                .orEmpty()
             EventProjectEditor.updateControl(
                 projectFile = currentProject,
                 controlId = control.id,
@@ -1361,7 +1364,7 @@ object DesktopCourseKmlImporter {
                 type = control.type,
                 scored = control.scored,
                 publicLabel = matchedControl.importedName,
-                notes = control.notes.orEmpty()
+                notes = notes
             )
         }
     }

@@ -721,6 +721,54 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun pointOnlySprintImportPromotesImportedNamesToPublicLabelsNotNotes() {
+        val kmlPath = Files.createTempFile("Sprint All controls", ".kml")
+        Files.writeString(kmlPath, samplePointOnlySprintAllControlsKml())
+        val baseProject = sprintPresetProject()
+        val project = baseProject.copy(
+            raceData = baseProject.raceData.copy(
+                controls = baseProject.raceData.controls.map { control ->
+                    val staleImportedName = when (control.label) {
+                        in listOf("1", "2", "3", "4", "5") -> control.label
+                        "F1" -> "1F"
+                        "F2" -> "2F"
+                        "F3" -> "3F"
+                        "F4" -> "4F"
+                        "F5" -> "5F"
+                        "M" -> "B"
+                        else -> ""
+                    }
+                    control.copy(
+                        publicLabel = null,
+                        notes = staleImportedName.takeIf { it.isNotBlank() }
+                    )
+                }
+            )
+        )
+
+        val (updatedProject, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null },
+            createMissingControls = true,
+            requireRoutes = false
+        )
+
+        assertEquals(0, summary.routeCount)
+        assertEquals(11, summary.matchedControlPointCount)
+        assertEquals(emptyList<String>(), summary.createdControlNames)
+        assertEquals(
+            listOf("1", "2", "3", "4", "5", "1F", "2F", "3F", "4F", "5F", null, "B"),
+            updatedProject.raceData.controls.map { it.publicLabel }
+        )
+        assertEquals(
+            List(12) { null },
+            updatedProject.raceData.controls.map { it.notes }
+        )
+    }
+
+    @Test
     fun matchesImportedFoxLabelsToExistingControlsByInferredSiCode() {
         val kmlPath = Files.createTempFile("radio-oracle-foxoring-si-labels", ".kml")
         Files.writeString(kmlPath, sampleFoxoringKmlWithSiCodeLabeledControls())
@@ -2996,6 +3044,68 @@ class DesktopCourseKmlImportTest {
               <Point><coordinates>-95.0010,39.0000,0</coordinates></Point>
             </Placemark>
           </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun samplePointOnlySprintAllControlsKml(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Folder>
+            <name>All controls</name>
+            <Placemark>
+              <name>Start</name>
+              <Point><coordinates>-121.671297229126,45.3007791974368,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>1</name>
+              <Point><coordinates>-121.673379675263,45.30330948122661,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>2</name>
+              <Point><coordinates>-121.672234533023,45.3029183727603,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>3</name>
+              <Point><coordinates>-121.672079990386,45.3025310127599,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>4</name>
+              <Point><coordinates>-121.672341225561,45.30214300567061,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>5</name>
+              <Point><coordinates>-121.671477817708,45.3012611398179,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>1F</name>
+              <Point><coordinates>-121.672222217582,45.3002217133004,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>2F</name>
+              <Point><coordinates>-121.670164245406,45.2996496016064,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>3F</name>
+              <Point><coordinates>-121.670268206351,45.2985780518941,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>4F</name>
+              <Point><coordinates>-121.675053357398,45.299863009869,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>5F</name>
+              <Point><coordinates>-121.673556347938,45.29727180548831,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>B</name>
+              <Point><coordinates>-121.671005324923,45.2968314768436,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Finish</name>
+              <Point><coordinates>-121.672258779476,45.2983419870845,0</coordinates></Point>
+            </Placemark>
+          </Folder>
         </kml>
         """.trimIndent()
 
