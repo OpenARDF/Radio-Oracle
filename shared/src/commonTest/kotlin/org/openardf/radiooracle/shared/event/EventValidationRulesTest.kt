@@ -174,6 +174,43 @@ class EventValidationRulesTest {
     }
 
     @Test
+    fun doesNotReportUnusedControlsWhenCategoryIdsAreStaleButSiAndRoleMatch() {
+        val issues = EventValidationRules.validateRaceData(
+            raceData(
+                controls = listOf(
+                    control("control-1-161-control", 161, "1"),
+                    control("control-b-136-beacon", 136, "B", ControlPointType.BEACON)
+                ),
+                categories = listOf(
+                    categoryData(
+                        name = "M21",
+                        controlPoints = listOf(
+                            EventControlPoint(
+                                id = "cat-stale-fox",
+                                categoryId = "M21",
+                                siCode = 161,
+                                type = ControlPointType.CONTROL,
+                                order = 1,
+                                controlId = "control-161-161-control"
+                            ),
+                            EventControlPoint(
+                                id = "cat-stale-beacon",
+                                categoryId = "M21",
+                                siCode = 136,
+                                type = ControlPointType.BEACON,
+                                order = 2,
+                                controlId = "control-136-136-beacon"
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+        assertFalse(issues.any { it is EventValidationIssue.UnusedControls })
+    }
+
+    @Test
     fun warnsAndValidatesAgainstEventRaceTypeWhenCategoryHasLegacySettings() {
         val issues = EventValidationRules.validateRaceData(
             raceData(

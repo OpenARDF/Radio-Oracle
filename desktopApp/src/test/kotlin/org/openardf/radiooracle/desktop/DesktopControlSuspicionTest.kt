@@ -100,6 +100,25 @@ class DesktopControlSuspicionTest {
     }
 
     @Test
+    fun resolvesDanglingControlIdsBySiCodeAndRole() {
+        val fox1 = control("fox-1-current", 161, "1")
+        val beacon = control("beacon-current", 136, "B", ControlPointType.BEACON)
+        val category = category(
+            controlPoint("control-161-stale", 161),
+            controlPoint("control-136-stale", 136, ControlPointType.BEACON)
+        )
+
+        val reasons = controlSuspicionReasonsByControlId(
+            controls = listOf(fox1, beacon),
+            categories = listOf(category)
+        )
+
+        assertTrue(reasons.getValue("fox-1-current").isEmpty())
+        assertTrue(reasons.getValue("beacon-current").isEmpty())
+        assertEquals(0, unusedControlWarningCount(reasons))
+    }
+
+    @Test
     fun treatsPublicControlIdsAsCategoryUse() {
         val fox1 = control("fox1", 31, "Fox 1")
         val category = category().copy(publicControlIds = listOf("fox1"))

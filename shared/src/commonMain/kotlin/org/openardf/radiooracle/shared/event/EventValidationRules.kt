@@ -94,6 +94,9 @@ object EventValidationRules {
                 return@buildList
             }
             val controlsById = raceData.controls.associateBy { it.id }
+            val controlsByLegacyDefinition = raceData.controls
+                .groupBy { it.siCode to it.type }
+                .mapValues { (_, controls) -> controls.singleOrNull() }
             raceData.categories.forEach { data ->
                 try {
                     validateLegacyCategoryRaceSettings(data.category, this)
@@ -123,16 +126,22 @@ object EventValidationRules {
                             else -> emptyList()
                         }
                         val missingControlIds = controlPoints
+                            .filter {
+                                val resolvedControl = controlsById[it.controlId]
+                                    ?: controlsByLegacyDefinition[it.siCode to it.type]
+                                resolvedControl == null
+                            }
                             .map { it.controlId }
-                            .filter { it.isBlank() || controlsById[it] == null }
                             .toSet()
                         if (missingControlIds.isNotEmpty()) {
                             add(EventValidationIssue.MissingCategoryControlReferences(data.category.name, missingControlIds))
                         }
                         controlPoints.map {
+                            val resolvedControl = controlsById[it.controlId]
+                                ?: controlsByLegacyDefinition[it.siCode to it.type]
                             org.openardf.radiooracle.shared.course.ControlPointDefinition(
-                                siCode = controlsById[it.controlId]?.siCode ?: it.siCode,
-                                type = controlsById[it.controlId]?.type ?: it.type,
+                                siCode = resolvedControl?.siCode ?: it.siCode,
+                                type = resolvedControl?.type ?: it.type,
                                 order = it.order
                             )
                         }
@@ -420,6 +429,7 @@ object EventValidationRules {
 
     @Suppress("DEPRECATION")
     private fun assignedControlIds(raceData: EventRaceData): Set<String> {
+        val controlIds = raceData.controls.mapTo(mutableSetOf()) { it.id }
         val idsByLegacyDefinition = raceData.controls
             .groupBy { it.siCode to it.type }
             .mapValues { (_, controls) -> controls.map { it.id } }
@@ -443,7 +453,7 @@ object EventValidationRules {
                 }
                 categoryData.publicControlIds +
                     categoryData.controlPoints.flatMap { controlPoint ->
-                        if (controlPoint.controlId.isNotBlank()) {
+                        if (controlPoint.controlId.isNotBlank() && controlPoint.controlId in controlIds) {
                             listOf(controlPoint.controlId)
                         } else {
                             idsByLegacyDefinition[controlPoint.siCode to controlPoint.type].orEmpty()

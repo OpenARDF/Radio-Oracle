@@ -388,10 +388,27 @@ object DesktopCourseKmlImporter {
                 invalidateAllReferencedProtectedCourses = false
             )
         }
-        var updatedProject = labeledProject
-        locationUpdateResult?.let { result ->
-            updatedProject = result.projectFile
+        val controlsOnlyProtectedImportResult = if (courseData.routes.isEmpty() && courseInfoByCategoryId.isEmpty()) {
+            importControlsOnlyProtectedCourseInfo(
+                projectFile = locationUpdateResult?.projectFile ?: labeledProject,
+                matchedControls = controlsForLocationUpdates,
+                password = password,
+                sourceName = path.fileName.toString(),
+                sourceSha256 = sourceSha256,
+                elevationProvider = elevationProvider
+            )
+        } else {
+            null
         }
+        val changedControlLocationCount = (
+            controlLocationUpdates.map { it.controlId } +
+                controlsOnlyProtectedImportResult?.updatedControlIds.orEmpty()
+            )
+            .distinct()
+            .size
+        var updatedProject = controlsOnlyProtectedImportResult?.projectFile
+            ?: locationUpdateResult?.projectFile
+            ?: labeledProject
         var matchedCategoryCount = 0
         var importedCategoryCount = 0
         var duplicateCategoryCount = 0
@@ -611,8 +628,10 @@ object DesktopCourseKmlImporter {
             missingElevationPointCount = missingElevationPointCount,
             importedCategoryCount = importedCategoryCount,
             categoryAssignmentUpdates = categoryAssignmentUpdates,
-            changedControlLocationCount = controlLocationUpdates.size,
-            controlLocationAffectedCategoryCount = locationUpdateResult?.affectedCategoryCount ?: 0,
+            changedControlLocationCount = changedControlLocationCount,
+            controlLocationAffectedCategoryCount = locationUpdateResult?.affectedCategoryCount
+                ?: controlsOnlyProtectedImportResult?.affectedCategoryCount
+                ?: 0,
             duplicateCategoryCount = duplicateCategoryCount,
             duplicateMissingElevationPointCount = duplicateMissingElevationPointCount,
             missingCategoryNames = missingCategoryNames,
@@ -1532,6 +1551,89 @@ object DesktopCourseKmlImporter {
             }
     }
 
+    private fun importControlsOnlyProtectedCourseInfo(
+        projectFile: EventProjectFile,
+        matchedControls: List<CourseMatchedControl>,
+        password: String,
+        sourceName: String,
+        sourceSha256: String,
+        elevationProvider: (CourseGeoPoint) -> Double?
+    ): ControlsOnlyProtectedCourseInfoImportResult? {
+        val matchedControlsById = matchedControls.associateBy { it.controlId }
+        val matchedControlsByLegacyDefinition = matchedControls
+            .groupBy { it.siCode to it.type }
+            .mapValues { (_, controls) -> controls.distinctBy { it.controlId }.singleOrNull() }
+        val elevationByControlId = mutableMapOf<String, Double?>()
+        var updatedProject = projectFile
+        val affectedCategoryIds = linkedSetOf<String>()
+        val updatedControlIds = linkedSetOf<String>()
+        projectFile.raceData.categories.forEach { categoryData ->
+            val categoryControls = categoryData.controlsOnlyProtectedImportControls(
+                matchedControlsById = matchedControlsById,
+                matchedControlsByLegacyDefinition = matchedControlsByLegacyDefinition
+            )
+            if (categoryControls.isEmpty()) {
+                return@forEach
+            }
+            val controlPoints = categoryControls.map { control ->
+                val elevation = elevationByControlId.getOrPut(control.controlId) {
+                    elevationProvider(control.point)
+                }
+                ProtectedCourseControlPoint(
+                    controlId = control.controlId,
+                    label = control.label,
+                    latitude = control.point.latitude,
+                    longitude = control.point.longitude,
+                    type = control.type,
+                    elevationMeters = elevation,
+                    speedFactor = control.speedFactorHint
+                )
+            }
+            val protectedCourseInfo = ProtectedCourseInfo(
+                idealOrder = categoryControls.joinToString(" ") { it.label },
+                lengthMeters = null,
+                climbMeters = null,
+                sourceName = sourceName,
+                sourceSha256 = sourceSha256,
+                sampledPointCount = 0,
+                route = emptyList(),
+                controlPoints = controlPoints,
+                courseObjects = emptyList()
+            )
+            updatedProject = EventProjectEditor.updateCategoryEncryptedCourseInfo(
+                updatedProject,
+                categoryData.category.id,
+                DesktopProtectedCourseOrder.encryptCourseInfo(protectedCourseInfo, password)
+            )
+            affectedCategoryIds += categoryData.category.id
+            categoryControls.mapTo(updatedControlIds) { it.controlId }
+        }
+        return affectedCategoryIds.takeIf { it.isNotEmpty() }?.let {
+            ControlsOnlyProtectedCourseInfoImportResult(
+                projectFile = updatedProject,
+                updatedControlIds = updatedControlIds,
+                affectedCategoryCount = affectedCategoryIds.size
+            )
+        }
+    }
+
+    private fun EventCategoryData.controlsOnlyProtectedImportControls(
+        matchedControlsById: Map<String, CourseMatchedControl>,
+        matchedControlsByLegacyDefinition: Map<Pair<Int, ControlPointType>, CourseMatchedControl?>
+    ): List<CourseMatchedControl> {
+        val controls = when {
+            controlPoints.isNotEmpty() -> controlPoints.mapNotNull { controlPoint ->
+                matchedControlsById[controlPoint.controlId]
+                    ?: matchedControlsByLegacyDefinition[controlPoint.siCode to controlPoint.type]
+            }
+            publicControlIds.isNotEmpty() -> publicControlIds.mapNotNull { controlId ->
+                matchedControlsById[controlId]
+            }
+            else -> emptyList()
+        }
+        return controls.distinctBy { it.controlId }
+    }
+
     private fun sameSourceDuplicateCategoryIds(
         routes: List<CourseRoute>,
         routeCategoryTargets: RouteCategoryTargetResult,
@@ -2030,6 +2132,12 @@ private data class CourseMatchedControl(
     val type: ControlPointType,
     val point: CourseGeoPoint,
     val speedFactorHint: Double? = null
+)
+
+private data class ControlsOnlyProtectedCourseInfoImportResult(
+    val projectFile: EventProjectFile,
+    val updatedControlIds: Set<String>,
+    val affectedCategoryCount: Int
 )
 
 private fun CourseMatchedControl.hasSiCodeConflict(): Boolean =

@@ -89,10 +89,27 @@ object DesktopControlsRouteKmlKmzExporter {
 
         val protectedCourseInfoByCategoryId = decryptProtectedCourseInfo(projectFile, trimmedPassword)
         val exportedCourseObjects = courseExportObjects(protectedCourseInfoByCategoryId.values)
+        val controlCatalogControls = if (protectedCourseInfoByCategoryId.isEmpty()) {
+            controlCatalogControls(projectFile, exportedCourseObjects)
+        } else {
+            emptyList()
+        }
         val entryBytes = when (target.format) {
-            DesktopControlsRouteKmlKmzExportFormat.Kml -> buildKml(projectFile, protectedCourseInfoByCategoryId).encodeToByteArray()
-            DesktopControlsRouteKmlKmzExportFormat.Kmz -> buildKmz(buildKml(projectFile, protectedCourseInfoByCategoryId))
-            DesktopControlsRouteKmlKmzExportFormat.Gpx -> buildGpx(projectFile, protectedCourseInfoByCategoryId).encodeToByteArray()
+            DesktopControlsRouteKmlKmzExportFormat.Kml -> buildKml(
+                projectFile,
+                protectedCourseInfoByCategoryId,
+                exportedCourseObjects,
+                controlCatalogControls
+            ).encodeToByteArray()
+            DesktopControlsRouteKmlKmzExportFormat.Kmz -> buildKmz(
+                buildKml(projectFile, protectedCourseInfoByCategoryId, exportedCourseObjects, controlCatalogControls)
+            )
+            DesktopControlsRouteKmlKmzExportFormat.Gpx -> buildGpx(
+                projectFile,
+                protectedCourseInfoByCategoryId,
+                exportedCourseObjects,
+                controlCatalogControls
+            ).encodeToByteArray()
         }
         val entryName = "controls-routes.${target.format.contentExtension}"
 
@@ -111,7 +128,7 @@ object DesktopControlsRouteKmlKmzExporter {
         return DesktopControlsRouteKmlKmzExportSummary(
             categoryCount = projectFile.raceData.categories.size,
             routeCount = protectedCourseInfoByCategoryId.values.count { it.route.isNotEmpty() },
-            controlCatalogCount = 0,
+            controlCatalogCount = controlCatalogControls.size,
             courseControlPointCount = exportedCourseObjects.courseObjects.size + exportedCourseObjects.controlPoints.size,
             outputFormat = target.format
         )
@@ -132,7 +149,9 @@ object DesktopControlsRouteKmlKmzExporter {
 
     private fun buildKml(
         projectFile: EventProjectFile,
-        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+        exportedCourseObjects: CourseExportObjects,
+        controlCatalogControls: List<EventControl>
     ): String = buildString {
         appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
         appendLine("""<kml xmlns="http://www.opengis.net/kml/2.2">""")
@@ -150,7 +169,12 @@ object DesktopControlsRouteKmlKmzExporter {
             appendLine("    </Style>")
         }
         val controlsById = projectFile.raceData.controls.associateBy { it.id }
-        val exportedCourseObjects = courseExportObjects(protectedCourseInfoByCategoryId.values)
+        if (controlCatalogControls.isNotEmpty()) {
+            appendLine("    <Folder>")
+            appendLine("      <name>Control catalog</name>")
+            appendControlCatalogPlacemarks(controlCatalogControls)
+            appendLine("    </Folder>")
+        }
         appendLine("    <Folder>")
         appendLine("      <name>Courses</name>")
         projectFile.raceData.categories.forEach { categoryData ->
@@ -169,6 +193,31 @@ object DesktopControlsRouteKmlKmzExporter {
         appendLine("    </Folder>")
         appendLine("  </Document>")
         appendLine("</kml>")
+    }
+
+    private fun StringBuilder.appendControlCatalogPlacemarks(controls: List<EventControl>) {
+        controls.forEach { control ->
+            val latitude = control.latitude ?: return@forEach
+            val longitude = control.longitude ?: return@forEach
+            val label = control.displayCourseLabel()
+            appendLine("        <Placemark>")
+            appendLine("          <name>${xml(label)}</name>")
+            appendLine("          <description>${xml(coursePointDescription(control, "Control catalog $label; type ${control.type}; id ${control.id}"))}</description>")
+            appendExtendedData(
+                indent = "          ",
+                values = listOf(
+                    "controlId" to control.id,
+                    "label" to label,
+                    "type" to control.type.name,
+                    "siCode" to control.siCode.toString()
+                )
+            )
+            controlPointStyle(control.type)?.let { styleId ->
+                appendLine("          <styleUrl>#$styleId</styleUrl>")
+            }
+            appendLine("          <Point><coordinates>${coordinates(longitude, latitude, null)}</coordinates></Point>")
+            appendLine("        </Placemark>")
+        }
     }
 
     private fun StringBuilder.appendCourseRoutePlacemark(
@@ -276,7 +325,9 @@ object DesktopControlsRouteKmlKmzExporter {
 
     private fun buildGpx(
         projectFile: EventProjectFile,
-        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+        exportedCourseObjects: CourseExportObjects,
+        controlCatalogControls: List<EventControl>
     ): String = buildString {
         appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
         appendLine("""<gpx version="1.1" creator="Radio-Oracle ${xml(DesktopBuildInfo.displayVersion)}" xmlns="http://www.topografix.com/GPX/1/1">""")
@@ -285,7 +336,7 @@ object DesktopControlsRouteKmlKmzExporter {
         appendLine("    <desc>Radio-Oracle protected controls and category routes. OCAD-specific GPX extensions are not yet documented; standard GPX waypoints and routes are used.</desc>")
         appendLine("  </metadata>")
         val controlsById = projectFile.raceData.controls.associateBy { it.id }
-        val exportedCourseObjects = courseExportObjects(protectedCourseInfoByCategoryId.values)
+        appendGpxControlCatalogWaypoints(controlCatalogControls)
         appendGpxCourseObjectWaypoints(exportedCourseObjects.courseObjects, controlsById)
         appendGpxCourseControlWaypoints(exportedCourseObjects.controlPoints, controlsById)
         projectFile.raceData.categories.forEach { categoryData ->
@@ -313,6 +364,24 @@ object DesktopControlsRouteKmlKmzExporter {
             appendLine("  </rte>")
         }
         appendLine("</gpx>")
+    }
+
+    private fun StringBuilder.appendGpxControlCatalogWaypoints(controls: List<EventControl>) {
+        controls.forEach { control ->
+            val latitude = control.latitude ?: return@forEach
+            val longitude = control.longitude ?: return@forEach
+            val label = control.displayCourseLabel()
+            appendGpxWaypoint(
+                indent = "  ",
+                tagName = "wpt",
+                latitude = latitude,
+                longitude = longitude,
+                elevationMeters = null,
+                name = label,
+                description = "Control catalog $label; type ${control.type}; id ${control.id}",
+                type = control.type.name
+            )
+        }
     }
 
     private fun StringBuilder.appendGpxCourseObjectWaypoints(
@@ -409,6 +478,23 @@ object DesktopControlsRouteKmlKmzExporter {
             .filterNot { it.controlId in courseObjectControlIds }
             .distinctBy { "${it.controlId}:${it.type}" }
         return CourseExportObjects(courseObjects = courseObjects, controlPoints = controlPoints)
+    }
+
+    private fun controlCatalogControls(
+        projectFile: EventProjectFile,
+        exportedCourseObjects: CourseExportObjects
+    ): List<EventControl> {
+        val protectedControlIds = exportedCourseObjects.courseObjects.mapTo(mutableSetOf()) { it.id }
+        exportedCourseObjects.controlPoints.mapTo(protectedControlIds) { it.controlId }
+        return projectFile.raceData.controls.filter { control ->
+            val latitude = control.latitude
+            val longitude = control.longitude
+            control.id !in protectedControlIds &&
+                latitude != null &&
+                longitude != null &&
+                latitude.isValidLatitude() &&
+                longitude.isValidLongitude()
+        }
     }
 
     private fun List<ProtectedCourseObjectPoint>.dedupeForExport(): List<ProtectedCourseObjectPoint> =

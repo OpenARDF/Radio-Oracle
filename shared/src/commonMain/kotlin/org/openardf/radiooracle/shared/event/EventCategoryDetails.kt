@@ -83,6 +83,9 @@ data class EventCategoryDetails(
         ): String {
             val aliasesByCode = raceData.aliases.associateBy { it.siCode }
             val controlsById = raceData.controls.associateBy { it.id }
+            val controlsByLegacyDefinition = raceData.controls
+                .groupBy { it.siCode to it.type }
+                .mapValues { (_, controls) -> controls.singleOrNull() }
             val publicControlPoints = if (controlPoints.isNotEmpty()) {
                 controlPoints
             } else if (publicControlIds.isNotEmpty()) {
@@ -114,11 +117,13 @@ data class EventCategoryDetails(
             }
             return ControlPointRules.formatEditableDisplayTokens(
                 sortedControlPoints.map { controlPoint ->
+                    val control = controlsById[controlPoint.controlId]
+                        ?: controlsByLegacyDefinition[controlPoint.siCode to controlPoint.type]
                     ControlPointDisplayToken(
                         siCode = controlPoint.siCode,
-                        aliasName = controlsById[controlPoint.controlId]?.publicLabel
+                        aliasName = control?.publicLabel
                             ?: aliasesByCode[controlPoint.siCode]?.name
-                            ?: controlsById[controlPoint.controlId]?.label
+                            ?: control?.label
                     )
                 },
                 useAlias = useAliases

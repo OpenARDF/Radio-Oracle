@@ -110,6 +110,72 @@ class DesktopControlsRouteKmlKmzExportTest {
     }
 
     @Test
+    fun exportsControlCatalogWhenProtectedCoursesAreAbsent() {
+        val output = Files.createTempFile("radio-oracle-controls-catalog", ".kml.zip")
+        val project = sampleProjectWithoutProtectedCourses(sampleProject("course-key"))
+
+        val summary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+            target = DesktopControlsRouteKmlKmzExportTarget(output, DesktopControlsRouteKmlKmzExportFormat.Kml),
+            projectFile = project,
+            password = "course-key"
+        )
+
+        assertEquals(0, summary.routeCount)
+        assertEquals(4, summary.controlCatalogCount)
+        assertEquals(0, summary.courseControlPointCount)
+        val kml = exportedKmlText(output, "course-key")
+        assertTrue(kml.contains("<name>Control catalog</name>"))
+        assertTrue(kml.contains("<name>Courses</name>"))
+        assertEquals(listOf("1", "2", "Spectator", "B"), kml.folderPlacemarkNames("Control catalog"))
+        assertEquals(emptyList<String>(), kml.folderPlacemarkNames("Courses"))
+        assertTrue(kml.placemarkNamed("1").contains("<description>SI=31"))
+        assertTrue(kml.placemarkNamed("B").contains("<Data name=\"siCode\"><value>99</value></Data>"))
+        assertTrue(kml.contains("-122.0001,45.0001"))
+    }
+
+    @Test
+    fun exportsGpxControlCatalogWhenProtectedCoursesAreAbsent() {
+        val output = Files.createTempFile("radio-oracle-controls-catalog", ".gpx.zip")
+        val project = sampleProjectWithoutProtectedCourses(sampleProject("course-key"))
+
+        val summary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+            target = DesktopControlsRouteKmlKmzExportTarget(output, DesktopControlsRouteKmlKmzExportFormat.Gpx),
+            projectFile = project,
+            password = "course-key"
+        )
+
+        assertEquals(0, summary.routeCount)
+        assertEquals(4, summary.controlCatalogCount)
+        assertEquals(0, summary.courseControlPointCount)
+        val gpx = exportedGpxText(output, "course-key")
+        assertEquals(listOf("1", "2", "Spectator", "B"), gpx.gpxWaypointNames())
+        assertEquals(emptyList<String>(), gpx.gpxRouteNames())
+        assertTrue(gpx.contains("<wpt lat=\"45.0001\" lon=\"-122.0001\">"))
+        assertTrue(gpx.contains("<desc>Control catalog B; type BEACON; id control-beacon</desc>"))
+    }
+
+    @Test
+    fun exportsProtectedControlPointsWhenRoutesAreAbsent() {
+        val output = Files.createTempFile("radio-oracle-protected-controls", ".kml.zip")
+        val project = sampleProjectWithProtectedControlsOnly("course-key")
+
+        val summary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+            target = DesktopControlsRouteKmlKmzExportTarget(output, DesktopControlsRouteKmlKmzExportFormat.Kml),
+            projectFile = project,
+            password = "course-key"
+        )
+
+        assertEquals(0, summary.routeCount)
+        assertEquals(0, summary.controlCatalogCount)
+        assertEquals(3, summary.courseControlPointCount)
+        val kml = exportedKmlText(output, "course-key")
+        assertFalse(kml.contains("<name>Control catalog</name>"))
+        assertEquals(listOf("1", "2", "B"), kml.folderPlacemarkNames("Courses"))
+        assertTrue(kml.placemarkNamed("1").contains("<description>SI=31"))
+        assertTrue(kml.contains("-122.0001,45.0001,90"))
+    }
+
+    @Test
     fun exportsDifferentCategoryColorsForAgeGenderRoutes() {
         val output = Files.createTempFile("radio-oracle-controls-routes", ".kml.zip")
         val project = sampleProjectWithTwoCategories("course-key")
@@ -406,6 +472,24 @@ class DesktopControlsRouteKmlKmzExportTest {
             EventProjectEditor.updateCategoryEncryptedCourseInfo(withSecondCategory, "cat-m21", encryptedCourse),
             "cat-w65",
             encryptedCourse
+        )
+    }
+
+    private fun sampleProjectWithProtectedControlsOnly(password: String): EventProjectFile {
+        val project = sampleProject("password-unused")
+        return EventProjectEditor.updateCategoryEncryptedCourseInfo(
+            sampleProjectWithoutProtectedCourses(project),
+            "cat-m21",
+            DesktopProtectedCourseOrder.encryptCourseInfo(
+                sampleCourseInfo().copy(
+                    lengthMeters = null,
+                    climbMeters = null,
+                    sampledPointCount = 0,
+                    route = emptyList(),
+                    courseObjects = emptyList()
+                ),
+                password
+            )
         )
     }
 

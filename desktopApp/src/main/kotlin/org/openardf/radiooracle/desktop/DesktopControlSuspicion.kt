@@ -76,6 +76,7 @@ private fun assignedControlIds(
     controls: List<EventControlDetails>,
     categories: List<EventCategoryData>
 ): Set<String> {
+    val controlIds = controls.mapTo(mutableSetOf()) { it.id }
     val idsByLegacyDefinition = controls
         .groupBy { it.siCode to it.type }
         .mapValues { (_, matchingControls) -> matchingControls.map { it.id } }
@@ -84,7 +85,7 @@ private fun assignedControlIds(
         .flatMap { categoryData ->
             categoryData.publicControlIds +
                 categoryData.controlPoints.flatMap { controlPoint ->
-                    if (controlPoint.controlId.isNotBlank()) {
+                    if (controlPoint.controlId.isNotBlank() && controlPoint.controlId in controlIds) {
                         listOf(controlPoint.controlId)
                     } else {
                         idsByLegacyDefinition[controlPoint.siCode to controlPoint.type].orEmpty()

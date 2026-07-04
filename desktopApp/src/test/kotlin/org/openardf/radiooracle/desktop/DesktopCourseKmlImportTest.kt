@@ -816,7 +816,7 @@ class DesktopCourseKmlImportTest {
         val kmlPath = Files.createTempFile("Sprint All controls", ".kml")
         Files.writeString(kmlPath, samplePointOnlySprintAllControlsKml())
         val baseProject = sprintPresetProject()
-        val project = baseProject.copy(
+        val projectWithControls = baseProject.copy(
             raceData = baseProject.raceData.copy(
                 controls = listOf(
                     EventControl("control-b-136-beacon", "race", "B", 136, ControlPointType.BEACON, notes = "B"),
@@ -833,6 +833,17 @@ class DesktopCourseKmlImportTest {
                     EventControl("control-5f-175-control", "race", "5F", 175, ControlPointType.CONTROL, notes = "5F")
                 )
             )
+        )
+        val projectWithCategory = EventProjectEditor.addCategory(
+            projectFile = projectWithControls,
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+        val project = EventProjectEditor.replaceCategoryAssignedControls(
+            projectFile = projectWithCategory,
+            categoryId = "cat-m21",
+            controlIds = projectWithCategory.raceData.controls.map { it.id },
+            controlPointIdFactory = { index -> "cp-$index" }
         )
 
         val (updatedProject, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
@@ -852,6 +863,7 @@ class DesktopCourseKmlImportTest {
         assertEquals(emptyList<String>(), summary.createdControlNames)
         assertEquals(emptyList<String>(), summary.deletedControlNames)
         assertEquals(11, summary.controlPublicLabelUpdateCount)
+        assertEquals(11, summary.changedControlLocationCount)
         assertFalse(summary.isControlLocationNoOp)
         assertEquals(
             listOf("B", null, "1", "2", "3", "4", "5", "1F", "2F", "3F", "4F", "5F"),
@@ -860,6 +872,16 @@ class DesktopCourseKmlImportTest {
         assertEquals(
             listOf(null, "S", null, null, null, null, null, null, null, null, null, null),
             updatedProject.raceData.controls.map { it.notes }
+        )
+        assertEquals(0, updatedProject.raceData.controls.count { it.latitude != null && it.longitude != null })
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updatedProject.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals(11, protectedCourseInfo.controlPoints.size)
+        assertEquals(
+            setOf("B", "1", "2", "3", "4", "5", "1F", "2F", "3F", "4F", "5F"),
+            protectedCourseInfo.controlPoints.map { it.label }.toSet()
         )
     }
 
