@@ -168,7 +168,7 @@ object DesktopControlsRouteKmlKmzExporter {
             appendLine("      </LineStyle>")
             appendLine("    </Style>")
         }
-        val controlsById = projectFile.raceData.controls.associateBy { it.id }
+        val controlLookup = ControlExportLookup(projectFile.raceData.controls)
         if (controlCatalogControls.isNotEmpty()) {
             appendLine("    <Folder>")
             appendLine("      <name>Control catalog</name>")
@@ -188,8 +188,8 @@ object DesktopControlsRouteKmlKmzExporter {
                 )
             }
         }
-        appendCourseObjectPlacemarks(exportedCourseObjects.courseObjects, controlsById)
-        appendCourseControlPointPlacemarks(exportedCourseObjects.controlPoints, controlsById)
+        appendCourseObjectPlacemarks(exportedCourseObjects.courseObjects, controlLookup)
+        appendCourseControlPointPlacemarks(exportedCourseObjects.controlPoints, controlLookup)
         appendLine("    </Folder>")
         appendLine("  </Document>")
         appendLine("</kml>")
@@ -245,10 +245,10 @@ object DesktopControlsRouteKmlKmzExporter {
 
     private fun StringBuilder.appendCourseControlPointPlacemarks(
         points: List<ProtectedCourseControlPoint>,
-        controlsById: Map<String, EventControl>
+        controlLookup: ControlExportLookup
     ) {
         points.forEach { point ->
-            val control = controlsById[point.controlId]
+            val control = controlLookup.resolve(point.controlId, point.label, point.type)
             val label = control?.displayCourseLabel() ?: point.label
             appendLine("        <Placemark>")
             appendLine("          <name>${xml(label)}</name>")
@@ -260,6 +260,7 @@ object DesktopControlsRouteKmlKmzExporter {
                     "label" to label,
                     "sourceLabel" to point.label,
                     "type" to point.type.name,
+                    "siCode" to (control?.siCode?.toString() ?: ""),
                     "elevationMeters" to (point.elevationMeters?.let(::formatNumber) ?: "")
                 )
             )
@@ -273,10 +274,10 @@ object DesktopControlsRouteKmlKmzExporter {
 
     private fun StringBuilder.appendCourseObjectPlacemarks(
         points: List<ProtectedCourseObjectPoint>,
-        controlsById: Map<String, EventControl>
+        controlLookup: ControlExportLookup
     ) {
         points.forEach { point ->
-            val control = controlsById[point.id]
+            val control = controlLookup.resolve(point.id, point.label, point.type.controlPointType())
             val label = control?.displayCourseLabel() ?: point.label
             appendLine("        <Placemark>")
             appendLine("          <name>${xml(label)}</name>")
@@ -288,6 +289,7 @@ object DesktopControlsRouteKmlKmzExporter {
                     "label" to label,
                     "sourceLabel" to point.label,
                     "type" to point.type.name,
+                    "siCode" to (control?.siCode?.toString() ?: ""),
                     "elevationMeters" to (point.elevationMeters?.let(::formatNumber) ?: "")
                 )
             )
@@ -531,6 +533,15 @@ object DesktopControlsRouteKmlKmzExporter {
         ProtectedCourseObjectType.WAYPOINT -> COURSE_WAYPOINT_STYLE_ID
     }
 
+    private fun ProtectedCourseObjectType.controlPointType(): ControlPointType? = when (this) {
+        ProtectedCourseObjectType.CONTROL -> ControlPointType.CONTROL
+        ProtectedCourseObjectType.BEACON -> ControlPointType.BEACON
+        ProtectedCourseObjectType.SPECTATOR -> ControlPointType.SEPARATOR
+        ProtectedCourseObjectType.START,
+        ProtectedCourseObjectType.FINISH,
+        ProtectedCourseObjectType.WAYPOINT -> null
+    }
+
     private fun categoryLineColor(categoryIndex: Int): String {
         var hue = (categoryIndex * 137.5) % 360.0
         if (hue in 45.0..75.0) {
@@ -575,3 +586,32 @@ private data class CourseExportObjects(
     val courseObjects: List<ProtectedCourseObjectPoint>,
     val controlPoints: List<ProtectedCourseControlPoint>
 )
+
+private class ControlExportLookup(controls: List<EventControl>) {
+    private val controlsById = controls.associateBy { it.id }
+    private val controlsByRoleAndLabel = controls
+        .flatMap { control ->
+            listOf(control.exportDisplayCourseLabel(), control.label)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinctBy { it.normalizedExportLabel() }
+                .map { label -> (control.type to label.normalizedExportLabel()) to control }
+        }
+        .groupBy({ it.first }, { it.second })
+        .mapNotNull { (key, matchingControls) ->
+            matchingControls.distinctBy { it.id }.singleOrNull()?.let { key to it }
+        }
+        .toMap()
+
+    fun resolve(controlId: String, label: String, type: ControlPointType?): EventControl? =
+        controlsById[controlId]
+            ?: type?.let { controlType ->
+                controlsByRoleAndLabel[controlType to label.normalizedExportLabel()]
+            }
+}
+
+private fun String.normalizedExportLabel(): String =
+    trim().lowercase()
+
+private fun EventControl.exportDisplayCourseLabel(): String =
+    publicLabel?.takeIf { it.isNotBlank() } ?: label

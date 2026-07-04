@@ -176,6 +176,27 @@ class DesktopControlsRouteKmlKmzExportTest {
     }
 
     @Test
+    fun exportsSiDescriptionsWhenProtectedControlIdsAreStale() {
+        val output = Files.createTempFile("radio-oracle-stale-protected-controls", ".kml.zip")
+        val project = sampleProjectWithProtectedControlsOnly("course-key", staleControlIds = true)
+
+        val summary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+            target = DesktopControlsRouteKmlKmzExportTarget(output, DesktopControlsRouteKmlKmzExportFormat.Kml),
+            projectFile = project,
+            password = "course-key"
+        )
+
+        assertEquals(3, summary.courseControlPointCount)
+        val kml = exportedKmlText(output, "course-key")
+        val foxPlacemark = kml.placemarkNamed("1")
+        assertTrue(foxPlacemark.contains("<description>SI=31"))
+        assertTrue(foxPlacemark.indexOf("SI=31") < foxPlacemark.indexOf("Course control"))
+        assertTrue(foxPlacemark.contains("<Data name=\"controlId\"><value>stale-control-31</value></Data>"))
+        assertTrue(foxPlacemark.contains("<Data name=\"siCode\"><value>31</value></Data>"))
+        assertTrue(kml.placemarkNamed("B").contains("<description>SI=99"))
+    }
+
+    @Test
     fun exportsDifferentCategoryColorsForAgeGenderRoutes() {
         val output = Files.createTempFile("radio-oracle-controls-routes", ".kml.zip")
         val project = sampleProjectWithTwoCategories("course-key")
@@ -475,19 +496,30 @@ class DesktopControlsRouteKmlKmzExportTest {
         )
     }
 
-    private fun sampleProjectWithProtectedControlsOnly(password: String): EventProjectFile {
+    private fun sampleProjectWithProtectedControlsOnly(
+        password: String,
+        staleControlIds: Boolean = false
+    ): EventProjectFile {
         val project = sampleProject("password-unused")
+        val courseInfo = sampleCourseInfo().copy(
+            lengthMeters = null,
+            climbMeters = null,
+            sampledPointCount = 0,
+            route = emptyList(),
+            controlPoints = if (staleControlIds) {
+                sampleCourseInfo().controlPoints.map { point ->
+                    point.copy(controlId = "stale-${point.controlId}")
+                }
+            } else {
+                sampleCourseInfo().controlPoints
+            },
+            courseObjects = emptyList()
+        )
         return EventProjectEditor.updateCategoryEncryptedCourseInfo(
             sampleProjectWithoutProtectedCourses(project),
             "cat-m21",
             DesktopProtectedCourseOrder.encryptCourseInfo(
-                sampleCourseInfo().copy(
-                    lengthMeters = null,
-                    climbMeters = null,
-                    sampledPointCount = 0,
-                    route = emptyList(),
-                    courseObjects = emptyList()
-                ),
+                courseInfo,
                 password
             )
         )
