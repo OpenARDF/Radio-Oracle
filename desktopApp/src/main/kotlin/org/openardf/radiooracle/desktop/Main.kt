@@ -16030,6 +16030,24 @@ private fun VenueElevationCacheImportPanel(
                 ) {
                     ButtonLabel("Create Cache From Local Source")
                 }
+            }
+            LabeledTextField(
+                "Local source file(s)",
+                localRasterPathDraft,
+                { localRasterPathDraft = it },
+                Modifier.width(640.dp)
+            )
+            Text(
+                text = "Use a local GeoTIFF raster (.tif/.tiff), GeoTIFF ZIP (.zip), or one or more LAS/LAZ point clouds (.las/.laz), such as countywide LiDAR DEM files, to create a cache without downloading elevation data.",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+            Text(
+                text = DESKTOP_ELEVATION_TOOL_INSTALL_HELP,
+                color = DesktopPalette.Disconnected,
+                fontSize = 12.sp
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Button(
                     onClick = {
                         Toolkit.getDefaultToolkit().systemClipboard.setContents(
@@ -16055,22 +16073,6 @@ private fun VenueElevationCacheImportPanel(
                     ButtonLabel("Open Windows Miniforge Installer")
                 }
             }
-            LabeledTextField(
-                "Local source file(s)",
-                localRasterPathDraft,
-                { localRasterPathDraft = it },
-                Modifier.width(640.dp)
-            )
-            Text(
-                text = "Use a local GeoTIFF raster (.tif/.tiff), GeoTIFF ZIP (.zip), or one or more LAS/LAZ point clouds (.las/.laz), such as countywide LiDAR DEM files, to create a cache without downloading elevation data.",
-                color = DesktopPalette.Black,
-                fontSize = 13.sp
-            )
-            Text(
-                text = DESKTOP_ELEVATION_TOOL_INSTALL_HELP,
-                color = DesktopPalette.Disconnected,
-                fontSize = 12.sp
-            )
         }
     }
 }
