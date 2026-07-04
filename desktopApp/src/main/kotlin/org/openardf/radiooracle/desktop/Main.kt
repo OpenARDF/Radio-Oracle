@@ -2946,6 +2946,18 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun exportVenueElevationBoundingBoxKml(listing: DesktopVenueElevationCacheListing) {
+            runCatching {
+                val path = DesktopVenueElevationCache.exportBoundingBoxKml(listing)
+                revealFileInFileBrowser(path)
+                path
+            }.onSuccess { path ->
+                projectStatusText = "Wrote KML bounding box for ${listing.venueName}: $path"
+            }.onFailure { error ->
+                projectStatusText = "Could not write KML bounding box for ${listing.venueName}: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
         fun currentEventFileWorkingFolder(): Path =
             projectSession.currentPath?.parent ?: DesktopEventFileLocations.preferredEventFileDirectory()
 
@@ -5968,6 +5980,7 @@ fun main(args: Array<String>) = application {
             onDownloadMissingCourseAnalysisElevations = ::downloadMissingCourseAnalysisElevations,
             onDownloadVenueElevationCache = ::startVenueElevationCacheDownload,
             onOpenVenueElevationCacheFolder = ::openVenueElevationCacheFolder,
+            onExportVenueElevationBoundingBoxKml = ::exportVenueElevationBoundingBoxKml,
             onOpenEventFileWorkingFolder = ::openEventFileWorkingFolder,
             elevationCacheRefreshToken = venueElevationCacheRefreshToken,
             onUnlockProtectedCourseOrder = ::unlockProtectedCourseOrder,
@@ -9411,6 +9424,7 @@ private fun RadioOManagerDesktopApp(
     onDownloadMissingCourseAnalysisElevations: suspend (String, DesktopCourseAnalysisSummary) -> CourseAnalysisElevationPreparationResult? = { _, _ -> null },
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox?, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit = { _, _, _, _, _, _ -> },
     onOpenVenueElevationCacheFolder: () -> Unit = {},
+    onExportVenueElevationBoundingBoxKml: (DesktopVenueElevationCacheListing) -> Unit = {},
     onOpenEventFileWorkingFolder: () -> Unit = {},
     onOpenPublishedPublicResultsSite: (String) -> Unit = {},
     onCopyPublishedPublicResultsSite: (String) -> Unit = {},
@@ -9767,6 +9781,7 @@ private fun RadioOManagerDesktopApp(
                                     onDownloadMissingCourseAnalysisElevations = onDownloadMissingCourseAnalysisElevations,
                                     onDownloadVenueElevationCache = onDownloadVenueElevationCache,
                                     onOpenVenueElevationCacheFolder = onOpenVenueElevationCacheFolder,
+                                    onExportVenueElevationBoundingBoxKml = onExportVenueElevationBoundingBoxKml,
                                     onOpenPublishedPublicResultsSite = onOpenPublishedPublicResultsSite,
                                     onCopyPublishedPublicResultsSite = onCopyPublishedPublicResultsSite,
                                     elevationCacheRefreshToken = elevationCacheRefreshToken,
@@ -10834,6 +10849,7 @@ private fun SectionWorkspace(
     onDownloadMissingCourseAnalysisElevations: suspend (String, DesktopCourseAnalysisSummary) -> CourseAnalysisElevationPreparationResult?,
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox?, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
     onOpenVenueElevationCacheFolder: () -> Unit,
+    onExportVenueElevationBoundingBoxKml: (DesktopVenueElevationCacheListing) -> Unit,
     onOpenPublishedPublicResultsSite: (String) -> Unit,
     onCopyPublishedPublicResultsSite: (String) -> Unit,
     elevationCacheRefreshToken: Int,
@@ -11008,7 +11024,8 @@ private fun SectionWorkspace(
         if (section == DesktopSection.ElevationCache && projectFile != null) {
             VenueElevationCachePanel(
                 refreshToken = elevationCacheRefreshToken,
-                onOpenCacheFolder = onOpenVenueElevationCacheFolder
+                onOpenCacheFolder = onOpenVenueElevationCacheFolder,
+                onExportBoundingBoxKml = onExportVenueElevationBoundingBoxKml
             )
         }
         if (section == DesktopSection.ElevationCacheImport && projectFile != null) {
@@ -15711,15 +15728,12 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
 @Composable
 private fun VenueElevationCachePanel(
     refreshToken: Int,
-    onOpenCacheFolder: () -> Unit
+    onOpenCacheFolder: () -> Unit,
+    onExportBoundingBoxKml: (DesktopVenueElevationCacheListing) -> Unit
 ) {
     var cacheListings by remember { mutableStateOf<List<DesktopVenueElevationCacheListing>>(emptyList()) }
     var isLoadingCacheListings by remember { mutableStateOf(true) }
     var cacheListingError by remember { mutableStateOf<String?>(null) }
-    val spotCheckScope = rememberCoroutineScope()
-    var spotCheckInProgress by remember { mutableStateOf<DesktopVenueElevationCacheListing?>(null) }
-    var spotCheckResult by remember { mutableStateOf<DesktopVenueElevationSpotCheckSummary?>(null) }
-    var spotCheckError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(refreshToken) {
         isLoadingCacheListings = true
@@ -15735,29 +15749,6 @@ private fun VenueElevationCachePanel(
             cacheListingError = error.message ?: error::class.simpleName
         }
         isLoadingCacheListings = false
-    }
-
-    fun startSpotCheck(
-        listing: DesktopVenueElevationCacheListing,
-        source: DesktopVenueElevationReferenceSource
-    ) {
-        spotCheckInProgress = listing
-        spotCheckResult = null
-        spotCheckError = null
-        spotCheckScope.launch {
-            runCatching {
-                DesktopVenueElevationCache.spotCheck(
-                    cachePath = listing.path,
-                    referenceSource = source,
-                    samplePointCount = 100
-                )
-            }.onSuccess { summary ->
-                spotCheckResult = summary
-            }.onFailure { error ->
-                spotCheckError = error.message ?: error::class.simpleName
-            }
-            spotCheckInProgress = null
-        }
     }
 
     Column(
@@ -15805,11 +15796,14 @@ private fun VenueElevationCachePanel(
                 fontSize = 14.sp
             )
         } else {
-            cacheListings.forEach { listing ->
+            cacheListings.forEachIndexed { index, listing ->
                 val totalPointCount = listing.rowCount.toLong() * listing.columnCount.toLong()
                 val pointText = listing.resolvedPointCount?.let { resolved ->
                     "$resolved/$totalPointCount points"
                 } ?: "$totalPointCount grid points"
+                if (index > 0) {
+                    Divider(color = DesktopPalette.LightGrey)
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         text = "${listing.venueName} - ${listing.sourceName} ${listing.resolutionMeters.roundToInt()} m - $pointText",
@@ -15823,33 +15817,12 @@ private fun VenueElevationCachePanel(
                         fontSize = 12.sp
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DesktopVenueElevationReferenceSource.entries.forEach { source ->
-                            Button(
-                                onClick = { startSpotCheck(listing, source) },
-                                enabled = spotCheckInProgress == null
-                            ) {
-                                ButtonLabel(
-                                    if (spotCheckInProgress?.path == listing.path) {
-                                        "Checking..."
-                                    } else {
-                                        "Spot Check ${source.label}"
-                                    }
-                                )
-                            }
+                        Button(onClick = { onExportBoundingBoxKml(listing) }) {
+                            ButtonLabel("KML Bounding Box")
                         }
                     }
                 }
             }
-        }
-        spotCheckError?.let { error ->
-            Text(
-                text = "Spot check failed: $error",
-                color = DesktopPalette.Error,
-                fontSize = 13.sp
-            )
-        }
-        spotCheckResult?.let { result ->
-            VenueElevationSpotCheckResultPanel(result)
         }
     }
 }
@@ -16173,6 +16146,29 @@ private fun SpotCheckHeatMap(result: DesktopVenueElevationSpotCheckSummary) {
         color = DesktopPalette.Black,
         fontSize = 12.sp
     )
+}
+
+private fun revealFileInFileBrowser(path: Path) {
+    val normalized = path.toAbsolutePath().normalize()
+    val osName = System.getProperty("os.name").lowercase()
+    val process = when {
+        osName.contains("mac") -> ProcessBuilder("open", "-R", normalized.toString()).start()
+        osName.contains("win") -> ProcessBuilder("explorer.exe", "/select,${normalized}").start()
+        else -> null
+    }
+    if (process != null && process.waitFor() == 0) {
+        return
+    }
+
+    val directory = normalized.parent ?: DesktopVenueElevationCache.cacheDirectory()
+    if (!Desktop.isDesktopSupported()) {
+        error("Opening folders is not supported on this system.")
+    }
+    val desktop = Desktop.getDesktop()
+    if (!desktop.isSupported(Desktop.Action.OPEN)) {
+        error("Opening folders is not supported on this system.")
+    }
+    desktop.open(directory.toFile())
 }
 
 @Composable

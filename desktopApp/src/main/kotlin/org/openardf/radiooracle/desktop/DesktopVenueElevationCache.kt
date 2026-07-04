@@ -357,6 +357,16 @@ object DesktopVenueElevationCache {
         )
     }
 
+    fun exportBoundingBoxKml(listing: DesktopVenueElevationCacheListing): Path {
+        val directory = cacheDirectory().resolve("bounding-box-kml")
+        Files.createDirectories(directory)
+        val fileName = "${listing.venueName.safeFileToken().ifBlank { "venue" }}-" +
+            "${listing.resolutionMeters.roundToInt().coerceAtLeast(1)}m-bounding-box.kml"
+        val path = directory.resolve(fileName)
+        Files.writeString(path, boundingBoxKml(listing), StandardCharsets.UTF_8)
+        return path
+    }
+
     fun reviewDemFileImport(paths: List<Path>): DesktopVenueElevationDemImportReview {
         val targetDirectory = cacheDirectory()
         val candidates = mutableListOf<DesktopVenueElevationDemImportCandidate>()
@@ -1937,6 +1947,100 @@ object DesktopVenueElevationCache {
         )
     }
 }
+
+private fun boundingBoxKml(listing: DesktopVenueElevationCacheListing): String {
+    val bounds = listing.boundingBox
+    val west = bounds.minLongitude.kmlCoordinateText()
+    val east = bounds.maxLongitude.kmlCoordinateText()
+    val south = bounds.minLatitude.kmlCoordinateText()
+    val north = bounds.maxLatitude.kmlCoordinateText()
+    val title = "${listing.venueName} Elevation Cache Bounding Box"
+    val description = "Coverage polygon for Radio-Oracle elevation cache ${listing.path.fileName}. " +
+        "Source: ${listing.sourceName}. Grid: ${listing.rowCount} rows x ${listing.columnCount} columns " +
+        "at ${listing.resolutionMeters.kmlMetersText()} resolution."
+    return """
+        |<?xml version="1.0" encoding="UTF-8"?>
+        |<kml xmlns="http://www.opengis.net/kml/2.2">
+        |  <Document>
+        |    <name>${title.xmlEscaped()}</name>
+        |    <description>${description.xmlEscaped()}</description>
+        |    <Style id="coverageStyle">
+        |      <LineStyle>
+        |        <color>ff00a5ff</color>
+        |        <width>3</width>
+        |      </LineStyle>
+        |      <PolyStyle>
+        |        <color>3300a5ff</color>
+        |      </PolyStyle>
+        |    </Style>
+        |    <Placemark>
+        |      <name>Elevation cache bounding box</name>
+        |      <styleUrl>#coverageStyle</styleUrl>
+        |      <ExtendedData>
+        |        <Data name="venueName">
+        |          <value>${listing.venueName.xmlEscaped()}</value>
+        |        </Data>
+        |        <Data name="sourceName">
+        |          <value>${listing.sourceName.xmlEscaped()}</value>
+        |        </Data>
+        |        <Data name="resolutionMeters">
+        |          <value>${listing.resolutionMeters}</value>
+        |        </Data>
+        |        <Data name="rowCount">
+        |          <value>${listing.rowCount}</value>
+        |        </Data>
+        |        <Data name="columnCount">
+        |          <value>${listing.columnCount}</value>
+        |        </Data>
+        |      </ExtendedData>
+        |      <Polygon>
+        |        <outerBoundaryIs>
+        |          <LinearRing>
+        |            <coordinates>
+        |              $west,$south,0
+        |              $east,$south,0
+        |              $east,$north,0
+        |              $west,$north,0
+        |              $west,$south,0
+        |            </coordinates>
+        |          </LinearRing>
+        |        </outerBoundaryIs>
+        |      </Polygon>
+        |    </Placemark>
+        |  </Document>
+        |</kml>
+    """.trimMargin()
+}
+
+private fun Double.kmlCoordinateText(): String =
+    String.format(Locale.US, "%.7f", this)
+
+private fun Double.kmlMetersText(): String =
+    if (abs(this - roundToInt()) < 0.01) {
+        "${roundToInt()} m"
+    } else {
+        String.format(Locale.US, "%.1f m", this)
+    }
+
+private fun String.safeFileToken(): String =
+    lowercase(Locale.US)
+        .replace(Regex("[^a-z0-9]+"), "-")
+        .trim('-')
+        .take(80)
+
+private fun String.xmlEscaped(): String =
+    buildString {
+        this@xmlEscaped.forEach { char ->
+            when (char) {
+                '&' -> append("&amp;")
+                '<' -> append("&lt;")
+                '>' -> append("&gt;")
+                '"' -> append("&quot;")
+                '\'' -> append("&apos;")
+                else -> append(char)
+            }
+        }
+    }
 
 internal enum class LocalElevationSourceType {
     GeoTiff,

@@ -768,6 +768,27 @@ class DesktopVenueElevationCacheTest {
         }
     }
 
+    @Test
+    fun exportsBoundingBoxKmlForCachedVenueListing() {
+        withTemporaryUserHome {
+            val cacheDirectory = DesktopVenueElevationCache.cacheDirectory()
+            Files.createDirectories(cacheDirectory)
+            val sourcePath = cacheDirectory.resolve("test-venue-10m.roelev.json")
+            writeCache(sourcePath, "Local LiDAR Raster - Test & Demo", 10.0, 123.0)
+
+            val listing = DesktopVenueElevationCache.listings().single()
+            val kmlPath = DesktopVenueElevationCache.exportBoundingBoxKml(listing)
+            val kml = Files.readString(kmlPath)
+
+            assertEquals("test-venue-10m-bounding-box.kml", kmlPath.fileName.toString())
+            assertTrue(kmlPath.parent.endsWith(Path.of("Radio-Oracle", "elevations", "bounding-box-kml")))
+            assertTrue(kml.contains("<name>Test Venue Elevation Cache Bounding Box</name>"))
+            assertTrue(kml.contains("Local LiDAR Raster - Test &amp; Demo"))
+            assertTrue(kml.contains("-122.1000000,44.9000000,0"))
+            assertTrue(kml.contains("-121.9000000,45.1000000,0"))
+        }
+    }
+
     private fun withTemporaryUserHome(block: (Path) -> Unit) {
         val originalHome = System.getProperty("user.home")
         val home = Files.createTempDirectory("radio-oracle-home")
