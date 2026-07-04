@@ -851,6 +851,8 @@ class DesktopCourseKmlImportTest {
         )
         assertEquals(emptyList<String>(), summary.createdControlNames)
         assertEquals(emptyList<String>(), summary.deletedControlNames)
+        assertEquals(11, summary.controlPublicLabelUpdateCount)
+        assertFalse(summary.isControlLocationNoOp)
         assertEquals(
             listOf("B", null, "1", "2", "3", "4", "5", "1F", "2F", "3F", "4F", "5F"),
             updatedProject.raceData.controls.map { it.publicLabel }

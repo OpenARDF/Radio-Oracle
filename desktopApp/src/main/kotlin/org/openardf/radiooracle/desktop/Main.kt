@@ -3157,6 +3157,7 @@ fun main(args: Array<String>) = application {
                     "${selectedSummary.duplicateCategoryCount} duplicate categories skipped.",
                     "${selectedSummary.controlIdentityUpdateCount} control identities updated.",
                     "$retainedImportedSiConflictCount imported SI conflicts retained existing Race File numbers.",
+                    "${selectedSummary.controlPublicLabelUpdateCount} control public labels updated.",
                     "${selectedSummary.changedControlLocationCount} control locations updated.",
                     "${selectedSummary.categoryAssignmentUpdates.size.takeIf { applyCategoryAssignments } ?: 0} assigned-control lists replaced.",
                     "${selectedSummary.createdCategoryNames.size} missing categories created.",
@@ -3364,7 +3365,11 @@ fun main(args: Array<String>) = application {
                         pendingCourseKmlKmzCategoryMapping = null
                         projectStatusText =
                             "$formatLabel route data was not applied because the Race File has no categories."
-                    } else if (summary.isControlLocationNoOp && !summary.hasLabelConversions) {
+                    } else if (
+                        summary.isControlLocationNoOp &&
+                        !summary.hasLabelConversions &&
+                        !summary.hasControlPublicLabelUpdates
+                    ) {
                         pendingCourseKmlKmzImportReview = null
                         pendingCourseKmlKmzCategoryMapping = null
                         projectStatusText =
@@ -7325,6 +7330,9 @@ private fun CourseKmlKmzImportReviewDialog(
                         if (selectedSiUpdateCount > 0) {
                             Text("Control Identities To Update From SI= Lines: $selectedSiUpdateCount")
                         }
+                        if (selectedSummary.controlPublicLabelUpdateCount > 0) {
+                            Text("Control Public Labels To Update: ${selectedSummary.controlPublicLabelUpdateCount}")
+                        }
                         if (selectedSummary.labelConversions.isNotEmpty()) {
                             Text("Imported Control Names To Treat As Existing Race File Labels:")
                             selectedSummary.labelConversions.take(8).forEach { conversion ->
@@ -7366,6 +7374,13 @@ private fun CourseKmlKmzImportReviewDialog(
                         Text(
                             text = if (selectedSummary.isDuplicateOnly) {
                                 "This file has the same SHA-256 hash as route data already stored in the Race File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Race File unchanged."
+                            } else if (
+                                selectedSummary.hasControlPublicLabelUpdates &&
+                                selectedSummary.importedCategoryCount == 0 &&
+                                selectedSummary.assignedCategoryControlCount == 0 &&
+                                selectedSummary.changedControlLocationCount == 0
+                            ) {
+                                "Analyze Imported Data will copy matched $formatLabel control names into blank Public Label fields in the active Race File model. Matching Notes that duplicate the imported names are cleared. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
                             } else if (
                                 selectedSummary.hasLabelConversions &&
                                 selectedSummary.importedCategoryCount == 0 &&

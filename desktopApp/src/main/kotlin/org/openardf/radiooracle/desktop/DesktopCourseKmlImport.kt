@@ -91,7 +91,8 @@ data class DesktopCourseKmlImportSummary(
     val eventTypeWarnings: List<String>,
     val sourceSha256: String,
     val controlIdentityUpdateCount: Int = 0,
-    val controlSiConflictCount: Int = 0
+    val controlSiConflictCount: Int = 0,
+    val controlPublicLabelUpdateCount: Int = 0
 ) {
     val assignedCategoryControlCount: Int
         get() = categoryAssignmentUpdates.sumOf { it.controls.size }
@@ -102,6 +103,7 @@ data class DesktopCourseKmlImportSummary(
             assignedCategoryControlCount == 0 &&
             controlIdentityUpdateCount == 0 &&
             controlSiConflictCount == 0 &&
+            controlPublicLabelUpdateCount == 0 &&
             changedControlLocationCount == 0 &&
             duplicateCategoryCount == matchedCategoryCount
 
@@ -118,11 +120,15 @@ data class DesktopCourseKmlImportSummary(
             duplicateCategoryCount == 0 &&
             controlIdentityUpdateCount == 0 &&
             controlSiConflictCount == 0 &&
+            controlPublicLabelUpdateCount == 0 &&
             changedControlLocationCount == 0 &&
             matchedControlPointCount > 0
 
     val hasLabelConversions: Boolean
         get() = labelConversions.isNotEmpty()
+
+    val hasControlPublicLabelUpdates: Boolean
+        get() = controlPublicLabelUpdateCount > 0
 }
 
 data class DesktopCourseKmlLabelConversion(
@@ -331,6 +337,11 @@ object DesktopCourseKmlImporter {
         }
         val matchedControlsForHintedProject = matchedControls(importedControlsForControlMatching, hintedProject.raceData.controls)
         val labeledProject = applyControlPublicLabelHints(hintedProject, matchedControlsForHintedProject.controls)
+        val controlPublicLabelUpdateCount = labeledProject.raceData.controls.count { updatedControl ->
+            val beforeControl = hintedProject.raceData.controls.firstOrNull { it.id == updatedControl.id }
+            beforeControl != null &&
+                (beforeControl.publicLabel != updatedControl.publicLabel || beforeControl.notes != updatedControl.notes)
+        }
         val matchedControlsForLabeledProject = matchedControls(importedControlsForControlMatching, labeledProject.raceData.controls)
         val controls = matchedControlsForLabeledProject.controls
         val categories = labeledProject.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
@@ -624,11 +635,12 @@ object DesktopCourseKmlImporter {
             } else {
                 0
             },
-            controlSiConflictCount = controlSiConflictCount
+            controlSiConflictCount = controlSiConflictCount,
+            controlPublicLabelUpdateCount = controlPublicLabelUpdateCount
         )
         DesktopDebugLog.info(
             "CourseKml",
-            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} assignedCategoryControls=${summary.assignedCategoryControlCount} changedControlLocations=${summary.changedControlLocationCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} missingControls=${summary.missingControlNames.size} createdControls=${summary.createdControlNames.size} deletedControls=${summary.deletedControlNames.size} labelConversions=${summary.labelConversions.size} missingElevationPoints=${summary.missingElevationPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
+            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} assignedCategoryControls=${summary.assignedCategoryControlCount} changedControlLocations=${summary.changedControlLocationCount} publicLabelUpdates=${summary.controlPublicLabelUpdateCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} missingControls=${summary.missingControlNames.size} createdControls=${summary.createdControlNames.size} deletedControls=${summary.deletedControlNames.size} labelConversions=${summary.labelConversions.size} missingElevationPoints=${summary.missingElevationPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
         )
         return updatedProject to summary
     }
