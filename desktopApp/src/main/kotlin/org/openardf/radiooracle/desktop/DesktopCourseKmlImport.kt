@@ -94,7 +94,8 @@ data class DesktopCourseKmlImportSummary(
     val controlSiConflictCount: Int = 0,
     val controlPublicLabelUpdateCount: Int = 0,
     val staleCourseMappingCategoryIds: List<String> = emptyList(),
-    val staleCourseMappingCategoryNames: List<String> = emptyList()
+    val staleCourseMappingCategoryNames: List<String> = emptyList(),
+    val duplicateRouteAssignments: List<DesktopCourseKmlDuplicateRouteAssignment> = emptyList()
 ) {
     val assignedCategoryControlCount: Int
         get() = categoryAssignmentUpdates.sumOf { it.controls.size }
@@ -147,6 +148,19 @@ data class DesktopCourseKmlRejectedRoute(
     val routeName: String,
     val categoryName: String,
     val reason: String
+)
+
+data class DesktopCourseKmlDuplicateRouteAssignment(
+    val categoryId: String,
+    val categoryName: String,
+    val routeChoices: List<DesktopCourseKmlDuplicateRouteChoice>,
+    val selectedRouteKey: String?
+)
+
+data class DesktopCourseKmlDuplicateRouteChoice(
+    val routeKey: String,
+    val routeName: String,
+    val routeIndex: Int
 )
 
 data class DesktopCourseKmlAssignedControl(
@@ -211,7 +225,8 @@ object DesktopCourseKmlImporter {
         createMissingControls: Boolean = false,
         missingCategoryIdFactory: (String) -> String = { UUID.randomUUID().toString() },
         requireRoutes: Boolean = true,
-        siImportPolicy: DesktopCourseKmlSiImportPolicy = DesktopCourseKmlSiImportPolicy.PreserveExisting
+        siImportPolicy: DesktopCourseKmlSiImportPolicy = DesktopCourseKmlSiImportPolicy.PreserveExisting,
+        selectedDuplicateRouteChoices: Map<String, String> = emptyMap()
     ): Pair<EventProjectFile, DesktopCourseKmlImportSummary> {
         val sourceSha256 = fileSha256(path)
         val parsedCourseData = parse(path)
@@ -442,8 +457,30 @@ object DesktopCourseKmlImporter {
         val categoryAssignmentUpdates = mutableListOf<DesktopCourseKmlCategoryAssignmentUpdate>()
         val rejectedRoutes = mutableListOf<DesktopCourseKmlRejectedRoute>()
 
+        val routeKeysByRoute = courseData.routes.withIndex().associate { (index, route) ->
+            route to route.routeSelectionKey(index)
+        }
+        val duplicateRouteAssignments = duplicateRouteAssignments(
+            routes = courseData.routes,
+            routeCategoryTargets = routeCategoryTargets,
+            selectedDuplicateRouteChoices = selectedDuplicateRouteChoices
+        )
+        val selectedDuplicateRouteKeysByCategoryId = duplicateRouteAssignments.associate { assignment ->
+            assignment.categoryId to assignment.selectedRouteKey
+        }
+
         courseData.routes.forEach { route ->
+            val routeKey = routeKeysByRoute.getValue(route)
             routeCategoryTargets.targets[route].orEmpty().forEach { categoryData ->
+                selectedDuplicateRouteKeysByCategoryId[categoryData.category.id]?.let { selectedRouteKey ->
+                    if (routeKey != selectedRouteKey) {
+                        DesktopDebugLog.warn(
+                            "CourseKml",
+                            "Import skipped duplicate route assignment category=${categoryData.category.name}: route=${route.name}"
+                        )
+                        return@forEach
+                    }
+                }
                 matchedCategoryCount++
 
                 val existingCourseInfo = categoryData.category.encryptedCourseInfo
@@ -688,11 +725,12 @@ object DesktopCourseKmlImporter {
             controlSiConflictCount = controlSiConflictCount,
             controlPublicLabelUpdateCount = controlPublicLabelUpdateCount,
             staleCourseMappingCategoryIds = staleCourseMappingCategoryIds,
-            staleCourseMappingCategoryNames = staleCourseMappingCategoryNames
+            staleCourseMappingCategoryNames = staleCourseMappingCategoryNames,
+            duplicateRouteAssignments = duplicateRouteAssignments
         )
         DesktopDebugLog.info(
             "CourseKml",
-            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} assignedCategoryControls=${summary.assignedCategoryControlCount} changedControlLocations=${summary.changedControlLocationCount} staleCourseMappings=${summary.staleCourseMappingCategoryNames.size} publicLabelUpdates=${summary.controlPublicLabelUpdateCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} missingControls=${summary.missingControlNames.size} createdControls=${summary.createdControlNames.size} deletedControls=${summary.deletedControlNames.size} labelConversions=${summary.labelConversions.size} missingElevationPoints=${summary.missingElevationPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
+            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} assignedCategoryControls=${summary.assignedCategoryControlCount} changedControlLocations=${summary.changedControlLocationCount} staleCourseMappings=${summary.staleCourseMappingCategoryNames.size} duplicateRouteAssignments=${summary.duplicateRouteAssignments.size} publicLabelUpdates=${summary.controlPublicLabelUpdateCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} missingControls=${summary.missingControlNames.size} createdControls=${summary.createdControlNames.size} deletedControls=${summary.deletedControlNames.size} labelConversions=${summary.labelConversions.size} missingElevationPoints=${summary.missingElevationPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
         )
         return updatedProject to summary
     }
@@ -809,6 +847,51 @@ object DesktopCourseKmlImporter {
         }
         return RouteCategoryTargetResult(targets, assumptions)
     }
+
+    private fun duplicateRouteAssignments(
+        routes: List<CourseRoute>,
+        routeCategoryTargets: RouteCategoryTargetResult,
+        selectedDuplicateRouteChoices: Map<String, String>
+    ): List<DesktopCourseKmlDuplicateRouteAssignment> {
+        val routeKeysByRoute = routes.withIndex().associate { (index, route) ->
+            route to route.routeSelectionKey(index)
+        }
+        val routeIndexesByRoute = routes.withIndex().associate { (index, route) ->
+            route to index
+        }
+        val routeChoicesByCategoryId = linkedMapOf<String, Pair<String, MutableList<DesktopCourseKmlDuplicateRouteChoice>>>()
+        routes.forEach { route ->
+            routeCategoryTargets.targets[route].orEmpty().forEach { categoryData ->
+                val choices = routeChoicesByCategoryId.getOrPut(categoryData.category.id) {
+                    categoryData.category.name to mutableListOf()
+                }.second
+                choices += DesktopCourseKmlDuplicateRouteChoice(
+                    routeKey = routeKeysByRoute.getValue(route),
+                    routeName = route.name.ifBlank { "Route ${routeIndexesByRoute.getValue(route) + 1}" },
+                    routeIndex = routeIndexesByRoute.getValue(route)
+                )
+            }
+        }
+        return routeChoicesByCategoryId.mapNotNull { (categoryId, categoryAndChoices) ->
+            val (categoryName, choices) = categoryAndChoices
+            if (choices.size <= 1) {
+                null
+            } else {
+                val selectedRouteKey = selectedDuplicateRouteChoices[categoryId]
+                    ?.takeIf { selectedKey -> choices.any { it.routeKey == selectedKey } }
+                    ?: choices.first().routeKey
+                DesktopCourseKmlDuplicateRouteAssignment(
+                    categoryId = categoryId,
+                    categoryName = categoryName,
+                    routeChoices = choices,
+                    selectedRouteKey = selectedRouteKey
+                )
+            }
+        }
+    }
+
+    private fun CourseRoute.routeSelectionKey(routeIndex: Int): String =
+        "${routeIndex}:${name}:${points.size}"
 
     private fun DesktopCourseKmlData.withControlImportCourseRoutes(): DesktopCourseKmlData {
         if (routes.isEmpty()) {

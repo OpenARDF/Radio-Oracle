@@ -110,6 +110,59 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun duplicateCategoryRoutesRequireSingleSelectedRoute() {
+        val kmlPath = Files.createTempFile("radio-oracle-duplicate-category-routes", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithDuplicateM21Routes())
+        val project = EventProjectEditor.addCategory(
+            classicPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (defaultUpdated, defaultSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        assertEquals(1, defaultSummary.matchedCategoryCount)
+        assertEquals(1, defaultSummary.importedCategoryCount)
+        val duplicateAssignment = defaultSummary.duplicateRouteAssignments.single()
+        assertEquals("cat-m21", duplicateAssignment.categoryId)
+        assertEquals("M21", duplicateAssignment.categoryName)
+        assertEquals(2, duplicateAssignment.routeChoices.size)
+        assertEquals(duplicateAssignment.routeChoices.first().routeKey, duplicateAssignment.selectedRouteKey)
+        val defaultCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(defaultUpdated.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals("31", defaultCourseInfo.idealOrder)
+
+        val (selectedUpdated, selectedSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null },
+            selectedDuplicateRouteChoices = mapOf(
+                duplicateAssignment.categoryId to duplicateAssignment.routeChoices.last().routeKey
+            )
+        )
+
+        assertEquals(1, selectedSummary.matchedCategoryCount)
+        assertEquals(1, selectedSummary.importedCategoryCount)
+        assertEquals(
+            duplicateAssignment.routeChoices.last().routeKey,
+            selectedSummary.duplicateRouteAssignments.single().selectedRouteKey
+        )
+        val selectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(selectedUpdated.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals("32", selectedCourseInfo.idealOrder)
+    }
+
+    @Test
     fun importsSpeedSpecifiersIntoProtectedCourseInfo() {
         val kmlPath = Files.createTempFile("radio-oracle-course-speed", ".kml")
         Files.writeString(kmlPath, sampleKmlWithImportSpeedSpecifiers())
@@ -2621,6 +2674,41 @@ class DesktopCourseKmlImportTest {
 
     private fun sampleKml(): String =
         sampleKmlWithRouteName("M21")
+
+    private fun sampleKmlWithDuplicateM21Routes(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>-95.0000,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>-94.9980,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0000,39.0000,0
+                  -94.9995,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -94.9980,39.0000,0
+                  -94.9975,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent().trimStart()
 
     private fun sampleGpx(): String =
         """

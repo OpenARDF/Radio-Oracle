@@ -3092,13 +3092,15 @@ fun main(args: Array<String>) = application {
             selectedMissingCategoryNames: Set<String>,
             createMissingControls: Boolean,
             overwriteImportedSiNumbers: Boolean,
-            keepStaleCourseMappings: Boolean
+            keepStaleCourseMappings: Boolean,
+            selectedDuplicateRouteChoices: Map<String, String>
         ) {
             val formatLabel = controlsRouteImportFormatLabel(review.sourceName)
             val selectedPreview = review.previewForSelectedMissingMappings(
                 selectedMissingCategoryNames = selectedMissingCategoryNames,
                 createMissingControls = createMissingControls,
-                overwriteImportedSiNumbers = overwriteImportedSiNumbers
+                overwriteImportedSiNumbers = overwriteImportedSiNumbers,
+                selectedDuplicateRouteChoices = selectedDuplicateRouteChoices
             )
             val selectedSummary = selectedPreview.summary
             val selectedProject = selectedPreview.projectFile
@@ -3143,6 +3145,7 @@ fun main(args: Array<String>) = application {
                 lines = withRollbackBackupLine(listOf(
                     "${selectedSummary.importedCategoryCount} categories received stored route data.",
                     "${selectedSummary.duplicateCategoryCount} duplicate categories skipped.",
+                    "${selectedSummary.duplicateRouteAssignments.size} duplicate route assignments resolved.",
                     "${selectedSummary.controlIdentityUpdateCount} control identities updated.",
                     "$retainedImportedSiConflictCount imported SI conflicts retained existing Race File numbers.",
                     "${selectedSummary.controlPublicLabelUpdateCount} control public labels updated.",
@@ -5907,7 +5910,9 @@ fun main(args: Array<String>) = application {
         pendingCourseKmlKmzImportReview?.let { review ->
             CourseKmlKmzImportReviewDialog(
                 review = review,
-                onKeep = { fetchElevations, applyCategoryAssignments, selectedMissingCategoryNames, createMissingControls, overwriteImportedSiNumbers, keepStaleCourseMappings ->
+                onKeep = { fetchElevations, applyCategoryAssignments, selectedMissingCategoryNames,
+                        createMissingControls, overwriteImportedSiNumbers, keepStaleCourseMappings,
+                        selectedDuplicateRouteChoices ->
                     applyCourseKmlKmzImport(
                         review = review,
                         fetchElevations = fetchElevations,
@@ -5915,7 +5920,8 @@ fun main(args: Array<String>) = application {
                         selectedMissingCategoryNames = selectedMissingCategoryNames,
                         createMissingControls = createMissingControls,
                         overwriteImportedSiNumbers = overwriteImportedSiNumbers,
-                        keepStaleCourseMappings = keepStaleCourseMappings
+                        keepStaleCourseMappings = keepStaleCourseMappings,
+                        selectedDuplicateRouteChoices = selectedDuplicateRouteChoices
                     )
                 },
                 onCancel = {
@@ -7261,7 +7267,9 @@ private fun controlsRouteReviewDisplaySummary(
         createdControlNames = if (createMissingControls) importAllSummary.createdControlNames else emptyList(),
         deletedControlNames = if (createMissingControls) importAllSummary.deletedControlNames else emptyList(),
         staleCourseMappingCategoryIds = stalePairs.map { it.first },
-        staleCourseMappingCategoryNames = stalePairs.map { it.second }
+        staleCourseMappingCategoryNames = stalePairs.map { it.second },
+        duplicateRouteAssignments = importAllSummary.duplicateRouteAssignments
+            .filter { it.categoryId in selectedMatchedCategoryIds }
     )
 }
 
@@ -7320,7 +7328,8 @@ private fun CourseKmlKmzImportReviewDialog(
         selectedMissingCategoryNames: Set<String>,
         createMissingControls: Boolean,
         overwriteImportedSiNumbers: Boolean,
-        keepStaleCourseMappings: Boolean
+        keepStaleCourseMappings: Boolean,
+        selectedDuplicateRouteChoices: Map<String, String>
     ) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -7404,6 +7413,23 @@ private fun CourseKmlKmzImportReviewDialog(
     ) {
         mutableStateOf(false)
     }
+    var selectedDuplicateRouteChoices by remember(
+        review.sourceName,
+        summary.sourceSha256,
+        summary.duplicateRouteAssignments
+    ) {
+        mutableStateOf(
+            summary.duplicateRouteAssignments
+                .mapNotNull { assignment ->
+                    assignment.selectedRouteKey?.let { routeKey -> assignment.categoryId to routeKey }
+                }
+                .toMap()
+        )
+    }
+    val duplicateRouteSelectionComplete = selectedSummary.duplicateRouteAssignments.all { assignment ->
+        val selectedRouteKey = selectedDuplicateRouteChoices[assignment.categoryId]
+        selectedRouteKey != null && assignment.routeChoices.any { it.routeKey == selectedRouteKey }
+    }
     val selectedSiConflictCount = selectedSummary.controlSiConflictCount
     val selectedSiUpdateCount = if (overwriteImportedSiNumbers) {
         selectedSummary.controlSiConflictCount
@@ -7466,6 +7492,43 @@ private fun CourseKmlKmzImportReviewDialog(
                                 text = "Skipped route ${rejected.routeName} for ${rejected.categoryName}: ${rejected.reason}",
                                 color = DesktopPalette.Error,
                                 fontWeight = FontWeight.Bold
+                            )
+                        }
+                        if (selectedSummary.duplicateRouteAssignments.isNotEmpty()) {
+                            Text(
+                                text = "Duplicate Route Assignments Found",
+                                color = DesktopPalette.Error,
+                                fontWeight = FontWeight.Bold
+                            )
+                            selectedSummary.duplicateRouteAssignments.forEach { assignment ->
+                                Text(
+                                    "Category ${assignment.categoryName} has ${assignment.routeChoices.size} matching routes. Select exactly one to import.",
+                                    fontSize = 13.sp,
+                                    color = Color.DarkGray
+                                )
+                                assignment.routeChoices.forEach { choice ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Checkbox(
+                                            checked = selectedDuplicateRouteChoices[assignment.categoryId] == choice.routeKey,
+                                            onCheckedChange = { checked ->
+                                                selectedDuplicateRouteChoices = if (checked) {
+                                                    selectedDuplicateRouteChoices + (assignment.categoryId to choice.routeKey)
+                                                } else {
+                                                    selectedDuplicateRouteChoices - assignment.categoryId
+                                                }
+                                            }
+                                        )
+                                        Text("${choice.routeName} (route ${choice.routeIndex + 1})")
+                                    }
+                                }
+                            }
+                            Text(
+                                "Only the selected route for each listed category will be imported. Unselected duplicate routes are skipped.",
+                                fontSize = 12.sp,
+                                color = Color.DarkGray
                             )
                         }
                         Text("Matched Categories: ${selectedSummary.matchedCategoryCount} Of ${selectedSummary.routeCount} Routes")
@@ -7696,6 +7759,7 @@ private fun CourseKmlKmzImportReviewDialog(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
+                        enabled = duplicateRouteSelectionComplete,
                         onClick = {
                             onKeep(
                                 fetchElevations,
@@ -7703,7 +7767,8 @@ private fun CourseKmlKmzImportReviewDialog(
                                 selectedMissingCategoryNames,
                                 createMissingControls,
                                 overwriteImportedSiNumbers,
-                                keepStaleCourseMappings
+                                keepStaleCourseMappings,
+                                selectedDuplicateRouteChoices
                             )
                         }
                     ) {
@@ -9641,13 +9706,22 @@ private data class SelectedCourseKmlKmzImportPreview(
 private fun PendingCourseKmlKmzImportReview.previewForSelectedMissingMappings(
     selectedMissingCategoryNames: Set<String>,
     createMissingControls: Boolean,
-    overwriteImportedSiNumbers: Boolean
+    overwriteImportedSiNumbers: Boolean,
+    selectedDuplicateRouteChoices: Map<String, String>
 ): SelectedCourseKmlKmzImportPreview {
     val selectedMatchNames = selectedMissingCategoryNames.mapTo(mutableSetOf()) { it.courseMappingSelectionKey() }
     val allMissingMatchNames = summary.missingCategoryNames.mapTo(mutableSetOf()) { it.courseMappingSelectionKey() }
     val selectsAllMissing = allMissingMatchNames.isNotEmpty() && selectedMatchNames == allMissingMatchNames
     val selectsNoMissing = selectedMatchNames.isEmpty()
     if (selectsAllMissing && createMissingControls) {
+        if (selectedDuplicateRouteChoices != summary.defaultDuplicateRouteChoices()) {
+            return importPreviewForSelections(
+                selectedMissingCategoryNames = selectedMissingCategoryNames,
+                createMissingControls = createMissingControls,
+                overwriteImportedSiNumbers = overwriteImportedSiNumbers,
+                selectedDuplicateRouteChoices = selectedDuplicateRouteChoices
+            )
+        }
         val summary = if (overwriteImportedSiNumbers) {
             overwriteSiCreatedMissingCategorySummary ?: createdMissingCategorySummary
         } else {
@@ -9663,6 +9737,14 @@ private fun PendingCourseKmlKmzImportReview.previewForSelectedMissingMappings(
         }
     }
     if (selectsNoMissing && !createMissingControls) {
+        if (selectedDuplicateRouteChoices != summary.defaultDuplicateRouteChoices()) {
+            return importPreviewForSelections(
+                selectedMissingCategoryNames = selectedMissingCategoryNames,
+                createMissingControls = createMissingControls,
+                overwriteImportedSiNumbers = overwriteImportedSiNumbers,
+                selectedDuplicateRouteChoices = selectedDuplicateRouteChoices
+            )
+        }
         val summary = if (overwriteImportedSiNumbers) {
             overwriteSiSummary ?: this.summary
         } else {
@@ -9676,6 +9758,20 @@ private fun PendingCourseKmlKmzImportReview.previewForSelectedMissingMappings(
         return SelectedCourseKmlKmzImportPreview(project, summary)
     }
 
+    return importPreviewForSelections(
+        selectedMissingCategoryNames = selectedMissingCategoryNames,
+        createMissingControls = createMissingControls,
+        overwriteImportedSiNumbers = overwriteImportedSiNumbers,
+        selectedDuplicateRouteChoices = selectedDuplicateRouteChoices
+    )
+}
+
+private fun PendingCourseKmlKmzImportReview.importPreviewForSelections(
+    selectedMissingCategoryNames: Set<String>,
+    createMissingControls: Boolean,
+    overwriteImportedSiNumbers: Boolean,
+    selectedDuplicateRouteChoices: Map<String, String>
+): SelectedCourseKmlKmzImportPreview {
     val (project, selectedSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
         path = path,
         projectFile = baseProject,
@@ -9689,10 +9785,16 @@ private fun PendingCourseKmlKmzImportReview.previewForSelectedMissingMappings(
             DesktopCourseKmlSiImportPolicy.OverwriteFromImport
         } else {
             DesktopCourseKmlSiImportPolicy.PreserveExisting
-        }
+        },
+        selectedDuplicateRouteChoices = selectedDuplicateRouteChoices
     )
     return SelectedCourseKmlKmzImportPreview(project, selectedSummary)
 }
+
+private fun DesktopCourseKmlImportSummary.defaultDuplicateRouteChoices(): Map<String, String> =
+    duplicateRouteAssignments.mapNotNull { assignment ->
+        assignment.selectedRouteKey?.let { routeKey -> assignment.categoryId to routeKey }
+    }.toMap()
 
 private fun String.courseMappingSelectionKey(): String =
     StandardCategoryRules.normalizedCategoryName(this).uppercase()
