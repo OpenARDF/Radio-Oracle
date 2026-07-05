@@ -72,6 +72,7 @@ enum class DesktopNavAction {
     ImportIofEntryListXml,
     ExportIofEntryListXml,
     ImportEventRegCompetitorsCsv,
+    ImportCompetitorsSpreadsheet,
     SaveEventFile,
     CloseEventFile,
     ImportCategoriesCsv,
@@ -468,41 +469,63 @@ object DesktopNavigation {
                     "Competitors",
                     workflow,
                     listOf(
-                        action(
+                        group(
                             "setup.competitors.import",
-                            "Import Competitors CSV...",
+                            "Import",
                             workflow,
-                            DesktopNavAction.ImportCompetitorsCsv
+                            listOf(
+                                action(
+                                    "setup.competitors.import-csv",
+                                    "Import Competitors CSV...",
+                                    workflow,
+                                    DesktopNavAction.ImportCompetitorsCsv
+                                ),
+                                action(
+                                    "setup.competitors.import-race-file",
+                                    "Import Competitors From Race File...",
+                                    workflow,
+                                    DesktopNavAction.ImportCompetitorsRaceFile
+                                ),
+                                action(
+                                    "setup.competitors.import-spreadsheet",
+                                    "Import Spreadsheet...",
+                                    workflow,
+                                    DesktopNavAction.ImportCompetitorsSpreadsheet
+                                ),
+                                action(
+                                    "setup.competitors.import-eventreg",
+                                    "Import EventReg Website...",
+                                    workflow,
+                                    DesktopNavAction.ImportEventRegCompetitorsCsv
+                                ),
+                                action(
+                                    "setup.competitors.import-iof-entry-list",
+                                    "Import IOF EntryList XML...",
+                                    workflow,
+                                    DesktopNavAction.ImportIofEntryListXml
+                                )
+                            ),
+                            DesktopSection.CompetitorsImportExport
                         ),
-                        action(
-                            "setup.competitors.import-race-file",
-                            "Import Competitors From Race File...",
-                            workflow,
-                            DesktopNavAction.ImportCompetitorsRaceFile
-                        ),
-                        action(
-                            "setup.competitors.import-eventreg",
-                            "Import EventReg Website...",
-                            workflow,
-                            DesktopNavAction.ImportEventRegCompetitorsCsv
-                        ),
-                        action(
-                            "setup.competitors.import-iof-entry-list",
-                            "Import IOF EntryList XML...",
-                            workflow,
-                            DesktopNavAction.ImportIofEntryListXml
-                        ),
-                        action(
+                        group(
                             "setup.competitors.export",
-                            "Export Competitors CSV...",
+                            "Export",
                             workflow,
-                            DesktopNavAction.ExportCompetitorsCsv
-                        ),
-                        action(
-                            "setup.competitors.export-iof-entry-list",
-                            "Export IOF EntryList XML...",
-                            workflow,
-                            DesktopNavAction.ExportIofEntryListXml
+                            listOf(
+                                action(
+                                    "setup.competitors.export-csv",
+                                    "Export Competitors CSV...",
+                                    workflow,
+                                    DesktopNavAction.ExportCompetitorsCsv
+                                ),
+                                action(
+                                    "setup.competitors.export-iof-entry-list",
+                                    "Export IOF EntryList XML...",
+                                    workflow,
+                                    DesktopNavAction.ExportIofEntryListXml
+                                )
+                            ),
+                            DesktopSection.CompetitorsImportExport
                         ),
                         action(
                             "setup.competitors.delete-all",
@@ -1271,14 +1294,20 @@ object DesktopNavigation {
         "setup.competitors" to
             "Use Competitors to add, import, export, edit, and assign competitors to categories before drawing starts or running race operations.",
         "setup.competitors.import" to
-            "Use Import Competitors CSV to append or update competitor lists while preserving existing race setup data.",
+            "Use Import to bring competitor registrations from CSV, another Race File, a spreadsheet, EventReg, or IOF EntryList XML into the current race setup.",
+        "setup.competitors.import-csv" to
+            "Use Import Competitors CSV to append, update, or synchronize competitor lists while preserving existing race setup data.",
         "setup.competitors.import-race-file" to
             "Use Import Competitors From Race File to update only competitor records from another Radio-Oracle Race File.",
+        "setup.competitors.import-spreadsheet" to
+            "Use Import Spreadsheet to review spreadsheet race mappings and synchronize competitor lists and categories into the current race or Race Series.",
         "setup.competitors.import-eventreg" to
             "Use Import EventReg Website to bring competitor data from EventReg exports into the current Race File.",
         "setup.competitors.import-iof-entry-list" to
             "Use Import IOF EntryList XML to import schema-valid IOF EntryList registrations as competitors.",
         "setup.competitors.export" to
+            "Use Export to write competitor data for review, backup, external editing, or IOF exchange.",
+        "setup.competitors.export-csv" to
             "Use Export Competitors CSV to write the current competitor list for review, backup, or external editing.",
         "setup.competitors.export-iof-entry-list" to
             "Use Export IOF EntryList XML to write schema-valid IOF EntryList registrations from current competitors.",

@@ -30,6 +30,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.EventProjectEditor
+import org.openardf.radiooracle.shared.event.EventProjectFactory
+import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import java.nio.file.Files
 
@@ -205,6 +209,102 @@ class DesktopEventRegImportTest {
     }
 
     @Test
+    fun competitorSpreadsheetPlanMapsSingleRaceAndRemovesEmptyCategories() {
+        val project = eventProject("race-sprint", "Sprint Race", RaceType.SPRINT, RaceBand.NONE)
+            .withCompetitorRows(
+                listOf(
+                    CompetitorCsvImportRow(
+                        siNumber = 111,
+                        startNumber = null,
+                        firstName = "Old",
+                        lastName = "Runner",
+                        categoryName = "OldCat",
+                        isMan = true,
+                        birthYear = null,
+                        club = "",
+                        personId = "old-runner",
+                        startTimeText = null,
+                        siRent = false
+                    )
+                )
+            )
+        val target = DesktopSpreadsheetCompetitorImportTarget(
+            targetId = "race-sprint",
+            displayName = "Sprint Race",
+            path = null,
+            projectFile = project
+        )
+
+        val plan = DesktopSpreadsheetCompetitorImporter.buildPlan(
+            url = "https://docs.google.com/spreadsheets/d/test-spreadsheet-id/edit",
+            targets = listOf(target),
+            fetchSpreadsheet = {
+                SpreadsheetDownload(
+                    bytes = sprintOnlyGoogleSheetCsv().toByteArray(),
+                    contentType = "text/csv",
+                    fileName = "Sprint Registration.csv"
+                )
+            }
+        )
+
+        assertEquals(listOf("Sprint"), plan.selectedMappings.map { it.competitionName })
+        val mapping = plan.selectedMappings.single()
+        assertEquals("Sprint Race", mapping.target?.displayName)
+        assertEquals(listOf("M-21"), mapping.preview?.createdCategoryNames)
+        assertEquals(listOf("OldCat"), mapping.preview?.removableEmptyCategoryNames)
+        assertEquals(1, mapping.preview?.importedCount)
+        assertEquals(1, mapping.preview?.deletedCount)
+
+        val applied = DesktopSpreadsheetCompetitorImporter.applyMapping(mapping)
+
+        assertEquals(listOf("M-21"), applied.updatedProjectFile.raceData.categories.map { it.category.name })
+        assertEquals(listOf("Fala"), applied.updatedProjectFile.raceData.competitorData.map {
+            it.competitorCategory.competitor.lastName
+        })
+        assertEquals(listOf("OldCat"), applied.removedCategoryNames)
+    }
+
+    @Test
+    fun competitorSpreadsheetPlanMapsSeriesByRaceFormat() {
+        val targets = listOf(
+            eventProject("race-sprint", "Sprint Race", RaceType.SPRINT, RaceBand.NONE),
+            eventProject("race-fox", "Foxoring Race", RaceType.FOXORING, RaceBand.NONE),
+            eventProject("race-2m", "2m Classic Race", RaceType.CLASSIC, RaceBand.M2),
+            eventProject("race-80m", "80m Classic Race", RaceType.CLASSIC, RaceBand.M80)
+        ).mapIndexed { index, project ->
+            DesktopSpreadsheetCompetitorImportTarget(
+                targetId = project.raceData.race.id,
+                displayName = project.raceData.race.name,
+                path = null,
+                projectFile = project,
+                seriesOrder = index
+            )
+        }
+
+        val plan = DesktopSpreadsheetCompetitorImporter.buildPlan(
+            url = "https://docs.google.com/spreadsheets/d/test-spreadsheet-id/edit",
+            targets = targets,
+            fetchSpreadsheet = {
+                SpreadsheetDownload(
+                    bytes = seriesGoogleSheetCsv().toByteArray(),
+                    contentType = "text/csv",
+                    fileName = "Series Registration.csv"
+                )
+            }
+        )
+
+        assertEquals(
+            mapOf(
+                "Sprint" to "Sprint Race",
+                "FoxO" to "Foxoring Race",
+                "2m" to "2m Classic Race",
+                "80m" to "80m Classic Race"
+            ),
+            plan.selectedMappings.associate { it.competitionName to it.target?.displayName }
+        )
+    }
+
+    @Test
     fun generatesOneCompetitorCsvPerCompetitionWithEventFileStem() {
         val outputDirectory = Files.createTempDirectory("radio-oracle-eventreg-competitors-test")
         val ids = generateSequence(1) { it + 1 }.map { "id-$it" }.iterator()
@@ -242,6 +342,59 @@ class DesktopEventRegImportTest {
         1,Kathleen,Kerns,conf-2,Confirmed,102,1959-01-01 00:00:00,F,MTHD,1800859,N,W-65,W-65,,NC,,,Competing,K7KER
         2,Gerald,Boyd,conf-3,Confirmed,103,1957-01-01 00:00:00,M,NMO,247347,N,NC,,,M-60,M-60,,Competing,WB8WFK
         """.trimIndent()
+
+    private fun sprintOnlyGoogleSheetCsv(): String =
+        """
+        First,Last,ConfNum,Sex,E-Punch ID,Sprint Class,Sprint Crs
+        Gheorghe,Fala,conf-1,M,8400555,M-21,M-21
+        """.trimIndent()
+
+    private fun seriesGoogleSheetCsv(): String =
+        """
+        First,Last,ConfNum,Sex,E-Punch ID,Sprint Class,FoxO Class,2m Class,80m Class
+        Gheorghe,Fala,conf-1,M,8400555,M-21,NC,NC,NC
+        Gerald,Boyd,conf-2,M,247347,NC,M-60,NC,NC
+        Kathleen,Kerns,conf-3,F,1800859,NC,NC,W-65,NC
+        Lidia,Stone,conf-4,F,1800860,NC,NC,NC,W-50
+        """.trimIndent()
+
+    private fun eventProject(
+        raceId: String,
+        name: String,
+        raceType: RaceType,
+        raceBand: RaceBand
+    ): EventProjectFile {
+        val project = EventProjectFactory.createEmptyProject(
+            raceId = raceId,
+            raceName = name,
+            startDateTimeIso = "2026-07-03T09:00"
+        )
+        return project.copy(
+            raceData = project.raceData.copy(
+                race = project.raceData.race.copy(
+                    raceType = raceType,
+                    raceBand = raceBand
+                )
+            )
+        )
+    }
+
+    private fun EventProjectFile.withCompetitorRows(rows: List<CompetitorCsvImportRow>): EventProjectFile {
+        var nextId = 0
+        val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
+            projectFile = this,
+            rows = rows,
+            competitorIdFactory = {
+                nextId += 1
+                "competitor-$nextId"
+            },
+            categoryIdFactory = {
+                nextId += 1
+                "category-$nextId"
+            }
+        )
+        return outcome.projectFile
+    }
 
     private fun sampleRegistrationHtml(): String =
         """

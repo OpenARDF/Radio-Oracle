@@ -83,6 +83,7 @@ enum class DesktopSection(val label: String) {
     Categories("Categories"),
     ProtectedCourseOrder("Course Order"),
     Competitors("Competitors"),
+    CompetitorsImportExport("Competitor Files"),
     StartList("Start List"),
     Series("Race Series"),
     SeriesEvents("Series Races"),

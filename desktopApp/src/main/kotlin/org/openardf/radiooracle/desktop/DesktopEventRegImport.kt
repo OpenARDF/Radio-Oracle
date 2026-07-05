@@ -25,8 +25,11 @@
 package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.domain.RaceBand
+import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.CompetitorCsvImportDuplicatePolicy
+import org.openardf.radiooracle.shared.event.CompetitorCsvImportOutcome
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventProjectFile
@@ -103,6 +106,11 @@ data class DesktopEventRegCompetitor(
     val siRent: Boolean = false
 )
 
+data class DesktopSpreadsheetRegistrationImport(
+    val sourceUrl: String,
+    val registration: DesktopEventRegRegistration
+)
+
 object DesktopEventRegImportPreferences {
     private const val LAST_EVENT_REG_URL_KEY = "lastEventRegUrl"
     private const val LAST_GOOGLE_SHEET_URL_KEY = "lastGoogleSheetUrl"
@@ -125,6 +133,21 @@ object DesktopEventRegImportPreferences {
 }
 
 object DesktopEventRegImporter {
+    fun spreadsheetRegistration(
+        url: String,
+        fallbackEventName: String = "Google Sheets Registration",
+        fetchSpreadsheet: (String) -> SpreadsheetDownload = ::fetchSpreadsheet
+    ): DesktopSpreadsheetRegistrationImport {
+        val normalizedUrl = normalizedUrl(url, label = "Spreadsheet URL")
+        return DesktopSpreadsheetRegistrationImport(
+            sourceUrl = normalizedUrl,
+            registration = DesktopEventRegSpreadsheetParser.parse(
+                download = fetchSpreadsheet(normalizedUrl),
+                fallbackEventName = fallbackEventName
+            )
+        )
+    }
+
     fun importCompetitorCsvsFromWebsite(
         url: String,
         outputDirectory: Path,
@@ -176,13 +199,12 @@ object DesktopEventRegImporter {
         fetchSpreadsheet: (String) -> SpreadsheetDownload = ::fetchSpreadsheet,
         idFactory: () -> String = { UUID.randomUUID().toString() }
     ): DesktopEventRegImportResult {
-        val normalizedUrl = normalizedUrl(url, label = "Spreadsheet URL")
-        val registration = DesktopEventRegSpreadsheetParser.parse(
-            download = fetchSpreadsheet(normalizedUrl),
-            fallbackEventName = "Google Sheets Registration"
+        val import = spreadsheetRegistration(
+            url = url,
+            fetchSpreadsheet = fetchSpreadsheet
         )
         val projects = DesktopEventRegProjectBuilder.buildProjects(
-            registration = registration,
+            registration = import.registration,
             startDateTimeIso = startDateTimeIso,
             idFactory = idFactory
         )
@@ -207,7 +229,7 @@ object DesktopEventRegImporter {
         }
 
         return DesktopEventRegImportResult(
-            sourceUrl = normalizedUrl,
+            sourceUrl = import.sourceUrl,
             outputDirectory = outputDirectory,
             generatedFiles = generatedFiles
         )
@@ -286,7 +308,7 @@ object DesktopEventRegImporter {
         return response.body()
     }
 
-    private fun fetchSpreadsheet(url: String): SpreadsheetDownload {
+    fun fetchSpreadsheet(url: String): SpreadsheetDownload {
         val googleId = googleSpreadsheetId(url)
         val candidateUrls = if (googleId != null) {
             listOf(
@@ -644,6 +666,340 @@ object DesktopEventRegSpreadsheetParser {
         val startNumberIndex = headers.indexOfFirstHeader("Start Number", "Start #")
     }
 }
+
+data class DesktopSpreadsheetCompetitorImportTarget(
+    val targetId: String,
+    val displayName: String,
+    val path: Path?,
+    val projectFile: EventProjectFile,
+    val seriesEventId: String? = null,
+    val seriesOrder: Int? = null,
+    val seriesFormatLabel: String = "",
+    val seriesStartDateTimeIso: String = ""
+)
+
+data class DesktopSpreadsheetCompetitorImportPlan(
+    val sourceUrl: String,
+    val eventName: String,
+    val mappings: List<DesktopSpreadsheetCompetitorImportMapping>
+) {
+    val selectedMappings: List<DesktopSpreadsheetCompetitorImportMapping>
+        get() = mappings.filter { it.target != null && it.confidence >= DesktopSpreadsheetCompetitorImporter.MinimumAutoMapConfidence }
+
+    val competitorCount: Int
+        get() = selectedMappings.sumOf { it.competitorCount }
+}
+
+data class DesktopSpreadsheetCompetitorImportMapping(
+    val competitionName: String,
+    val target: DesktopSpreadsheetCompetitorImportTarget?,
+    val confidence: Int,
+    val reasons: List<String>,
+    val warnings: List<String>,
+    val rows: List<CompetitorCsvImportRow>,
+    val preview: DesktopSpreadsheetCompetitorImportPreview?
+) {
+    val competitorCount: Int
+        get() = rows.size
+}
+
+data class DesktopSpreadsheetCompetitorImportPreview(
+    val importedCount: Int,
+    val updatedCount: Int,
+    val deletedCount: Int,
+    val createdCategoryNames: List<String>,
+    val removableEmptyCategoryNames: List<String>,
+    val protectedEmptyCategoryNames: List<String>,
+    val warnings: List<String>
+)
+
+data class DesktopSpreadsheetCompetitorImportAppliedMapping(
+    val competitionName: String,
+    val targetDisplayName: String,
+    val targetPath: Path?,
+    val outcome: CompetitorCsvImportOutcome,
+    val removedCategoryNames: List<String>,
+    val updatedProjectFile: EventProjectFile
+)
+
+object DesktopSpreadsheetCompetitorImporter {
+    const val MinimumAutoMapConfidence: Int = 55
+
+    fun buildPlan(
+        url: String,
+        targets: List<DesktopSpreadsheetCompetitorImportTarget>,
+        fetchSpreadsheet: (String) -> SpreadsheetDownload = DesktopEventRegImporter::fetchSpreadsheet,
+        previewIdFactory: () -> String = newPreviewIdFactory()
+    ): DesktopSpreadsheetCompetitorImportPlan {
+        require(targets.isNotEmpty()) {
+            "Open or create a Race File before importing spreadsheet competitors."
+        }
+        val spreadsheetImport = DesktopEventRegImporter.spreadsheetRegistration(
+            url = url,
+            fetchSpreadsheet = fetchSpreadsheet
+        )
+        val initialMappings = spreadsheetImport.registration.competitions.map { competition ->
+            val rows = competition.competitors.map { it.toImportRow() }
+            val match = bestTargetMatch(competition, targets)
+            val target = match.target?.takeIf { match.confidence >= MinimumAutoMapConfidence }
+            val reasons = if (targets.size == 1 && target != null && match.reasons.none { it.contains("only open", ignoreCase = true) }) {
+                listOf("Only open Race File") + match.reasons
+            } else {
+                match.reasons
+            }
+            val warnings = buildList {
+                if (target == null) {
+                    add("No confident Race File match was found.")
+                }
+                addAll(match.warnings)
+            }
+            DesktopSpreadsheetCompetitorImportMapping(
+                competitionName = competition.name,
+                target = target,
+                confidence = match.confidence,
+                reasons = reasons,
+                warnings = warnings,
+                rows = rows,
+                preview = target?.let {
+                    previewImport(
+                        projectFile = it.projectFile,
+                        rows = rows,
+                        idFactory = previewIdFactory
+                    )
+                }
+            )
+        }
+        val mappings = suppressDuplicateTargets(initialMappings)
+        require(mappings.isNotEmpty()) {
+            "No competition columns with registered competitors were found."
+        }
+        return DesktopSpreadsheetCompetitorImportPlan(
+            sourceUrl = spreadsheetImport.sourceUrl,
+            eventName = spreadsheetImport.registration.eventName,
+            mappings = mappings
+        )
+    }
+
+    fun applyMapping(
+        mapping: DesktopSpreadsheetCompetitorImportMapping,
+        competitorIdFactory: () -> String = { UUID.randomUUID().toString() },
+        categoryIdFactory: () -> String = { UUID.randomUUID().toString() }
+    ): DesktopSpreadsheetCompetitorImportAppliedMapping {
+        val target = requireNotNull(mapping.target) {
+            "No Race File target was selected for ${mapping.competitionName}."
+        }
+        val outcome = syncCompetitors(
+            projectFile = target.projectFile,
+            rows = mapping.rows,
+            competitorIdFactory = competitorIdFactory,
+            categoryIdFactory = categoryIdFactory
+        )
+        val emptyCategoryNames = mapping.preview?.removableEmptyCategoryNames.orEmpty().toSet()
+        var updatedProject = outcome.projectFile
+        val removedCategoryNames = mutableListOf<String>()
+        emptyCategoryNames.forEach { categoryName ->
+            val category = updatedProject.raceData.categories
+                .firstOrNull { it.category.name == categoryName && it.competitors.isEmpty() && !it.hasCourseData() }
+            if (category != null) {
+                updatedProject = EventProjectEditor.removeCategory(updatedProject, category.category.id, deleteCompetitors = false)
+                removedCategoryNames += category.category.name
+            }
+        }
+        return DesktopSpreadsheetCompetitorImportAppliedMapping(
+            competitionName = mapping.competitionName,
+            targetDisplayName = target.displayName,
+            targetPath = target.path,
+            outcome = outcome.copy(projectFile = updatedProject),
+            removedCategoryNames = removedCategoryNames,
+            updatedProjectFile = updatedProject
+        )
+    }
+
+    private fun previewImport(
+        projectFile: EventProjectFile,
+        rows: List<CompetitorCsvImportRow>,
+        idFactory: () -> String
+    ): DesktopSpreadsheetCompetitorImportPreview {
+        val existingCategoryNames = projectFile.raceData.categories.mapTo(mutableSetOf()) { it.category.name }
+        val createdCategoryNames = rows
+            .map { it.categoryName.trim() }
+            .filter { it.isNotBlank() && it !in existingCategoryNames }
+            .distinct()
+            .sorted()
+        val outcome = syncCompetitors(
+            projectFile = projectFile,
+            rows = rows,
+            competitorIdFactory = idFactory,
+            categoryIdFactory = idFactory
+        )
+        val emptyCategories = outcome.projectFile.raceData.categories
+            .filter { it.competitors.isEmpty() }
+            .sortedBy { it.category.name }
+        return DesktopSpreadsheetCompetitorImportPreview(
+            importedCount = outcome.importedCount,
+            updatedCount = outcome.updatedCount,
+            deletedCount = outcome.deletedCount,
+            createdCategoryNames = createdCategoryNames,
+            removableEmptyCategoryNames = emptyCategories
+                .filterNot { it.hasCourseData() }
+                .map { it.category.name },
+            protectedEmptyCategoryNames = emptyCategories
+                .filter { it.hasCourseData() }
+                .map { it.category.name },
+            warnings = outcome.warnings
+        )
+    }
+
+    private fun suppressDuplicateTargets(
+        mappings: List<DesktopSpreadsheetCompetitorImportMapping>
+    ): List<DesktopSpreadsheetCompetitorImportMapping> {
+        val duplicatedTargetIds = mappings
+            .mapNotNull { mapping -> mapping.target?.targetId }
+            .groupingBy { it }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
+        if (duplicatedTargetIds.isEmpty()) {
+            return mappings
+        }
+        return mappings.map { mapping ->
+            if (mapping.target?.targetId in duplicatedTargetIds) {
+                mapping.copy(
+                    target = null,
+                    preview = null,
+                    warnings = mapping.warnings + "Another spreadsheet competition also maps to ${mapping.target?.displayName}; choose one Race File mapping before importing."
+                )
+            } else {
+                mapping
+            }
+        }
+    }
+
+    private fun syncCompetitors(
+        projectFile: EventProjectFile,
+        rows: List<CompetitorCsvImportRow>,
+        competitorIdFactory: () -> String,
+        categoryIdFactory: () -> String
+    ): CompetitorCsvImportOutcome =
+        EventProjectEditor.importCompetitorRowsWithOutcome(
+            projectFile = projectFile,
+            rows = rows,
+            competitorIdFactory = competitorIdFactory,
+            categoryIdFactory = categoryIdFactory,
+            duplicatePolicy = CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY,
+            deleteMissingByImportKey = true,
+            createMissingCategories = true
+        )
+
+    private fun bestTargetMatch(
+        competition: DesktopEventRegCompetition,
+        targets: List<DesktopSpreadsheetCompetitorImportTarget>
+    ): TargetMatch {
+        val scored = targets
+            .map { target -> scoreTarget(competition.name, target) }
+            .sortedWith(compareByDescending<TargetMatch> { it.confidence }.thenBy { it.target?.seriesOrder ?: Int.MAX_VALUE })
+        val best = scored.firstOrNull() ?: return TargetMatch(null, 0, emptyList(), listOf("No Race Files are available."))
+        val second = scored.drop(1).firstOrNull()
+        return if (second != null && best.confidence == second.confidence && best.confidence >= MinimumAutoMapConfidence) {
+            best.copy(
+                target = null,
+                warnings = best.warnings + "Two Race Files have the same match confidence: ${best.target?.displayName} and ${second.target?.displayName}."
+            )
+        } else {
+            best
+        }
+    }
+
+    private fun scoreTarget(competitionName: String, target: DesktopSpreadsheetCompetitorImportTarget): TargetMatch {
+        val sourceFormat = competitionName.eventRegRaceFormat()
+        val targetRace = target.projectFile.raceData.race
+        var score = 0
+        val reasons = mutableListOf<String>()
+        if (sourceFormat.raceType == targetRace.raceType && sourceFormat.raceBand == targetRace.raceBand) {
+            score += 70
+            reasons += "Same race format (${targetRace.raceType.toDisplayText(targetRace.raceBand)})"
+        } else if (sourceFormat.raceType == targetRace.raceType) {
+            score += 35
+            reasons += "Same race type (${targetRace.raceType.toDisplayText(null)})"
+        }
+        val sourceTokens = competitionName.matchTokens()
+        val targetText = listOf(
+            target.displayName,
+            target.path?.fileName?.toString().orEmpty(),
+            target.projectFile.raceData.race.name,
+            target.seriesFormatLabel
+        ).joinToString(" ").lowercase()
+        val overlap = sourceTokens.count { token -> targetText.contains(token) }
+        if (overlap > 0) {
+            score += (overlap * 8).coerceAtMost(24)
+            reasons += "Name text overlaps"
+        }
+        val raceLevel = targetRace.raceLevel.name.lowercase()
+        if (raceLevel != RaceLevel.PRACTICE.name.lowercase() && competitionName.lowercase().contains(raceLevel)) {
+            score += 8
+            reasons += "Race level text overlaps"
+        }
+        if (target.seriesFormatLabel.isNotBlank() && target.seriesFormatLabel.lowercase().matchTokens().any { it in sourceTokens }) {
+            score += 10
+            reasons += "Series format label matches"
+        }
+        return TargetMatch(
+            target = target,
+            confidence = score.coerceAtMost(100),
+            reasons = reasons.ifEmpty { listOf("Weak metadata match") },
+            warnings = emptyList()
+        )
+    }
+
+    private fun newPreviewIdFactory(): () -> String {
+        var next = 0
+        return {
+            next += 1
+            "preview-$next"
+        }
+    }
+
+    private data class TargetMatch(
+        val target: DesktopSpreadsheetCompetitorImportTarget?,
+        val confidence: Int,
+        val reasons: List<String>,
+        val warnings: List<String>
+    )
+}
+
+private fun EventCategoryData.hasCourseData(): Boolean =
+    controlPoints.isNotEmpty() ||
+        publicControlIds.isNotEmpty() ||
+        category.controlPointsString.isNotBlank() ||
+        category.lengthMeters != 0 ||
+        category.climbMeters != 0 ||
+        category.encryptedIdealOrder?.isNotBlank() == true ||
+        category.encryptedCourseInfo?.isNotBlank() == true
+
+private fun String.matchTokens(): Set<String> =
+    lowercase()
+        .split(Regex("[^a-z0-9]+"))
+        .map { token ->
+            when (token) {
+                "classic" -> ""
+                "meter", "meters" -> "m"
+                else -> token
+            }
+        }
+        .filter { it.length >= 2 }
+        .toSet()
+
+private fun RaceType.toDisplayText(raceBand: RaceBand?): String =
+    when (this) {
+        RaceType.CLASSIC -> when (raceBand) {
+            RaceBand.M80 -> "80m Classic"
+            RaceBand.M2 -> "2m Classic"
+            else -> "Classic"
+        }
+        RaceType.SPRINT -> "Sprint"
+        RaceType.FOXORING -> "Foxoring"
+        else -> name.lowercase().replaceFirstChar { it.titlecase() }
+    }
 
 private object XlsxFirstSheetReader {
     fun readRows(bytes: ByteArray): List<List<String>> {

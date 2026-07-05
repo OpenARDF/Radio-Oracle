@@ -516,6 +516,7 @@ fun main(args: Array<String>) = application {
         var eventSeriesValidationEventPath by remember { mutableStateOf<Path?>(null) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
         var isGoogleSheetImportDialogVisible by remember { mutableStateOf(false) }
+        var isCompetitorSpreadsheetImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzUnlockAction by remember { mutableStateOf<CourseKmlKmzUnlockAction?>(null) }
         var pendingProtectedControlDeleteId by remember { mutableStateOf<String?>(null) }
@@ -543,9 +544,13 @@ fun main(args: Array<String>) = application {
         var googleSheetImportUrl by remember { mutableStateOf(DesktopEventRegImportPreferences.lastGoogleSheetUrl()) }
         var isImportingEventRegWebsite by remember { mutableStateOf(false) }
         var isImportingGoogleSheet by remember { mutableStateOf(false) }
+        var isImportingCompetitorSpreadsheet by remember { mutableStateOf(false) }
         var isImportingEventRegCompetitorCsvs by remember { mutableStateOf(false) }
         var isImportingCourseKmlKmz by remember { mutableStateOf(false) }
         var pendingCompetitorsCsvImportReview by remember { mutableStateOf<PendingCompetitorsCsvImportReview?>(null) }
+        var pendingSpreadsheetCompetitorImportReview by remember {
+            mutableStateOf<PendingSpreadsheetCompetitorImportReview?>(null)
+        }
         var syncCompetitorsCsvImport by remember { mutableStateOf(false) }
         val siPortMutex = remember { Mutex() }
         val activeEventFileTransferServer by rememberUpdatedState(eventFileTransferServer)
@@ -4576,9 +4581,61 @@ fun main(args: Array<String>) = application {
             isGoogleSheetImportDialogVisible = true
         }
 
+        fun showCompetitorSpreadsheetImportDialog() {
+            googleSheetImportUrl = DesktopEventRegImportPreferences.lastGoogleSheetUrl()
+            isCompetitorSpreadsheetImportDialogVisible = true
+        }
+
         fun showEventRegCompetitorCsvImportDialog() {
             eventRegImportUrl = DesktopEventRegImportPreferences.lastRegistrationUrl()
             isEventRegCompetitorCsvImportDialogVisible = true
+        }
+
+        fun spreadsheetCompetitorImportTargets(): List<DesktopSpreadsheetCompetitorImportTarget> {
+            val currentProject = projectSession.currentProject
+                ?: error("Open or create a Race File before importing spreadsheet competitors.")
+            val currentPath = projectSession.currentPath?.toAbsolutePath()?.normalize()
+            val manifestPath = currentSeriesManifestPath()
+            if (manifestPath != null) {
+                val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+                val seriesFolder = requireNotNull(manifestPath.parent) {
+                    "Race Series manifest has no parent folder."
+                }
+                val targets = seriesFile.sortedEvents().mapNotNull { event ->
+                    val eventPath = seriesFolder.resolve(event.eventFilePath).normalize()
+                    val normalizedEventPath = eventPath.toAbsolutePath().normalize()
+                    val eventProject = if (normalizedEventPath == currentPath) {
+                        currentProject
+                    } else if (DesktopEventSeriesFiles.exists(eventPath)) {
+                        DesktopEventSeriesFiles.readEvent(eventPath)
+                    } else {
+                        null
+                    }
+                    eventProject?.let { project ->
+                        DesktopSpreadsheetCompetitorImportTarget(
+                            targetId = event.seriesEventId,
+                            displayName = event.displayName,
+                            path = eventPath,
+                            projectFile = project,
+                            seriesEventId = event.seriesEventId,
+                            seriesOrder = event.order,
+                            seriesFormatLabel = event.formatLabel,
+                            seriesStartDateTimeIso = event.startDateTimeIso
+                        )
+                    }
+                }
+                if (targets.isNotEmpty()) {
+                    return targets
+                }
+            }
+            return listOf(
+                DesktopSpreadsheetCompetitorImportTarget(
+                    targetId = currentProject.raceData.race.id,
+                    displayName = currentProject.raceData.race.name.ifBlank { "Current Race File" },
+                    path = projectSession.currentPath,
+                    projectFile = currentProject
+                )
+            )
         }
 
         fun importEventRegWebsite(url: String) {
@@ -4661,6 +4718,114 @@ fun main(args: Array<String>) = application {
                     DesktopDebugLog.error("GoogleSheet", projectStatusText)
                 }
                 isImportingGoogleSheet = false
+            }
+        }
+
+        fun importCompetitorSpreadsheet(url: String) {
+            if (isImportingCompetitorSpreadsheet) {
+                return
+            }
+            val trimmedUrl = url.trim()
+            isImportingCompetitorSpreadsheet = true
+            projectStatusText = "Importing spreadsheet competitors..."
+            DesktopEventRegImportPreferences.rememberGoogleSheetUrl(trimmedUrl)
+            val targets = runCatching {
+                spreadsheetCompetitorImportTargets()
+            }.getOrElse { error ->
+                projectStatusText = "Spreadsheet competitor import failed: ${error.message ?: error::class.simpleName}"
+                isImportingCompetitorSpreadsheet = false
+                return
+            }
+            appCoroutineScope.launch {
+                val result = runCatching {
+                    withContext(Dispatchers.IO) {
+                        DesktopSpreadsheetCompetitorImporter.buildPlan(
+                            url = trimmedUrl,
+                            targets = targets
+                        )
+                    }
+                }
+                result.onSuccess { plan ->
+                    pendingSpreadsheetCompetitorImportReview = PendingSpreadsheetCompetitorImportReview(plan)
+                    projectStatusText = "Review spreadsheet competitor import before applying it."
+                }.onFailure { error ->
+                    projectStatusText = "Spreadsheet competitor import failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("SpreadsheetCompetitors", projectStatusText)
+                }
+                isImportingCompetitorSpreadsheet = false
+            }
+        }
+
+        fun applySpreadsheetCompetitorImport(review: PendingSpreadsheetCompetitorImportReview) {
+            runCatching {
+                val mappings = review.plan.selectedMappings
+                require(mappings.isNotEmpty()) {
+                    "No confident Race File mappings were selected."
+                }
+                val duplicateTarget = mappings
+                    .mapNotNull { it.target?.targetId }
+                    .groupingBy { it }
+                    .eachCount()
+                    .filterValues { it > 1 }
+                    .keys
+                    .firstOrNull()
+                require(duplicateTarget == null) {
+                    "Two spreadsheet competitions map to the same Race File. Import canceled."
+                }
+                checkpointBeforeImport("spreadsheet competitors import")
+                val appliedMappings = mappings.map(DesktopSpreadsheetCompetitorImporter::applyMapping)
+                appliedMappings.forEach { applied ->
+                    applied.targetPath?.let { path ->
+                        DesktopEventSeriesFiles.writeEvent(path, applied.updatedProjectFile)
+                    }
+                }
+                val currentPath = projectSession.currentPath?.toAbsolutePath()?.normalize()
+                val currentApplied = appliedMappings.firstOrNull { applied ->
+                    val path = applied.targetPath?.toAbsolutePath()?.normalize()
+                    if (currentPath != null) {
+                        path == currentPath
+                    } else {
+                        path == null
+                    }
+                }
+                if (currentApplied != null) {
+                    if (projectSession.currentPath != null) {
+                        projectFile = projectSession.open(projectSession.currentPath!!)
+                    } else {
+                        projectFile = projectSession.updateCurrentProject { currentApplied.updatedProjectFile }
+                    }
+                }
+                syncProjectState()
+                pendingSpreadsheetCompetitorImportReview = null
+                isCompetitorSpreadsheetImportDialogVisible = false
+                val added = appliedMappings.sumOf { it.outcome.importedCount }
+                val updated = appliedMappings.sumOf { it.outcome.updatedCount }
+                val deleted = appliedMappings.sumOf { it.outcome.deletedCount }
+                val removedCategories = appliedMappings.sumOf { it.removedCategoryNames.size }
+                val warningLines = appliedMappings.flatMap { applied ->
+                    applied.outcome.warnings.map { warning -> "${applied.targetDisplayName}: $warning" }
+                }
+                recentImportReport = DesktopImportReport(
+                    title = "Spreadsheet Competitors: ${review.plan.eventName}",
+                    lines = withRollbackBackupLine(
+                        listOf(
+                            "${appliedMappings.size} Race Files updated.",
+                            "$added competitors added.",
+                            "$updated competitors updated.",
+                            "$deleted competitors removed by sync.",
+                            "$removedCategories empty categories removed."
+                        ) + warningLines
+                    )
+                )
+                projectStatusText =
+                    "Imported spreadsheet competitors: updated ${appliedMappings.size} Race Files; added $added, updated $updated, removed $deleted competitors."
+                DesktopDebugLog.info(
+                    "SpreadsheetCompetitors",
+                    "Applied ${appliedMappings.size} spreadsheet competitor mappings from ${review.plan.sourceUrl}"
+                )
+            }.onFailure { error ->
+                projectStatusText = "Spreadsheet competitor import failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("SpreadsheetCompetitors", projectStatusText)
             }
         }
 
@@ -5108,7 +5273,8 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportEventRegWebsite,
                 DesktopNavAction.ImportGoogleSheet,
                 DesktopNavAction.ImportDemFile -> true
-                DesktopNavAction.ImportEventRegCompetitorsCsv -> projectFile != null
+                DesktopNavAction.ImportEventRegCompetitorsCsv,
+                DesktopNavAction.ImportCompetitorsSpreadsheet -> projectFile != null
                 DesktopNavAction.ShowDebugLogHelp,
                 DesktopNavAction.ShowAbout -> true
                 DesktopNavAction.SaveEventFile -> canSaveEventFile()
@@ -5142,6 +5308,7 @@ fun main(args: Array<String>) = application {
                     }
                 DesktopNavAction.CloseEventFile,
                 DesktopNavAction.ImportEventRegCompetitorsCsv,
+                DesktopNavAction.ImportCompetitorsSpreadsheet,
                 DesktopNavAction.ImportIofEntryListXml,
                 DesktopNavAction.ExportIofEntryListXml,
                 DesktopNavAction.ImportCategoriesCsv,
@@ -5253,6 +5420,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportEventRegWebsite -> showEventRegImportDialog()
                 DesktopNavAction.ImportGoogleSheet -> showGoogleSheetImportDialog()
                 DesktopNavAction.ImportEventRegCompetitorsCsv -> showEventRegCompetitorCsvImportDialog()
+                DesktopNavAction.ImportCompetitorsSpreadsheet -> showCompetitorSpreadsheetImportDialog()
                 DesktopNavAction.ImportIofEntryListXml -> importIofEntryListXml()
                 DesktopNavAction.ExportIofEntryListXml -> exportIofEntryListXml()
                 DesktopNavAction.SaveEventFile -> saveCurrentProject()
@@ -5577,6 +5745,23 @@ fun main(args: Array<String>) = application {
                 }
             )
         }
+        if (isCompetitorSpreadsheetImportDialogVisible) {
+            EventRegImportDialog(
+                title = "Import Competitor Spreadsheet",
+                urlLabel = "Spreadsheet URL",
+                idleDescription = "Reviews spreadsheet competitions, maps them to the current race or series Race Files, and synchronizes competitor lists and categories after confirmation.",
+                importingDescription = "Downloading spreadsheet and preparing import review...",
+                url = googleSheetImportUrl,
+                isImporting = isImportingCompetitorSpreadsheet,
+                onUrlChange = { googleSheetImportUrl = it },
+                onImport = { importCompetitorSpreadsheet(googleSheetImportUrl) },
+                onCancel = {
+                    if (!isImportingCompetitorSpreadsheet) {
+                        isCompetitorSpreadsheetImportDialogVisible = false
+                    }
+                }
+            )
+        }
         if (isEventRegCompetitorCsvImportDialogVisible) {
             EventRegImportDialog(
                 title = "Import EventReg Competitors",
@@ -5886,6 +6071,16 @@ fun main(args: Array<String>) = application {
                     )
                 },
                 onCancel = { pendingCompetitorsCsvImportReview = null }
+            )
+        }
+        pendingSpreadsheetCompetitorImportReview?.let { review ->
+            SpreadsheetCompetitorImportReviewDialog(
+                review = review,
+                onImport = { applySpreadsheetCompetitorImport(review) },
+                onCancel = {
+                    pendingSpreadsheetCompetitorImportReview = null
+                    projectStatusText = "Spreadsheet competitor import canceled. No changes applied."
+                }
             )
         }
         pendingReadoutEdit?.let { draft ->
@@ -8397,6 +8592,114 @@ private fun EventRegImportDialog(
     )
 }
 
+@Composable
+private fun SpreadsheetCompetitorImportReviewDialog(
+    review: PendingSpreadsheetCompetitorImportReview,
+    onImport: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val selectedMappings = review.plan.selectedMappings
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Review Competitor Spreadsheet Import") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .widthIn(min = 560.dp, max = 760.dp)
+                    .heightIn(max = 620.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "Source: ${review.plan.eventName}",
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "${selectedMappings.size} of ${review.plan.mappings.size} competitions will be imported. " +
+                        "The spreadsheet is treated as the source of truth for each mapped Race File.",
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+                review.plan.mappings.forEach { mapping ->
+                    SpreadsheetCompetitorImportMappingReview(mapping)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onImport,
+                enabled = selectedMappings.isNotEmpty()
+            ) {
+                Text("Apply Import")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun SpreadsheetCompetitorImportMappingReview(mapping: DesktopSpreadsheetCompetitorImportMapping) {
+    val target = mapping.target
+    val preview = mapping.preview
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color(0xFFE0E0E0))
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(mapping.competitionName, fontWeight = FontWeight.SemiBold)
+        if (target == null || mapping.confidence < DesktopSpreadsheetCompetitorImporter.MinimumAutoMapConfidence) {
+            Text(
+                "Skipped: no confident Race File match (${mapping.confidence}%).",
+                fontSize = 13.sp,
+                color = Color(0xFF9A3412)
+            )
+        } else {
+            Text(
+                "Maps to ${target.displayName} (${mapping.confidence}% confidence).",
+                fontSize = 13.sp
+            )
+            preview?.let { importPreview ->
+                Text(
+                    "${mapping.competitorCount} spreadsheet competitors: " +
+                        "${importPreview.importedCount} add, " +
+                        "${importPreview.updatedCount} update, " +
+                        "${importPreview.deletedCount} remove.",
+                    fontSize = 13.sp
+                )
+                if (importPreview.createdCategoryNames.isNotEmpty()) {
+                    Text(
+                        "Create categories: ${importPreview.createdCategoryNames.joinToString()}",
+                        fontSize = 13.sp
+                    )
+                }
+                if (importPreview.removableEmptyCategoryNames.isNotEmpty()) {
+                    Text(
+                        "Remove empty categories: ${importPreview.removableEmptyCategoryNames.joinToString()}",
+                        fontSize = 13.sp
+                    )
+                }
+                if (importPreview.protectedEmptyCategoryNames.isNotEmpty()) {
+                    Text(
+                        "Keep empty course categories: ${importPreview.protectedEmptyCategoryNames.joinToString()}",
+                        fontSize = 13.sp,
+                        color = Color.DarkGray
+                    )
+                }
+            }
+        }
+        val details = mapping.reasons + mapping.warnings + preview?.warnings.orEmpty()
+        details.distinct().take(6).forEach { detail ->
+            Text("- $detail", fontSize = 12.sp, color = Color.DarkGray)
+        }
+    }
+}
+
 private data class DesktopEventFileTransferDialogState(
     val addresses: List<DesktopEventFileTransferAddress>,
     val selectedAddress: DesktopEventFileTransferAddress,
@@ -9143,6 +9446,10 @@ private data class PendingCompetitorsCsvImportReview(
     val rows: List<CompetitorCsvImportRow>,
     val invalidLineCount: Int,
     val missingCategoryNames: List<String>
+)
+
+private data class PendingSpreadsheetCompetitorImportReview(
+    val plan: DesktopSpreadsheetCompetitorImportPlan
 )
 
 private data class PendingCategoriesCsvImportReview(

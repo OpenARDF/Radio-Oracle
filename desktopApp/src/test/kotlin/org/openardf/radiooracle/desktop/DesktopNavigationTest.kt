@@ -955,15 +955,30 @@ class DesktopNavigationTest {
         assertEquals(DesktopSection.ProtectedCourseOrder, categoryItems.first { it.label == "Course Order" }.section)
         assertEquals(
             listOf(
-                "Import Competitors CSV...",
-                "Import Competitors From Race File...",
-                "Import EventReg Website...",
-                "Import IOF EntryList XML...",
-                "Export Competitors CSV...",
-                "Export IOF EntryList XML...",
+                "Import",
+                "Export",
                 "Delete All Competitors..."
             ),
             competitorItems.map { it.label }
+        )
+        assertEquals(DesktopSection.CompetitorsImportExport, competitorItems.first { it.label == "Import" }.section)
+        assertEquals(DesktopSection.CompetitorsImportExport, competitorItems.first { it.label == "Export" }.section)
+        assertEquals(
+            listOf(
+                "Import Competitors CSV...",
+                "Import Competitors From Race File...",
+                "Import Spreadsheet...",
+                "Import EventReg Website...",
+                "Import IOF EntryList XML..."
+            ),
+            competitorItems.first { it.label == "Import" }.children.map { it.label }
+        )
+        assertEquals(
+            listOf(
+                "Export Competitors CSV...",
+                "Export IOF EntryList XML..."
+            ),
+            competitorItems.first { it.label == "Export" }.children.map { it.label }
         )
         assertEquals(DesktopNavAction.ImportCategoriesCsv, categoryItems.first { it.label == "Import Categories CSV..." }.action)
         assertEquals(
@@ -987,16 +1002,22 @@ class DesktopNavigationTest {
             DesktopNavAction.DeleteAllCategories,
             categoryItems.first { it.label == "Delete All Categories..." }.action
         )
-        assertEquals(DesktopNavAction.ImportCompetitorsCsv, competitorItems.first { it.label == "Import Competitors CSV..." }.action)
+        val competitorImportItems = competitorItems.first { it.label == "Import" }.children
+        val competitorExportItems = competitorItems.first { it.label == "Export" }.children
+        assertEquals(DesktopNavAction.ImportCompetitorsCsv, competitorImportItems.first { it.label == "Import Competitors CSV..." }.action)
         assertEquals(
             DesktopNavAction.ImportCompetitorsRaceFile,
-            competitorItems.first { it.label == "Import Competitors From Race File..." }.action
+            competitorImportItems.first { it.label == "Import Competitors From Race File..." }.action
         )
-        assertEquals(DesktopNavAction.ImportEventRegCompetitorsCsv, competitorItems.first { it.label == "Import EventReg Website..." }.action)
-        assertTrue(competitorItems.first { it.label == "Import EventReg Website..." }.requiresEventFile)
-        assertEquals(DesktopNavAction.ImportIofEntryListXml, competitorItems.first { it.label == "Import IOF EntryList XML..." }.action)
-        assertEquals(DesktopNavAction.ExportCompetitorsCsv, competitorItems.first { it.label == "Export Competitors CSV..." }.action)
-        assertEquals(DesktopNavAction.ExportIofEntryListXml, competitorItems.first { it.label == "Export IOF EntryList XML..." }.action)
+        assertEquals(
+            DesktopNavAction.ImportCompetitorsSpreadsheet,
+            competitorImportItems.first { it.label == "Import Spreadsheet..." }.action
+        )
+        assertEquals(DesktopNavAction.ImportEventRegCompetitorsCsv, competitorImportItems.first { it.label == "Import EventReg Website..." }.action)
+        assertTrue(competitorImportItems.first { it.label == "Import EventReg Website..." }.requiresEventFile)
+        assertEquals(DesktopNavAction.ImportIofEntryListXml, competitorImportItems.first { it.label == "Import IOF EntryList XML..." }.action)
+        assertEquals(DesktopNavAction.ExportCompetitorsCsv, competitorExportItems.first { it.label == "Export Competitors CSV..." }.action)
+        assertEquals(DesktopNavAction.ExportIofEntryListXml, competitorExportItems.first { it.label == "Export IOF EntryList XML..." }.action)
         assertEquals(DesktopNavAction.DeleteAllCompetitors, competitorItems.first { it.label == "Delete All Competitors..." }.action)
         assertFalse(setupItems.any { it.label == "Imports" })
         assertFalse(setupItems.any { it.label == "Setup Exports" })
