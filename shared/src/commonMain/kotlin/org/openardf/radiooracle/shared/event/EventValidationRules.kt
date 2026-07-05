@@ -98,17 +98,6 @@ object EventValidationRules {
                 .groupBy { it.siCode to it.type }
                 .mapValues { (_, controls) -> controls.singleOrNull() }
             raceData.categories.forEach { data ->
-                StandardCategoryRules.inferIsManFromName(data.category.name)
-                    ?.takeIf { expectedIsMan -> expectedIsMan != data.category.isMan }
-                    ?.let { expectedIsMan ->
-                        add(
-                            EventValidationIssue.CategoryGenderMismatch(
-                                categoryName = data.category.name,
-                                expectedIsMan = expectedIsMan,
-                                actualIsMan = data.category.isMan
-                            )
-                        )
-                    }
                 try {
                     validateLegacyCategoryRaceSettings(data.category, this)
                     val raceType = raceData.race.raceType

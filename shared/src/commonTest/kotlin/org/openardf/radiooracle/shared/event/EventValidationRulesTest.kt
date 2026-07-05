@@ -120,18 +120,18 @@ class EventValidationRulesTest {
     }
 
     @Test
-    fun reportsStandardCategoryGenderMismatch() {
+    fun reconcilesStandardCategoryGenderMismatches() {
         val issues = EventValidationRules.validateRaceData(
             raceData(
                 categories = listOf(
                     categoryData("M21", isMan = false),
+                    categoryData("M80", isMan = false),
                     categoryData("W55", isMan = true)
                 )
             )
         )
 
-        assertTrue(issues.contains(EventValidationIssue.CategoryGenderMismatch("M21", true, false)))
-        assertTrue(issues.contains(EventValidationIssue.CategoryGenderMismatch("W55", false, true)))
+        assertFalse(issues.any { it is EventValidationIssue.CategoryGenderMismatch })
     }
 
     @Test

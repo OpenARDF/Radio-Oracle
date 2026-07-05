@@ -42,7 +42,7 @@ class EventProjectFileTest {
     fun defaultsToCurrentSchemaAndAppName() {
         val projectFile = EventProjectFile(raceData = raceData())
 
-        assertEquals(3, projectFile.schemaVersion)
+        assertEquals(EventProjectFileFormat.CURRENT_SCHEMA_VERSION, projectFile.schemaVersion)
         assertEquals("Radio-Oracle", projectFile.appName)
         assertTrue(projectFile.isSupportedSchema())
     }
@@ -60,7 +60,7 @@ class EventProjectFileTest {
         val encoded = EventProjectFileJson.encode(original)
         val decoded = EventProjectFileJson.decode(encoded)
 
-        assertTrue(encoded.contains("\"schemaVersion\": 3"))
+        assertTrue(encoded.contains("\"schemaVersion\": ${EventProjectFileFormat.CURRENT_SCHEMA_VERSION}"))
         assertTrue(encoded.contains("\"appName\": \"Radio-Oracle\""))
         assertTrue(encoded.contains("\"courseAnalyzerSpeedCompensationFactor\": 1.0"))
         assertEquals(original.schemaVersion, decoded.schemaVersion)
@@ -116,7 +116,10 @@ class EventProjectFileTest {
     @Test
     fun refusesProjectFilesWithUnsupportedSchemaVersions() {
         val encoded = EventProjectFileJson.encode(EventProjectFile(raceData = raceData()))
-            .replace("\"schemaVersion\": 3", "\"schemaVersion\": 4")
+            .replace(
+                "\"schemaVersion\": ${EventProjectFileFormat.CURRENT_SCHEMA_VERSION}",
+                "\"schemaVersion\": ${EventProjectFileFormat.CURRENT_SCHEMA_VERSION + 1}"
+            )
 
         assertFailsWith<IllegalArgumentException> {
             EventProjectFileJson.decode(encoded)
@@ -195,7 +198,7 @@ class EventProjectFileTest {
             )
         )
         val legacyEncoded = EventProjectFileJson.encode(projectFile)
-            .replace("\"schemaVersion\": 3", "\"schemaVersion\": 2")
+            .replace("\"schemaVersion\": ${EventProjectFileFormat.CURRENT_SCHEMA_VERSION}", "\"schemaVersion\": 2")
             .replace(Regex("""\s+"scored": true,\n"""), "")
 
         val decoded = EventProjectFileJson.decode(legacyEncoded)
@@ -228,6 +231,29 @@ class EventProjectFileTest {
         assertEquals(null, decoded.raceType)
         assertEquals(null, decoded.raceBand)
         assertEquals(null, decoded.timeLimitSeconds)
+    }
+
+    @Test
+    fun reconcilesStandardCategoryGendersOnEncodeAndDecode() {
+        val baseRaceData = raceData()
+        val staleActiveCategory = baseRaceData.categories.single().let { categoryData ->
+            categoryData.copy(category = categoryData.category.copy(name = "M80", isMan = false))
+        }
+        val staleCourseMapping = baseRaceData.categories.single().let { categoryData ->
+            categoryData.copy(category = categoryData.category.copy(name = "W75", isMan = true))
+        }
+        val projectFile = EventProjectFile(
+            raceData = baseRaceData.copy(
+                categories = listOf(staleActiveCategory),
+                courseMappings = listOf(staleCourseMapping)
+            )
+        )
+
+        val encoded = EventProjectFileJson.encode(projectFile)
+        val decoded = EventProjectFileJson.decode(encoded)
+
+        assertTrue(decoded.raceData.categories.single().category.isMan)
+        assertFalse(decoded.raceData.courseMappings.single().category.isMan)
     }
 
     private fun raceData(): EventRaceData =

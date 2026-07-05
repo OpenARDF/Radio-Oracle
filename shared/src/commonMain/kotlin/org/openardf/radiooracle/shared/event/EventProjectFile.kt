@@ -72,7 +72,9 @@ object EventProjectFileJson {
 
     /** Returns the in-memory form that will be persisted when this Race File is written. */
     fun normalizedForStorage(projectFile: EventProjectFile): EventProjectFile =
-        clearPublicControlLocations(clearLegacyCategoryRaceSettings(projectFile))
+        reconcileStandardCategoryGenders(
+            clearPublicControlLocations(clearLegacyCategoryRaceSettings(projectFile))
+        )
 
     /** Encodes a Race File using the stable, shared desktop-beta JSON format. */
     fun encode(projectFile: EventProjectFile): String =
@@ -110,7 +112,9 @@ object EventProjectFileJson {
         } else {
             backfilledProjectFile
         }
-        return EventStartNumbers.assignFromDrawnStartTimes(clearPublicControlLocations(migratedProjectFile))
+        return EventStartNumbers.assignFromDrawnStartTimes(
+            reconcileStandardCategoryGenders(clearPublicControlLocations(migratedProjectFile))
+        )
     }
 
     private fun clearPublicControlLocations(projectFile: EventProjectFile): EventProjectFile {
@@ -137,6 +141,34 @@ object EventProjectFileJson {
                 }
             )
         )
+    }
+
+    private fun reconcileStandardCategoryGenders(projectFile: EventProjectFile): EventProjectFile {
+        val categories = projectFile.raceData.categories.map(::reconcileStandardCategoryGender)
+        val courseMappings = projectFile.raceData.courseMappings.map(::reconcileStandardCategoryGender)
+        if (
+            categories == projectFile.raceData.categories &&
+            courseMappings == projectFile.raceData.courseMappings
+        ) {
+            return projectFile
+        }
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                categories = categories,
+                courseMappings = courseMappings
+            )
+        )
+    }
+
+    private fun reconcileStandardCategoryGender(categoryData: EventCategoryData): EventCategoryData {
+        val reconciledIsMan = StandardCategoryRules.reconcileIsManWithName(
+            categoryData.category.name,
+            categoryData.category.isMan
+        )
+        if (reconciledIsMan == categoryData.category.isMan) {
+            return categoryData
+        }
+        return categoryData.copy(category = categoryData.category.copy(isMan = reconciledIsMan))
     }
 
     private fun EventCategory.hasLegacyRaceSettings(): Boolean =
