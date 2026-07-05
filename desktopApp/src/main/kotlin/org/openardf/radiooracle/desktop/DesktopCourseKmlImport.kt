@@ -629,9 +629,9 @@ object DesktopCourseKmlImporter {
                     "CourseKml",
                     "Import matched category=${categoryData.category.name}: route=${route.name} sampledRoutePoints=${sampledRoute.size} idealOrder='${idealOrder.ifBlank { "none" }}' routeControls=${controlPoints.size} visibleControls=${routeMatchedControls.size} courseObjects=${courseObjects.size} routeElevations=${sampledRoute.count { it.elevationMeters != null }} controlElevations=${controlPoints.count { it.elevationMeters != null }}"
                 )
-                // Route-derived length and climb facts are competition-sensitive. Store them only in
-                // the encrypted category payload; assigned controls are updated separately from the
-                // matched map point controls.
+                // Route geometry and ideal order are competition-sensitive, but length/climb are
+                // normal category facts. Calculate them from the imported geometry and elevation
+                // cache rather than trusting source-file metadata.
                 val protectedCourseInfo = ProtectedCourseInfo(
                     idealOrder = idealOrder,
                     lengthMeters = routeLengthMeters(sampledRoute).roundToInt(),
@@ -663,6 +663,11 @@ object DesktopCourseKmlImporter {
                     updatedProject,
                     categoryData.category.id,
                     encryptedIdealOrder
+                )
+                updatedProject = updateCategoryCalculatedCourseMetrics(
+                    projectFile = updatedProject,
+                    categoryId = categoryData.category.id,
+                    courseInfo = protectedCourseInfo
                 )
                 importedCategoryCount++
             }
@@ -1316,6 +1321,11 @@ object DesktopCourseKmlImporter {
                 target.categoryId,
                 DesktopProtectedCourseOrder.encryptCourseInfo(updatedCourseInfo, password)
             )
+            updatedProject = updateCategoryCalculatedCourseMetrics(
+                projectFile = updatedProject,
+                categoryId = target.categoryId,
+                courseInfo = updatedCourseInfo
+            )
             DesktopDebugLog.info(
                 "CourseElevation",
                 "Fetch category complete category=${target.categoryName}: routeFetched=$routeFetched courseObjectFetched=$courseObjectFetched controlLocationFetched=$controlFetched remainingRouteMissing=${elevatedRoute.count { it.elevationMeters == null }} remainingCourseObjectMissing=${elevatedCourseObjects.count { it.elevationMeters == null }} remainingControlLocationMissing=${updatedCourseInfo.controlPoints.count { it.elevationMeters == null }}"
@@ -1866,6 +1876,18 @@ object DesktopCourseKmlImporter {
                 )
             }
     }
+
+    private fun updateCategoryCalculatedCourseMetrics(
+        projectFile: EventProjectFile,
+        categoryId: String,
+        courseInfo: ProtectedCourseInfo
+    ): EventProjectFile =
+        EventProjectEditor.updateCategoryPhysicalStats(
+            projectFile = projectFile,
+            categoryId = categoryId,
+            lengthMeters = (courseInfo.lengthMeters ?: 0).toString(),
+            climbMeters = (courseInfo.climbMeters ?: 0).toString()
+        )
 
     private fun categoryAssignmentUpdate(
         projectFile: EventProjectFile,

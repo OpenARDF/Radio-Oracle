@@ -279,13 +279,35 @@ private enum class DesktopSportIdentAppendOutcome {
     DuplicateCreatedNew
 }
 
+private val CategoryNameColumn = FixedTableColumn("Name", 150.dp)
+private val CategoryGenderColumn = FixedTableColumn("Gender", 92.dp)
+private val CategoryLengthColumn = FixedTableColumn("Length (m)", 96.dp)
+private val CategoryClimbColumn = FixedTableColumn("Climb (m)", 92.dp)
+private val CategoryAssignedControlsColumn = FixedTableColumn("Assigned Controls", 320.dp)
+
 private val CategoryTableColumns = listOf(
-    FixedTableColumn("Name", 150.dp),
-    FixedTableColumn("Gender", 92.dp),
-    FixedTableColumn("Length (m)", 96.dp),
-    FixedTableColumn("Climb (m)", 92.dp),
-    FixedTableColumn("Assigned Controls", 320.dp)
+    CategoryNameColumn,
+    CategoryGenderColumn,
+    CategoryLengthColumn,
+    CategoryClimbColumn,
+    CategoryAssignedControlsColumn
 )
+
+private val RestrictedCategoryTableColumns = listOf(
+    CategoryNameColumn,
+    CategoryGenderColumn,
+    CategoryAssignedControlsColumn
+)
+
+private fun categoryTableColumns(showPhysicalStats: Boolean): List<FixedTableColumn> =
+    if (showPhysicalStats) {
+        CategoryTableColumns
+    } else {
+        RestrictedCategoryTableColumns
+    }
+
+private fun showCategoryPhysicalStatsInSetup(raceLevel: RaceLevel): Boolean =
+    raceLevel == RaceLevel.PRACTICE || raceLevel == RaceLevel.OTHER
 
 private val CategoryTableColumnHints = mapOf(
     "Name" to "Category/class name used for competitor assignment, start lists, and results.",
@@ -11902,6 +11924,7 @@ private fun SectionWorkspace(
             CategoryDetailsPanel(
                 categories = EventCategoryDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
                 controls = EventControlDetails.from(projectFile.raceData),
+                raceLevel = projectFile.raceData.race.raceLevel,
                 onRenameCategory = onRenameCategory,
                 onUpdateCategoryGender = onUpdateCategoryGender,
                 onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
@@ -18847,6 +18870,7 @@ private fun controlRoleBackgroundColor(type: ControlPointType): Color =
 private fun CategoryDetailsPanel(
     categories: List<EventCategoryDetails>,
     controls: List<EventControlDetails>,
+    raceLevel: RaceLevel,
     onRenameCategory: (String, String) -> Unit,
     onUpdateCategoryGender: (String, Boolean) -> Unit,
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
@@ -18855,7 +18879,9 @@ private fun CategoryDetailsPanel(
     onRemoveCategory: (String, Boolean) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
-    val tableWidth = fixedTableWidth(CategoryTableColumns)
+    val showPhysicalStats = showCategoryPhysicalStatsInSetup(raceLevel)
+    val tableColumns = categoryTableColumns(showPhysicalStats)
+    val tableWidth = fixedTableWidth(tableColumns)
     val orderedCategories = rememberEditableRowOrder(categories) { it.id }
     var categoryNameDraft by remember { mutableStateOf("") }
     fun addCategory() {
@@ -18884,6 +18910,8 @@ private fun CategoryDetailsPanel(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     CategoryAddRow(
+                        tableColumns = tableColumns,
+                        showPhysicalStats = showPhysicalStats,
                         categoryNameDraft = categoryNameDraft,
                         onCategoryNameChange = { categoryNameDraft = it },
                         onCommit = {
@@ -18892,7 +18920,7 @@ private fun CategoryDetailsPanel(
                             }
                         }
                     )
-                    FixedDetailHeaderRow(CategoryTableColumns, CategoryTableColumnHints)
+                    FixedDetailHeaderRow(tableColumns, CategoryTableColumnHints)
                 }
             }
         }
@@ -18922,6 +18950,8 @@ private fun CategoryDetailsPanel(
                             CategoryDetailRow(
                                 category = category,
                                 controls = controls,
+                                tableColumns = tableColumns,
+                                showPhysicalStats = showPhysicalStats,
                                 onRenameCategory = onRenameCategory,
                                 onUpdateCategoryGender = onUpdateCategoryGender,
                                 onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
@@ -19275,12 +19305,14 @@ private fun ProtectedIdealOrderEditor(
 /** Shows the new-category entry row above existing category definitions. */
 @Composable
 private fun CategoryAddRow(
+    tableColumns: List<FixedTableColumn>,
+    showPhysicalStats: Boolean,
     categoryNameDraft: String,
     onCategoryNameChange: (String) -> Unit,
     onCommit: () -> Unit
 ) {
     Row(
-        modifier = Modifier.width(fixedTableWidth(CategoryTableColumns)),
+        modifier = Modifier.width(fixedTableWidth(tableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -19288,15 +19320,19 @@ private fun CategoryAddRow(
             value = categoryNameDraft,
             onValueChange = onCategoryNameChange,
             modifier = Modifier
-                .width(CategoryTableColumns[0].width)
+                .width(tableColumns[0].width)
                 .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("New Category") }
         )
-        Spacer(modifier = Modifier.width(CategoryTableColumns[1].width))
-        Spacer(modifier = Modifier.width(CategoryTableColumns[2].width))
-        Spacer(modifier = Modifier.width(CategoryTableColumns[3].width))
-        Spacer(modifier = Modifier.width(CategoryTableColumns[4].width))
+        Spacer(modifier = Modifier.width(tableColumns[1].width))
+        if (showPhysicalStats) {
+            Spacer(modifier = Modifier.width(tableColumns[2].width))
+            Spacer(modifier = Modifier.width(tableColumns[3].width))
+            Spacer(modifier = Modifier.width(tableColumns[4].width))
+        } else {
+            Spacer(modifier = Modifier.width(tableColumns[2].width))
+        }
     }
 }
 
@@ -19305,6 +19341,8 @@ private fun CategoryAddRow(
 private fun CategoryDetailRow(
     category: EventCategoryDetails,
     controls: List<EventControlDetails>,
+    tableColumns: List<FixedTableColumn>,
+    showPhysicalStats: Boolean,
     onRenameCategory: (String, String) -> Unit,
     onUpdateCategoryGender: (String, Boolean) -> Unit,
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
@@ -19340,7 +19378,7 @@ private fun CategoryDetailRow(
     }
     Row(
         modifier = Modifier
-            .width(fixedTableWidth(CategoryTableColumns))
+            .width(fixedTableWidth(tableColumns))
             .background(categoryGenderBackground(category.isMan)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
@@ -19349,7 +19387,7 @@ private fun CategoryDetailRow(
             value = categoryNameDraft,
             onValueChange = { categoryNameDraft = it },
             modifier = Modifier
-                .width(CategoryTableColumns[0].width)
+                .width(tableColumns[0].width)
                 .onFocusChanged { focusState ->
                     if (!focusState.isFocused) {
                         applyCategoryNameDraft()
@@ -19362,32 +19400,37 @@ private fun CategoryDetailRow(
         CategoryGenderPicker(
             isMan = category.isMan,
             onGenderChange = { isMan -> onUpdateCategoryGender(category.id, isMan) },
-            modifier = Modifier.width(CategoryTableColumns[1].width)
+            modifier = Modifier.width(tableColumns[1].width)
         )
-        TextField(
-            value = lengthMetersDraft,
-            onValueChange = {
-                lengthMetersDraft = it
-                applyPhysicalStats(nextLength = it)
-            },
-            modifier = Modifier
-                .width(CategoryTableColumns[2].width)
-                .commitOnEnter { applyPhysicalStats() },
-            singleLine = true,
-            label = { Text("Length M") }
-        )
-        TextField(
-            value = climbMetersDraft,
-            onValueChange = {
-                climbMetersDraft = it
-                applyPhysicalStats(nextClimb = it)
-            },
-            modifier = Modifier
-                .width(CategoryTableColumns[3].width)
-                .commitOnEnter { applyPhysicalStats() },
-            singleLine = true,
-            label = { Text("Climb M") }
-        )
+        val assignedControlsColumnIndex = if (showPhysicalStats) {
+            TextField(
+                value = lengthMetersDraft,
+                onValueChange = {
+                    lengthMetersDraft = it
+                    applyPhysicalStats(nextLength = it)
+                },
+                modifier = Modifier
+                    .width(tableColumns[2].width)
+                    .commitOnEnter { applyPhysicalStats() },
+                singleLine = true,
+                label = { Text("Length M") }
+            )
+            TextField(
+                value = climbMetersDraft,
+                onValueChange = {
+                    climbMetersDraft = it
+                    applyPhysicalStats(nextClimb = it)
+                },
+                modifier = Modifier
+                    .width(tableColumns[3].width)
+                    .commitOnEnter { applyPhysicalStats() },
+                singleLine = true,
+                label = { Text("Climb M") }
+            )
+            4
+        } else {
+            2
+        }
         AssignedControlsEditor(
             controlPointsDraft = controlPointsDraft,
             controls = controls,
@@ -19398,7 +19441,7 @@ private fun CategoryDetailRow(
                 controlPointsDraft = text
                 onUpdateCategoryControlPoints(category.id, text, shouldCheckRequiredControls)
             },
-            modifier = Modifier.width(CategoryTableColumns[4].width)
+            modifier = Modifier.width(tableColumns[assignedControlsColumnIndex].width)
         )
     }
 }

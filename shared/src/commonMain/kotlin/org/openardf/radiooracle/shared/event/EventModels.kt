@@ -89,11 +89,10 @@ data class EventCategory(
 /**
  * Password-protected route-derived course data.
  *
- * KML/KMZ files may live outside the Race File, but their derived length, climb,
- * ideal order, and route geometry are sensitive before competition day. The
- * desktop app therefore encrypts this payload before storing it in
- * EventCategory.encryptedCourseInfo instead of copying those values into public
- * category length/climb/control fields.
+ * KML/KMZ files may live outside the Race File, but their ideal order and route geometry are
+ * sensitive before competition day. The desktop app therefore encrypts the detailed route payload
+ * in EventCategory.encryptedCourseInfo; public category length/climb fields may still mirror
+ * calculated route metrics.
  */
 @Serializable
 data class ProtectedCourseInfo(

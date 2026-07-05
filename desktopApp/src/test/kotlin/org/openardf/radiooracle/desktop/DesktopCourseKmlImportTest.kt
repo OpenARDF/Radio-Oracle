@@ -84,8 +84,6 @@ class DesktopCourseKmlImportTest {
         assertEquals(0, summary.changedControlLocationCount)
         assertEquals(0, summary.duplicateCategoryCount)
         assertTrue(summary.routeElevationPointCount > 0)
-        assertEquals(0, category.lengthMeters)
-        assertEquals(0, category.climbMeters)
         assertEquals("", category.controlPointsString)
         assertTrue(categoryData.controlPoints.isEmpty())
         assertEquals("31 32", summary.categoryAssignmentUpdates.single().controlPointsText)
@@ -100,6 +98,8 @@ class DesktopCourseKmlImportTest {
         assertEquals("31 32", protectedCourseInfo.idealOrder)
         assertTrue(protectedCourseInfo.lengthMeters!! > 100)
         assertTrue(protectedCourseInfo.climbMeters!! >= 12)
+        assertEquals(protectedCourseInfo.lengthMeters, category.lengthMeters)
+        assertEquals(protectedCourseInfo.climbMeters, category.climbMeters)
         assertEquals(kmlPath.fileName.toString(), protectedCourseInfo.sourceName)
         assertEquals(summary.sourceSha256, protectedCourseInfo.sourceSha256)
         assertEquals(64, protectedCourseInfo.sourceSha256.length)
@@ -2396,6 +2396,8 @@ class DesktopCourseKmlImportTest {
         assertEquals(listOf("Start", "31", "32", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
         assertTrue(protectedCourseInfo.courseObjects.all { it.elevationMeters != null })
         assertTrue(protectedCourseInfo.climbMeters!! >= 12)
+        assertEquals(protectedCourseInfo.lengthMeters, category.lengthMeters)
+        assertEquals(protectedCourseInfo.climbMeters, category.climbMeters)
         assertEquals(
             protectedCourseInfo.route.size + protectedCourseInfo.courseObjects.size,
             elevationResult.elevatedPointCount
