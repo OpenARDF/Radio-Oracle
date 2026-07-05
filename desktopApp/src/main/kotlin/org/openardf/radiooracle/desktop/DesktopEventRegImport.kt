@@ -108,6 +108,7 @@ data class DesktopEventRegCompetitor(
     val club: String,
     val categoryName: String,
     val startTimeText: String?,
+    val courseName: String = "",
     val siNumber: Int? = null,
     val startNumber: Int? = null,
     val bibNumber: String = "",
@@ -523,6 +524,11 @@ object DesktopEventRegSpreadsheetParser {
                     lastName = lastName,
                     club = row.getOrBlank(columns.clubIndex),
                     categoryName = categoryName,
+                    courseName = spreadsheetCategoryName(
+                        competitionName = column.competitionName,
+                        classValue = "",
+                        courseValue = row.getOrBlank(column.courseIndex)
+                    ).ifBlank { categoryName },
                     startTimeText = row.getOrBlank(column.startIndex).let(::normalizedStartTime),
                     siNumber = row.getOrBlank(columns.siNumberIndex).numericText().toIntOrNull(),
                     startNumber = row.getOrBlank(columns.startNumberIndex).numericText().toIntOrNull(),
@@ -903,7 +909,9 @@ object DesktopSpreadsheetCompetitorImporter {
     fun applyMapping(
         mapping: DesktopSpreadsheetCompetitorImportMapping,
         competitorIdFactory: () -> String = { UUID.randomUUID().toString() },
-        categoryIdFactory: () -> String = { UUID.randomUUID().toString() }
+        categoryIdFactory: () -> String = { UUID.randomUUID().toString() },
+        removeEmptyCategories: Boolean = true,
+        removeEmptyCourseCategories: Boolean = false
     ): DesktopSpreadsheetCompetitorImportAppliedMapping {
         val target = requireNotNull(mapping.target) {
             "No Race File target was selected for ${mapping.competitionName}."
@@ -914,12 +922,25 @@ object DesktopSpreadsheetCompetitorImporter {
             competitorIdFactory = competitorIdFactory,
             categoryIdFactory = categoryIdFactory
         )
-        val emptyCategoryNames = mapping.preview?.removableEmptyCategoryNames.orEmpty().toSet()
+        val emptyCategoryNames = if (removeEmptyCategories) {
+            mapping.preview?.removableEmptyCategoryNames.orEmpty().toSet()
+        } else {
+            emptySet()
+        }
+        val emptyCourseCategoryNames = if (removeEmptyCourseCategories) {
+            mapping.preview?.protectedEmptyCategoryNames.orEmpty().toSet()
+        } else {
+            emptySet()
+        }
         var updatedProject = outcome.projectFile
         val removedCategoryNames = mutableListOf<String>()
-        emptyCategoryNames.forEach { categoryName ->
+        (emptyCategoryNames + emptyCourseCategoryNames).forEach { categoryName ->
             val category = updatedProject.raceData.categories
-                .firstOrNull { it.category.name == categoryName && it.competitors.isEmpty() && !it.hasCourseData() }
+                .firstOrNull { categoryData ->
+                    categoryData.category.name == categoryName &&
+                        categoryData.competitors.isEmpty() &&
+                        (!categoryData.hasCourseData() || categoryName in emptyCourseCategoryNames)
+                }
             if (category != null) {
                 updatedProject = EventProjectEditor.removeCategory(updatedProject, category.category.id, deleteCompetitors = false)
                 removedCategoryNames += category.category.name
@@ -1296,6 +1317,7 @@ object DesktopEventRegRegistrationParser {
                     lastName = name.last,
                     club = if (clubIndex >= 0) row.getOrBlank(clubIndex) else "",
                     categoryName = categoryName,
+                    courseName = categoryName,
                     startTimeText = column.startIndex?.let { row.getOrBlank(it) }?.let(::normalizedStartTime)
                 )
             }
@@ -1460,6 +1482,7 @@ private fun DesktopEventRegCompetitor.toImportRow(): CompetitorCsvImportRow =
         firstName = firstName,
         lastName = lastName,
         categoryName = categoryName,
+        courseName = courseName,
         isMan = isMan
             ?: StandardCategoryRules.inferIsManFromName(categoryName)
             ?: categoryName.trim().uppercase().startsWith("M"),

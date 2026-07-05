@@ -421,50 +421,6 @@ object DesktopNavigation {
                     DesktopSection.Controls
                 ),
                 group(
-                    "setup.categories",
-                    "Categories",
-                    workflow,
-                    listOf(
-                        item(
-                            "setup.categories.protected-course-order",
-                            "Course Order",
-                            workflow,
-                            DesktopSection.ProtectedCourseOrder
-                        ),
-                        action(
-                            "setup.categories.import",
-                            "Import Categories CSV...",
-                            workflow,
-                            DesktopNavAction.ImportCategoriesCsv
-                        ),
-                        action(
-                            "setup.categories.import-race-file",
-                            "Import Categories From Race File...",
-                            workflow,
-                            DesktopNavAction.ImportCategoriesRaceFile
-                        ),
-                        action(
-                            "setup.categories.export",
-                            "Export Categories CSV...",
-                            workflow,
-                            DesktopNavAction.ExportCategoriesCsv
-                        ),
-                        action(
-                            "setup.categories.delete-all-assigned-controls",
-                            "Delete All Control Assignments...",
-                            workflow,
-                            DesktopNavAction.DeleteAllCategoryAssignedControls
-                        ),
-                        action(
-                            "setup.categories.delete-all-categories",
-                            "Delete All Categories...",
-                            workflow,
-                            DesktopNavAction.DeleteAllCategories
-                        ),
-                    ),
-                    DesktopSection.Categories
-                ),
-                group(
                     "setup.competitors",
                     "Competitors",
                     workflow,
@@ -535,6 +491,50 @@ object DesktopNavigation {
                         )
                     ),
                     DesktopSection.Competitors
+                ),
+                group(
+                    "setup.categories",
+                    "Categories",
+                    workflow,
+                    listOf(
+                        item(
+                            "setup.categories.protected-course-order",
+                            "Course Order",
+                            workflow,
+                            DesktopSection.ProtectedCourseOrder
+                        ),
+                        action(
+                            "setup.categories.import",
+                            "Import Categories CSV...",
+                            workflow,
+                            DesktopNavAction.ImportCategoriesCsv
+                        ),
+                        action(
+                            "setup.categories.import-race-file",
+                            "Import Categories From Race File...",
+                            workflow,
+                            DesktopNavAction.ImportCategoriesRaceFile
+                        ),
+                        action(
+                            "setup.categories.export",
+                            "Export Categories CSV...",
+                            workflow,
+                            DesktopNavAction.ExportCategoriesCsv
+                        ),
+                        action(
+                            "setup.categories.delete-all-assigned-controls",
+                            "Delete All Control Assignments...",
+                            workflow,
+                            DesktopNavAction.DeleteAllCategoryAssignedControls
+                        ),
+                        action(
+                            "setup.categories.delete-all-categories",
+                            "Delete All Categories...",
+                            workflow,
+                            DesktopNavAction.DeleteAllCategories
+                        ),
+                    ),
+                    DesktopSection.Categories
                 ),
                 group(
                     "setup.start-list",

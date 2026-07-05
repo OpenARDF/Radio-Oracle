@@ -57,7 +57,8 @@ data class CompetitorCsvImportRow(
     val siRent: Boolean,
     val preferredStartGroup: Int? = null,
     val bibNumber: String = "",
-    val callSign: String = ""
+    val callSign: String = "",
+    val courseName: String = ""
 ) {
     @Deprecated("Use personId; this is the IOF Person/Id-compatible identity field.")
     val index: String

@@ -1361,6 +1361,39 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun importsCompetitorRowsCreateMissingCategoryFromPreservedCourseMapping() {
+        val original = projectFile(
+            categories = listOf(categoryData("cat-course", "Course A", controlSiCodes = listOf(31, 32)))
+        )
+
+        val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
+            projectFile = original,
+            rows = listOf(
+                competitorImportRow(
+                    firstName = "Anna",
+                    lastName = "Berg",
+                    categoryName = "W-55",
+                    courseName = "Course A",
+                    isMan = true,
+                    index = "T003"
+                )
+            ),
+            competitorIdFactory = { "comp-1" },
+            categoryIdFactory = { "cat-w55" }
+        )
+
+        assertEquals(listOf("Course A", "W55"), outcome.projectFile.raceData.categories.map { it.category.name })
+        val courseOnly = outcome.projectFile.raceData.categories.single { it.category.name == "Course A" }
+        assertEquals(emptyList<EventCompetitor>(), courseOnly.competitors)
+
+        val imported = outcome.projectFile.raceData.categories.single { it.category.name == "W55" }
+        assertEquals(listOf(31, 32), imported.controlPoints.map { it.siCode })
+        assertEquals(listOf("cat-w55-control-0", "cat-w55-control-1"), imported.controlPoints.map { it.id })
+        assertEquals(listOf("Line 1: created placeholder category 'W55' from source category 'W-55'.", "Line 1: applied course mapping 'Course A' to category 'W55'."), outcome.warnings)
+        assertEquals("cat-w55", outcome.projectFile.raceData.competitorData.single().competitorCategory.competitor.categoryId)
+    }
+
+    @Test
     fun importsCompetitorRowsWithoutCreatingMissingCategoriesWhenDisabled() {
         val original = projectFile(
             categories = listOf(categoryData("cat-1", "M21"))
@@ -4109,7 +4142,8 @@ class EventProjectEditorTest {
         startTimeText: String? = null,
         siRent: Boolean = false,
         bibNumber: String = "",
-        callSign: String = ""
+        callSign: String = "",
+        courseName: String = ""
     ): CompetitorCsvImportRow =
         CompetitorCsvImportRow(
             siNumber = siNumber,
@@ -4124,7 +4158,8 @@ class EventProjectEditorTest {
             startTimeText = startTimeText,
             siRent = siRent,
             bibNumber = bibNumber,
-            callSign = callSign
+            callSign = callSign,
+            courseName = courseName
         )
 
     private fun readout(

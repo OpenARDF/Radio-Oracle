@@ -1647,30 +1647,61 @@ object EventProjectEditor {
                     }
                     existingCategory
                 } else if (createMissingCategories) {
-                    EventCategory(
-                        id = categoryIdFactory(),
+                    val courseTemplate = row.courseName
+                        .takeIf { it.isNotBlank() && !StandardCategoryRules.categoryNamesEquivalent(it, categoryName) }
+                        ?.let { courseName -> categories.findCategoryDataByImportName(courseName) }
+                        ?.takeIf { it.hasCourseData() }
+                    val newCategoryId = categoryIdFactory()
+                    val newCategory = (courseTemplate?.category ?: EventCategory(
+                        id = newCategoryId,
                         raceId = projectFile.raceData.race.id,
                         name = normalizedCategoryName,
                         isMan = StandardCategoryRules.inferIsManFromName(normalizedCategoryName) ?: row.isMan,
                         maxAge = null,
                         lengthMeters = 0,
                         climbMeters = 0,
-                        order = nextCategoryOrder++,
+                        order = nextCategoryOrder,
                         differentProperties = false,
                         raceType = null,
                         raceBand = null,
                         timeLimitSeconds = null,
                         controlPointsString = ""
-                    ).also { newCategory ->
+                    )).copy(
+                        id = newCategoryId,
+                        raceId = projectFile.raceData.race.id,
+                        name = normalizedCategoryName,
+                        isMan = StandardCategoryRules.inferIsManFromName(normalizedCategoryName) ?: row.isMan,
+                        maxAge = StandardCategoryRules.normalizedCategoryName(normalizedCategoryName)
+                            .filter(Char::isDigit)
+                            .takeIf { it.isNotBlank() }
+                            ?.toIntOrNull()
+                            ?: courseTemplate?.category?.maxAge,
+                        order = nextCategoryOrder++,
+                        differentProperties = false,
+                        raceType = null,
+                        raceBand = null,
+                        timeLimitSeconds = null
+                    )
+                    newCategory.also { category ->
                         warnings += if (newCategory.name == categoryName) {
                             "Line ${rowIndex + 1}: created placeholder category '${newCategory.name}'."
                         } else {
                             "Line ${rowIndex + 1}: created placeholder category '${newCategory.name}' from source category '$categoryName'."
                         }
+                        if (courseTemplate != null) {
+                            warnings += "Line ${rowIndex + 1}: applied course mapping '${courseTemplate.category.name}' to category '${category.name}'."
+                        }
                         categories += EventCategoryData(
-                            category = newCategory,
-                            controlPoints = emptyList(),
-                            competitors = emptyList()
+                            category = category,
+                            controlPoints = courseTemplate?.controlPoints.orEmpty().mapIndexed { index, controlPoint ->
+                                controlPoint.copy(
+                                    id = "$newCategoryId-control-$index",
+                                    categoryId = newCategoryId,
+                                    order = index + 1
+                                )
+                            },
+                            competitors = emptyList(),
+                            publicControlIds = courseTemplate?.publicControlIds.orEmpty()
                         )
                     }
                 } else {
@@ -1821,6 +1852,15 @@ object EventProjectEditor {
                 .takeIf { it >= 0 }
             ?: indexOfFirst { StandardCategoryRules.categoryNamesEquivalent(it.category.name, importName) }
     }
+
+    private fun EventCategoryData.hasCourseData(): Boolean =
+        controlPoints.isNotEmpty() ||
+            publicControlIds.isNotEmpty() ||
+            category.controlPointsString.isNotBlank() ||
+            category.lengthMeters != 0 ||
+            category.climbMeters != 0 ||
+            category.encryptedIdealOrder?.isNotBlank() == true ||
+            category.encryptedCourseInfo?.isNotBlank() == true
 
     private fun importOutcome(
         projectFile: EventProjectFile,

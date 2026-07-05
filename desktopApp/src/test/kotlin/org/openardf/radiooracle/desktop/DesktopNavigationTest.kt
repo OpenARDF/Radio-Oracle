@@ -186,7 +186,7 @@ class DesktopNavigationTest {
     @Test
     fun placesCurrentDesktopSectionsUnderWorkflowGroups() {
         assertEquals(
-            listOf("Race File", "Controls", "Categories", "Competitors", "Start List", "More..."),
+            listOf("Race File", "Controls", "Competitors", "Categories", "Start List", "More..."),
             DesktopNavigation.rootItems(DesktopWorkflow.Setup).map { it.label }
         )
         assertEquals(

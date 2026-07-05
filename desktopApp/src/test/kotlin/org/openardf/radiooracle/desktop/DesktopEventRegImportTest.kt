@@ -33,6 +33,7 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import java.nio.file.Files
@@ -76,6 +77,8 @@ class DesktopEventRegImportTest {
         val fala = registration.competitions.first { it.name == "Sprint" }.competitors.first()
         assertEquals(8400555, fala.siNumber)
         assertEquals("101", fala.bibNumber)
+        assertEquals("M-21", fala.categoryName)
+        assertEquals("M-21", fala.courseName)
         assertEquals("BOK", fala.club)
         assertEquals("K4FAL", fala.callSign)
         assertEquals(1991, fala.birthYear)
@@ -263,6 +266,60 @@ class DesktopEventRegImportTest {
             it.competitorCategory.competitor.lastName
         })
         assertEquals(listOf("OldCat"), applied.removedCategoryNames)
+    }
+
+    @Test
+    fun competitorSpreadsheetApplyCanKeepOrDeleteEmptyCourseCategories() {
+        val project = EventProjectEditor.importCategoryRows(
+            projectFile = eventProject("race-sprint", "Sprint Race", RaceType.SPRINT, RaceBand.NONE),
+            rows = listOf(
+                CategoryCsvImportRow(
+                    name = "OldCourse",
+                    isMan = true,
+                    maxAge = 99,
+                    lengthMeters = 3_000,
+                    climbMeters = 90,
+                    followsRacePresets = true,
+                    raceType = RaceType.SPRINT,
+                    timeLimitMinutes = null,
+                    raceBand = RaceBand.NONE,
+                    controlPointsText = "31 32"
+                )
+            ),
+            categoryIdFactory = { "cat-old-course" },
+            controlPointIdFactory = { categoryId, index -> "$categoryId-control-$index" }
+        )
+        val target = DesktopSpreadsheetCompetitorImportTarget(
+            targetId = "race-sprint",
+            displayName = "Sprint Race",
+            path = null,
+            projectFile = project
+        )
+        val plan = DesktopSpreadsheetCompetitorImporter.buildPlan(
+            url = "https://docs.google.com/spreadsheets/d/test-spreadsheet-id/edit",
+            targets = listOf(target),
+            fetchSpreadsheet = {
+                SpreadsheetDownload(
+                    bytes = sprintOnlyGoogleSheetCsv().toByteArray(),
+                    contentType = "text/csv",
+                    fileName = "Sprint Registration.csv"
+                )
+            }
+        )
+        val mapping = plan.selectedMappings.single()
+
+        assertEquals(listOf("OldCourse"), mapping.preview?.protectedEmptyCategoryNames)
+
+        val kept = DesktopSpreadsheetCompetitorImporter.applyMapping(mapping)
+        assertEquals(listOf("M21", "OldCourse"), kept.updatedProjectFile.raceData.categories.map { it.category.name }.sorted())
+        assertEquals(emptyList<String>(), kept.removedCategoryNames)
+
+        val deleted = DesktopSpreadsheetCompetitorImporter.applyMapping(
+            mapping = mapping,
+            removeEmptyCourseCategories = true
+        )
+        assertEquals(listOf("M21"), deleted.updatedProjectFile.raceData.categories.map { it.category.name })
+        assertEquals(listOf("OldCourse"), deleted.removedCategoryNames)
     }
 
     @Test

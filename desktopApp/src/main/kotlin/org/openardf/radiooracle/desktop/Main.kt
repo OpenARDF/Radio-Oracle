@@ -4690,7 +4690,13 @@ fun main(args: Array<String>) = application {
                     "Two spreadsheet competitions map to the same Race File. Import canceled."
                 }
                 checkpointBeforeImport("spreadsheet competitors import")
-                val appliedMappings = mappings.map(DesktopSpreadsheetCompetitorImporter::applyMapping)
+                val appliedMappings = mappings.map { mapping ->
+                    DesktopSpreadsheetCompetitorImporter.applyMapping(
+                        mapping = mapping,
+                        removeEmptyCategories = review.removeEmptyCategories,
+                        removeEmptyCourseCategories = review.removeEmptyCourseCategories
+                    )
+                }
                 appliedMappings.forEach { applied ->
                     applied.targetPath?.let { path ->
                         DesktopEventSeriesFiles.writeEvent(path, applied.updatedProjectFile)
@@ -5983,6 +5989,12 @@ fun main(args: Array<String>) = application {
                 review = review,
                 onSelectionChange = { competitionName, selected ->
                     pendingSpreadsheetCompetitorImportReview = review.withSelection(competitionName, selected)
+                },
+                onRemoveEmptyCategoriesChange = { remove ->
+                    pendingSpreadsheetCompetitorImportReview = review.withRemoveEmptyCategories(remove)
+                },
+                onRemoveEmptyCourseCategoriesChange = { remove ->
+                    pendingSpreadsheetCompetitorImportReview = review.withRemoveEmptyCourseCategories(remove)
                 },
                 onImport = { applySpreadsheetCompetitorImport(review) },
                 onCancel = {
@@ -8445,6 +8457,8 @@ private fun EventRegImportDialog(
 private fun SpreadsheetCompetitorImportReviewDialog(
     review: PendingSpreadsheetCompetitorImportReview,
     onSelectionChange: (String, Boolean) -> Unit,
+    onRemoveEmptyCategoriesChange: (Boolean) -> Unit,
+    onRemoveEmptyCourseCategoriesChange: (Boolean) -> Unit,
     onImport: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -8457,6 +8471,12 @@ private fun SpreadsheetCompetitorImportReviewDialog(
         .map { it.first().second }
         .distinct()
     val canApply = selectedMappings.isNotEmpty() && duplicateTargets.isEmpty()
+    val removableEmptyCategoryNames = selectedMappings.flatMap { mapping ->
+        mapping.preview?.removableEmptyCategoryNames.orEmpty()
+    }.distinct().sorted()
+    val emptyCourseCategoryNames = selectedMappings.flatMap { mapping ->
+        mapping.preview?.protectedEmptyCategoryNames.orEmpty()
+    }.distinct().sorted()
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Review Competitor Import") },
@@ -8492,10 +8512,50 @@ private fun SpreadsheetCompetitorImportReviewDialog(
                         color = Color(0xFF9A3412)
                     )
                 }
+                if (removableEmptyCategoryNames.isNotEmpty() || emptyCourseCategoryNames.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (removableEmptyCategoryNames.isNotEmpty()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Checkbox(
+                                    checked = review.removeEmptyCategories,
+                                    onCheckedChange = onRemoveEmptyCategoriesChange
+                                )
+                                Text("Delete empty categories without course data")
+                            }
+                            Text(
+                                removableEmptyCategoryNames.joinToString(),
+                                fontSize = 12.sp,
+                                color = Color.DarkGray
+                            )
+                        }
+                        if (emptyCourseCategoryNames.isNotEmpty()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Checkbox(
+                                    checked = review.removeEmptyCourseCategories,
+                                    onCheckedChange = onRemoveEmptyCourseCategoriesChange
+                                )
+                                Text("Delete empty categories with course data")
+                            }
+                            Text(
+                                emptyCourseCategoryNames.joinToString(),
+                                fontSize = 12.sp,
+                                color = Color.DarkGray
+                            )
+                        }
+                    }
+                }
                 review.plan.mappings.forEach { mapping ->
                     SpreadsheetCompetitorImportMappingReview(
                         mapping = mapping,
                         selected = review.isSelected(mapping),
+                        removeEmptyCategories = review.removeEmptyCategories,
+                        removeEmptyCourseCategories = review.removeEmptyCourseCategories,
                         onSelectedChange = { selected ->
                             onSelectionChange(mapping.competitionName, selected)
                         }
@@ -8523,6 +8583,8 @@ private fun SpreadsheetCompetitorImportReviewDialog(
 private fun SpreadsheetCompetitorImportMappingReview(
     mapping: DesktopSpreadsheetCompetitorImportMapping,
     selected: Boolean,
+    removeEmptyCategories: Boolean,
+    removeEmptyCourseCategories: Boolean,
     onSelectedChange: (Boolean) -> Unit
 ) {
     val target = mapping.target
@@ -8580,13 +8642,15 @@ private fun SpreadsheetCompetitorImportMappingReview(
                 }
                 if (importPreview.removableEmptyCategoryNames.isNotEmpty()) {
                     Text(
-                        "Remove empty categories: ${importPreview.removableEmptyCategoryNames.joinToString()}",
+                        "${if (removeEmptyCategories) "Delete" else "Keep"} empty categories without course data: " +
+                            importPreview.removableEmptyCategoryNames.joinToString(),
                         fontSize = 13.sp
                     )
                 }
                 if (importPreview.protectedEmptyCategoryNames.isNotEmpty()) {
                     Text(
-                        "Keep empty course categories: ${importPreview.protectedEmptyCategoryNames.joinToString()}",
+                        "${if (removeEmptyCourseCategories) "Delete" else "Keep"} empty categories with course data: " +
+                            importPreview.protectedEmptyCategoryNames.joinToString(),
                         fontSize = 13.sp,
                         color = Color.DarkGray
                     )
@@ -9260,7 +9324,9 @@ private data class CourseKmlKmzImportPreview(
 private data class PendingSpreadsheetCompetitorImportReview(
     val plan: DesktopSpreadsheetCompetitorImportPlan,
     val selectedCompetitionNames: Set<String>,
-    val documentation: DesktopCompetitorImportDocumentation?
+    val documentation: DesktopCompetitorImportDocumentation?,
+    val removeEmptyCategories: Boolean,
+    val removeEmptyCourseCategories: Boolean
 ) {
     fun selectedMappings(): List<DesktopSpreadsheetCompetitorImportMapping> =
         plan.mappings.filter { it.competitionName in selectedCompetitionNames }
@@ -9277,6 +9343,12 @@ private data class PendingSpreadsheetCompetitorImportReview(
             }
         )
 
+    fun withRemoveEmptyCategories(remove: Boolean): PendingSpreadsheetCompetitorImportReview =
+        copy(removeEmptyCategories = remove)
+
+    fun withRemoveEmptyCourseCategories(remove: Boolean): PendingSpreadsheetCompetitorImportReview =
+        copy(removeEmptyCourseCategories = remove)
+
     fun documentationLines(): List<String> =
         documentation?.let { docs ->
             listOf("${docs.files.size} documentation CSV files generated in ${docs.outputDirectory}.")
@@ -9290,7 +9362,9 @@ private data class PendingSpreadsheetCompetitorImportReview(
             PendingSpreadsheetCompetitorImportReview(
                 plan = plan,
                 selectedCompetitionNames = plan.selectedMappings.mapTo(mutableSetOf()) { it.competitionName },
-                documentation = documentation
+                documentation = documentation,
+                removeEmptyCategories = true,
+                removeEmptyCourseCategories = false
             )
     }
 }
