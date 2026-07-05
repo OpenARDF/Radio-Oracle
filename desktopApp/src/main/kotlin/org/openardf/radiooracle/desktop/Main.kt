@@ -166,7 +166,6 @@ import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.shared.event.EventInForestDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutSeverity
-import org.openardf.radiooracle.shared.event.CompetitorCsvImportDuplicatePolicy
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventRaceDetails
@@ -199,7 +198,6 @@ import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.files.IofCourseDataPreview
-import org.openardf.radiooracle.shared.files.IofEntryListPreview
 import org.openardf.radiooracle.shared.files.IofResultListPreview
 import org.openardf.radiooracle.shared.files.IofStartListPreview
 import org.openardf.radiooracle.shared.files.IofXmlImports
@@ -529,7 +527,6 @@ fun main(args: Array<String>) = application {
         var pendingCourseKmlKmzCategoryMapping by remember { mutableStateOf<PendingCourseKmlKmzCategoryMapping?>(null) }
         var pendingCategoriesCsvImportReview by remember { mutableStateOf<PendingCategoriesCsvImportReview?>(null) }
         var pendingIofCourseDataImportReview by remember { mutableStateOf<PendingIofCourseDataImportReview?>(null) }
-        var pendingIofEntryListImportReview by remember { mutableStateOf<PendingIofEntryListImportReview?>(null) }
         var pendingIofStartListImportReview by remember { mutableStateOf<PendingIofStartListImportReview?>(null) }
         var pendingIofResultListImportReview by remember { mutableStateOf<PendingIofResultListImportReview?>(null) }
         var pendingControlsCsvImportReview by remember { mutableStateOf<PendingControlsCsvImportReview?>(null) }
@@ -547,11 +544,9 @@ fun main(args: Array<String>) = application {
         var isImportingCompetitorSpreadsheet by remember { mutableStateOf(false) }
         var isImportingEventRegCompetitorCsvs by remember { mutableStateOf(false) }
         var isImportingCourseKmlKmz by remember { mutableStateOf(false) }
-        var pendingCompetitorsCsvImportReview by remember { mutableStateOf<PendingCompetitorsCsvImportReview?>(null) }
         var pendingSpreadsheetCompetitorImportReview by remember {
             mutableStateOf<PendingSpreadsheetCompetitorImportReview?>(null)
         }
-        var syncCompetitorsCsvImport by remember { mutableStateOf(false) }
         val siPortMutex = remember { Mutex() }
         val activeEventFileTransferServer by rememberUpdatedState(eventFileTransferServer)
         val activeAndroidFileReceiveServer by rememberUpdatedState(androidFileReceiveServer)
@@ -3876,20 +3871,56 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun currentCompetitorImportTarget(): DesktopSpreadsheetCompetitorImportTarget {
+            val currentProject = projectSession.currentProject
+                ?: error("Open or create a Race File before importing competitors.")
+            return DesktopSpreadsheetCompetitorImportTarget(
+                targetId = currentProject.raceData.race.id,
+                displayName = currentProject.raceData.race.name.ifBlank { "Current Race File" },
+                path = projectSession.currentPath,
+                projectFile = currentProject
+            )
+        }
+
+        fun prepareSingleRaceCompetitorImportReview(
+            sourceName: String,
+            competitionName: String,
+            rows: List<CompetitorCsvImportRow>,
+            warnings: List<String> = emptyList()
+        ) {
+            val plan = DesktopSpreadsheetCompetitorImporter.buildRowsPlan(
+                sourceUrl = sourceName,
+                eventName = sourceName,
+                competitionName = competitionName,
+                rows = rows,
+                target = currentCompetitorImportTarget(),
+                warnings = warnings
+            )
+            val documentation = DesktopSpreadsheetCompetitorImporter.writeDocumentationCsvs(
+                plan = plan,
+                outputDirectory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
+            )
+            pendingSpreadsheetCompetitorImportReview = PendingSpreadsheetCompetitorImportReview.create(
+                plan = plan,
+                documentation = documentation
+            )
+        }
+
         fun importCompetitorsCsv() {
             DesktopFileDialogs.chooseImportCsv("Import Competitors CSV")?.let { path ->
                 runCatching {
                     val result = EventCsvImports.parseAndroidCompetitorRows(Files.readString(path))
-                    pendingCompetitorsCsvImportReview = PendingCompetitorsCsvImportReview(
-                        path = path,
+                    prepareSingleRaceCompetitorImportReview(
+                        sourceName = path.fileName.toString(),
+                        competitionName = path.fileName.toString().substringBeforeLast("."),
                         rows = result.rows,
-                        invalidLineCount = result.invalidLines.size,
-                        missingCategoryNames = missingCompetitorCategoryNames(
-                            rows = result.rows,
-                            projectFile = requireNotNull(projectSession.currentProject)
-                        )
+                        warnings = if (result.invalidLines.isEmpty()) {
+                            emptyList()
+                        } else {
+                            listOf("${result.invalidLines.size} invalid rows skipped.")
+                        }
                     )
-                    syncCompetitorsCsvImport = false
+                    projectStatusText = "Review competitors CSV import before applying it."
                 }.onFailure { error ->
                     projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
                 }
@@ -3901,80 +3932,17 @@ fun main(args: Array<String>) = application {
                 runCatching {
                     val sourceProject = DesktopProjectFiles.read(path)
                     val rows = sourceProject.competitorImportRows()
-                    pendingCompetitorsCsvImportReview = PendingCompetitorsCsvImportReview(
-                        path = path,
-                        rows = rows,
-                        invalidLineCount = 0,
-                        missingCategoryNames = missingCompetitorCategoryNames(
-                            rows = rows,
-                            projectFile = requireNotNull(projectSession.currentProject)
-                        )
+                    prepareSingleRaceCompetitorImportReview(
+                        sourceName = path.fileName.toString(),
+                        competitionName = sourceProject.raceData.race.name.ifBlank {
+                            path.fileName.toString().substringBeforeLast(".")
+                        },
+                        rows = rows
                     )
-                    syncCompetitorsCsvImport = false
+                    projectStatusText = "Review Race File competitor import before applying it."
                 }.onFailure { error ->
                     projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
                 }
-            }
-        }
-
-        fun importCompetitorsFromRows(
-            path: Path,
-            rows: List<CompetitorCsvImportRow>,
-            invalidLineCount: Int,
-            synchronizeToCsv: Boolean,
-            createMissingCategories: Boolean
-        ) {
-            runCatching {
-                checkpointBeforeImport("competitors import ${path.fileName}")
-                var importWarnings = emptyList<String>()
-                var importedRows = 0
-                var updatedRows = 0
-                var skippedRows = 0
-                var deletedRows = 0
-                projectFile = projectSession.updateCurrentProject { currentProject ->
-                    val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
-                        projectFile = currentProject,
-                        rows = rows,
-                        competitorIdFactory = { UUID.randomUUID().toString() },
-                        categoryIdFactory = { UUID.randomUUID().toString() },
-                        duplicatePolicy = if (synchronizeToCsv) {
-                            CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY
-                        } else {
-                            CompetitorCsvImportDuplicatePolicy.SKIP_EXISTING_BY_IMPORT_KEY
-                        },
-                        deleteMissingByImportKey = synchronizeToCsv,
-                        createMissingCategories = createMissingCategories
-                    )
-                    importWarnings = outcome.warnings
-                    importedRows = outcome.importedCount
-                    updatedRows = outcome.updatedCount
-                    skippedRows = outcome.skippedCount
-                    deletedRows = outcome.deletedCount
-                    outcome.projectFile
-                }
-                syncProjectState()
-                pendingCompetitorsCsvImportReview = null
-                recordActivity("Applied competitors import ${path.fileName}.")
-                recentImportReport = DesktopImportReport(
-                    title = "Competitors: ${path.fileName}",
-                    lines = withRollbackBackupLine(listOf(
-                        "$importedRows competitors added.",
-                        "$updatedRows competitors updated.",
-                        "$skippedRows competitors skipped.",
-                        "$deletedRows competitors removed by sync.",
-                        "$invalidLineCount invalid rows skipped."
-                    ) + importWarnings)
-                )
-                projectStatusText = competitorImportStatusText(
-                    importedRows = importedRows,
-                    updatedRows = updatedRows,
-                    skippedRows = skippedRows,
-                    deletedRows = deletedRows,
-                    invalidRows = invalidLineCount,
-                    fileName = path.fileName.toString()
-                ) + warningStatusSuffix(importWarnings)
-            }.onFailure { error ->
-                projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
             }
         }
 
@@ -3987,77 +3955,18 @@ fun main(args: Array<String>) = application {
                         Files.readString(path),
                         IofXmlSchemaResource.loadBundledSchema()
                     )
-                    val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
-                        projectFile = currentProject,
+                    prepareSingleRaceCompetitorImportReview(
+                        sourceName = path.fileName.toString(),
+                        competitionName = currentProject.raceData.race.name.ifBlank {
+                            path.fileName.toString().substringBeforeLast(".")
+                        },
                         rows = parsed.parsedData.entries,
-                        competitorIdFactory = { UUID.randomUUID().toString() },
-                        categoryIdFactory = { UUID.randomUUID().toString() },
-                        duplicatePolicy = CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY,
-                        createMissingCategories = true
-                    )
-                    val warningLines = iofWarningLines(parsed.unsupportedItems, outcome.warnings)
-                    pendingIofEntryListImportReview = PendingIofEntryListImportReview(
-                        path = path,
-                        entryList = parsed.parsedData,
-                        missingCategoryNames = missingCompetitorCategoryNames(parsed.parsedData.entries, currentProject),
-                        importedCount = outcome.importedCount,
-                        updatedCount = outcome.updatedCount,
-                        skippedCount = outcome.skippedCount,
-                        warningLines = warningLines
+                        warnings = iofWarningLines(parsed.unsupportedItems, emptyList())
                     )
                     projectStatusText = "Review IOF EntryList import before applying it."
                 }.onFailure { error ->
                     projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
                 }
-            }
-        }
-
-        fun applyIofEntryListImport(review: PendingIofEntryListImportReview) {
-            runCatching {
-                checkpointBeforeImport("IOF EntryList import ${review.path.fileName}")
-                var importedRows = 0
-                var updatedRows = 0
-                var skippedRows = 0
-                var importWarnings = emptyList<String>()
-                projectFile = projectSession.updateCurrentProject { currentProject ->
-                    val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
-                        projectFile = currentProject,
-                        rows = review.entryList.entries,
-                        competitorIdFactory = { UUID.randomUUID().toString() },
-                        categoryIdFactory = { UUID.randomUUID().toString() },
-                        duplicatePolicy = CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY,
-                        createMissingCategories = true
-                    )
-                    importedRows = outcome.importedCount
-                    updatedRows = outcome.updatedCount
-                    skippedRows = outcome.skippedCount
-                    importWarnings = outcome.warnings
-                    outcome.projectFile
-                }
-                syncProjectState()
-                pendingIofEntryListImportReview = null
-                val warningLines = review.warningLines + importWarnings
-                    .map { warning -> "Import warning: $warning" }
-                    .filterNot { it in review.warningLines }
-                recentImportReport = DesktopImportReport(
-                    title = "IOF EntryList XML: ${review.path.fileName}",
-                    lines = withRollbackBackupLine(listOf(
-                        "$importedRows competitors added.",
-                        "$updatedRows competitors updated.",
-                        "$skippedRows competitors skipped."
-                    ) + warningLines)
-                )
-                projectStatusText = buildString {
-                    append("Imported IOF EntryList ${review.path.fileName}: ")
-                    append("added $importedRows, updated $updatedRows, skipped $skippedRows.")
-                    if (warningLines.isNotEmpty()) {
-                        append(" ${warningLines.size} warning")
-                        append(if (warningLines.size == 1) "" else "s")
-                        append(".")
-                    }
-                }
-            }.onFailure { error ->
-                projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
             }
         }
 
@@ -4739,14 +4648,22 @@ fun main(args: Array<String>) = application {
             appCoroutineScope.launch {
                 val result = runCatching {
                     withContext(Dispatchers.IO) {
-                        DesktopSpreadsheetCompetitorImporter.buildPlan(
+                        val plan = DesktopSpreadsheetCompetitorImporter.buildPlan(
                             url = trimmedUrl,
                             targets = targets
                         )
+                        val documentation = DesktopSpreadsheetCompetitorImporter.writeDocumentationCsvs(
+                            plan = plan,
+                            outputDirectory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
+                        )
+                        plan to documentation
                     }
                 }
-                result.onSuccess { plan ->
-                    pendingSpreadsheetCompetitorImportReview = PendingSpreadsheetCompetitorImportReview.create(plan)
+                result.onSuccess { (plan, documentation) ->
+                    pendingSpreadsheetCompetitorImportReview = PendingSpreadsheetCompetitorImportReview.create(
+                        plan = plan,
+                        documentation = documentation
+                    )
                     projectStatusText = "Review spreadsheet competitor import before applying it."
                 }.onFailure { error ->
                     projectStatusText = "Spreadsheet competitor import failed: ${error.message ?: error::class.simpleName}"
@@ -4814,7 +4731,7 @@ fun main(args: Array<String>) = application {
                             "$updated competitors updated.",
                             "$deleted competitors removed by sync.",
                             "$removedCategories empty categories removed."
-                        ) + warningLines
+                        ) + review.documentationLines() + warningLines
                     )
                 )
                 projectStatusText =
@@ -4837,27 +4754,43 @@ fun main(args: Array<String>) = application {
             isImportingEventRegCompetitorCsvs = true
             projectStatusText = "Importing EventReg website..."
             DesktopEventRegImportPreferences.rememberRegistrationUrl(trimmedUrl)
+            val targets = runCatching {
+                spreadsheetCompetitorImportTargets()
+            }.getOrElse { error ->
+                projectStatusText = "EventReg competitor import failed: ${error.message ?: error::class.simpleName}"
+                isImportingEventRegCompetitorCsvs = false
+                return
+            }
             appCoroutineScope.launch {
                 val result = runCatching {
                     withContext(Dispatchers.IO) {
-                        DesktopEventRegImporter.importCompetitorCsvsFromWebsite(
+                        val registrationImport = DesktopEventRegImporter.websiteRegistration(
                             url = trimmedUrl,
-                            outputDirectory = DesktopEventFileLocations.preparePreferredEventFileDirectory(),
-                            startDateTimeIso = DesktopDateTimeText.isoText(DesktopDateTimeText.defaultStartDateTime())
                         )
+                        val plan = DesktopSpreadsheetCompetitorImporter.buildPlan(
+                            registrationImport = registrationImport,
+                            targets = targets
+                        )
+                        val documentation = DesktopSpreadsheetCompetitorImporter.writeDocumentationCsvs(
+                            plan = plan,
+                            outputDirectory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
+                        )
+                        plan to documentation
                     }
                 }
-                result.onSuccess { importResult ->
-                    val totalCompetitors = importResult.generatedFiles.sumOf { it.competitorCount }
-                    projectStatusText =
-                        "Generated ${importResult.generatedFiles.size} competitor CSV files with $totalCompetitors competitor entries in ${importResult.outputDirectory}."
+                result.onSuccess { (plan, documentation) ->
+                    pendingSpreadsheetCompetitorImportReview = PendingSpreadsheetCompetitorImportReview.create(
+                        plan = plan,
+                        documentation = documentation
+                    )
+                    projectStatusText = "Review EventReg competitor import before applying it."
                     isEventRegCompetitorCsvImportDialogVisible = false
                     DesktopDebugLog.info(
                         "EventReg",
-                        "Generated ${importResult.generatedFiles.size} competitor CSV files from ${importResult.sourceUrl}"
+                        "Prepared ${plan.mappings.size} EventReg competitor mappings from ${plan.sourceUrl}; generated ${documentation.files.size} documentation CSV files."
                     )
                 }.onFailure { error ->
-                    projectStatusText = "EventReg competitor CSV import failed: ${error.message ?: error::class.simpleName}"
+                    projectStatusText = "EventReg competitor import failed: ${error.message ?: error::class.simpleName}"
                     DesktopDebugLog.error("EventReg", projectStatusText)
                 }
                 isImportingEventRegCompetitorCsvs = false
@@ -6015,16 +5948,6 @@ fun main(args: Array<String>) = application {
                 }
             )
         }
-        pendingIofEntryListImportReview?.let { review ->
-            IofEntryListImportReviewDialog(
-                review = review,
-                onImport = { applyIofEntryListImport(review) },
-                onCancel = {
-                    pendingIofEntryListImportReview = null
-                    projectStatusText = "IOF EntryList import canceled. No changes applied."
-                }
-            )
-        }
         pendingIofStartListImportReview?.let { review ->
             IofStartListImportReviewDialog(
                 review = review,
@@ -6053,24 +5976,6 @@ fun main(args: Array<String>) = application {
                     pendingControlsCsvImportReview = null
                     projectStatusText = "Controls CSV import canceled. No changes applied."
                 }
-            )
-        }
-        pendingCompetitorsCsvImportReview?.let { review ->
-            CompetitorCsvImportOptionsDialog(
-                fileName = review.path.fileName.toString(),
-                missingCategoryNames = review.missingCategoryNames,
-                synchronizeToCsv = syncCompetitorsCsvImport,
-                onSynchronizeToCsvChange = { syncCompetitorsCsvImport = it },
-                onImport = { createMissingCategories ->
-                    importCompetitorsFromRows(
-                        path = review.path,
-                        rows = review.rows,
-                        invalidLineCount = review.invalidLineCount,
-                        synchronizeToCsv = syncCompetitorsCsvImport,
-                        createMissingCategories = createMissingCategories
-                    )
-                },
-                onCancel = { pendingCompetitorsCsvImportReview = null }
             )
         }
         pendingSpreadsheetCompetitorImportReview?.let { review ->
@@ -7717,65 +7622,6 @@ private fun CategoriesCsvImportReviewDialog(
 }
 
 @Composable
-private fun IofEntryListImportReviewDialog(
-    review: PendingIofEntryListImportReview,
-    onImport: () -> Unit,
-    onCancel: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text("Review IOF EntryList Import") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 380.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("File: ${review.path.fileName}")
-                review.entryList.eventName?.takeIf { it.isNotBlank() }?.let { eventName ->
-                    Text("Race: $eventName")
-                }
-                Text("Entry Rows In File: ${review.entryList.entries.size}")
-                Text("Competitors To Add: ${review.importedCount}")
-                Text("Competitors To Update: ${review.updatedCount}")
-                if (review.skippedCount > 0) {
-                    Text(
-                        text = "Competitors to skip: ${review.skippedCount}",
-                        color = DesktopPalette.Warning
-                    )
-                }
-                if (review.missingCategoryNames.isNotEmpty()) {
-                    Text("Categories To Create: ${review.missingCategoryNames.joinToString()}")
-                }
-                review.warningLines.forEach { warning ->
-                    Text(
-                        text = warning,
-                        color = DesktopPalette.Warning,
-                        fontSize = 12.sp
-                    )
-                }
-                Text(
-                    "This import adds or updates competitors from IOF EntryList PersonEntry rows using Person/Id as Person ID. IOF EntryList RaceNumber is multi-race participation data, not a bib number.",
-                    fontSize = 12.sp,
-                    color = Color.DarkGray
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = onImport) {
-                ButtonLabel("Import EntryList")
-            }
-        },
-        dismissButton = {
-            Button(onClick = onCancel) {
-                ButtonLabel("Cancel")
-            }
-        }
-    )
-}
-
-@Composable
 private fun IofStartListImportReviewDialog(
     review: PendingIofStartListImportReview,
     onImport: () -> Unit,
@@ -8613,7 +8459,7 @@ private fun SpreadsheetCompetitorImportReviewDialog(
     val canApply = selectedMappings.isNotEmpty() && duplicateTargets.isEmpty()
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Review Competitor Spreadsheet Import") },
+        title = { Text("Review Competitor Import") },
         text = {
             Column(
                 modifier = Modifier
@@ -8628,13 +8474,20 @@ private fun SpreadsheetCompetitorImportReviewDialog(
                 )
                 Text(
                     "${selectedMappings.size} of ${review.plan.mappings.size} competitions are selected for import. " +
-                        "The spreadsheet is treated as the source of truth for each mapped Race File.",
+                        "The registration source is treated as the source of truth for each mapped Race File.",
                     fontSize = 13.sp,
                     color = Color.DarkGray
                 )
+                review.documentation?.let { documentation ->
+                    Text(
+                        "Documentation CSV files: ${documentation.files.size} in ${documentation.outputDirectory}.",
+                        fontSize = 13.sp,
+                        color = Color.DarkGray
+                    )
+                }
                 if (duplicateTargets.isNotEmpty()) {
                     Text(
-                        "Select only one spreadsheet competition for each Race File: ${duplicateTargets.joinToString()}.",
+                        "Select only one registration competition for each Race File: ${duplicateTargets.joinToString()}.",
                         fontSize = 13.sp,
                         color = Color(0xFF9A3412)
                     )
@@ -9055,90 +8908,6 @@ private fun AndroidFileReceiveDialog(
 }
 
 @Composable
-private fun CompetitorCsvImportOptionsDialog(
-    fileName: String,
-    missingCategoryNames: List<String>,
-    synchronizeToCsv: Boolean,
-    onSynchronizeToCsvChange: (Boolean) -> Unit,
-    onImport: (createMissingCategories: Boolean) -> Unit,
-    onCancel: () -> Unit
-) {
-    var createMissingCategories by remember(fileName, missingCategoryNames) {
-        mutableStateOf(missingCategoryNames.isNotEmpty())
-    }
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text("Import Competitors") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "Import $fileName",
-                    fontSize = 13.sp,
-                    color = Color.DarkGray
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = synchronizeToCsv,
-                        onCheckedChange = onSynchronizeToCsvChange
-                    )
-                    Text(
-                        text = "Synchronize competitors to source",
-                        fontSize = 13.sp,
-                        color = DesktopPalette.Black
-                    )
-                }
-                Text(
-                    text = if (synchronizeToCsv) {
-                        "Updates matching competitors and removes current competitors not included in the source."
-                    } else {
-                        "Default: adds new competitors and leaves matching existing competitors unchanged."
-                    },
-                    fontSize = 13.sp,
-                    color = Color.DarkGray
-                )
-                if (missingCategoryNames.isNotEmpty()) {
-                    Text(
-                        text = "New categories in source: ${missingCategoryNames.joinToString()}",
-                        fontSize = 13.sp,
-                        color = DesktopPalette.Black
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = createMissingCategories,
-                            onCheckedChange = { createMissingCategories = it }
-                        )
-                        Text(
-                            text = "Create missing categories",
-                            fontSize = 13.sp,
-                            color = DesktopPalette.Black
-                        )
-                    }
-                    Text(
-                        text = if (createMissingCategories) {
-                            "Created categories will not have course data unless route data was imported for them separately. Review Course Analyzer and add course data before the race."
-                        } else {
-                            "Competitors in these categories will be imported without a category assignment."
-                        },
-                        fontSize = 13.sp,
-                        color = Color.DarkGray
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = { onImport(createMissingCategories) }) {
-                Text("Import")
-            }
-        },
-        dismissButton = {
-            Button(onClick = onCancel) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
-@Composable
 private fun AboutRadioOracleDialog(
     onCheckForUpdates: () -> Unit,
     onOpenUpdateLink: (String) -> Unit,
@@ -9488,16 +9257,10 @@ private data class CourseKmlKmzImportPreview(
     val overwriteSiCreatedMissingCategorySummary: DesktopCourseKmlImportSummary?
 )
 
-private data class PendingCompetitorsCsvImportReview(
-    val path: Path,
-    val rows: List<CompetitorCsvImportRow>,
-    val invalidLineCount: Int,
-    val missingCategoryNames: List<String>
-)
-
 private data class PendingSpreadsheetCompetitorImportReview(
     val plan: DesktopSpreadsheetCompetitorImportPlan,
-    val selectedCompetitionNames: Set<String>
+    val selectedCompetitionNames: Set<String>,
+    val documentation: DesktopCompetitorImportDocumentation?
 ) {
     fun selectedMappings(): List<DesktopSpreadsheetCompetitorImportMapping> =
         plan.mappings.filter { it.competitionName in selectedCompetitionNames }
@@ -9514,11 +9277,20 @@ private data class PendingSpreadsheetCompetitorImportReview(
             }
         )
 
+    fun documentationLines(): List<String> =
+        documentation?.let { docs ->
+            listOf("${docs.files.size} documentation CSV files generated in ${docs.outputDirectory}.")
+        }.orEmpty()
+
     companion object {
-        fun create(plan: DesktopSpreadsheetCompetitorImportPlan): PendingSpreadsheetCompetitorImportReview =
+        fun create(
+            plan: DesktopSpreadsheetCompetitorImportPlan,
+            documentation: DesktopCompetitorImportDocumentation? = null
+        ): PendingSpreadsheetCompetitorImportReview =
             PendingSpreadsheetCompetitorImportReview(
                 plan = plan,
-                selectedCompetitionNames = plan.selectedMappings.mapTo(mutableSetOf()) { it.competitionName }
+                selectedCompetitionNames = plan.selectedMappings.mapTo(mutableSetOf()) { it.competitionName },
+                documentation = documentation
             )
     }
 }
@@ -9535,16 +9307,6 @@ private data class PendingIofCourseDataImportReview(
     val courseData: IofCourseDataPreview,
     val preview: DesktopCategoryCsvImportPreview,
     val deletedControlNames: List<String>,
-    val warningLines: List<String>
-)
-
-private data class PendingIofEntryListImportReview(
-    val path: Path,
-    val entryList: IofEntryListPreview,
-    val missingCategoryNames: List<String>,
-    val importedCount: Int,
-    val updatedCount: Int,
-    val skippedCount: Int,
     val warningLines: List<String>
 )
 
@@ -19961,20 +19723,6 @@ private fun importStatusText(action: String, importedRows: Int, invalidRows: Int
         "$action $importedRows rows from $fileName; skipped $invalidRows invalid rows."
     }
 
-private fun missingCompetitorCategoryNames(path: Path, projectFile: EventProjectFile): List<String> {
-    val result = EventCsvImports.parseAndroidCompetitorRows(Files.readString(path))
-    return missingCompetitorCategoryNames(result.rows, projectFile)
-}
-
-private fun missingCompetitorCategoryNames(rows: List<CompetitorCsvImportRow>, projectFile: EventProjectFile): List<String> {
-    val existingCategoryNames = projectFile.raceData.categories.mapTo(mutableSetOf()) { it.category.name }
-    return rows
-        .map { row -> row.categoryName.trim() }
-        .filter { it.isNotEmpty() }
-        .distinct()
-        .filterNot { it in existingCategoryNames }
-}
-
 internal fun EventProjectFile.categoryImportRows(): List<CategoryCsvImportRow> =
     raceData.categories
         .sortedWith(compareBy({ it.category.order }, { it.category.name }))
@@ -20047,28 +19795,6 @@ private fun startListDrawStatusText(details: EventStartListDetails): String {
 private fun isValidStartListInterval(intervalText: String): Boolean =
     runCatching { DurationFormatter.minuteStringToSeconds(intervalText.trim()) > 0 }
         .getOrDefault(false)
-
-private fun competitorImportStatusText(
-    importedRows: Int,
-    updatedRows: Int,
-    skippedRows: Int,
-    deletedRows: Int,
-    invalidRows: Int,
-    fileName: String
-): String {
-    val actions = listOf(
-        "imported $importedRows",
-        "updated $updatedRows",
-        "skipped $skippedRows",
-        "deleted $deletedRows"
-    )
-    val summary = "Competitor CSV import from $fileName: ${actions.joinToString(", ")}."
-    return if (invalidRows == 0) {
-        summary
-    } else {
-        "$summary Skipped $invalidRows invalid rows."
-    }
-}
 
 private fun warningStatusSuffix(warnings: List<String>): String =
     if (warnings.isEmpty()) {

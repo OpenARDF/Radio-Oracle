@@ -36,6 +36,7 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import java.nio.file.Files
+import java.util.UUID
 
 class DesktopEventRegImportTest {
     @Test
@@ -333,6 +334,83 @@ class DesktopEventRegImportTest {
         assertTrue(mapping.confidence < DesktopSpreadsheetCompetitorImporter.MinimumAutoMapConfidence)
         assertTrue(mapping.canOverrideRejection)
         assertEquals(1, mapping.preview?.importedCount)
+    }
+
+    @Test
+    fun competitorRowsPlanUsesSameReviewShapeForSingleRaceSources() {
+        val target = DesktopSpreadsheetCompetitorImportTarget(
+            targetId = "race-sprint",
+            displayName = "Sprint Race",
+            path = null,
+            projectFile = eventProject("race-sprint", "Sprint Race", RaceType.SPRINT, RaceBand.NONE)
+        )
+
+        val plan = DesktopSpreadsheetCompetitorImporter.buildRowsPlan(
+            sourceUrl = "competitors.csv",
+            eventName = "competitors.csv",
+            competitionName = "competitors",
+            rows = listOf(
+                CompetitorCsvImportRow(
+                    siNumber = 8400555,
+                    startNumber = null,
+                    firstName = "Gheorghe",
+                    lastName = "Fala",
+                    categoryName = "M-21",
+                    isMan = true,
+                    birthYear = 1991,
+                    club = "BOK",
+                    personId = "conf-1",
+                    startTimeText = null,
+                    siRent = false
+                )
+            ),
+            target = target,
+            warnings = listOf("1 invalid rows skipped.")
+        )
+
+        assertEquals(listOf("competitors"), plan.selectedMappings.map { it.competitionName })
+        val mapping = plan.selectedMappings.single()
+        assertEquals(100, mapping.confidence)
+        assertEquals(listOf("1 invalid rows skipped."), mapping.warnings)
+        assertEquals(listOf("M-21"), mapping.preview?.createdCategoryNames)
+    }
+
+    @Test
+    fun writesCategoryAndCompetitorDocumentationCsvsForImportPlan() {
+        val outputDirectory = Files.createTempDirectory("radio-oracle-competitor-doc-test")
+        val target = DesktopSpreadsheetCompetitorImportTarget(
+            targetId = "race-sprint",
+            displayName = "Sprint Race",
+            path = null,
+            projectFile = eventProject("race-sprint", "Sprint Race", RaceType.SPRINT, RaceBand.NONE)
+        )
+        val plan = DesktopSpreadsheetCompetitorImporter.buildPlan(
+            url = "https://docs.google.com/spreadsheets/d/test-spreadsheet-id/edit",
+            targets = listOf(target),
+            fetchSpreadsheet = {
+                SpreadsheetDownload(
+                    bytes = sprintOnlyGoogleSheetCsv().toByteArray(),
+                    contentType = "text/csv",
+                    fileName = "Sprint Registration.csv"
+                )
+            }
+        )
+
+        val documentation = DesktopSpreadsheetCompetitorImporter.writeDocumentationCsvs(
+            plan = plan,
+            outputDirectory = outputDirectory,
+            idFactory = {
+                UUID.randomUUID().toString()
+            }
+        )
+
+        assertEquals(outputDirectory, documentation.outputDirectory)
+        assertEquals(listOf("categories", "competitors"), documentation.files.map { it.kind })
+        documentation.files.forEach { file ->
+            assertTrue(Files.isRegularFile(file.path))
+        }
+        assertTrue(Files.readString(documentation.files.first { it.kind == "categories" }.path).contains("M-21"))
+        assertTrue(Files.readString(documentation.files.first { it.kind == "competitors" }.path).contains("Fala"))
     }
 
     @Test
