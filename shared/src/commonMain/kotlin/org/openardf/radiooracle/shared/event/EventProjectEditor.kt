@@ -219,7 +219,12 @@ object EventProjectEditor {
         val categories = projectFile.raceData.categories.map { categoryData ->
             if (categoryData.category.id == categoryId) {
                 foundCategory = true
-                categoryData.copy(category = categoryData.category.copy(name = trimmedName))
+                categoryData.copy(
+                    category = categoryData.category.copy(
+                        name = trimmedName,
+                        isMan = StandardCategoryRules.reconcileIsManWithName(trimmedName, categoryData.category.isMan)
+                    )
+                )
             } else {
                 categoryData
             }
@@ -243,7 +248,11 @@ object EventProjectEditor {
         val categories = projectFile.raceData.categories.map { categoryData ->
             if (categoryData.category.id == categoryId) {
                 foundCategory = true
-                categoryData.copy(category = categoryData.category.copy(isMan = isMan))
+                categoryData.copy(
+                    category = categoryData.category.copy(
+                        isMan = StandardCategoryRules.reconcileIsManWithName(categoryData.category.name, isMan)
+                    )
+                )
             } else {
                 categoryData
             }
@@ -1460,7 +1469,7 @@ object EventProjectEditor {
                 id = categoryId,
                 raceId = projectFile.raceData.race.id,
                 name = existingCategoryData?.category?.name ?: categoryName,
-                isMan = StandardCategoryRules.inferIsManFromName(categoryName) ?: row.isMan,
+                isMan = StandardCategoryRules.reconcileIsManWithName(categoryName, row.isMan),
                 maxAge = row.maxAge,
                 lengthMeters = row.lengthMeters,
                 climbMeters = row.climbMeters,
@@ -1571,7 +1580,10 @@ object EventProjectEditor {
                     raceId = projectFile.raceData.race.id,
                     name = existingCategoryData?.category?.name ?: importedCategoryName,
                     order = categoryOrder,
-                    isMan = StandardCategoryRules.inferIsManFromName(importedCategoryName) ?: imported.category.isMan,
+                    isMan = StandardCategoryRules.reconcileIsManWithName(
+                        importedCategoryName,
+                        imported.category.isMan
+                    ),
                     encryptedIdealOrder = existingCategoryData?.category?.encryptedIdealOrder,
                     encryptedCourseInfo = existingCategoryData?.category?.encryptedCourseInfo,
                     controlPointsString = ControlPointRules.formatControlPoints(definitions)
@@ -1654,6 +1666,15 @@ object EventProjectEditor {
                 val normalizedCategoryName = StandardCategoryRules.normalizedCategoryName(categoryName)
                 val existingCategory = categories.findCategoryDataByImportName(categoryName)?.category
                 if (existingCategory != null) {
+                    val reconciledCategory = existingCategory.copy(
+                        isMan = StandardCategoryRules.reconcileIsManWithName(
+                            existingCategory.name,
+                            existingCategory.isMan
+                        )
+                    )
+                    if (reconciledCategory != existingCategory) {
+                        categories = categories.replacingCategory(reconciledCategory)
+                    }
                     val aliasKey = "$categoryName:${existingCategory.id}"
                     if (
                         existingCategory.id in originalCategoryIds &&
@@ -1663,7 +1684,7 @@ object EventProjectEditor {
                     ) {
                         warnings += "Line ${rowIndex + 1}: category '$categoryName' matched existing category '${existingCategory.name}'."
                     }
-                    existingCategory
+                    reconciledCategory
                 } else if (createMissingCategories) {
                     val courseTemplate = row.courseName
                         .takeIf { it.isNotBlank() && !StandardCategoryRules.categoryNamesEquivalent(it, categoryName) }
@@ -1883,6 +1904,15 @@ object EventProjectEditor {
                 .takeIf { it >= 0 }
             ?: indexOfFirst { StandardCategoryRules.categoryNamesEquivalent(it.category.name, importName) }
     }
+
+    private fun List<EventCategoryData>.replacingCategory(category: EventCategory): List<EventCategoryData> =
+        map { data ->
+            if (data.category.id == category.id) {
+                data.copy(category = category)
+            } else {
+                data
+            }
+        }
 
     private fun EventCategoryData.hasCourseData(): Boolean =
         controlPoints.isNotEmpty() ||

@@ -39,6 +39,7 @@ object DesktopEventValidationText {
             EventValidationIssue.NoCategories,
             is EventValidationIssue.DuplicateCategoryNames,
             is EventValidationIssue.InvalidCategoryControlPoints,
+            is EventValidationIssue.CategoryGenderMismatch,
             is EventValidationIssue.LegacyCategoryRaceSettings,
             is EventValidationIssue.MissingCategoryAssignedControls,
             is EventValidationIssue.MissingCategoryControlReferences,
@@ -106,6 +107,9 @@ object DesktopEventValidationText {
                 "Controls use codes above 255: ${issue.codes.joinToString()}."
             is EventValidationIssue.MissingCategoryControlReferences ->
                 "Category ${issue.categoryName} references missing controls: ${issue.controlIds.joinToString()}."
+            is EventValidationIssue.CategoryGenderMismatch ->
+                "Category ${issue.categoryName} is marked ${issue.actualIsMan.genderLabel()} but its standard name " +
+                    "indicates ${issue.expectedIsMan.genderLabel()}."
             is EventValidationIssue.LegacyCategoryRaceSettings ->
                 "Category ${issue.categoryName} contains legacy category-specific race settings. " +
                     "Radio-Oracle ignores them and will clear them when the Race File is saved."
@@ -119,3 +123,6 @@ object DesktopEventValidationText {
                 }"
         }
 }
+
+private fun Boolean.genderLabel(): String =
+    if (this) "Men" else "Women"

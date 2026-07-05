@@ -685,6 +685,41 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun selectedMissingMappingsDoNotBlockExistingCategoryRouteUpdates() {
+        val kmlPath = Files.createTempFile("Sprint", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithSprintCategoryRouteNames())
+        val project = EventProjectEditor.addCategory(
+            classicPresetProject(raceName = "Sprint Test", startDateTimeIso = "2026-06-11T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null },
+            missingCategoryNamesToCreate = setOf("W35"),
+            missingCategoryIdFactory = { name -> "cat-${name.lowercase()}" }
+        )
+
+        assertEquals(listOf("W35"), summary.createdCategoryNames)
+        assertEquals(listOf("M21", "W35"), updated.raceData.categories.map { it.category.name })
+        assertEquals(2, summary.importedCategoryCount)
+        assertNotNull(
+            updated.raceData.categories
+                .single { it.category.name == "M21" }
+                .category.encryptedCourseInfo
+        )
+        assertNotNull(
+            updated.raceData.categories
+                .single { it.category.name == "W35" }
+                .category.encryptedCourseInfo
+        )
+        assertFalse(updated.raceData.categories.any { it.category.name == "M50" })
+    }
+
+    @Test
     fun previewsMissingCategoriesWhenNoExistingCategoryOrControlMatches() {
         val kmlPath = Files.createTempFile("Sprint", ".kml")
         Files.writeString(kmlPath, sampleRouteOnlyKmlWithCategoryNames())
@@ -726,6 +761,33 @@ class DesktopCourseKmlImportTest {
         assertNotNull(
             withCreatedCategories.raceData.categories
                 .single { it.category.name == "W35" }
+                .category.encryptedCourseInfo
+        )
+    }
+
+    @Test
+    fun importsOnlySelectedMissingCourseMappings() {
+        val kmlPath = Files.createTempFile("Sprint", ".kml")
+        Files.writeString(kmlPath, sampleRouteOnlyKmlWithCategoryNames())
+        val project = classicPresetProject(raceName = "Sprint Test", startDateTimeIso = "2026-06-11T09:00")
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null },
+            missingCategoryNamesToCreate = setOf("M21"),
+            missingCategoryIdFactory = { name -> "cat-${name.lowercase()}" }
+        )
+
+        assertEquals(listOf("M21", "W35"), summary.missingCategoryNames)
+        assertEquals(listOf("M21"), summary.createdCategoryNames)
+        assertEquals(listOf("M21"), updated.raceData.categories.map { it.category.name })
+        assertEquals(1, summary.matchedCategoryCount)
+        assertEquals(1, summary.importedCategoryCount)
+        assertNotNull(
+            updated.raceData.categories
+                .single { it.category.name == "M21" }
                 .category.encryptedCourseInfo
         )
     }
@@ -2051,6 +2113,8 @@ class DesktopCourseKmlImportTest {
         assertEquals(2, summary.matchedControlPointCount)
         assertEquals(1, summary.changedControlLocationCount)
         assertEquals(1, summary.controlLocationAffectedCategoryCount)
+        assertEquals(listOf("cat-m21"), summary.staleCourseMappingCategoryIds)
+        assertEquals(listOf("M21"), summary.staleCourseMappingCategoryNames)
         assertEquals(0, summary.importedCategoryCount)
         val publicControl = updated.raceData.controls.single { it.siCode == 31 }
         assertEquals(null, publicControl.latitude)
@@ -2065,6 +2129,13 @@ class DesktopCourseKmlImportTest {
         assertTrue(protectedCourseInfo.route.isEmpty())
         assertEquals(null, protectedCourseInfo.lengthMeters)
         assertEquals(null, protectedCourseInfo.climbMeters)
+
+        val cleared = DesktopCourseKmlImporter.clearStaleCourseMappings(
+            projectFile = updated,
+            categoryIds = summary.staleCourseMappingCategoryIds
+        )
+        assertNull(cleared.raceData.categories.single().category.encryptedCourseInfo)
+        assertNull(cleared.raceData.categories.single().category.encryptedIdealOrder)
     }
 
     @Test
@@ -2219,6 +2290,7 @@ class DesktopCourseKmlImportTest {
         assertTrue(firstSummary.sourceSha256 != secondSummary.sourceSha256)
         assertEquals(1, secondSummary.importedCategoryCount)
         assertEquals(0, secondSummary.duplicateCategoryCount)
+        assertEquals(emptyList<String>(), secondSummary.staleCourseMappingCategoryNames)
         assertEquals(secondSummary.sourceSha256, protectedCourseInfo.sourceSha256)
     }
 

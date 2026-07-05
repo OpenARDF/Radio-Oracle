@@ -100,6 +100,10 @@ object StandardCategoryRules {
         }
     }
 
+    /** Returns the gender flag corrected by standard category naming when the name implies one. */
+    fun reconcileIsManWithName(name: String, isMan: Boolean): Boolean =
+        inferIsManFromName(name) ?: isMan
+
     /** Returns the canonical spelling for standard ARDF category names while leaving custom names intact. */
     fun normalizedCategoryName(name: String): String {
         val trimmed = name.trim()

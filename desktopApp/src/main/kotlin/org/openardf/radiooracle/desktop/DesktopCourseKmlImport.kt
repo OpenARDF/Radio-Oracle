@@ -92,7 +92,9 @@ data class DesktopCourseKmlImportSummary(
     val sourceSha256: String,
     val controlIdentityUpdateCount: Int = 0,
     val controlSiConflictCount: Int = 0,
-    val controlPublicLabelUpdateCount: Int = 0
+    val controlPublicLabelUpdateCount: Int = 0,
+    val staleCourseMappingCategoryIds: List<String> = emptyList(),
+    val staleCourseMappingCategoryNames: List<String> = emptyList()
 ) {
     val assignedCategoryControlCount: Int
         get() = categoryAssignmentUpdates.sumOf { it.controls.size }
@@ -205,6 +207,7 @@ object DesktopCourseKmlImporter {
         categoryOverrideId: String? = null,
         elevationProvider: (CourseGeoPoint) -> Double? = { point -> DesktopVenueElevationCache.elevationMeters(point) },
         createMissingCategories: Boolean = false,
+        missingCategoryNamesToCreate: Set<String>? = null,
         createMissingControls: Boolean = false,
         missingCategoryIdFactory: (String) -> String = { UUID.randomUUID().toString() },
         requireRoutes: Boolean = true,
@@ -245,7 +248,14 @@ object DesktopCourseKmlImporter {
             sourceName = path.fileName.toString(),
             categoryOverrideId = categoryOverrideId
         )
-        val createdCategoryNames = if (createMissingCategories) missingCategoryNames else emptyList()
+        val selectedMissingCategoryMatchNames = missingCategoryNamesToCreate
+            ?.mapTo(mutableSetOf()) { it.categoryMatchText() }
+        val createdCategoryNames = when {
+            createMissingCategories -> missingCategoryNames
+            selectedMissingCategoryMatchNames != null ->
+                missingCategoryNames.filter { it.categoryMatchText() in selectedMissingCategoryMatchNames }
+            else -> emptyList()
+        }
         val projectWithMissingCategories = if (createdCategoryNames.isEmpty()) {
             projectFile
         } else {
@@ -621,6 +631,15 @@ object DesktopCourseKmlImporter {
             }
         }
 
+        val importedRouteCategoryIds = matchedCategoryIds.toSet()
+        val staleCourseMappingCategoryIds = locationUpdateResult?.affectedCategoryIds.orEmpty()
+            .filterNot { it in importedRouteCategoryIds }
+            .distinct()
+        val staleCategoryNamesById = updatedProject.raceData.categories.associate { categoryData ->
+            categoryData.category.id to categoryData.category.name
+        }
+        val staleCourseMappingCategoryNames = staleCourseMappingCategoryIds.mapNotNull(staleCategoryNamesById::get)
+
         require(matchedCategoryCount > 0 || controls.isNotEmpty() || missingCategoryNames.isNotEmpty()) {
             "No route names matched Race File category names, and no point controls matched existing controls."
         }
@@ -667,11 +686,13 @@ object DesktopCourseKmlImporter {
                 0
             },
             controlSiConflictCount = controlSiConflictCount,
-            controlPublicLabelUpdateCount = controlPublicLabelUpdateCount
+            controlPublicLabelUpdateCount = controlPublicLabelUpdateCount,
+            staleCourseMappingCategoryIds = staleCourseMappingCategoryIds,
+            staleCourseMappingCategoryNames = staleCourseMappingCategoryNames
         )
         DesktopDebugLog.info(
             "CourseKml",
-            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} assignedCategoryControls=${summary.assignedCategoryControlCount} changedControlLocations=${summary.changedControlLocationCount} publicLabelUpdates=${summary.controlPublicLabelUpdateCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} missingControls=${summary.missingControlNames.size} createdControls=${summary.createdControlNames.size} deletedControls=${summary.deletedControlNames.size} labelConversions=${summary.labelConversions.size} missingElevationPoints=${summary.missingElevationPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
+            "Import summary for ${path.fileName}: hash=${sourceSha256.shortHash()} matchedCategories=${summary.matchedCategoryCount} importedCategories=${summary.importedCategoryCount} assignedCategoryControls=${summary.assignedCategoryControlCount} changedControlLocations=${summary.changedControlLocationCount} staleCourseMappings=${summary.staleCourseMappingCategoryNames.size} publicLabelUpdates=${summary.controlPublicLabelUpdateCount} duplicateCategories=${summary.duplicateCategoryCount} matchedControls=${summary.matchedControlPointCount}/${summary.controlPointCount} missingControls=${summary.missingControlNames.size} createdControls=${summary.createdControlNames.size} deletedControls=${summary.deletedControlNames.size} labelConversions=${summary.labelConversions.size} missingElevationPoints=${summary.missingElevationPointCount} duplicateMissingElevationPoints=${summary.duplicateMissingElevationPointCount}"
         )
         return updatedProject to summary
     }
@@ -1736,6 +1757,31 @@ object DesktopCourseKmlImporter {
                 "${update.categoryId}-kml-control-${index + 1}"
             }
         }
+    }
+
+    fun clearStaleCourseMappings(
+        projectFile: EventProjectFile,
+        categoryIds: Collection<String>
+    ): EventProjectFile {
+        if (categoryIds.isEmpty()) {
+            return projectFile
+        }
+        val existingCategoryIds = projectFile.raceData.categories
+            .mapTo(mutableSetOf()) { it.category.id }
+        return categoryIds
+            .distinct()
+            .filter { it in existingCategoryIds }
+            .fold(projectFile) { currentProject, categoryId ->
+                EventProjectEditor.updateCategoryEncryptedIdealOrder(
+                    projectFile = EventProjectEditor.updateCategoryEncryptedCourseInfo(
+                        currentProject,
+                        categoryId,
+                        encryptedCourseInfo = null
+                    ),
+                    categoryId = categoryId,
+                    encryptedIdealOrder = null
+                )
+            }
     }
 
     private fun categoryAssignmentUpdate(

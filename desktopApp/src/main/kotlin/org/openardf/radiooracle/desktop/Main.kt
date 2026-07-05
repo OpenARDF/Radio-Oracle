@@ -186,6 +186,7 @@ import org.openardf.radiooracle.shared.event.EventValidationRules
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.ResultRecalculationOutcome
+import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
 import org.openardf.radiooracle.shared.event.StartDrawStartGroupMode
@@ -3088,42 +3089,19 @@ fun main(args: Array<String>) = application {
             review: PendingCourseKmlKmzImportReview,
             fetchElevations: Boolean,
             applyCategoryAssignments: Boolean,
-            createMissingCategories: Boolean,
-            overwriteImportedSiNumbers: Boolean
+            selectedMissingCategoryNames: Set<String>,
+            createMissingControls: Boolean,
+            overwriteImportedSiNumbers: Boolean,
+            keepStaleCourseMappings: Boolean
         ) {
             val formatLabel = controlsRouteImportFormatLabel(review.sourceName)
-            if (
-                !createMissingCategories &&
-                (review.summary.missingCategoryNames.isNotEmpty() || review.summary.missingControlNames.isNotEmpty())
-            ) {
-                projectStatusText =
-                    "Controls/route $formatLabel import was not applied because listed categories or controls are missing."
-                return
-            }
-            val overwriteProject = if (createMissingCategories) {
-                review.overwriteSiCreatedMissingCategoryProject
-            } else {
-                review.overwriteSiProject
-            }
-            val overwriteSummary = if (createMissingCategories) {
-                review.overwriteSiCreatedMissingCategorySummary
-            } else {
-                review.overwriteSiSummary
-            }
-            val selectedSummary = if (overwriteImportedSiNumbers && overwriteSummary != null) {
-                overwriteSummary
-            } else if (createMissingCategories) {
-                review.createdMissingCategorySummary ?: review.summary
-            } else {
-                review.summary
-            }
-            val selectedProject = if (overwriteImportedSiNumbers && overwriteProject != null) {
-                overwriteProject
-            } else if (createMissingCategories) {
-                review.createdMissingCategoryProject ?: review.updatedProject
-            } else {
-                review.updatedProject
-            }
+            val selectedPreview = review.previewForSelectedMissingMappings(
+                selectedMissingCategoryNames = selectedMissingCategoryNames,
+                createMissingControls = createMissingControls,
+                overwriteImportedSiNumbers = overwriteImportedSiNumbers
+            )
+            val selectedSummary = selectedPreview.summary
+            val selectedProject = selectedPreview.projectFile
             val isDuplicateElevationRetry = fetchElevations &&
                 selectedSummary.importedCategoryCount == 0 &&
                 selectedSummary.duplicateCategoryCount > 0 &&
@@ -3133,13 +3111,23 @@ fun main(args: Array<String>) = application {
             } else {
                 selectedProject
             }
-            val updatedProject = if (applyCategoryAssignments) {
+            val projectAfterAssignments = if (applyCategoryAssignments) {
                 DesktopCourseKmlImporter.applyCategoryAssignmentUpdates(
                     projectFile = projectToApply,
                     updates = selectedSummary.categoryAssignmentUpdates
                 )
             } else {
                 projectToApply
+            }
+            val shouldClearStaleCourseMappings = !keepStaleCourseMappings &&
+                selectedSummary.staleCourseMappingCategoryIds.isNotEmpty()
+            val updatedProject = if (shouldClearStaleCourseMappings) {
+                DesktopCourseKmlImporter.clearStaleCourseMappings(
+                    projectFile = projectAfterAssignments,
+                    categoryIds = selectedSummary.staleCourseMappingCategoryIds
+                )
+            } else {
+                projectAfterAssignments
             }
             checkpointBeforeImport("controls/route $formatLabel import ${review.sourceName}")
             projectFile = projectSession.updateCurrentProject { updatedProject }
@@ -3159,8 +3147,10 @@ fun main(args: Array<String>) = application {
                     "$retainedImportedSiConflictCount imported SI conflicts retained existing Race File numbers.",
                     "${selectedSummary.controlPublicLabelUpdateCount} control public labels updated.",
                     "${selectedSummary.changedControlLocationCount} control locations updated.",
+                    "${selectedSummary.staleCourseMappingCategoryNames.size.takeIf { shouldClearStaleCourseMappings } ?: 0} stale course mappings cleared.",
+                    "${selectedSummary.staleCourseMappingCategoryNames.size.takeIf { keepStaleCourseMappings } ?: 0} stale course mappings kept by user override.",
                     "${selectedSummary.categoryAssignmentUpdates.size.takeIf { applyCategoryAssignments } ?: 0} assigned-control lists replaced.",
-                    "${selectedSummary.createdCategoryNames.size} missing categories created.",
+                    "${selectedSummary.createdCategoryNames.size} course mappings created.",
                     "${selectedSummary.createdControlNames.size} missing controls created.",
                     "${selectedSummary.missingCategoryNames.size} category names were missing before review."
                 ) + listOf(updatedProject.resultImpactWarning("Course data changed").trim()).filter { it.isNotBlank() } +
@@ -3187,9 +3177,16 @@ fun main(args: Array<String>) = application {
                         .takeIf { it > 0 }
                         ?.let { " Updated $it control locations." }
                         .orEmpty()
+                    val staleMappingText = when {
+                        shouldClearStaleCourseMappings ->
+                            " Cleared ${selectedSummary.staleCourseMappingCategoryNames.size} stale course mappings."
+                        keepStaleCourseMappings && selectedSummary.staleCourseMappingCategoryNames.isNotEmpty() ->
+                            " Kept ${selectedSummary.staleCourseMappingCategoryNames.size} stale course mappings by user override."
+                        else -> ""
+                    }
                     val createdText = selectedSummary.createdCategoryNames
                         .takeIf { it.isNotEmpty() }
-                        ?.let { " Created ${it.size} categories without competitors." }
+                        ?.let { " Created ${it.size} course mappings without active competitors." }
                         .orEmpty()
                     val createdControlsText = selectedSummary.createdControlNames
                         .takeIf { it.isNotEmpty() }
@@ -3204,15 +3201,15 @@ fun main(args: Array<String>) = application {
                         ""
                     }
                     if (selectedSummary.importedCategoryCount == 0 && selectedSummary.changedControlLocationCount > 0) {
-                        "Updated ${selectedSummary.changedControlLocationCount} control locations.$assignedText$duplicateText$createdText$createdControlsText Unsaved changes."
+                        "Updated ${selectedSummary.changedControlLocationCount} control locations.$staleMappingText$assignedText$duplicateText$createdText$createdControlsText Unsaved changes."
                     } else if (
                         selectedSummary.importedCategoryCount == 0 &&
                         selectedSummary.assignedCategoryControlCount > 0 &&
                         applyCategoryAssignments
                     ) {
-                        "Updated assigned controls for ${selectedSummary.categoryAssignmentUpdates.size} categories.$duplicateText$createdText$createdControlsText Unsaved changes."
+                        "Updated assigned controls for ${selectedSummary.categoryAssignmentUpdates.size} categories.$staleMappingText$duplicateText$createdText$createdControlsText Unsaved changes."
                     } else {
-                        "Imported controls/route data for ${selectedSummary.importedCategoryCount} categories.$locationText$assignedText$duplicateText$createdText$createdControlsText Unsaved changes."
+                        "Imported controls/route data for ${selectedSummary.importedCategoryCount} categories.$locationText$staleMappingText$assignedText$duplicateText$createdText$createdControlsText Unsaved changes."
                     }
                 } + controlsOnlyImportWarningLines.firstOrNull()?.let { " $it" }.orEmpty()
             }
@@ -3389,6 +3386,7 @@ fun main(args: Array<String>) = application {
                         pendingCourseKmlKmzImportReview = PendingCourseKmlKmzImportReview(
                             sourceName = path.fileName.toString(),
                             path = path,
+                            baseProject = currentProject,
                             updatedProject = updatedProject,
                             summary = summary,
                             createdMissingCategoryProject = preview.createdMissingCategoryProject,
@@ -3397,7 +3395,9 @@ fun main(args: Array<String>) = application {
                             overwriteSiSummary = preview.overwriteSiSummary,
                             overwriteSiCreatedMissingCategoryProject = preview.overwriteSiCreatedMissingCategoryProject,
                             overwriteSiCreatedMissingCategorySummary = preview.overwriteSiCreatedMissingCategorySummary,
-                            password = password
+                            password = password,
+                            categoryOverrideId = categoryOverrideId,
+                            requireRoutes = requireRoutes
                         )
                         projectStatusText = if (summary.isDuplicateOnly) {
                             "Identical controls/route data already imported. Review missing elevation retrieval option."
@@ -3979,6 +3979,7 @@ fun main(args: Array<String>) = application {
                         path = path,
                         rows = result.rows,
                         invalidLineCount = result.invalidLines.size,
+                        newCourseMappingNames = newCategoryCsvCourseMappingNames(currentProject, result.rows),
                         preview = DesktopImportPreviews.categoryCsvPreview(
                             projectFile = currentProject,
                             sourceName = path.fileName.toString(),
@@ -4002,6 +4003,7 @@ fun main(args: Array<String>) = application {
                         path = path,
                         rows = rows,
                         invalidLineCount = 0,
+                        newCourseMappingNames = newCategoryCsvCourseMappingNames(currentProject, rows),
                         preview = DesktopImportPreviews.categoryCsvPreview(
                             projectFile = currentProject,
                             sourceName = path.fileName.toString(),
@@ -4015,16 +4017,24 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun applyCategoriesCsvImport(review: PendingCategoriesCsvImportReview) {
+        fun applyCategoriesCsvImport(
+            review: PendingCategoriesCsvImportReview,
+            selectedNewCourseMappingNames: Set<String>
+        ) {
             runCatching {
                 lockProtectedCourseOrder()
                 checkpointBeforeImport("categories CSV import ${review.path.fileName}")
                 var importedRows = 0
                 var updatedRows = 0
                 projectFile = projectSession.updateCurrentProject { currentProject ->
-                    val outcome = EventProjectEditor.importCategoryRowsWithOutcome(
+                    val rowsToImport = selectedCategoryCsvRows(
                         projectFile = currentProject,
                         rows = review.rows,
+                        selectedNewCourseMappingNames = selectedNewCourseMappingNames
+                    )
+                    val outcome = EventProjectEditor.importCategoryRowsWithOutcome(
+                        projectFile = currentProject,
+                        rows = rowsToImport,
                         categoryIdFactory = { UUID.randomUUID().toString() },
                         controlPointIdFactory = { _, _ -> UUID.randomUUID().toString() }
                     )
@@ -4038,8 +4048,8 @@ fun main(args: Array<String>) = application {
                 recentImportReport = DesktopImportReport(
                     title = "Categories CSV: ${review.path.fileName}",
                     lines = withRollbackBackupLine(listOf(
-                        "$importedRows categories added.",
-                        "$updatedRows categories updated by name.",
+                        "$importedRows course mappings added.",
+                        "$updatedRows course mappings updated by name.",
                         "${review.invalidLineCount} invalid rows skipped.",
                         "${review.preview.affectedCompetitorCount} competitors are in updated categories.",
                         "${review.preview.categoriesWithAssignedControlsReplacedCount} existing assigned-control lists replaced.",
@@ -4048,7 +4058,7 @@ fun main(args: Array<String>) = application {
                         review.preview.eventTypeWarnings)
                 )
                 projectStatusText =
-                    "Imported ${review.path.fileName}: $importedRows added, $updatedRows updated, ${review.invalidLineCount} invalid."
+                    "Imported ${review.path.fileName}: $importedRows course mappings added, $updatedRows updated, ${review.invalidLineCount} invalid."
             }.onFailure { error ->
                 projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
             }
@@ -4256,6 +4266,7 @@ fun main(args: Array<String>) = application {
                     pendingIofCourseDataImportReview = PendingIofCourseDataImportReview(
                         path = path,
                         courseData = parsed.parsedData,
+                        newCourseMappingNames = newIofCourseMappingNames(currentProject, parsed.parsedData.categories),
                         preview = DesktopImportPreviews.categoryDataPreview(
                             projectFile = currentProject,
                             sourceName = path.fileName.toString(),
@@ -4271,13 +4282,23 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun applyIofCourseDataImport(review: PendingIofCourseDataImportReview) {
+        fun applyIofCourseDataImport(
+            review: PendingIofCourseDataImportReview,
+            selectedNewCourseMappingNames: Set<String>
+        ) {
             runCatching {
                 val currentProject = projectSession.currentProject
                     ?: throw IllegalStateException("Open or create a Race File before importing IOF XML.")
                 checkpointBeforeImport("IOF CourseData import ${review.path.fileName}")
-                val outcome = EventProjectEditor.importIofCourseData(currentProject, review.courseData)
-                val importedIdentities = review.courseData.categories
+                val courseDataToImport = review.courseData.copy(
+                    categories = selectedIofCourseDataCategories(
+                        projectFile = currentProject,
+                        categories = review.courseData.categories,
+                        selectedNewCourseMappingNames = selectedNewCourseMappingNames
+                    )
+                )
+                val outcome = EventProjectEditor.importIofCourseData(currentProject, courseDataToImport)
+                val importedIdentities = courseDataToImport.categories
                     .flatMap { categoryData -> categoryData.controlPoints.map { it.siCode to it.type } }
                     .toSet()
                 val importedControlIds = outcome.projectFile.raceData.controls
@@ -4293,16 +4314,16 @@ fun main(args: Array<String>) = application {
                 recentImportReport = DesktopImportReport(
                     title = "IOF CourseData XML: ${review.path.fileName}",
                     lines = withRollbackBackupLine(listOf(
-                        "${outcome.importedCount} categories added.",
-                        "${outcome.updatedCount} categories updated by name.",
+                        "${outcome.importedCount} course mappings added.",
+                        "${outcome.updatedCount} course mappings updated by name.",
                         "${pruneResult.deletedControls.size} stale over-limit controls removed."
                     ) + pruneResult.deletedControlNames.takeIf { it.isNotEmpty() }?.let { names ->
                         listOf("Deleted controls: ${names.joinToString()}.")
                     }.orEmpty() + review.warningLines)
                 )
                 projectStatusText = buildString {
-                    append("Imported ${outcome.importedCount} IOF CourseData categor")
-                    append(if (outcome.importedCount == 1) "y" else "ies")
+                    append("Imported ${outcome.importedCount} IOF CourseData course mapping")
+                    append(if (outcome.importedCount == 1) "" else "s")
                     append(" from ${review.path.fileName}.")
                     if (outcome.updatedCount > 0) {
                         append(" Updated ${outcome.updatedCount}.")
@@ -5886,13 +5907,15 @@ fun main(args: Array<String>) = application {
         pendingCourseKmlKmzImportReview?.let { review ->
             CourseKmlKmzImportReviewDialog(
                 review = review,
-                onKeep = { fetchElevations, applyCategoryAssignments, createMissingCategories, overwriteImportedSiNumbers ->
+                onKeep = { fetchElevations, applyCategoryAssignments, selectedMissingCategoryNames, createMissingControls, overwriteImportedSiNumbers, keepStaleCourseMappings ->
                     applyCourseKmlKmzImport(
                         review = review,
                         fetchElevations = fetchElevations,
                         applyCategoryAssignments = applyCategoryAssignments,
-                        createMissingCategories = createMissingCategories,
-                        overwriteImportedSiNumbers = overwriteImportedSiNumbers
+                        selectedMissingCategoryNames = selectedMissingCategoryNames,
+                        createMissingControls = createMissingControls,
+                        overwriteImportedSiNumbers = overwriteImportedSiNumbers,
+                        keepStaleCourseMappings = keepStaleCourseMappings
                     )
                 },
                 onCancel = {
@@ -5943,7 +5966,9 @@ fun main(args: Array<String>) = application {
         pendingCategoriesCsvImportReview?.let { review ->
             CategoriesCsvImportReviewDialog(
                 review = review,
-                onImport = { applyCategoriesCsvImport(review) },
+                onImport = { selectedNewCourseMappingNames ->
+                    applyCategoriesCsvImport(review, selectedNewCourseMappingNames)
+                },
                 onCancel = {
                     pendingCategoriesCsvImportReview = null
                     projectStatusText = "Categories CSV import canceled. No changes applied."
@@ -5953,7 +5978,9 @@ fun main(args: Array<String>) = application {
         pendingIofCourseDataImportReview?.let { review ->
             IofCourseDataImportReviewDialog(
                 review = review,
-                onImport = { applyIofCourseDataImport(review) },
+                onImport = { selectedNewCourseMappingNames ->
+                    applyIofCourseDataImport(review, selectedNewCourseMappingNames)
+                },
                 onCancel = {
                     pendingIofCourseDataImportReview = null
                     projectStatusText = "IOF CourseData import canceled. No changes applied."
@@ -7192,6 +7219,52 @@ private fun controlsRouteImportFormatLabel(sourceName: String): String =
         "KML/KMZ"
     }
 
+private fun defaultImportMissingCourseMapping(categoryName: String): Boolean {
+    val normalizedName = StandardCategoryRules.normalizedCategoryName(categoryName).uppercase()
+    return StandardCategoryRules.inferIsManFromName(normalizedName) != null &&
+        (normalizedName.startsWith("M") || normalizedName.startsWith("W"))
+}
+
+private fun controlsRouteReviewDisplaySummary(
+    baseSummary: DesktopCourseKmlImportSummary,
+    importAllSummary: DesktopCourseKmlImportSummary,
+    selectedMissingCategoryNames: Set<String>,
+    createMissingControls: Boolean
+): DesktopCourseKmlImportSummary {
+    val selectedMissingKeys = selectedMissingCategoryNames.mapTo(mutableSetOf()) { it.courseMappingSelectionKey() }
+    val allMissingKeys = baseSummary.missingCategoryNames.mapTo(mutableSetOf()) { it.courseMappingSelectionKey() }
+    if (selectedMissingKeys.isEmpty() && !createMissingControls) {
+        return baseSummary
+    }
+    if (allMissingKeys.isNotEmpty() && selectedMissingKeys == allMissingKeys && createMissingControls) {
+        return importAllSummary
+    }
+
+    val existingMatchedKeys = baseSummary.matchedCategoryNames.mapTo(mutableSetOf()) { it.courseMappingSelectionKey() }
+    val selectedCategoryKeys = existingMatchedKeys + selectedMissingKeys
+    val matchedPairs = importAllSummary.matchedCategoryIds.zip(importAllSummary.matchedCategoryNames)
+        .filter { (_, name) -> name.courseMappingSelectionKey() in selectedCategoryKeys }
+    val createdNames = importAllSummary.createdCategoryNames
+        .filter { it.courseMappingSelectionKey() in selectedMissingKeys }
+    val selectedMatchedCategoryIds = matchedPairs.mapTo(mutableSetOf()) { it.first }
+    val stalePairs = importAllSummary.staleCourseMappingCategoryIds
+        .zip(importAllSummary.staleCourseMappingCategoryNames)
+        .filter { (categoryId, _) -> categoryId !in selectedMatchedCategoryIds }
+    return importAllSummary.copy(
+        matchedCategoryCount = matchedPairs.size,
+        matchedCategoryIds = matchedPairs.map { it.first },
+        matchedCategoryNames = matchedPairs.map { it.second },
+        importedCategoryCount = baseSummary.importedCategoryCount + createdNames.size,
+        categoryAssignmentUpdates = importAllSummary.categoryAssignmentUpdates
+            .filter { it.categoryName.courseMappingSelectionKey() in selectedCategoryKeys },
+        createdCategoryNames = createdNames,
+        createdControlNames = if (createMissingControls) importAllSummary.createdControlNames else emptyList(),
+        deletedControlNames = if (createMissingControls) importAllSummary.deletedControlNames else emptyList(),
+        staleCourseMappingCategoryIds = stalePairs.map { it.first },
+        staleCourseMappingCategoryNames = stalePairs.map { it.second }
+    )
+}
+
 internal fun defaultApplyCategoryAssignments(
     projectFile: EventProjectFile,
     updates: List<DesktopCourseKmlCategoryAssignmentUpdate>,
@@ -7244,8 +7317,10 @@ private fun CourseKmlKmzImportReviewDialog(
     onKeep: (
         fetchElevations: Boolean,
         applyCategoryAssignments: Boolean,
-        createMissingCategories: Boolean,
-        overwriteImportedSiNumbers: Boolean
+        selectedMissingCategoryNames: Set<String>,
+        createMissingControls: Boolean,
+        overwriteImportedSiNumbers: Boolean,
+        keepStaleCourseMappings: Boolean
     ) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -7255,27 +7330,41 @@ private fun CourseKmlKmzImportReviewDialog(
     val importAllHasControlListChanges = summary.missingCategoryNames.isNotEmpty() ||
         summary.missingControlNames.isNotEmpty() ||
         importAllSummary.deletedControlNames.isNotEmpty()
-    var createMissingCategories by remember(
+    val defaultSelectedMissingCategoryNames = remember(
         review.sourceName,
         summary.sourceSha256,
-        summary.missingCategoryNames,
+        summary.missingCategoryNames
+    ) {
+        summary.missingCategoryNames
+            .filter(::defaultImportMissingCourseMapping)
+            .toSet()
+    }
+    var selectedMissingCategoryNames by remember(
+        review.sourceName,
+        summary.sourceSha256,
+        summary.missingCategoryNames
+    ) {
+        mutableStateOf(defaultSelectedMissingCategoryNames)
+    }
+    var createMissingControls by remember(
+        review.sourceName,
+        summary.sourceSha256,
         summary.missingControlNames,
         importAllSummary.deletedControlNames
     ) {
-        mutableStateOf(importAllHasControlListChanges)
+        mutableStateOf(summary.missingControlNames.isNotEmpty() || importAllSummary.deletedControlNames.isNotEmpty())
     }
-    val selectedSummary = if (createMissingCategories) {
-        review.createdMissingCategorySummary ?: summary
-    } else {
-        summary
-    }
-    val selectedProject = if (createMissingCategories) {
+    val selectedSummary = controlsRouteReviewDisplaySummary(
+        baseSummary = summary,
+        importAllSummary = importAllSummary,
+        selectedMissingCategoryNames = selectedMissingCategoryNames,
+        createMissingControls = createMissingControls
+    )
+    val selectedProject = if (selectedMissingCategoryNames.isNotEmpty() || createMissingControls) {
         review.createdMissingCategoryProject ?: review.updatedProject
     } else {
         review.updatedProject
     }
-    val hasMissingImportItems = summary.missingCategoryNames.isNotEmpty() || summary.missingControlNames.isNotEmpty()
-    val blocksKeepForMissingItems = hasMissingImportItems && !createMissingCategories
     val categoriesText = selectedSummary.matchedCategoryNames
         .ifEmpty { listOf("None") }
         .joinToString()
@@ -7294,7 +7383,8 @@ private fun CourseKmlKmzImportReviewDialog(
     var applyCategoryAssignments by remember(
         review.sourceName,
         summary.sourceSha256,
-        createMissingCategories
+        selectedMissingCategoryNames,
+        createMissingControls
     ) {
         mutableStateOf(
             defaultApplyCategoryAssignments(
@@ -7305,6 +7395,13 @@ private fun CourseKmlKmzImportReviewDialog(
         )
     }
     var overwriteImportedSiNumbers by remember(review.sourceName, summary.sourceSha256) {
+        mutableStateOf(false)
+    }
+    var keepStaleCourseMappings by remember(
+        review.sourceName,
+        selectedSummary.sourceSha256,
+        selectedSummary.staleCourseMappingCategoryIds
+    ) {
         mutableStateOf(false)
     }
     val selectedSiConflictCount = selectedSummary.controlSiConflictCount
@@ -7375,40 +7472,58 @@ private fun CourseKmlKmzImportReviewDialog(
                         Text("Categories: $categoriesText")
                         if (importAllHasControlListChanges) {
                             if (summary.missingCategoryNames.isNotEmpty()) {
-                                Text("Categories Listed In $formatLabel But Not In The Race File: ${summary.missingCategoryNames.joinToString()}")
+                                Text("New Course Mappings Found In $formatLabel:")
+                                summary.missingCategoryNames.forEach { categoryName ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Checkbox(
+                                            checked = categoryName in selectedMissingCategoryNames,
+                                            onCheckedChange = { checked ->
+                                                selectedMissingCategoryNames = if (checked) {
+                                                    selectedMissingCategoryNames + categoryName
+                                                } else {
+                                                    selectedMissingCategoryNames - categoryName
+                                                }
+                                            }
+                                        )
+                                        Text(
+                                            "$categoryName${
+                                                if (defaultImportMissingCourseMapping(categoryName)) {
+                                                    " (standard)"
+                                                } else {
+                                                    " (nonstandard)"
+                                                }
+                                            }"
+                                        )
+                                    }
+                                }
+                                Text(
+                                    "Existing Race File categories are updated when their routes match. Selected new mappings store route/course data for later category activation; they do not create active competitor categories.",
+                                    fontSize = 12.sp,
+                                    color = Color.DarkGray
+                                )
                             }
                             if (summary.missingControlNames.isNotEmpty()) {
                                 Text("Controls Listed In $formatLabel But Not In The Race File: ${summary.missingControlNames.joinToString()}")
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Checkbox(
-                                    checked = createMissingCategories,
-                                    onCheckedChange = { createMissingCategories = it }
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Checkbox(
+                                        checked = createMissingControls,
+                                        onCheckedChange = { createMissingControls = it }
+                                    )
+                                    Text("Create Missing Controls In Setup > Controls")
+                                }
                                 Text(
-                                    if (hasMissingImportItems) {
-                                        "Create Missing Categories And Controls, Then Save Course Data"
-                                    } else {
-                                        "Import All $formatLabel Controls Into The Controls List"
-                                    }
+                                    "When selected, imported controls that do not already match Race File controls are added to the controls list.",
+                                    fontSize = 12.sp,
+                                    color = Color.DarkGray
                                 )
                             }
-                            Text(
-                                text = if (createMissingCategories && hasMissingImportItems) {
-                                    "Created categories will be saved without competitors. Created controls will be added to Setup > Controls so route analysis and category assignments can use them."
-                                } else if (!createMissingCategories && hasMissingImportItems) {
-                                    "Route-bearing imports cannot be made active while listed categories or controls are missing. Create them, or cancel and add them manually before importing again."
-                                } else {
-                                    "The active controls list will be synchronized with the imported $formatLabel controls where event-type limits require stale unmatched controls to be removed."
-                                },
-                                fontSize = 12.sp,
-                                color = if (blocksKeepForMissingItems) DesktopPalette.Error else Color.DarkGray,
-                                fontWeight = if (blocksKeepForMissingItems) FontWeight.Bold else FontWeight.Normal
-                            )
-                            if (createMissingCategories) {
+                            if (createMissingControls || selectedMissingCategoryNames.isNotEmpty()) {
                                 Text(
                                     DesktopControlImportPruning.ImportAllControlsDeletionNotice,
                                     fontSize = 12.sp,
@@ -7424,7 +7539,7 @@ private fun CourseKmlKmzImportReviewDialog(
                             )
                         }
                         if (selectedSummary.importedCategoryCount > 0) {
-                            Text("Categories To Update: ${selectedSummary.importedCategoryCount}")
+                            Text("Course Mappings To Import/Update: ${selectedSummary.importedCategoryCount}")
                         }
                         if (selectedSummary.assignedCategoryControlCount > 0) {
                             Text("Category Assigned Control Points Available To Copy: ${selectedSummary.assignedCategoryControlCount}")
@@ -7489,6 +7604,28 @@ private fun CourseKmlKmzImportReviewDialog(
                             Text("Control Locations To Update: ${selectedSummary.changedControlLocationCount}")
                             Text("Stored courses affected by location changes: ${selectedSummary.controlLocationAffectedCategoryCount}")
                         }
+                        if (selectedSummary.staleCourseMappingCategoryNames.isNotEmpty()) {
+                            Text(
+                                text = "Stale Course Mappings To Clear: ${selectedSummary.staleCourseMappingCategoryNames.joinToString()}",
+                                color = DesktopPalette.Warning,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Checkbox(
+                                    checked = keepStaleCourseMappings,
+                                    onCheckedChange = { keepStaleCourseMappings = it }
+                                )
+                                Text("Keep Stale Course Mappings Anyway")
+                            }
+                            Text(
+                                "These mappings reference controls whose locations changed, but this import did not include replacement route data for those categories. By default they will be deleted so stale course data is not reused.",
+                                fontSize = 12.sp,
+                                color = Color.DarkGray
+                            )
+                        }
                         if (canFetchElevations) {
                             Text(
                                 if (selectedSummary.isDuplicateOnly) {
@@ -7523,27 +7660,27 @@ private fun CourseKmlKmzImportReviewDialog(
                                 selectedSummary.assignedCategoryControlCount == 0 &&
                                 selectedSummary.changedControlLocationCount == 0
                             ) {
-                                "Analyze Imported Data will copy matched $formatLabel control names into blank Public Label fields in the active Race File model. Matching Notes that duplicate the imported names are cleared. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+                                "Accept Import will copy matched $formatLabel control names into blank Public Label fields in the active Race File model. Matching Notes that duplicate the imported names are cleared. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
                             } else if (
                                 selectedSummary.hasLabelConversions &&
                                 selectedSummary.importedCategoryCount == 0 &&
                                 selectedSummary.assignedCategoryControlCount == 0 &&
                                 selectedSummary.changedControlLocationCount == 0
                             ) {
-                                "Analyze Imported Data will use these $formatLabel names as matches to existing Race File labels in the active Race File model. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+                                "Accept Import will use these $formatLabel names as matches to existing Race File labels in the active Race File model. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
                             } else if (
                                 selectedSummary.importedCategoryCount == 0 &&
                                 (selectedSummary.changedControlLocationCount > 0 || selectedSummary.controlIdentityUpdateCount > 0)
                             ) {
-                                "Analyze Imported Data will update control identities or locations in the active Race File model. Affected stored route geometry is invalidated when locations change so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+                                "Accept Import will update control identities or locations in the active Race File model. Affected stored route geometry is invalidated when locations change so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
                             } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.controlSiConflictCount > 0) {
                                 "Choose whether to retain current Race File SI numbers or overwrite them from imported SI= lines. Cancel leaves the Race File unchanged."
                             } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.assignedCategoryControlCount > 0) {
-                                "Analyze Imported Data will make the matched $formatLabel control points active in memory for Course Analyzer. Category assigned controls are changed only when the assignment checkbox is selected. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+                                "Accept Import will make the matched $formatLabel control points active in memory for Course Analyzer. Category assigned controls are changed only when the assignment checkbox is selected. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
                             } else if (selectedSummary.hasLabelConversions) {
-                                "Analyze Imported Data will use these $formatLabel names as matches to existing Race File labels, then update route facts, ideal order, and any changed control locations in the active Race File model. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+                                "Accept Import will use these $formatLabel names as matches to existing Race File labels, then update route facts, ideal order, and any changed control locations in the active Race File model. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
                             } else {
-                                "Analyze Imported Data will update route facts, ideal order, and any changed control locations in the active Race File model. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import becomes active. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+                                "Accept Import will update route facts, ideal order, and any changed control locations in the active Race File model. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import becomes active. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
                             },
                             fontSize = 13.sp,
                             color = Color.DarkGray
@@ -7559,13 +7696,14 @@ private fun CourseKmlKmzImportReviewDialog(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
-                        enabled = !blocksKeepForMissingItems,
                         onClick = {
                             onKeep(
                                 fetchElevations,
                                 applyCategoryAssignments,
-                                createMissingCategories,
-                                overwriteImportedSiNumbers
+                                selectedMissingCategoryNames,
+                                createMissingControls,
+                                overwriteImportedSiNumbers,
+                                keepStaleCourseMappings
                             )
                         }
                     ) {
@@ -7573,7 +7711,7 @@ private fun CourseKmlKmzImportReviewDialog(
                             if (selectedSummary.isDuplicateOnly) {
                                 "Continue"
                             } else {
-                                "Analyze Imported Data"
+                                "Accept Import"
                             }
                         )
                     }
@@ -7586,10 +7724,13 @@ private fun CourseKmlKmzImportReviewDialog(
 @Composable
 private fun CategoriesCsvImportReviewDialog(
     review: PendingCategoriesCsvImportReview,
-    onImport: () -> Unit,
+    onImport: (selectedNewCourseMappingNames: Set<String>) -> Unit,
     onCancel: () -> Unit
 ) {
     val preview = review.preview
+    var selectedNewCourseMappingNames by remember(review.path, review.newCourseMappingNames) {
+        mutableStateOf(review.newCourseMappingNames.filter(::defaultImportMissingCourseMapping).toSet())
+    }
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Review Categories CSV Import") },
@@ -7608,8 +7749,37 @@ private fun CategoriesCsvImportReviewDialog(
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Text("Categories To Add: ${preview.addedCount}")
-                Text("Categories To Update: ${preview.updatedCount}")
+                if (review.newCourseMappingNames.isNotEmpty()) {
+                    Text("New Course Mappings Found:")
+                    review.newCourseMappingNames.forEach { categoryName ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Checkbox(
+                                checked = categoryName in selectedNewCourseMappingNames,
+                                onCheckedChange = { checked ->
+                                    selectedNewCourseMappingNames = if (checked) {
+                                        selectedNewCourseMappingNames + categoryName
+                                    } else {
+                                        selectedNewCourseMappingNames - categoryName
+                                    }
+                                }
+                            )
+                            Text(
+                                "$categoryName${
+                                    if (defaultImportMissingCourseMapping(categoryName)) {
+                                        " (standard)"
+                                    } else {
+                                        " (nonstandard)"
+                                    }
+                                }"
+                            )
+                        }
+                    }
+                }
+                Text("Course Mappings To Add: ${selectedNewCourseMappingNames.size}")
+                Text("Course Mappings To Update: ${preview.updatedCount}")
                 if (review.invalidLineCount > 0) {
                     Text(
                         text = "Invalid rows skipped: ${review.invalidLineCount}",
@@ -7629,15 +7799,15 @@ private fun CategoriesCsvImportReviewDialog(
                     Text("Protected controls/route course data will be preserved for ${preview.categoriesWithProtectedCoursePreservedCount} updated categor${if (preview.categoriesWithProtectedCoursePreservedCount == 1) "y" else "ies"}.")
                 }
                 Text(
-                    "This import updates existing categories by name and appends new names. It does not delete categories missing from the CSV.",
+                    "Existing Race File categories are updated when their names match. Selected new mappings store course assignments for later category activation; they do not create active competitor categories. Categories missing from the CSV are not deleted.",
                     fontSize = 12.sp,
                     color = Color.DarkGray
                 )
             }
         },
         confirmButton = {
-            Button(onClick = onImport) {
-                ButtonLabel("Import Categories")
+            Button(onClick = { onImport(selectedNewCourseMappingNames) }) {
+                ButtonLabel("Accept Import")
             }
         },
         dismissButton = {
@@ -7761,10 +7931,13 @@ private fun IofResultListImportReviewDialog(
 @Composable
 private fun IofCourseDataImportReviewDialog(
     review: PendingIofCourseDataImportReview,
-    onImport: () -> Unit,
+    onImport: (selectedNewCourseMappingNames: Set<String>) -> Unit,
     onCancel: () -> Unit
 ) {
     val preview = review.preview
+    var selectedNewCourseMappingNames by remember(review.path, review.newCourseMappingNames) {
+        mutableStateOf(review.newCourseMappingNames.filter(::defaultImportMissingCourseMapping).toSet())
+    }
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Review IOF CourseData Import") },
@@ -7783,8 +7956,37 @@ private fun IofCourseDataImportReviewDialog(
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Text("Categories To Add: ${preview.addedCount}")
-                Text("Categories To Update: ${preview.updatedCount}")
+                if (review.newCourseMappingNames.isNotEmpty()) {
+                    Text("New Course Mappings Found:")
+                    review.newCourseMappingNames.forEach { categoryName ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Checkbox(
+                                checked = categoryName in selectedNewCourseMappingNames,
+                                onCheckedChange = { checked ->
+                                    selectedNewCourseMappingNames = if (checked) {
+                                        selectedNewCourseMappingNames + categoryName
+                                    } else {
+                                        selectedNewCourseMappingNames - categoryName
+                                    }
+                                }
+                            )
+                            Text(
+                                "$categoryName${
+                                    if (defaultImportMissingCourseMapping(categoryName)) {
+                                        " (standard)"
+                                    } else {
+                                        " (nonstandard)"
+                                    }
+                                }"
+                            )
+                        }
+                    }
+                }
+                Text("Course Mappings To Add: ${selectedNewCourseMappingNames.size}")
+                Text("Course Mappings To Update: ${preview.updatedCount}")
                 if (preview.affectedCompetitorCount > 0) {
                     Text("Updated categories currently include ${preview.affectedCompetitorCount} competitor${if (preview.affectedCompetitorCount == 1) "" else "s"}.")
                 }
@@ -7817,15 +8019,15 @@ private fun IofCourseDataImportReviewDialog(
                     )
                 }
                 Text(
-                    "This import updates existing categories by name and appends new names. It does not delete categories missing from the IOF CourseData XML; stale unmatched controls may be deleted only when keeping them would exceed event-type control limits.",
+                    "Existing Race File categories are updated when their names match. Selected new mappings store course assignments for later category activation; they do not create active competitor categories. Categories missing from the IOF CourseData XML are not deleted; stale unmatched controls may be deleted only when keeping them would exceed event-type control limits.",
                     fontSize = 12.sp,
                     color = Color.DarkGray
                 )
             }
         },
         confirmButton = {
-            Button(onClick = onImport) {
-                ButtonLabel("Import CourseData")
+            Button(onClick = { onImport(selectedNewCourseMappingNames) }) {
+                ButtonLabel("Accept Import")
             }
         },
         dismissButton = {
@@ -9417,6 +9619,7 @@ private data class DesktopImportCheckpoint(
 private data class PendingCourseKmlKmzImportReview(
     val sourceName: String,
     val path: Path,
+    val baseProject: EventProjectFile,
     val updatedProject: EventProjectFile,
     val summary: DesktopCourseKmlImportSummary,
     val createdMissingCategoryProject: EventProjectFile?,
@@ -9425,8 +9628,118 @@ private data class PendingCourseKmlKmzImportReview(
     val overwriteSiSummary: DesktopCourseKmlImportSummary?,
     val overwriteSiCreatedMissingCategoryProject: EventProjectFile?,
     val overwriteSiCreatedMissingCategorySummary: DesktopCourseKmlImportSummary?,
-    val password: String
+    val password: String,
+    val categoryOverrideId: String?,
+    val requireRoutes: Boolean
 )
+
+private data class SelectedCourseKmlKmzImportPreview(
+    val projectFile: EventProjectFile,
+    val summary: DesktopCourseKmlImportSummary
+)
+
+private fun PendingCourseKmlKmzImportReview.previewForSelectedMissingMappings(
+    selectedMissingCategoryNames: Set<String>,
+    createMissingControls: Boolean,
+    overwriteImportedSiNumbers: Boolean
+): SelectedCourseKmlKmzImportPreview {
+    val selectedMatchNames = selectedMissingCategoryNames.mapTo(mutableSetOf()) { it.courseMappingSelectionKey() }
+    val allMissingMatchNames = summary.missingCategoryNames.mapTo(mutableSetOf()) { it.courseMappingSelectionKey() }
+    val selectsAllMissing = allMissingMatchNames.isNotEmpty() && selectedMatchNames == allMissingMatchNames
+    val selectsNoMissing = selectedMatchNames.isEmpty()
+    if (selectsAllMissing && createMissingControls) {
+        val summary = if (overwriteImportedSiNumbers) {
+            overwriteSiCreatedMissingCategorySummary ?: createdMissingCategorySummary
+        } else {
+            createdMissingCategorySummary
+        }
+        val project = if (overwriteImportedSiNumbers) {
+            overwriteSiCreatedMissingCategoryProject ?: createdMissingCategoryProject
+        } else {
+            createdMissingCategoryProject
+        }
+        if (summary != null && project != null) {
+            return SelectedCourseKmlKmzImportPreview(project, summary)
+        }
+    }
+    if (selectsNoMissing && !createMissingControls) {
+        val summary = if (overwriteImportedSiNumbers) {
+            overwriteSiSummary ?: this.summary
+        } else {
+            this.summary
+        }
+        val project = if (overwriteImportedSiNumbers) {
+            overwriteSiProject ?: updatedProject
+        } else {
+            updatedProject
+        }
+        return SelectedCourseKmlKmzImportPreview(project, summary)
+    }
+
+    val (project, selectedSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+        path = path,
+        projectFile = baseProject,
+        password = password,
+        categoryOverrideId = categoryOverrideId,
+        elevationProvider = { point -> DesktopVenueElevationCache.elevationMeters(point) },
+        missingCategoryNamesToCreate = selectedMissingCategoryNames,
+        createMissingControls = createMissingControls,
+        requireRoutes = requireRoutes,
+        siImportPolicy = if (overwriteImportedSiNumbers) {
+            DesktopCourseKmlSiImportPolicy.OverwriteFromImport
+        } else {
+            DesktopCourseKmlSiImportPolicy.PreserveExisting
+        }
+    )
+    return SelectedCourseKmlKmzImportPreview(project, selectedSummary)
+}
+
+private fun String.courseMappingSelectionKey(): String =
+    StandardCategoryRules.normalizedCategoryName(this).uppercase()
+
+private fun newCategoryCsvCourseMappingNames(
+    projectFile: EventProjectFile,
+    rows: List<CategoryCsvImportRow>
+): List<String> =
+    rows.map { StandardCategoryRules.normalizedCategoryName(it.name) }
+        .filterNot(projectFile::hasCategoryImportName)
+        .distinctBy { it.courseMappingSelectionKey() }
+
+private fun newIofCourseMappingNames(
+    projectFile: EventProjectFile,
+    categories: List<EventCategoryData>
+): List<String> =
+    categories.map { StandardCategoryRules.normalizedCategoryName(it.category.name) }
+        .filterNot(projectFile::hasCategoryImportName)
+        .distinctBy { it.courseMappingSelectionKey() }
+
+private fun selectedCategoryCsvRows(
+    projectFile: EventProjectFile,
+    rows: List<CategoryCsvImportRow>,
+    selectedNewCourseMappingNames: Set<String>
+): List<CategoryCsvImportRow> {
+    val selectedKeys = selectedNewCourseMappingNames.mapTo(mutableSetOf()) { it.courseMappingSelectionKey() }
+    return rows.filter { row ->
+        projectFile.hasCategoryImportName(row.name) || row.name.courseMappingSelectionKey() in selectedKeys
+    }
+}
+
+private fun selectedIofCourseDataCategories(
+    projectFile: EventProjectFile,
+    categories: List<EventCategoryData>,
+    selectedNewCourseMappingNames: Set<String>
+): List<EventCategoryData> {
+    val selectedKeys = selectedNewCourseMappingNames.mapTo(mutableSetOf()) { it.courseMappingSelectionKey() }
+    return categories.filter { categoryData ->
+        projectFile.hasCategoryImportName(categoryData.category.name) ||
+            categoryData.category.name.courseMappingSelectionKey() in selectedKeys
+    }
+}
+
+private fun EventProjectFile.hasCategoryImportName(categoryName: String): Boolean =
+    raceData.categories.any { categoryData ->
+        StandardCategoryRules.categoryNamesEquivalent(categoryData.category.name, categoryName)
+    }
 
 private data class PendingCourseKmlKmzImportWarning(
     val title: String,
@@ -9660,12 +9973,14 @@ private data class PendingCategoriesCsvImportReview(
     val path: Path,
     val rows: List<CategoryCsvImportRow>,
     val invalidLineCount: Int,
+    val newCourseMappingNames: List<String>,
     val preview: DesktopCategoryCsvImportPreview
 )
 
 private data class PendingIofCourseDataImportReview(
     val path: Path,
     val courseData: IofCourseDataPreview,
+    val newCourseMappingNames: List<String>,
     val preview: DesktopCategoryCsvImportPreview,
     val deletedControlNames: List<String>,
     val warningLines: List<String>

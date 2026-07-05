@@ -120,6 +120,21 @@ class EventValidationRulesTest {
     }
 
     @Test
+    fun reportsStandardCategoryGenderMismatch() {
+        val issues = EventValidationRules.validateRaceData(
+            raceData(
+                categories = listOf(
+                    categoryData("M21", isMan = false),
+                    categoryData("W55", isMan = true)
+                )
+            )
+        )
+
+        assertTrue(issues.contains(EventValidationIssue.CategoryGenderMismatch("M21", true, false)))
+        assertTrue(issues.contains(EventValidationIssue.CategoryGenderMismatch("W55", false, true)))
+    }
+
+    @Test
     fun reportsInvalidCategoryControlPoints() {
         val issues = EventValidationRules.validateRaceData(
             raceData(
@@ -355,14 +370,15 @@ class EventValidationRulesTest {
         controlPointsString: String = "",
         differentProperties: Boolean = false,
         raceType: RaceType? = null,
-        controlPoints: List<EventControlPoint>? = null
+        controlPoints: List<EventControlPoint>? = null,
+        isMan: Boolean = true
     ): EventCategoryData =
         EventCategoryData(
             category = EventCategory(
                 id = name,
                 raceId = "race",
                 name = name,
-                isMan = true,
+                isMan = isMan,
                 maxAge = null,
                 lengthMeters = 0,
                 climbMeters = 0,

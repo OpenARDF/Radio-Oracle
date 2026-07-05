@@ -178,7 +178,8 @@ object DesktopProtectedControlLocationUpdater {
                 projectFile.raceData.controls.first { it.id == update.controlId }.publicControlLabel()
             } ?: "${uniqueUpdates.size} controls",
             updatedControlCount = uniqueUpdates.size,
-            affectedCategoryNames = affectedCategoryIds.mapNotNull(categoryNamesById::get)
+            affectedCategoryNames = affectedCategoryIds.mapNotNull(categoryNamesById::get),
+            affectedCategoryIds = affectedCategoryIds.toList()
         )
     }
 
@@ -228,7 +229,8 @@ data class DesktopProtectedControlLocationUpdateResult(
     val courseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     val controlLabel: String,
     val updatedControlCount: Int,
-    val affectedCategoryNames: List<String>
+    val affectedCategoryNames: List<String>,
+    val affectedCategoryIds: List<String> = emptyList()
 ) {
     val affectedCategoryCount: Int
         get() = affectedCategoryNames.size

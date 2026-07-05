@@ -1093,15 +1093,26 @@ class EventProjectEditorTest {
     @Test
     fun updatesCategoryGender() {
         val original = projectFile(
+            categories = listOf(categoryData("cat-1", "Open"))
+        )
+
+        val updated = EventProjectEditor.updateCategoryGender(original, "cat-1", true)
+
+        assertEquals(true, updated.raceData.categories.single().category.isMan)
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCategoryGender(original, "missing", false)
+        }
+    }
+
+    @Test
+    fun updateCategoryGenderReconcilesStandardCategoryName() {
+        val original = projectFile(
             categories = listOf(categoryData("cat-1", "M21"))
         )
 
         val updated = EventProjectEditor.updateCategoryGender(original, "cat-1", false)
 
-        assertEquals(false, updated.raceData.categories.single().category.isMan)
-        assertFailsWith<IllegalArgumentException> {
-            EventProjectEditor.updateCategoryGender(original, "missing", false)
-        }
+        assertEquals(true, updated.raceData.categories.single().category.isMan)
     }
 
     @Test
@@ -1150,6 +1161,7 @@ class EventProjectEditorTest {
         val updated = outcome.projectFile.raceData.categories.single()
         assertEquals("cat-1", updated.category.id)
         assertEquals(7, updated.category.order)
+        assertEquals(true, updated.category.isMan)
         assertEquals("32 90B", updated.category.controlPointsString)
         assertEquals(listOf(32, 90), updated.controlPoints.map { it.siCode })
         assertEquals("encrypted-order", updated.category.encryptedIdealOrder)
@@ -1176,6 +1188,7 @@ class EventProjectEditorTest {
         assertEquals("cat-1", updated.category.id)
         assertEquals("M21", updated.category.name)
         assertEquals(7, updated.category.order)
+        assertEquals(true, updated.category.isMan)
         assertEquals("32 90B", updated.category.controlPointsString)
     }
 
@@ -1310,7 +1323,11 @@ class EventProjectEditorTest {
     @Test
     fun importsCompetitorRowsMatchExistingCategoryByNormalizedStandardName() {
         val original = projectFile(
-            categories = listOf(categoryData("cat-1", "M21"))
+            categories = listOf(
+                categoryData("cat-1", "M21").let { data ->
+                    data.copy(category = data.category.copy(isMan = false))
+                }
+            )
         )
 
         val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
@@ -1328,9 +1345,11 @@ class EventProjectEditorTest {
         )
 
         assertEquals(listOf("M21"), outcome.projectFile.raceData.categories.map { it.category.name })
+        assertEquals(true, outcome.projectFile.raceData.categories.single().category.isMan)
         val imported = outcome.projectFile.raceData.competitorData.single().competitorCategory
         assertEquals("cat-1", imported.competitor.categoryId)
         assertEquals("M21", imported.category?.name)
+        assertEquals(true, imported.category?.isMan)
         assertEquals(
             listOf("Line 1: category 'M-21' matched existing category 'M21'."),
             outcome.warnings
