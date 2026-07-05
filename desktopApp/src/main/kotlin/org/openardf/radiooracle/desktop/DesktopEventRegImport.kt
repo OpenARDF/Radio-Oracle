@@ -940,18 +940,19 @@ object DesktopSpreadsheetCompetitorImporter {
         rows: List<CompetitorCsvImportRow>,
         idFactory: () -> String
     ): DesktopSpreadsheetCompetitorImportPreview {
-        val existingCategoryNames = projectFile.raceData.categories.mapTo(mutableSetOf()) { it.category.name }
-        val createdCategoryNames = rows
-            .map { it.categoryName.trim() }
-            .filter { it.isNotBlank() && it !in existingCategoryNames }
-            .distinct()
-            .sorted()
+        val existingCategoryNames = projectFile.raceData.categories
+            .mapTo(mutableSetOf()) { StandardCategoryRules.normalizedCategoryName(it.category.name) }
         val outcome = syncCompetitors(
             projectFile = projectFile,
             rows = rows,
             competitorIdFactory = idFactory,
             categoryIdFactory = idFactory
         )
+        val createdCategoryNames = outcome.projectFile.raceData.categories
+            .filter { StandardCategoryRules.normalizedCategoryName(it.category.name) !in existingCategoryNames }
+            .map { it.category.name }
+            .distinct()
+            .sorted()
         val emptyCategories = outcome.projectFile.raceData.categories
             .filter { it.competitors.isEmpty() }
             .sortedBy { it.category.name }

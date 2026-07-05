@@ -36,6 +36,7 @@ data class StandardCategoryDefinition(
 /** Shared parser and provider for built-in standard category presets. */
 object StandardCategoryRules {
     private val standardCategoryNamePattern = Regex("^[A-Z][ -]?\\d{1,3}[A-Z]*$")
+    private val standardCategoryPartsPattern = Regex("^([A-Z])\\s*-?\\s*(\\d{1,3})([A-Z]*)$")
 
     private val internationalRows = listOf(
         "W19;0;19",
@@ -88,7 +89,7 @@ object StandardCategoryRules {
 
     /** Infers category gender from standard ARDF category prefixes when the stored flag is stale or absent. */
     fun inferIsManFromName(name: String): Boolean? {
-        val normalized = name.trim().uppercase()
+        val normalized = normalizedCategoryName(name).uppercase()
         if (!standardCategoryNamePattern.matches(normalized)) {
             return null
         }
@@ -98,6 +99,17 @@ object StandardCategoryRules {
             else -> null
         }
     }
+
+    /** Returns the canonical spelling for standard ARDF category names while leaving custom names intact. */
+    fun normalizedCategoryName(name: String): String {
+        val trimmed = name.trim()
+        val match = standardCategoryPartsPattern.matchEntire(trimmed.uppercase()) ?: return trimmed
+        return "${match.groupValues[1]}${match.groupValues[2]}${match.groupValues[3]}"
+    }
+
+    /** Compares category names using canonical standard-category spelling. */
+    fun categoryNamesEquivalent(first: String, second: String): Boolean =
+        normalizedCategoryName(first).equals(normalizedCategoryName(second), ignoreCase = true)
 
     /** Parses a semicolon-delimited category preset row in the form name;isMan;maxAge. */
     fun parseDefinition(row: String): StandardCategoryDefinition? {

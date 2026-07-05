@@ -118,11 +118,11 @@ class DesktopEventRegImportTest {
         assertEquals(RaceBand.NONE, sprintProject.raceData.race.raceBand)
         assertEquals(2, sprintProject.raceData.competitorData.size)
         assertEquals(
-            listOf("M-21", "W-65"),
+            listOf("M21", "W65"),
             sprintProject.raceData.categories.map { it.category.name }.sorted()
         )
-        assertEquals(true, sprintProject.raceData.categories.single { it.category.name == "M-21" }.category.isMan)
-        assertEquals(false, sprintProject.raceData.categories.single { it.category.name == "W-65" }.category.isMan)
+        assertEquals(true, sprintProject.raceData.categories.single { it.category.name == "M21" }.category.isMan)
+        assertEquals(false, sprintProject.raceData.categories.single { it.category.name == "W65" }.category.isMan)
         assertEquals(
             "BOK",
             sprintProject.raceData.competitorData
@@ -193,13 +193,13 @@ class DesktopEventRegImportTest {
         assertEquals(RaceType.SPRINT, sprintProject.raceData.race.raceType)
 
         val sprintCategoryRows = sprintProject.categoryImportRows()
-        assertEquals(listOf("M-21", "W-65"), sprintCategoryRows.map { it.name })
+        assertEquals(listOf("M21", "W65"), sprintCategoryRows.map { it.name })
 
         val sprintCompetitorRows = sprintProject.competitorImportRows()
         assertEquals(listOf("Fala", "Kerns"), sprintCompetitorRows.map { it.lastName })
         assertEquals(listOf(8400555, 1800859), sprintCompetitorRows.map { it.siNumber })
         assertEquals(listOf("101", "102"), sprintCompetitorRows.map { it.bibNumber })
-        assertEquals(listOf("M-21", "W-65"), sprintCompetitorRows.map { it.categoryName })
+        assertEquals(listOf("M21", "W65"), sprintCompetitorRows.map { it.categoryName })
 
         val foxProject = DesktopProjectFiles.read(
             result.generatedFiles.first { it.competitionName == "FoxO" }.path
@@ -251,14 +251,14 @@ class DesktopEventRegImportTest {
         assertEquals(listOf("Sprint"), plan.selectedMappings.map { it.competitionName })
         val mapping = plan.selectedMappings.single()
         assertEquals("Sprint Race", mapping.target?.displayName)
-        assertEquals(listOf("M-21"), mapping.preview?.createdCategoryNames)
+        assertEquals(listOf("M21"), mapping.preview?.createdCategoryNames)
         assertEquals(listOf("OldCat"), mapping.preview?.removableEmptyCategoryNames)
         assertEquals(1, mapping.preview?.importedCount)
         assertEquals(1, mapping.preview?.deletedCount)
 
         val applied = DesktopSpreadsheetCompetitorImporter.applyMapping(mapping)
 
-        assertEquals(listOf("M-21"), applied.updatedProjectFile.raceData.categories.map { it.category.name })
+        assertEquals(listOf("M21"), applied.updatedProjectFile.raceData.categories.map { it.category.name })
         assertEquals(listOf("Fala"), applied.updatedProjectFile.raceData.competitorData.map {
             it.competitorCategory.competitor.lastName
         })
@@ -372,7 +372,7 @@ class DesktopEventRegImportTest {
         val mapping = plan.selectedMappings.single()
         assertEquals(100, mapping.confidence)
         assertEquals(listOf("1 invalid rows skipped."), mapping.warnings)
-        assertEquals(listOf("M-21"), mapping.preview?.createdCategoryNames)
+        assertEquals(listOf("M21"), mapping.preview?.createdCategoryNames)
     }
 
     @Test
@@ -409,7 +409,7 @@ class DesktopEventRegImportTest {
         documentation.files.forEach { file ->
             assertTrue(Files.isRegularFile(file.path))
         }
-        assertTrue(Files.readString(documentation.files.first { it.kind == "categories" }.path).contains("M-21"))
+        assertTrue(Files.readString(documentation.files.first { it.kind == "categories" }.path).contains("M21"))
         assertTrue(Files.readString(documentation.files.first { it.kind == "competitors" }.path).contains("Fala"))
     }
 
@@ -440,7 +440,7 @@ class DesktopEventRegImportTest {
         val sprintCsv = Files.readString(result.generatedFiles.first { it.competitionName == "Sprint" }.path)
         val sprintRows = EventCsvImports.parseAndroidCompetitorRows(sprintCsv).rows
         assertEquals(listOf("Fala", "Kerns"), sprintRows.map { it.lastName })
-        assertEquals(listOf("M-21", "W-65"), sprintRows.map { it.categoryName })
+        assertEquals(listOf("M21", "W65"), sprintRows.map { it.categoryName })
         assertEquals(listOf(true, false), sprintRows.map { it.isMan })
     }
 

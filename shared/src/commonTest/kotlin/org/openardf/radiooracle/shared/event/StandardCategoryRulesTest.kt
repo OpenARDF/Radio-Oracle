@@ -74,4 +74,15 @@ class StandardCategoryRulesTest {
         assertEquals(false, StandardCategoryRules.inferIsManFromName("D20"))
         assertNull(StandardCategoryRules.inferIsManFromName("Beginner"))
     }
+
+    @Test
+    fun normalizesStandardCategoryNames() {
+        assertEquals("M19", StandardCategoryRules.normalizedCategoryName("M-19"))
+        assertEquals("M21", StandardCategoryRules.normalizedCategoryName(" m - 21 "))
+        assertEquals("W55", StandardCategoryRules.normalizedCategoryName("w 55"))
+        assertEquals("D20", StandardCategoryRules.normalizedCategoryName("D-20"))
+        assertEquals("Beginner - Short", StandardCategoryRules.normalizedCategoryName(" Beginner - Short "))
+        assertEquals(true, StandardCategoryRules.categoryNamesEquivalent("M21", "M-21"))
+        assertEquals(false, StandardCategoryRules.categoryNamesEquivalent("M21", "W21"))
+    }
 }

@@ -1127,6 +1127,29 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun updatesExistingCategoryImportsByNormalizedStandardName() {
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21", order = 7, controlSiCodes = listOf(31)))
+        )
+
+        val outcome = EventProjectEditor.importCategoryRowsWithOutcome(
+            projectFile = original,
+            rows = listOf(categoryImportRow(name = "M-21", controlPointsText = "32 90B")),
+            categoryIdFactory = { "cat-2" },
+            controlPointIdFactory = { categoryId, index -> "$categoryId-control-$index" }
+        )
+
+        assertEquals(0, outcome.importedCount)
+        assertEquals(1, outcome.updatedCount)
+        assertEquals(1, outcome.projectFile.raceData.categories.size)
+        val updated = outcome.projectFile.raceData.categories.single()
+        assertEquals("cat-1", updated.category.id)
+        assertEquals("M21", updated.category.name)
+        assertEquals(7, updated.category.order)
+        assertEquals("32 90B", updated.category.controlPointsString)
+    }
+
+    @Test
     fun importsIofCourseDataAsCategoryDefinitions() {
         val existingCategory = category("cat-1", "M21", order = 7)
         val existingCompetitor = competitorData("comp-1", "Alice", "Runner", category = existingCategory)
@@ -1255,6 +1278,36 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun importsCompetitorRowsMatchExistingCategoryByNormalizedStandardName() {
+        val original = projectFile(
+            categories = listOf(categoryData("cat-1", "M21"))
+        )
+
+        val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
+            projectFile = original,
+            rows = listOf(
+                competitorImportRow(
+                    firstName = "Pavel",
+                    lastName = "Kolsky",
+                    categoryName = "M-21",
+                    index = "T002"
+                )
+            ),
+            competitorIdFactory = { "comp-1" },
+            categoryIdFactory = { "cat-2" }
+        )
+
+        assertEquals(listOf("M21"), outcome.projectFile.raceData.categories.map { it.category.name })
+        val imported = outcome.projectFile.raceData.competitorData.single().competitorCategory
+        assertEquals("cat-1", imported.competitor.categoryId)
+        assertEquals("M21", imported.category?.name)
+        assertEquals(
+            listOf("Line 1: category 'M-21' matched existing category 'M21'."),
+            outcome.warnings
+        )
+    }
+
+    @Test
     fun importsCompetitorRowsInferMissingCategoryGenderFromName() {
         val original = projectFile()
 
@@ -1277,6 +1330,34 @@ class EventProjectEditorTest {
         val category = updated.raceData.categories.single().category
         assertEquals("M50", category.name)
         assertEquals(true, category.isMan)
+    }
+
+    @Test
+    fun importsCompetitorRowsCreateMissingCategoryWithNormalizedStandardName() {
+        val original = projectFile(categories = emptyList())
+
+        val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
+            projectFile = original,
+            rows = listOf(
+                competitorImportRow(
+                    firstName = "Anna",
+                    lastName = "Berg",
+                    categoryName = "W-55",
+                    isMan = true,
+                    index = "T003"
+                )
+            ),
+            competitorIdFactory = { "comp-1" },
+            categoryIdFactory = { "cat-w55" }
+        )
+
+        val category = outcome.projectFile.raceData.categories.single().category
+        assertEquals("W55", category.name)
+        assertEquals(false, category.isMan)
+        assertEquals(
+            listOf("Line 1: created placeholder category 'W55' from source category 'W-55'."),
+            outcome.warnings
+        )
     }
 
     @Test

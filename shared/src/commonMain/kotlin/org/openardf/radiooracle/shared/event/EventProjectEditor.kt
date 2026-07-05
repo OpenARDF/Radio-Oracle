@@ -1419,7 +1419,7 @@ object EventProjectEditor {
         controlPointIdFactory: (String, Int) -> String
     ): CategoryCsvImportOutcome {
         val duplicateImportNames = rows
-            .groupBy { it.name }
+            .groupBy { StandardCategoryRules.normalizedCategoryName(it.name) }
             .filterValues { it.size > 1 }
             .keys
         require(duplicateImportNames.isEmpty()) {
@@ -1433,7 +1433,8 @@ object EventProjectEditor {
         var updatedCount = 0
 
         rows.forEach { row ->
-            val existingIndex = categories.indexOfFirst { it.category.name == row.name }
+            val categoryName = StandardCategoryRules.normalizedCategoryName(row.name)
+            val existingIndex = categories.indexOfCategoryImportName(row.name)
             val existingCategoryData = existingIndex.takeIf { it >= 0 }?.let(categories::get)
             val categoryId = existingCategoryData?.category?.id ?: categoryIdFactory()
             val categoryOrder = existingCategoryData?.category?.order ?: nextCategoryOrder++
@@ -1441,8 +1442,8 @@ object EventProjectEditor {
             val category = EventCategory(
                 id = categoryId,
                 raceId = projectFile.raceData.race.id,
-                name = row.name,
-                isMan = StandardCategoryRules.inferIsManFromName(row.name) ?: row.isMan,
+                name = existingCategoryData?.category?.name ?: categoryName,
+                isMan = StandardCategoryRules.inferIsManFromName(categoryName) ?: row.isMan,
                 maxAge = row.maxAge,
                 lengthMeters = row.lengthMeters,
                 climbMeters = row.climbMeters,
@@ -1517,7 +1518,7 @@ object EventProjectEditor {
         preview: IofCourseDataPreview
     ): IofCourseDataImportOutcome {
         val duplicateImportNames = preview.categories
-            .groupBy { it.category.name }
+            .groupBy { StandardCategoryRules.normalizedCategoryName(it.category.name) }
             .filterValues { it.size > 1 }
             .keys
         require(duplicateImportNames.isEmpty()) {
@@ -1531,7 +1532,8 @@ object EventProjectEditor {
         var updatedCount = 0
 
         preview.categories.forEach { imported ->
-            val existingIndex = categories.indexOfFirst { it.category.name == imported.category.name }
+            val importedCategoryName = StandardCategoryRules.normalizedCategoryName(imported.category.name)
+            val existingIndex = categories.indexOfCategoryImportName(imported.category.name)
             val existingCategoryData = existingIndex.takeIf { it >= 0 }?.let(categories::get)
             val categoryId = existingCategoryData?.category?.id ?: imported.category.id
             val categoryOrder = existingCategoryData?.category?.order ?: nextCategoryOrder++
@@ -1550,8 +1552,9 @@ object EventProjectEditor {
                 category = imported.category.copy(
                     id = categoryId,
                     raceId = projectFile.raceData.race.id,
+                    name = existingCategoryData?.category?.name ?: importedCategoryName,
                     order = categoryOrder,
-                    isMan = StandardCategoryRules.inferIsManFromName(imported.category.name) ?: imported.category.isMan,
+                    isMan = StandardCategoryRules.inferIsManFromName(importedCategoryName) ?: imported.category.isMan,
                     encryptedIdealOrder = existingCategoryData?.category?.encryptedIdealOrder,
                     encryptedCourseInfo = existingCategoryData?.category?.encryptedCourseInfo,
                     controlPointsString = ControlPointRules.formatControlPoints(definitions)
@@ -1613,6 +1616,8 @@ object EventProjectEditor {
         var updatedCount = 0
         var skippedCount = 0
         val importKeys = rows.map { it.importKey() }.toSet()
+        val originalCategoryIds = categories.mapTo(mutableSetOf()) { it.category.id }
+        val reportedCategoryAliases = mutableSetOf<String>()
 
         rows.forEachIndexed { rowIndex, row ->
             val existingPosition = row.existingCompetitorPosition(competitors, duplicatePolicy)
@@ -1628,12 +1633,25 @@ object EventProjectEditor {
                 warnings += "Line ${rowIndex + 1}: competitor ${row.lastName} ${row.firstName} has no category."
             }
             val category = row.categoryName.takeIf { it.isNotEmpty() }?.let { categoryName ->
-                categories.firstOrNull { it.category.name == categoryName }?.category ?: if (createMissingCategories) {
+                val normalizedCategoryName = StandardCategoryRules.normalizedCategoryName(categoryName)
+                val existingCategory = categories.findCategoryDataByImportName(categoryName)?.category
+                if (existingCategory != null) {
+                    val aliasKey = "$categoryName:${existingCategory.id}"
+                    if (
+                        existingCategory.id in originalCategoryIds &&
+                        existingCategory.name != categoryName &&
+                        StandardCategoryRules.categoryNamesEquivalent(existingCategory.name, categoryName) &&
+                        reportedCategoryAliases.add(aliasKey)
+                    ) {
+                        warnings += "Line ${rowIndex + 1}: category '$categoryName' matched existing category '${existingCategory.name}'."
+                    }
+                    existingCategory
+                } else if (createMissingCategories) {
                     EventCategory(
                         id = categoryIdFactory(),
                         raceId = projectFile.raceData.race.id,
-                        name = categoryName,
-                        isMan = StandardCategoryRules.inferIsManFromName(categoryName) ?: row.isMan,
+                        name = normalizedCategoryName,
+                        isMan = StandardCategoryRules.inferIsManFromName(normalizedCategoryName) ?: row.isMan,
                         maxAge = null,
                         lengthMeters = 0,
                         climbMeters = 0,
@@ -1644,7 +1662,11 @@ object EventProjectEditor {
                         timeLimitSeconds = null,
                         controlPointsString = ""
                     ).also { newCategory ->
-                        warnings += "Line ${rowIndex + 1}: created placeholder category '${newCategory.name}'."
+                        warnings += if (newCategory.name == categoryName) {
+                            "Line ${rowIndex + 1}: created placeholder category '${newCategory.name}'."
+                        } else {
+                            "Line ${rowIndex + 1}: created placeholder category '${newCategory.name}' from source category '$categoryName'."
+                        }
                         categories += EventCategoryData(
                             category = newCategory,
                             controlPoints = emptyList(),
@@ -1784,6 +1806,20 @@ object EventProjectEditor {
             deletedCount = removedCompetitors.size,
             warnings = warnings
         )
+    }
+
+    private fun List<EventCategoryData>.findCategoryDataByImportName(importName: String): EventCategoryData? {
+        val index = indexOfCategoryImportName(importName)
+        return index.takeIf { it >= 0 }?.let(::get)
+    }
+
+    private fun List<EventCategoryData>.indexOfCategoryImportName(importName: String): Int {
+        val normalizedName = StandardCategoryRules.normalizedCategoryName(importName)
+        return indexOfFirst { it.category.name == normalizedName }
+            .takeIf { it >= 0 }
+            ?: indexOfFirst { it.category.name == importName }
+                .takeIf { it >= 0 }
+            ?: indexOfFirst { StandardCategoryRules.categoryNamesEquivalent(it.category.name, importName) }
     }
 
     private fun importOutcome(
