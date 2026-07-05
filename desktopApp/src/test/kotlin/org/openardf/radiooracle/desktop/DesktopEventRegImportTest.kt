@@ -305,6 +305,37 @@ class DesktopEventRegImportTest {
     }
 
     @Test
+    fun competitorSpreadsheetPlanKeepsLowConfidenceCandidateForUserOverride() {
+        val target = DesktopSpreadsheetCompetitorImportTarget(
+            targetId = "race-2m",
+            displayName = "2m Classic Race",
+            path = null,
+            projectFile = eventProject("race-2m", "2m Classic Race", RaceType.CLASSIC, RaceBand.M2)
+        )
+
+        val plan = DesktopSpreadsheetCompetitorImporter.buildPlan(
+            url = "https://docs.google.com/spreadsheets/d/test-spreadsheet-id/edit",
+            targets = listOf(target),
+            fetchSpreadsheet = {
+                SpreadsheetDownload(
+                    bytes = eightyMeterOnlyGoogleSheetCsv().toByteArray(),
+                    contentType = "text/csv",
+                    fileName = "80m Registration.csv"
+                )
+            }
+        )
+
+        assertEquals(emptyList<DesktopSpreadsheetCompetitorImportMapping>(), plan.selectedMappings)
+        val mapping = plan.mappings.single()
+        assertEquals("80m", mapping.competitionName)
+        assertEquals("2m Classic Race", mapping.target?.displayName)
+        assertTrue(mapping.confidence >= DesktopSpreadsheetCompetitorImporter.MinimumOverrideConfidence)
+        assertTrue(mapping.confidence < DesktopSpreadsheetCompetitorImporter.MinimumAutoMapConfidence)
+        assertTrue(mapping.canOverrideRejection)
+        assertEquals(1, mapping.preview?.importedCount)
+    }
+
+    @Test
     fun generatesOneCompetitorCsvPerCompetitionWithEventFileStem() {
         val outputDirectory = Files.createTempDirectory("radio-oracle-eventreg-competitors-test")
         val ids = generateSequence(1) { it + 1 }.map { "id-$it" }.iterator()
@@ -356,6 +387,12 @@ class DesktopEventRegImportTest {
         Gerald,Boyd,conf-2,M,247347,NC,M-60,NC,NC
         Kathleen,Kerns,conf-3,F,1800859,NC,NC,W-65,NC
         Lidia,Stone,conf-4,F,1800860,NC,NC,NC,W-50
+        """.trimIndent()
+
+    private fun eightyMeterOnlyGoogleSheetCsv(): String =
+        """
+        First,Last,ConfNum,Sex,E-Punch ID,80m Class
+        Lidia,Stone,conf-4,F,1800860,W-50
         """.trimIndent()
 
     private fun eventProject(

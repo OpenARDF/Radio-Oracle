@@ -4746,7 +4746,7 @@ fun main(args: Array<String>) = application {
                     }
                 }
                 result.onSuccess { plan ->
-                    pendingSpreadsheetCompetitorImportReview = PendingSpreadsheetCompetitorImportReview(plan)
+                    pendingSpreadsheetCompetitorImportReview = PendingSpreadsheetCompetitorImportReview.create(plan)
                     projectStatusText = "Review spreadsheet competitor import before applying it."
                 }.onFailure { error ->
                     projectStatusText = "Spreadsheet competitor import failed: ${error.message ?: error::class.simpleName}"
@@ -4758,7 +4758,7 @@ fun main(args: Array<String>) = application {
 
         fun applySpreadsheetCompetitorImport(review: PendingSpreadsheetCompetitorImportReview) {
             runCatching {
-                val mappings = review.plan.selectedMappings
+                val mappings = review.selectedMappings()
                 require(mappings.isNotEmpty()) {
                     "No confident Race File mappings were selected."
                 }
@@ -6076,6 +6076,9 @@ fun main(args: Array<String>) = application {
         pendingSpreadsheetCompetitorImportReview?.let { review ->
             SpreadsheetCompetitorImportReviewDialog(
                 review = review,
+                onSelectionChange = { competitionName, selected ->
+                    pendingSpreadsheetCompetitorImportReview = review.withSelection(competitionName, selected)
+                },
                 onImport = { applySpreadsheetCompetitorImport(review) },
                 onCancel = {
                     pendingSpreadsheetCompetitorImportReview = null
@@ -8595,10 +8598,19 @@ private fun EventRegImportDialog(
 @Composable
 private fun SpreadsheetCompetitorImportReviewDialog(
     review: PendingSpreadsheetCompetitorImportReview,
+    onSelectionChange: (String, Boolean) -> Unit,
     onImport: () -> Unit,
     onCancel: () -> Unit
 ) {
-    val selectedMappings = review.plan.selectedMappings
+    val selectedMappings = review.selectedMappings()
+    val duplicateTargets = selectedMappings
+        .mapNotNull { mapping -> mapping.target?.targetId?.let { it to mapping.target.displayName } }
+        .groupBy { it.first }
+        .filterValues { it.size > 1 }
+        .values
+        .map { it.first().second }
+        .distinct()
+    val canApply = selectedMappings.isNotEmpty() && duplicateTargets.isEmpty()
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Review Competitor Spreadsheet Import") },
@@ -8615,20 +8627,33 @@ private fun SpreadsheetCompetitorImportReviewDialog(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    "${selectedMappings.size} of ${review.plan.mappings.size} competitions will be imported. " +
+                    "${selectedMappings.size} of ${review.plan.mappings.size} competitions are selected for import. " +
                         "The spreadsheet is treated as the source of truth for each mapped Race File.",
                     fontSize = 13.sp,
                     color = Color.DarkGray
                 )
+                if (duplicateTargets.isNotEmpty()) {
+                    Text(
+                        "Select only one spreadsheet competition for each Race File: ${duplicateTargets.joinToString()}.",
+                        fontSize = 13.sp,
+                        color = Color(0xFF9A3412)
+                    )
+                }
                 review.plan.mappings.forEach { mapping ->
-                    SpreadsheetCompetitorImportMappingReview(mapping)
+                    SpreadsheetCompetitorImportMappingReview(
+                        mapping = mapping,
+                        selected = review.isSelected(mapping),
+                        onSelectedChange = { selected ->
+                            onSelectionChange(mapping.competitionName, selected)
+                        }
+                    )
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = onImport,
-                enabled = selectedMappings.isNotEmpty()
+                enabled = canApply
             ) {
                 Text("Apply Import")
             }
@@ -8642,7 +8667,11 @@ private fun SpreadsheetCompetitorImportReviewDialog(
 }
 
 @Composable
-private fun SpreadsheetCompetitorImportMappingReview(mapping: DesktopSpreadsheetCompetitorImportMapping) {
+private fun SpreadsheetCompetitorImportMappingReview(
+    mapping: DesktopSpreadsheetCompetitorImportMapping,
+    selected: Boolean,
+    onSelectedChange: (Boolean) -> Unit
+) {
     val target = mapping.target
     val preview = mapping.preview
     Column(
@@ -8652,17 +8681,35 @@ private fun SpreadsheetCompetitorImportMappingReview(mapping: DesktopSpreadsheet
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text(mapping.competitionName, fontWeight = FontWeight.SemiBold)
-        if (target == null || mapping.confidence < DesktopSpreadsheetCompetitorImporter.MinimumAutoMapConfidence) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Checkbox(
+                checked = selected,
+                onCheckedChange = onSelectedChange,
+                enabled = mapping.selectedByDefault || mapping.canOverrideRejection
+            )
+            Text(mapping.competitionName, fontWeight = FontWeight.SemiBold)
+        }
+        if (target == null) {
             Text(
-                "Skipped: no confident Race File match (${mapping.confidence}%).",
+                "Skipped: no Race File candidate (${mapping.confidence}%).",
                 fontSize = 13.sp,
                 color = Color(0xFF9A3412)
             )
         } else {
             Text(
-                "Maps to ${target.displayName} (${mapping.confidence}% confidence).",
-                fontSize = 13.sp
+                if (selected) {
+                    "Selected: ${target.displayName} (${mapping.confidence}% confidence)."
+                } else if (mapping.canOverrideRejection) {
+                    "Rejected by default: ${target.displayName} (${mapping.confidence}% confidence). Select to override."
+                } else {
+                    "Skipped: ${target.displayName} (${mapping.confidence}% confidence)."
+                },
+                fontSize = 13.sp,
+                color = if (!selected && mapping.canOverrideRejection) Color(0xFF9A3412) else Color.Unspecified
             )
             preview?.let { importPreview ->
                 Text(
@@ -9449,8 +9496,32 @@ private data class PendingCompetitorsCsvImportReview(
 )
 
 private data class PendingSpreadsheetCompetitorImportReview(
-    val plan: DesktopSpreadsheetCompetitorImportPlan
-)
+    val plan: DesktopSpreadsheetCompetitorImportPlan,
+    val selectedCompetitionNames: Set<String>
+) {
+    fun selectedMappings(): List<DesktopSpreadsheetCompetitorImportMapping> =
+        plan.mappings.filter { it.competitionName in selectedCompetitionNames }
+
+    fun isSelected(mapping: DesktopSpreadsheetCompetitorImportMapping): Boolean =
+        mapping.competitionName in selectedCompetitionNames
+
+    fun withSelection(competitionName: String, selected: Boolean): PendingSpreadsheetCompetitorImportReview =
+        copy(
+            selectedCompetitionNames = if (selected) {
+                selectedCompetitionNames + competitionName
+            } else {
+                selectedCompetitionNames - competitionName
+            }
+        )
+
+    companion object {
+        fun create(plan: DesktopSpreadsheetCompetitorImportPlan): PendingSpreadsheetCompetitorImportReview =
+            PendingSpreadsheetCompetitorImportReview(
+                plan = plan,
+                selectedCompetitionNames = plan.selectedMappings.mapTo(mutableSetOf()) { it.competitionName }
+            )
+    }
+}
 
 private data class PendingCategoriesCsvImportReview(
     val path: Path,

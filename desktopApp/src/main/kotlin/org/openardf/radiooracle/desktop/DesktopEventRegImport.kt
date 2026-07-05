@@ -684,7 +684,7 @@ data class DesktopSpreadsheetCompetitorImportPlan(
     val mappings: List<DesktopSpreadsheetCompetitorImportMapping>
 ) {
     val selectedMappings: List<DesktopSpreadsheetCompetitorImportMapping>
-        get() = mappings.filter { it.target != null && it.confidence >= DesktopSpreadsheetCompetitorImporter.MinimumAutoMapConfidence }
+        get() = mappings.filter { it.selectedByDefault }
 
     val competitorCount: Int
         get() = selectedMappings.sumOf { it.competitorCount }
@@ -697,10 +697,14 @@ data class DesktopSpreadsheetCompetitorImportMapping(
     val reasons: List<String>,
     val warnings: List<String>,
     val rows: List<CompetitorCsvImportRow>,
-    val preview: DesktopSpreadsheetCompetitorImportPreview?
+    val preview: DesktopSpreadsheetCompetitorImportPreview?,
+    val selectedByDefault: Boolean
 ) {
     val competitorCount: Int
         get() = rows.size
+
+    val canOverrideRejection: Boolean
+        get() = target != null && confidence >= DesktopSpreadsheetCompetitorImporter.MinimumOverrideConfidence
 }
 
 data class DesktopSpreadsheetCompetitorImportPreview(
@@ -724,6 +728,7 @@ data class DesktopSpreadsheetCompetitorImportAppliedMapping(
 
 object DesktopSpreadsheetCompetitorImporter {
     const val MinimumAutoMapConfidence: Int = 55
+    const val MinimumOverrideConfidence: Int = 30
 
     fun buildPlan(
         url: String,
@@ -741,14 +746,17 @@ object DesktopSpreadsheetCompetitorImporter {
         val initialMappings = spreadsheetImport.registration.competitions.map { competition ->
             val rows = competition.competitors.map { it.toImportRow() }
             val match = bestTargetMatch(competition, targets)
-            val target = match.target?.takeIf { match.confidence >= MinimumAutoMapConfidence }
+            val target = match.target?.takeIf { match.confidence >= MinimumOverrideConfidence }
             val reasons = if (targets.size == 1 && target != null && match.reasons.none { it.contains("only open", ignoreCase = true) }) {
                 listOf("Only open Race File") + match.reasons
             } else {
                 match.reasons
             }
+            val selectedByDefault = target != null &&
+                match.autoSelectable &&
+                match.confidence >= MinimumAutoMapConfidence
             val warnings = buildList {
-                if (target == null) {
+                if (target == null || !selectedByDefault) {
                     add("No confident Race File match was found.")
                 }
                 addAll(match.warnings)
@@ -766,10 +774,11 @@ object DesktopSpreadsheetCompetitorImporter {
                         rows = rows,
                         idFactory = previewIdFactory
                     )
-                }
+                },
+                selectedByDefault = selectedByDefault
             )
         }
-        val mappings = suppressDuplicateTargets(initialMappings)
+        val mappings = suppressDuplicateDefaultSelections(initialMappings)
         require(mappings.isNotEmpty()) {
             "No competition columns with registered competitors were found."
         }
@@ -850,10 +859,11 @@ object DesktopSpreadsheetCompetitorImporter {
         )
     }
 
-    private fun suppressDuplicateTargets(
+    private fun suppressDuplicateDefaultSelections(
         mappings: List<DesktopSpreadsheetCompetitorImportMapping>
     ): List<DesktopSpreadsheetCompetitorImportMapping> {
         val duplicatedTargetIds = mappings
+            .filter { it.selectedByDefault }
             .mapNotNull { mapping -> mapping.target?.targetId }
             .groupingBy { it }
             .eachCount()
@@ -863,10 +873,9 @@ object DesktopSpreadsheetCompetitorImporter {
             return mappings
         }
         return mappings.map { mapping ->
-            if (mapping.target?.targetId in duplicatedTargetIds) {
+            if (mapping.target?.targetId in duplicatedTargetIds && mapping.selectedByDefault) {
                 mapping.copy(
-                    target = null,
-                    preview = null,
+                    selectedByDefault = false,
                     warnings = mapping.warnings + "Another spreadsheet competition also maps to ${mapping.target?.displayName}; choose one Race File mapping before importing."
                 )
             } else {
@@ -902,7 +911,7 @@ object DesktopSpreadsheetCompetitorImporter {
         val second = scored.drop(1).firstOrNull()
         return if (second != null && best.confidence == second.confidence && best.confidence >= MinimumAutoMapConfidence) {
             best.copy(
-                target = null,
+                autoSelectable = false,
                 warnings = best.warnings + "Two Race Files have the same match confidence: ${best.target?.displayName} and ${second.target?.displayName}."
             )
         } else {
@@ -963,7 +972,8 @@ object DesktopSpreadsheetCompetitorImporter {
         val target: DesktopSpreadsheetCompetitorImportTarget?,
         val confidence: Int,
         val reasons: List<String>,
-        val warnings: List<String>
+        val warnings: List<String>,
+        val autoSelectable: Boolean = true
     )
 }
 
