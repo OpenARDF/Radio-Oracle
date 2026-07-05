@@ -4693,8 +4693,10 @@ fun main(args: Array<String>) = application {
                 val appliedMappings = mappings.map { mapping ->
                     DesktopSpreadsheetCompetitorImporter.applyMapping(
                         mapping = mapping,
-                        removeEmptyCategories = review.removeEmptyCategories,
-                        removeEmptyCourseCategories = review.removeEmptyCourseCategories
+                        selectedRowIndexes = review.selectedRowIndexes(mapping),
+                        selectedRemovalCompetitorIds = review.selectedRemovalCompetitorIds(mapping),
+                        emptyCategoryNamesToRemove = review.selectedEmptyCategoryNames(mapping),
+                        emptyCourseCategoryNamesToRemove = review.selectedEmptyCourseCategoryNames(mapping)
                     )
                 }
                 appliedMappings.forEach { applied ->
@@ -5685,21 +5687,49 @@ fun main(args: Array<String>) = application {
             )
         }
         if (isCompetitorSpreadsheetImportDialogVisible) {
-            EventRegImportDialog(
-                title = "Import Competitor Spreadsheet",
-                urlLabel = "Spreadsheet URL",
-                idleDescription = "Reviews spreadsheet competitions, maps them to the current race or series Race Files, and synchronizes competitor lists and categories after confirmation.",
-                importingDescription = "Downloading spreadsheet and preparing import review...",
-                url = googleSheetImportUrl,
-                isImporting = isImportingCompetitorSpreadsheet,
-                onUrlChange = { googleSheetImportUrl = it },
-                onImport = { importCompetitorSpreadsheet(googleSheetImportUrl) },
-                onCancel = {
-                    if (!isImportingCompetitorSpreadsheet) {
-                        isCompetitorSpreadsheetImportDialogVisible = false
+            val spreadsheetReview = pendingSpreadsheetCompetitorImportReview
+            if (spreadsheetReview == null) {
+                EventRegImportDialog(
+                    title = "Import Competitor Spreadsheet",
+                    urlLabel = "Spreadsheet URL",
+                    idleDescription = "Reviews spreadsheet competitions, maps them to the current race or series Race Files, and synchronizes competitor lists and categories after confirmation.",
+                    importingDescription = "Downloading spreadsheet and preparing import review...",
+                    url = googleSheetImportUrl,
+                    isImporting = isImportingCompetitorSpreadsheet,
+                    onUrlChange = { googleSheetImportUrl = it },
+                    onImport = { importCompetitorSpreadsheet(googleSheetImportUrl) },
+                    onCancel = {
+                        if (!isImportingCompetitorSpreadsheet) {
+                            isCompetitorSpreadsheetImportDialogVisible = false
+                        }
                     }
-                }
-            )
+                )
+            } else {
+                SpreadsheetCompetitorImportReviewDialog(
+                    review = spreadsheetReview,
+                    onSelectionChange = { competitionName, selected ->
+                        pendingSpreadsheetCompetitorImportReview = spreadsheetReview.withSelection(competitionName, selected)
+                    },
+                    onRowActionSelectionChange = { mapping, action, selected ->
+                        pendingSpreadsheetCompetitorImportReview = spreadsheetReview.withRowActionSelection(mapping, action, selected)
+                    },
+                    onRemovalActionSelectionChange = { mapping, action, selected ->
+                        pendingSpreadsheetCompetitorImportReview = spreadsheetReview.withRemovalActionSelection(mapping, action, selected)
+                    },
+                    onEmptyCategorySelectionChange = { mapping, categoryName, selected ->
+                        pendingSpreadsheetCompetitorImportReview = spreadsheetReview.withEmptyCategoryRemoval(mapping, categoryName, selected)
+                    },
+                    onEmptyCourseCategorySelectionChange = { mapping, categoryName, selected ->
+                        pendingSpreadsheetCompetitorImportReview = spreadsheetReview.withEmptyCourseCategoryRemoval(mapping, categoryName, selected)
+                    },
+                    onImport = { applySpreadsheetCompetitorImport(spreadsheetReview) },
+                    onCancel = {
+                        pendingSpreadsheetCompetitorImportReview = null
+                        isCompetitorSpreadsheetImportDialogVisible = false
+                        projectStatusText = "Spreadsheet competitor import canceled. No changes applied."
+                    }
+                )
+            }
         }
         if (isEventRegCompetitorCsvImportDialogVisible) {
             EventRegImportDialog(
@@ -5984,17 +6014,23 @@ fun main(args: Array<String>) = application {
                 }
             )
         }
-        pendingSpreadsheetCompetitorImportReview?.let { review ->
+        pendingSpreadsheetCompetitorImportReview?.takeUnless { isCompetitorSpreadsheetImportDialogVisible }?.let { review ->
             SpreadsheetCompetitorImportReviewDialog(
                 review = review,
                 onSelectionChange = { competitionName, selected ->
                     pendingSpreadsheetCompetitorImportReview = review.withSelection(competitionName, selected)
                 },
-                onRemoveEmptyCategoriesChange = { remove ->
-                    pendingSpreadsheetCompetitorImportReview = review.withRemoveEmptyCategories(remove)
+                onRowActionSelectionChange = { mapping, action, selected ->
+                    pendingSpreadsheetCompetitorImportReview = review.withRowActionSelection(mapping, action, selected)
                 },
-                onRemoveEmptyCourseCategoriesChange = { remove ->
-                    pendingSpreadsheetCompetitorImportReview = review.withRemoveEmptyCourseCategories(remove)
+                onRemovalActionSelectionChange = { mapping, action, selected ->
+                    pendingSpreadsheetCompetitorImportReview = review.withRemovalActionSelection(mapping, action, selected)
+                },
+                onEmptyCategorySelectionChange = { mapping, categoryName, selected ->
+                    pendingSpreadsheetCompetitorImportReview = review.withEmptyCategoryRemoval(mapping, categoryName, selected)
+                },
+                onEmptyCourseCategorySelectionChange = { mapping, categoryName, selected ->
+                    pendingSpreadsheetCompetitorImportReview = review.withEmptyCourseCategoryRemoval(mapping, categoryName, selected)
                 },
                 onImport = { applySpreadsheetCompetitorImport(review) },
                 onCancel = {
@@ -8457,8 +8493,10 @@ private fun EventRegImportDialog(
 private fun SpreadsheetCompetitorImportReviewDialog(
     review: PendingSpreadsheetCompetitorImportReview,
     onSelectionChange: (String, Boolean) -> Unit,
-    onRemoveEmptyCategoriesChange: (Boolean) -> Unit,
-    onRemoveEmptyCourseCategoriesChange: (Boolean) -> Unit,
+    onRowActionSelectionChange: (DesktopSpreadsheetCompetitorImportMapping, DesktopSpreadsheetCompetitorImportAction, Boolean) -> Unit,
+    onRemovalActionSelectionChange: (DesktopSpreadsheetCompetitorImportMapping, DesktopSpreadsheetCompetitorImportAction, Boolean) -> Unit,
+    onEmptyCategorySelectionChange: (DesktopSpreadsheetCompetitorImportMapping, String, Boolean) -> Unit,
+    onEmptyCourseCategorySelectionChange: (DesktopSpreadsheetCompetitorImportMapping, String, Boolean) -> Unit,
     onImport: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -8471,39 +8509,35 @@ private fun SpreadsheetCompetitorImportReviewDialog(
         .map { it.first().second }
         .distinct()
     val canApply = selectedMappings.isNotEmpty() && duplicateTargets.isEmpty()
-    val removableEmptyCategoryNames = selectedMappings.flatMap { mapping ->
-        mapping.preview?.removableEmptyCategoryNames.orEmpty()
-    }.distinct().sorted()
-    val emptyCourseCategoryNames = selectedMappings.flatMap { mapping ->
-        mapping.preview?.protectedEmptyCategoryNames.orEmpty()
-    }.distinct().sorted()
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text("Review Competitor Import") },
-        text = {
+    Dialog(onDismissRequest = onCancel) {
+        Surface(
+            modifier = Modifier
+                .width(980.dp)
+                .heightIn(max = 760.dp),
+            color = MaterialTheme.colors.surface
+        ) {
             Column(
                 modifier = Modifier
-                    .widthIn(min = 560.dp, max = 760.dp)
-                    .heightIn(max = 620.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Text(
-                    "Source: ${review.plan.eventName}",
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    "${selectedMappings.size} of ${review.plan.mappings.size} competitions are selected for import. " +
-                        "The registration source is treated as the source of truth for each mapped Race File.",
-                    fontSize = 13.sp,
-                    color = Color.DarkGray
-                )
-                review.documentation?.let { documentation ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Review Competitor Import", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+                    Text("Source: ${review.plan.eventName}", fontSize = 13.sp, color = Color.DarkGray)
                     Text(
-                        "Documentation CSV files: ${documentation.files.size} in ${documentation.outputDirectory}.",
+                        "${selectedMappings.size} of ${review.plan.mappings.size} competitions selected. " +
+                            "The registration source is treated as the source of truth for each mapped Race File.",
                         fontSize = 13.sp,
                         color = Color.DarkGray
                     )
+                    review.documentation?.let { documentation ->
+                        Text(
+                            "Documentation CSV files: ${documentation.files.size} in ${documentation.outputDirectory}.",
+                            fontSize = 13.sp,
+                            color = Color.DarkGray
+                        )
+                    }
                 }
                 if (duplicateTargets.isNotEmpty()) {
                     Text(
@@ -8512,80 +8546,57 @@ private fun SpreadsheetCompetitorImportReviewDialog(
                         color = Color(0xFF9A3412)
                     )
                 }
-                if (removableEmptyCategoryNames.isNotEmpty() || emptyCourseCategoryNames.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (removableEmptyCategoryNames.isNotEmpty()) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Checkbox(
-                                    checked = review.removeEmptyCategories,
-                                    onCheckedChange = onRemoveEmptyCategoriesChange
-                                )
-                                Text("Delete empty categories without course data")
-                            }
-                            Text(
-                                removableEmptyCategoryNames.joinToString(),
-                                fontSize = 12.sp,
-                                color = Color.DarkGray
-                            )
-                        }
-                        if (emptyCourseCategoryNames.isNotEmpty()) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Checkbox(
-                                    checked = review.removeEmptyCourseCategories,
-                                    onCheckedChange = onRemoveEmptyCourseCategoriesChange
-                                )
-                                Text("Delete empty categories with course data")
-                            }
-                            Text(
-                                emptyCourseCategoryNames.joinToString(),
-                                fontSize = 12.sp,
-                                color = Color.DarkGray
-                            )
-                        }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    review.plan.mappings.forEach { mapping ->
+                        SpreadsheetCompetitorImportMappingReview(
+                            review = review,
+                            mapping = mapping,
+                            selected = review.isSelected(mapping),
+                            onSelectedChange = { selected ->
+                                onSelectionChange(mapping.competitionName, selected)
+                            },
+                            onRowActionSelectionChange = onRowActionSelectionChange,
+                            onRemovalActionSelectionChange = onRemovalActionSelectionChange,
+                            onEmptyCategorySelectionChange = onEmptyCategorySelectionChange,
+                            onEmptyCourseCategorySelectionChange = onEmptyCourseCategorySelectionChange
+                        )
                     }
                 }
-                review.plan.mappings.forEach { mapping ->
-                    SpreadsheetCompetitorImportMappingReview(
-                        mapping = mapping,
-                        selected = review.isSelected(mapping),
-                        removeEmptyCategories = review.removeEmptyCategories,
-                        removeEmptyCourseCategories = review.removeEmptyCourseCategories,
-                        onSelectedChange = { selected ->
-                            onSelectionChange(mapping.competitionName, selected)
-                        }
-                    )
+                Divider()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(onClick = onCancel) {
+                        Text("Cancel")
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = onImport, enabled = canApply) {
+                        Text("Apply Import")
+                    }
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = onImport,
-                enabled = canApply
-            ) {
-                Text("Apply Import")
-            }
-        },
-        dismissButton = {
-            Button(onClick = onCancel) {
-                Text("Cancel")
-            }
         }
-    )
+    }
 }
 
 @Composable
 private fun SpreadsheetCompetitorImportMappingReview(
+    review: PendingSpreadsheetCompetitorImportReview,
     mapping: DesktopSpreadsheetCompetitorImportMapping,
     selected: Boolean,
-    removeEmptyCategories: Boolean,
-    removeEmptyCourseCategories: Boolean,
-    onSelectedChange: (Boolean) -> Unit
+    onSelectedChange: (Boolean) -> Unit,
+    onRowActionSelectionChange: (DesktopSpreadsheetCompetitorImportMapping, DesktopSpreadsheetCompetitorImportAction, Boolean) -> Unit,
+    onRemovalActionSelectionChange: (DesktopSpreadsheetCompetitorImportMapping, DesktopSpreadsheetCompetitorImportAction, Boolean) -> Unit,
+    onEmptyCategorySelectionChange: (DesktopSpreadsheetCompetitorImportMapping, String, Boolean) -> Unit,
+    onEmptyCourseCategorySelectionChange: (DesktopSpreadsheetCompetitorImportMapping, String, Boolean) -> Unit
 ) {
     val target = mapping.target
     val preview = mapping.preview
@@ -8640,27 +8651,129 @@ private fun SpreadsheetCompetitorImportMappingReview(
                         fontSize = 13.sp
                     )
                 }
-                if (importPreview.removableEmptyCategoryNames.isNotEmpty()) {
-                    Text(
-                        "${if (removeEmptyCategories) "Delete" else "Keep"} empty categories without course data: " +
-                            importPreview.removableEmptyCategoryNames.joinToString(),
-                        fontSize = 13.sp
-                    )
-                }
-                if (importPreview.protectedEmptyCategoryNames.isNotEmpty()) {
-                    Text(
-                        "${if (removeEmptyCourseCategories) "Delete" else "Keep"} empty categories with course data: " +
-                            importPreview.protectedEmptyCategoryNames.joinToString(),
-                        fontSize = 13.sp,
-                        color = Color.DarkGray
-                    )
-                }
+                SpreadsheetCompetitorActionSection(
+                    title = "Add competitors",
+                    actions = importPreview.addedCompetitors,
+                    selected = selected,
+                    isChecked = { action -> review.isRowActionSelected(mapping, action) },
+                    onCheckedChange = { action, checked -> onRowActionSelectionChange(mapping, action, checked) }
+                )
+                SpreadsheetCompetitorActionSection(
+                    title = "Update competitors",
+                    actions = importPreview.updatedCompetitors,
+                    selected = selected,
+                    isChecked = { action -> review.isRowActionSelected(mapping, action) },
+                    onCheckedChange = { action, checked -> onRowActionSelectionChange(mapping, action, checked) }
+                )
+                SpreadsheetCompetitorActionSection(
+                    title = "Remove competitors",
+                    actions = importPreview.removedCompetitors,
+                    selected = selected,
+                    isChecked = { action -> review.isRemovalActionSelected(mapping, action) },
+                    onCheckedChange = { action, checked -> onRemovalActionSelectionChange(mapping, action, checked) }
+                )
+                SpreadsheetCompetitorCategorySection(
+                    title = "Delete empty categories without course data",
+                    categoryNames = importPreview.removableEmptyCategoryNames,
+                    selected = selected,
+                    isChecked = { categoryName -> review.isEmptyCategoryRemovalSelected(mapping, categoryName) },
+                    onCheckedChange = { categoryName, checked -> onEmptyCategorySelectionChange(mapping, categoryName, checked) }
+                )
+                SpreadsheetCompetitorCategorySection(
+                    title = "Delete empty categories with course data",
+                    categoryNames = importPreview.protectedEmptyCategoryNames,
+                    selected = selected,
+                    isChecked = { categoryName -> review.isEmptyCourseCategoryRemovalSelected(mapping, categoryName) },
+                    onCheckedChange = { categoryName, checked -> onEmptyCourseCategorySelectionChange(mapping, categoryName, checked) }
+                )
             }
         }
         val details = mapping.reasons + mapping.warnings + preview?.warnings.orEmpty()
         details.distinct().take(6).forEach { detail ->
             Text("- $detail", fontSize = 12.sp, color = Color.DarkGray)
         }
+    }
+}
+
+@Composable
+private fun SpreadsheetCompetitorActionSection(
+    title: String,
+    actions: List<DesktopSpreadsheetCompetitorImportAction>,
+    selected: Boolean,
+    isChecked: (DesktopSpreadsheetCompetitorImportAction) -> Boolean,
+    onCheckedChange: (DesktopSpreadsheetCompetitorImportAction, Boolean) -> Unit
+) {
+    if (actions.isEmpty()) {
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("$title (${actions.size})", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        actions.forEach { action ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Checkbox(
+                    checked = selected && isChecked(action),
+                    onCheckedChange = { checked -> onCheckedChange(action, checked) },
+                    enabled = selected
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(action.reviewLabel(), fontSize = 13.sp)
+                    if (action.fieldChanges.isNotEmpty()) {
+                        Text(
+                            action.fieldChanges.take(4).joinToString("; "),
+                            fontSize = 12.sp,
+                            color = Color.DarkGray
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpreadsheetCompetitorCategorySection(
+    title: String,
+    categoryNames: List<String>,
+    selected: Boolean,
+    isChecked: (String) -> Boolean,
+    onCheckedChange: (String, Boolean) -> Unit
+) {
+    if (categoryNames.isEmpty()) {
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        categoryNames.forEach { categoryName ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Checkbox(
+                    checked = selected && isChecked(categoryName),
+                    onCheckedChange = { checked -> onCheckedChange(categoryName, checked) },
+                    enabled = selected
+                )
+                Text(categoryName, fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+private fun DesktopSpreadsheetCompetitorImportAction.reviewLabel(): String {
+    val details = buildList {
+        if (categoryName.isNotBlank()) add(categoryName)
+        if (club.isNotBlank()) add(club)
+        siNumber?.let { add("SI $it") }
+        if (personId.isNotBlank()) add("ID $personId")
+    }
+    return if (details.isEmpty()) {
+        name
+    } else {
+        "$name (${details.joinToString()})"
     }
 }
 
@@ -9325,8 +9438,10 @@ private data class PendingSpreadsheetCompetitorImportReview(
     val plan: DesktopSpreadsheetCompetitorImportPlan,
     val selectedCompetitionNames: Set<String>,
     val documentation: DesktopCompetitorImportDocumentation?,
-    val removeEmptyCategories: Boolean,
-    val removeEmptyCourseCategories: Boolean
+    val selectedRowActionKeys: Set<String>,
+    val selectedRemovalActionKeys: Set<String>,
+    val selectedEmptyCategoryRemovalKeys: Set<String>,
+    val selectedEmptyCourseCategoryRemovalKeys: Set<String>
 ) {
     fun selectedMappings(): List<DesktopSpreadsheetCompetitorImportMapping> =
         plan.mappings.filter { it.competitionName in selectedCompetitionNames }
@@ -9340,32 +9455,194 @@ private data class PendingSpreadsheetCompetitorImportReview(
                 selectedCompetitionNames + competitionName
             } else {
                 selectedCompetitionNames - competitionName
+            },
+            selectedRowActionKeys = if (selected) {
+                selectedRowActionKeys + plan.mappings
+                    .firstOrNull { it.competitionName == competitionName }
+                    .defaultRowActionKeys()
+            } else {
+                selectedRowActionKeys - plan.mappings
+                    .firstOrNull { it.competitionName == competitionName }
+                    .allRowActionKeys()
+            },
+            selectedRemovalActionKeys = if (selected) {
+                selectedRemovalActionKeys + plan.mappings
+                    .firstOrNull { it.competitionName == competitionName }
+                    .defaultRemovalActionKeys()
+            } else {
+                selectedRemovalActionKeys - plan.mappings
+                    .firstOrNull { it.competitionName == competitionName }
+                    .allRemovalActionKeys()
+            },
+            selectedEmptyCategoryRemovalKeys = if (selected) {
+                selectedEmptyCategoryRemovalKeys + plan.mappings
+                    .firstOrNull { it.competitionName == competitionName }
+                    .defaultEmptyCategoryRemovalKeys()
+            } else {
+                selectedEmptyCategoryRemovalKeys - plan.mappings
+                    .firstOrNull { it.competitionName == competitionName }
+                    .allEmptyCategoryRemovalKeys()
+            },
+            selectedEmptyCourseCategoryRemovalKeys = if (selected) {
+                selectedEmptyCourseCategoryRemovalKeys
+            } else {
+                selectedEmptyCourseCategoryRemovalKeys - plan.mappings
+                    .firstOrNull { it.competitionName == competitionName }
+                    .allEmptyCourseCategoryRemovalKeys()
             }
         )
 
-    fun withRemoveEmptyCategories(remove: Boolean): PendingSpreadsheetCompetitorImportReview =
-        copy(removeEmptyCategories = remove)
+    fun isRowActionSelected(
+        mapping: DesktopSpreadsheetCompetitorImportMapping,
+        action: DesktopSpreadsheetCompetitorImportAction
+    ): Boolean =
+        actionKey(mapping, action.actionId) in selectedRowActionKeys
 
-    fun withRemoveEmptyCourseCategories(remove: Boolean): PendingSpreadsheetCompetitorImportReview =
-        copy(removeEmptyCourseCategories = remove)
+    fun withRowActionSelection(
+        mapping: DesktopSpreadsheetCompetitorImportMapping,
+        action: DesktopSpreadsheetCompetitorImportAction,
+        selected: Boolean
+    ): PendingSpreadsheetCompetitorImportReview =
+        copy(selectedRowActionKeys = selectedRowActionKeys.withSelection(actionKey(mapping, action.actionId), selected))
+
+    fun isRemovalActionSelected(
+        mapping: DesktopSpreadsheetCompetitorImportMapping,
+        action: DesktopSpreadsheetCompetitorImportAction
+    ): Boolean =
+        actionKey(mapping, action.actionId) in selectedRemovalActionKeys
+
+    fun withRemovalActionSelection(
+        mapping: DesktopSpreadsheetCompetitorImportMapping,
+        action: DesktopSpreadsheetCompetitorImportAction,
+        selected: Boolean
+    ): PendingSpreadsheetCompetitorImportReview =
+        copy(selectedRemovalActionKeys = selectedRemovalActionKeys.withSelection(actionKey(mapping, action.actionId), selected))
+
+    fun isEmptyCategoryRemovalSelected(mapping: DesktopSpreadsheetCompetitorImportMapping, categoryName: String): Boolean =
+        categoryKey(mapping, categoryName) in selectedEmptyCategoryRemovalKeys
+
+    fun withEmptyCategoryRemoval(
+        mapping: DesktopSpreadsheetCompetitorImportMapping,
+        categoryName: String,
+        selected: Boolean
+    ): PendingSpreadsheetCompetitorImportReview =
+        copy(
+            selectedEmptyCategoryRemovalKeys = selectedEmptyCategoryRemovalKeys.withSelection(
+                categoryKey(mapping, categoryName),
+                selected
+            )
+        )
+
+    fun isEmptyCourseCategoryRemovalSelected(mapping: DesktopSpreadsheetCompetitorImportMapping, categoryName: String): Boolean =
+        categoryKey(mapping, categoryName) in selectedEmptyCourseCategoryRemovalKeys
+
+    fun withEmptyCourseCategoryRemoval(
+        mapping: DesktopSpreadsheetCompetitorImportMapping,
+        categoryName: String,
+        selected: Boolean
+    ): PendingSpreadsheetCompetitorImportReview =
+        copy(
+            selectedEmptyCourseCategoryRemovalKeys = selectedEmptyCourseCategoryRemovalKeys.withSelection(
+                categoryKey(mapping, categoryName),
+                selected
+            )
+        )
+
+    fun selectedRowIndexes(mapping: DesktopSpreadsheetCompetitorImportMapping): Set<Int>? =
+        mapping.preview?.let { preview ->
+            (preview.addedCompetitors + preview.updatedCompetitors)
+                .filter { action -> isRowActionSelected(mapping, action) }
+                .mapNotNullTo(mutableSetOf()) { action -> action.rowIndex }
+        }
+
+    fun selectedRemovalCompetitorIds(mapping: DesktopSpreadsheetCompetitorImportMapping): Set<String>? =
+        mapping.preview?.removedCompetitors
+            ?.filter { action -> isRemovalActionSelected(mapping, action) }
+            ?.mapNotNullTo(mutableSetOf()) { action -> action.competitorId }
+
+    fun selectedEmptyCategoryNames(mapping: DesktopSpreadsheetCompetitorImportMapping): Set<String> =
+        mapping.preview?.removableEmptyCategoryNames
+            ?.filterTo(mutableSetOf()) { categoryName -> isEmptyCategoryRemovalSelected(mapping, categoryName) }
+            ?: emptySet()
+
+    fun selectedEmptyCourseCategoryNames(mapping: DesktopSpreadsheetCompetitorImportMapping): Set<String> =
+        mapping.preview?.protectedEmptyCategoryNames
+            ?.filterTo(mutableSetOf()) { categoryName -> isEmptyCourseCategoryRemovalSelected(mapping, categoryName) }
+            ?: emptySet()
 
     fun documentationLines(): List<String> =
         documentation?.let { docs ->
             listOf("${docs.files.size} documentation CSV files generated in ${docs.outputDirectory}.")
         }.orEmpty()
 
+    private fun DesktopSpreadsheetCompetitorImportMapping?.defaultRowActionKeys(): Set<String> =
+        this?.preview?.let { preview ->
+            (preview.addedCompetitors + preview.updatedCompetitors)
+                .mapTo(mutableSetOf()) { action -> actionKey(this, action.actionId) }
+        } ?: emptySet()
+
+    private fun DesktopSpreadsheetCompetitorImportMapping?.allRowActionKeys(): Set<String> =
+        defaultRowActionKeys()
+
+    private fun DesktopSpreadsheetCompetitorImportMapping?.defaultRemovalActionKeys(): Set<String> =
+        this?.preview?.removedCompetitors
+            ?.mapTo(mutableSetOf()) { action -> actionKey(this, action.actionId) }
+            ?: emptySet()
+
+    private fun DesktopSpreadsheetCompetitorImportMapping?.allRemovalActionKeys(): Set<String> =
+        defaultRemovalActionKeys()
+
+    private fun DesktopSpreadsheetCompetitorImportMapping?.defaultEmptyCategoryRemovalKeys(): Set<String> =
+        this?.preview?.removableEmptyCategoryNames
+            ?.mapTo(mutableSetOf()) { categoryName -> categoryKey(this, categoryName) }
+            ?: emptySet()
+
+    private fun DesktopSpreadsheetCompetitorImportMapping?.allEmptyCategoryRemovalKeys(): Set<String> =
+        defaultEmptyCategoryRemovalKeys()
+
+    private fun DesktopSpreadsheetCompetitorImportMapping?.allEmptyCourseCategoryRemovalKeys(): Set<String> =
+        this?.preview?.protectedEmptyCategoryNames
+            ?.mapTo(mutableSetOf()) { categoryName -> categoryKey(this, categoryName) }
+            ?: emptySet()
+
+    private fun actionKey(mapping: DesktopSpreadsheetCompetitorImportMapping, actionId: String): String =
+        "${mapping.competitionName}\u001F$actionId"
+
+    private fun categoryKey(mapping: DesktopSpreadsheetCompetitorImportMapping, categoryName: String): String =
+        "${mapping.competitionName}\u001F$categoryName"
+
+    private fun Set<String>.withSelection(key: String, selected: Boolean): Set<String> =
+        if (selected) this + key else this - key
+
     companion object {
         fun create(
             plan: DesktopSpreadsheetCompetitorImportPlan,
             documentation: DesktopCompetitorImportDocumentation? = null
-        ): PendingSpreadsheetCompetitorImportReview =
-            PendingSpreadsheetCompetitorImportReview(
+        ): PendingSpreadsheetCompetitorImportReview {
+            val selectedMappings = plan.selectedMappings
+            return PendingSpreadsheetCompetitorImportReview(
                 plan = plan,
                 selectedCompetitionNames = plan.selectedMappings.mapTo(mutableSetOf()) { it.competitionName },
                 documentation = documentation,
-                removeEmptyCategories = true,
-                removeEmptyCourseCategories = false
+                selectedRowActionKeys = selectedMappings.flatMapTo(mutableSetOf()) { mapping ->
+                    mapping.preview?.let { preview ->
+                        (preview.addedCompetitors + preview.updatedCompetitors)
+                            .map { action -> "${mapping.competitionName}\u001F${action.actionId}" }
+                    }.orEmpty()
+                },
+                selectedRemovalActionKeys = selectedMappings.flatMapTo(mutableSetOf()) { mapping ->
+                    mapping.preview?.removedCompetitors
+                        ?.map { action -> "${mapping.competitionName}\u001F${action.actionId}" }
+                        .orEmpty()
+                },
+                selectedEmptyCategoryRemovalKeys = selectedMappings.flatMapTo(mutableSetOf()) { mapping ->
+                    mapping.preview?.removableEmptyCategoryNames
+                        ?.map { categoryName -> "${mapping.competitionName}\u001F$categoryName" }
+                        .orEmpty()
+                },
+                selectedEmptyCourseCategoryRemovalKeys = emptySet()
             )
+        }
     }
 }
 

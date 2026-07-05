@@ -30,6 +30,7 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.CompetitorCsvImportDuplicatePolicy
 import org.openardf.radiooracle.shared.event.CompetitorCsvImportOutcome
 import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventProjectFile
@@ -745,7 +746,22 @@ data class DesktopSpreadsheetCompetitorImportPreview(
     val createdCategoryNames: List<String>,
     val removableEmptyCategoryNames: List<String>,
     val protectedEmptyCategoryNames: List<String>,
-    val warnings: List<String>
+    val warnings: List<String>,
+    val addedCompetitors: List<DesktopSpreadsheetCompetitorImportAction> = emptyList(),
+    val updatedCompetitors: List<DesktopSpreadsheetCompetitorImportAction> = emptyList(),
+    val removedCompetitors: List<DesktopSpreadsheetCompetitorImportAction> = emptyList()
+)
+
+data class DesktopSpreadsheetCompetitorImportAction(
+    val actionId: String,
+    val rowIndex: Int?,
+    val competitorId: String?,
+    val name: String,
+    val categoryName: String,
+    val club: String,
+    val siNumber: Int?,
+    val personId: String,
+    val fieldChanges: List<String> = emptyList()
 )
 
 data class DesktopSpreadsheetCompetitorImportAppliedMapping(
@@ -911,23 +927,39 @@ object DesktopSpreadsheetCompetitorImporter {
         competitorIdFactory: () -> String = { UUID.randomUUID().toString() },
         categoryIdFactory: () -> String = { UUID.randomUUID().toString() },
         removeEmptyCategories: Boolean = true,
-        removeEmptyCourseCategories: Boolean = false
+        removeEmptyCourseCategories: Boolean = false,
+        selectedRowIndexes: Set<Int>? = null,
+        selectedRemovalCompetitorIds: Set<String>? = null,
+        emptyCategoryNamesToRemove: Set<String>? = null,
+        emptyCourseCategoryNamesToRemove: Set<String>? = null
     ): DesktopSpreadsheetCompetitorImportAppliedMapping {
         val target = requireNotNull(mapping.target) {
             "No Race File target was selected for ${mapping.competitionName}."
         }
+        val selectedRows = selectedRowIndexes?.let { indexes ->
+            mapping.rows.filterIndexed { index, _ -> index in indexes }
+        } ?: mapping.rows
+        val deleteMissingImportKeys = selectedRemovalCompetitorIds?.let { selectedIds ->
+            target.projectFile.raceData.competitorData
+                .mapNotNull { data ->
+                    val competitor = data.competitorCategory.competitor
+                    EventProjectEditor.competitorImportKey(competitor).takeIf { competitor.id in selectedIds }
+                }
+                .toSet()
+        }
         val outcome = syncCompetitors(
             projectFile = target.projectFile,
-            rows = mapping.rows,
+            rows = selectedRows,
             competitorIdFactory = competitorIdFactory,
-            categoryIdFactory = categoryIdFactory
+            categoryIdFactory = categoryIdFactory,
+            deleteMissingImportKeys = deleteMissingImportKeys
         )
-        val emptyCategoryNames = if (removeEmptyCategories) {
+        val emptyCategoryNames = emptyCategoryNamesToRemove ?: if (removeEmptyCategories) {
             mapping.preview?.removableEmptyCategoryNames.orEmpty().toSet()
         } else {
             emptySet()
         }
-        val emptyCourseCategoryNames = if (removeEmptyCourseCategories) {
+        val emptyCourseCategoryNames = emptyCourseCategoryNamesToRemove ?: if (removeEmptyCourseCategories) {
             mapping.preview?.protectedEmptyCategoryNames.orEmpty().toSet()
         } else {
             emptySet()
@@ -961,6 +993,11 @@ object DesktopSpreadsheetCompetitorImporter {
         rows: List<CompetitorCsvImportRow>,
         idFactory: () -> String
     ): DesktopSpreadsheetCompetitorImportPreview {
+        val originalCompetitors = projectFile.raceData.competitorData
+        val originalById = originalCompetitors.associateBy { it.competitorCategory.competitor.id }
+        val rowIndexByImportKey = rows
+            .mapIndexed { index, row -> EventProjectEditor.competitorImportKey(row) to index }
+            .toMap()
         val existingCategoryNames = projectFile.raceData.categories
             .mapTo(mutableSetOf()) { StandardCategoryRules.normalizedCategoryName(it.category.name) }
         val outcome = syncCompetitors(
@@ -969,6 +1006,45 @@ object DesktopSpreadsheetCompetitorImporter {
             competitorIdFactory = idFactory,
             categoryIdFactory = idFactory
         )
+        val updatedCompetitors = outcome.projectFile.raceData.competitorData
+        val updatedById = updatedCompetitors.associateBy { it.competitorCategory.competitor.id }
+        val addedActions = updatedCompetitors
+            .filter { it.competitorCategory.competitor.id !in originalById }
+            .map { data ->
+                val importKey = EventProjectEditor.competitorImportKey(data.competitorCategory.competitor)
+                data.toImportAction(
+                    actionId = "row-${rowIndexByImportKey[importKey] ?: importKey}",
+                    rowIndex = rowIndexByImportKey[importKey],
+                    fieldChanges = emptyList()
+                )
+            }
+            .sortedWith(compareBy<DesktopSpreadsheetCompetitorImportAction> { it.categoryName }.thenBy { it.name })
+        val updatedActions = updatedCompetitors
+            .mapNotNull { data ->
+                val original = originalById[data.competitorCategory.competitor.id] ?: return@mapNotNull null
+                val changes = original.diffForReview(data)
+                if (changes.isEmpty()) {
+                    null
+                } else {
+                    val importKey = EventProjectEditor.competitorImportKey(data.competitorCategory.competitor)
+                    data.toImportAction(
+                        actionId = "row-${rowIndexByImportKey[importKey] ?: importKey}",
+                        rowIndex = rowIndexByImportKey[importKey],
+                        fieldChanges = changes
+                    )
+                }
+            }
+            .sortedWith(compareBy<DesktopSpreadsheetCompetitorImportAction> { it.categoryName }.thenBy { it.name })
+        val removedActions = originalCompetitors
+            .filter { it.competitorCategory.competitor.id !in updatedById }
+            .map { data ->
+                data.toImportAction(
+                    actionId = "remove-${data.competitorCategory.competitor.id}",
+                    rowIndex = null,
+                    fieldChanges = emptyList()
+                )
+            }
+            .sortedWith(compareBy<DesktopSpreadsheetCompetitorImportAction> { it.categoryName }.thenBy { it.name })
         val createdCategoryNames = outcome.projectFile.raceData.categories
             .filter { StandardCategoryRules.normalizedCategoryName(it.category.name) !in existingCategoryNames }
             .map { it.category.name }
@@ -988,7 +1064,10 @@ object DesktopSpreadsheetCompetitorImporter {
             protectedEmptyCategoryNames = emptyCategories
                 .filter { it.hasCourseData() }
                 .map { it.category.name },
-            warnings = outcome.warnings
+            warnings = outcome.warnings,
+            addedCompetitors = addedActions,
+            updatedCompetitors = updatedActions,
+            removedCompetitors = removedActions
         )
     }
 
@@ -1064,7 +1143,8 @@ object DesktopSpreadsheetCompetitorImporter {
         projectFile: EventProjectFile,
         rows: List<CompetitorCsvImportRow>,
         competitorIdFactory: () -> String,
-        categoryIdFactory: () -> String
+        categoryIdFactory: () -> String,
+        deleteMissingImportKeys: Set<String>? = null
     ): CompetitorCsvImportOutcome =
         EventProjectEditor.importCompetitorRowsWithOutcome(
             projectFile = projectFile,
@@ -1072,9 +1152,64 @@ object DesktopSpreadsheetCompetitorImporter {
             competitorIdFactory = competitorIdFactory,
             categoryIdFactory = categoryIdFactory,
             duplicatePolicy = CompetitorCsvImportDuplicatePolicy.UPDATE_EXISTING_BY_IMPORT_KEY,
-            deleteMissingByImportKey = true,
+            deleteMissingByImportKey = deleteMissingImportKeys == null,
+            deleteMissingImportKeys = deleteMissingImportKeys,
             createMissingCategories = true
         )
+
+    private fun EventCompetitorData.toImportAction(
+        actionId: String,
+        rowIndex: Int?,
+        fieldChanges: List<String>
+    ): DesktopSpreadsheetCompetitorImportAction {
+        val competitor = competitorCategory.competitor
+        return DesktopSpreadsheetCompetitorImportAction(
+            actionId = actionId,
+            rowIndex = rowIndex,
+            competitorId = competitor.id,
+            name = listOf(competitor.firstName, competitor.lastName)
+                .filter { it.isNotBlank() }
+                .joinToString(" ")
+                .ifBlank { "(unnamed competitor)" },
+            categoryName = competitorCategory.category?.name.orEmpty(),
+            club = competitor.club,
+            siNumber = competitor.siNumber,
+            personId = competitor.index,
+            fieldChanges = fieldChanges
+        )
+    }
+
+    private fun EventCompetitorData.diffForReview(updated: EventCompetitorData): List<String> {
+        val originalCompetitor = competitorCategory.competitor
+        val updatedCompetitor = updated.competitorCategory.competitor
+        return buildList {
+            addChange("Name", "${originalCompetitor.firstName} ${originalCompetitor.lastName}".trim(), "${updatedCompetitor.firstName} ${updatedCompetitor.lastName}".trim())
+            addChange("Category", competitorCategory.category?.name.orEmpty(), updated.competitorCategory.category?.name.orEmpty())
+            addChange("Club", originalCompetitor.club, updatedCompetitor.club)
+            addChange("Person ID", originalCompetitor.index, updatedCompetitor.index)
+            addChange("Bib", originalCompetitor.bibNumber, updatedCompetitor.bibNumber)
+            addChange("Call sign", originalCompetitor.callSign, updatedCompetitor.callSign)
+            addChange("SI", originalCompetitor.siNumber?.toString().orEmpty(), updatedCompetitor.siNumber?.toString().orEmpty())
+            addChange("Gender", originalCompetitor.isMan.toString(), updatedCompetitor.isMan.toString())
+            addChange("Birth year", originalCompetitor.birthYear?.toString().orEmpty(), updatedCompetitor.birthYear?.toString().orEmpty())
+            addChange(
+                "Start",
+                originalCompetitor.drawnStartTimeSeconds?.toString().orEmpty(),
+                updatedCompetitor.drawnStartTimeSeconds?.toString().orEmpty()
+            )
+            addChange(
+                "Start group",
+                originalCompetitor.preferredStartGroup?.toString().orEmpty(),
+                updatedCompetitor.preferredStartGroup?.toString().orEmpty()
+            )
+        }
+    }
+
+    private fun MutableList<String>.addChange(label: String, before: String, after: String) {
+        if (before != after) {
+            add("$label: ${before.ifBlank { "(blank)" }} -> ${after.ifBlank { "(blank)" }}")
+        }
+    }
 
     private fun bestTargetMatch(
         competition: DesktopEventRegCompetition,

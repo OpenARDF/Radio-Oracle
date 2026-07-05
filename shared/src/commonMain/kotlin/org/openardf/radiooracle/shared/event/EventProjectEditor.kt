@@ -1606,6 +1606,7 @@ object EventProjectEditor {
         categoryIdFactory: () -> String,
         duplicatePolicy: CompetitorCsvImportDuplicatePolicy = CompetitorCsvImportDuplicatePolicy.REJECT_DUPLICATES,
         deleteMissingByImportKey: Boolean = false,
+        deleteMissingImportKeys: Set<String>? = null,
         createMissingCategories: Boolean = true
     ): CompetitorCsvImportOutcome {
         var categories = projectFile.raceData.categories
@@ -1796,10 +1797,14 @@ object EventProjectEditor {
             importedCount++
         }
 
-        val removedCompetitors = if (deleteMissingByImportKey) {
-            competitors.filter { it.competitorCategory.competitor.importKey() !in importKeys }
-        } else {
-            emptyList()
+        val removedCompetitors = when {
+            deleteMissingImportKeys != null ->
+                competitors.filter { it.competitorCategory.competitor.importKey() in deleteMissingImportKeys }
+            deleteMissingByImportKey ->
+                competitors.filter { it.competitorCategory.competitor.importKey() !in importKeys }
+            else -> {
+                emptyList()
+            }
         }
         if (removedCompetitors.isNotEmpty()) {
             val removedIds = removedCompetitors
@@ -3082,11 +3087,22 @@ object EventProjectEditor {
      * repeatable key available for deciding whether a downloaded competitor is
      * already present in the current Race File.
      */
+    fun competitorImportKey(row: CompetitorCsvImportRow): String =
+        competitorImportKey(personId = row.personId, firstName = row.firstName, lastName = row.lastName, club = row.club)
+
+    fun competitorImportKey(competitor: EventCompetitor): String =
+        competitorImportKey(
+            personId = competitor.index,
+            firstName = competitor.firstName,
+            lastName = competitor.lastName,
+            club = competitor.club
+        )
+
     private fun CompetitorCsvImportRow.importKey(): String =
-        competitorImportKey(personId = personId, firstName = firstName, lastName = lastName, club = club)
+        competitorImportKey(this)
 
     private fun EventCompetitor.importKey(): String =
-        competitorImportKey(personId = index, firstName = firstName, lastName = lastName, club = club)
+        competitorImportKey(this)
 
     private fun CompetitorCsvImportRow.existingCompetitorPositionByNameClub(
         competitors: List<EventCompetitorData>

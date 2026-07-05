@@ -323,6 +323,118 @@ class DesktopEventRegImportTest {
     }
 
     @Test
+    fun competitorSpreadsheetApplyHonorsGranularSelections() {
+        val project = eventProject("race-sprint", "Sprint Race", RaceType.SPRINT, RaceBand.NONE)
+            .withCompetitorRows(
+                listOf(
+                    CompetitorCsvImportRow(
+                        siNumber = 101,
+                        startNumber = null,
+                        firstName = "Keep",
+                        lastName = "Runner",
+                        categoryName = "OldCat",
+                        isMan = true,
+                        birthYear = null,
+                        club = "OK",
+                        personId = "keep",
+                        startTimeText = null,
+                        siRent = false
+                    ),
+                    CompetitorCsvImportRow(
+                        siNumber = 102,
+                        startNumber = null,
+                        firstName = "Update",
+                        lastName = "Runner",
+                        categoryName = "OldCat",
+                        isMan = true,
+                        birthYear = null,
+                        club = "Old Club",
+                        personId = "update",
+                        startTimeText = null,
+                        siRent = false
+                    ),
+                    CompetitorCsvImportRow(
+                        siNumber = 103,
+                        startNumber = null,
+                        firstName = "Remove",
+                        lastName = "Runner",
+                        categoryName = "OldCat",
+                        isMan = true,
+                        birthYear = null,
+                        club = "Gone",
+                        personId = "remove",
+                        startTimeText = null,
+                        siRent = false
+                    )
+                )
+            )
+        val target = DesktopSpreadsheetCompetitorImportTarget(
+            targetId = "race-sprint",
+            displayName = "Sprint Race",
+            path = null,
+            projectFile = project
+        )
+        val plan = DesktopSpreadsheetCompetitorImporter.buildRowsPlan(
+            sourceUrl = "competitors.csv",
+            eventName = "competitors.csv",
+            competitionName = "Sprint",
+            rows = listOf(
+                CompetitorCsvImportRow(
+                    siNumber = 102,
+                    startNumber = null,
+                    firstName = "Update",
+                    lastName = "Runner",
+                    categoryName = "M-21",
+                    isMan = true,
+                    birthYear = null,
+                    club = "New Club",
+                    personId = "update",
+                    startTimeText = null,
+                    siRent = false
+                ),
+                CompetitorCsvImportRow(
+                    siNumber = 104,
+                    startNumber = null,
+                    firstName = "Add",
+                    lastName = "Runner",
+                    categoryName = "W-55",
+                    isMan = false,
+                    birthYear = null,
+                    club = "New",
+                    personId = "add",
+                    startTimeText = null,
+                    siRent = false
+                )
+            ),
+            target = target
+        )
+        val mapping = plan.selectedMappings.single()
+        val preview = mapping.preview!!
+
+        assertEquals(listOf("Add Runner"), preview.addedCompetitors.map { it.name })
+        assertEquals(listOf("Update Runner"), preview.updatedCompetitors.map { it.name })
+        assertEquals(listOf("Keep Runner", "Remove Runner"), preview.removedCompetitors.map { it.name }.sorted())
+
+        val removeId = preview.removedCompetitors.single { it.name == "Remove Runner" }.competitorId!!
+        val applied = DesktopSpreadsheetCompetitorImporter.applyMapping(
+            mapping = mapping,
+            selectedRowIndexes = preview.addedCompetitors.mapNotNullTo(mutableSetOf()) { it.rowIndex },
+            selectedRemovalCompetitorIds = setOf(removeId),
+            emptyCategoryNamesToRemove = emptySet(),
+            emptyCourseCategoryNamesToRemove = emptySet()
+        )
+        val competitors = applied.updatedProjectFile.raceData.competitorData
+            .map { it.competitorCategory.competitor }
+
+        assertTrue(competitors.any { it.firstName == "Keep" && it.lastName == "Runner" })
+        assertTrue(competitors.any { it.firstName == "Add" && it.lastName == "Runner" })
+        assertFalse(competitors.any { it.firstName == "Remove" && it.lastName == "Runner" })
+        val skippedUpdate = competitors.single { it.firstName == "Update" && it.lastName == "Runner" }
+        assertEquals("Old Club", skippedUpdate.club)
+        assertEquals("OldCat", applied.updatedProjectFile.raceData.categories.single { it.category.id == skippedUpdate.categoryId }.category.name)
+    }
+
+    @Test
     fun competitorSpreadsheetPlanMapsSeriesByRaceFormat() {
         val targets = listOf(
             eventProject("race-sprint", "Sprint Race", RaceType.SPRINT, RaceBand.NONE),
