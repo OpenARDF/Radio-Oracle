@@ -1443,6 +1443,46 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun importsCompetitorRowsCreateMissingCategoryFromInactiveCourseMapping() {
+        val original = projectFile(
+            courseMappings = listOf(
+                categoryData(
+                    "mapping-w75",
+                    "W75",
+                    controlSiCodes = listOf(31, 32),
+                    encryptedIdealOrder = "encrypted-order",
+                    encryptedCourseInfo = "encrypted-course"
+                )
+            )
+        )
+
+        val outcome = EventProjectEditor.importCompetitorRowsWithOutcome(
+            projectFile = original,
+            rows = listOf(
+                competitorImportRow(
+                    firstName = "Anna",
+                    lastName = "Berg",
+                    categoryName = "W75",
+                    isMan = true,
+                    index = "T003"
+                )
+            ),
+            competitorIdFactory = { "comp-1" },
+            categoryIdFactory = { "cat-w75" }
+        )
+
+        assertEquals(listOf("W75"), outcome.projectFile.raceData.categories.map { it.category.name })
+        assertEquals(emptyList(), outcome.projectFile.raceData.courseMappings)
+        val imported = outcome.projectFile.raceData.categories.single()
+        assertEquals(listOf(31, 32), imported.controlPoints.map { it.siCode })
+        assertEquals(listOf("cat-w75-control-0", "cat-w75-control-1"), imported.controlPoints.map { it.id })
+        assertEquals("encrypted-order", imported.category.encryptedIdealOrder)
+        assertEquals("encrypted-course", imported.category.encryptedCourseInfo)
+        assertEquals(false, imported.category.isMan)
+        assertEquals("cat-w75", outcome.projectFile.raceData.competitorData.single().competitorCategory.competitor.categoryId)
+    }
+
+    @Test
     fun importsCompetitorRowsWithoutCreatingMissingCategoriesWhenDisabled() {
         val original = projectFile(
             categories = listOf(categoryData("cat-1", "M21"))
@@ -4008,6 +4048,7 @@ class EventProjectEditorTest {
         raceType: RaceType = RaceType.CLASSIC,
         raceLevel: RaceLevel = RaceLevel.PRACTICE,
         categories: List<EventCategoryData> = emptyList(),
+        courseMappings: List<EventCategoryData> = emptyList(),
         competitors: List<EventCompetitorData> = emptyList(),
         controls: List<EventControl> = emptyList(),
         aliases: List<EventAlias> = emptyList(),
@@ -4026,6 +4067,7 @@ class EventProjectEditorTest {
                     timeLimitSeconds = 7_200
                 ),
                 categories = categories,
+                courseMappings = courseMappings,
                 aliases = aliases,
                 controls = controls,
                 competitorData = competitors,

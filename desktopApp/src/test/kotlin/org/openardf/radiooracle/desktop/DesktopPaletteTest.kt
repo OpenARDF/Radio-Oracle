@@ -38,6 +38,7 @@ class DesktopPaletteTest {
                 "Categories",
                 "Course Order",
                 "Competitors",
+                "Competitor Files",
                 "Start List",
                 "Race Series",
                 "Series Races",

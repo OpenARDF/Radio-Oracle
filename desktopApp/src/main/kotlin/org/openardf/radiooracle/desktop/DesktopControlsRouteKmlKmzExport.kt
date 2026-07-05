@@ -30,6 +30,7 @@ import net.lingala.zip4j.model.enums.AesKeyStrength
 import net.lingala.zip4j.model.enums.CompressionMethod
 import net.lingala.zip4j.model.enums.EncryptionMethod
 import org.openardf.radiooracle.shared.domain.ControlPointType
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
@@ -37,6 +38,7 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
+import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -77,6 +79,15 @@ data class DesktopControlsRouteKmlKmzExportSummary(
 )
 
 object DesktopControlsRouteKmlKmzExporter {
+    private fun exportCategoryData(projectFile: EventProjectFile): List<EventCategoryData> {
+        val activeNames = projectFile.raceData.categories.mapTo(mutableSetOf()) { categoryData ->
+            StandardCategoryRules.normalizedCategoryName(categoryData.category.name).uppercase()
+        }
+        return projectFile.raceData.categories + projectFile.raceData.courseMappings.filterNot { mapping ->
+            StandardCategoryRules.normalizedCategoryName(mapping.category.name).uppercase() in activeNames
+        }
+    }
+
     fun exportEncryptedZip(
         target: DesktopControlsRouteKmlKmzExportTarget,
         projectFile: EventProjectFile,
@@ -126,7 +137,7 @@ object DesktopControlsRouteKmlKmzExporter {
         zipFile.addStream(ByteArrayInputStream(entryBytes), zipParameters)
 
         return DesktopControlsRouteKmlKmzExportSummary(
-            categoryCount = projectFile.raceData.categories.size,
+            categoryCount = exportCategoryData(projectFile).size,
             routeCount = protectedCourseInfoByCategoryId.values.count { it.route.isNotEmpty() },
             controlCatalogCount = controlCatalogControls.size,
             courseControlPointCount = exportedCourseObjects.courseObjects.size + exportedCourseObjects.controlPoints.size,
@@ -138,7 +149,7 @@ object DesktopControlsRouteKmlKmzExporter {
         projectFile: EventProjectFile,
         password: String
     ): Map<String, ProtectedCourseInfo> =
-        projectFile.raceData.categories.mapNotNull { categoryData ->
+        exportCategoryData(projectFile).mapNotNull { categoryData ->
             categoryData.category.encryptedCourseInfo
                 ?.takeIf { it.isNotBlank() }
                 ?.let { encryptedValue ->
@@ -159,7 +170,7 @@ object DesktopControlsRouteKmlKmzExporter {
         appendLine("    <name>${xml(projectFile.raceData.race.name)} controls and routes</name>")
         appendLine("    <open>1</open>")
         append(DesktopCourseKmlStyle.pointStyleDefinitions(includeWaypoint = true))
-        projectFile.raceData.categories.forEachIndexed { categoryIndex, categoryData ->
+        exportCategoryData(projectFile).forEachIndexed { categoryIndex, categoryData ->
             val routeStyleId = courseRouteStyleId(categoryData.category.id)
             appendLine("    <Style id=\"$routeStyleId\">")
             appendLine("      <LineStyle>")
@@ -177,7 +188,7 @@ object DesktopControlsRouteKmlKmzExporter {
         }
         appendLine("    <Folder>")
         appendLine("      <name>Courses</name>")
-        projectFile.raceData.categories.forEach { categoryData ->
+        exportCategoryData(projectFile).forEach { categoryData ->
             val category = categoryData.category
             val courseInfo = protectedCourseInfoByCategoryId[category.id]
             if (courseInfo != null) {
@@ -341,7 +352,7 @@ object DesktopControlsRouteKmlKmzExporter {
         appendGpxControlCatalogWaypoints(controlCatalogControls)
         appendGpxCourseObjectWaypoints(exportedCourseObjects.courseObjects, controlsById)
         appendGpxCourseControlWaypoints(exportedCourseObjects.controlPoints, controlsById)
-        projectFile.raceData.categories.forEach { categoryData ->
+        exportCategoryData(projectFile).forEach { categoryData ->
             val category = categoryData.category
             val courseInfo = protectedCourseInfoByCategoryId[category.id] ?: return@forEach
             appendLine("  <rte>")

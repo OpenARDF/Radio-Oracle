@@ -40,6 +40,7 @@ import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventRace
+import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
@@ -214,6 +215,13 @@ object DesktopCourseKmlImporter {
     private const val SYNTHESIZED_ANALYZER_ROUTE_CATEGORY = "M21"
     private val json = Json { ignoreUnknownKeys = true }
 
+    private fun activeAndInactiveCourseCategories(raceData: EventRaceData): List<EventCategoryData> {
+        val activeNames = raceData.categories.mapTo(mutableSetOf()) { it.category.name.categoryMatchText() }
+        return raceData.categories + raceData.courseMappings.filterNot { mapping ->
+            mapping.category.name.categoryMatchText() in activeNames
+        }
+    }
+
     fun importProtectedCourseInfo(
         path: Path,
         projectFile: EventProjectFile,
@@ -259,7 +267,7 @@ object DesktopCourseKmlImporter {
         }
         val missingCategoryNames = missingRouteCategoryNames(
             routes = courseData.routes,
-            categories = projectFile.raceData.categories,
+            categories = activeAndInactiveCourseCategories(projectFile.raceData),
             sourceName = path.fileName.toString(),
             categoryOverrideId = categoryOverrideId
         )
@@ -274,9 +282,19 @@ object DesktopCourseKmlImporter {
         val projectWithMissingCategories = if (createdCategoryNames.isEmpty()) {
             projectFile
         } else {
+            val activeCategoryNames = projectFile.raceData.categories.mapTo(mutableSetOf()) { it.category.name.categoryMatchText() }
+            val retainedCourseMappings = projectFile.raceData.courseMappings.filterNot { mapping ->
+                mapping.category.name.categoryMatchText() in activeCategoryNames ||
+                    createdCategoryNames.any { createdName ->
+                        StandardCategoryRules.categoryNamesEquivalent(mapping.category.name, createdName)
+                    }
+            }
+            val nextCourseMappingOrder = (
+                projectFile.raceData.categories + projectFile.raceData.courseMappings
+                ).maxOfOrNull { it.category.order } ?: -1
             projectFile.copy(
                 raceData = projectFile.raceData.copy(
-                    categories = projectFile.raceData.categories + createdCategoryNames.mapIndexed { index, name ->
+                    courseMappings = retainedCourseMappings + createdCategoryNames.mapIndexed { index, name ->
                         EventCategoryData(
                             category = EventCategory(
                                 id = missingCategoryIdFactory(name),
@@ -287,7 +305,7 @@ object DesktopCourseKmlImporter {
                                 maxAge = name.filter(Char::isDigit).takeIf { it.isNotBlank() }?.toIntOrNull(),
                                 lengthMeters = 0,
                                 climbMeters = 0,
-                                order = (projectFile.raceData.categories.maxOfOrNull { it.category.order } ?: -1) + index + 1,
+                                order = nextCourseMappingOrder + index + 1,
                                 differentProperties = false,
                                 raceType = null,
                                 raceBand = null,
@@ -381,8 +399,9 @@ object DesktopCourseKmlImporter {
         }
         val matchedControlsForLabeledProject = matchedControls(importedControlsForControlMatching, labeledProject.raceData.controls)
         val controls = matchedControlsForLabeledProject.controls
-        val categories = labeledProject.raceData.categories.sortedWith(EventCategorySort.byDisplayName)
-        val courseInfoByCategoryId = labeledProject.raceData.categories.mapNotNull { categoryData ->
+        val categories = activeAndInactiveCourseCategories(labeledProject.raceData)
+            .sortedWith(EventCategorySort.byDisplayName)
+        val courseInfoByCategoryId = categories.mapNotNull { categoryData ->
             categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
                 categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
             }
@@ -677,7 +696,7 @@ object DesktopCourseKmlImporter {
         val staleCourseMappingCategoryIds = locationUpdateResult?.affectedCategoryIds.orEmpty()
             .filterNot { it in importedRouteCategoryIds }
             .distinct()
-        val staleCategoryNamesById = updatedProject.raceData.categories.associate { categoryData ->
+        val staleCategoryNamesById = activeAndInactiveCourseCategories(updatedProject.raceData).associate { categoryData ->
             categoryData.category.id to categoryData.category.name
         }
         val staleCourseMappingCategoryNames = staleCourseMappingCategoryIds.mapNotNull(staleCategoryNamesById::get)
@@ -1126,7 +1145,7 @@ object DesktopCourseKmlImporter {
         onProgress: (DesktopRouteElevationProgress) -> Unit = {}
     ): Pair<EventProjectFile, DesktopRouteElevationResult> {
         val categoryIdSet = categoryIds.toSet()
-        val categories = projectFile.raceData.categories
+        val categories = activeAndInactiveCourseCategories(projectFile.raceData)
             .filter { it.category.id in categoryIdSet }
             .mapNotNull { categoryData ->
                 val encryptedCourseInfo = categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }
@@ -1859,7 +1878,7 @@ object DesktopCourseKmlImporter {
         if (categoryIds.isEmpty()) {
             return projectFile
         }
-        val existingCategoryIds = projectFile.raceData.categories
+        val existingCategoryIds = activeAndInactiveCourseCategories(projectFile.raceData)
             .mapTo(mutableSetOf()) { it.category.id }
         return categoryIds
             .distinct()
@@ -1894,7 +1913,7 @@ object DesktopCourseKmlImporter {
         categoryId: String,
         controls: List<CourseMatchedControl>
     ): DesktopCourseKmlCategoryAssignmentUpdate? {
-        val categoryData = projectFile.raceData.categories
+        val categoryData = activeAndInactiveCourseCategories(projectFile.raceData)
             .firstOrNull { it.category.id == categoryId }
             ?: return null
         val raceType = categoryData.category.effectiveRaceType(projectFile.raceData.race)

@@ -91,8 +91,8 @@ data class EventCategory(
  *
  * KML/KMZ files may live outside the Race File, but their ideal order and route geometry are
  * sensitive before competition day. The desktop app therefore encrypts the detailed route payload
- * in EventCategory.encryptedCourseInfo; public category length/climb fields may still mirror
- * calculated route metrics.
+ * in EventCategory.encryptedCourseInfo or in an inactive EventRaceData.courseMappings entry;
+ * public category length/climb fields may still mirror calculated route metrics.
  */
 @Serializable
 data class ProtectedCourseInfo(
@@ -318,7 +318,8 @@ data class EventRaceData(
     val competitorData: List<EventCompetitorData>,
     val unmatchedReadoutData: List<EventReadoutData>,
     val controls: List<EventControl> = emptyList(),
-    val startDrawSettings: StartDrawSettings? = null
+    val startDrawSettings: StartDrawSettings? = null,
+    val courseMappings: List<EventCategoryData> = emptyList()
 )
 
 /**

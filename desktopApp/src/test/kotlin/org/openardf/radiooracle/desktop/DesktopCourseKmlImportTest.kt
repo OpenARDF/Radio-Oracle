@@ -702,7 +702,7 @@ class DesktopCourseKmlImportTest {
             password = "course-key",
             elevationProvider = { null }
         )
-        val (withCreatedCategories, withCreatedSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+        val (withCreatedMappings, withCreatedSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
             path = kmlPath,
             projectFile = project,
             password = "course-key",
@@ -718,20 +718,18 @@ class DesktopCourseKmlImportTest {
 
         assertEquals(expectedMissingCategoryNames, withCreatedSummary.missingCategoryNames)
         assertEquals(expectedMissingCategoryNames, withCreatedSummary.createdCategoryNames)
-        assertEquals(
-            listOf("M21") + expectedMissingCategoryNames,
-            withCreatedCategories.raceData.categories.map { it.category.name }
-        )
-        assertEquals(true, withCreatedCategories.raceData.categories.single { it.category.name == "M50" }.category.isMan)
-        assertEquals(false, withCreatedCategories.raceData.categories.single { it.category.name == "W35" }.category.isMan)
+        assertEquals(listOf("M21"), withCreatedMappings.raceData.categories.map { it.category.name })
+        assertEquals(expectedMissingCategoryNames, withCreatedMappings.raceData.courseMappings.map { it.category.name })
+        assertEquals(true, withCreatedMappings.raceData.courseMappings.single { it.category.name == "M50" }.category.isMan)
+        assertEquals(false, withCreatedMappings.raceData.courseMappings.single { it.category.name == "W35" }.category.isMan)
         assertEquals(9, withCreatedSummary.importedCategoryCount)
         assertNotNull(
-            withCreatedCategories.raceData.categories
+            withCreatedMappings.raceData.courseMappings
                 .single { it.category.name == "W35" }
                 .category.encryptedCourseInfo
         )
         assertNotNull(
-            withCreatedCategories.raceData.categories
+            withCreatedMappings.raceData.courseMappings
                 .single { it.category.name == "M70" }
                 .category.encryptedCourseInfo
         )
@@ -757,7 +755,8 @@ class DesktopCourseKmlImportTest {
         )
 
         assertEquals(listOf("W35"), summary.createdCategoryNames)
-        assertEquals(listOf("M21", "W35"), updated.raceData.categories.map { it.category.name })
+        assertEquals(listOf("M21"), updated.raceData.categories.map { it.category.name })
+        assertEquals(listOf("W35"), updated.raceData.courseMappings.map { it.category.name })
         assertEquals(2, summary.importedCategoryCount)
         assertNotNull(
             updated.raceData.categories
@@ -765,7 +764,7 @@ class DesktopCourseKmlImportTest {
                 .category.encryptedCourseInfo
         )
         assertNotNull(
-            updated.raceData.categories
+            updated.raceData.courseMappings
                 .single { it.category.name == "W35" }
                 .category.encryptedCourseInfo
         )
@@ -803,16 +802,17 @@ class DesktopCourseKmlImportTest {
 
         assertEquals(expectedMissingCategoryNames, withCreatedSummary.missingCategoryNames)
         assertEquals(expectedMissingCategoryNames, withCreatedSummary.createdCategoryNames)
-        assertEquals(expectedMissingCategoryNames, withCreatedCategories.raceData.categories.map { it.category.name })
+        assertEquals(emptyList<String>(), withCreatedCategories.raceData.categories.map { it.category.name })
+        assertEquals(expectedMissingCategoryNames, withCreatedCategories.raceData.courseMappings.map { it.category.name })
         assertEquals(2, withCreatedSummary.matchedCategoryCount)
         assertEquals(2, withCreatedSummary.importedCategoryCount)
         assertNotNull(
-            withCreatedCategories.raceData.categories
+            withCreatedCategories.raceData.courseMappings
                 .single { it.category.name == "M21" }
                 .category.encryptedCourseInfo
         )
         assertNotNull(
-            withCreatedCategories.raceData.categories
+            withCreatedCategories.raceData.courseMappings
                 .single { it.category.name == "W35" }
                 .category.encryptedCourseInfo
         )
@@ -835,11 +835,12 @@ class DesktopCourseKmlImportTest {
 
         assertEquals(listOf("M21", "W35"), summary.missingCategoryNames)
         assertEquals(listOf("M21"), summary.createdCategoryNames)
-        assertEquals(listOf("M21"), updated.raceData.categories.map { it.category.name })
+        assertEquals(emptyList<String>(), updated.raceData.categories.map { it.category.name })
+        assertEquals(listOf("M21"), updated.raceData.courseMappings.map { it.category.name })
         assertEquals(1, summary.matchedCategoryCount)
         assertEquals(1, summary.importedCategoryCount)
         assertNotNull(
-            updated.raceData.categories
+            updated.raceData.courseMappings
                 .single { it.category.name == "M21" }
                 .category.encryptedCourseInfo
         )
@@ -882,8 +883,12 @@ class DesktopCourseKmlImportTest {
         assertEquals(5, summary.assignedCategoryControlCount)
         assertEquals("161 171 162 137! 136B", summary.categoryAssignmentUpdates.single().controlPointsText)
         assertEquals(
-            listOf("M21"),
+            emptyList<String>(),
             updatedProject.raceData.categories.map { it.category.name }
+        )
+        assertEquals(
+            listOf("M21"),
+            updatedProject.raceData.courseMappings.map { it.category.name }
         )
         assertEquals(
             listOf("M", "S", "1", "2", "F1"),
@@ -894,12 +899,12 @@ class DesktopCourseKmlImportTest {
             updatedProject.raceData.controls.map { it.publicLabel }
         )
         val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
-            requireNotNull(updatedProject.raceData.categories.single().category.encryptedCourseInfo),
+            requireNotNull(updatedProject.raceData.courseMappings.single().category.encryptedCourseInfo),
             "course-key"
         )
         assertEquals(5, protectedCourseInfo.controlPoints.size)
         assertEquals("1 2 S 1F Beacon", protectedCourseInfo.idealOrder)
-        assertNotNull(updatedProject.raceData.categories.single().category.encryptedIdealOrder)
+        assertNotNull(updatedProject.raceData.courseMappings.single().category.encryptedIdealOrder)
     }
 
     @Test

@@ -399,7 +399,10 @@ object EventProjectEditor {
             )
         }
         return projectFile.copy(
-            raceData = projectFile.raceData.copy(categories = categories)
+            raceData = projectFile.raceData.copy(
+                categories = categories,
+                courseMappings = emptyList()
+            )
         )
     }
 
@@ -459,7 +462,7 @@ object EventProjectEditor {
         controlPointsText: String,
         controlPointIdFactory: (Int) -> String
     ): EventProjectFile {
-        val categoryData = projectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
+        val categoryData = projectFile.raceData.categoryOrCourseMapping(categoryId)
             ?: throw IllegalArgumentException("Category was not found: $categoryId")
 
         val matchedControlsByOrder = mutableMapOf<Int, EventControl>()
@@ -545,20 +548,48 @@ object EventProjectEditor {
             }
         )
 
-        val categories = projectFile.raceData.categories.map { data ->
-            if (data.category.id == categoryData.category.id) {
-                data.copy(
-                    category = data.category.copy(controlPointsString = formattedControlPoints),
-                    controlPoints = controlPoints,
-                    publicControlIds = controlPoints.map { it.controlId }
-                )
+        return projectFile.updateCategoryOrCourseMapping(categoryId) { data ->
+            data.copy(
+                category = data.category.copy(controlPointsString = formattedControlPoints),
+                controlPoints = controlPoints,
+                publicControlIds = controlPoints.map { it.controlId }
+            )
+        }
+    }
+
+    private fun EventRaceData.categoryOrCourseMapping(categoryId: String): EventCategoryData? =
+        categories.firstOrNull { it.category.id == categoryId }
+            ?: courseMappings.firstOrNull { it.category.id == categoryId }
+
+    private fun EventProjectFile.updateCategoryOrCourseMapping(
+        categoryId: String,
+        transform: (EventCategoryData) -> EventCategoryData
+    ): EventProjectFile {
+        var foundCategory = false
+        val categories = raceData.categories.map { categoryData ->
+            if (categoryData.category.id == categoryId) {
+                foundCategory = true
+                transform(categoryData)
             } else {
-                data
+                categoryData
             }
         }
-
-        return projectFile.copy(
-            raceData = projectFile.raceData.copy(categories = categories)
+        val courseMappings = raceData.courseMappings.map { categoryData ->
+            if (categoryData.category.id == categoryId) {
+                foundCategory = true
+                transform(categoryData)
+            } else {
+                categoryData
+            }
+        }
+        require(foundCategory) {
+            "Category was not found: $categoryId"
+        }
+        return copy(
+            raceData = raceData.copy(
+                categories = categories,
+                courseMappings = courseMappings
+            )
         )
     }
 
@@ -585,27 +616,14 @@ object EventProjectEditor {
         val length = parseNonNegativeInt(lengthMeters, "Category length")
         val climb = parseNonNegativeInt(climbMeters, "Category climb")
 
-        var foundCategory = false
-        val categories = projectFile.raceData.categories.map { categoryData ->
-            if (categoryData.category.id == categoryId) {
-                foundCategory = true
-                categoryData.copy(
-                    category = categoryData.category.copy(
-                        lengthMeters = length,
-                        climbMeters = climb
-                    )
+        return projectFile.updateCategoryOrCourseMapping(categoryId) { categoryData ->
+            categoryData.copy(
+                category = categoryData.category.copy(
+                    lengthMeters = length,
+                    climbMeters = climb
                 )
-            } else {
-                categoryData
-            }
+            )
         }
-        require(foundCategory) {
-            "Category was not found: $categoryId"
-        }
-
-        return projectFile.copy(
-            raceData = projectFile.raceData.copy(categories = categories)
-        )
     }
 
     /** Returns a copy of the Race File with one category's encrypted protected course order changed. */
@@ -614,26 +632,13 @@ object EventProjectEditor {
         categoryId: String,
         encryptedIdealOrder: String?
     ): EventProjectFile {
-        var foundCategory = false
-        val categories = projectFile.raceData.categories.map { categoryData ->
-            if (categoryData.category.id == categoryId) {
-                foundCategory = true
-                categoryData.copy(
-                    category = categoryData.category.copy(
-                        encryptedIdealOrder = encryptedIdealOrder?.trim()?.takeIf { it.isNotEmpty() }
-                    )
+        return projectFile.updateCategoryOrCourseMapping(categoryId) { categoryData ->
+            categoryData.copy(
+                category = categoryData.category.copy(
+                    encryptedIdealOrder = encryptedIdealOrder?.trim()?.takeIf { it.isNotEmpty() }
                 )
-            } else {
-                categoryData
-            }
+            )
         }
-        require(foundCategory) {
-            "Category was not found: $categoryId"
-        }
-
-        return projectFile.copy(
-            raceData = projectFile.raceData.copy(categories = categories)
-        )
     }
 
     /** Returns a copy of the Race File with one category's encrypted protected course data changed. */
@@ -642,26 +647,13 @@ object EventProjectEditor {
         categoryId: String,
         encryptedCourseInfo: String?
     ): EventProjectFile {
-        var foundCategory = false
-        val categories = projectFile.raceData.categories.map { categoryData ->
-            if (categoryData.category.id == categoryId) {
-                foundCategory = true
-                categoryData.copy(
-                    category = categoryData.category.copy(
-                        encryptedCourseInfo = encryptedCourseInfo?.trim()?.takeIf { it.isNotEmpty() }
-                    )
+        return projectFile.updateCategoryOrCourseMapping(categoryId) { categoryData ->
+            categoryData.copy(
+                category = categoryData.category.copy(
+                    encryptedCourseInfo = encryptedCourseInfo?.trim()?.takeIf { it.isNotEmpty() }
                 )
-            } else {
-                categoryData
-            }
+            )
         }
-        require(foundCategory) {
-            "Category was not found: $categoryId"
-        }
-
-        return projectFile.copy(
-            raceData = projectFile.raceData.copy(categories = categories)
-        )
     }
 
     /** Returns a copy of the Race File with one global logical control changed. */
@@ -696,10 +688,14 @@ object EventProjectEditor {
         val categories = projectFile.raceData.categories.map { categoryData ->
             categoryData.withUpdatedControlDefinition(updatedControl)
         }
+        val courseMappings = projectFile.raceData.courseMappings.map { categoryData ->
+            categoryData.withUpdatedControlDefinition(updatedControl)
+        }
         return projectFile.copy(
             raceData = projectFile.raceData.copy(
                 controls = controls,
-                categories = categories
+                categories = categories,
+                courseMappings = courseMappings
             )
         )
     }
@@ -814,7 +810,7 @@ object EventProjectEditor {
         require(projectFile.raceData.controls.any { it.id == controlId }) {
             "Control was not found: $controlId"
         }
-        val categories = projectFile.raceData.categories.map { categoryData ->
+        fun clearControlFromCategoryData(categoryData: EventCategoryData): EventCategoryData {
             val remainingControlPoints = categoryData.controlPoints
                 .filterNot { it.controlId == controlId }
                 .mapIndexed { index, controlPoint -> controlPoint.copy(order = index + 1) }
@@ -822,14 +818,14 @@ object EventProjectEditor {
             val changed = remainingControlPoints.size != categoryData.controlPoints.size ||
                 remainingPublicControlIds.size != categoryData.publicControlIds.size
             if (!changed) {
-                categoryData
+                return categoryData
             } else {
                 val remainingControlPointsString = ControlPointRules.formatControlPoints(
                     remainingControlPoints.map {
                         ControlPointDefinition(it.siCode, it.type, it.order)
                     }
                 )
-                categoryData.copy(
+                return categoryData.copy(
                     category = categoryData.category.copy(
                         lengthMeters = 0,
                         climbMeters = 0,
@@ -846,10 +842,13 @@ object EventProjectEditor {
                 )
             }
         }
+        val categories = projectFile.raceData.categories.map(::clearControlFromCategoryData)
+        val courseMappings = projectFile.raceData.courseMappings.map(::clearControlFromCategoryData)
         return projectFile.copy(
             raceData = projectFile.raceData.copy(
                 controls = projectFile.raceData.controls.filterNot { it.id == controlId },
-                categories = categories
+                categories = categories,
+                courseMappings = courseMappings
             )
         )
     }
@@ -1639,6 +1638,7 @@ object EventProjectEditor {
         createMissingCategories: Boolean = true
     ): CompetitorCsvImportOutcome {
         var categories = projectFile.raceData.categories
+        var courseMappings = projectFile.raceData.courseMappings
         val competitors = projectFile.raceData.competitorData.toMutableList()
         val warnings = mutableListOf<String>()
         var nextCategoryOrder = (categories.maxOfOrNull { it.category.order } ?: -1) + 1
@@ -1686,10 +1686,15 @@ object EventProjectEditor {
                     }
                     reconciledCategory
                 } else if (createMissingCategories) {
-                    val courseTemplate = row.courseName
-                        .takeIf { it.isNotBlank() && !StandardCategoryRules.categoryNamesEquivalent(it, categoryName) }
-                        ?.let { courseName -> categories.findCategoryDataByImportName(courseName) }
+                    val courseTemplate = courseMappings.findCategoryDataByImportName(categoryName)
                         ?.takeIf { it.hasCourseData() }
+                        ?: row.courseName
+                            .takeIf { it.isNotBlank() && !StandardCategoryRules.categoryNamesEquivalent(it, categoryName) }
+                            ?.let { courseName ->
+                                categories.findCategoryDataByImportName(courseName)
+                                    ?: courseMappings.findCategoryDataByImportName(courseName)
+                            }
+                            ?.takeIf { it.hasCourseData() }
                     val newCategoryId = categoryIdFactory()
                     val newCategory = (courseTemplate?.category ?: EventCategory(
                         id = newCategoryId,
@@ -1742,6 +1747,9 @@ object EventProjectEditor {
                             competitors = emptyList(),
                             publicControlIds = courseTemplate?.publicControlIds.orEmpty()
                         )
+                        courseMappings = courseMappings.filterNot { mapping ->
+                            StandardCategoryRules.categoryNamesEquivalent(mapping.category.name, category.name)
+                        }
                     }
                 } else {
                     warnings += "Line ${rowIndex + 1}: category '$categoryName' does not exist; competitor ${row.lastName} ${row.firstName} was imported without a category."
@@ -1867,6 +1875,7 @@ object EventProjectEditor {
                 return importOutcome(
                     projectFile = projectFile,
                     categories = categories,
+                    courseMappings = courseMappings,
                     competitors = competitors,
                     unmatchedReadouts = projectFile.raceData.unmatchedReadoutData + unmatchedReadouts,
                     importedCount = importedCount,
@@ -1881,6 +1890,7 @@ object EventProjectEditor {
         return importOutcome(
             projectFile = projectFile,
             categories = categories,
+            courseMappings = courseMappings,
             competitors = competitors,
             unmatchedReadouts = projectFile.raceData.unmatchedReadoutData,
             importedCount = importedCount,
@@ -1926,6 +1936,7 @@ object EventProjectEditor {
     private fun importOutcome(
         projectFile: EventProjectFile,
         categories: List<EventCategoryData>,
+        courseMappings: List<EventCategoryData>,
         competitors: List<EventCompetitorData>,
         unmatchedReadouts: List<EventReadoutData>,
         importedCount: Int,
@@ -1936,6 +1947,7 @@ object EventProjectEditor {
     ): CompetitorCsvImportOutcome {
         val raceData = projectFile.raceData.copy(
             categories = categories,
+            courseMappings = courseMappings,
             competitorData = competitors,
             unmatchedReadoutData = unmatchedReadouts
         )

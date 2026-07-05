@@ -154,7 +154,7 @@ object EventProjectFileJson {
 /** Schema metadata for portable Radio-Oracle Race Files. */
 object EventProjectFileFormat {
     const val APP_NAME = "Radio-Oracle"
-    const val CURRENT_SCHEMA_VERSION = 3
+    const val CURRENT_SCHEMA_VERSION = 4
 
     /** Returns true when the supplied schema version is within the supported range. */
     fun isSupportedSchema(schemaVersion: Int): Boolean =

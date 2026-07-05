@@ -15338,25 +15338,16 @@ private fun CompetitorDetailsPanel(
             adapter = rememberScrollbarAdapter(horizontalScrollState),
             modifier = Modifier.fillMaxWidth()
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
-            verticalAlignment = Alignment.Top
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                orderedCompetitors.forEach { competitor ->
-                    key(competitor.id) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            orderedCompetitors.forEach { competitor ->
+                key(competitor.id) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+                        verticalAlignment = Alignment.Top
+                    ) {
                         CompetitorDeleteButton(competitor, onRemoveCompetitor)
-                    }
-                }
-            }
-            Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
-                Column(
-                    modifier = Modifier.width(tableWidth),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    orderedCompetitors.forEach { competitor ->
-                        key(competitor.id) {
+                        Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
                             CompetitorDetailRow(
                                 competitor = competitor,
                                 categories = categories,
@@ -15665,7 +15656,7 @@ private fun CompetitorDetailRow(
                     onAssignCompetitorCategory(competitor.id, it)
                 },
                 modifier = Modifier.width(CompetitorTableColumns[6].width),
-                textColor = rowTextColor
+                textColor = if (competitor.warningReasons.isEmpty()) Color.White else DesktopPalette.Error
             )
         }
         ControlWarningTooltip(warningText) {
@@ -15762,7 +15753,7 @@ private fun CategoryPicker(
     categories: List<EventCategoryDetails>,
     onCategorySelected: (String?) -> Unit,
     modifier: Modifier = Modifier,
-    textColor: Color = DesktopPalette.Black
+    textColor: Color = Color.White
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selectedCategoryName = categories.firstOrNull { it.id == selectedCategoryId }?.name ?: "Unassigned"
