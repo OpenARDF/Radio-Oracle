@@ -4636,13 +4636,26 @@ fun main(args: Array<String>) = application {
                 }
                 result.onSuccess { importResult ->
                     val totalCompetitors = importResult.generatedFiles.sumOf { it.competitorCount }
+                    val openFolderStatus = runCatching {
+                        openDirectoryInFileBrowser(importResult.outputDirectory)
+                    }
+                    val folderStatusText = openFolderStatus.fold(
+                        onSuccess = { " Opened folder." },
+                        onFailure = { error -> " Could not open folder: ${error.message ?: error::class.simpleName}" }
+                    )
                     projectStatusText =
-                        "Generated ${importResult.generatedFiles.size} Race Files with $totalCompetitors competitor entries in ${importResult.outputDirectory}."
+                        "Generated ${importResult.generatedFiles.size} Race Files with $totalCompetitors competitor entries in ${importResult.outputDirectory}.$folderStatusText"
                     isGoogleSheetImportDialogVisible = false
                     DesktopDebugLog.info(
                         "GoogleSheet",
                         "Generated ${importResult.generatedFiles.size} Race Files from ${importResult.sourceUrl}"
                     )
+                    openFolderStatus.exceptionOrNull()?.let { error ->
+                        DesktopDebugLog.warn(
+                            "GoogleSheet",
+                            "Could not open Race File output folder ${importResult.outputDirectory}: ${error.message ?: error::class.simpleName}"
+                        )
+                    }
                 }.onFailure { error ->
                     projectStatusText = "Google Sheet import failed: ${error.message ?: error::class.simpleName}"
                     DesktopDebugLog.error("GoogleSheet", projectStatusText)
@@ -16203,6 +16216,19 @@ private fun revealFileInFileBrowser(path: Path) {
         error("Opening folders is not supported on this system.")
     }
     desktop.open(directory.toFile())
+}
+
+private fun openDirectoryInFileBrowser(directory: Path) {
+    val normalized = directory.toAbsolutePath().normalize()
+    Files.createDirectories(normalized)
+    if (!Desktop.isDesktopSupported()) {
+        error("Opening folders is not supported on this system.")
+    }
+    val desktop = Desktop.getDesktop()
+    if (!desktop.isSupported(Desktop.Action.OPEN)) {
+        error("Opening folders is not supported on this system.")
+    }
+    desktop.open(normalized.toFile())
 }
 
 @Composable
