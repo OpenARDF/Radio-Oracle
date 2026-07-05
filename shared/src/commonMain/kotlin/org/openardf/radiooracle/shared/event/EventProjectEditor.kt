@@ -933,15 +933,32 @@ object EventProjectEditor {
         competitorId: String,
         club: String,
         personId: String
-    ): EventProjectFile =
-        updateCompetitorClubBibCallSign(
-            projectFile = projectFile,
-            competitorId = competitorId,
-            club = club,
-            bibNumber = "",
-            callSign = "",
-            personId = personId
+    ): EventProjectFile {
+        var foundCompetitor = false
+        val competitorData = projectFile.raceData.competitorData.map { data ->
+            val competitorCategory = data.competitorCategory
+            val competitor = competitorCategory.competitor
+            if (competitor.id == competitorId) {
+                foundCompetitor = true
+                data.copy(
+                    competitorCategory = competitorCategory.copy(
+                        competitor = competitor.copy(
+                            club = club.trim(),
+                            index = personId.trim()
+                        )
+                    )
+                )
+            } else {
+                data
+            }
+        }
+        require(foundCompetitor) {
+            "Competitor was not found: $competitorId"
+        }
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(competitorData = competitorData)
         )
+    }
 
     @Deprecated("Use updateCompetitorClubPersonId.")
     fun updateCompetitorClubIndex(
@@ -962,7 +979,7 @@ object EventProjectEditor {
         personId: String? = null
     ): EventProjectFile {
         val trimmedBibNumber = bibNumber.trim()
-        val trimmedCallSign = callSign.trim()
+        val trimmedCallSign = normalizedCompetitorCallSign(callSign)
         require(
             trimmedBibNumber.isBlank() || projectFile.raceData.competitorData.none { data ->
                 val competitor = data.competitorCategory.competitor
@@ -972,7 +989,7 @@ object EventProjectEditor {
             "Bib number must be unique."
         }
         require(
-            trimmedCallSign.isBlank() || projectFile.raceData.competitorData.none { data ->
+            !trimmedCallSign.isUniqueCompetitorCallSign() || projectFile.raceData.competitorData.none { data ->
                 val competitor = data.competitorCategory.competitor
                 competitor.id != competitorId && competitor.callSign.equals(trimmedCallSign, ignoreCase = true)
             }
@@ -1732,10 +1749,11 @@ object EventProjectEditor {
             ) {
                 "Bib number must be unique."
             }
+            val normalizedRowCallSign = normalizedCompetitorCallSign(row.callSign)
             require(
-                row.callSign.isBlank() || competitors.noneIndexed { index, data ->
+                !normalizedRowCallSign.isUniqueCompetitorCallSign() || competitors.noneIndexed { index, data ->
                     index != existingPosition &&
-                        data.competitorCategory.competitor.callSign.equals(row.callSign, ignoreCase = true)
+                        data.competitorCategory.competitor.callSign.equals(normalizedRowCallSign, ignoreCase = true)
                 }
             ) {
                 "Call sign must be unique."
@@ -1751,14 +1769,18 @@ object EventProjectEditor {
                     club = row.club,
                     index = row.personId,
                     bibNumber = row.bibNumber,
-                    callSign = row.callSign,
+                    callSign = normalizedCompetitorCallSign(row.callSign),
                     isMan = row.isMan,
                     birthYear = row.birthYear,
                     siNumber = row.siNumber ?: existingCompetitor.siNumber,
                     siRent = row.siRent,
                     drawnStartTimeSeconds = row.startTimeText?.let(DurationFormatter::minuteStringToSeconds)
                         ?: existingCompetitor.drawnStartTimeSeconds,
-                    preferredStartGroup = row.preferredStartGroup ?: existingCompetitor.preferredStartGroup
+                    preferredStartGroup = row.preferredStartGroup ?: existingCompetitor.preferredStartGroup,
+                    email = row.email,
+                    cellPhone = row.cellPhone,
+                    usaChampEligible = row.usaChampEligible,
+                    region2ChampEligible = row.region2ChampEligible
                 )
                 competitors[existingPosition] = existingData.copy(
                     competitorCategory = existingData.competitorCategory.copy(
@@ -1779,13 +1801,17 @@ object EventProjectEditor {
                 club = row.club,
                 index = row.personId,
                 bibNumber = row.bibNumber,
-                callSign = row.callSign,
+                callSign = normalizedCompetitorCallSign(row.callSign),
                 isMan = row.isMan,
                 birthYear = row.birthYear,
                 siNumber = row.siNumber,
                 siRent = row.siRent,
                 drawnStartTimeSeconds = row.startTimeText?.let(DurationFormatter::minuteStringToSeconds),
-                preferredStartGroup = row.preferredStartGroup
+                preferredStartGroup = row.preferredStartGroup,
+                email = row.email,
+                cellPhone = row.cellPhone,
+                usaChampEligible = row.usaChampEligible,
+                region2ChampEligible = row.region2ChampEligible
             )
             competitors += EventCompetitorData(
                 competitorCategory = EventCompetitorCategory(
@@ -3271,7 +3297,7 @@ object EventProjectEditor {
                 drawnStartTimeSeconds = null,
                 preferredStartGroup = null,
                 bibNumber = "",
-                callSign = ""
+                callSign = normalizedCompetitorCallSign("")
             )
             copy(
                 raceData = raceData.copy(
@@ -4397,12 +4423,18 @@ object EventProjectEditor {
     private fun CompetitorStartCsvImportRow.historyKey(): String? =
         siNumber?.takeIf { it > 0 }?.let { "si:$it" }
             ?: bibNumber.trim().takeIf { it.isNotEmpty() }?.let { "bib:$it" }
-            ?: callSign.trim().uppercase().takeIf { it.isNotEmpty() }?.let { "call:$it" }
+            ?: callSign.trim().uppercase().takeIf { it.isUniqueCompetitorCallSign() }?.let { "call:$it" }
 
     private fun EventCompetitor.historyKey(): String? =
         siNumber?.takeIf { it > 0 }?.let { "si:$it" }
             ?: bibNumber.trim().takeIf { it.isNotEmpty() }?.let { "bib:$it" }
-            ?: callSign.trim().uppercase().takeIf { it.isNotEmpty() }?.let { "call:$it" }
+            ?: callSign.trim().uppercase().takeIf { it.isUniqueCompetitorCallSign() }?.let { "call:$it" }
+
+    private fun String.isUniqueCompetitorCallSign(): Boolean =
+        isNotEmpty() && !equals("SWL", ignoreCase = true)
+
+    private fun normalizedCompetitorCallSign(callSign: String): String =
+        callSign.trim().ifBlank { "SWL" }
 
     private fun seededRank(seed: String, value: String): Long {
         // FNV-1a followed by MurmurHash3-style finalization. Kotlin/Native/JVM

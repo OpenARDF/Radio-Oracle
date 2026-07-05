@@ -4664,6 +4664,7 @@ fun main(args: Array<String>) = application {
                         plan = plan,
                         documentation = documentation
                     )
+                    isCompetitorSpreadsheetImportDialogVisible = false
                     projectStatusText = "Review spreadsheet competitor import before applying it."
                 }.onFailure { error ->
                     projectStatusText = "Spreadsheet competitor import failed: ${error.message ?: error::class.simpleName}"
@@ -5704,31 +5705,6 @@ fun main(args: Array<String>) = application {
                         }
                     }
                 )
-            } else {
-                SpreadsheetCompetitorImportReviewDialog(
-                    review = spreadsheetReview,
-                    onSelectionChange = { competitionName, selected ->
-                        pendingSpreadsheetCompetitorImportReview = spreadsheetReview.withSelection(competitionName, selected)
-                    },
-                    onRowActionSelectionChange = { mapping, action, selected ->
-                        pendingSpreadsheetCompetitorImportReview = spreadsheetReview.withRowActionSelection(mapping, action, selected)
-                    },
-                    onRemovalActionSelectionChange = { mapping, action, selected ->
-                        pendingSpreadsheetCompetitorImportReview = spreadsheetReview.withRemovalActionSelection(mapping, action, selected)
-                    },
-                    onEmptyCategorySelectionChange = { mapping, categoryName, selected ->
-                        pendingSpreadsheetCompetitorImportReview = spreadsheetReview.withEmptyCategoryRemoval(mapping, categoryName, selected)
-                    },
-                    onEmptyCourseCategorySelectionChange = { mapping, categoryName, selected ->
-                        pendingSpreadsheetCompetitorImportReview = spreadsheetReview.withEmptyCourseCategoryRemoval(mapping, categoryName, selected)
-                    },
-                    onImport = { applySpreadsheetCompetitorImport(spreadsheetReview) },
-                    onCancel = {
-                        pendingSpreadsheetCompetitorImportReview = null
-                        isCompetitorSpreadsheetImportDialogVisible = false
-                        projectStatusText = "Spreadsheet competitor import canceled. No changes applied."
-                    }
-                )
             }
         }
         if (isEventRegCompetitorCsvImportDialogVisible) {
@@ -6014,31 +5990,6 @@ fun main(args: Array<String>) = application {
                 }
             )
         }
-        pendingSpreadsheetCompetitorImportReview?.takeUnless { isCompetitorSpreadsheetImportDialogVisible }?.let { review ->
-            SpreadsheetCompetitorImportReviewDialog(
-                review = review,
-                onSelectionChange = { competitionName, selected ->
-                    pendingSpreadsheetCompetitorImportReview = review.withSelection(competitionName, selected)
-                },
-                onRowActionSelectionChange = { mapping, action, selected ->
-                    pendingSpreadsheetCompetitorImportReview = review.withRowActionSelection(mapping, action, selected)
-                },
-                onRemovalActionSelectionChange = { mapping, action, selected ->
-                    pendingSpreadsheetCompetitorImportReview = review.withRemovalActionSelection(mapping, action, selected)
-                },
-                onEmptyCategorySelectionChange = { mapping, categoryName, selected ->
-                    pendingSpreadsheetCompetitorImportReview = review.withEmptyCategoryRemoval(mapping, categoryName, selected)
-                },
-                onEmptyCourseCategorySelectionChange = { mapping, categoryName, selected ->
-                    pendingSpreadsheetCompetitorImportReview = review.withEmptyCourseCategoryRemoval(mapping, categoryName, selected)
-                },
-                onImport = { applySpreadsheetCompetitorImport(review) },
-                onCancel = {
-                    pendingSpreadsheetCompetitorImportReview = null
-                    projectStatusText = "Spreadsheet competitor import canceled. No changes applied."
-                }
-            )
-        }
         pendingReadoutEdit?.let { draft ->
             ReadoutEditDialog(
                 draft = draft,
@@ -6146,6 +6097,34 @@ fun main(args: Array<String>) = application {
             recentImportReport = recentImportReport,
             recentImportCheckpoint = recentImportCheckpoint,
             recentActivityLog = recentActivityLog,
+            competitorImportReview = pendingSpreadsheetCompetitorImportReview,
+            onCompetitorImportReviewSelectionChange = { competitionName, selected ->
+                pendingSpreadsheetCompetitorImportReview =
+                    pendingSpreadsheetCompetitorImportReview?.withSelection(competitionName, selected)
+            },
+            onCompetitorImportReviewRowActionSelectionChange = { mapping, action, selected ->
+                pendingSpreadsheetCompetitorImportReview =
+                    pendingSpreadsheetCompetitorImportReview?.withRowActionSelection(mapping, action, selected)
+            },
+            onCompetitorImportReviewRemovalActionSelectionChange = { mapping, action, selected ->
+                pendingSpreadsheetCompetitorImportReview =
+                    pendingSpreadsheetCompetitorImportReview?.withRemovalActionSelection(mapping, action, selected)
+            },
+            onCompetitorImportReviewEmptyCategorySelectionChange = { mapping, categoryName, selected ->
+                pendingSpreadsheetCompetitorImportReview =
+                    pendingSpreadsheetCompetitorImportReview?.withEmptyCategoryRemoval(mapping, categoryName, selected)
+            },
+            onCompetitorImportReviewEmptyCourseCategorySelectionChange = { mapping, categoryName, selected ->
+                pendingSpreadsheetCompetitorImportReview =
+                    pendingSpreadsheetCompetitorImportReview?.withEmptyCourseCategoryRemoval(mapping, categoryName, selected)
+            },
+            onApplyCompetitorImportReview = {
+                pendingSpreadsheetCompetitorImportReview?.let { applySpreadsheetCompetitorImport(it) }
+            },
+            onCancelCompetitorImportReview = {
+                pendingSpreadsheetCompetitorImportReview = null
+                projectStatusText = "Spreadsheet competitor import canceled. No changes applied."
+            },
             onResolveCachedCourseAnalysisElevations = ::resolveCachedCourseAnalysisElevations,
             onDownloadMissingCourseAnalysisElevations = ::downloadMissingCourseAnalysisElevations,
             onDownloadVenueElevationCache = ::startVenueElevationCacheDownload,
@@ -8500,6 +8479,42 @@ private fun SpreadsheetCompetitorImportReviewDialog(
     onImport: () -> Unit,
     onCancel: () -> Unit
 ) {
+    Dialog(onDismissRequest = onCancel) {
+        Surface(
+            modifier = Modifier
+                .width(980.dp)
+                .heightIn(max = 760.dp),
+            color = MaterialTheme.colors.surface
+        ) {
+            SpreadsheetCompetitorImportReviewPanel(
+                review = review,
+                onSelectionChange = onSelectionChange,
+                onRowActionSelectionChange = onRowActionSelectionChange,
+                onRemovalActionSelectionChange = onRemovalActionSelectionChange,
+                onEmptyCategorySelectionChange = onEmptyCategorySelectionChange,
+                onEmptyCourseCategorySelectionChange = onEmptyCourseCategorySelectionChange,
+                onImport = onImport,
+                onCancel = onCancel,
+                modifier = Modifier.padding(18.dp),
+                scrollWeight = true
+            )
+        }
+    }
+}
+
+@Composable
+private fun SpreadsheetCompetitorImportReviewPanel(
+    review: PendingSpreadsheetCompetitorImportReview,
+    onSelectionChange: (String, Boolean) -> Unit,
+    onRowActionSelectionChange: (DesktopSpreadsheetCompetitorImportMapping, DesktopSpreadsheetCompetitorImportAction, Boolean) -> Unit,
+    onRemovalActionSelectionChange: (DesktopSpreadsheetCompetitorImportMapping, DesktopSpreadsheetCompetitorImportAction, Boolean) -> Unit,
+    onEmptyCategorySelectionChange: (DesktopSpreadsheetCompetitorImportMapping, String, Boolean) -> Unit,
+    onEmptyCourseCategorySelectionChange: (DesktopSpreadsheetCompetitorImportMapping, String, Boolean) -> Unit,
+    onImport: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+    scrollWeight: Boolean = false
+) {
     val selectedMappings = review.selectedMappings()
     val duplicateTargets = selectedMappings
         .mapNotNull { mapping -> mapping.target?.targetId?.let { it to mapping.target.displayName } }
@@ -8509,79 +8524,73 @@ private fun SpreadsheetCompetitorImportReviewDialog(
         .map { it.first().second }
         .distinct()
     val canApply = selectedMappings.isNotEmpty() && duplicateTargets.isEmpty()
-    Dialog(onDismissRequest = onCancel) {
-        Surface(
-            modifier = Modifier
-                .width(980.dp)
-                .heightIn(max = 760.dp),
-            color = MaterialTheme.colors.surface
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Review Competitor Import", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+            Text("Source: ${review.plan.eventName}", fontSize = 13.sp, color = Color.DarkGray)
+            Text(
+                "${selectedMappings.size} of ${review.plan.mappings.size} competitions selected. " +
+                    "The registration source is treated as the source of truth for each mapped Race File.",
+                fontSize = 13.sp,
+                color = Color.DarkGray
+            )
+            review.documentation?.let { documentation ->
+                Text(
+                    "Documentation CSV files: ${documentation.files.size} in ${documentation.outputDirectory}.",
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+            }
+        }
+        if (duplicateTargets.isNotEmpty()) {
+            Text(
+                "Select only one registration competition for each Race File: ${duplicateTargets.joinToString()}.",
+                fontSize = 13.sp,
+                color = Color(0xFF9A3412)
+            )
+        }
+        val reviewListModifier = if (scrollWeight) {
+            Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState())
+        } else {
+            Modifier.fillMaxWidth()
+        }
+        Column(
+            modifier = reviewListModifier,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Review Competitor Import", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-                    Text("Source: ${review.plan.eventName}", fontSize = 13.sp, color = Color.DarkGray)
-                    Text(
-                        "${selectedMappings.size} of ${review.plan.mappings.size} competitions selected. " +
-                            "The registration source is treated as the source of truth for each mapped Race File.",
-                        fontSize = 13.sp,
-                        color = Color.DarkGray
-                    )
-                    review.documentation?.let { documentation ->
-                        Text(
-                            "Documentation CSV files: ${documentation.files.size} in ${documentation.outputDirectory}.",
-                            fontSize = 13.sp,
-                            color = Color.DarkGray
-                        )
-                    }
-                }
-                if (duplicateTargets.isNotEmpty()) {
-                    Text(
-                        "Select only one registration competition for each Race File: ${duplicateTargets.joinToString()}.",
-                        fontSize = 13.sp,
-                        color = Color(0xFF9A3412)
-                    )
-                }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    review.plan.mappings.forEach { mapping ->
-                        SpreadsheetCompetitorImportMappingReview(
-                            review = review,
-                            mapping = mapping,
-                            selected = review.isSelected(mapping),
-                            onSelectedChange = { selected ->
-                                onSelectionChange(mapping.competitionName, selected)
-                            },
-                            onRowActionSelectionChange = onRowActionSelectionChange,
-                            onRemovalActionSelectionChange = onRemovalActionSelectionChange,
-                            onEmptyCategorySelectionChange = onEmptyCategorySelectionChange,
-                            onEmptyCourseCategorySelectionChange = onEmptyCourseCategorySelectionChange
-                        )
-                    }
-                }
-                Divider()
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Button(onClick = onCancel) {
-                        Text("Cancel")
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Button(onClick = onImport, enabled = canApply) {
-                        Text("Apply Import")
-                    }
-                }
+            review.plan.mappings.forEach { mapping ->
+                SpreadsheetCompetitorImportMappingReview(
+                    review = review,
+                    mapping = mapping,
+                    selected = review.isSelected(mapping),
+                    onSelectedChange = { selected ->
+                        onSelectionChange(mapping.competitionName, selected)
+                    },
+                    onRowActionSelectionChange = onRowActionSelectionChange,
+                    onRemovalActionSelectionChange = onRemovalActionSelectionChange,
+                    onEmptyCategorySelectionChange = onEmptyCategorySelectionChange,
+                    onEmptyCourseCategorySelectionChange = onEmptyCourseCategorySelectionChange
+                )
+            }
+        }
+        Divider()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(onClick = onCancel) {
+                Text("Cancel")
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = onImport, enabled = canApply) {
+                Text("Apply Import")
             }
         }
     }
@@ -8767,8 +8776,9 @@ private fun DesktopSpreadsheetCompetitorImportAction.reviewLabel(): String {
     val details = buildList {
         if (categoryName.isNotBlank()) add(categoryName)
         if (club.isNotBlank()) add(club)
+        if (bibNumber.isNotBlank()) add("Bib $bibNumber")
+        if (callSign.isNotBlank()) add("Call $callSign")
         siNumber?.let { add("SI $it") }
-        if (personId.isNotBlank()) add("ID $personId")
     }
     return if (details.isEmpty()) {
         name
@@ -9940,6 +9950,14 @@ private fun RadioOManagerDesktopApp(
     recentImportReport: DesktopImportReport? = null,
     recentImportCheckpoint: DesktopImportCheckpoint? = null,
     recentActivityLog: List<String> = emptyList(),
+    competitorImportReview: PendingSpreadsheetCompetitorImportReview? = null,
+    onCompetitorImportReviewSelectionChange: (String, Boolean) -> Unit = { _, _ -> },
+    onCompetitorImportReviewRowActionSelectionChange: (DesktopSpreadsheetCompetitorImportMapping, DesktopSpreadsheetCompetitorImportAction, Boolean) -> Unit = { _, _, _ -> },
+    onCompetitorImportReviewRemovalActionSelectionChange: (DesktopSpreadsheetCompetitorImportMapping, DesktopSpreadsheetCompetitorImportAction, Boolean) -> Unit = { _, _, _ -> },
+    onCompetitorImportReviewEmptyCategorySelectionChange: (DesktopSpreadsheetCompetitorImportMapping, String, Boolean) -> Unit = { _, _, _ -> },
+    onCompetitorImportReviewEmptyCourseCategorySelectionChange: (DesktopSpreadsheetCompetitorImportMapping, String, Boolean) -> Unit = { _, _, _ -> },
+    onApplyCompetitorImportReview: () -> Unit = {},
+    onCancelCompetitorImportReview: () -> Unit = {},
     onResolveCachedCourseAnalysisElevations: suspend (String) -> CourseAnalysisElevationPreparationResult? = { null },
     onDownloadMissingCourseAnalysisElevations: suspend (String, DesktopCourseAnalysisSummary) -> CourseAnalysisElevationPreparationResult? = { _, _ -> null },
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox?, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit = { _, _, _, _, _, _ -> },
@@ -10296,6 +10314,14 @@ private fun RadioOManagerDesktopApp(
                                     recentImportReport = recentImportReport,
                                     recentImportCheckpoint = recentImportCheckpoint,
                                     recentActivityLog = recentActivityLog,
+                                    competitorImportReview = competitorImportReview,
+                                    onCompetitorImportReviewSelectionChange = onCompetitorImportReviewSelectionChange,
+                                    onCompetitorImportReviewRowActionSelectionChange = onCompetitorImportReviewRowActionSelectionChange,
+                                    onCompetitorImportReviewRemovalActionSelectionChange = onCompetitorImportReviewRemovalActionSelectionChange,
+                                    onCompetitorImportReviewEmptyCategorySelectionChange = onCompetitorImportReviewEmptyCategorySelectionChange,
+                                    onCompetitorImportReviewEmptyCourseCategorySelectionChange = onCompetitorImportReviewEmptyCourseCategorySelectionChange,
+                                    onApplyCompetitorImportReview = onApplyCompetitorImportReview,
+                                    onCancelCompetitorImportReview = onCancelCompetitorImportReview,
                                     onRecalculateResults = onRecalculateResults,
                                     onResolveCachedCourseAnalysisElevations = onResolveCachedCourseAnalysisElevations,
                                     onDownloadMissingCourseAnalysisElevations = onDownloadMissingCourseAnalysisElevations,
@@ -11365,6 +11391,14 @@ private fun SectionWorkspace(
     recentImportReport: DesktopImportReport?,
     recentImportCheckpoint: DesktopImportCheckpoint?,
     recentActivityLog: List<String>,
+    competitorImportReview: PendingSpreadsheetCompetitorImportReview?,
+    onCompetitorImportReviewSelectionChange: (String, Boolean) -> Unit,
+    onCompetitorImportReviewRowActionSelectionChange: (DesktopSpreadsheetCompetitorImportMapping, DesktopSpreadsheetCompetitorImportAction, Boolean) -> Unit,
+    onCompetitorImportReviewRemovalActionSelectionChange: (DesktopSpreadsheetCompetitorImportMapping, DesktopSpreadsheetCompetitorImportAction, Boolean) -> Unit,
+    onCompetitorImportReviewEmptyCategorySelectionChange: (DesktopSpreadsheetCompetitorImportMapping, String, Boolean) -> Unit,
+    onCompetitorImportReviewEmptyCourseCategorySelectionChange: (DesktopSpreadsheetCompetitorImportMapping, String, Boolean) -> Unit,
+    onApplyCompetitorImportReview: () -> Unit,
+    onCancelCompetitorImportReview: () -> Unit,
     onResolveCachedCourseAnalysisElevations: suspend (String) -> CourseAnalysisElevationPreparationResult?,
     onDownloadMissingCourseAnalysisElevations: suspend (String, DesktopCourseAnalysisSummary) -> CourseAnalysisElevationPreparationResult?,
     onDownloadVenueElevationCache: (String, DesktopVenueElevationBoundingBox?, Double, Double, DesktopVenueElevationCacheSource, String) -> Unit,
@@ -11469,6 +11503,29 @@ private fun SectionWorkspace(
                 onUpdateIdealOrder = onUpdateProtectedIdealOrder,
                 onUpdateControlLocation = onUpdateProtectedControlLocation
             )
+        }
+        if (
+            competitorImportReview != null &&
+            (section == DesktopSection.Competitors || section == DesktopSection.CompetitorsImportExport)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, Color(0xFFE0E0E0)),
+                color = MaterialTheme.colors.surface
+            ) {
+                SpreadsheetCompetitorImportReviewPanel(
+                    review = competitorImportReview,
+                    onSelectionChange = onCompetitorImportReviewSelectionChange,
+                    onRowActionSelectionChange = onCompetitorImportReviewRowActionSelectionChange,
+                    onRemovalActionSelectionChange = onCompetitorImportReviewRemovalActionSelectionChange,
+                    onEmptyCategorySelectionChange = onCompetitorImportReviewEmptyCategorySelectionChange,
+                    onEmptyCourseCategorySelectionChange = onCompetitorImportReviewEmptyCourseCategorySelectionChange,
+                    onImport = onApplyCompetitorImportReview,
+                    onCancel = onCancelCompetitorImportReview,
+                    modifier = Modifier.padding(14.dp)
+                )
+            }
         }
         if (section == DesktopSection.Competitors && projectFile != null) {
             CompetitorDetailsPanel(

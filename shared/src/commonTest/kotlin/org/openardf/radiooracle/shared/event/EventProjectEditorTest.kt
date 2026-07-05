@@ -887,6 +887,36 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun storesBlankCompetitorCallSignsAsSwlAndAllowsMultipleSwlCompetitors() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner"),
+                competitorData("comp-2", "Bob", "Runner", startNumber = 2)
+            )
+        )
+
+        val firstUpdated = EventProjectEditor.updateCompetitorClubBibCallSign(
+            projectFile = original,
+            competitorId = "comp-1",
+            club = "",
+            bibNumber = "",
+            callSign = ""
+        )
+        val secondUpdated = EventProjectEditor.updateCompetitorClubBibCallSign(
+            projectFile = firstUpdated,
+            competitorId = "comp-2",
+            club = "",
+            bibNumber = "",
+            callSign = ""
+        )
+
+        assertEquals(
+            listOf("SWL", "SWL"),
+            secondUpdated.raceData.competitorData.map { it.competitorCategory.competitor.callSign }
+        )
+    }
+
+    @Test
     fun rejectsUnknownCompetitorClubAndPersonIdUpdate() {
         assertFailsWith<IllegalArgumentException> {
             EventProjectEditor.updateCompetitorClubPersonId(projectFile(), "missing", "OK Test", "A101")

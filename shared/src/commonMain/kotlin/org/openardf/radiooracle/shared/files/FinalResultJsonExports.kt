@@ -155,6 +155,12 @@ object FinalResultJsonExports {
             siNumber = competitor.siNumber,
             siRent = competitor.siRent,
             startNumber = competitor.startNumber,
+            bibNumber = competitor.bibNumber.takeIf { it.isNotBlank() },
+            callSign = competitor.callSign.takeIf { it.isNotBlank() },
+            email = competitor.email.takeIf { it.isNotBlank() },
+            cellPhone = competitor.cellPhone.takeIf { it.isNotBlank() },
+            usaChampEligible = competitor.usaChampEligible,
+            region2ChampEligible = competitor.region2ChampEligible,
             competitorStartTime = competitor.drawnStartTimeSeconds
                 ?.let { DurationFormatter.secondsToFormattedString(it, useMinutes = true) }
                 ?: "",
@@ -272,6 +278,12 @@ object FinalResultJsonExports {
         @SerialName("si_number") val siNumber: Int? = null,
         @SerialName("si_rent") val siRent: Boolean,
         @SerialName("start_number") val startNumber: Int? = null,
+        @SerialName("bib_number") val bibNumber: String? = null,
+        @SerialName("call_sign") val callSign: String? = null,
+        @SerialName("email") val email: String? = null,
+        @SerialName("cell_phone") val cellPhone: String? = null,
+        @SerialName("usa_champ_eligible") val usaChampEligible: Boolean? = null,
+        @SerialName("region2_champ_eligible") val region2ChampEligible: Boolean? = null,
         @SerialName("competitor_start_time") val competitorStartTime: String,
         val result: FinalResultJson? = null
     )

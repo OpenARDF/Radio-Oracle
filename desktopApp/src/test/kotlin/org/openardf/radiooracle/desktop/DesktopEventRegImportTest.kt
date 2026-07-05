@@ -81,6 +81,10 @@ class DesktopEventRegImportTest {
         assertEquals("M-21", fala.courseName)
         assertEquals("BOK", fala.club)
         assertEquals("K4FAL", fala.callSign)
+        assertEquals("fala@example.test", fala.email)
+        assertEquals("555-0101", fala.cellPhone)
+        assertEquals(true, fala.usaChampEligible)
+        assertEquals(false, fala.region2ChampEligible)
         assertEquals(1991, fala.birthYear)
         assertEquals(true, fala.isMan)
         assertEquals("conf-1", fala.personId)
@@ -192,6 +196,10 @@ class DesktopEventRegImportTest {
         assertEquals(8400555, fala.siNumber)
         assertEquals("101", fala.bibNumber)
         assertEquals("K4FAL", fala.callSign)
+        assertEquals("fala@example.test", fala.email)
+        assertEquals("555-0101", fala.cellPhone)
+        assertEquals(true, fala.usaChampEligible)
+        assertEquals(false, fala.region2ChampEligible)
         assertEquals("conf-1", fala.index)
         assertEquals(RaceType.SPRINT, sprintProject.raceData.race.raceType)
 
@@ -615,10 +623,10 @@ class DesktopEventRegImportTest {
 
     private fun sampleGoogleSheetCsv(): String =
         """
-        ,First,Last,ConfNum,Status,Bib#,YearBorn,Sex,Club,E-Punch ID,RentPunch,Sprint Class,Sprint Crs,Sprint Start,FoxO Class,FoxO Crs,FoxO Start,SprMod-NC Crs, Call--Call
-        0,Gheorghe,Fala,conf-1,Confirmed,101,1991-01-01 00:00:00,M,BOK,8400555,N,M-21,M-21,05:00,M-21,M-21,,NC,K4FAL
-        1,Kathleen,Kerns,conf-2,Confirmed,102,1959-01-01 00:00:00,F,MTHD,1800859,N,W-65,W-65,,NC,,,Competing,K7KER
-        2,Gerald,Boyd,conf-3,Confirmed,103,1957-01-01 00:00:00,M,NMO,247347,N,NC,,,M-60,M-60,,Competing,WB8WFK
+        ,First,Last,ConfNum,Status,Bib#,YearBorn,Sex,Club,email,cellphone,USA--Champ Eligibility,Region2--Champ Eligibility,E-Punch ID,RentPunch,Sprint Class,Sprint Crs,Sprint Start,FoxO Class,FoxO Crs,FoxO Start,SprMod-NC Crs, Call--Call
+        0,Gheorghe,Fala,conf-1,Confirmed,101,1991-01-01 00:00:00,M,BOK,fala@example.test,555-0101,Y,N,8400555,N,M-21,M-21,05:00,M-21,M-21,,NC,K4FAL
+        1,Kathleen,Kerns,conf-2,Confirmed,102,1959-01-01 00:00:00,F,MTHD,kerns@example.test,555-0102,N,Y,1800859,N,W-65,W-65,,NC,,,Competing,K7KER
+        2,Gerald,Boyd,conf-3,Confirmed,103,1957-01-01 00:00:00,M,NMO,boyd@example.test,555-0103,Y,Y,247347,N,NC,,,M-60,M-60,,Competing,WB8WFK
         """.trimIndent()
 
     private fun sprintOnlyGoogleSheetCsv(): String =

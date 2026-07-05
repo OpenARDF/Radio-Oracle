@@ -214,7 +214,11 @@ data class EventCompetitor(
     val drawnStartTimeSeconds: Long?,
     val preferredStartGroup: Int? = null,
     val bibNumber: String = "",
-    val callSign: String = ""
+    val callSign: String = "SWL",
+    val email: String = "",
+    val cellPhone: String = "",
+    val usaChampEligible: Boolean? = null,
+    val region2ChampEligible: Boolean? = null
 ) {
     init {
         require(preferredStartGroup == null || preferredStartGroup in 1..3) {

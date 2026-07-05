@@ -67,7 +67,11 @@ object EventCsvRows {
             if (competitor.siRent) 1 else 0,
             competitor.preferredStartGroup ?: "",
             competitor.bibNumber,
-            competitor.callSign
+            competitor.callSign,
+            competitor.email,
+            competitor.cellPhone,
+            competitor.usaChampEligible?.let { if (it) 1 else 0 } ?: "",
+            competitor.region2ChampEligible?.let { if (it) 1 else 0 } ?: ""
         )
     }
 

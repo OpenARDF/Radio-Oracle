@@ -58,7 +58,11 @@ data class CompetitorCsvImportRow(
     val preferredStartGroup: Int? = null,
     val bibNumber: String = "",
     val callSign: String = "",
-    val courseName: String = ""
+    val courseName: String = "",
+    val email: String = "",
+    val cellPhone: String = "",
+    val usaChampEligible: Boolean? = null,
+    val region2ChampEligible: Boolean? = null
 ) {
     @Deprecated("Use personId; this is the IOF Person/Id-compatible identity field.")
     val index: String
@@ -291,7 +295,11 @@ object EventCsvImports {
             callSign = fields.optionalTrimmed(EventCsvFormat.Competitor.CALL_SIGN),
             startTimeText = fields.optionalTrimmed(EventCsvFormat.Competitor.START_TIME).takeIf { it.isNotEmpty() },
             siRent = fields.optionalTrimmedInt(EventCsvFormat.Competitor.SI_RENT) == 1,
-            preferredStartGroup = preferredStartGroup
+            preferredStartGroup = preferredStartGroup,
+            email = fields.optionalTrimmed(EventCsvFormat.Competitor.EMAIL),
+            cellPhone = fields.optionalTrimmed(EventCsvFormat.Competitor.CELL_PHONE),
+            usaChampEligible = fields.optionalBoolean(EventCsvFormat.Competitor.USA_CHAMP_ELIGIBLE),
+            region2ChampEligible = fields.optionalBoolean(EventCsvFormat.Competitor.REGION2_CHAMP_ELIGIBLE)
         )
     }
 
@@ -450,6 +458,14 @@ object EventCsvImports {
 
     private fun List<String>.optionalTrimmedInt(index: Int): Int? =
         optionalTrimmed(index).takeIf { it.isNotEmpty() }?.toInt()
+
+    private fun List<String>.optionalBoolean(index: Int): Boolean? =
+        when (optionalTrimmed(index).lowercase()) {
+            "" -> null
+            "1", "y", "yes", "true", "eligible", "champ eligible" -> true
+            "0", "n", "no", "false", "ineligible", "not eligible" -> false
+            else -> null
+        }
 
     private object HeaderRow : IllegalArgumentException()
 }

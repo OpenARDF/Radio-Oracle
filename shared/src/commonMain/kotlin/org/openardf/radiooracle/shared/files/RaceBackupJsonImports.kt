@@ -111,8 +111,14 @@ object RaceBackupJsonImports {
                 birthYear = competitorJson.int("birth_year"),
                 siNumber = competitorJson.int("si_number"),
                 siRent = competitorJson.boolean("si_rent") ?: false,
-                startNumber = null,
-                drawnStartTimeSeconds = competitorJson.durationSeconds("competitor_start_time")
+                startNumber = competitorJson.int("start_number"),
+                drawnStartTimeSeconds = competitorJson.durationSeconds("competitor_start_time"),
+                bibNumber = competitorJson.string("bib_number") ?: "",
+                callSign = competitorJson.string("call_sign")?.ifBlank { "SWL" } ?: "SWL",
+                email = competitorJson.string("email") ?: "",
+                cellPhone = competitorJson.string("cell_phone") ?: "",
+                usaChampEligible = competitorJson.boolean("usa_champ_eligible"),
+                region2ChampEligible = competitorJson.boolean("region2_champ_eligible")
             )
             category?.let { categoryCompetitors[it.category.id]?.add(competitor) }
 

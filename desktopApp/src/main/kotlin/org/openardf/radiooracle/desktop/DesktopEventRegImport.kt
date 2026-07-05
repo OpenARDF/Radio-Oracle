@@ -117,7 +117,11 @@ data class DesktopEventRegCompetitor(
     val birthYear: Int? = null,
     val personId: String = "",
     val isMan: Boolean? = null,
-    val siRent: Boolean = false
+    val siRent: Boolean = false,
+    val email: String = "",
+    val cellPhone: String = "",
+    val usaChampEligible: Boolean? = null,
+    val region2ChampEligible: Boolean? = null
 )
 
 data class DesktopSpreadsheetRegistrationImport(
@@ -538,7 +542,11 @@ object DesktopEventRegSpreadsheetParser {
                     birthYear = row.getOrBlank(columns.birthYearIndex).birthYear(),
                     personId = row.getOrBlank(columns.personIdIndex).trim(),
                     isMan = row.getOrBlank(columns.sexIndex).sexIsMan(),
-                    siRent = row.getOrBlank(columns.siRentIndex).yesLike()
+                    siRent = row.getOrBlank(columns.siRentIndex).yesLike(),
+                    email = row.getOrBlank(columns.emailIndex).trim(),
+                    cellPhone = row.getOrBlank(columns.cellPhoneIndex).trim(),
+                    usaChampEligible = row.getOrBlank(columns.usaChampEligibilityIndex).yesNoLike(),
+                    region2ChampEligible = row.getOrBlank(columns.region2ChampEligibilityIndex).yesNoLike()
                 )
             }
             if (competitors.isEmpty()) {
@@ -673,6 +681,14 @@ object DesktopEventRegSpreadsheetParser {
     private fun String.yesLike(): Boolean =
         trim().uppercase() in setOf("Y", "YES", "TRUE", "1")
 
+    private fun String.yesNoLike(): Boolean? =
+        when (trim().uppercase()) {
+            "" -> null
+            "Y", "YES", "TRUE", "1", "ELIGIBLE" -> true
+            "N", "NO", "FALSE", "0", "INELIGIBLE", "NOT ELIGIBLE" -> false
+            else -> null
+        }
+
     private data class SpreadsheetCompetitionColumn(
         val competitionName: String,
         val classIndex: Int?,
@@ -696,6 +712,21 @@ object DesktopEventRegSpreadsheetParser {
         val personIdIndex = headers.indexOfFirstHeader("ConfNum", "Confirmation Number", "Person ID")
         val siRentIndex = headers.indexOfFirstHeader("RentPunch", "Rent SI?", "SI Rent")
         val startNumberIndex = headers.indexOfFirstHeader("Start Number", "Start #")
+        val emailIndex = headers.indexOfFirstHeader("email", "e-mail", "email address")
+        val cellPhoneIndex = headers.indexOfFirstHeader("cellphone", "cell phone", "mobile", "phone")
+        val usaChampEligibilityIndex = headers.indexOfFirstHeader(
+            "USA--Champ Eligibility",
+            "USA Champ Eligibility",
+            "USA Championship Eligibility",
+            "US Champ Eligibility"
+        )
+        val region2ChampEligibilityIndex = headers.indexOfFirstHeader(
+            "Region2--Champ Eligibility",
+            "Region 2--Champ Eligibility",
+            "Region2 Champ Eligibility",
+            "Region 2 Champ Eligibility",
+            "Region 2 Championship Eligibility"
+        )
     }
 }
 
@@ -760,6 +791,8 @@ data class DesktopSpreadsheetCompetitorImportAction(
     val categoryName: String,
     val club: String,
     val siNumber: Int?,
+    val bibNumber: String,
+    val callSign: String,
     val personId: String,
     val fieldChanges: List<String> = emptyList()
 )
@@ -1174,6 +1207,8 @@ object DesktopSpreadsheetCompetitorImporter {
             categoryName = competitorCategory.category?.name.orEmpty(),
             club = competitor.club,
             siNumber = competitor.siNumber,
+            bibNumber = competitor.bibNumber,
+            callSign = competitor.callSign,
             personId = competitor.index,
             fieldChanges = fieldChanges
         )
@@ -1189,6 +1224,10 @@ object DesktopSpreadsheetCompetitorImporter {
             addChange("Person ID", originalCompetitor.index, updatedCompetitor.index)
             addChange("Bib", originalCompetitor.bibNumber, updatedCompetitor.bibNumber)
             addChange("Call sign", originalCompetitor.callSign, updatedCompetitor.callSign)
+            addChange("Email", originalCompetitor.email, updatedCompetitor.email)
+            addChange("Cell", originalCompetitor.cellPhone, updatedCompetitor.cellPhone)
+            addChange("USA eligibility", originalCompetitor.usaChampEligible?.toString().orEmpty(), updatedCompetitor.usaChampEligible?.toString().orEmpty())
+            addChange("Region 2 eligibility", originalCompetitor.region2ChampEligible?.toString().orEmpty(), updatedCompetitor.region2ChampEligible?.toString().orEmpty())
             addChange("SI", originalCompetitor.siNumber?.toString().orEmpty(), updatedCompetitor.siNumber?.toString().orEmpty())
             addChange("Gender", originalCompetitor.isMan.toString(), updatedCompetitor.isMan.toString())
             addChange("Birth year", originalCompetitor.birthYear?.toString().orEmpty(), updatedCompetitor.birthYear?.toString().orEmpty())
@@ -1627,7 +1666,11 @@ private fun DesktopEventRegCompetitor.toImportRow(): CompetitorCsvImportRow =
         startTimeText = startTimeText,
         siRent = siRent,
         bibNumber = bibNumber,
-        callSign = callSign
+        callSign = callSign,
+        email = email,
+        cellPhone = cellPhone,
+        usaChampEligible = usaChampEligible,
+        region2ChampEligible = region2ChampEligible
     )
 
 private class RegListTableParser : HTMLEditorKit.ParserCallback() {

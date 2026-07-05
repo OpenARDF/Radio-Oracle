@@ -162,8 +162,8 @@ class EventCsvImportsTest {
     fun parsesExplicitBibNumberAndCallSignCompetitorColumns() {
         val result = EventCsvImports.parseAndroidCompetitorRows(
             """
-            si_number;start_number;first_name;last_name;category;gender;birth_year;club;person_id;start_time;si_rent;preferred_start_group;bib_number;call_sign
-            123456;42;Pavel;Kolsky;M21;0;1980;OK Lokomotiva;REG001;10:00;1;2;B042;KOL
+            si_number;start_number;first_name;last_name;category;gender;birth_year;club;person_id;start_time;si_rent;preferred_start_group;bib_number;call_sign;email;cell_phone;usa_champ_eligible;region2_champ_eligible
+            123456;42;Pavel;Kolsky;M21;0;1980;OK Lokomotiva;REG001;10:00;1;2;B042;KOL;pavel@example.test;555-0101;1;0
             """.trimIndent()
         )
 
@@ -172,19 +172,24 @@ class EventCsvImportsTest {
         assertEquals("REG001", row.personId)
         assertEquals("B042", row.bibNumber)
         assertEquals("KOL", row.callSign)
+        assertEquals("pavel@example.test", row.email)
+        assertEquals("555-0101", row.cellPhone)
+        assertEquals(true, row.usaChampEligible)
+        assertEquals(false, row.region2ChampEligible)
     }
 
     @Test
     fun acceptsLegacyIndexHeaderAsPersonIdCompetitorColumn() {
         val result = EventCsvImports.parseAndroidCompetitorRows(
             """
-            si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent;preferred_start_group;bib_number;call_sign
-            123456;42;Pavel;Kolsky;M21;0;1980;OK Lokomotiva;REG001;10:00;1;2;B042;KOL
+            si_number;start_number;first_name;last_name;category;gender;birth_year;club;index;start_time;si_rent;preferred_start_group;bib_number;call_sign;email;cell_phone;usa_champ_eligible;region2_champ_eligible
+            123456;42;Pavel;Kolsky;M21;0;1980;OK Lokomotiva;REG001;10:00;1;2;B042;KOL;pavel@example.test;555-0101;yes;no
             """.trimIndent()
         )
 
         assertEquals(emptyList(), result.invalidLines)
         assertEquals("REG001", result.rows.single().personId)
+        assertEquals("pavel@example.test", result.rows.single().email)
     }
 
     @Test

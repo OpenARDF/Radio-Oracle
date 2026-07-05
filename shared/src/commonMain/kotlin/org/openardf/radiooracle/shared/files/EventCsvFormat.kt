@@ -56,7 +56,7 @@ object EventCsvFormat {
     }
 
     object Competitor {
-        const val COLUMN_COUNT = 14
+        const val COLUMN_COUNT = 18
         const val REQUIRED_IMPORT_COLUMNS = 6
         const val SI_NUMBER = 0
         const val START_NUMBER = 1
@@ -74,6 +74,10 @@ object EventCsvFormat {
         const val PREFERRED_START_GROUP = 11
         const val BIB_NUMBER = 12
         const val CALL_SIGN = 13
+        const val EMAIL = 14
+        const val CELL_PHONE = 15
+        const val USA_CHAMP_ELIGIBLE = 16
+        const val REGION2_CHAMP_ELIGIBLE = 17
 
         val HEADER = listOf(
             "si_number",
@@ -89,7 +93,11 @@ object EventCsvFormat {
             "si_rent",
             "preferred_start_group",
             "bib_number",
-            "call_sign"
+            "call_sign",
+            "email",
+            "cell_phone",
+            "usa_champ_eligible",
+            "region2_champ_eligible"
         )
         val LEGACY_INDEX_HEADER = HEADER.toMutableList().also { it[PERSON_ID] = "index" }
         val LEGACY_HEADER = HEADER.take(PREFERRED_START_GROUP + 1)
