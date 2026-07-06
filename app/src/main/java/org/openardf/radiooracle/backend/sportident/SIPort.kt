@@ -73,6 +73,7 @@ class SIPort(
     private var stationCodeNumber: Int? = null
     private var stationModeCode: Int? = null
     private var lastReadCardId: Int? = null
+    private var waitingForRaceLogged = false
 
     /**
      * Stores the temp readout data
@@ -101,10 +102,15 @@ class SIPort(
                 if (dataProcessor.currentState.value!!.siReaderState.status == SIReaderStatus.DISCONNECTED && probeDevice()) {
                     setStatusConnected()
                 }
-                if (dataProcessor.currentState.value!!.siReaderState.status != SIReaderStatus.DISCONNECTED
-                    && dataProcessor.currentState.value!!.currentRace != null
-                ) {
-                    readCardOnce(dataProcessor.currentState.value!!.currentRace!!)
+                if (dataProcessor.currentState.value!!.siReaderState.status != SIReaderStatus.DISCONNECTED) {
+                    val currentRace = dataProcessor.currentState.value!!.currentRace
+                    if (currentRace != null) {
+                        waitingForRaceLogged = false
+                        readCardOnce(currentRace)
+                    } else if (!waitingForRaceLogged) {
+                        waitingForRaceLogged = true
+                        DebugLog.warn("SI", "Reader connected but no race is selected; card readout is paused")
+                    }
                 }
             }
         }

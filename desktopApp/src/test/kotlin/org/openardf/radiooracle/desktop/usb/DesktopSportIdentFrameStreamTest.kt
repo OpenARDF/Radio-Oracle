@@ -75,9 +75,24 @@ class DesktopSportIdentFrameStreamTest {
     @Test
     fun returnsNullAfterEmptySerialRead() {
         val port = ChunkedPort(emptyList())
-        val stream = DesktopSportIdentFrameStream(port, nowMillis = { 0L })
+        val stream = DesktopSportIdentFrameStream(port, nowMillis = advancingClock())
 
         assertNull(stream.nextFrame(deadlineMillis = 1_000))
+    }
+
+    @Test
+    fun keepsWaitingAfterQuietSerialRead() {
+        val message = SportIdentProtocol.buildExtendedMessage(
+            command = SportIdentProtocol.PROBE_COMMAND,
+            data = byteArrayOf(0x4d)
+        )
+        val port = ChunkedPort(listOf(ByteArray(0), message))
+        val stream = DesktopSportIdentFrameStream(port, nowMillis = advancingClock())
+
+        val frame = stream.nextFrame(deadlineMillis = 1_000)
+        assertNotNull(frame)
+
+        assertEquals(SportIdentProtocol.PROBE_COMMAND, frame!!.command)
     }
 
     private class ChunkedPort(chunks: List<ByteArray>) : DesktopSerialPort {
