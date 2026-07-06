@@ -34,6 +34,14 @@ android-test filter="":
 
 android-check: android-compile android-test
 
+android-si-status serial="":
+    @ADB="${ANDROID_ADB:-adb}"; \
+    if [ -n {{quote(serial)}} ]; then \
+        "$ADB" -s {{quote(serial)}} shell am broadcast -a org.openardf.radiooracle.command.SI_STATUS -n org.openardf.radiooracle/.backend.commands.AppCommandReceiver; \
+    else \
+        "$ADB" shell am broadcast -a org.openardf.radiooracle.command.SI_STATUS -n org.openardf.radiooracle/.backend.commands.AppCommandReceiver; \
+    fi
+
 android-iof-smoke serial="" schema_path="":
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:assembleDebug
     ./scripts/android-iof-smoke.sh {{quote(serial)}} {{quote(schema_path)}}

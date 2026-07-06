@@ -28,6 +28,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
 import android.util.Log
 import androidx.preference.PreferenceManager
 import org.openardf.radiooracle.R
@@ -54,7 +56,12 @@ import org.openardf.radiooracle.backend.room.enums.RaceBand
 import org.openardf.radiooracle.backend.room.enums.RaceLevel
 import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.backend.results.ResultsProcessor
+import org.openardf.radiooracle.shared.device.SIReadoutReadinessRules
+import org.openardf.radiooracle.shared.device.SIReaderState
+import org.openardf.radiooracle.shared.device.SIReaderStatus
 import org.openardf.radiooracle.shared.event.EventSeriesPackageFingerprints
+import org.openardf.radiooracle.shared.sportident.SportIdentStationMode
+import org.openardf.radiooracle.shared.sportident.SportIdentUsbDevice
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -103,6 +110,7 @@ class AppCommandReceiver : BroadcastReceiver() {
             ACTION_LOG_SERIES_PACKAGE_FINGERPRINT -> logSeriesPackageFingerprint(dataProcessor, intent)
             ACTION_RUN_IOF_XML_SMOKE -> runIofXmlSmoke(context, dataProcessor, intent)
             ACTION_PRINT_STATUS -> printStatus(context)
+            ACTION_SI_STATUS -> siStatus(context, dataProcessor)
             ACTION_PRINT_FINISH_TICKET -> printFinishTicket(dataProcessor, intent)
             ACTION_PRINT_LATEST_FINISH_TICKET -> printLatestFinishTicket(dataProcessor, intent)
             else -> {
@@ -571,6 +579,50 @@ class AppCommandReceiver : BroadcastReceiver() {
         }
     }
 
+    private fun siStatus(context: Context, dataProcessor: DataProcessor) {
+        val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+        val siDevices = usbManager.deviceList.values
+            .filter { it.vendorId == SportIdentUsbDevice.VENDOR_ID && it.productId == SportIdentUsbDevice.PRODUCT_ID }
+        val firstSiDevice = siDevices.firstOrNull()
+        val usbPermission = firstSiDevice?.let(usbManager::hasPermission)
+        val appState = dataProcessor.currentState.value
+        val readerState = appState?.siReaderState ?: SIReaderState(SIReaderStatus.DISCONNECTED)
+        val currentRace = appState?.currentRace
+        val readiness = SIReadoutReadinessRules.evaluate(
+            readerState = readerState,
+            hasSelectedRace = currentRace != null,
+            attachedSportIdentDeviceCount = siDevices.size,
+            hasUsbPermission = usbPermission
+        )
+        val stationModeLabel = readerState.stationModeCode?.let(SportIdentStationMode::labelForModeCode)
+
+        DebugLog.info(
+            TAG,
+            "SI status ready=${readiness.ready} reason=${readiness.reason} " +
+                "message=${readiness.message} usbDevices=${siDevices.size} usbPermission=${usbPermission ?: "n/a"} " +
+                "reader=${readerState.status} station=${readerState.stationId ?: "unknown"} " +
+                "stationMode=${stationModeLabel ?: "unknown"} selectedRace=${currentRace?.id ?: "none"} " +
+                "selectedRaceName=${currentRace?.name ?: "none"} lastCard=${readerState.lastCard ?: "none"}"
+        )
+        Log.i(TAG, "si ready=${readiness.ready} reason=${readiness.reason} message=${readiness.message}")
+        Log.i(TAG, "si usbDevices=${siDevices.size} usbPermission=${usbPermission ?: "n/a"}")
+        siDevices.forEach { device ->
+            Log.i(
+                TAG,
+                "si-device vendor=${device.vendorId} product=${device.productId} " +
+                    "serial=${device.safeSerialNumber(usbManager)} permission=${usbManager.hasPermission(device)}"
+            )
+        }
+        Log.i(
+            TAG,
+            "si-reader status=${readerState.status} station=${readerState.stationId ?: "unknown"} " +
+                "stationCode=${readerState.stationCodeNumber ?: "unknown"} " +
+                "stationMode=${readerState.stationModeCode ?: "unknown"}:${stationModeLabel ?: "unknown"} " +
+                "lastCard=${readerState.lastCard ?: "none"}"
+        )
+        Log.i(TAG, "si-selected-race id=${currentRace?.id ?: "none"} name=${currentRace?.name ?: "none"}")
+    }
+
     private suspend fun deleteEvent(dataProcessor: DataProcessor, intent: Intent) {
         val eventId = intent.uuidExtra() ?: return missingEventId()
         val race = dataProcessor.getRace(eventId)
@@ -820,6 +872,13 @@ class AppCommandReceiver : BroadcastReceiver() {
     private fun Context.isDebuggableApp(): Boolean =
         (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
+    private fun UsbDevice.safeSerialNumber(usbManager: UsbManager): String {
+        if (!usbManager.hasPermission(this)) {
+            return "permission-required"
+        }
+        return runCatching { serialNumber }.getOrNull() ?: "unknown"
+    }
+
     companion object {
         private const val TAG = "AppCommand"
         const val ACTION_LIST_EVENTS = "org.openardf.radiooracle.command.LIST_EVENTS"
@@ -835,6 +894,7 @@ class AppCommandReceiver : BroadcastReceiver() {
             "org.openardf.radiooracle.command.LOG_SERIES_PACKAGE_FINGERPRINT"
         const val ACTION_RUN_IOF_XML_SMOKE = "org.openardf.radiooracle.command.RUN_IOF_XML_SMOKE"
         const val ACTION_PRINT_STATUS = "org.openardf.radiooracle.command.PRINT_STATUS"
+        const val ACTION_SI_STATUS = "org.openardf.radiooracle.command.SI_STATUS"
         const val ACTION_PRINT_FINISH_TICKET = "org.openardf.radiooracle.command.PRINT_FINISH_TICKET"
         const val ACTION_PRINT_LATEST_FINISH_TICKET = "org.openardf.radiooracle.command.PRINT_LATEST_FINISH_TICKET"
         const val EXTRA_EVENT_ID = "event_id"

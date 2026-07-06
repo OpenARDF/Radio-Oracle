@@ -55,6 +55,7 @@ import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.ARDFRepository
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.databinding.ActivityMainBinding
+import org.openardf.radiooracle.shared.device.SIReadoutReadinessRules
 import org.openardf.radiooracle.shared.device.SIReaderStatus
 import org.openardf.radiooracle.shared.sportident.SportIdentStationMode
 import kotlinx.coroutines.Dispatchers
@@ -312,6 +313,10 @@ class MainActivity : AppCompatActivity() {
                     }
                     //Race not selected - warn user
                     else {
+                        val readiness = SIReadoutReadinessRules.evaluate(
+                            readerState = newState.siReaderState,
+                            hasSelectedRace = false
+                        )
                         if (hasReadoutModeWarning && newState.siReaderState.stationId != null && stationModeLabel != null) {
                             siStatusTextView.text =
                                 getString(
@@ -326,8 +331,10 @@ class MainActivity : AppCompatActivity() {
                                     newState.siReaderState.stationId!!
                                 )
                         } else {
-                            getString(R.string.si_connected_but_no_race)
+                            siStatusTextView.text =
+                                getString(R.string.si_connected_but_no_race_no_station)
                         }
+                        DebugLog.warn("SI", "Readout not ready: ${readiness.reason} ${readiness.message}")
                         siStatusTextView.setBackgroundResource(R.color.yellow_warning)
                     }
                 }

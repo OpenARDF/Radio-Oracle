@@ -221,7 +221,8 @@
     <string name="si_service">SI Service</string>
     <string name="si_ready">SI service started</string>
     <string name="si_connected">SI station %1$d connected</string>
-    <string name="si_connected_but_no_race">SI station %1$d connected, but no race set!</string>
+    <string name="si_connected_but_no_race">SI station %1$d connected. Select an event to enable SI card readout.</string>
+    <string name="si_connected_but_no_race_no_station">SI reader connected. Select an event to enable SI card readout.</string>
     <string name="si_station_wrong_mode_status">SI station %1$d is in %2$s mode</string>
     <string name="si_station_wrong_mode_title">SI Station Mode Warning</string>
     <string name="si_station_wrong_mode_message">SI station %1$d is connected, but it appears to be in %2$s mode instead of READOUT/SI MASTER. Reprogram the station in a download-capable mode before using it for SI-card downloads.</string>
@@ -230,6 +231,8 @@
     <string name="si_card_error">SI station %1$d, error reading card %2$d </string>
     <string name="si_card_read">SI station %1$d, read card %2$d </string>
     <string name="si_last_card">Last read card: %1$s </string>
+    <string name="si_card_ambiguous_series_route">Card %1$d matched more than one event; readout was not stored.</string>
+    <string name="si_card_no_series_route">Card %1$d did not match any event in this series.</string>
     <string name="no_cards_yet">No cards yet </string>
 
     <!--Readout-->

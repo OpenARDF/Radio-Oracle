@@ -29,6 +29,7 @@ import android.content.Context
 import android.content.Intent
 import android.hardware.usb.UsbDevice
 import android.net.Uri
+import android.widget.Toast
 import androidx.lifecycle.MutableLiveData
 import androidx.preference.PreferenceManager
 import org.openardf.radiooracle.R
@@ -87,6 +88,8 @@ import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.StandardCategoryType
 import org.openardf.radiooracle.shared.files.DataFormat
 import org.openardf.radiooracle.shared.files.DataType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -95,6 +98,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -609,18 +613,28 @@ class DataProcessor private constructor(context: Context) {
             is EventSeriesReadoutRoute.Ambiguous -> {
                 DebugLog.warn(
                     "Race Series",
-                    "Card read ambiguous si=${cardData.siNumber} " +
+                    "Card read ignored reason=ambiguous-series-route si=${cardData.siNumber} " +
                         "candidates=${route.candidates.joinToString { it.member.seriesEventId }} " +
                         "reason=${route.reason}"
                 )
+                showSiReadoutToast(R.string.si_card_ambiguous_series_route, cardData.siNumber)
                 false
             }
             EventSeriesReadoutRoute.NoMatch -> {
                 DebugLog.warn(
                     "Race Series",
-                    "Card read did not match any series race si=${cardData.siNumber}"
+                    "Card read ignored reason=no-series-route si=${cardData.siNumber}"
                 )
+                showSiReadoutToast(R.string.si_card_no_series_route, cardData.siNumber)
                 false
+            }
+        }
+    }
+
+    private fun showSiReadoutToast(messageResId: Int, vararg formatArgs: Any) {
+        appContext.get()?.let { context ->
+            CoroutineScope(Dispatchers.Main).launch {
+                Toast.makeText(context, context.getString(messageResId, *formatArgs), Toast.LENGTH_LONG).show()
             }
         }
     }

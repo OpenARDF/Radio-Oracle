@@ -56,9 +56,11 @@ internal class DesktopSportIdentFrameStream(
 
             val raw = port.read(maxReadBytes)
             if (raw.isEmpty()) {
+                trace("quiet serial read")
                 continue
             }
             lastRawRead = raw
+            trace("raw ${raw.toHexString()}")
             buffered += raw
         }
         return nextBufferedFrame(requireValidCrc)
@@ -69,6 +71,10 @@ internal class DesktopSportIdentFrameStream(
             buffered,
             requireValidCrc = requireValidCrc
         ) ?: return null
+        trace(
+            "frame command=${frame.command.toHexString()} dataBytes=${frame.data.size} " +
+                "raw=${frame.raw.toHexString()}"
+        )
         discardThrough(frame.raw)
         return frame
     }
@@ -92,9 +98,18 @@ internal class DesktopSportIdentFrameStream(
         }
     }
 
+    private fun trace(message: String) {
+        if (traceFrames) {
+            System.err.println("SI frame trace: $message")
+        }
+    }
+
     private companion object {
         const val DEFAULT_MAX_READ_BYTES = 512
         const val MAX_BUFFER_BYTES = 4096
+        val traceFrames: Boolean =
+            System.getenv("RADIO_ORACLE_SI_TRACE_FRAMES")?.equals("1") == true ||
+                System.getenv("RADIO_ORACLE_SI_TRACE_FRAMES")?.equals("true", ignoreCase = true) == true
     }
 }
 
@@ -116,3 +131,9 @@ private fun ByteArray.indexOf(needle: ByteArray): Int {
     }
     return -1
 }
+
+private fun Byte.toHexString(): String =
+    "0x%02x".format(toInt() and 0xff)
+
+private fun ByteArray.toHexString(): String =
+    joinToString(" ") { it.toHexString() }

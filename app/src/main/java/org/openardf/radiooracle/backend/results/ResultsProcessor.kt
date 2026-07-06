@@ -263,29 +263,41 @@ object ResultsProcessor {
                 // Create new readout
                 context.getString(R.string.preferences_readout_duplicate_new_value) -> {
                     createNewReadout = true
+                    DebugLog.info(
+                        "SI",
+                        "Duplicate card read will create a new unmatched readout " +
+                            "id=${cardData.siNumber} race=${race.id} existingResult=${existingResult.id}"
+                    )
                 }
 
                 // Replace duplicate
                 context.getString(R.string.preferences_readout_duplicate_replace_value) -> {
+                    DebugLog.info(
+                        "SI",
+                        "Duplicate card read will replace existing readout " +
+                            "id=${cardData.siNumber} race=${race.id} existingResult=${existingResult.id}"
+                    )
                     dataProcessor.deleteResult(existingResult.id)
                 }
 
-	                // Warn about existing readout
-	                else -> {
+                // Warn about existing readout
+                else -> {
                     val namedUnmatchedReadout =
                         existingResult.competitorId == null && !existingResult.cardName.isNullOrBlank()
+                    val duplicateReason = if (namedUnmatchedReadout) {
+                        "named-unmatched-readout-exists"
+                    } else {
+                        "readout-already-exists"
+                    }
                     DebugLog.warn(
                         "SI",
-                        if (namedUnmatchedReadout) {
-                            "Named unmatched duplicate card read ignored id=${cardData.siNumber}"
-                        } else {
-                            "Duplicate card read ignored id=${cardData.siNumber}"
-                        }
+                        "Duplicate card read ignored reason=$duplicateReason " +
+                            "id=${cardData.siNumber} race=${race.id} existingResult=${existingResult.id}"
                     )
-	                    //Run on the main UI thread
-	                    CoroutineScope(Dispatchers.Main).launch {
-	                        Toast.makeText(
-	                            context,
+                    // Run on the main UI thread.
+                    CoroutineScope(Dispatchers.Main).launch {
+                        Toast.makeText(
+                            context,
                             if (namedUnmatchedReadout) {
                                 context.getString(
                                     R.string.readout_named_unmatched_si_exists,
@@ -294,9 +306,9 @@ object ResultsProcessor {
                             } else {
                                 context.getString(R.string.readout_si_exists, cardData.siNumber)
                             },
-	                            Toast.LENGTH_LONG
-	                        )
-	                            .show()
+                            Toast.LENGTH_LONG
+                        )
+                            .show()
                     }
                     if (!namedUnmatchedReadout) {
                         isToMakeSound(context, SoundType.DUPLICATE)
