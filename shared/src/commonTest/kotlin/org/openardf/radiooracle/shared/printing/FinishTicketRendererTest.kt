@@ -64,7 +64,7 @@ class FinishTicketRendererTest {
             [L]Category: M21
             
             [L]Start          10:00:00
-            [L]1 (Foxhole)OK  10:05:00 00:05:00
+            [L]1 (Foxhole)    10:05:00 00:05:00
             [L]2 (32)MP       10:10:00 00:10:00
             [L]Finish         10:20:00 00:20:00
             
@@ -152,7 +152,7 @@ class FinishTicketRendererTest {
         assertEquals("", lines[6])
         assertEquals("Start          10:00:00", lines[7])
         assertEquals(lines[8].indexOf("10:05:00"), lines[7].indexOf("10:00:00"))
-        assertEquals("1 (Foxhole)OK  10:05:00 00:05:00", lines[8])
+        assertEquals("1 (Foxhole)    10:05:00 00:05:00", lines[8])
         assertEquals("2 (32)MP       10:10:00 00:10:00", lines[9])
         assertEquals("Finish         10:20:00 00:20:00", lines[10])
         assertEquals("", lines[11])
@@ -185,7 +185,7 @@ class FinishTicketRendererTest {
         val rows = listOf(
             FinishTicketTimeRowFormatter.format("Start", "10:00:00", null, 32),
             FinishTicketTimeRowFormatter.format("Finish", "10:20:00", "00:20:00", 32),
-            FinishTicketTimeRowFormatter.format("1FOK", "10:05:00", "00:05:00", 32),
+            FinishTicketTimeRowFormatter.format("1F", "10:05:00", "00:05:00", 32),
             FinishTicketTimeRowFormatter.format("2F?", "10:10:00", "00:10:00", 32),
             FinishTicketTimeRowFormatter.format("3F+", "10:15:00", "00:15:00", 32)
         )
@@ -210,7 +210,7 @@ class FinishTicketRendererTest {
     fun rendersRadioOTicketWithRawSiCodesWhenAliasesAreDisabled() {
         val text = FinishTicketRenderer.render(raceData(), resultId = "matched", useAliases = false)
 
-        assertEquals("31OK", text.lines()[8].substringAfter("[L]").take(14).trimEnd())
+        assertEquals("31", text.lines()[8].substringAfter("[L]").take(14).trimEnd())
         assertEquals("32MP", text.lines()[9].substringAfter("[L]").take(14).trimEnd())
     }
 
@@ -218,7 +218,7 @@ class FinishTicketRendererTest {
     fun rendersRadioOTicketWithNumberedAliasesWhenAliasesAreEnabled() {
         val text = FinishTicketRenderer.render(raceData(), resultId = "matched", useAliases = true)
 
-        assertEquals("1 (Foxhole)OK", text.lines()[8].substringAfter("[L]").take(14).trimEnd())
+        assertEquals("1 (Foxhole)", text.lines()[8].substringAfter("[L]").take(14).trimEnd())
         assertEquals("2 (32)MP", text.lines()[9].substringAfter("[L]").take(14).trimEnd())
     }
 
@@ -241,7 +241,7 @@ class FinishTicketRendererTest {
             useAliases = true
         )
 
-        assertEquals("1 (1)OK", text.lines()[8].substringAfter("[L]").take(14).trimEnd())
+        assertEquals("1 (1)", text.lines()[8].substringAfter("[L]").take(14).trimEnd())
         assertEquals("2 (32)MP", text.lines()[9].substringAfter("[L]").take(14).trimEnd())
     }
 
@@ -253,7 +253,7 @@ class FinishTicketRendererTest {
             useAliases = true
         )
 
-        assertEquals("1 (Foxhole)OK", text.lines()[8].substringAfter("[L]").take(14).trimEnd())
+        assertEquals("1 (Foxhole)", text.lines()[8].substringAfter("[L]").take(14).trimEnd())
         assertEquals("2 (32)MP", text.lines()[9].substringAfter("[L]").take(14).trimEnd())
     }
 

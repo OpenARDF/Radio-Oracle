@@ -45,10 +45,10 @@ object FinishTicketTimeRowFormatter {
         return "$fixedLabel $fixedTime ${split.padStart(splitWidth)}"
     }
 
-    // ESC/POS code pages do not reliably print UI glyphs such as checkmarks.
+    // ESC/POS code pages do not reliably print UI glyphs; valid punches stay unmarked.
     fun statusSuffix(status: PunchStatus): String =
         when (status) {
-            PunchStatus.VALID -> "OK"
+            PunchStatus.VALID -> ""
             PunchStatus.INVALID -> "MP"
             PunchStatus.DUPLICATE -> "+"
             PunchStatus.UNKNOWN -> "?"
