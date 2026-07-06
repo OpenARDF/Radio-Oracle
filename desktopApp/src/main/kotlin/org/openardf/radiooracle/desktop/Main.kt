@@ -10359,6 +10359,7 @@ private data class DesktopReadoutEditDraft(
     val finishSeconds: String,
     val startSiTime: String,
     val finishSiTime: String,
+    val elapsedBaseSeconds: Long?,
     val controlPunches: List<DesktopReadoutPunchEditDraft>,
     val resultStatus: ResultStatus,
     val categoryId: String?,
@@ -10372,8 +10373,15 @@ private data class DesktopReadoutPunchEditDraft(
     val rowId: String,
     val controlId: String?,
     val siCode: Int,
-    val elapsedTime: String
+    val controlText: String,
+    val elapsedTime: String,
+    val siTime: String
 )
+
+private enum class DesktopReadoutPunchTimeMode(val columnLabel: String) {
+    ELAPSED("Elapsed"),
+    SI("SI Time")
+}
 
 private data class EventSeriesValidationUiState(
     val manifestPath: Path,
@@ -11275,6 +11283,7 @@ private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEdit
                 finishSeconds = elapsedRaceTimeText(readoutData.result.finishTimeSeconds, elapsedBaseSeconds),
                 startSiTime = readoutData.result.startTimeSeconds.toReadoutSiTimeText(),
                 finishSiTime = readoutData.result.finishTimeSeconds.toReadoutSiTimeText(),
+                elapsedBaseSeconds = elapsedBaseSeconds,
                 controlPunches = readoutData.controlPunchRows(this, elapsedBaseSeconds),
                 resultStatus = readoutData.result.resultStatus,
                 categoryId = readoutData.result.categoryId ?: competitor.categoryId,
@@ -11300,6 +11309,7 @@ private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEdit
                 finishSeconds = elapsedRaceTimeText(readoutData.result.finishTimeSeconds, elapsedBaseSeconds),
                 startSiTime = readoutData.result.startTimeSeconds.toReadoutSiTimeText(),
                 finishSiTime = readoutData.result.finishTimeSeconds.toReadoutSiTimeText(),
+                elapsedBaseSeconds = elapsedBaseSeconds,
                 controlPunches = readoutData.controlPunchRows(this, elapsedBaseSeconds),
                 resultStatus = readoutData.result.resultStatus,
                 categoryId = readoutData.result.categoryId,
@@ -11347,13 +11357,17 @@ private fun org.openardf.radiooracle.shared.event.EventReadoutData.controlPunchR
     punches
         .map { aliasPunch -> aliasPunch.punch to aliasPunch.alias?.name }
         .filter { (punch, _) -> punch.punchType == SIRecordType.CONTROL }
-        .mapIndexed { index, (punch, _) ->
+        .mapIndexed { index, (punch, aliasName) ->
             val control = raceData.controls.firstOrNull { it.siCode == punch.siCode }
             DesktopReadoutPunchEditDraft(
                 rowId = punch.id.ifBlank { "punch-$index-${punch.siCode}" },
                 controlId = control?.id,
                 siCode = punch.siCode,
-                elapsedTime = raceData.elapsedRaceTimeText(punch.siTimeSeconds, elapsedBaseSeconds)
+                controlText = control?.editPunchToken(raceData.controls)
+                    ?: aliasName?.takeIf { it.isNotBlank() }
+                    ?: punch.siCode.toString(),
+                elapsedTime = raceData.elapsedRaceTimeText(punch.siTimeSeconds, elapsedBaseSeconds),
+                siTime = punch.siTimeSeconds.toReadoutSiTimeText()
             )
         }
 
@@ -11362,7 +11376,7 @@ private fun List<DesktopReadoutPunchEditDraft>.toControlPunchesText(controls: Li
     val sortedControls = controls.sortedWith(compareBy<EventControl> { it.siCode }.thenBy { it.publicDisplayLabel() })
     return joinToString("\n") { punch ->
         val control = punch.controlId?.let(controlsById::get)
-        val controlText = control?.editPunchToken(sortedControls) ?: punch.siCode.toString()
+        val controlText = control?.editPunchToken(sortedControls) ?: punch.controlText
         "$controlText @ ${punch.elapsedTime.trim()}"
     }
 }
@@ -15073,16 +15087,32 @@ private fun ReadoutEditDialog(
     var categoryId by remember(draft.resultId) { mutableStateOf(draft.categoryId) }
     var updateCompetitorCategory by remember(draft.resultId) { mutableStateOf(draft.updateCompetitorCategory) }
     var selectedControlId by remember(draft.resultId, controls) { mutableStateOf(controls.firstOrNull()?.id) }
+    var punchTimeMode by remember(draft.resultId) { mutableStateOf(DesktopReadoutPunchTimeMode.ELAPSED) }
     val dialogScrollState = rememberScrollState()
     val categoryChanged = draft.matched && categoryId != draft.originalCategoryId
     val sortedControls = remember(controls) {
         controls.sortedWith(compareBy<EventControl> { it.siCode }.thenBy { it.publicDisplayLabel() })
     }
-    val punchValidationMessage = remember(controlPunches) { controlPunches.validationMessage() }
+    val addableControls = remember(sortedControls, controlPunches) {
+        val usedControlIds = controlPunches.mapNotNull { it.controlId }.toSet()
+        val usedSiCodes = controlPunches.map { it.siCode }.toSet()
+        sortedControls.filter { control -> control.id !in usedControlIds && control.siCode !in usedSiCodes }
+    }
+    val timeValidationMessage = remember(startSeconds, finishSeconds, startSiTime, finishSiTime, draft.isPractice) {
+        readoutTimeValidationMessage(
+            startElapsed = startSeconds,
+            finishElapsed = finishSeconds,
+            startSiTime = startSiTime,
+            finishSiTime = finishSiTime,
+            validateStartElapsed = !draft.isPractice
+        )
+    }
+    val punchValidationMessage = remember(controlPunches, punchTimeMode) { controlPunches.validationMessage(punchTimeMode) }
+    val validationMessage = timeValidationMessage ?: punchValidationMessage
 
-    LaunchedEffect(sortedControls, selectedControlId) {
-        if (selectedControlId == null || sortedControls.none { it.id == selectedControlId }) {
-            selectedControlId = sortedControls.firstOrNull()?.id
+    LaunchedEffect(addableControls, selectedControlId) {
+        if (selectedControlId == null || addableControls.none { it.id == selectedControlId }) {
+            selectedControlId = addableControls.firstOrNull()?.id
         }
     }
 
@@ -15149,6 +15179,7 @@ private fun ReadoutEditDialog(
                                 value = startSiTime,
                                 onValueChange = { startSiTime = it },
                                 modifier = Modifier.width(160.dp),
+                                isError = startSiTime.isInvalidOptionalReadoutTime(),
                                 onCommit = ::saveDraft
                             )
                             LabeledTextField(
@@ -15156,6 +15187,7 @@ private fun ReadoutEditDialog(
                                 value = finishSiTime,
                                 onValueChange = { finishSiTime = it },
                                 modifier = Modifier.width(160.dp),
+                                isError = finishSiTime.isInvalidOptionalReadoutTime(),
                                 onCommit = ::saveDraft
                             )
                         }
@@ -15170,6 +15202,7 @@ private fun ReadoutEditDialog(
                                 },
                                 modifier = Modifier.width(160.dp),
                                 enabled = !draft.isPractice,
+                                isError = !draft.isPractice && startSeconds.isInvalidOptionalReadoutTime(),
                                 onCommit = ::saveDraft
                             )
                             LabeledTextField(
@@ -15177,6 +15210,7 @@ private fun ReadoutEditDialog(
                                 value = finishSeconds,
                                 onValueChange = { finishSeconds = it },
                                 modifier = Modifier.width(160.dp),
+                                isError = finishSeconds.isInvalidFinishElapsedTime(startSeconds, !draft.isPractice),
                                 onCommit = ::saveDraft
                             )
                         }
@@ -15190,8 +15224,21 @@ private fun ReadoutEditDialog(
                                 )
                             } else {
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    FixedTableText("Control", 220.dp, DesktopPalette.Disconnected)
-                                    FixedTableText("Elapsed", 110.dp, DesktopPalette.Disconnected)
+                                    FixedTableText("Control", 112.dp, DesktopPalette.Disconnected)
+                                    Text(
+                                        text = punchTimeMode.columnLabel,
+                                        color = DesktopPalette.Primary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier
+                                            .width(92.dp)
+                                            .clickable {
+                                                punchTimeMode = when (punchTimeMode) {
+                                                    DesktopReadoutPunchTimeMode.ELAPSED -> DesktopReadoutPunchTimeMode.SI
+                                                    DesktopReadoutPunchTimeMode.SI -> DesktopReadoutPunchTimeMode.ELAPSED
+                                                }
+                                            }
+                                    )
                                     Spacer(Modifier.width(160.dp))
                                 }
                             }
@@ -15201,19 +15248,33 @@ private fun ReadoutEditDialog(
                                     controls = sortedControls,
                                     canMoveUp = index > 0,
                                     canMoveDown = index < controlPunches.lastIndex,
+                                    timeMode = punchTimeMode,
+                                    isTimeError = punch.timeText(punchTimeMode).isInvalidRequiredReadoutTime(),
                                     onControlSelected = { controlId ->
                                         val control = sortedControls.firstOrNull { it.id == controlId }
                                         controlPunches = controlPunches.map { row ->
                                             if (row.rowId == punch.rowId && control != null) {
-                                                row.copy(controlId = control.id, siCode = control.siCode)
+                                                row.copy(
+                                                    controlId = control.id,
+                                                    siCode = control.siCode,
+                                                    controlText = control.editPunchToken(sortedControls)
+                                                )
                                             } else {
                                                 row
                                             }
                                         }
                                     },
-                                    onElapsedTimeChanged = { elapsedTime ->
+                                    onTimeChanged = { timeText ->
                                         controlPunches = controlPunches.map { row ->
-                                            if (row.rowId == punch.rowId) row.copy(elapsedTime = elapsedTime) else row
+                                            if (row.rowId == punch.rowId) {
+                                                row.withEditedTime(
+                                                    timeMode = punchTimeMode,
+                                                    value = timeText,
+                                                    elapsedBaseSeconds = draft.elapsedBaseSeconds
+                                                )
+                                            } else {
+                                                row
+                                            }
                                         }
                                     },
                                     onMoveUp = {
@@ -15231,26 +15292,29 @@ private fun ReadoutEditDialog(
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 ReadoutControlPicker(
                                     selectedControlId = selectedControlId,
-                                    controls = sortedControls,
+                                    controls = addableControls,
                                     onControlSelected = { selectedControlId = it },
-                                    modifier = Modifier.width(260.dp)
+                                    modifier = Modifier.width(140.dp)
                                 )
                                 Button(
                                     onClick = {
-                                        val control = sortedControls.firstOrNull { it.id == selectedControlId } ?: return@Button
+                                        val control = addableControls.firstOrNull { it.id == selectedControlId } ?: return@Button
+                                        val elapsedTime = defaultNewPunchElapsedTime(startSeconds)
                                         controlPunches = controlPunches + DesktopReadoutPunchEditDraft(
                                             rowId = "new-punch-${UUID.randomUUID()}",
                                             controlId = control.id,
                                             siCode = control.siCode,
-                                            elapsedTime = defaultNewPunchElapsedTime(startSeconds)
+                                            controlText = control.editPunchToken(sortedControls),
+                                            elapsedTime = elapsedTime,
+                                            siTime = elapsedTime.toReadoutSiTimeText(draft.elapsedBaseSeconds) ?: "00:00:00"
                                         )
                                     },
-                                    enabled = selectedControlId != null
+                                    enabled = selectedControlId != null && addableControls.isNotEmpty()
                                 ) {
                                     ButtonLabel("Add Punch")
                                 }
                             }
-                            punchValidationMessage?.let { message ->
+                            validationMessage?.let { message ->
                                 Text(text = message, color = DesktopPalette.Error, fontSize = 12.sp)
                             }
                         }
@@ -15290,7 +15354,7 @@ private fun ReadoutEditDialog(
                         Text("Cancel")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = ::saveDraft, enabled = punchValidationMessage == null) {
+                    Button(onClick = ::saveDraft, enabled = validationMessage == null) {
                         Text("Save")
                     }
                 }
@@ -15305,27 +15369,34 @@ private fun ReadoutPunchEditRow(
     controls: List<EventControl>,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
+    timeMode: DesktopReadoutPunchTimeMode,
+    isTimeError: Boolean,
     onControlSelected: (String?) -> Unit,
-    onElapsedTimeChanged: (String) -> Unit,
+    onTimeChanged: (String) -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onDelete: () -> Unit,
     onCommit: () -> Unit
 ) {
+    val timeText = when (timeMode) {
+        DesktopReadoutPunchTimeMode.ELAPSED -> punch.elapsedTime
+        DesktopReadoutPunchTimeMode.SI -> punch.siTime
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         ReadoutControlPicker(
             selectedControlId = punch.controlId,
             controls = controls,
             onControlSelected = onControlSelected,
-            modifier = Modifier.width(220.dp),
-            emptySelectionText = "SI ${punch.siCode}"
+            modifier = Modifier.width(112.dp),
+            emptySelectionText = punch.controlText
         )
         TextField(
-            value = punch.elapsedTime,
-            onValueChange = onElapsedTimeChanged,
+            value = timeText,
+            onValueChange = onTimeChanged,
             singleLine = true,
+            isError = isTimeError,
             modifier = Modifier
-                .width(110.dp)
+                .width(92.dp)
                 .commitOnEnter(onCommit)
         )
         Button(onClick = onMoveUp, enabled = canMoveUp, modifier = Modifier.width(48.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
@@ -20557,15 +20628,100 @@ private fun appendPublicControlLabel(controlPointsText: String, publicLabel: Str
 private fun defaultNewPunchElapsedTime(startSeconds: String): String =
     startSeconds.trim().takeIf { it.toReadoutElapsedSecondsOrNull() != null } ?: "00:00"
 
-private fun List<DesktopReadoutPunchEditDraft>.validationMessage(): String? =
+private fun readoutTimeValidationMessage(
+    startElapsed: String,
+    finishElapsed: String,
+    startSiTime: String,
+    finishSiTime: String,
+    validateStartElapsed: Boolean
+): String? {
+    if (startSiTime.isInvalidOptionalReadoutTime()) {
+        return "Start SI Time must use mm:ss or hh:mm:ss under 24 hours."
+    }
+    if (finishSiTime.isInvalidOptionalReadoutTime()) {
+        return "Finish SI Time must use mm:ss or hh:mm:ss under 24 hours."
+    }
+    if (validateStartElapsed && startElapsed.isInvalidOptionalReadoutTime()) {
+        return "Start Elapsed must use mm:ss or hh:mm:ss under 24 hours."
+    }
+    if (finishElapsed.isInvalidFinishElapsedTime(startElapsed, validateStartElapsed)) {
+        return "Finish Elapsed must be a valid time and cannot be earlier than Start Elapsed."
+    }
+    return null
+}
+
+private fun String.isInvalidOptionalReadoutTime(): Boolean =
+    isNotBlank() && toReadoutElapsedSecondsOrNull() == null
+
+private fun String.isInvalidRequiredReadoutTime(): Boolean =
+    isBlank() || toReadoutElapsedSecondsOrNull() == null
+
+private fun String.isInvalidFinishElapsedTime(startElapsed: String, validateStartElapsed: Boolean): Boolean {
+    if (isInvalidOptionalReadoutTime()) {
+        return true
+    }
+    val finishSeconds = toReadoutElapsedSecondsOrNull() ?: return false
+    val startSeconds = if (validateStartElapsed) {
+        startElapsed.toReadoutElapsedSecondsOrNull()
+    } else {
+        null
+    }
+    return startSeconds != null && finishSeconds < startSeconds
+}
+
+private fun List<DesktopReadoutPunchEditDraft>.validationMessage(timeMode: DesktopReadoutPunchTimeMode): String? =
     mapIndexedNotNull { index, punch ->
         val label = "Punch ${index + 1}"
+        val timeText = punch.timeText(timeMode)
         when {
-            punch.elapsedTime.isBlank() -> "$label needs an elapsed time."
-            punch.elapsedTime.toReadoutElapsedSecondsOrNull() == null -> "$label time must use mm:ss or hh:mm:ss under 24 hours."
+            timeText.isInvalidRequiredReadoutTime() -> "$label ${timeMode.columnLabel.lowercase()} must use mm:ss or hh:mm:ss under 24 hours."
             else -> null
         }
     }.firstOrNull()
+
+private fun DesktopReadoutPunchEditDraft.timeText(timeMode: DesktopReadoutPunchTimeMode): String =
+    when (timeMode) {
+        DesktopReadoutPunchTimeMode.ELAPSED -> elapsedTime
+        DesktopReadoutPunchTimeMode.SI -> siTime
+    }
+
+private fun DesktopReadoutPunchEditDraft.withEditedTime(
+    timeMode: DesktopReadoutPunchTimeMode,
+    value: String,
+    elapsedBaseSeconds: Long?
+): DesktopReadoutPunchEditDraft =
+    when (timeMode) {
+        DesktopReadoutPunchTimeMode.ELAPSED -> {
+            val siTime = value.toReadoutSiTimeText(elapsedBaseSeconds)
+            copy(
+                elapsedTime = value,
+                siTime = siTime ?: this.siTime
+            )
+        }
+        DesktopReadoutPunchTimeMode.SI -> {
+            val elapsedTime = value.toReadoutElapsedText(elapsedBaseSeconds)
+            copy(
+                siTime = value,
+                elapsedTime = elapsedTime ?: this.elapsedTime
+            )
+        }
+    }
+
+private fun String.toReadoutSiTimeText(elapsedBaseSeconds: Long?): String? =
+    toReadoutElapsedSecondsOrNull()
+        ?.let { elapsedSeconds -> (elapsedBaseSeconds ?: 0L) + elapsedSeconds }
+        ?.toReadoutSiTimeText()
+
+private fun String.toReadoutElapsedText(elapsedBaseSeconds: Long?): String? =
+    toReadoutElapsedSecondsOrNull()
+        ?.let { siSeconds ->
+            if (elapsedBaseSeconds == null) {
+                siSeconds
+            } else {
+                (siSeconds - elapsedBaseSeconds).toSportIdentDaySeconds()
+            }
+        }
+        ?.toReadoutElapsedText()
 
 private fun String.toReadoutElapsedSecondsOrNull(): Long? {
     val parts = trim().split(":")
@@ -21216,12 +21372,17 @@ private fun LabeledTextField(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     placeholder: String = "",
+    isError: Boolean = false,
     onCommit: (() -> Unit)? = null
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
         Text(
             text = label,
-            color = if (enabled) DesktopPalette.Black else DesktopPalette.Disconnected,
+            color = when {
+                !enabled -> DesktopPalette.Disconnected
+                isError -> DesktopPalette.Error
+                else -> DesktopPalette.Black
+            },
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold
         )
@@ -21235,7 +21396,8 @@ private fun LabeledTextField(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (onCommit != null) Modifier.commitOnEnter(onCommit) else Modifier),
-            enabled = enabled
+            enabled = enabled,
+            isError = isError
         )
     }
 }
