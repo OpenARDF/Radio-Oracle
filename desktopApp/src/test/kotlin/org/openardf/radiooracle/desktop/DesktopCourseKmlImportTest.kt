@@ -880,8 +880,8 @@ class DesktopCourseKmlImportTest {
         assertEquals(listOf("1", "2", "S", "1F", "Beacon"), summary.createdControlNames)
         assertEquals(1, summary.importedCategoryCount)
         assertEquals(5, summary.matchedControlPointCount)
-        assertEquals(5, summary.assignedCategoryControlCount)
-        assertEquals("161 171 162 137! 136B", summary.categoryAssignmentUpdates.single().controlPointsText)
+        assertEquals(0, summary.assignedCategoryControlCount)
+        assertEquals(emptyList<DesktopCourseKmlCategoryAssignmentUpdate>(), summary.categoryAssignmentUpdates)
         assertEquals(
             emptyList<String>(),
             updatedProject.raceData.categories.map { it.category.name }
@@ -943,12 +943,26 @@ class DesktopCourseKmlImportTest {
         assertEquals(1, summary.matchedCategoryCount)
         assertEquals(1, summary.importedCategoryCount)
         assertEquals(5, summary.matchedControlPointCount)
-        assertEquals(5, summary.assignedCategoryControlCount)
-        assertEquals("31 32 33 34 35", summary.categoryAssignmentUpdates.single().controlPointsText)
+        assertEquals(0, summary.assignedCategoryControlCount)
+        assertEquals(emptyList<DesktopCourseKmlCategoryAssignmentUpdate>(), summary.categoryAssignmentUpdates)
         assertEquals(emptyList<String>(), updatedProject.raceData.categories.map { it.category.name })
         assertEquals(listOf("M21"), updatedProject.raceData.courseMappings.map { it.category.name })
         assertEquals(listOf("1", "2", "3", "4", "5"), updatedProject.raceData.controls.map { it.label })
         assertEquals(listOf("V1", "V2", "V3", "V4", "V5"), updatedProject.raceData.controls.map { it.publicLabel })
+        assertEquals(
+            updatedProject,
+            DesktopCourseKmlImporter.applyCategoryAssignmentUpdates(
+                projectFile = updatedProject,
+                updates = listOf(
+                    DesktopCourseKmlCategoryAssignmentUpdate(
+                        categoryId = updatedProject.raceData.courseMappings.single().category.id,
+                        categoryName = "M21",
+                        controlPointsText = "31 32 33 34 35",
+                        controls = emptyList()
+                    )
+                )
+            )
+        )
 
         val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
             requireNotNull(updatedProject.raceData.courseMappings.single().category.encryptedCourseInfo),

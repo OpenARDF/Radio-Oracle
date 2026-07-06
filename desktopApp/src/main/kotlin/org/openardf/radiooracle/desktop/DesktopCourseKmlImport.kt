@@ -1857,7 +1857,8 @@ object DesktopCourseKmlImporter {
         if (updates.isEmpty()) {
             return projectFile
         }
-        return updates.fold(projectFile) { currentProject, update ->
+        val activeCategoryIds = projectFile.raceData.categories.mapTo(mutableSetOf()) { it.category.id }
+        return updates.filter { it.categoryId in activeCategoryIds }.fold(projectFile) { currentProject, update ->
             // Replace, rather than merge, so an imported route cannot leave stale assigned foxes
             // behind. The review already resolved exact stored controls and sorted them into
             // neutral control order; the shared editor keeps derived category fields consistent.
@@ -1913,7 +1914,7 @@ object DesktopCourseKmlImporter {
         categoryId: String,
         controls: List<CourseMatchedControl>
     ): DesktopCourseKmlCategoryAssignmentUpdate? {
-        val categoryData = activeAndInactiveCourseCategories(projectFile.raceData)
+        val categoryData = projectFile.raceData.categories
             .firstOrNull { it.category.id == categoryId }
             ?: return null
         val raceType = categoryData.category.effectiveRaceType(projectFile.raceData.race)
