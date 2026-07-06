@@ -25,6 +25,7 @@
 package org.openardf.radiooracle.ui.readouts
 
 import android.content.Context
+import android.text.TextWatcher
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
@@ -33,6 +34,7 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.TextView
 import androidx.core.widget.doOnTextChanged
 import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
@@ -67,6 +69,8 @@ class PunchEditRecyclerViewAdapter(
     override fun onBindViewHolder(holder: PunchViewHolder, position: Int) {
         val item = values[position]
 
+        holder.clearTextWatchers()
+        holder.number.text = punchNumberLabel(position)
         holder.time.setText(item.punch.siTime.getTimeString())
         holder.weekday.setText(item.punch.siTime.getDayOfWeek().toString())
         holder.week.setText(item.punch.siTime.getWeek().toString())
@@ -91,6 +95,7 @@ class PunchEditRecyclerViewAdapter(
             SIRecordType.START -> {
                 holder.code.setText("S")
                 holder.code.isEnabled = false
+                holder.addBtn.visibility = View.VISIBLE
                 holder.deleteBtn.visibility = View.GONE
             }
 
@@ -109,42 +114,7 @@ class PunchEditRecyclerViewAdapter(
             }
         }
 
-        //Set watchers
-        holder.code.doOnTextChanged { cs: CharSequence?, i: Int, i1: Int, i2: Int ->
-            // Omit the check for start and finish
-            if (item.punch.punchType != SIRecordType.START && item.punch.punchType != SIRecordType.FINISH) {
-                if (!codeWatcher(holder.bindingAdapterPosition, cs.toString())) {
-                    holder.code.error = holder.code.context.getString(R.string.general_invalid)
-                } else {
-                    holder.refreshValidationErrors()
-                }
-            }
-        }
-
-        holder.time.doOnTextChanged { cs: CharSequence?, i: Int, i1: Int, i2: Int ->
-            if (!timeWatcher(holder.bindingAdapterPosition, cs.toString())) {
-                holder.time.error = holder.code.context.getString(R.string.general_invalid)
-            } else {
-                holder.refreshValidationErrors()
-            }
-        }
-
-        holder.weekday.doOnTextChanged { cs: CharSequence?, i: Int, i1: Int, i2: Int ->
-            if (!dayWatcher(holder.bindingAdapterPosition, cs.toString())) {
-                holder.weekday.error = holder.code.context.getString(R.string.general_invalid)
-            } else {
-                holder.refreshValidationErrors()
-            }
-        }
-
-        holder.week.doOnTextChanged { cs: CharSequence?, i: Int, i1: Int, i2: Int ->
-            if (!weekWatcher(holder.bindingAdapterPosition, cs.toString())) {
-                holder.week.error = holder.code.context.getString(R.string.general_invalid)
-            } else {
-                holder.refreshValidationErrors()
-            }
-        }
-
+        holder.installTextWatchers(item)
         holder.applyValidationErrors(item, position)
     }
 
@@ -171,7 +141,6 @@ class PunchEditRecyclerViewAdapter(
         timing.issues.forEach { issue ->
             when (issue.status) {
                 SportIdentRunTimingStatus.FINISH_BEFORE_START -> {
-                    positions += startPosition
                     positions += finishPosition
                 }
 
@@ -180,7 +149,6 @@ class PunchEditRecyclerViewAdapter(
                 }
 
                 SportIdentRunTimingStatus.CONTROL_NOT_AFTER_START -> {
-                    positions += startPosition
                     issue.controlIndex?.let { controls.getOrNull(it)?.index }?.let(positions::add)
                 }
 
@@ -213,13 +181,27 @@ class PunchEditRecyclerViewAdapter(
             )
         )
         notifyItemInserted(position + 1)
+        notifyItemRangeChanged(position + 1, values.size - position - 1)
         onPunchesChanged?.invoke()
     }
 
     private fun deletePunch(position: Int) {
         values.removeAt(position)
         notifyItemRemoved(position)
+        notifyItemRangeChanged(position, values.size - position)
         onPunchesChanged?.invoke()
+    }
+
+    private fun punchNumberLabel(position: Int): String {
+        return when (values[position].punch.punchType) {
+            SIRecordType.START -> "S"
+            SIRecordType.FINISH -> "F"
+            SIRecordType.CONTROL -> values
+                .take(position + 1)
+                .count { it.punch.punchType == SIRecordType.CONTROL }
+                .toString()
+            SIRecordType.CHECK -> ""
+        }
     }
 
     //Text watchers
@@ -311,12 +293,66 @@ class PunchEditRecyclerViewAdapter(
     }
 
     inner class PunchViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        var number: TextView = view.findViewById(R.id.punch_edit_item_number)
         var code: EditText = view.findViewById(R.id.punch_edit_item_si_code)
         var time: EditText = view.findViewById(R.id.punch_edit_item_time)
         var weekday: EditText = view.findViewById(R.id.punch_edit_item_weekday)
         var week: EditText = view.findViewById(R.id.punch_edit_item_week)
         var addBtn: ImageButton = view.findViewById(R.id.punch_edit_item_add_btn)
         var deleteBtn: ImageButton = view.findViewById(R.id.punch_edit_item_delete_btn)
+        private var codeTextWatcher: TextWatcher? = null
+        private var timeTextWatcher: TextWatcher? = null
+        private var weekdayTextWatcher: TextWatcher? = null
+        private var weekTextWatcher: TextWatcher? = null
+
+        fun clearTextWatchers() {
+            codeTextWatcher?.let(code::removeTextChangedListener)
+            timeTextWatcher?.let(time::removeTextChangedListener)
+            weekdayTextWatcher?.let(weekday::removeTextChangedListener)
+            weekTextWatcher?.let(week::removeTextChangedListener)
+            codeTextWatcher = null
+            timeTextWatcher = null
+            weekdayTextWatcher = null
+            weekTextWatcher = null
+        }
+
+        fun installTextWatchers(item: PunchEditItemWrapper) {
+            // RecyclerView rebinds rows while scrolling; watchers must be replaced so rebinding text
+            // does not mutate stale rows or hide the current explanation.
+            codeTextWatcher = code.doOnTextChanged { cs: CharSequence?, _, _, _ ->
+                if (item.punch.punchType != SIRecordType.START && item.punch.punchType != SIRecordType.FINISH) {
+                    if (!codeWatcher(bindingAdapterPosition, cs.toString())) {
+                        code.error = code.context.getString(R.string.general_invalid)
+                    } else {
+                        refreshValidationErrors()
+                    }
+                }
+            }
+
+            timeTextWatcher = time.doOnTextChanged { cs: CharSequence?, _, _, _ ->
+                if (!timeWatcher(bindingAdapterPosition, cs.toString())) {
+                    time.error = code.context.getString(R.string.general_invalid)
+                } else {
+                    refreshValidationErrors()
+                }
+            }
+
+            weekdayTextWatcher = weekday.doOnTextChanged { cs: CharSequence?, _, _, _ ->
+                if (!dayWatcher(bindingAdapterPosition, cs.toString())) {
+                    weekday.error = code.context.getString(R.string.general_invalid)
+                } else {
+                    refreshValidationErrors()
+                }
+            }
+
+            weekTextWatcher = week.doOnTextChanged { cs: CharSequence?, _, _, _ ->
+                if (!weekWatcher(bindingAdapterPosition, cs.toString())) {
+                    week.error = code.context.getString(R.string.general_invalid)
+                } else {
+                    refreshValidationErrors()
+                }
+            }
+        }
 
         fun installKeyboardDoneHandlers() {
             listOf(code, time, weekday, week).forEach { editor ->
