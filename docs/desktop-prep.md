@@ -336,6 +336,23 @@ After a public npm publish, `npm run jdeploy:registry-smoke -- <version>`
 installs that exact registry version in a temporary directory, launches it with
 the smoke Race File, confirms startup, and quits the app.
 
+If a release gate fails during deployment and a fix is made before publishing,
+do not treat the fix as automatically safe just because the failing command now
+passes. First classify the patch's regression risk:
+
+- Low-risk release plumbing or documentation fixes may continue after the
+  original failing gate, the relevant focused test, and the normal jDeploy
+  preflight/smoke checks pass.
+- Runtime, shared-model, import/export, scoring, hardware, packaging, or
+  platform-behavior fixes are significant-risk deployment fixes. Postpone the
+  deployment unless the fix has an explicit regression test for the failure, the
+  affected nearby tests pass, and the broad desktop/Android release gates have
+  been rerun.
+- If the needed regression evidence requires hardware or a platform that is not
+  available, either record an explicit user-approved waiver in the release notes
+  or postpone the deployment. Do not spot-fix a release blocker and publish on
+  the strength of one narrow passing command.
+
 The normal deployment sequence is:
 
 1. Bump Android, desktop, and npm/jDeploy versions together.
