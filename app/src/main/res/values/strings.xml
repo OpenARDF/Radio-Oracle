@@ -29,6 +29,7 @@
     <string name="general_limit">Limit</string>
     <string name="general_main">Main</string>
     <string name="general_max_age">Maximal Age</string>
+    <string name="general_more_options">More Options</string>
     <string name="general_name">Name</string>
     <string name="general_ok" translatable="false">OK</string>
     <string name="general_points">Points</string>
@@ -103,12 +104,17 @@
     <string name="event_series_send_desktop">Send Race Series To Desktop</string>
     <string name="event_series_open_member">Open %1$s</string>
     <string name="event_series_add_event">Add To Series</string>
+    <string name="event_series_add_race">Add Race</string>
+    <string name="event_series_add_race_empty">No races are available to add.</string>
+    <string name="event_series_add_race_title">Add Race To %1$s</string>
     <string name="event_series_add_to_existing_title">Add Race To Series</string>
     <string name="event_series_add_to_existing_success">Added to series: %1$s</string>
     <string name="event_series_create_new">Create New Series</string>
     <string name="event_series_create_new_title">Create Race Series</string>
     <string name="event_series_create_new_success">Created series: %1$s</string>
     <string name="event_series_default_name">%1$s Series</string>
+    <string name="event_series_edit">Edit Series</string>
+    <string name="event_series_edit_success">Series updated</string>
     <string name="event_series_membership_error">Race Series update failed</string>
     <string name="event_series_name_hint">Series Name</string>
     <string name="event_series_name_required">Enter a series name.</string>

@@ -29,31 +29,22 @@
                 android:textStyle="bold" />
 
             <ImageButton
-                android:id="@+id/event_series_item_export"
+                android:id="@+id/event_series_item_add_race"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/event_series_export"
+                android:contentDescription="@string/event_series_add_race"
                 android:padding="12dp"
-                android:src="@drawable/ic_share" />
+                android:src="@drawable/ic_add" />
 
             <ImageButton
-                android:id="@+id/event_series_item_send_desktop"
+                android:id="@+id/event_series_item_more"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/event_series_send_desktop"
+                android:contentDescription="@string/general_more_options"
                 android:padding="12dp"
-                android:src="@drawable/ic_upload" />
-
-            <ImageButton
-                android:id="@+id/event_series_item_remove_grouping"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/event_series_remove_grouping"
-                android:padding="12dp"
-                android:src="@drawable/ic_delete" />
+                android:src="@drawable/ic_more" />
         </LinearLayout>
 
         <TextView

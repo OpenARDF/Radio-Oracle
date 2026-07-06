@@ -32,12 +32,15 @@ import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.widget.PopupMenu
 import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
 
 class EventSeriesRecyclerViewAdapter(
     private val values: List<EventSeriesListItem>,
     private val context: Context,
+    private val onAddRace: (EventSeriesListItem) -> Unit,
+    private val onEditSeries: (EventSeriesListItem) -> Unit,
     private val onSendToDesktop: (EventSeriesListItem) -> Unit,
     private val onExport: (EventSeriesListItem) -> Unit,
     private val onRemoveGrouping: (EventSeriesListItem) -> Unit,
@@ -62,18 +65,51 @@ class EventSeriesRecyclerViewAdapter(
         item.members.forEach { member ->
             holder.members.addView(memberView(member))
         }
-        holder.sendButton.setOnClickListener {
-            onSendToDesktop(item)
+        holder.addRaceButton.setOnClickListener {
+            onAddRace(item)
         }
-        holder.exportButton.setOnClickListener {
-            onExport(item)
+        holder.moreButton.setOnClickListener {
+            showContextMenu(holder.moreButton, item)
         }
-        holder.removeGroupingButton.setOnClickListener {
-            onRemoveGrouping(item)
+        holder.itemView.setOnLongClickListener {
+            showContextMenu(holder.moreButton, item)
+            true
         }
     }
 
     override fun getItemCount(): Int = values.size
+
+    private fun showContextMenu(anchor: View, item: EventSeriesListItem) {
+        val popupMenu = PopupMenu(context, anchor)
+        popupMenu.inflate(R.menu.context_menu_event_series)
+
+        popupMenu.setOnMenuItemClickListener {
+            when (it.itemId) {
+                R.id.menu_item_edit_series -> {
+                    onEditSeries(item)
+                    true
+                }
+
+                R.id.menu_item_export_series -> {
+                    onExport(item)
+                    true
+                }
+
+                R.id.menu_item_send_series_desktop -> {
+                    onSendToDesktop(item)
+                    true
+                }
+
+                R.id.menu_item_remove_series_grouping -> {
+                    onRemoveGrouping(item)
+                    true
+                }
+
+                else -> false
+            }
+        }
+        popupMenu.show()
+    }
 
     private fun memberView(member: EventSeriesMemberListItem): TextView =
         TextView(context).apply {
@@ -97,8 +133,7 @@ class EventSeriesRecyclerViewAdapter(
         val title: TextView = view.findViewById(R.id.event_series_item_title)
         val count: TextView = view.findViewById(R.id.event_series_item_count)
         val members: LinearLayout = view.findViewById(R.id.event_series_item_members)
-        val sendButton: ImageButton = view.findViewById(R.id.event_series_item_send_desktop)
-        val exportButton: ImageButton = view.findViewById(R.id.event_series_item_export)
-        val removeGroupingButton: ImageButton = view.findViewById(R.id.event_series_item_remove_grouping)
+        val addRaceButton: ImageButton = view.findViewById(R.id.event_series_item_add_race)
+        val moreButton: ImageButton = view.findViewById(R.id.event_series_item_more)
     }
 }

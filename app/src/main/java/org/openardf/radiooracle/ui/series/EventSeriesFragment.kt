@@ -29,9 +29,11 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.text.InputType
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.addCallback
@@ -50,6 +52,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
 import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
@@ -100,6 +103,8 @@ class EventSeriesFragment : Fragment() {
                     recyclerView.adapter = EventSeriesRecyclerViewAdapter(
                         series,
                         requireContext(),
+                        ::chooseRaceToAdd,
+                        ::showEditSeriesDialog,
                         ::prepareSeriesForDesktopUpload,
                         ::chooseSeriesExportDestination,
                         ::confirmRemoveSeriesGrouping,
@@ -123,6 +128,100 @@ class EventSeriesFragment : Fragment() {
     private fun openSeriesMember(member: EventSeriesMemberListItem) {
         selectedRaceViewModel.setRace(member.localRaceId)
         findNavController().navigate(EventSeriesFragmentDirections.openRaceFromSeries())
+    }
+
+    private fun chooseRaceToAdd(item: EventSeriesListItem) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val races = withContext(Dispatchers.IO) {
+                    viewModel.availableRacesForSeries(item.seriesId)
+                }
+                if (races.isEmpty()) {
+                    AlertDialog.Builder(requireContext())
+                        .setTitle(R.string.event_series_add_race)
+                        .setMessage(R.string.event_series_add_race_empty)
+                        .setPositiveButton(R.string.general_ok, null)
+                        .show()
+                    return@launch
+                }
+
+                val raceLabels = races.map(::raceAddLabel).toTypedArray()
+                AlertDialog.Builder(requireContext())
+                    .setTitle(getString(R.string.event_series_add_race_title, item.name))
+                    .setItems(raceLabels) { _, which ->
+                        addRaceToSeries(item, races[which])
+                    }
+                    .setNegativeButton(R.string.general_cancel, null)
+                    .show()
+            } catch (error: Exception) {
+                displayAlert(error.message ?: "Could not load races.")
+            }
+        }
+    }
+
+    private fun raceAddLabel(race: Race): String =
+        "${race.startDateTime.toLocalDate()} - ${race.name}"
+
+    private fun addRaceToSeries(item: EventSeriesListItem, race: Race) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    viewModel.addRaceToSeries(item.seriesId, race.id)
+                }
+                Toast.makeText(
+                    requireContext(),
+                    getString(R.string.event_series_add_to_existing_success, item.name),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (error: Exception) {
+                displayAlert(error.message ?: "Could not add race to Race Series.")
+            }
+        }
+    }
+
+    private fun showEditSeriesDialog(item: EventSeriesListItem) {
+        val input = EditText(requireContext()).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            hint = getString(R.string.event_series_name_hint)
+            setSingleLine(true)
+            setText(item.name)
+            selectAll()
+        }
+        val dialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_series_edit)
+            .setView(input)
+            .setPositiveButton(R.string.event_series_edit, null)
+            .setNegativeButton(R.string.general_cancel, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val seriesName = input.text.toString().trim()
+                if (seriesName.isBlank()) {
+                    input.error = getString(R.string.event_series_name_required)
+                } else {
+                    dialog.dismiss()
+                    renameSeries(item, seriesName)
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun renameSeries(item: EventSeriesListItem, seriesName: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    viewModel.renameSeries(item.seriesId, seriesName)
+                }
+                Toast.makeText(
+                    requireContext(),
+                    getString(R.string.event_series_edit_success),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (error: Exception) {
+                displayAlert(error.message ?: "Could not edit Race Series.")
+            }
+        }
     }
 
     private fun chooseSeriesExportDestination(item: EventSeriesListItem) {

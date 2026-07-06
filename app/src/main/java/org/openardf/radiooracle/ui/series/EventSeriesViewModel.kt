@@ -30,9 +30,12 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.DesktopFileTransferUpload
+import org.openardf.radiooracle.backend.room.entity.Race
+import java.util.UUID
 
 class EventSeriesViewModel : ViewModel() {
     private val dataProcessor = DataProcessor.get()
@@ -52,6 +55,27 @@ class EventSeriesViewModel : ViewModel() {
 
     suspend fun exportEventSeriesPackage(uri: Uri, seriesId: String) {
         dataProcessor.exportEventSeriesPackage(uri, seriesId)
+    }
+
+    suspend fun availableRacesForSeries(seriesId: String): List<Race> {
+        dataProcessor.getEventSeries(seriesId) ?: throw IllegalArgumentException("Race Series not found: $seriesId")
+        val groupedRaceIds = dataProcessor.getEventSeries()
+            .first()
+            .flatMap { it.members }
+            .map { it.localRaceId }
+            .toSet()
+        return dataProcessor.getRaces()
+            .first()
+            .filterNot { it.id in groupedRaceIds }
+            .sortedWith(compareBy({ it.startDateTime }, { it.name.lowercase() }, { it.id.toString() }))
+    }
+
+    suspend fun addRaceToSeries(seriesId: String, raceId: UUID) {
+        dataProcessor.addRaceToEventSeries(raceId, seriesId)
+    }
+
+    suspend fun renameSeries(seriesId: String, name: String) {
+        dataProcessor.renameEventSeries(seriesId, name)
     }
 
     suspend fun removeSeriesGrouping(seriesId: String) {

@@ -515,6 +515,17 @@ class DataProcessor private constructor(context: Context) {
         return getEventSeries(seriesId) ?: seriesData
     }
 
+    suspend fun renameEventSeries(seriesId: String, seriesName: String): EventSeriesData {
+        require(seriesName.isNotBlank()) {
+            "Series name must not be blank."
+        }
+        val seriesData = getEventSeries(seriesId) ?: throw IllegalArgumentException("Race Series not found: $seriesId")
+        val updatedSeries = seriesData.series.copy(name = seriesName.trim())
+        saveEventSeries(updatedSeries, seriesData.members)
+        DebugLog.info("Race Series", "Renamed series=$seriesId")
+        return getEventSeries(seriesId) ?: seriesData.copy(series = updatedSeries)
+    }
+
     suspend fun removeRaceFromEventSeries(raceId: UUID): EventSeriesData? {
         val seriesData = getEventSeriesForRace(raceId) ?: return null
         val remainingMembers = EventSeriesMemberships.removeRace(seriesData, raceId)

@@ -90,6 +90,30 @@ class DataProcessorEventSeriesMembershipTests {
         assertNotNull(processor.getRace(dayTwo.race.id))
     }
 
+    @Test
+    fun renameSeriesKeepsExistingMembers() = runBlocking {
+        val processor = DataProcessor.get()
+        val dayOne = raceData(
+            id = UUID.fromString("33333333-3333-3333-3333-333333333333"),
+            name = "Rename Day 1"
+        )
+        val dayTwo = raceData(
+            id = UUID.fromString("44444444-4444-4444-4444-444444444444"),
+            name = "Rename Day 2"
+        )
+        processor.saveRaceData(dayOne)
+        processor.saveRaceData(dayTwo)
+
+        val created = processor.createEventSeriesFromRace(dayOne.race.id, "Old Name")
+        processor.addRaceToEventSeries(dayTwo.race.id, created.series.seriesId)
+
+        val renamed = processor.renameEventSeries(created.series.seriesId, "  New Name  ")
+
+        assertEquals("New Name", renamed.series.name)
+        assertEquals(listOf(dayOne.race.id, dayTwo.race.id), renamed.orderedMembers().map { it.localRaceId })
+        assertEquals("New Name", processor.getEventSeries(created.series.seriesId)?.series?.name)
+    }
+
     private fun raceData(id: UUID, name: String): RaceData =
         RaceData(
             race = Race(
