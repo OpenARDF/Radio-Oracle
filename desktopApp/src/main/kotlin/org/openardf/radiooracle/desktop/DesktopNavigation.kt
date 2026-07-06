@@ -686,7 +686,6 @@ object DesktopNavigation {
                     )
                 ),
                 item("race.in-forest", "In Forest", workflow, DesktopSection.InForest),
-                item("race.unmatched", "Unmatched Readouts", workflow, DesktopSection.Readouts),
                 item("race.finish-tickets", "Finish Tickets", workflow, DesktopSection.Readouts)
             )
             DesktopWorkflow.Series -> listOf(
@@ -1367,8 +1366,6 @@ object DesktopNavigation {
             "Use Stop Continuous SI to end continuous readout after the current card wait finishes.",
         "race.in-forest" to
             "Use In Forest to monitor started competitors who do not yet have finish readouts.",
-        "race.unmatched" to
-            "Use Unmatched Readouts to review SI-card readouts that are not yet assigned to competitors.",
         "race.finish-tickets" to
             "Use Finish Tickets to preview and print competitor finish tickets from available readout and result data.",
         "results.live" to
