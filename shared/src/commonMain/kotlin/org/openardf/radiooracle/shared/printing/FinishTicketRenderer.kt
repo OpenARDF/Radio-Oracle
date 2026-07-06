@@ -24,7 +24,6 @@
 
 package org.openardf.radiooracle.shared.printing
 
-import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.domain.toResultStatusCode
@@ -133,11 +132,32 @@ object FinishTicketRenderer {
     ): String =
         when (punch.punchType) {
             SIRecordType.START ->
-                "[L]${formatTimeRow("Start", punch.siTimeSeconds.toTimeOfDay(), null, charactersPerLine)}"
+                "[L]${
+                    FinishTicketTimeRowFormatter.format(
+                        "Start",
+                        punch.siTimeSeconds.toTimeOfDay(),
+                        null,
+                        charactersPerLine
+                    )
+                }"
             SIRecordType.FINISH ->
-                "[L]${formatTimeRow("Finish", punch.siTimeSeconds.toTimeOfDay(), punch.splitSeconds.toDuration(useMinuteTimeFormat), charactersPerLine)}"
+                "[L]${
+                    FinishTicketTimeRowFormatter.format(
+                        "Finish",
+                        punch.siTimeSeconds.toTimeOfDay(),
+                        punch.splitSeconds.toDuration(useMinuteTimeFormat),
+                        charactersPerLine
+                    )
+                }"
             SIRecordType.CONTROL ->
-                "[L]${formatTimeRow(formatCode(raceType, controlLabelsByCode, useAliases), punch.siTimeSeconds.toTimeOfDay(), punch.splitSeconds.toDuration(useMinuteTimeFormat), charactersPerLine)}"
+                "[L]${
+                    FinishTicketTimeRowFormatter.format(
+                        formatCode(raceType, controlLabelsByCode, useAliases),
+                        punch.siTimeSeconds.toTimeOfDay(),
+                        punch.splitSeconds.toDuration(useMinuteTimeFormat),
+                        charactersPerLine
+                    )
+                }"
             SIRecordType.CHECK -> ""
         }
 
@@ -156,16 +176,8 @@ object FinishTicketRenderer {
         } else {
             punch.siCode.toString()
         }
-        return "$code${punch.punchStatus.toTicketSuffix()}"
+        return "$code${FinishTicketTimeRowFormatter.statusSuffix(punch.punchStatus)}"
     }
-
-    private fun PunchStatus.toTicketSuffix(): String =
-        when (this) {
-            PunchStatus.VALID -> "OK"
-            PunchStatus.INVALID -> "MP"
-            PunchStatus.DUPLICATE -> "+"
-            PunchStatus.UNKNOWN -> "?"
-        }
 
     private fun Long.toDuration(useMinuteTimeFormat: Boolean): String =
         DurationFormatter.secondsToFormattedString(this, useMinuteTimeFormat)
@@ -177,23 +189,6 @@ object FinishTicketRenderer {
         val minutes = (normalized % 3600) / 60
         val seconds = normalized % 60
         return "%02d:%02d:%02d".format(hours, minutes, seconds)
-    }
-
-    private fun formatTimeRow(label: String, time: String, split: String?, charactersPerLine: Int): String {
-        val timeWidth = 8
-        val splitWidth = split?.length?.coerceAtLeast(8) ?: 8
-        val labelWidth = charactersPerLine - timeWidth - splitWidth - 2
-        if (labelWidth < 1) {
-            return listOfNotNull(label, time, split).joinToString(" ").truncate(charactersPerLine)
-        }
-        if (split == null) {
-            return label.truncate(labelWidth).padEnd(labelWidth) +
-                " " + time.takeLast(timeWidth).padStart(timeWidth)
-        }
-
-        return label.truncate(labelWidth).padEnd(labelWidth) +
-            " " + time.takeLast(timeWidth).padStart(timeWidth) +
-            " " + split.padStart(splitWidth)
     }
 
     private fun String.truncate(maxLength: Int): String =

@@ -181,6 +181,24 @@ class FinishTicketRendererTest {
     }
 
     @Test
+    fun fixedWidthRowsKeepTimesAlignedAcrossStatusSuffixes() {
+        val rows = listOf(
+            FinishTicketTimeRowFormatter.format("Start", "10:00:00", null, 32),
+            FinishTicketTimeRowFormatter.format("Finish", "10:20:00", "00:20:00", 32),
+            FinishTicketTimeRowFormatter.format("1FOK", "10:05:00", "00:05:00", 32),
+            FinishTicketTimeRowFormatter.format("2F?", "10:10:00", "00:10:00", 32),
+            FinishTicketTimeRowFormatter.format("3F+", "10:15:00", "00:15:00", 32)
+        )
+
+        val timeColumn = rows.first().indexOf("10:00:00")
+        assertTrue(rows.all { it.length <= 32 })
+        assertEquals(
+            listOf(timeColumn),
+            rows.map { row -> row.indexOf(Regex("\\d\\d:\\d\\d:\\d\\d").find(row)!!.value) }.distinct()
+        )
+    }
+
+    @Test
     fun omitsBlankBibNumberFromTicketHeader() {
         val text = FinishTicketRenderer.render(raceData(bibNumber = ""), resultId = "matched")
 

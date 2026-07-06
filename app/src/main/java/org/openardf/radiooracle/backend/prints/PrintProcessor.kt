@@ -41,11 +41,11 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.AliasPunch
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
-import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.domain.toResultStatusCode
+import org.openardf.radiooracle.shared.printing.FinishTicketTimeRowFormatter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -316,14 +316,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
     }
 
     private fun formatCodeString(aliasPunch: AliasPunch, raceType: RaceType): String {
-        val context = appContext.get()!!
-
-        val symbol = when (aliasPunch.punch.punchStatus) {
-            PunchStatus.VALID -> context.getString(R.string.punch_status_valid)
-            PunchStatus.INVALID -> context.getString(R.string.punch_status_invalid)
-            PunchStatus.DUPLICATE -> context.getString(R.string.punch_status_duplicate)
-            PunchStatus.UNKNOWN -> context.getString(R.string.punch_status_unknown)
-        }
+        val symbol = FinishTicketTimeRowFormatter.statusSuffix(aliasPunch.punch.punchStatus)
         val code = if (raceType == RaceType.ORIENTEERING || shouldUseAliases()) {
             "${aliasPunch.punch.order} (${aliasPunch.alias?.name ?: aliasPunch.punch.siCode})"
         } else {
@@ -333,21 +326,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
     }
 
     private fun formatTimeRow(label: String, time: String, split: String?): String {
-        val charactersPerLine = getCharactersPerLine()
-        val timeWidth = 8
-        val splitWidth = split?.length?.coerceAtLeast(8) ?: 8
-        val labelWidth = charactersPerLine - timeWidth - splitWidth - 2
-        if (labelWidth < 1) {
-            return listOfNotNull(label, time, split).joinToString(" ").take(charactersPerLine)
-        }
-        if (split == null) {
-            return label.take(labelWidth).padEnd(labelWidth) +
-                    " " + time.takeLast(timeWidth).padStart(timeWidth)
-        }
-
-        return label.take(labelWidth).padEnd(labelWidth) +
-                " " + time.takeLast(timeWidth).padStart(timeWidth) +
-                " " + split.padStart(splitWidth)
+        return FinishTicketTimeRowFormatter.format(label, time, split, getCharactersPerLine())
     }
 
     private fun shouldUseAliases(): Boolean {
