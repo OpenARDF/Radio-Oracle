@@ -15089,7 +15089,8 @@ private fun ReadoutEditDialog(
     var selectedControlId by remember(draft.resultId, controls) { mutableStateOf(controls.firstOrNull()?.id) }
     var punchTimeMode by remember(draft.resultId) { mutableStateOf(DesktopReadoutPunchTimeMode.ELAPSED) }
     val dialogScrollState = rememberScrollState()
-    val categoryChanged = draft.matched && categoryId != draft.originalCategoryId
+    // This copies the current result category to the competitor, including result categories set before opening the modal.
+    val canUpdateCompetitorCategory = draft.matched
     val sortedControls = remember(controls) {
         controls.sortedWith(compareBy<EventControl> { it.siCode }.thenBy { it.publicDisplayLabel() })
     }
@@ -15116,8 +15117,8 @@ private fun ReadoutEditDialog(
         }
     }
 
-    LaunchedEffect(categoryChanged) {
-        if (!categoryChanged) {
+    LaunchedEffect(canUpdateCompetitorCategory) {
+        if (!canUpdateCompetitorCategory) {
             updateCompetitorCategory = false
         }
     }
@@ -15224,6 +15225,7 @@ private fun ReadoutEditDialog(
                                 )
                             } else {
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    FixedTableText("#", 32.dp, DesktopPalette.Disconnected)
                                     FixedTableText("Control", 112.dp, DesktopPalette.Disconnected)
                                     Text(
                                         text = punchTimeMode.columnLabel,
@@ -15244,6 +15246,7 @@ private fun ReadoutEditDialog(
                             }
                             controlPunches.forEachIndexed { index, punch ->
                                 ReadoutPunchEditRow(
+                                    punchNumber = index + 1,
                                     punch = punch,
                                     controls = sortedControls,
                                     canMoveUp = index > 0,
@@ -15332,15 +15335,20 @@ private fun ReadoutEditDialog(
                             )
                         }
                         if (draft.matched) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.clickable {
+                                    updateCompetitorCategory = !updateCompetitorCategory
+                                }
+                            ) {
                                 Checkbox(
-                                    checked = categoryChanged && updateCompetitorCategory,
+                                    checked = updateCompetitorCategory,
                                     onCheckedChange = { updateCompetitorCategory = it },
-                                    enabled = categoryChanged
+                                    enabled = canUpdateCompetitorCategory
                                 )
                                 Text(
                                     "Also change competitor category",
-                                    color = if (categoryChanged) DesktopPalette.Black else DesktopPalette.Disconnected
+                                    color = if (canUpdateCompetitorCategory) DesktopPalette.Black else DesktopPalette.Disconnected
                                 )
                             }
                         }
@@ -15365,6 +15373,7 @@ private fun ReadoutEditDialog(
 
 @Composable
 private fun ReadoutPunchEditRow(
+    punchNumber: Int,
     punch: DesktopReadoutPunchEditDraft,
     controls: List<EventControl>,
     canMoveUp: Boolean,
@@ -15383,6 +15392,7 @@ private fun ReadoutPunchEditRow(
         DesktopReadoutPunchTimeMode.SI -> punch.siTime
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        FixedTableText(punchNumber.toString(), 32.dp, DesktopPalette.Black)
         ReadoutControlPicker(
             selectedControlId = punch.controlId,
             controls = controls,
